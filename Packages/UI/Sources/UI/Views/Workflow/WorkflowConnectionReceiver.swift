@@ -16,8 +16,8 @@ struct WorkflowConnectionReceiver: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WorkflowConnectionHitView { WorkflowConnectionHitView() }
     func updateNSView(_ view: WorkflowConnectionHitView, context: Context) {
-        view.wirePath = path; view.midpoint = midpoint
-        view.canDisconnect = canDisconnect; view.cutAvailable = cutAvailable
+        view.updateGeometry(path: path, midpoint: midpoint, cutAvailable: cutAvailable)
+        view.canDisconnect = canDisconnect
         view.onSelect = onSelect; view.onDisconnect = onDisconnect
         view.disconnectTitle = disconnectTitle
         view.setAccessibilityElement(true); view.setAccessibilityRole(.button)
@@ -43,6 +43,12 @@ final class WorkflowConnectionHitView: NSView {
     private var escapeMonitor: Any?
     private var resignObserver: NSObjectProtocol?
     private var tracking: NSTrackingArea?
+    func updateGeometry(path: CGPath, midpoint: CGPoint, cutAvailable: Bool) {
+        if wirePath != path || self.midpoint != midpoint || self.cutAvailable != cutAvailable {
+            clearHover(); cancelPress()
+        }
+        wirePath = path; self.midpoint = midpoint; self.cutAvailable = cutAvailable
+    }
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { false }
     private var cutRect: CGRect { CGRect(x: midpoint.x - 11, y: midpoint.y - 11, width: 22, height: 22) }
@@ -127,6 +133,7 @@ final class WorkflowConnectionHitView: NSView {
         super.viewWillMove(toWindow: newWindow)
     }
     override func rightMouseDown(with event: NSEvent) {
+        guard !isHiddenOrHasHiddenAncestor, wirePath.contains(convert(event.locationInWindow, from: nil)) else { return }
         let menu = NSMenu(); menu.autoenablesItems = false
         let item = NSMenuItem(title: disconnectTitle, action: #selector(disconnectWire), keyEquivalent: "")
         item.target = self; item.isEnabled = canDisconnect

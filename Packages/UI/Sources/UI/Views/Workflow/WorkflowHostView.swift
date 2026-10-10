@@ -8,7 +8,7 @@ struct WorkflowHostView: View {
     let model: WorkbenchModel
     let nodeTags: ModelNodeTagStore
     var onQuickUse: ((WorkflowNode) -> Void)? = nil
-    var libraryContent: ((CGPoint, @escaping () -> Void) -> AnyView)? = nil
+    var libraryContent: ((WorkflowCanvasLibraryMode, CGPoint, @escaping () -> Void) -> AnyView)? = nil
     var onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
     var acceptsLegacyAsset: ((UUID, UUID) -> Bool)? = nil
     @Environment(\.dLanguageStore) private var languageStore

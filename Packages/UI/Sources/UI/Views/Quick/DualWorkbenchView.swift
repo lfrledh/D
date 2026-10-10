@@ -48,6 +48,7 @@ public struct DualWorkbenchView: View {
     let metadataIssue: String?
     @State private var projects: [ProjectManifest] = []
     @State private var fullLibraryState = SharedLibraryBrowserState()
+    @State private var canvasAssetLibraryState = SharedLibraryBrowserState()
     @State private var compactLibraryState = SharedLibraryBrowserState()
     @State private var previewAsset: LibraryAssetPreview?
     private struct FilesRoute: Identifiable {
@@ -316,7 +317,7 @@ public struct DualWorkbenchView: View {
                     }
                 }
                 RetainedContentHost(content: WorkflowHostView(model: canvasModel, nodeTags: nodeTags, onQuickUse: useNode,
-                    libraryContent: { point, close in AnyView(libraryBrowser(compact: true, at: point, onBack: close)) },
+                    libraryContent: { mode, point, close in AnyView(libraryBrowser(compact: true, at: point, onBack: close, canvasMode: mode)) },
                     onSharedAssetDrop: acceptSharedAssetDrop,
                     acceptsLegacyAsset: { projectID, assetID in
                         guard let instance = SharedLibraryProjection.resolvedInstanceID(projectID: projectID,
@@ -576,18 +577,24 @@ public struct DualWorkbenchView: View {
         !languageVisible && !settingsVisible && !library.isPresented && previewAsset == nil && libraryInfo == nil &&
         filesRoute == nil && pendingFilesRoute == nil
     }
-    @ViewBuilder private func libraryBrowser(compact: Bool, at point: CGPoint, onBack: (() -> Void)? = nil) -> some View {
+    @ViewBuilder private func libraryBrowser(compact: Bool, at point: CGPoint, onBack: (() -> Void)? = nil, canvasMode: WorkflowCanvasLibraryMode? = nil) -> some View {
         if let metadata {
             SharedLibraryBrowser(entries: entries.filter { value in
+                if let canvasMode {
+                    switch value.selection {
+                    case .asset, .assetInstance: return canvasMode == .assets
+                    default: return canvasMode == .nodes
+                    }
+                }
                 guard !compact, let family = modelPickerCategory else { return true }
                 guard case .operation(let operation, _) = value.selection else { return false }
                 return QuickCategory.category(for: operation) == family
-            }, store: metadata, compact: compact, state: compact ? compactLibraryState : fullLibraryState,
+            }, store: metadata, compact: compact, state: canvasMode == .assets ? canvasAssetLibraryState : (compact ? compactLibraryState : fullLibraryState),
                 onUse: useLibraryEntry, onAdd: { value in Task { await addLibraryEntry(value, at: point) } },
                 onPreview: { value in Task { await previewLibraryEntry(value) } },
                 onLocation: { value in Task { await showAssetLocation(value) } },
                 onPrepare: { value in Task { await prepareModel(value) } },
-                onImport: { Task { await importLibraryAsset() } }, onClose: { if let onBack { onBack() } else { libraryVisible = false } })
+                onImport: { Task { await importLibraryAsset(forCanvas: canvasMode != nil) } }, onClose: { if let onBack { onBack() } else { libraryVisible = false } })
         } else {
             VStack(alignment: .leading) {
                 Button(baselineText(language, "label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left") {
@@ -814,11 +821,21 @@ public struct DualWorkbenchView: View {
             await refreshLibrary(checkModels: true)
         } catch { issue = error.localizedDescription }
     }
-    private func importLibraryAsset() async {
-        let destination = quick.store
+    private func importLibraryAsset(forCanvas: Bool = false) async {
+        let owner = forCanvas ? canvasModel.projectSession : quickModel.projectSession
+        let destination = forCanvas ? owner.currentStore : quick.store
+        let controller = forCanvas ? owner.workflow : nil
+        guard let destination, !forCanvas || controller?.canEditCanvas == true else { return }
         guard let (url, mode) = await NativeAssetImportPanel.choose(language: language) else { return }
         let scope = url.startAccessingSecurityScopedResource(); defer { if scope { url.stopAccessingSecurityScopedResource() } }
-        do { _ = try await destination.importWorkflowMediaFile(at: url, mode: mode); await refreshLibrary(checkModels: false) }
+        do {
+            if forCanvas {
+                guard let controller, owner.currentStore === destination, owner.workflow === controller,
+                      controller.canEditCanvas else { throw WorkflowIssue("目标项目已改变或当前不可编辑，未导入素材。") }
+                await controller.importLibraryFile(url, mode: mode)
+            } else { _ = try await destination.importWorkflowMediaFile(at: url, mode: mode) }
+            await refreshLibrary(checkModels: false)
+        }
         catch { issue = error.localizedDescription }
     }
     private func addLibraryEntry(_ value: SharedLibraryBrowserEntry, at point: CGPoint) async {

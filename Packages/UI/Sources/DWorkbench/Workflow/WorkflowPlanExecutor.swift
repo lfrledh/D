@@ -2,6 +2,9 @@ import Foundation
 
 @MainActor public final class WorkflowPlanExecutor {
     public private(set) var checkpoint: WorkflowPlanCheckpoint?
+    /// Presentation observes the interval after resume initialization and before
+    /// execution returns; receiving a request outside it would be misleading.
+    public var pauseAvailabilityChanged: @MainActor (Bool) -> Void = { _ in }
 
     private let registry: WorkflowRegistry
     private let executeCall: @MainActor (WorkflowExecutionContext) async throws -> WorkflowOperationResult
@@ -26,7 +29,7 @@ import Foundation
     public func execute(_ supplied: WorkflowPlanCheckpoint) async throws -> WorkflowPlanCheckpoint {
         guard !executing else { throw WorkflowIssue("结构化计划已有一次执行正在进行。") }
         executing = true
-        defer { executing = false }
+        defer { executing = false; pauseAvailabilityChanged(false) }
         if let held = checkpoint, held.state == .saving {
             guard held.runID == supplied.runID else {
                 throw WorkflowIssue("另一运行仍有结果等待保存；必须先保存或由所有者明确放弃。")
@@ -51,6 +54,7 @@ import Foundation
 
         pauseRequested = false
         stopRequested = false
+        pauseAvailabilityChanged(true)
         try validateCheckpoint()
         try validateExternalInputs()
         try validateSubmittedWaitingDecisions()

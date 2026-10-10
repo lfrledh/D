@@ -1614,7 +1614,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             ZStack {
                 content
                 RetainedContentHost(content: WorkflowHostView(model: model, nodeTags: tags, libraryContent: libraryStore.map { store in
-                    { _, close in AnyView(SharedLibraryBrowser(entries: libraryEntries, store: store,
+                    { _, _, close in AnyView(SharedLibraryBrowser(entries: libraryEntries, store: store,
                         compact: true, state: libraryState,
                         onUse: { _ in XCTFail("Hidden library must not execute") },
                         onAdd: { _ in XCTFail("Hidden library must not add") },

@@ -27,7 +27,14 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     @ObservationIgnored private var emptyInsertionRevision = UUID()
     public private(set) var runs: [WorkflowRun] = [] { didSet { displayHistoryGeneration &+= 1 } }
     public private(set) var tools: [WorkflowToolDefinition] = [] { didSet { displayToolGeneration &+= 1 } }
-    @ObservationIgnored private var activeExecutor: WorkflowPlanExecutor?
+    @ObservationIgnored private var activeExecutor: WorkflowPlanExecutor? {
+        didSet { if activeExecutor == nil { presentationHasExecutor = false } }
+    }
+    private var presentationHasExecutor = false
+    public var canPausePresentation: Bool {
+        guard presentationHasExecutor, !isSaving, let run = activePresentationRun else { return false }
+        return run.status == .running && run.planCheckpoint?.state == .running
+    }
     public private(set) var availableAssets: [ProjectAsset] = []
     public private(set) var projectID: UUID?
     public private(set) var projectInstanceID: UUID?
@@ -46,6 +53,10 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     @ObservationIgnored public var externalOperationBusy: () -> Bool = { false }
     public private(set) var streamingText = ""
     public private(set) var streamingStepID: UUID?
+    public var activePresentationRun: WorkflowRun? {
+        guard isRunning, let activeRunID else { return nil }
+        return runs.first { $0.id == activeRunID }
+    }
     public var visibleStreamingText: String {
         guard let id = activeRunID, runs.first(where: { $0.id == id })?.graph.id == selectedGraphID else { return "" }
         return streamingText
@@ -783,6 +794,25 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         }
     }
 
+    /// Read-only navigation follows a concrete call's provenance to its root.
+    /// It changes presentation only, including while the frozen run is in flight.
+    public func presentationRootGraphID(for runID: UUID) -> UUID? {
+        guard var current = runs.first(where: { $0.id == runID }) else { return nil }
+        var seen = Set<UUID>()
+        while seen.insert(current.id).inserted {
+            if graphs.contains(where: { $0.id == current.graph.id }) { return current.graph.id }
+            guard let parentID = current.scope?.originCall?.address.runID,
+                  let parent = runs.first(where: { $0.id == parentID }) else { return nil }
+            current = parent
+        }
+        return nil
+    }
+    @discardableResult public func revealRunForPresentation(_ runID: UUID) -> Bool {
+        guard !closed, let root = presentationRootGraphID(for: runID) else { return false }
+        selectedGraphID = root; bodyPath = []; selectedNodeID = nil; selectedNodeIDs = []
+        return true
+    }
+
     private func belongsToSelectedWorkflow(_ run: WorkflowRun) -> Bool {
         var current = run, seen = Set<UUID>()
         while seen.insert(current.id).inserted {
@@ -792,6 +822,13 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             current = parent
         }
         return false
+    }
+
+    public func presentationStep(nodeID: UUID, runID: UUID?) -> WorkflowStepRun? {
+        guard let runID else { return latestStep(for: nodeID) }
+        guard let run = runs.first(where: { $0.id == runID }), belongsToSelectedWorkflow(run) else { return nil }
+        return run.planCheckpoint?.records.last(where: { $0.step.node.id == nodeID })?.step
+            ?? run.steps.last(where: { $0.node.id == nodeID })
     }
 
     public func canRerunCall(_ call: WorkflowPlanCallRecord) -> Bool {
@@ -935,6 +972,10 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             try await self.persist()
         })
         activeExecutor = executor
+        executor.pauseAvailabilityChanged = { [weak self, weak executor] ready in
+            guard let self, self.activeExecutor === executor else { return }
+            self.presentationHasExecutor = ready
+        }
         do {
             let result = try await executor.execute(checkpoint)
             capture(result, runIndex: ri)

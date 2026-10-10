@@ -16,16 +16,16 @@ struct WorkflowToolPanel: View {
                     HStack {
                         Text(tool.name + " · v\(tool.version)")
                         Spacer()
-                        Button(t("insert", "插入实例")) { controller.addTool(tool); dismiss() }
+                        Button(t("insert", "插入实例")) { controller.addTool(tool); dismiss() }.disabled(!controller.canEditCanvas)
                         Button(t("copy", "展开为编辑副本")) {
                             guard let digest = try? WorkflowPlanCompiler.digest(tool) else { return }
                             controller.openToolCopy(.init(id: tool.id, version: tool.version, digest: digest)); dismiss()
-                        }
+                        }.disabled(!controller.canEditCanvas)
                     }
                 }
                 Divider()
                 TextField(t("name", "新工具名称"), text: $name)
-                Button(t("saveGraph", "按公开接口另存当前流程为工具")) { controller.saveGraphAsTool(name: name) }
+                Button(t("saveGraph", "按公开接口另存当前流程为工具")) { controller.saveGraphAsTool(name: name) }.disabled(!controller.canEditCanvas)
                 Text(t("fixed", "工具实例固定版本与摘要。编辑副本、另存工具和选择新版本都不会静默改变既有实例。")).font(.caption).foregroundStyle(.secondary)
                 Button(t("inspect", "检查选区的跨界输入与输出")) {
                     if let graph = controller.graph { boundary = ToolBoundaryDraft(graph: graph, selected: controller.selectedNodeIDs, registry: controller.registry, tools: controller.tools) }
@@ -59,7 +59,7 @@ struct WorkflowToolPanel: View {
                 guard let draft = boundary, controller.selectedNodeIDs == draft.selected else { controller.errorMessage = t("stale", "选区已改变，请重新检查边界。"); return }
                 controller.extractSelection(name: name, inputs: draft.inputs, outputs: draft.outputs.filter(\.included).map(\.value), expectedGraphID: draft.graphID, expectedRevision: draft.revision)
                 if controller.errorMessage == nil { boundary = nil; dismiss() }
-            }.buttonStyle(.borderedProminent)
+            }.buttonStyle(.borderedProminent).disabled(!controller.canEditCanvas)
         }
     }
     private func t(_ suffix: String, _ fallback: String) -> String { language?.text("workflow.language.tools." + suffix, fallback: fallback) ?? fallback }

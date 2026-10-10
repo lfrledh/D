@@ -295,6 +295,13 @@ extension WorkflowLifecycleTests {
         #expect(derived.steps[0].id != call.step.id)
         #expect(derived.steps[0].outputs == call.step.outputs)
         #expect(derived.scope?.originCall == .init(address: call.address, stepID: call.step.id))
+        #expect(c.presentationRootGraphID(for: derived.id) == original.graph.id)
+        c.selectedGraphID = nil
+        #expect(c.revealRunForPresentation(derived.id))
+        #expect(c.rootGraph?.id == original.graph.id && c.bodyPath.isEmpty)
+        #expect(c.runs == [original, derived])
+        #expect(c.presentationStep(nodeID: call.step.node.id, runID: derived.id)?.id == derived.steps[0].id)
+        #expect(c.presentationStep(nodeID: call.step.node.id, runID: original.id)?.id == original.planCheckpoint?.records.last(where: { $0.step.node.id == call.step.node.id })?.step.id)
         #expect(await engine.requests.isEmpty)
         try await c.close(); let url = store.rootURL; try await store.close()
         let reopened = try await ProjectStore.open(at: url)
@@ -577,7 +584,14 @@ struct WorkflowLifecycleTests {
         let submitted = try #require(await engine.requests.first)
         c.setParameter(nodeID: original.nodes[0].id, key: "text", value: .text("new unsent input"))
         c.addExample("template"); let other = try #require(c.graph)
+        let active = try #require(c.activePresentationRun)
+        #expect(active.graph.id == original.id && active.targetNodeID == original.nodes[1].id)
+        #expect(c.canPausePresentation)
+        #expect(c.revealRunForPresentation(active.id))
+        #expect(c.graph?.id == original.id && c.bodyPath.isEmpty)
+        c.selectedGraphID = other.id
         await gate.open(); await operation.value
+        #expect(c.activePresentationRun == nil && !c.canPausePresentation)
         #expect(c.errorMessage == nil)
         #expect(c.graph == other)
         let run = try #require(c.runs.last)

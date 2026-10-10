@@ -7,6 +7,7 @@ struct WorkflowPortDragReceiver: NSViewRepresentable {
     let port: WorkflowPortIdentity
     let scope: WorkflowCanvasScope
     let enabled: Bool
+    var visibleAt: (CGPoint) -> Bool = { _ in true }
     let onClick: () -> Void
     let onChange: (CGSize) -> Void
     let onEnd: (WorkflowPortIdentity?) -> Void
@@ -20,7 +21,7 @@ struct WorkflowPortDragReceiver: NSViewRepresentable {
     func updateNSView(_ view: WorkflowPortDragView, context: Context) {
         let accepts = enabled && environmentEnabled
         if view.port != port || view.scope != scope || !accepts { view.cancel(notify: false) }
-        view.port = port; view.scope = scope; view.enabled = accepts
+        view.port = port; view.scope = scope; view.enabled = accepts; view.visibleAt = visibleAt
         view.onClick = onClick; view.onChange = onChange; view.onEnd = onEnd
     }
     static func dismantleNSView(_ view: WorkflowPortDragView, coordinator: ()) {
@@ -32,6 +33,7 @@ final class WorkflowPortDragView: NSView {
     var port: WorkflowPortIdentity?
     var scope: WorkflowCanvasScope?
     var enabled = false
+    var visibleAt: (CGPoint) -> Bool = { _ in true }
     var onClick: () -> Void = {}
     var onChange: (CGSize) -> Void = { _ in }
     var onEnd: (WorkflowPortIdentity?) -> Void = { _ in }
@@ -45,6 +47,7 @@ final class WorkflowPortDragView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard enabled, !isHiddenOrHasHiddenAncestor else { return nil }
         let local = convert(point, from: superview)
+        guard visibleAt(CGPoint(x: local.x - bounds.midX, y: local.y - bounds.midY)) else { return nil }
         return hypot(local.x - bounds.midX, local.y - bounds.midY) <= min(bounds.width, bounds.height) / 2 ? self : nil
     }
     override func mouseDown(with event: NSEvent) {
@@ -96,5 +99,20 @@ final class WorkflowPortDragView: NSView {
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         if newWindow !== window { cancel() }
         super.viewWillMove(toWindow: newWindow)
+    }
+}
+
+/// Opaque cards must also occlude native event receivers in lower cards. The
+/// viewport owns node gestures; this transparent receiver only establishes z-order.
+struct WorkflowNodePlateReceiver: NSViewRepresentable {
+    func makeNSView(context: Context) -> WorkflowNodePlateView { WorkflowNodePlateView() }
+    func updateNSView(_ view: WorkflowNodePlateView, context: Context) {}
+}
+final class WorkflowNodePlateView: NSView {
+    override var isFlipped: Bool { true }
+    override var isOpaque: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHiddenOrHasHiddenAncestor else { return nil }
+        return WorkflowConnectionGeometry.nodePlate(bounds).cgPath.contains(convert(point, from: superview)) ? self : nil
     }
 }

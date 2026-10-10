@@ -20,6 +20,7 @@ struct WorkflowGraphSurface: View {
     @Binding var selectedConnectionID: UUID?
     let readOnly: Bool
     let onPlan: (UUID, Bool) -> Void
+    var onSetRunTarget: (UUID) -> Void = { _ in }
     var nodeSizeObserver: ((UUID, CGSize) -> Void)?
     var viewportSizeObserver: ((WorkflowCanvasViewportMeasurement) -> Void)?
     var portCenterObserver: (([WorkflowPortIdentity: CGPoint]) -> Void)?
@@ -37,6 +38,7 @@ struct WorkflowGraphSurface: View {
     @State private var connectionIssue: WorkflowCanvasConnectionIssue?
     @State private var scrollTracking = WorkflowCanvasScrollTracking()
     @State private var controlBounds: [CGRect] = []
+    @State private var nodeControlBounds: [UUID: [CGRect]] = [:]
     @State private var clipViewportSize: CGSize?
     @State private var resizeAnchorRaw: CGPoint?
     @State private var pendingZoomOffset: CGPoint?
@@ -105,8 +107,18 @@ struct WorkflowGraphSurface: View {
                                 readOnly: readOnly,
                                 selected: controller.selectedNodeID == node.id || controller.selectedNodeIDs.contains(node.id),
                                 onPlan: onPlan,
+                                onSetRunTarget: onSetRunTarget,
                                 onBindAsset: onBindAsset,
                                 onInspect: onInspect,
+                                portVisible: { port, delta in
+                                    guard let center = measuredPortCenters[port],
+                                          let index = graph.nodes.firstIndex(where: { $0.id == node.id }) else { return false }
+                                    let point = CGPoint(x: center.x + delta.x, y: center.y + delta.y)
+                                    let frames = WorkflowConnectionGeometry.nodeFrames(geometry: geometry, sizes: cardSizes)
+                                    return !graph.nodes.dropFirst(index + 1).contains { other in
+                                        frames[other.id].map { WorkflowConnectionGeometry.nodePlate($0).cgPath.contains(point) } ?? false
+                                    }
+                                },
                                 onSelectPort: { port in selectPort(port, scope: scope) },
                                 onPortDrag: { port, delta in
                                     guard canConnect(in: scope), let center = measuredPortCenters[port] else { return }
@@ -140,9 +152,9 @@ struct WorkflowGraphSurface: View {
                         }
                         }
                         .frame(width: geometry.size.width, height: geometry.size.height)
-                        // The wires are foreground strokes, including the segment inside a card.
-                        // Only their narrow hit paths receive events; drawing has no hit surface.
-                        .overlayPreferenceValue(WorkflowPortAnchorPreferenceKey.self) { anchors in
+                        // Main wires and their event receivers belong behind opaque node plates.
+                        // Each card owns its short port leads in the same node z-order.
+                        .backgroundPreferenceValue(WorkflowPortAnchorPreferenceKey.self) { anchors in
                         GeometryReader { proxy in
                             let centers = anchors.mapValues { proxy[$0] }
                             WorkflowConnectionLayer(
@@ -153,12 +165,16 @@ struct WorkflowGraphSurface: View {
                                 dragPresentation: nodeDrag,
                                 portCenters: centers,
                                 controlBounds: controlBounds,
+                                cardSizes: cardSizes,
                                 selectedConnectionID: selectedConnectionID,
                                 pendingConnection: pendingConnection,
                                 dragPoint: connectionDrag,
                                 canDisconnect: !readOnly && controller.canEditCanvas,
                                 onSelect: { connectionID in
-                                    if scope.isCurrent(in: controller) { selectedConnectionID = connectionID }
+                                    if scope.isCurrent(in: controller) {
+                                        controller.selectedNodeID = nil; controller.selectedNodeIDs = []
+                                        selectedConnectionID = connectionID
+                                    }
                                 },
                                 onDisconnect: { connection in
                                     guard !readOnly, WorkflowCanvasConnectionEditing.disconnect(connection,
@@ -172,10 +188,20 @@ struct WorkflowGraphSurface: View {
                     }
                     .overlayPreferenceValue(WorkflowNodeControlPreferenceKey.self) { anchors in
                         GeometryReader { proxy in
-                            let frames = anchors.map { proxy[$0] }
+                            let frames = anchors.map { proxy[$0.anchor] }
+                            let owned = Dictionary(grouping: anchors.filter { $0.nodeID != nil }, by: { $0.nodeID! })
+                                .mapValues { $0.map { proxy[$0.anchor] } }
                             Color.clear.allowsHitTesting(false)
-                                .onAppear { updateControlBounds(frames) }
-                                .onChange(of: frames) { _, next in updateControlBounds(next) }
+                                .onAppear { updateControlBounds(frames); nodeControlBounds = owned; nodeDrag.latestOwnedControlBounds = owned }
+                                .onChange(of: frames) { _, next in
+                                    updateControlBounds(next)
+                                    nodeDrag.latestOwnedControlBounds = owned
+                                    if nodeDrag.active == nil { nodeControlBounds = owned }
+                                }
+                                .onChange(of: owned) { _, next in
+                                    nodeDrag.latestOwnedControlBounds = next
+                                    if nodeDrag.active == nil { nodeControlBounds = next }
+                                }
                         }.allowsHitTesting(false)
                     }
                     .offset(x: edge.width, y: edge.height)
@@ -374,6 +400,7 @@ struct WorkflowGraphSurface: View {
     private func restoreMeasuredHits() {
         measuredPortCenters = nodeDrag.latestPortCenters
         controlBounds = nodeDrag.latestControlBounds
+        nodeControlBounds = nodeDrag.latestOwnedControlBounds
     }
 
     private func canConnect(in scope: WorkflowCanvasScope) -> Bool {
@@ -428,21 +455,27 @@ struct WorkflowGraphSurface: View {
                 let raw = layout.rawPoint(screenPoint: point, offset: offset)
                 let display = CGPoint(x: raw.x + geometry.translation.width,
                                       y: raw.y + geometry.translation.height)
-                if controlBounds.contains(where: { $0.contains(display) }) { return .control }
-                if tool == .pointer, measuredPortCenters.values.contains(where: {
-                    hypot(display.x - $0.x, display.y - $0.y) <= 11
-                }) { return .control }
+                // Resolve the topmost card before testing wires or controls belonging to
+                // covered cards. This matches the drawing stack and avoids invisible hits.
+                for node in geometry.graph.nodes.reversed() {
+                    let center = geometry.displayPosition(node.id)
+                    let size = cardSizes[node.id] ?? CGSize(width: WorkflowCanvasLayoutPolicy.nodeWidth, height: 600)
+                    let frame = CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2,
+                                       width: size.width, height: size.height)
+                    if WorkflowConnectionGeometry.nodePlate(frame).cgPath.contains(display) {
+                        if nodeControlBounds[node.id]?.contains(where: { $0.contains(display) }) == true { return .control }
+                        if tool == .pointer, measuredPortCenters.contains(where: {
+                            $0.key.nodeID == node.id && hypot(display.x - $0.value.x, display.y - $0.value.y) <= 11
+                        }) { return .control }
+                        return .node(node.id)
+                    }
+                }
                 if geometry.graph.connections.contains(where: {
                     WorkflowConnectionGeometry.hitPath(for: $0, geometry: geometry,
-                        portCenters: measuredPortCenters, excluding: controlBounds).cgPath.contains(display)
+                        portCenters: measuredPortCenters, excluding: controlBounds,
+                        nodeFrames: WorkflowConnectionGeometry.nodeFrames(geometry: geometry, sizes: cardSizes))
+                        .cgPath.contains(display)
                 }) { return .control }
-                for node in geometry.graph.nodes.reversed() {
-                    let center = geometry.rawPosition(node.id)
-                    let height = cardSizes[node.id]?.height ?? 600
-                    let frame = CGRect(x: center.x - WorkflowCanvasLayoutPolicy.nodeWidth / 2,
-                        y: center.y - height / 2, width: WorkflowCanvasLayoutPolicy.nodeWidth, height: height)
-                    if frame.contains(raw) { return .node(node.id) }
-                }
                 return .blank
             },
             onPointer: { update in
@@ -776,6 +809,7 @@ private struct WorkflowConnectionLayer: View {
     let dragPresentation: WorkflowCanvasNodeDragPresentation
     let portCenters: [WorkflowPortIdentity: CGPoint]
     let controlBounds: [CGRect]
+    let cardSizes: [UUID: CGSize]
     let selectedConnectionID: UUID?
     let pendingConnection: WorkflowPendingConnection?
     let dragPoint: WorkflowConnectionDragPresentation
@@ -787,8 +821,10 @@ private struct WorkflowConnectionLayer: View {
         let centers = WorkflowConnectionGeometry.movingFallbackCenters(
             graph: graph, geometry: geometry, measured: portCenters,
             moving: dragPresentation.movingNodeIDs, offset: dragPresentation.offset)
+        let frames = WorkflowConnectionGeometry.nodeFrames(geometry: geometry, sizes: cardSizes,
+            moving: dragPresentation.movingNodeIDs, offset: dragPresentation.offset)
         let paths = graph.connections.map {
-            WorkflowConnectionGeometry.path(for: $0, geometry: geometry, portCenters: centers)
+            WorkflowConnectionGeometry.path(for: $0, geometry: geometry, portCenters: centers, nodeFrames: frames)
         }
         let drawingBounds = WorkflowConnectionGeometry.drawingBounds(size: geometry.size, paths: paths)
         let drawingOrigin = drawingBounds.origin
@@ -814,7 +850,7 @@ private struct WorkflowConnectionLayer: View {
             if dragPresentation.movingNodeIDs.isEmpty {
                 ForEach(graph.connections) { connection in
                     WorkflowConnectionInteraction(connection: connection, geometry: geometry,
-                        portCenters: centers, controlBounds: controlBounds, canDisconnect: canDisconnect,
+                        portCenters: centers, controlBounds: controlBounds, nodeFrames: frames, canDisconnect: canDisconnect,
                         label: workflowText(language, "refinement.canvas.connectionLabel", fallback: "{type} connection from {source} to {target}",
                             arguments: ["type": WorkflowPortStyle.label(for: sourcePort(connection), language: language),
                                         "source": connection.sourcePort, "target": connection.targetPort]),
@@ -822,7 +858,7 @@ private struct WorkflowConnectionLayer: View {
                 }
             }
             WorkflowPendingConnectionLayer(pending: pendingConnection, drag: dragPoint,
-                centers: centers, color: WorkflowPortStyle.color(for: pendingConnection.flatMap { sourcePort($0) }))
+                centers: centers, nodeFrames: frames, color: WorkflowPortStyle.color(for: pendingConnection.flatMap { sourcePort($0) }))
 
         }
         .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
@@ -848,10 +884,12 @@ private struct WorkflowPendingConnectionLayer: View {
     let pending: WorkflowPendingConnection?
     let drag: WorkflowConnectionDragPresentation
     let centers: [WorkflowPortIdentity: CGPoint]
+    let nodeFrames: [UUID: CGRect]
     let color: Color
     var body: some View {
         if let pending, let point = drag.point,
-           let start = centers[.init(nodeID: pending.nodeID, port: pending.port, input: pending.input)] {
+           let dot = centers[.init(nodeID: pending.nodeID, port: pending.port, input: pending.input)] {
+            let start = WorkflowConnectionGeometry.edgePoint(dot, input: pending.input, frame: nodeFrames[pending.nodeID])
             WorkflowConnectionGeometry.curve(from: pending.input ? point : start,
                 to: pending.input ? start : point)
                 .stroke(color, lineWidth: 2.5).allowsHitTesting(false).accessibilityHidden(true)
@@ -866,6 +904,7 @@ private struct WorkflowConnectionInteraction: View {
     let geometry: WorkflowGraphGeometry
     let portCenters: [WorkflowPortIdentity: CGPoint]
     let controlBounds: [CGRect]
+    let nodeFrames: [UUID: CGRect]
     let canDisconnect: Bool
     let label: String
     let onSelect: () -> Void
@@ -873,14 +912,14 @@ private struct WorkflowConnectionInteraction: View {
     @State private var hitCache = WorkflowConnectionHitCache()
     var body: some View {
         let hit = hitCache.path(for: connection,
-            geometry: geometry, portCenters: portCenters, excluding: controlBounds)
+            geometry: geometry, portCenters: portCenters, excluding: controlBounds, nodeFrames: nodeFrames)
         let ends = WorkflowConnectionGeometry.endpoints(for: connection,
-            geometry: geometry, portCenters: portCenters)
+            geometry: geometry, portCenters: portCenters, nodeFrames: nodeFrames)
         let middle = CGPoint(x: (ends.start.x + ends.end.x) / 2, y: (ends.start.y + ends.end.y) / 2)
         WorkflowConnectionReceiver(path: hit.cgPath, midpoint: middle,
             canDisconnect: canDisconnect,
             cutAvailable: WorkflowConnectionGeometry.canShowCut(at: middle,
-                portCenters: Array(portCenters.values), controls: controlBounds), label: label,
+                portCenters: Array(portCenters.values), controls: controlBounds + Array(nodeFrames.values)), label: label,
             disconnectTitle: workflowText(language, "workflow.connection.disconnect", fallback: "断开连接"),
             identifier: "workflow-connection-" + connection.id.uuidString,
             onSelect: onSelect, onDisconnect: onDisconnect)
@@ -899,12 +938,16 @@ private struct WorkflowNodeCard: View {
     let readOnly: Bool
     let selected: Bool
     let onPlan: (UUID, Bool) -> Void
+    let onSetRunTarget: (UUID) -> Void
     let onBindAsset: (UUID, UUID?, UUID, UUID) -> Bool
     let onInspect: (UUID) -> Void
+    let portVisible: (WorkflowPortIdentity, CGPoint) -> Bool
     let onSelectPort: (WorkflowPortIdentity) -> Void
     let onPortDrag: (WorkflowPortIdentity, CGSize) -> Void
     let onPortDragEnd: (WorkflowPortIdentity?) -> Void
     @Environment(\.dLanguageStore) private var languageStore
+    @Environment(\.chatDisplayPreferences) private var displayPreferences
+    @Environment(\.colorScheme) private var colorScheme
     private var collapsed: Bool { controller.graph?.layout.first(where: { $0.nodeID == node.id })?.collapsed == true }
 
     var body: some View {
@@ -924,27 +967,24 @@ private struct WorkflowNodeCard: View {
                     if let annotation = identity.annotation, annotation != identity.title {
                         Text(annotation).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     }
-                    Text(workflowText(
-                        languageStore,
-                        "workflow.node.dragHint",
-                        fallback: "拖动卡片空白或说明移动；控件独立操作"
-                    ))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
                 }
                 .allowsHitTesting(false)
                 Spacer(minLength: 6)
+                Menu { nodeActions } label: {
+                    Image(systemName: "ellipsis").frame(width: 22, height: 22)
+                }.menuStyle(.borderlessButton).fixedSize().workflowNodeControl(node.id)
+                    .accessibilityIdentifier("workflow-node-menu-" + node.id.uuidString)
                 Button { onInspect(node.id) } label: {
                     Image(systemName: "slider.horizontal.3")
                 }
                 .buttonStyle(.borderless)
-                .workflowNodeControl()
+                .workflowNodeControl(node.id)
                 .help(workflowText(languageStore, "workflow.node.edit", fallback: "编辑节点"))
                 Button { controller.toggleCollapsed(node.id) } label: {
                     Image(systemName: collapsed ? "chevron.down" : "chevron.up")
                 }
                 .buttonStyle(.borderless)
-                .workflowNodeControl()
+                .workflowNodeControl(node.id)
                 .help(collapsed
                       ? workflowText(languageStore, "workflow.node.expand", fallback: "展开节点")
                       : workflowText(languageStore, "workflow.node.collapse", fallback: "折叠节点"))
@@ -954,7 +994,7 @@ private struct WorkflowNodeCard: View {
                     controller.deleteNode(id: node.id, target: target)
                 } label: { Image(systemName: "trash") }
                 .buttonStyle(.borderless)
-                .workflowNodeControl()
+                .workflowNodeControl(node.id)
                 .help(workflowText(languageStore, "workflow.node.delete", fallback: "删除节点"))
                 .accessibilityLabel(workflowText(languageStore, "workflow.node.delete", fallback: "删除节点"))
                 .accessibilityIdentifier("workflow-node-delete-\(node.id.uuidString)")
@@ -985,45 +1025,71 @@ private struct WorkflowNodeCard: View {
                     .allowsHitTesting(false)
             }
 
-            Toggle(workflowText(languageStore, "workflow.language.selection", fallback: "加入封装选区"), isOn: Binding(get: { controller.selectedNodeIDs.contains(node.id) }, set: { checked in
-                if checked { controller.selectedNodeIDs.insert(node.id) } else { controller.selectedNodeIDs.remove(node.id) }
-            })).toggleStyle(.checkbox).disabled(readOnly)
-                .workflowNodeControl()
-            HStack(spacing: 6) {
-                Button(workflowText(languageStore, "workflow.action.runToHere", fallback: "运行到这里")) {
-                    onPlan(node.id, false)
-                }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .workflowNodeControl()
-                Button(workflowText(languageStore, "workflow.action.rerunOnly", fallback: "仅重跑本步")) {
-                    onPlan(node.id, true)
-                }
-                    .controlSize(.small)
-                    .workflowNodeControl()
-                Spacer(minLength: 0)
-            }
-            .disabled(readOnly || definition == nil)
+
         }
         .padding(12)
         .frame(width: WorkflowCanvasLayoutPolicy.nodeWidth, alignment: .leading)
-        .background {
-            RoundedRectangle(cornerRadius: 13)
-                .fill(Color.clear).workbenchPanel(cornerRadius: 13)
-                .contentShape(RoundedRectangle(cornerRadius: 13))
-                .help(node.operationID)
+        .backgroundPreferenceValue(WorkflowPortAnchorPreferenceKey.self) { anchors in
+            GeometryReader { proxy in
+                Canvas { context, _ in
+                    for (port, anchor) in anchors where port.nodeID == node.id {
+                        let connected = graph.connections.contains { port.input
+                            ? $0.targetNode == node.id && $0.targetPort == port.port
+                            : $0.sourceNode == node.id && $0.sourcePort == port.port }
+                        guard connected || pendingConnection == WorkflowPendingConnection(
+                            nodeID: node.id, port: port.port, input: port.input) else { continue }
+                        let dot = proxy[anchor]
+                        let edge = WorkflowConnectionGeometry.edgePoint(dot, input: port.input,
+                            frame: CGRect(origin: .zero, size: proxy.size))
+                        let ownDefinition = (port.input ? definition?.inputs : definition?.outputs)?.first { $0.id == port.port }
+                        let incoming = port.input ? graph.connections.first { $0.targetNode == node.id && $0.targetPort == port.port } : nil
+                        let sourceDefinition = incoming.flatMap { edge in
+                            graph.nodes.first { $0.id == edge.sourceNode }.flatMap {
+                                controller.registry.definition(for: $0, tools: controller.tools)?.outputs.first { $0.id == edge.sourcePort }
+                            }
+                        }
+                        var lead = Path(); lead.move(to: dot); lead.addLine(to: edge)
+                        context.stroke(lead, with: .color(WorkflowPortStyle.color(for: sourceDefinition ?? ownDefinition)), lineWidth: 2.5)
+                    }
+                }.allowsHitTesting(false)
+            }
+            .background(WorkflowNodePlateReceiver())
+            .background {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(displayPreferences.resolvedAppearance.palette(for: colorScheme).panelColor)
+                    .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+            }
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 13)
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .stroke(selected ? Color.accentColor : Color.secondary.opacity(0.25),
                         lineWidth: selected ? 3 : 1)
                 .allowsHitTesting(false)
         }
-        .contentShape(RoundedRectangle(cornerRadius: 13))
+        .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
         .dropDestination(for: WorkflowCanvasTransfer.self) { (items: [WorkflowCanvasTransfer], _: CGPoint) -> Bool in
             acceptAsset(items)
         }
+        .contextMenu { nodeActions }
+        .accessibilityActions { nodeActions }
         .accessibilityIdentifier("workflow-node-\(node.id.uuidString)")
+    }
+
+    @ViewBuilder private var nodeActions: some View {
+        Button(workflowText(languageStore, controller.selectedNodeIDs.contains(node.id)
+            ? "workflow.selection.remove" : "workflow.language.selection",
+            fallback: controller.selectedNodeIDs.contains(node.id) ? "移出当前选择" : "加入当前选择")) {
+            guard scope.isCurrent(in: controller) else { return }
+            if controller.selectedNodeIDs.contains(node.id) { controller.selectedNodeIDs.remove(node.id) }
+            else { controller.selectedNodeIDs.insert(node.id) }
+            controller.selectedNodeID = controller.selectedNodeIDs.count == 1 ? controller.selectedNodeIDs.first : nil
+        }
+        Button(workflowText(languageStore, "workflow.run.setTarget", fallback: "设为运行终点")) { if scope.isCurrent(in: controller) { onSetRunTarget(node.id) } }
+            .disabled(readOnly || definition == nil)
+        Button(workflowText(languageStore, "workflow.action.runToHere", fallback: "运行到此节点")) { if scope.isCurrent(in: controller) { onPlan(node.id, false) } }
+            .disabled(readOnly || definition == nil)
+        Button(workflowText(languageStore, "workflow.action.rerunOnly", fallback: "只重跑此节点")) { if scope.isCurrent(in: controller) { onPlan(node.id, true) } }
+            .disabled(readOnly || definition == nil)
     }
 
     @ViewBuilder
@@ -1079,6 +1145,7 @@ private struct WorkflowNodeCard: View {
         .overlay {
             WorkflowPortDragReceiver(port: identity, scope: scope,
                 enabled: !readOnly && tool == .pointer && controller.canEditCanvas,
+                visibleAt: { portVisible(identity, $0) },
                 onClick: { onSelectPort(identity) },
                 onChange: { onPortDrag(identity, $0) }, onEnd: onPortDragEnd)
         }
@@ -1321,6 +1388,7 @@ final class WorkflowCanvasNodeDragPresentation {
     @ObservationIgnored private var gestureZoom: CGFloat = 1
     @ObservationIgnored var latestPortCenters: [WorkflowPortIdentity: CGPoint] = [:]
     @ObservationIgnored var latestControlBounds: [CGRect] = []
+    @ObservationIgnored var latestOwnedControlBounds: [UUID: [CGRect]] = [:]
     private(set) var movingNodeIDs: Set<UUID> = []
     private(set) var offset = CGSize.zero
     var active: WorkflowCanvasNodeDragState? { coordinator.active }
@@ -1460,16 +1528,17 @@ struct WorkflowPortIdentity: Hashable {
     let input: Bool
 }
 
+private struct WorkflowNodeControlAnchor { let nodeID: UUID?; let anchor: Anchor<CGRect> }
 private struct WorkflowNodeControlPreferenceKey: PreferenceKey {
-    static let defaultValue: [Anchor<CGRect>] = []
-    static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
+    static let defaultValue: [WorkflowNodeControlAnchor] = []
+    static func reduce(value: inout [WorkflowNodeControlAnchor], nextValue: () -> [WorkflowNodeControlAnchor]) {
         value += nextValue()
     }
 }
 
 private extension View {
-    func workflowNodeControl() -> some View {
-        anchorPreference(key: WorkflowNodeControlPreferenceKey.self, value: .bounds) { [$0] }
+    func workflowNodeControl(_ nodeID: UUID? = nil) -> some View {
+        anchorPreference(key: WorkflowNodeControlPreferenceKey.self, value: .bounds) { [.init(nodeID: nodeID, anchor: $0)] }
     }
 }
 
@@ -1485,6 +1554,24 @@ struct WorkflowPortAnchorPreferenceKey: PreferenceKey {
 }
 
 enum WorkflowConnectionGeometry {
+    static func nodePlate(_ rect: CGRect) -> Path {
+        RoundedRectangle(cornerRadius: 13, style: .continuous).path(in: rect)
+    }
+    static func nodeFrames(geometry: WorkflowGraphGeometry, sizes: [UUID: CGSize],
+                           moving: Set<UUID> = [], offset: CGSize = .zero) -> [UUID: CGRect] {
+        Dictionary(uniqueKeysWithValues: geometry.graph.nodes.map { node in
+            let center = geometry.displayPosition(node.id)
+            let size = sizes[node.id] ?? CGSize(width: WorkflowCanvasLayoutPolicy.nodeWidth, height: 180)
+            return (node.id, CGRect(x: center.x - size.width / 2 + (moving.contains(node.id) ? offset.width : 0),
+                y: center.y - size.height / 2 + (moving.contains(node.id) ? offset.height : 0),
+                width: size.width, height: size.height))
+        })
+    }
+    static func edgePoint(_ point: CGPoint, input: Bool, frame: CGRect?) -> CGPoint {
+        guard let frame else { return point }
+        return CGPoint(x: input ? frame.minX : frame.maxX, y: point.y)
+    }
+
     static func drawingBounds(size: CGSize, paths: [Path]) -> CGRect {
         paths.reduce(CGRect(origin: .zero, size: size)) { bounds, path in
             bounds.union(path.boundingRect.insetBy(dx: -3, dy: -3))
@@ -1501,19 +1588,21 @@ enum WorkflowConnectionGeometry {
         for connection: WorkflowConnection,
         geometry: WorkflowGraphGeometry,
         portCenters: [WorkflowPortIdentity: CGPoint],
-        excluding controls: [CGRect] = []
+        excluding controls: [CGRect] = [],
+        nodeFrames: [UUID: CGRect] = [:]
     ) -> Path {
-        let ends = endpoints(for: connection, geometry: geometry, portCenters: portCenters)
+        let ends = endpoints(for: connection, geometry: geometry, portCenters: portCenters, nodeFrames: nodeFrames)
         // Exclude the actual dot hit circles, rather than an arbitrary fraction
         // that either hides a short wire or steals a long wire's endpoint.
-        var hit = path(for: connection, geometry: geometry, portCenters: portCenters)
+        var hit = path(for: connection, geometry: geometry, portCenters: portCenters, nodeFrames: nodeFrames)
             .strokedPath(StrokeStyle(lineWidth: 12, lineCap: .round))
         let bounds = hit.boundingRect
-        for point in Array(portCenters.values) + [ends.start, ends.end] {
+        for point in Array(portCenters.values) + (nodeFrames.isEmpty ? [ends.start, ends.end] : []) {
             let circle = CGRect(x: point.x - 12, y: point.y - 12, width: 24, height: 24)
             if bounds.intersects(circle) { hit = hit.subtracting(Path(ellipseIn: circle)) }
         }
         for rect in controls where bounds.intersects(rect) { hit = hit.subtracting(Path(rect)) }
+        for rect in nodeFrames.values where bounds.intersects(rect) { hit = hit.subtracting(nodePlate(rect)) }
         return hit
     }
 
@@ -1541,7 +1630,8 @@ enum WorkflowConnectionGeometry {
     static func endpoints(
         for connection: WorkflowConnection,
         geometry: WorkflowGraphGeometry,
-        portCenters: [WorkflowPortIdentity: CGPoint]
+        portCenters: [WorkflowPortIdentity: CGPoint],
+        nodeFrames: [UUID: CGRect] = [:]
     ) -> (start: CGPoint, end: CGPoint) {
         let source = WorkflowPortIdentity(
             nodeID: connection.sourceNode, port: connection.sourcePort, input: false
@@ -1552,23 +1642,24 @@ enum WorkflowConnectionGeometry {
         let sourceCenter = geometry.displayPosition(connection.sourceNode)
         let targetCenter = geometry.displayPosition(connection.targetNode)
         return (
-            portCenters[source] ?? CGPoint(
+            edgePoint(portCenters[source] ?? CGPoint(
                 x: sourceCenter.x + WorkflowCanvasLayoutPolicy.nodeWidth / 2,
                 y: sourceCenter.y
-            ),
-            portCenters[target] ?? CGPoint(
+            ), input: false, frame: nodeFrames[connection.sourceNode]),
+            edgePoint(portCenters[target] ?? CGPoint(
                 x: targetCenter.x - WorkflowCanvasLayoutPolicy.nodeWidth / 2,
                 y: targetCenter.y
-            )
+            ), input: true, frame: nodeFrames[connection.targetNode])
         )
     }
 
     static func path(
         for connection: WorkflowConnection,
         geometry: WorkflowGraphGeometry,
-        portCenters: [WorkflowPortIdentity: CGPoint]
+        portCenters: [WorkflowPortIdentity: CGPoint],
+        nodeFrames: [UUID: CGRect] = [:]
     ) -> Path {
-        let points = endpoints(for: connection, geometry: geometry, portCenters: portCenters)
+        let points = endpoints(for: connection, geometry: geometry, portCenters: portCenters, nodeFrames: nodeFrames)
         return curve(from: points.start, to: points.end)
     }
 
@@ -1675,21 +1766,23 @@ enum WorkflowCanvasConnectionPolicy {
 /// exact endpoints and nearby excluded affordances, independent of graph semantics.
 @MainActor final class WorkflowConnectionHitCache {
     private struct Key: Equatable {
-        let start: CGPoint; let end: CGPoint; let ports: [CGPoint]; let controls: [CGRect]
+        let start: CGPoint; let end: CGPoint; let ports: [CGPoint]; let controls: [CGRect]; let nodes: [CGRect]
     }
     private var key: Key?
     private var cached = Path()
     private(set) var builds = 0
     func path(for connection: WorkflowConnection, geometry: WorkflowGraphGeometry,
-              portCenters: [WorkflowPortIdentity: CGPoint], excluding controls: [CGRect]) -> Path {
-        let ends = WorkflowConnectionGeometry.endpoints(for: connection, geometry: geometry, portCenters: portCenters)
+              portCenters: [WorkflowPortIdentity: CGPoint], excluding controls: [CGRect],
+              nodeFrames: [UUID: CGRect] = [:]) -> Path {
+        let ends = WorkflowConnectionGeometry.endpoints(for: connection, geometry: geometry, portCenters: portCenters, nodeFrames: nodeFrames)
         let curve = WorkflowConnectionGeometry.curve(from: ends.start, to: ends.end)
         let bounds = curve.boundingRect.insetBy(dx: -6, dy: -6)
-        let ports = (Array(portCenters.values) + [ends.start, ends.end]).filter {
+        let ports = (Array(portCenters.values) + (nodeFrames.isEmpty ? [ends.start, ends.end] : [])).filter {
             bounds.intersects(CGRect(x: $0.x - 12, y: $0.y - 12, width: 24, height: 24))
         }.sorted { $0.x == $1.x ? $0.y < $1.y : $0.x < $1.x }
         let nearby = controls.filter { bounds.intersects($0) }
-        let next = Key(start: ends.start, end: ends.end, ports: ports, controls: nearby)
+        let nodes = nodeFrames.sorted { $0.key.uuidString < $1.key.uuidString }.map(\.value).filter { bounds.intersects($0) }
+        let next = Key(start: ends.start, end: ends.end, ports: ports, controls: nearby, nodes: nodes)
         if next != key {
             #if DEBUG
             let start = CFAbsoluteTimeGetCurrent()
@@ -1698,6 +1791,7 @@ enum WorkflowCanvasConnectionPolicy {
             for point in ports { hit = hit.subtracting(Path(ellipseIn:
                 CGRect(x: point.x - 12, y: point.y - 12, width: 24, height: 24))) }
             for rect in nearby { hit = hit.subtracting(Path(rect)) }
+            for rect in nodes { hit = hit.subtracting(WorkflowConnectionGeometry.nodePlate(rect)) }
             key = next; cached = hit; builds += 1
             #if DEBUG
             WorkflowCanvasUpdateProbe.wireHitBuild?(CFAbsoluteTimeGetCurrent() - start)
