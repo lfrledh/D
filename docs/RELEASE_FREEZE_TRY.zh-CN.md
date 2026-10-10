@@ -1,29 +1,37 @@
-# D 节点拖动性能修订候选
+# D 系统性 UI 性能修补候选
 
-2026-10-10 · **UI-PRESENTATION-REBUILD-01** · 生产 **2d2b8380c81b782a356432125ddf038f86a6f794**。本轮只处理节点拖动的额外开销，保留现有布局和交互。
+2026-10-10 · **UI-PRESENTATION-REBUILD-01 / R15** · 生产 **f1dec35fd816caf3f2219ad94131ea623ccaf588**。继承R14节点局部拖动，保留布局、功能和视觉默认。
 
 ## 唯一试用入口
 
 [启动聊天当前验收.command](/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/启动聊天当前验收.command)
 
-指向 [D UI Review 2d2b8380.app](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-node-drag-performance/delivery/D UI Review 2d2b8380.app>)。实际PID35328、包路径和隔离UUID核实；入口拒绝双开，不覆盖普通D。当前已打开独立 [Node drag review.dproject](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-node-drag-performance/gui/Node drag review.dproject>) 的“双输入文字模板”，可直接拖动，无需模型。重新启动后用文件→打开项目→工作流→左上流程选择器进入。
+指向 [D UI Review f1dec35f.app](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-systematic-performance/delivery/D UI Review f1dec35f.app>)。普通签名/App Sandbox、7文件摘要和实际PID41034/隔离UUID已核实；入口拒绝双开，不覆盖普通D。当前已打开独立 [Performance review.dproject](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-systematic-performance/gui/Performance review.dproject>) 的「双输入文字模板」，四节点/三连接。重新启动后用文件→打开项目；顶部工作流→左上流程选择器进入，文字/图像通过快速生成入口切换。没有运行模型。
 
-## 这轮修复
+## 六组结果
 
-节点移动现在只更新其外层位置和连线，不再逐帧重算整张工作面、所有卡片及连线命中区域。原生控件身份保持，松手只提交一次布局，仍支持一次撤销；折叠节点的线端跟随，反向曲线绘制范围完整。此前圆点命中、前景连线、两工具分工及右键/剪刀入口保留。
+| 范围 | 操作因何减少重复工作 | 证据边界 |
+|---|---|---|
+| 注册表/查询 | 内置表一次初始化，参数定义和历史结果同次展示只查询一次。 | 固定Debug夹具500次注册表访问95.39→3.67毫秒。 |
+| 节点状态 | 当前作用域复用图/历史分析；参数、工具、上游结果变化仍失效。 | 同四节点100轮79.71→0.42毫秒；布局/Undo不重复规划，权威执行校验保留。 |
+| 画布 | R14局部节点拖动保留；临时线独立更新，未变命中路径复用。 | 36次节点/临时线更新根、卡片和命中构造均0；原生移动后右键及反向拖接成功。 |
+| 聊天 | 草稿/活动输出与旧行、列表分开；父链完整校验共享索引。 | 800消息3次校验882.62→9.09毫秒；36草稿旧行/列表更新0，受控流旧行0。 |
+| 文本/宿主 | 复用原生高度与Markdown配置；完整段落证明已过上限后无需再测全文。 | 长文100次测高717.88→5.91毫秒；组字/字体/宽度/缩短失效反例通过。无换行长段、隐藏宿主全面跳更新保留。 |
+| 媒体/合成 | 修复预览所有者与取消边界；未新建缓存或降低画质/动效。 | 两个20秒采样PNG解码各7样本，未取得新增缓存收益依据；冷首显/峰值尚无结论。 |
 
-相同36次连续位移的宿主测量：工作面重算72→0、卡片216→0、连线命中区144→0；实际端口仍有36个中间位置。17个相关方法分批通过，最后2方法复验通过不重复累加。普通构建28.98秒，签名/App Sandbox及7个包文件摘要匹配。这些是开销/行为证据，不是屏幕帧率。
+以上是函数/宿主开销，不能换算FPS。13项值/状态、35项宿主相关检查通过，最后2项复验不重复计数。普通构建31.66秒，位于全部XCTest之后。缓存所有者/容量/失效、原失败及精确证据见[任务R15](tasks/UI-PRESENTATION-REBUILD-01.md#r15系统性-ui-性能修补2026-10-10)。
 
 ## 同版原生检查
 
-已实际操作pointer/hand拖节点、折叠后拖动与展开、空白平移、移位后线右键断开及一次Undo恢复原ID、空处释放和保存。新快照仅改变测试节点位置，内容、连接、运行、资产与工具不变；旧项目75/77及上一轮用户保存后的81文件、个人scheme和源/main保持。
+已实际操作图片切换/125%/fit、草稿键入/Undo/Redo、40行内部滚动、历史词法搜索打开目标消息、双栏切换；两工具拖节点、移动后线右键断开、输入→输出反向接回、逐次Undo和保存均有直接结果。最终图内容/布局/连接身份及草稿恢复；原四份项目75/77/81/83文件摘要、源/main及个人scheme保持。
 
-- [拖动后的节点与连线](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-node-drag-performance/gui/02-pointer-node-moved-2d2b8380.png>)
-- [拖动后的连线菜单](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-node-drag-performance/gui/06-moved-wire-menu-2d2b8380.png>)
-- [保存后的全景](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-node-drag-performance/gui/07-saved-overview-2d2b8380.png>)
+- [搜索、消息与双栏](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-systematic-performance/gui/02-chat-search-f1dec35f.png>)
+- [40行草稿内部滚动](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-systematic-performance/gui/03-long-draft-f1dec35f.png>)
+- [节点撤销恢复后保存](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-systematic-performance/gui/05-canvas-restored-f1dec35f.png>)
+- 媒体同状态：[修前](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-systematic-performance/gui/baseline-media.png>) / [修后](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-systematic-performance/gui/01-media-f1dec35f.png>)。
 
-均为2d2b8380真实画面；独立复看无新增静态问题。截图不能证明在途每帧同步或持续FPS。当前工具无法分离按住拖动/释放，未用松手后的Escape冒充手势取消；宿主取消复位已验，原生按住Escape后立即点击仍保留。向上越过原边界松手时仍沿用旧坐标原点重定位逻辑。
+原生SwiftUI短采样的历史宿主148→197次、聊天根7→10次；两个阶段未逐事件对齐，超过99.7%视图名称unknown且无layout更新，不能声称整体变快，也不足以把差异判成代码回退。媒体CPU采样827→796个Running样本的差异也没有整体提速意义；不是连续FPS或P95。正常外观未见本轮新增静态阻断，图像模态旧浅色矩形/按钮组织留下一轮设计。
 
-## 剩余观察
+## 合并待验
 
-[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)继续保留连续拖动手感/帧率、按住取消后的即时命中、缩放/失焦组合，以及旧镜片、输入滚动条、材料拖放、阅读/停止与封装余项。Agent承担可独立完成的检查，未把实现错误转交用户。旧R13的双向边缘连线与冷开证据按旧版保留，本轮未重复全矩阵。没有加载模型或扩展音频/E/收费/搜索，F26继续延期。
+[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)已合并实际入口、步骤、预期和证据：当前候选连续拖动/长历史手感、按住Escape与缩放/失焦组合、无换行超长段和重媒体冷首显/长期内存，以及旧镜片、滚动条thumb、材料拖放/采用、真实模型停止与封装组合。用户主要观察体验，Agent负责可独立定位；不逐项催验。没有扩展模型、音频/E/收费/搜索，F26继续延期。
