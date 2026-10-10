@@ -237,3 +237,22 @@ GUI：库存与进程均确认无D，Finder原入口启动后，读取精确新�
 - 资源单独增量更新en/zh JSON曾导致根签名失效，只更新源码mtime未触发按内容增量的重签；失败记录保留。移走本任务生成的派生App后普通构建49.57秒成功，独立包严格签名/App Sandbox与7文件摘要一致，不手工重签、不覆盖普通D。
 - Finder唯一入口已启动e641，PID28667/实际路径/隔离UUID核实；读取D窗口一次`-10005 timeoutReached`。立即暂停GUI，不推断锁屏、不轮询/扩权；本版无截图/实际边缘拖接/光标/动效证据。桌面失败后只完成非交互测量与记录，不将离屏改写原生。当前包保留供后续同版复查；全部原生余项写现有集中队列。
 - R12证据：`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-drag-interactions`；`lead/{interactions-fixed,preview-isolation,bidirectional-policy}-result.json`、`delivery-review.json`、`native-pause.json`、`resource-signature-failure.json`。独立`gui/Drag review.dproject`取自已有无模型合成夹具，未由本轮GUI打开。原始75/77文件和原会话保护核对见data-protection.json。没有模型运行、推理、联网、自动生成或权限变更。
+
+
+## R13：节点命中、前景线、平移与断开（2026-10-10）
+
+用户实看R12后新增五项明确反馈，本轮仅修这些节点交互，不续镜片精修、不扩模型。起点7357c2d7本地/远端一致；生产 **0b48129c429a7c3a9726950d6a201ce4dc3851b3**。Lead单写，三个固定快照只读调查，初交及最多两轮修复复核；最后捕获动作/取消清理由Lead有界收尾。源01758/main91bef及个人scheme内容、索引和未暂存状态未变。
+
+根因与实现：原整行Button/原生接收器把端口标题算进接线；改为9点色点外22点圆形接收，标题/说明被动展示并交节点路由。旧blank和card独立手势竞争；改一个原生mouse-down归属会话，controls/ports/wires让位，两个工具均移动节点，空白才分pan/marquee。手型平移直接滚NSClipView，offset和panning留非观察跟踪对象；结束/取消才保存原scope、原zoom对应中心，切页后不写入新图。滚动位置移入工作面，活跃平移锁住其他缩放/中键路径。
+
+已存线与拖动预览移至卡片上方。线用12点窄路径命中，扣除全部端口和卡片控件；原SwiftUI Path.contains在减洞路径中仍回true，由反例定位后改CGPath原生命中。每线原生右键菜单和局部22点中点圆钮，线上hover显示dot，进入变剪刀，完整圆形可点；与端口/控件重叠时隐藏中点剪刀，避免遮住原控件。普通点线仍选择/打开详情；删除闭包捕获原scope、旧连接身份，再走既有Controller断开/单次Undo。按下动作与菜单动作捕获，不在更新后误用新scope；Escape/失焦/隐藏清理。未改Runtime/Store/模型/输入桥。
+
+检查分层：canvas-build-01编译失败（AX action重载），修后build-02通过；canvas-targeted-01的14项中13过，减洞命中反例失败保留。改CGPath原生命中后canvas-targeted-02 **15项通过**；最终剪刀重叠与动作生命周期修正后canvas-final-targets **4项通过**，不累计19项。36次跨runloop平移注入实测36个中间offset，canvas/surface/retained重算全0；不是窗口事件/帧率测试，不替代原生。旧R12 key-window前置失败未反复重跑。XCTest后普通构建27.85秒/exit0，包严格签名/App Sandbox及7文件摘要匹配，无补包/重签。
+
+同版原生：Finder唯一入口启动PID32058、冷重开PID32256及隔离UUID核实。仅用R13/gui/Canvas review.dproject。pointer从输出标题(1408,1030)拖到(1450,930)只移动节点，没有新线，更多→撤销恢复；Command-Z当时未产生workflow Undo，不计通过。hand节点标题(1160,940)→(1260,940)只移动该节点，其他节点与scroll offset不变；hand空白(800,700)→(920,780)全图平移；pointer空白(2100,1030)→(2670,1610)只框选确认节点。已存线在卡片内的一段亲见完整可见。
+
+线右键(1768,1246)显示“断开连接”，3→2条，菜单Undo恢复原ID。普通点线打开原检查器。中点dot和剪刀分别留07/08原图，剪刀上缘(1470,1228)距中心18屏幕像素，在线条窄命中外而圆钮主体内，点击3→2条，一次Undo恢复。输出圆点边缘(1406,1223)→输入(1534,1269)成功接线，显式断开后反方向同点拖接成功，保存最终BDA9360A连接。工具无纯移动API，中点状态经线上短拖到达，不报告无按键hover过程通过；也没有在途线连续截图/录像。最初坐标误按半倍的尝试无变化，不列成功。
+
+保存显示成功，正常退出后无D进程；同入口冷开、重新打开同副本并选择“双输入文字模板”，三条连接ID/节点位置保持。文件核对图内容/运行/资产相同，仅工作流revision递增；原资产媒体不变。原始UI review 75文件、Function review 77文件摘要不变；源/main/个人scheme内容与index摘要复核不变。候选留在该4节点现场，唯一入口更新。无本轮桌面失败/锁屏推断、权限变化或模型运行。
+
+证据根R13=`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback`；`lead/{canvas-targeted-02,canvas-final-targets,canvas-normal-delivery}-result.json`、`native-review.json`、`delivery-review.json`、`data-protection-final.json`，GUI 01–14均属同一生产。只在试用页选少量图。剩余为纯hover、密集交叉、缩放/取消/光标过程和连续大图手感，合并现有集中队列；原阅读、输入滚动条、Finder释放/采用、真实停止与封装组合门槛继续，不以本轮CPU/静态图全部关闭。

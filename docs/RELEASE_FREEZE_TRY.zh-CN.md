@@ -1,25 +1,34 @@
-# D 镜片拖动与节点交互修订候选
+# D 节点命中、连线与平移修订候选
 
-2026-10-10 · **UI-PRESENTATION-REBUILD-01** · 生产 **e6413de64889beac0f43d291c9403cbd039d598b**。保留现有布局、材质、输入修复和自适应轮廓。
+2026-10-10 · **UI-PRESENTATION-REBUILD-01** · 生产 **0b48129c429a7c3a9726950d6a201ce4dc3851b3**。保留现有布局、材质、镜片与输入修复。
 
 ## 唯一试用入口
 
 [启动聊天当前验收.command](/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/启动聊天当前验收.command)
 
-指向 [D UI Review e6413de6.app](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-drag-interactions/delivery/D UI Review e6413de6.app>)。Finder启动后PID28667、实际包路径和原隔离UUID已核实；入口拒绝双开，不覆盖普通D。本轮D窗口读取返回一次`-10005 timeoutReached`，停止原生操作，未认作锁屏。**没有本版真实截图、边缘拖接或手感通过结论。**
+指向 [D UI Review 0b48129c.app](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback/delivery/D UI Review 0b48129c.app>)。实际包路径、隔离UUID与冷重开PID32256核实；入口拒绝双开，不覆盖普通D。当前留在独立 [Canvas review.dproject](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback/gui/Canvas review.dproject>) 的“双输入文字模板”。冷启动后可用文件→打开项目→切换到工作流→左上流程选择器打开它，无需模型。
 
-原生复查使用已准备的 [Drag review.dproject](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-drag-interactions/gui/Drag review.dproject>)：文件→打开项目；其“双输入文字模板”只有文字输入、模板和确认节点，无需模型。副本尚未由Agent在本版界面打开，原始项目与会话保留。
+## 这轮变化
 
-## 变化与已验范围
+- 端口接线只命中小色点附近的22点圆形区域；标题/说明可拖动节点。指针工具仍支持两个方向起拖。
+- 已存线和正在拖出的线都在节点前景，点到卡片边缘这一段不再被卡片遮住。前景命中让位于其他端口和卡片控件。
+- 手型、指针都可移动节点；只有手型拖空白才平移，指针拖空白框选。平移直接使用原生滚动，取消每帧上报造成的工作面重算。
+- 右键连线可“断开连接”；线上悬停出现中点圆钮，进入圆钮变剪刀，点击断开，支持“更多→撤销”。中点恰与端口/控件重叠时不显示剪刀，仍可在线的其他位置右键。
 
-- 镜片：拖动临时状态留在独立控件内；松手才切换，原单镜片、局部折射、非线性回弹与减弱动态效果保留。离屏宿主36次分帧预览注入产生32个中间呈现值，真实工作台根/保留编辑器宿主更新均为0；提交后根更新。此为更新隔离测量，不是原生帧率。
-- 端口：输入、输出两端都可起拖，实时曲线；释放在另一兼容端口才按输出→输入提交，既有占用/类型/循环/Undo机制保留。普通点击/键盘端口入口也保留。手型仍用于导航及移动节点，端口连接在指针工具下操作。
-- 工具：两种工具都可拖节点；手型拖空白平移，指针拖空白框选。补手形悬停、按下抓握及松手/隐藏/失焦复位。
+## 同版原生证据
 
-11项原有相关方法通过；两个新增窗口事件测试在key-window前置失败，零事件，未重试到绿。离屏更新隔离测量通过；方向归一化与既有连接策略定向复验见任务回执。普通构建、独立包签名/沙盒及7文件一致性核对完成，资源增量签名失败和修正过程保留。
+已实际操作端口标题拖节点、手型拖节点/空白、指针框选、正反向圆点边缘拖接、线选择打开详情、右键断开、剪刀可见圆钮上缘点击断开，以及菜单一次Undo恢复原连接ID。保存后正常退出、用同一入口冷重开，三条连接ID和新位置保留，既有运行/资产/媒体未改。原项目75/77文件摘要、个人scheme及源/main保持。
 
-## 集中待验
+- [节点画布全景](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback/gui/14-delivery-overview-0b48129c.png>)
+- [悬停中点圆钮](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback/gui/07-wire-midpoint-dot-0b48129c.png>) · [进入中点的剪刀状态](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback/gui/08-wire-scissors-0b48129c.png>)
+- [连线原生右键菜单](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback/gui/05-wire-context-menu-0b48129c.png>)
 
-[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)已补实际入口、步骤、预期和证据边界：镜片持续/反向拖动及取消；两方向端口拖接、空处取消、缩放后命中、单次Undo；手型抓握、两工具节点拖动、空白平移/框选及保存重开。Agent未完成的原生验证仍由Agent继续，不把确定实现错误转交用户。
+上述均为0b48129c真实画面。中点状态通过在线上短拖移动指针到达；工具没有纯移鼠标API，未把未按键hover过程记为通过。截图不能证明连续跟手或在途预览的每帧状态。
 
-R11的输入/Undo/草稿保存和浅深静态证据仍属aa7ab43f，不能冒作本版重验。未加载模型、未自动发送、未扩权限、模型矩阵、音频/E/收费或搜索。F26继续延期。
+15项相关测试通过，最终4项受影响方法复验通过，不重复累加；36次跨runloop平移产生36个实际中间offset，canvas/surface/retained重算均0。此为开销隔离测量，不是屏幕帧率。普通构建27.85秒，严格签名/App Sandbox及7文件与普通产物一致。
+
+## 剩余观察
+
+[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)保留实际步骤：纯hover与在途线连续过程、密集交叉及缩放后命中、失焦/Escape取消、手形抓握全程和大图连续平移手感。其他镜片/面板、输入滚动条、材料拖放、阅读/真实停止、新建封装组合按原版本继续，不因本轮通过关闭。Agent承担可独立完成的检查，不将确定的实现错误转交用户。
+
+本轮没有加载模型或扩展音频/E/收费/搜索，F26继续延期。R12超时与旧失败保留于任务回执；同版操作明细在R13/lead/native-review.json。

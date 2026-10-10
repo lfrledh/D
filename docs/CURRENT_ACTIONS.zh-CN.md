@@ -1,6 +1,6 @@
 # 当前行动与接手点
 
-最后核实：2026-10-10。唯一活动任务为 **UI-PRESENTATION-REBUILD-01**，本聊天原生 UI Lead 持有展示、集成与验收。用户认可大布局，功能归组已实施；输入修复已获用户认可；最新授权修复镜片拖动卡顿、端口双向拖接、手型/指针的节点与画布行为。保留外壳、侧栏和视觉方向，本轮仅修镜片拖动性能，保留单镜片与现有光学方向。旧复杂交互待验保留。原生回归未齐，不宣布UI验收完成。
+最后核实：2026-10-10。唯一活动任务为 **UI-PRESENTATION-REBUILD-01**，本聊天原生 UI Lead 持有展示、集成与验收。用户认可大布局，功能归组已实施；输入修复已获用户认可；最新授权处理节点画布五项反馈：端口缩点命中、线置于节点前景、平移性能、两工具节点移动，以及连线右键/剪刀断开。保留外壳、侧栏、单镜片与现有光学方向，本轮仅改节点画布交互。旧复杂交互待验保留。原生回归未齐，不宣布UI验收完成。
 
 用户拒收旧界面，授权重组展示层而非重写 D。首轮直接完成公共外壳与真实聊天切片，原生自检/行为回归后交用户评审；其他模态只检公共导航，不扩模型、E、音频编辑器、收费或发行。
 
@@ -13,9 +13,17 @@
 
 ## 当前动作与证据
 
+R13交付（2026-10-10）：用户实看e641后指出端口整行误触、连线被节点遮挡、hand平移卡顿及拖节点仍平移，新增右键/悬停剪刀断开。7357c2d7本地/远端一致且工作树干净；Lead单写，三个固定快照只读调查/复核，旧实现检查不再当这些行为已修好的结论。当前生产 **0b48129c429a7c3a9726950d6a201ce4dc3851b3**。
+
+端口现在只在9点色点外的22点圆形范围接线，标题/说明属于节点移动；已存与预览线绘于节点前景。统一原生按下归属，两个工具均拖节点，仅hand空白平移/pointer空白框选。平移直接滚动原生clip，连续位置留在非观察跟踪对象，结束才发布视图中心。连线可右键断开，悬停中点显示圆钮、进入变剪刀；其完整圆形主体可点，端口/卡片控件优先，中点与控件重叠时不显示剪刀，线的其他部分仍可右键。沿用原作用域校验、Controller和单次Undo。
+
+R13=`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback`。15项相关方法通过，最终4项受影响方法复验通过，不累加为19项；36次分帧平移测量的canvas/surface/retained重算均0、实际中间offset36，不当原生帧率。初次编译/SwiftUI Path.contains孔洞反例失败保留，改精确CGPath原生命中后通过。XCTest后普通构建27.85秒；独立包严格签名/App Sandbox及7文件摘要匹配。
+
+同版原生PID32058、冷重开PID32256及隔离UUID已核实。独立Canvas review.dproject中实际完成：端口标题拖节点＋菜单Undo、hand拖节点/空白平移、pointer空白框选、正反向圆点边缘拖接、线选择详情、右键断开、剪刀圆钮上缘点击断开＋一次Undo恢复原ID；保存后正常退出/重开，三条连接ID与位置保留。已亲见前景线与点/剪刀静态图。工具没有纯移鼠标API，中点状态通过线上短拖到达；不把它写成未按键hover过程已测。无连续帧率/大图/缩放取消组合结论，具体余项在集中队列。原始75/77文件、源/main/个人scheme内容与索引未变，未加载模型；候选停在保存副本的节点画布，唯一入口已更新。
+
 2026-10-10 R12交付实现检查点：源与个人scheme保护未变，工作树/远端起点db5ca024一致，本轮启动前核实无D进程。用户反馈镜片拖动卡顿、端口拖线失败、反向拖线不支持、手型拖节点变成拖画布且缺少手形光标。Lead单写，三个固定快照只读调查已完成；先隔离高频展示状态，统一局部连线生命周期，再做同版原生与保存/Undo检查，不运行模型。旧待验与失败保留。
 
-当前生产 **e6413de64889beac0f43d291c9403cbd039d598b**：镜片高频 preview/hover/press/focus 移入独立控件，重复限位样本去重；不改现有局部标签折射或松手提交。端口改为同一原生鼠标生命周期，输入/输出均可起拖，实时使用与已存连接一致的曲线，释放后按输出→输入归一化再走既有校验/Controller/Undo；空处/失焦/Escape/旧scope取消。手型与指针均可移动节点；仅空白区区分平移/框选，并补openHand/closedHand状态和隐藏复位。
+R12生产 **e6413de64889beac0f43d291c9403cbd039d598b**：镜片高频 preview/hover/press/focus 移入独立控件，重复限位样本去重；不改现有局部标签折射或松手提交。端口改为同一原生鼠标生命周期，输入/输出均可起拖，实时使用与已存连接一致的曲线，释放后按输出→输入归一化再走既有校验/Controller/Undo；空处/失焦/Escape/旧scope取消。手型与指针均可移动节点；仅空白区区分平移/框选，并补openHand/closedHand状态和隐藏复位。
 
 R12=`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-drag-interactions`。11项既有相关方法通过；新增两个原生窗口测试停在key-window前置、零事件。另以明确离屏宿主测量控件预览入口：36次跨runloop注入、32个中间呈现值、真实Dual根body/RetainedContentHost更新均0，提交后根body更新，聊天状态不变；不是原生帧率或鼠标通过。源码方向归一化与原类型/占用/循环反例定向复验另记任务回执。非实现者检查已修端口消失清锁；原模型、Store、输入代码未改。
 
@@ -51,7 +59,7 @@ R7生产052fdb4a保留为旧候选：10方法通过、普通构建与浅深边�
 
 首片原生工作于2026-10-09被 `SCStreamErrorDomain -3812`（参数无效）中断；立即暂停，不轮询、不提权、不改变策略。保留当时隔离候选与草稿。该次未完项保留于[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)，后续局部补验见R7/R8，R9原生待验，不重开旧失败预算。本轮不要求重制网页原型，已获准的功能归组优先；不进入下一产品阶段。
 
-任务正文与验收：[UI-PRESENTATION-REBUILD-01](tasks/UI-PRESENTATION-REBUILD-01.md)。证据根 `D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261008-first-slice`（下称R），接管 `lead/takeover.json`、包 `lead/delivery-review.json`、桌面停点 `lead/native-pause.json`；`delivery/原生UI首片评审.html`汇总真实图与原型差异。[唯一试用入口](RELEASE_FREEZE_TRY.zh-CN.md)现指向e6413de64889beac0f43d291c9403cbd039d598b交互修订候选；早期候选仅留作恢复，不再推荐。
+任务正文与验收：[UI-PRESENTATION-REBUILD-01](tasks/UI-PRESENTATION-REBUILD-01.md)。证据根 `D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261008-first-slice`（下称R），接管 `lead/takeover.json`、包 `lead/delivery-review.json`、桌面停点 `lead/native-pause.json`；`delivery/原生UI首片评审.html`汇总真实图与原型差异。[唯一试用入口](RELEASE_FREEZE_TRY.zh-CN.md)现指向0b48129c429a7c3a9726950d6a201ce4dc3851b3节点交互修订候选；早期候选仅留作恢复，不再推荐。
 
 ## 继承与原位归档
 
