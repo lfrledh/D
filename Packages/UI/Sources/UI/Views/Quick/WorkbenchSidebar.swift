@@ -63,14 +63,11 @@ struct WorkbenchSidebar<Content: View>: View {
         GeometryReader { geometry in
             let width = leading ? WorkbenchSidebarLayout.leadingWidth : WorkbenchSidebarLayout.trailingWidth
             let alignment: Alignment = leading ? .topLeading : .topTrailing
-            let shape = RoundedRectangle(cornerRadius: expanded ? 22 : 20,
-                                         style: expanded ? .continuous : .circular)
             let visible = expanded && revealed
             let palette = preferences.resolvedAppearance.palette(for: scheme)
             ZStack(alignment: alignment) {
-                Color.clear
-                    .frame(width: expanded ? width : 40, height: expanded ? geometry.size.height : 40)
-                    .workbenchGlassPlate(in: shape)
+                WorkbenchSidebarPlate(progress: expanded ? 1 : 0, expandedWidth: width,
+                    expandedHeight: geometry.size.height, leading: leading)
                     .workbenchMorph(value: expanded)
                     .allowsHitTesting(false)
 
@@ -130,22 +127,81 @@ struct WorkbenchSidebar<Content: View>: View {
     }
 }
 
-struct WorkbenchCategoryLensTrack: View {
-    let selection: CGFloat
+/// Only the decorative plate interpolates. Clamp evaluated geometry, not the
+/// endpoint values: a closing rebound in a tall window must never go negative.
+struct WorkbenchSidebarPlate: View, Animatable {
+    nonisolated var progress: CGFloat
+    let expandedWidth: CGFloat
+    let expandedHeight: CGFloat
+    let leading: Bool
+    nonisolated var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+    static func size(progress: CGFloat, width: CGFloat, height: CGFloat) -> CGSize {
+        CGSize(width: max(34, min(width + 12, 40 + (width - 40) * progress)),
+               height: max(34, min(height + 6, 40 + (height - 40) * progress)))
+    }
+    var body: some View {
+        let size = Self.size(progress: progress, width: expandedWidth, height: expandedHeight)
+        Color.clear.frame(width: size.width, height: size.height)
+            .workbenchGlassPlate(in: RoundedRectangle(cornerRadius: min(22, min(size.width, size.height) / 2), style: .continuous))
+            // When the droplet compresses, keep its center on the fixed icon.
+            .offset(x: max(0, (40 - size.width) / 2) * (leading ? 1 : -1),
+                    y: max(0, (40 - size.height) / 2))
+    }
+}
+
+/// The shader receives only this app-owned label layer. It cannot sample the
+/// window server, another view or the desktop. Real buttons remain above it.
+struct WorkbenchCategoryLensTrack: View, Animatable {
+    nonisolated var selection: CGFloat
     let titles: [String]
     var hovered: Int? = nil
     var pressed: Int? = nil
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+    nonisolated var animatableData: CGFloat {
+        get { selection }
+        set { selection = newValue }
+    }
     var body: some View {
-        ZStack(alignment: .leading) {
-            HStack(spacing: 2) {
-                ForEach(titles.indices, id: \.self) { index in
-                    WorkbenchCategoryInk(title: titles[index], hovered: hovered == index, pressed: pressed == index)
-                        .frame(maxWidth: .infinity).frame(height: 36)
-                }
+        let decorated = !preferences.resolvedAppearance.lightweight && !reduceTransparency && contrast != .increased
+        let width: CGFloat = (256 - 6) / 4
+        // A rebound can take the lens beyond an end item; reserve the capsule's
+        // existing 4pt inset rather than clipping the entire control or its shadow.
+        let x = min(256 - width + 3, max(-3, selection * (width + 2)))
+        let ink = preferences.resolvedAppearance.palette(for: scheme).foregroundColor
+        HStack(spacing: 2) {
+            ForEach(titles.indices, id: \.self) { index in
+                WorkbenchCategoryInk(title: titles[index], hovered: hovered == index, pressed: pressed == index)
+                    .frame(maxWidth: .infinity).frame(height: 36)
             }
-            WorkbenchCategoryLens(selection: selection, titles: titles, hovered: hovered, pressed: pressed)
-                .workbenchMorph(value: selection)
-        }.frame(width: 256, height: 36).allowsHitTesting(false).accessibilityHidden(true)
+        }
+        .frame(width: 256, height: 36)
+        .modifier(WorkbenchCategoryRefraction(origin: x, enabled: decorated))
+        .overlay(alignment: .leading) {
+            Capsule()
+                .strokeBorder(ink.opacity(decorated ? 0.22 : 1), lineWidth: decorated ? 0.6 : 1.5)
+                .frame(width: width, height: 36).offset(x: x)
+        }
+        .frame(width: 256, height: 36)
+        .allowsHitTesting(false).accessibilityHidden(true)
+    }
+}
+
+/// Optical sampling is limited to the 256x36 category artwork, never a whole
+/// page snapshot. Alpha stays transparent between glyphs; the real bar below
+/// supplies its own color. Accessibility uses the same labels and a solid rim.
+struct WorkbenchCategoryRefraction: ViewModifier {
+    let origin: CGFloat
+    let enabled: Bool
+    func body(content: Content) -> some View {
+        content.layerEffect(ShaderLibrary.bundle(.module).workbenchCategoryRefraction(
+            .float2(origin, 0), .float2(62.5, 36)),
+            maxSampleOffset: CGSize(width: 8, height: 5), isEnabled: enabled)
     }
 }
 
@@ -162,50 +218,5 @@ private struct WorkbenchCategoryInk: View {
             .foregroundStyle(isEnabled && (hovered || pressed) ? palette.accentColor : palette.foregroundColor)
             .opacity(isEnabled && pressed ? 0.65 : 1)
             .workbenchMotion(value: hovered).workbenchMotion(value: pressed)
-    }
-}
-
-/// One moving lens, with a locally magnified copy of the category labels. The
-/// four actual buttons never move or scale, and remain the only input targets.
-struct WorkbenchCategoryLens: View, Animatable {
-    nonisolated var selection: CGFloat
-    let titles: [String]
-    var hovered: Int? = nil
-    var pressed: Int? = nil
-    @Environment(\.chatDisplayPreferences) private var preferences
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var contrast
-    nonisolated var animatableData: CGFloat {
-        get { selection }
-        set { selection = newValue }
-    }
-    var body: some View {
-        let width: CGFloat = (256 - 6) / 4
-        let x = selection * (width + 2)
-        let decorated = !preferences.resolvedAppearance.lightweight && !reduceTransparency && contrast != .increased
-        Color.clear.frame(width: width, height: 36)
-            .workbenchGlassPlate(in: Capsule())
-            .overlay {
-                if !decorated {
-                    Capsule().strokeBorder(preferences.resolvedAppearance.palette(for: scheme).foregroundColor, lineWidth: 1.5)
-                }
-            }
-            .overlay(alignment: .leading) {
-                HStack(spacing: 2) {
-                    ForEach(titles.indices, id: \.self) { i in
-                        WorkbenchCategoryInk(title: titles[i], hovered: hovered == i, pressed: pressed == i)
-                            .frame(width: width, height: 36)
-                    }
-                }
-                .frame(width: 256, height: 36)
-                .scaleEffect(decorated ? 1.12 : 1, anchor: UnitPoint(x: (x + width / 2) / 256, y: 0.5))
-                .offset(x: -x)
-                .frame(width: width, height: 36, alignment: .leading)
-                .clipShape(Capsule())
-            }
-            .offset(x: x)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
     }
 }

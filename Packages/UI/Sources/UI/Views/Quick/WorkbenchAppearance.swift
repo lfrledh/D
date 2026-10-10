@@ -99,10 +99,39 @@ struct WorkbenchEffectsPolicy {
         // Finite timing curve: acceleration, deceleration and a small return.
         // Unlike a spring's response, this duration is the entire transition.
         morphDuration = duration == nil ? nil : 0.18 + 0.04 * appearance.motion
-        let curve = UnitCurve.bezier(startControlPoint: .init(x: 0.36, y: 0),
-                             endControlPoint: .init(x: 0.22, y: 1.12))
+        let curve = WorkbenchRebound.curve
         morphCurve = curve
-        morphAnimation = morphDuration.map { .timingCurve(curve, duration: $0) }
+        morphAnimation = morphDuration.map { Animation(WorkbenchRebound(duration: $0, strength: appearance.motion)) }
+    }
+}
+
+/// Keep the accepted travel curve and finite clock. Amplify only its small
+/// overshoot to the previous spring's peak, without reintroducing its long tail.
+struct WorkbenchRebound: CustomAnimation {
+    let duration: Double
+    let strength: Double
+    static var curve: UnitCurve {
+        .bezier(startControlPoint: .init(x: 0.36, y: 0), endControlPoint: .init(x: 0.22, y: 1.12))
+    }
+    var peakOvershoot: Double {
+        let damping = 0.82 - 0.12 * strength
+        return exp(-damping * .pi / sqrt(1 - damping * damping))
+    }
+    func progress(at fraction: Double) -> Double {
+        let base = Self.curve.value(at: min(1, max(0, fraction)))
+        guard base > 1 else { return base }
+        // Exact maximum of the original Bezier's y polynomial.
+        let t = 6.72 / 7.08
+        let originalPeak = 3 * (1 - t) * t * t * 1.12 + t * t * t - 1
+        let phase = min(1, (base - 1) / originalPeak)
+        // Zero correction slope at either end avoids a velocity kink when
+        // crossing the target, while leaving all pre-target travel unchanged.
+        return base + (peakOvershoot - originalPeak) * phase * phase * (3 - 2 * phase)
+    }
+    func animate<V: VectorArithmetic>(value: V, time: TimeInterval,
+                                      context: inout AnimationContext<V>) -> V? {
+        guard time < duration else { return nil }
+        return value.scaled(by: progress(at: time / duration))
     }
 }
 

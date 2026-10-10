@@ -225,6 +225,7 @@ public struct DualWorkbenchView: View {
                             titles: QuickCategory.allCases.map { workflowText(language, "quick.category.\($0.rawValue)", fallback: $0.rawValue) },
                             hovered: hoveredCategory.flatMap { QuickCategory.allCases.firstIndex(of: $0) },
                             pressed: pressedCategory.flatMap { QuickCategory.allCases.firstIndex(of: $0) })
+                            .workbenchMorph(value: quick.category)
                             .opacity(quickOwnerIsChanging ? 0.45 : 1)
                     }
                     .padding(4).frame(width: 264)

@@ -20,7 +20,7 @@ let package = Package(
                 resources: [.process("Models/Resources")]),
         .target(name: "UI", dependencies: ["DWorkbench", .product(name: "DInference", package: "DPlatform"),
                 .product(name: "SwiftStreamingMarkdown", package: "SwiftStreamingMarkdown")],
-                resources: [.process("Resources/Localization"), .copy("Resources/Chat-Third-Party-Notices.txt"), .copy("Resources/Mermaid")]),
+                resources: [.process("Resources/Localization"), .process("Resources/Shaders"), .copy("Resources/Chat-Third-Party-Notices.txt"), .copy("Resources/Mermaid")]),
         .testTarget(name: "DWorkbenchTests", dependencies: ["DWorkbench", .product(name: "DRuntime", package: "DPlatform"),
                 .product(name: "DMLXBackend", package: "DMLXIntegration")]),
         .testTarget(name: "UITests", dependencies: ["UI", "DWorkbench"]),

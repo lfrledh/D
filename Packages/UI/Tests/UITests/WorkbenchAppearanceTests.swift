@@ -23,6 +23,62 @@ import Testing
         }
     }
 
+    @Test func reboundPreservesTravelAndRecoversPreviousSpringPeak() {
+        for strength in [0.01, 0.5, 1.0] {
+            let motion = WorkbenchRebound(duration: 0.18 + 0.04 * strength, strength: strength)
+            var peak = 0.0
+            for tick in 0...1000 {
+                let t = Double(tick) / 1000
+                let original = WorkbenchRebound.curve.value(at: t)
+                let revised = motion.progress(at: t)
+                if original <= 1 { #expect(original == revised) }
+                peak = max(peak, revised)
+            }
+            #expect(abs(peak - 1 - motion.peakOvershoot) < 0.0001)
+            #expect(peak > 1.01 && peak < 1.05)
+            #expect(motion.progress(at: 1) == 1)
+        }
+    }
+
+    @Test func sidebarReboundKeepsTallPlateFiniteAndDropletCentered() {
+        let motion = WorkbenchRebound(duration: 0.22, strength: 1)
+        for height: CGFloat in [500, 1000, 1600] {
+            for tick in 0...1000 {
+                let phase = motion.progress(at: Double(tick) / 1000)
+                for progress in [phase, 1 - phase] {
+                    let size = WorkbenchSidebarPlate.size(progress: progress, width: 288, height: height)
+                    #expect(size.height.isFinite && size.height >= 34 && size.height <= height + 6)
+                    #expect(size.width >= 34 && size.width < 302)
+                }
+            }
+        }
+    }
+
+    @Test func categoryRefractionSamplesRealContentAndPreservesTransparency() throws {
+        func pixels(enabled: Bool, offset: CGFloat) throws -> [NSColor] {
+            let probe = Canvas { context, _ in
+                for x in stride(from: CGFloat(0), to: 256, by: 8) {
+                    context.fill(Path(CGRect(x: x + offset, y: 0, width: 2, height: 36)), with: .color(.black))
+                }
+            }.frame(width: 256, height: 36)
+                .modifier(WorkbenchCategoryRefraction(origin: 64.5, enabled: enabled))
+            let renderer = ImageRenderer(content: probe); renderer.scale = 2
+            let image = try #require(renderer.cgImage)
+            let bitmap = NSBitmapImageRep(cgImage: image)
+            return try (0..<72).flatMap { y in try (0..<512).map { x in try #require(bitmap.colorAt(x: x, y: y)) } }
+        }
+        let plain = try pixels(enabled: false, offset: 0)
+        let bent = try pixels(enabled: true, offset: 0)
+        let moved = try pixels(enabled: true, offset: 2)
+        let changed = plain.indices.filter { plain[$0] != bent[$0] }
+        #expect(changed.count > 60, "The actual shader must bend source pixels, not just add a rim")
+        #expect(changed.allSatisfy { (129...254).contains($0 % 512) }, "No effect outside the selected lens")
+        let interior = (20..<52).flatMap { y in (150..<232).map { y * 512 + $0 } }
+        #expect(interior.filter { bent[$0].alphaComponent < 0.05 }.count > 500,
+                "Clear source must remain transmissive, not become an opaque replacement plate")
+        #expect(interior.contains { bent[$0] != moved[$0] }, "Refraction must follow changed source content")
+    }
+
     @Test func categoryHoverChangesInkWithoutPaintingAnotherPlate() throws {
         func pixels(selection: CGFloat, hovered: Int?, scheme: ColorScheme) throws -> [NSColor] {
             let renderer = ImageRenderer(content: WorkbenchCategoryLensTrack(selection: selection,
