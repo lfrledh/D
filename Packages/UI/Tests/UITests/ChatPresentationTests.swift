@@ -219,12 +219,14 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             try await Task.sleep(for: .milliseconds(120))
             let editor = try #require(descendants(host).compactMap { $0 as? FileDropTextView }.first)
             let scroll = try #require(editor.enclosingScrollView)
-            #expect(scroll.frame.height >= 52 && scroll.frame.height <= 60)
-            #expect(try #require(rectangles["composer"]).height < 150)
+            #expect(scroll.frame.height >= 25 && scroll.frame.height <= 36)
+            #expect(try #require(rectangles["composer-capsule"]).height <= 56)
             window.makeFirstResponder(editor)
             editor.insertText("Short draft", replacementRange: .init(location: 0, length: editor.string.utf16.count))
             try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
-            #expect(scroll.frame.height <= 60)
+            #expect(scroll.frame.height <= 36)
+            let shortPlate = try #require(rectangles["composer-capsule"])
+            #expect(ChatComposerShape(multiline: false).path(in: shortPlate) == Capsule().path(in: shortPlate))
             editor.insertText(String(repeating: "Long draft line\n", count: 40),
                 replacementRange: .init(location: 0, length: editor.string.utf16.count))
             try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
@@ -233,19 +235,62 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             let composer = try #require(rectangles["composer"])
             #expect(composer.contains(try #require(rectangles["composer-send"])))
             let capsule = try #require(rectangles["composer-capsule"])
-            let outline = Capsule().path(in: capsule)
+            let outline = ChatComposerShape(multiline: true).path(in: capsule)
+            #expect(outline.contains(CGPoint(x: capsule.minX + 12, y: capsule.minY + 12)))
+            #expect(!Capsule().path(in: capsule).contains(CGPoint(x: capsule.minX + 12, y: capsule.minY + 12)),
+                    "Multiline text must no longer be surrounded by giant capsule ends")
             for key in ["composer-editor", "composer-send"] {
                 let bounds = try #require(rectangles[key])
                 for point in [CGPoint(x: bounds.minX, y: bounds.minY), CGPoint(x: bounds.maxX, y: bounds.minY),
                               CGPoint(x: bounds.minX, y: bounds.maxY), CGPoint(x: bounds.maxX, y: bounds.maxY)] {
-                    #expect(outline.contains(point), "Native editor and action corners must stay inside the capsule")
+                    #expect(outline.contains(point), "Native editor and action corners must stay inside the continuous rounded outline")
                 }
             }
             editor.insertText("", replacementRange: .init(location: 0, length: editor.string.utf16.count))
             try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
-            #expect(scroll.frame.height <= 60)
+            #expect(scroll.frame.height <= 36)
         }
         try await chat.flush(); try await close(store, root: root)
+    }
+
+    @Test func closedConversationPreservesDraftAndRestoresEditableComposer() async throws {
+        var session = ChatSession(title: "Deleted input")
+        session.draft = "Preserved draft"
+        var choices = ChatContextChoices(); choices.deletedAt = Date(); session.contextChoices = choices
+        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        let (chat, model, store, root) = try await fixture(state)
+        var rectangles: [String: CGRect] = [:]
+        let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
+            onSavedAsset: { _ in }, onAssetsChanged: {}).observingLayout { rectangles[$0] = $1 })
+        host.frame = .init(x: 0, y: 0, width: 1080, height: 720)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.close() }
+        func settle() async throws {
+            host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
+        }
+        try await settle()
+        #expect(rectangles["composer-readonly"] != nil)
+        #expect(descendants(host).compactMap { $0 as? FileDropTextView }.isEmpty,
+                "Do not advertise a normal input field that silently rejects typing")
+        #expect(chat.selectedSession?.contextChoices?.deletedAt != nil && chat.selectedSession?.draft == session.draft)
+        try chat.setDeleted(false, sessionID: session.id); try await settle()
+        let editor = try #require(descendants(host).compactMap { $0 as? FileDropTextView }.first)
+        #expect(editor.isEditable && editor.string == session.draft)
+        try chat.setArchived(true, sessionID: session.id); try await settle()
+        #expect(descendants(host).compactMap { $0 as? FileDropTextView }.isEmpty)
+        try chat.setArchived(false, sessionID: session.id); try await settle()
+        #expect(try #require(descendants(host).compactMap { $0 as? FileDropTextView }.first).isEditable)
+        #expect(chat.selectedSession?.draft == session.draft && chat.state.sessions.count == 1)
+        try chat.setArchived(true, sessionID: session.id)
+        // A fixture-only closed store gives a deterministic save failure without
+        // changing disk permissions or touching any user project.
+        try await store.close()
+        do { try await chat.flush(); Issue.record("Expected closed-store save failure") } catch {}
+        #expect(chat.saveIssue != nil)
+        try await settle()
+        #expect(rectangles["composer-retry-save"] != nil)
+        try FileManager.default.removeItem(at: root)
     }
 
     @Test func composerFileDropHitRegionInCompleteHost() async throws {
@@ -276,7 +321,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
                 let local = NSPoint(x: clip.bounds.minX + x, y: clip.bounds.minY + 12)
                 let inParent = clip.convert(local, to: host.superview)
                 let hit = host.hitTest(inParent)
-                #expect(hit === editor, "Visible composer point must hit its file receiver, hiddenWorkflow=\(hiddenWorkflow), x=\(x)")
+                #expect(hit === editor, "Visible composer point must hit its file receiver, hiddenWorkflow=\(hiddenWorkflow), x=\(x), hit=\(String(describing: hit)), clip=\(clip.bounds), editor=\(editor.frame), content=\(String(describing: editor.enclosingScrollView?.contentSize))")
             }
             #expect(chat.selectedSession?.draft == session.draft)
             #expect(chat.selectedSession?.attachments.isEmpty == true && chat.selectedSession?.messages.isEmpty == true)
@@ -525,7 +570,8 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     @Test func continuousStreamKeepsComposerStopReachableUntilDrain() async throws {
         var session = ChatSession(title: "可控连续流")
         session.configuration = try node(); session.draft = "保持原输入 👩🏽‍🎨"
-        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        var closed = ChatSession(title: "Archived reference"); closed.archived = true
+        var state = ChatState(); state.sessions = [session, closed]; state.selectedSessionID = session.id
         let engine = ChatPresentationGatedStreamEngine()
         let (chat, model, store, root) = try await fixture(state, engine: engine)
         var rectangles: [String: CGRect] = [:]
@@ -556,6 +602,13 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let visibleStop = try #require(withInspector["composer-stop"])
         #expect(!visibleStop.intersects(pane))
         #expect(horizontallyInside(visibleStop, width: 1_057))
+        try chat.selectSession(closed.id)
+        rectangles.removeAll()
+        host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
+        let closedComposer = try #require(rectangles["composer-readonly"])
+        #expect(closedComposer.contains(try #require(rectangles["composer-stop"])),
+                "Browsing a closed conversation must retain global cancellation")
+        try chat.selectSession(session.id)
         let cancelling = Task { await chat.cancel() }
         for _ in 0..<100 {
             if await engine.cancellationSeen { break }

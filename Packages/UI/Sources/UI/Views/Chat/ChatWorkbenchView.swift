@@ -53,6 +53,25 @@ enum ChatPresentationLayout {
     }
 }
 
+/// One outline is shared by the plate, border and whitespace hit region.
+/// The native editor is never replaced when its content wraps onto another line.
+struct ChatComposerShape: InsettableShape {
+    var multiline: Bool
+    private var insetAmount: CGFloat = 0
+    init(multiline: Bool) { self.multiline = multiline }
+
+    func path(in rect: CGRect) -> Path {
+        if multiline {
+            return RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .inset(by: insetAmount).path(in: rect)
+        }
+        return Capsule().inset(by: insetAmount).path(in: rect)
+    }
+    func inset(by amount: CGFloat) -> ChatComposerShape {
+        var result = self; result.insetAmount += amount; return result
+    }
+}
+
 private enum ChatInspectorTab: String, CaseIterable, Identifiable {
     case data, artifacts, tools
     var id: Self { self }
@@ -506,6 +525,8 @@ struct ChatWorkbenchView: View {
     @State private var organizationExpanded = false
     @State private var organizationRequest = 0
     @State private var speechExpanded = false
+    @State private var composerEditorHeight: CGFloat = 0
+    @State private var composerFocusRequest: UUID?
     @Environment(\.workbenchSidebars) private var sharedSidebars
     @State private var localSidebars = WorkbenchSidebarState()
     private var sidebars: WorkbenchSidebarState { sharedSidebars ?? localSidebars }
@@ -660,6 +681,7 @@ struct ChatWorkbenchView: View {
             }
         }
         .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
+        .onChange(of: chat.state.selectedSessionID) { _, _ in composerFocusRequest = nil }
         .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
         .task {
             let preferences = model.chatDisplaySettings
@@ -942,6 +964,9 @@ struct ChatWorkbenchView: View {
                         Text(newLabel("deletedReadOnly", english: "Deleted · restore from the conversation list",
                             chinese: "已删除 · 请在对话列表恢复"))
                             .font(.caption).foregroundStyle(.secondary)
+                    } else if session.archived {
+                        Text(newLabel("archivedReadOnly", english: "Archived · read only", chinese: "已归档 · 只读"))
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                     if let node = session.configuration {
                         let id = node.parameters["modelID"]?.string ?? ""
@@ -1179,8 +1204,12 @@ struct ChatWorkbenchView: View {
                     }
                 }
               }
-            composer(session, availableHeight: height)
-                .chatMeasured("composer", probe: layoutProbe)
+            if session.archived || session.contextChoices?.deletedAt != nil {
+                closedComposer(session).chatMeasured("composer-readonly", probe: layoutProbe)
+            } else {
+                composer(session, availableHeight: height)
+                    .chatMeasured("composer", probe: layoutProbe)
+            }
         }
     }
 
@@ -1798,14 +1827,55 @@ struct ChatWorkbenchView: View {
         }
     }
 
+    private func closedComposer(_ session: ChatSession) -> some View {
+        let deleted = session.contextChoices?.deletedAt != nil
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(deleted
+                ? newLabel("composerDeleted", english: "This conversation is deleted. Restore it or start a new one to write.", chinese: "此会话已删除。恢复会话或新建对话后即可输入。")
+                : newLabel("composerArchived", english: "This conversation is archived. Restore it or start a new one to write.", chinese: "此会话已归档。恢复会话或新建对话后即可输入。"))
+            if !session.draft.isEmpty {
+                DisclosureGroup(newLabel("preservedDraft", english: "Preserved draft (read only)", chinese: "保留的草稿（只读）")) {
+                    Text(session.draft).textSelection(.enabled).lineLimit(6)
+                }
+            }
+            HStack {
+                Button(newLabel("restoreForInput", english: "Restore conversation", chinese: "恢复会话")) {
+                    perform(sessionID: session.id) {
+                        if deleted { try chat.setDeleted(false, sessionID: session.id) }
+                        else { try chat.setArchived(false, sessionID: session.id) }
+                    }
+                }.buttonStyle(WorkbenchPrimaryButtonStyle()).accessibilityIdentifier("chat-composer-restore")
+                Button(newLabel("newForInput", english: "New conversation", chinese: "新建对话")) { createSession() }
+                    .accessibilityIdentifier("chat-composer-new")
+            }.disabled(!chat.isLoaded || chat.saveIssue != nil || chat.activeSessionID == session.id)
+            if chat.canStopGeneration { composerSubmitButton(session) }
+            if chat.isAssisting {
+                Button(newLabel("stopAssistance", english: "Stop conversation tasks", chinese: "停止会话任务")) {
+                    Task { await chat.cancelAssistance() }
+                }
+            }
+            if let issue = issues[session.id] {
+                Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red)
+            }
+            if let issue = chat.saveIssue {
+                Text(label("projectSaveIssue", "项目聊天保存失败：") + issue).font(.caption).foregroundStyle(.red)
+            }
+            if chat.pendingSaveAttemptID != nil || chat.saveIssue != nil {
+                Button(label("retrySave", "重试保存（不重新生成）")) { Task { await chat.retrySave() } }
+                    .disabled(chat.isRunning).accessibilityIdentifier("chat-composer-retry-save")
+                    .chatMeasured("composer-retry-save", probe: layoutProbe)
+            }
+        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+            .workbenchPanel(cornerRadius: 20).padding(.horizontal, 8).padding(.top, 8)
+            .accessibilityIdentifier("chat-composer-readonly")
+    }
+
     private func composer(_ session: ChatSession, availableHeight: CGFloat) -> some View {
         let editorLimit = speechExpanded ? min(100, max(52, availableHeight * 0.16)) : min(180, max(52, availableHeight * 0.3))
         let speechLimit = min(180, max(72, availableHeight * 0.24))
-        let capsuleRadius = (editorLimit + 28) / 2
-        // The editor's top and bottom corners stay within the capsule even at
-        // maximum height; no mask clips text, selection, or the native scroller.
-        let verticalOffset = capsuleRadius - 14
-        let editorInset = ceil(capsuleRadius - (capsuleRadius * capsuleRadius - verticalOffset * verticalOffset).squareRoot() + 6)
+        let font = NSFont.systemFont(ofSize: CGFloat(model.chatDisplaySettings.preferences.textPointSize))
+        let singleLineHeight = TextSourcesQuestionEditor.fittedHeight(text: "", font: font, width: 320, range: 0...editorLimit)
+        let shape = ChatComposerShape(multiline: composerEditorHeight > singleLineHeight + 1 || session.draft.contains("\n"))
         let extensionShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
         let palette = model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme)
         return VStack(alignment: .leading, spacing: 8) {
@@ -1847,7 +1917,7 @@ struct ChatWorkbenchView: View {
                 .workbenchMotion(value: speechExpanded)
             HStack(spacing: 12) {
                 TextSourcesQuestionEditor(value: session.draft, editEpoch: 0,
-                    isEditable: !session.archived && session.contextChoices?.deletedAt == nil,
+                    isEditable: !session.archived && session.contextChoices?.deletedAt == nil && chat.saveIssue == nil,
                     accessibilityIdentifier: "chat-draft-\(session.id.uuidString)",
                     accessibilityLabel: newLabel("messageDraft", english: "Message draft", chinese: "待发送消息"),
                     onEdit: { value in perform(sessionID: session.id) { try chat.updateDraft(value, sessionID: session.id) } },
@@ -1857,19 +1927,27 @@ struct ChatWorkbenchView: View {
                     onFileDrop: { urls in
                         let owner = session.id
                         Task { await importURLs(urls, sessionID: owner) }
-                    }, contentHeight: 52...editorLimit, transparentBackground: true,
+                    }, contentHeight: singleLineHeight...editorLimit, transparentBackground: true,
                     foregroundColor: NSColor(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor),
-                    placeholder: refinement("draftPlaceholder", "Write a message, or drop files here…", "输入消息，或拖入文件…"))
+                    placeholder: chat.saveIssue == nil
+                        ? refinement("draftPlaceholder", "Write a message, or drop files here…", "输入消息，或拖入文件…")
+                        : newLabel("draftSaveBlocked", english: "Resolve the save error below to continue editing", chinese: "请先在下方重试保存，再继续编辑"),
+                    focusRequest: composerFocusRequest)
                     .id(session.id.uuidString + ":draft")
                     .fixedSize(horizontal: false, vertical: true)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerEditorHeight = $0 }
                     .chatMeasured("composer-editor", probe: layoutProbe)
                     .help(model.chatDisplaySettings.preferences.sendShortcut == .return
                         ? refinement("returnHint", "Return sends; Shift–Return adds a line. Input method conversion takes priority.", "回车发送，Shift–回车换行；输入法选字优先。")
                         : refinement("commandHint", "Command–Return sends; Return adds a line. Drop files here to attach them.", "Command–回车发送，回车换行。拖入文件即可添加附件。"))
                 composerSubmitButton(session)
             }
-            .padding(.leading, editorInset).padding(.trailing, 20).padding(.vertical, 14)
-            .workbenchPanel(in: Capsule())
+            .padding(.horizontal, 16).padding(.vertical, 8)
+            .background {
+                Color.clear.contentShape(shape).onTapGesture { composerFocusRequest = UUID() }
+                    .accessibilityHidden(true)
+            }
+            .workbenchPanel(in: shape)
             .chatMeasured("composer-capsule", probe: layoutProbe)
             .workbenchMotion(value: chat.canStopGeneration)
             HStack(spacing: 10) {

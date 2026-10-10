@@ -8,6 +8,35 @@ import Testing
 
 @Suite("Chat display preferences")
 @MainActor struct ChatDisplayPreferencesTests {
+    @Test func queuedWhitespaceFocusRespectsLatestDisabledState() async throws {
+        let editor = NSTextView(), coordinator = TextSourcesQuestionEditor.Coordinator()
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 100),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = editor
+        defer { window.close() }
+        coordinator.update(editor, value: "draft", isEditable: true, onEdit: { _ in })
+        let request = UUID()
+        coordinator.focus(editor, request: request, enabled: true)
+        coordinator.focus(editor, request: request, enabled: false)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(window.firstResponder !== editor)
+        coordinator.focus(editor, request: UUID(), enabled: true)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(window.firstResponder === editor)
+        #expect(editor.string == "draft")
+    }
+
+    @Test func composerMeasuresOnlyActualLines() {
+        let font = NSFont.systemFont(ofSize: 14)
+        func height(_ text: String) -> CGFloat {
+            TextSourcesQuestionEditor.fittedHeight(text: text, font: font, width: 400, range: 0...180)
+        }
+        #expect(height("") == height("A short idea"))
+        #expect(height("A short idea") < 36)
+        #expect(height("A short idea\n") > height("A short idea"))
+        #expect(height(String(repeating: "Long line ", count: 80)) == 180)
+    }
+
     @Test func unmarkWithoutSyntheticChangeNotificationKeepsNativeTextOnEcho() {
         let editor = NSTextView(), coordinator = TextSourcesQuestionEditor.Coordinator()
         editor.delegate = coordinator

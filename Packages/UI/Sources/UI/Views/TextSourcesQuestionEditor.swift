@@ -19,6 +19,8 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     var transparentBackground = false
     var foregroundColor: NSColor? = nil
     var placeholder: String? = nil
+    // An explicit click in the composer's surrounding whitespace, never a redraw.
+    var focusRequest: UUID? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -45,11 +47,12 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
         editor.setAccessibilityIdentifier(accessibilityIdentifier)
         editor.setAccessibilityLabel(accessibilityLabel)
         editor.delegate = context.coordinator
-        let scroll = NSScrollView()
+        let scroll = contentHeight == nil ? NSScrollView() : ComposerTextScrollView()
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = false
         scroll.autohidesScrollers = true
         scroll.documentView = editor
+        (scroll as? ComposerTextScrollView)?.acceptsWhitespaceInput = context.environment.isEnabled && isEditable
         context.coordinator.update(editor, value: value, isEditable: isEditable, onEdit: onEdit,
             pointSize: pointSize, sendsOnReturn: sendsOnReturn, onSubmit: onSubmit)
         applyAppearance(scroll, editor: editor)
@@ -69,7 +72,8 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
                              range: ClosedRange<CGFloat>) -> CGFloat {
         // Match the native 6-point insets and default 5-point line-fragment padding.
         // This is a measurement only: no authoritative text, selection or Undo mutation.
-        let bounds = ((text.isEmpty ? " " : text + "\n") as NSString).boundingRect(
+        let measured = text.isEmpty || text.hasSuffix("\n") ? text + " " : text
+        let bounds = (measured as NSString).boundingRect(
             with: NSSize(width: max(1, width - 22), height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font])
         return min(range.upperBound, max(range.lowerBound, ceil(bounds.height) + 12))
@@ -88,10 +92,12 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let editor = scroll.documentView as? NSTextView else { return }
         applyAppearance(scroll, editor: editor)
+        (scroll as? ComposerTextScrollView)?.acceptsWhitespaceInput = context.environment.isEnabled && isEditable
         (editor as? FileDropTextView)?.onFileDrop = onFileDrop
         if editor.accessibilityLabel() != accessibilityLabel { editor.setAccessibilityLabel(accessibilityLabel) }
         context.coordinator.update(editor, value: value, isEditable: isEditable, onEdit: onEdit,
             pointSize: pointSize, sendsOnReturn: sendsOnReturn, onSubmit: onSubmit)
+        context.coordinator.focus(editor, request: focusRequest, enabled: context.environment.isEnabled && isEditable)
     }
 
     static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
@@ -111,6 +117,21 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
         private var replacing = false
         private var sendsOnReturn = false
         private var pendingPreferences: (pointSize: CGFloat?, sendsOnReturn: Bool)?
+        private var lastFocusRequest: UUID?
+        private var mayFocus = false
+
+        func focus(_ editor: NSTextView, request: UUID?, enabled: Bool) {
+            mayFocus = enabled
+            guard let request else { lastFocusRequest = nil; return }
+            guard request != lastFocusRequest else { return }
+            lastFocusRequest = request
+            DispatchQueue.main.async { [weak self, weak editor] in
+                guard let self, let editor, self.editor === editor,
+                      self.lastFocusRequest == request, self.mayFocus, editor.isEditable,
+                      !editor.isHiddenOrHasHiddenAncestor else { return }
+                editor.window?.makeFirstResponder(editor)
+            }
+        }
 
         private func applyPendingPreferences(_ editor: NSTextView) {
             guard self.editor === editor, !editor.hasMarkedText(), let value = pendingPreferences else { return }
@@ -201,6 +222,34 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
         }
     }
 
+}
+
+/// Empty and short drafts still own the entire native viewport. Otherwise the
+/// clip view can receive clicks/drops below the text document instead of its editor.
+@MainActor private final class ComposerTextScrollView: NSScrollView {
+    var acceptsWhitespaceInput = false
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        // AppKit can leave a bare clip-view strip at the document's right edge.
+        // That visible input whitespace belongs to the editor. Keep real scrollers
+        // and every other child receiver intact, including during scrolling.
+        guard hit === contentView, acceptsWhitespaceInput, let editor = documentView as? NSTextView,
+              editor.isEditable, !editor.isHiddenOrHasHiddenAncestor,
+              contentView.bounds.contains(contentView.convert(point, from: superview)),
+              editor.visibleRect.contains(editor.convert(point, from: superview)) else { return hit }
+        return editor
+    }
+
+    override func tile() {
+        super.tile()
+        guard let editor = documentView as? NSTextView else { return }
+        let viewport = contentSize
+        editor.minSize = NSSize(width: 0, height: viewport.height)
+        if editor.frame.width != viewport.width || editor.frame.height < viewport.height {
+            editor.setFrameSize(NSSize(width: viewport.width, height: max(editor.frame.height, viewport.height)))
+        }
+    }
 }
 
 /// NSTextView consumes Finder drops before a surrounding SwiftUI dropDestination
