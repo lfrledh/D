@@ -208,3 +208,21 @@ GUI：库存与进程均确认无D，Finder原入口启动后，读取精确新�
 原生复看发现并修了右标签重复、预设重复标题、默认规则亮白底、计算结果原始JSON抢首层、历史身份/参数信息挤占首屏和无已启用任务时运行按钮仍可用。随后浅色展开摘要/记忆发现两处旧白底，最后5ac3353c仅对齐同一既有编辑器外观。读取5ac3353c窗口一次返回 **-10005 timeoutReached**，立刻停止该路径，无截图重试、锁屏推断、扩权或系统修改。非UI核对PID22431、精确包路径及隔离UUID成功；已启动而未亲见最终包。R10/gui/09–12为27ef8afc真实JPEG，不冒充5ac3353c；01–08为e6e3f444（01旧名含dark但实际为light，回执明确标记）。没有连续动画录像。最终静态补看与复杂动效/拖动等一并列在原集中待办，其中最后编辑框静态补看仍由Agent负责。
 
 交付包R10/delivery/D UI Review 5ac3353c.app严格签名/App Sandbox及7关键文件（含metallib、双语资源）与普通产物摘要一致，未补包/重签。源01758/main91bef及个人scheme摘要、索引、未暂存状态不变；原UI review.dproject所有文件摘要相同，副本三个会话的草稿/消息/请求及预设均相同，仅增加一个显式计算记录。回执索引：lead/delivery-review.json、production-sources-final.json、data-protection.json、native-sequence.json、native-final-stop.json；大日志/截图在外盘，不入仓。唯一试用入口原位更新，当前候选保留运行。F26继续延期；旧右缘2pt、key-window、阅读/拖放/真实停止等缺口不被本轮静态成功关闭。
+
+
+### 2026-10-10 输入恢复与自适应轮廓修订
+
+2026-10-10最新用户反馈：5ac3353c存在无法输入及胶囊过大，优先修复，不将其列为可输入验收通过。本轮原生复现启动选择已删除会话57E466C7，编辑器只读却仍显示正常输入占位；点击键入INPUT-PROBE没有改变文本。旧27ef8afc Undo证据只覆盖未删除的独立项目，不覆盖这一启动路径。另有80点单行高度、按最大高度计算的约58点左留白及留白不聚焦问题。现实施明确只读恢复/新建入口、完整输入点击及单行胶囊/多行连续圆角逻辑；不撤销删除/归档保护。
+
+
+完成生产 **aa7ab43fb85445454af0e0aadac010c3489e76a3**（a7a4ea3a主修复＋aa7ab43f滚动区保护），R11=`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-composer-repair`。Lead单写、非实现者只读审阅；源01758/main91bef/个人scheme未推进。未修改模型、Runtime、Store或用户作品。
+
+实现：关闭会话使用明确只读面板，原草稿可展开、显式恢复或新建；仍保留全局生成/辅助停止、saveIssue和重试。编辑区域根据真实字体和换行测高，取消非空文本额外补一行；16点水平/8点垂直留白替代按最大高度计算的巨大弧端。单行Capsule、多行20点连续曲率RoundedRectangle共用一个InsettableShape绘制/描边/背景命中；不分支重建原生输入，长稿上限及内部滚动保留。留白点击发出一次焦点请求，异步再核身份、编辑/继承禁用和原生隐藏。仅composer使用专用scroll，短稿document填满viewport；bare NSClipView边条且落点属于可见editor才转交输入，长稿及真实滚动条完全保持AppKit返回。
+
+验证保留失败：composer-focused 8项7过/右缘反例失败，composer-hit-diagnosis确认clip/editor同宽554仍落NSClipView，不再猜尺寸。composer-repaired4项通过，composer-final6项通过；共11个唯一方法最终通过。原生a7a4ea3a两次thumb拖动选到文本，随即限制仅非滚动草稿兜底；composer-scroll-guard2项复验通过，新增同一editor长→空→Undo/Redo检查document高度、scroll offset及最右2pt重新命中。关闭Store的独立夹具确认只读会话仍显示保存重试；受控假引擎确认浏览归档会话仍可全局停止并等待drain。无真实模型、无矩阵扩大。普通构建a7 32.04秒、最终27.71秒均在XCTest之后，7关键文件/签名/沙盒匹配，无补包或重签。
+
+最终原生aa7ab43f/PID25593已亲见（不是a7截图代替）。独立Composer review.dproject新测试会话84E28506中，原图坐标(612,1400)左留白及(1790,1433)编辑器右缘点击后真实键入，主输入AX身份不随单多行变化；Command-Z/Shift-Z恢复前后文本；30行只在输入区滚动；a7正常退出后aa7重开原三行中文草稿完全保留。原生菜单归档该测试会话→只读说明→恢复会话→插入RESTORED→Undo成功。未选模型，发送维持禁用，未冒充真实发送/停止验收。浅深、多行/单行、1080点双栏与左收右开已看；摘要与记忆两框完成浅深静态补看，临时文字未保存并Undo清空，未启用记忆。主题恢复跟随系统/14pt。
+
+最终thumb指针拖动没有可确认位移，不能报告拖动通过；滚轮单独通过。输入法candidate window、Finder真实释放、原生模型停止、阅读往返和复杂镜片/动画继续集中待验。本轮没有桌面工具失败、轮询、提权或策略改变。原始UI review.dproject 75文件摘要不变，副本原有三个session对象及presets完全相同；新会话0消息/0请求、测试草稿已持久化、归档已恢复。非实现者查看06/07/11三张同版原图，未见静态阻断。
+
+索引：R11/lead/test-coverage.json、delivery-review.json、production-sources-final.json、native-sequence.json、native-sequence-a7a4ea3a.json、data-protection.json；R11/gui/06–11为最终同版原图，01为被拒基线、02–05为中间a7。保留精确版本，不混写。唯一试用入口原位更新，候选保持运行、当前测试会话可输入。
