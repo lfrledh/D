@@ -539,7 +539,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     }
 
     #if DEBUG
-    @Test func categoryPickerFramedDragDoesNotInvalidateWorkbench() async throws {
+    @Test func categoryPickerFramedPreviewDoesNotInvalidateWorkbench() async throws {
         let root = fixtureRoot.appendingPathComponent("category-drag-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let project = ProjectSession(sessionFactory: { _ in
@@ -552,25 +552,22 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         var navigation = QuickCreationState(); navigation.navigation = QuickNavigationState(selected: .text)
         try await fixtureStore.saveQuickCreationState(navigation, expectedRevision: 0)
         await project.enableProjectQuick(); await project.openWorkflow()
+        do {
         let quick = try #require(project.projectQuick)
         let chat = try #require(project.chat)
         let model = WorkbenchModel(projectSession: project)
         let library = ModelLibraryModel(library: try await ModelLibrary(stateDirectory: root.appendingPathComponent("models")))
         let host = NSHostingView(rootView: DualWorkbenchView(model: model, quickModel: model,
             quick: quick, library: library, nodeTags: ModelNodeTagStore(), metadata: nil))
-        let app = NSApplication.shared
-        let oldPolicy = app.activationPolicy(); app.setActivationPolicy(.regular)
         let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1200, height: 800),
             styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host
-        window.makeKeyAndOrderFront(nil); app.activate(ignoringOtherApps: true)
         defer {
             WorkbenchCategoryUpdateProbe.workbenchBody = nil
             WorkbenchCategoryUpdateProbe.retainedUpdate = nil
-            window.close(); app.setActivationPolicy(oldPolicy)
+            window.close()
         }
         try await Task.sleep(for: .milliseconds(250)); host.layoutSubtreeIfNeeded()
-        try #require(window.isKeyWindow)
         func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
         let receiver = try #require(descendants(host).compactMap { $0 as? WorkbenchCategoryDragView }.first)
         var rootUpdates = 0, retainedUpdates = 0
@@ -578,30 +575,26 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         WorkbenchCategoryUpdateProbe.retainedUpdate = { retainedUpdates += 1 }
         let before = chat.state
         let selection = quick.category
-        let start = CGPoint(x: receiver.presentation.midX, y: receiver.presentation.midY)
-        func send(_ type: NSEvent.EventType, _ x: CGFloat) throws {
-            let point = receiver.convert(CGPoint(x: start.x + x, y: start.y), to: nil)
-            window.sendEvent(try #require(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
-                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-                context: nil, eventNumber: 401, clickCount: 1, pressure: 1)))
-        }
-        try send(.leftMouseDown, 0)
+        // Deliberate hosting measurement of the real receiver callback path.
+        // This does not claim native mouse routing or desktop frame rate.
+        receiver.onPreview(0)
         var presentations: [CGFloat] = []
         for tick in 1...36 {
             let position = tick <= 24 ? CGFloat(tick) / 8 : 3 - CGFloat(tick - 24) / 6
-            try send(.leftMouseDragged, position * WorkbenchCategoryDragView.stride)
+            receiver.onPreview(position)
             try await Task.sleep(for: .milliseconds(16))
             presentations.append(receiver.presentationSelection)
         }
         #expect(Set(presentations.map { Int($0 * 100) }).count >= 20)
         #expect(rootUpdates == 0 && retainedUpdates == 0)
         #expect(quick.category == selection && chat.state == before)
-        print("CATEGORY_DRAG events=36 root=\(rootUpdates) retained=\(retainedUpdates) intermediate=\(Set(presentations.map { Int($0 * 100) }).count)")
-        try send(.leftMouseUp, WorkbenchCategoryDragView.stride)
+        print("CATEGORY_PREVIEW injections=36 root=\(rootUpdates) retained=\(retainedUpdates) intermediate=\(Set(presentations.map { Int($0 * 100) }).count)")
+        receiver.onPreview(nil); receiver.onCommit(1)
         try await Task.sleep(for: .milliseconds(250))
         #expect(quick.category == QuickCategory.allCases[1])
         #expect(rootUpdates > 0)
         #expect(chat.state == before)
+        } catch { await project.closeProject(); throw error }
         await project.closeProject()
     }
 

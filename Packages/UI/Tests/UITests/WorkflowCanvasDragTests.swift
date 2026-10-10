@@ -433,6 +433,20 @@ struct WorkflowCanvasDragTests {
         let target = targetDefinition.makeNode()
         var graph = WorkflowGraph(nodes: [source, target])
 
+        let output = WorkflowPortIdentity(nodeID: source.id, port: "text", input: false)
+        let input = WorkflowPortIdentity(nodeID: target.id, port: "text", input: true)
+        for (start, end) in [(output, input), (input, output)] {
+            let pair = try #require(WorkflowCanvasConnectionPolicy.directedPorts(start, end))
+            #expect(pair.output == output && pair.input == input)
+            #expect(WorkflowCanvasConnectionPolicy.canConnect(graph: graph, registry: registry, tools: [],
+                sourceNodeID: pair.output.nodeID, sourcePort: pair.output.port,
+                targetNodeID: pair.input.nodeID, targetPort: pair.input.port))
+        }
+        #expect(WorkflowCanvasConnectionPolicy.directedPorts(output,
+            WorkflowPortIdentity(nodeID: target.id, port: "textOut", input: false)) == nil)
+        #expect(WorkflowCanvasConnectionPolicy.directedPorts(input,
+            WorkflowPortIdentity(nodeID: source.id, port: "textIn", input: true)) == nil)
+
         #expect(WorkflowCanvasConnectionPolicy.canConnect(
             graph: graph, registry: registry, tools: [],
             sourceNodeID: source.id, sourcePort: "text",

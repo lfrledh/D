@@ -226,3 +226,14 @@ GUI：库存与进程均确认无D，Finder原入口启动后，读取精确新�
 最终thumb指针拖动没有可确认位移，不能报告拖动通过；滚轮单独通过。输入法candidate window、Finder真实释放、原生模型停止、阅读往返和复杂镜片/动画继续集中待验。本轮没有桌面工具失败、轮询、提权或策略改变。原始UI review.dproject 75文件摘要不变，副本原有三个session对象及presets完全相同；新会话0消息/0请求、测试草稿已持久化、归档已恢复。非实现者查看06/07/11三张同版原图，未见静态阻断。
 
 索引：R11/lead/test-coverage.json、delivery-review.json、production-sources-final.json、native-sequence.json、native-sequence-a7a4ea3a.json、data-protection.json；R11/gui/06–11为最终同版原图，01为被拒基线、02–05为中间a7。保留精确版本，不混写。唯一试用入口原位更新，候选保持运行、当前测试会话可输入。
+
+
+## R12：镜片拖动性能与节点交互（2026-10-10）
+
+- 用户认可R11输入修复，新增授权：镜片拖动卡顿排查、输入/输出两端起拖连线、两工具均移动节点、hand空白平移/pointer空白框选及抓握光标。起点db5ca024与远端一致；源/main/个人scheme未动。Lead单写，三个固定快照只读调查与非实现者复核。
+- 生产e6413de64889beac0f43d291c9403cbd039d598b。代码确认根@State preview每事件引发Dual重算，含模型记录排序并扩大保留宿主更新范围；旧版实际宿主更新次数/卡顿归因未实测。移为独立Picker后隔离计数通过，限位重复值去重，未改shader或引入节流任务。原生端口改用一个本地鼠标生命周期，双向手势归一为output→input；既有Controller/Store/Undo不改。参考[React Flow连接生命周期](https://reactflow.dev/examples/interaction/connection-events)，仅借鉴开始/持续/结束关系，不引入依赖。手型节点移动复用原有协调器；新增局部光标观察不吞左键事件。
+- 11项既有方法通过。新测试初次编译因嵌套Testing宏失败，拆开后修复；两个原生窗口方法仍在key-window前置失败，零事件，不反复尝试。改为另一个明确离屏的更新隔离测量：真实Dual＋保留Workflow，预览回调36次跨runloop注入，32个中间呈现、根body0/保留宿主0，提交后根正常更新且聊天状态不变。此结果不证明鼠标接收、屏幕帧率或流畅度。双向归一化/同向拒绝合并既有类型、占用、循环测试定向复验，精确结果见R12/lead。
+- 非实现者发现标签本地化key、Release测试条件及测试初始自动保存干扰，已修；发现端口独立消失可能留下锁，已在端口布局测量回调中补清理。手型节点移动最初被审查者按旧规则误报，按用户最新明确授权撤回；保留真实审查经过。
+- 资源单独增量更新en/zh JSON曾导致根签名失效，只更新源码mtime未触发按内容增量的重签；失败记录保留。移走本任务生成的派生App后普通构建49.57秒成功，独立包严格签名/App Sandbox与7文件摘要一致，不手工重签、不覆盖普通D。
+- Finder唯一入口已启动e641，PID28667/实际路径/隔离UUID核实；读取D窗口一次`-10005 timeoutReached`。立即暂停GUI，不推断锁屏、不轮询/扩权；本版无截图/实际边缘拖接/光标/动效证据。桌面失败后只完成非交互测量与记录，不将离屏改写原生。当前包保留供后续同版复查；全部原生余项写现有集中队列。
+- R12证据：`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-drag-interactions`；`lead/{interactions-fixed,preview-isolation,bidirectional-policy}-result.json`、`delivery-review.json`、`native-pause.json`、`resource-signature-failure.json`。独立`gui/Drag review.dproject`取自已有无模型合成夹具，未由本轮GUI打开。原始75/77文件和原会话保护核对见data-protection.json。没有模型运行、推理、联网、自动生成或权限变更。
