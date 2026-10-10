@@ -1325,7 +1325,7 @@ struct ChatWorkbenchView: View {
                 Text(newLabel("inspectorData", english: "Materials", chinese: "资料")).tag(ChatInspectorTab.data)
                 Text(newLabel("inspectorArtifacts", english: "Results", chinese: "成果")).tag(ChatInspectorTab.artifacts)
                 Text(newLabel("inspectorTools", english: "Tools", chinese: "工具")).tag(ChatInspectorTab.tools)
-            }.pickerStyle(.segmented).padding(.horizontal, 12).accessibilityIdentifier("chat-right-section")
+            }.pickerStyle(.segmented).labelsHidden().padding(.horizontal, 12).accessibilityIdentifier("chat-right-section")
             Divider().padding(.top, 12)
             ZStack {
                 retainedPane(inspectorTab == .data, id: "chat-materials-page") {
@@ -1438,16 +1438,16 @@ struct ChatWorkbenchView: View {
             Text(newLabel("frozenRequestNote", english: "Saved attempt only. The JSON omits free text and credentials.",
                 chinese: "仅来自已保存的尝试；JSON 省略自由文本与凭据。"))
                 .font(.caption).foregroundStyle(.secondary)
-            ForEach(snapshot.sections) { section in
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(section.title).font(.caption.bold())
-                    ForEach(section.fields) { field in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(field.label).font(.caption).foregroundStyle(.secondary)
-                            Text(field.value).font(.caption.monospaced()).textSelection(.enabled)
-                        }.chatMeasured("request-field-\(section.id)-\(field.id)-\(attempt.id.uuidString)", probe: layoutProbe)
-                    }
+            ForEach(snapshot.sections.filter { ["input", "messages"].contains($0.id) }) { section in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(requestSectionTitle(section)).font(.subheadline.bold())
+                    requestFields(section, attempt: attempt)
                 }
+            }
+            ForEach(snapshot.sections.filter { !["input", "messages"].contains($0.id) }) { section in
+                DisclosureGroup(requestSectionTitle(section)) {
+                    requestFields(section, attempt: attempt)
+                }.chatMeasured("request-section-" + section.id + "-" + attempt.id.uuidString, probe: layoutProbe)
             }
             Button(newLabel("copyRedactedJSON", english: "Copy redacted JSON", chinese: "复制脱敏 JSON")) {
                 copy(snapshot.redactedJSON)
@@ -1459,6 +1459,38 @@ struct ChatWorkbenchView: View {
             }
         }.accessibilityIdentifier("chat-request-inspection")
             .chatMeasured("request-inspection-\(attempt.id.uuidString)", probe: layoutProbe)
+    }
+
+    private func requestSectionTitle(_ section: ChatRequestInspection.Section) -> String {
+        let titles = ["source": "来源与身份（技术详情）", "input": "回答规则与格式", "messages": "实际发送的消息",
+            "memory": "采用的记忆与摘要来源", "media": "媒体处理记录", "tools": "自定义工具声明",
+            "template": "模型输入模板", "parameters": "本次模型参数", "seed": "本次随机种子", "response": "回答与用量记录"]
+        return newLabel("requestSection." + section.id, english: section.title, chinese: titles[section.id] ?? section.title)
+    }
+    @ViewBuilder private func requestFields(_ section: ChatRequestInspection.Section, attempt: ChatAttempt) -> some View {
+        if section.id == "input" {
+            ForEach(section.fields.filter { ["system", "format"].contains($0.id) }) { field in
+                requestField(field, section: section.id, attempt: attempt.id)
+            }
+            DisclosureGroup(newLabel("inputTechnicalDetails", english: "Material references and display details", chinese: "材料引用与展示详情")) {
+                ForEach(section.fields.filter { !["system", "format"].contains($0.id) }) { field in
+                    requestField(field, section: section.id, attempt: attempt.id)
+                }
+            }
+        } else {
+            ForEach(section.fields) { field in requestField(field, section: section.id, attempt: attempt.id) }
+        }
+    }
+    private func requestField(_ field: ChatRequestInspection.Field, section: String, attempt: UUID) -> some View {
+        let names = ["system": "这次使用的回答规则", "format": "回答格式（提示要求与生成后校验）",
+            "messages": "消息快照", "displayLimit": "本地展示保护"]
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(newLabel("requestField." + section + "." + field.id, english: field.label,
+                chinese: section == "input" ? names[field.id] ?? field.label : field.label))
+                .font(.caption).foregroundStyle(.secondary)
+            Text(field.value.isEmpty ? newLabel("notSpecified", english: "Not specified", chinese: "未指定") : field.value)
+                .font(.caption.monospaced()).textSelection(.enabled)
+        }.chatMeasured("request-field-\(section)-\(field.id)-\(attempt.uuidString)", probe: layoutProbe)
     }
 
     private func sessionMenuItems(_ item: ChatSession) -> [ChatActionMenuItem] {

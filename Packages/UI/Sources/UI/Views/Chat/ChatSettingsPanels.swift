@@ -18,6 +18,8 @@ struct ChatDefaultsSettingsPanel: View {
     let chat: ChatController
     var isAvailable: @MainActor () -> Bool = { true }
     @Environment(\.dLanguageStore) private var language
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.chatDisplayPreferences) private var preferences
     @State private var draft = ""
     @State private var loaded = false
     @State private var issue: String?
@@ -30,7 +32,9 @@ struct ChatDefaultsSettingsPanel: View {
                  : t("defaults.appScope", "Saved in application preferences. Existing conversations are unchanged.", "保存于应用偏好，不回写已有会话。"))
                 .font(.caption).foregroundStyle(.secondary)
             TextSourcesQuestionEditor(value: draft, editEpoch: 0, isEditable: true,
-                accessibilityIdentifier: "settings-default-rules", onEdit: { draft = $0 }).frame(height: 140)
+                accessibilityIdentifier: "settings-default-rules", onEdit: { draft = $0 },
+                transparentBackground: true, foregroundColor: NSColor(preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor))
+                .frame(height: 140).padding(8).workbenchPanel(cornerRadius: 10)
             Text(draft == chat.defaultSystemPrompt ? t("defaults.saved", "Saved default", "已保存的默认规则") : t("defaults.unsaved", "Changes not saved", "修改尚未保存")).font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button(t("defaults.save", "Save default", "保存默认规则")) {
@@ -63,7 +67,7 @@ struct ChatPresetsManagementPanel: View {
         VStack(alignment: .leading) {
             ChatPresetsPanel(chat: chat, sessionID: sessionID,
                 onImport: { Task { await importFile() } },
-                onExport: { values in Task { await export(values) } }).disabled(busy)
+                onExport: { values in Task { await export(values) } }, showsHeading: false).disabled(busy)
             if let pending {
                 Text(t("presets.importPreview", "Import copies: ", "将作为副本导入：") + pendingNames.joined(separator: "、"))
                 HStack {

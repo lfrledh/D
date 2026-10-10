@@ -71,6 +71,7 @@ struct ChatPresetsPanel: View {
     let chat: ChatController
     let sessionID: UUID?
     let onImport: () -> Void
+    let showsHeading: Bool
     let onExport: ([ChatPromptPreset]) -> Void
 
     @State private var editingID: UUID?
@@ -82,11 +83,11 @@ struct ChatPresetsPanel: View {
     @State private var issue: String?
 
     init(chat: ChatController, sessionID: UUID?, onImport: @escaping () -> Void,
-         onExport: @escaping ([ChatPromptPreset]) -> Void) {
+         onExport: @escaping ([ChatPromptPreset]) -> Void, showsHeading: Bool = true) {
         self.chat = chat
         self.sessionID = sessionID
         self.onImport = onImport
-        self.onExport = onExport
+        self.onExport = onExport; self.showsHeading = showsHeading
     }
 
     private var session: ChatSession? { chat.state.sessions.first { $0.id == sessionID } }
@@ -132,7 +133,7 @@ struct ChatPresetsPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(text("presets", "Presets", "预设")).font(.headline)
+            if showsHeading { Text(text("presets", "Presets", "预设")).font(.headline) }
             Text(text("future", "Applying a preset changes future answers only.", "应用预设只影响之后的回答。"))
                 .font(.caption).foregroundStyle(.secondary)
             if chat.state.presets.isEmpty {

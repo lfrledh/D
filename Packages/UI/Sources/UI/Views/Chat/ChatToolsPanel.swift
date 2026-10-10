@@ -122,9 +122,18 @@ struct ChatToolsPanel: View {
                                         .disabled(chat.isToolRunning || session.webOptions?.allowed != true)
                                 }
                             } else {
-                                Text(String(json.prefix(8_192))).font(.caption.monospaced()).textSelection(.enabled)
-                                if json.count > 8_192 {
-                                    Text(wording("Preview shows the first 8,192 characters. The complete saved result is used when adopted.", "预览显示前8,192字符；采用时使用完整已保存结果。")).font(.caption).foregroundStyle(.secondary)
+                                if case .calculator = activity.request,
+                                   let result = try? JSONDecoder().decode(ChatDeterministicTools.ArithmeticResult.self, from: Data(json.utf8)) {
+                                    Text(wording("Result: ", "结果：") + result.decimal).font(.headline).textSelection(.enabled)
+                                    if result.mayBeRounded { Text(wording("This result may be rounded.", "此结果可能已舍入。")).font(.caption) }
+                                } else {
+                                    Text(wording("Saved result · expand to inspect before adopting", "已保存结果 · 展开查看后可采用")).font(.caption).foregroundStyle(.secondary)
+                                }
+                                DisclosureGroup(wording("Result details (original data)", "结果详情（原始数据）")) {
+                                    Text(String(json.prefix(8_192))).font(.caption.monospaced()).textSelection(.enabled)
+                                    if json.count > 8_192 {
+                                        Text(wording("Preview shows the first 8,192 characters. The complete saved result is used when adopted.", "预览显示前8,192字符；采用时使用完整已保存结果。")).font(.caption).foregroundStyle(.secondary)
+                                    }
                                 }
                                 Button(wording("Add full result to next message", "将完整结果加入下条消息")) {
                                     Task { do { try await chat.attachToolResult(activity.id, sessionID: session.id); issue = nil } catch { issue = error.localizedDescription } }

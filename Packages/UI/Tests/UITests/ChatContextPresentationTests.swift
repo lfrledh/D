@@ -236,8 +236,11 @@ private final class ContextPresentationSettings: UserDefaults, @unchecked Sendab
         try await Task.sleep(for: .milliseconds(50))
         detailHost.layoutSubtreeIfNeeded()
         #expect(inspected["request-inspection-\(attemptID.uuidString)"] != nil)
-        for field in ["input-system", "input-messages", "parameters-modelID", "parameters-temperature"] {
+        for field in ["input-system", "input-format"] {
             #expect(inspected["request-field-\(field)-\(attemptID.uuidString)"] != nil)
+        }
+        for section in ["source", "parameters", "memory", "media"] {
+            #expect(inspected["request-section-\(section)-\(attemptID.uuidString)"] != nil)
         }
         #expect(chat.selectedSession?.draft == draft)
         let revision = try #require(chat.selectedSession?.contextChoices?.revisions.first)

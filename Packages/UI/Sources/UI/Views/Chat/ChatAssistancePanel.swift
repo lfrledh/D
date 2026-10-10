@@ -93,7 +93,8 @@ struct ChatAssistancePanel: View {
                     Button(wording("Run all enabled tasks in this conversation", "运行本会话所有已开启任务")) {
                         do { try chat.runAssistance(sessionID: session.id); error = nil }
                         catch { self.error = error.localizedDescription }
-                    }.disabled(chat.isRunning || chat.isAssisting || chat.pendingAssistanceSaveID != nil)
+                    }.disabled(chat.isRunning || chat.isAssisting || chat.pendingAssistanceSaveID != nil
+                        || !ChatAssistanceKind.allCases.contains { (session.assistanceOptions ?? .init()).isEnabled($0) })
                     if chat.isAssisting {
                         Button(wording("Stop assistance", "停止辅助")) { Task { await chat.cancelAssistance() } }
                     }
