@@ -1,49 +1,40 @@
-# D 原生 UI 可拖动镜片与栏内悬浮圆钮（原生待验）
+# D 文字工作面功能归组候选
 
-2026-10-10 · **UI-PRESENTATION-REBUILD-01**。当前候选 **5a171721**：镜片支持按住略增大、拖动跟手、松手吸附并切换；取消不切页。单镜片、应用内折射、约200毫秒曲线保留。左右圆钮固定内缩8点并带独立圆底板，展开后完整浮在栏内，收起底板完全收入圆钮。当前为实现检查点，尚未完成本版原生自检，见[当前行动](CURRENT_ACTIONS.zh-CN.md)。
+2026-10-10 · **UI-PRESENTATION-REBUILD-01** · 生产 **5ac3353c774eb733915cabccf446e5e9dbf24be6**。保留已认可外壳与胶囊；本轮整理入口、名称和作用范围，不继续镜片/折射精修。复杂交互留在[最终集中待验清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)，不阻塞本轮功能整理。
 
 ## 唯一试用入口
 
-本版已启动，PID15648与隔离会话核对成功；原入口已更新，仍拒绝已有D时双开：
+[启动聊天当前验收.command](/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/启动聊天当前验收.command)
 
-`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/启动聊天当前验收.command`
+现指向 [D UI Review 5ac3353c.app](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-function-organization/delivery/D UI Review 5ac3353c.app>)。已启动，PID22431与隔离UUID E6657FC1-65D2-4860-997C-8A0D531CAB07核实，入口拒绝已有D时双开。
 
-指向 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-lens-drag/delivery/D UI Review 5a171721.app`。
+最后普通构建35.45秒成功；严格签名、App Sandbox及7个关键文件与普通产物一致，无补包或重签。源01758b81/main91bef7d7与个人scheme未推进。本轮10项定向测试通过，修正后其中2项再次通过；最后两个编辑框只有外观差分，构建和独立静态复核通过。测试/构建不代表动效通过。
 
-生产 **5a1717219caeb8281efc32963b2b77061637fc12**。最终8项定向检查7通过、1因测试窗口未成为key window而前置失败，未发送拖动事件；不称拖动回归通过。随后普通构建30.76秒，签名/App Sandbox及5文件摘要一致。隔离UUID仍为 `E6657FC1-65D2-4860-997C-8A0D531CAB07`。源/main与个人修改未推进。
+**原生边界：** 本轮在e6e3f444和27ef8afc实际操作并截图。最终5ac3353c只追加摘要/记忆编辑框的主题外观，读取窗口一次返回-10005 timeoutReached；停止原生、不重试/扩权、不推断锁屏。最终包已运行，但尚无它自己的截图。下列图明确属于27ef8afc，不冒充最终同版通过。
 
-原生工具在读取本版窗口时一次返回`-10005 timeoutReached`，已停止，不推断锁屏或扩权。本版尚无原生画面、边缘拖动、按压/松手放大、Escape取消或快速再次抓取结果，也没有本版连续动效展示。下一步先补这些原生检查；旧版浅深截图不能代本版。原输入/Undo/阅读/拖入与最右2点输入接收器旧余项继续保留。证据`run-20261010-lens-drag/lead`。
+## 新入口
 
-## 旧首片原生参考（a226，非本版截图）
+- **左侧“本会话设置”**：模型与常用预设、回答方式、上下文与记忆、会话整理、高级模型设置。当前规则只影响以后请求；预设在此应用，在设置统一管理；支持的其余参数仍在高级入口。
+- **右侧“资料 / 成果 / 工具”**：资料负责查找与采用；成果负责已保存回答及可编辑内容；工具先选计算/换算/分析/联网或MCP任务，再看对应输入和结果。切页保留编辑状态，不自动运行。
+- **消息“更多”**：继续讨论、回答版本、保存交接、朗读、查看详情按分隔线归组；历史详情读取当次快照。对话列表菜单可进入“会话整理”。
+- **齿轮 / Command–逗号**：同一设置。发送键在“操作”；默认规则与当前项目预设在“聊天默认”；朗读声音/速度在“声音”；路径、下载与备份在“文件与模型”；凭据在“网络与凭据”。识别语言仍留在语音输入，应用语言独立。
 
-证据根R为 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261008-first-slice`。
+## 实际检查与截图
 
-打开 `R/delivery/原生UI首片评审.html` 查看完整原图与明确标注差异的参考。图像字节来自原生截图，没有重绘；原始工具返回JPEG，保留早期.png证据名，同时提供正确.jpg别名。
+27ef8afc的1080点普通窗口、深色17pt及浅色14pt已亲见；没有将图像重绘成设计稿。复看修正了重复标签、默认规则白底、历史详情首屏和计算结果主显示。摘要/记忆旧白底随后在5ac3353c修正，最终复看因超时保留待验。
 
-![a2260084 原生深色空会话，左栏开右栏收，未选模型](images/ui-presentation-empty-a2260084.jpg)
+[深色双栏与计算结果（27ef8afc）](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-function-organization/gui/09-final-tools-dark-27ef8afc.jpg>) · [统一设置与范围说明（27ef8afc）](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-function-organization/gui/10-final-defaults-dark-27ef8afc.jpg>) · [浅色展开上下文及资料（27ef8afc，仍显示旧白底）](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-function-organization/gui/11-final-context-light-27ef8afc.jpg>) · [消息历史详情（27ef8afc）](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-function-organization/gui/12-details-light-27ef8afc.jpg>)。
 
-已实际看到空输入紧凑、选择模型清楚、单一顶部分类与模式入口。短草稿Undo清空、Redo恢复；半屏30行输入仅内部滚动，附件/语音/选择模型/发送操作行可见。原生输入器与服务接线保留，后端/存储/模型不改。
+实际完成：计算0.1+0.2并保存0.3记录；工具↔资料切换保持输入/结果；设置默认规则草稿跨页保留及放弃；消息/会话菜单、成果、声音、文件和凭据页面打开；Command–逗号与齿轮路由一致。27ef8afc冷开副本后草稿/结果保留，实际插字后Undo精确恢复原草稿。恢复跟随系统主题、14pt，动效等原偏好保持。未加载模型、连接MCP、调用搜索、写入记忆或录音。
 
-旧图中的系统提示黑框、缺少占位文案和模型层级弱已在96d6代码中局部改善；052f本轮聊天原图可见透明主题系统提示框和输入占位，但处于已删除路径，不是可编辑草稿验收。原型01-chat为浅色双栏有消息，07-dark/09-narrow为图像页，均不能冒充本轮同状态聊天对照。交付的聊天HTML仅对齐主题/栏/消息/草稿，保留原样式；原型仍有Qwen演示模型，原生未选模型，且派生页本轮未渲染。**严格同状态对照仍待补。**
+文件→打开项目选独立副本：
 
-## 保留现场与后续门槛
+[Function review.dproject](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-function-organization/gui/Function review.dproject>)
 
-旧-3812参数错误、曾明确报告锁屏、R6的-3811捕捉流失败分别保留。R7和R8桌面成功，R8无旧D进程时才启动ad50e57f；R9同样核对无D后启动5a171721，但原生窗口读取超时；不改写前轮未验状态，不双开或丢弃现有工作。
+其中text:fixture不可运行；24节长文是合成展示资料，不是模型成果。原始UI review.dproject所有文件摘要未变；副本仅增加一个计算记录，原草稿、消息、请求快照及预设逐项相同。真实Finder拖放、资料采用组合、模型停止与连续动效不由此替代。
 
-继续时用文件→打开项目，选择独立副本：
-
-`R/gui/UI review.dproject`
-
-它带24节合成长文与受控媒体展示记录，`text:fixture`不是可运行模型。c978中间包已实际打开此副本；a226最终包尚未完成它的冷重开。不要把这些夹具写成模型生成成果。
-
-当前优先待验：本版原生拖动/松手提交/取消、按压反馈、侧栏完整圆钮与连续动效；其余主体边缘点击、Escape/分类键盘焦点与菜单隔离/拖出/禁用、短长草稿原生回归；再顺路补同状态对照、右栏/焦点缩窗、浅色/大字/轻量、长文分类/模式往返、Finder附件→预览→保存冷开、已有Qwen短请求/停止及公共模态导航。模型文件已存在而本轮未登记/执行；不下载新模型。旧fit/封装/端口与viewport失败沿用原记录，见[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。
+证据根为外盘 run-20261010-function-organization；lead中保留构建、测试、native-final-stop、data-protection及delivery-review。旧R9的key-window前置失败、右缘2pt反例和旧桌面失败继续有效。无需重制网页原型；本轮批准的新功能位置优先于旧原型。
 
 ## 同树 Xcode Run
 
-打开 `/Volumes/CodexProjects/Codex/D-Worktrees/D-UI-PRESENTATION-REBUILD-01/D.xcworkspace`，选 **D Nodes / My Mac / Debug**。本轮普通构建已通过，未实际点击Xcode Run。
-
-忽略的本机 `Development/Development.local.xcconfig` 仅指定已有开发资源：
-
-`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume/delivery/resources-with-python`
-
-不修改签名/系统权限或重复下载。换机说明见[Development](../Development/README.md)。旧79f试用页固定存档见[历史索引](history/README.md#ui-presentation-takeover)。
+打开 /Volumes/CodexProjects/Codex/D-Worktrees/D-UI-PRESENTATION-REBUILD-01/D.xcworkspace，选 **D Nodes / My Mac / Debug**。本轮普通构建成功，未点击Xcode Run。既有Development.local.xcconfig仍使用外盘已授权开发资源；不改签名/权限或重复下载，换机见[Development](../Development/README.md)。

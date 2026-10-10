@@ -8,7 +8,7 @@
 ## 2026-10-08 当前展示切片导航
 
 - `UI/Sources/UI/Views/Quick/DualWorkbenchView.swift`：公共顶部、模式/临时会话及设置路由；不拥有推理。
-- `UI/Sources/UI/Views/Chat/ChatWorkbenchView.swift`：浮动面板、会话导航、阅读和完整输入组合；`ChatSpeechPanel.swift`为持续语音区域。
+- `UI/Sources/UI/Views/Chat/ChatWorkbenchView.swift`：浮动面板、会话导航、阅读和完整输入组合；`ChatSpeechPanel.swift`为持续语音区域；`ChatSettingsPanels.swift`承接统一设置中的聊天默认、项目预设、声音与搜索凭据，复用原控制器/Store。
 - `UI/Sources/UI/Views/TextSourcesQuestionEditor.swift`：既有原生输入桥；仅聊天opt-in有界内容测量/透明背景，其他宿主默认保持。
 - `UI/Tests/UITests/ChatDisplayPreferencesTests.swift`、`ChatPresentationTests.swift`：真实输入身份/marked/Undo/高度、面板与停止/阅读检查。
 
