@@ -68,6 +68,7 @@ struct WorkflowCanvasPanSession: Equatable {
 /// that native view is mounted, and accepts events whose native hit path reaches its scroll view.
 struct WorkflowCanvasViewportInput: NSViewRepresentable {
     typealias Coordinator = Void
+    var tool: WorkflowCanvasTool = .pointer
     var navigationAllowed: () -> Bool
     var allowsEvent: (_ point: CGPoint, _ offset: CGPoint, _ viewport: CGSize) -> Bool
     var onViewportSize: (WorkflowCanvasViewportMeasurement) -> Void
@@ -81,6 +82,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     }
 
     func updateNSView(_ view: ProbeView, context: Context) {
+        view.setTool(tool)
         view.navigationAllowed = navigationAllowed
         view.allowsEvent = allowsEvent
         view.onViewportSize = onViewportSize
@@ -96,18 +98,73 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         var onWheel: (CGFloat, CGPoint, CGPoint, CGSize) -> Void = { _, _, _, _ in }
         var onMiddleClick: (CGSize) -> Void = { _ in }
         private var monitor: Any?
+        private var cursorTracking: NSTrackingArea?
+        private var resignObserver: NSObjectProtocol?
+        private(set) var tool: WorkflowCanvasTool = .pointer
+        private(set) var handPressed = false
+        private var ownsCursor = false
+
+        func setTool(_ next: WorkflowCanvasTool) {
+            guard next != tool else { return }
+            resetHandCursor(); tool = next
+            window?.invalidateCursorRects(for: self)
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let cursorTracking { removeTrackingArea(cursorTracking) }
+            let area = NSTrackingArea(rect: .zero,
+                options: [.inVisibleRect, .activeInKeyWindow, .mouseEnteredAndExited, .cursorUpdate],
+                owner: self, userInfo: nil)
+            addTrackingArea(area); cursorTracking = area
+        }
+        override func cursorUpdate(with event: NSEvent) { updateHandCursor(for: event) }
+        override func mouseEntered(with event: NSEvent) { updateHandCursor(for: event) }
+        override func mouseExited(with event: NSEvent) {
+            if !handPressed { resetHandCursor() }
+        }
+        private func updateHandCursor(for event: NSEvent) {
+            guard tool == .hand, window?.isKeyWindow == true,
+                  handPressed || accepts(event) else {
+                if !handPressed { resetHandCursor() }; return
+            }
+            (handPressed ? NSCursor.closedHand : NSCursor.openHand).set()
+            ownsCursor = true
+        }
+        private func resetHandCursor() {
+            handPressed = false
+            if ownsCursor { NSCursor.arrow.set(); ownsCursor = false }
+        }
+
         private var reportedSize: WorkflowCanvasViewportMeasurement?
         private weak var observedScroll: NSScrollView?
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override func viewDidHide() { super.viewDidHide(); resetHandCursor() }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             stopMonitoring()
             guard window != nil else { return }
             reportViewportSize()
-            monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .otherMouseDown]) { [weak self] event in
-                guard let self, self.accepts(event),
+            resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification,
+                object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.resetHandCursor() }
+                }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .otherMouseDown,
+                .mouseMoved, .leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
+                guard let self else { return event }
+                switch event.type {
+                case .leftMouseUp:
+                    self.resetHandCursor(); self.updateHandCursor(for: event); return event
+                case .leftMouseDown:
+                    if self.tool == .hand && self.accepts(event) { self.handPressed = true }
+                    self.updateHandCursor(for: event); return event
+                case .leftMouseDragged, .mouseMoved:
+                    self.updateHandCursor(for: event); return event
+                default: break
+                }
+                guard self.accepts(event),
                       let scroll = self.enclosingScrollView else { return event }
                 let clip = scroll.contentView
                 let location = clip.convert(event.locationInWindow, from: nil)
@@ -211,13 +268,15 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             guard let hit = content.hitTest(point) else { return false }
             var view: NSView? = hit
             while let current = view, current !== scroll {
-                if current is NSControl || current is NSTextView { return false }
+                if current is NSControl || current is NSTextView || current is WorkflowPortDragView { return false }
                 view = current.superview
             }
             return view === scroll
         }
 
         func stopMonitoring() {
+            resetHandCursor()
+            if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }; resignObserver = nil
             stopViewportObservation()
             if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
         }

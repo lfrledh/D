@@ -28,6 +28,9 @@ struct WorkbenchCategoryDragReceiver: NSViewRepresentable {
         view.selection = selection; view.owner = owner; view.enabled = accepts
         view.onPreview = onPreview; view.onCommit = onCommit
         view.presentation = presentation; view.presentationSelection = presentationSelection
+        #if DEBUG
+        WorkbenchCategoryUpdateProbe.presentationTrace()
+        #endif
     }
     static func dismantleNSView(_ view: WorkbenchCategoryDragView, coordinator: ()) {
         view.cancel(notify: false)
@@ -44,6 +47,7 @@ final class WorkbenchCategoryDragView: NSView {
     var onCommit: (Int) -> Void = { _ in }
     var presentation = CGRect(x: 0, y: 0, width: 62.5, height: 36)
     var presentationSelection: CGFloat = 0
+    private var lastPreview: CGFloat?
     private var startPresentation: CGFloat = 0
     private var start: CGPoint?
     private var startSelection = 0
@@ -62,8 +66,12 @@ final class WorkbenchCategoryDragView: NSView {
     override func mouseDown(with event: NSEvent) {
         guard enabled, event.buttonNumber == 0, let window, window.isKeyWindow else { return }
         cancel(notify: false)
+        #if DEBUG
+        WorkbenchCategoryUpdateProbe.beginTrace()
+        #endif
         start = convert(event.locationInWindow, from: nil)
         startSelection = selection; startOwner = owner; startPresentation = presentationSelection
+        lastPreview = startPresentation
         onPreview(startPresentation)
         // A temporary, window-scoped Escape monitor cancels a drag without
         // stealing the editor's first responder or invoking the sidebar shortcut.
@@ -82,7 +90,12 @@ final class WorkbenchCategoryDragView: NSView {
     }
     override func mouseDragged(with event: NSEvent) {
         guard start != nil, enabled, owner == startOwner, selection == startSelection else { cancel(); return }
-        onPreview(preview(at: convert(event.locationInWindow, from: nil)))
+        let next = preview(at: convert(event.locationInWindow, from: nil))
+        guard next != lastPreview else { return }
+        #if DEBUG
+        WorkbenchCategoryUpdateProbe.inputTrace()
+        #endif
+        lastPreview = next; onPreview(next)
     }
     override func mouseUp(with event: NSEvent) {
         guard start != nil else { return }
@@ -94,8 +107,11 @@ final class WorkbenchCategoryDragView: NSView {
         if accepts && target != selection { onCommit(target) }
     }
     func cancel(notify: Bool = true) {
+        #if DEBUG
+        WorkbenchCategoryUpdateProbe.endTrace()
+        #endif
         let wasActive = start != nil
-        start = nil; startOwner = nil
+        start = nil; startOwner = nil; lastPreview = nil
         if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor) }; escapeMonitor = nil
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }; resignObserver = nil
         if notify && wasActive { onPreview(nil) }

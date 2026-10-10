@@ -76,18 +76,7 @@ public struct DualWorkbenchView: View {
             tools: canvasModel.projectSession.workflow?.tools ?? [], projects: projects, language: language)
     }
     @State private var sidebarState = WorkbenchSidebarState()
-    @FocusState private var focusedCategory: QuickCategory?
-    @State private var hoveredCategory: QuickCategory?
-    @State private var pressedCategory: QuickCategory?
-    @State private var categoryDragPreview: CGFloat?
-    @Environment(\.chatDisplayPreferences) private var displayPreferences
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var controlsEnabled
-    private var categoryIndex: Int { QuickCategory.allCases.firstIndex(of: quick.category) ?? 0 }
-    private var categoryMotion: Animation? {
-        WorkbenchEffectsPolicy(appearance: displayPreferences.resolvedAppearance, reduceMotion: reduceMotion,
-            reduceTransparency: false, increasedContrast: false).morphAnimation
-    }
     private func selectCategory(_ category: QuickCategory) {
         guard controlsEnabled, !quickOwnerIsChanging, quick.category != category else { return }
         captureChatReading(); quick.selectCategory(category)
@@ -196,76 +185,20 @@ public struct DualWorkbenchView: View {
         entry = previous
     }
     public var body: some View {
+        #if DEBUG
+        let _ = WorkbenchCategoryUpdateProbe.workbenchBody?()
+        #endif
         VStack(spacing: 0) {
             ZStack {
                 if entry == .quick {
                     let dragOwner = quick
                     let dragStore = quickModel.projectSession.currentStore
-                    HStack(spacing: 2) {
-                        ForEach(QuickCategory.allCases, id: \.self) { category in
-                            Button {
-                                selectCategory(category)
-                            } label: {
-                                Text(workflowText(language, "quick.category.\(category.rawValue)", fallback: category.rawValue))
-                                    .foregroundStyle(.clear)
-                            }
-                            .buttonStyle(WorkbenchCategoryButtonStyle(onPressChanged: { pressed in
-                                if pressed { pressedCategory = category }
-                                else if pressedCategory == category { pressedCategory = nil }
-                            }))
-                            .onHover { inside in
-                                if inside && !quickOwnerIsChanging { hoveredCategory = category }
-                                else if hoveredCategory == category { hoveredCategory = nil }
-                            }
-                            .focused($focusedCategory, equals: category)
-                            .accessibilityAddTraits(quick.category == category ? .isSelected : [])
-                            .accessibilityIdentifier("quick-category-\(category.rawValue)")
+                    WorkbenchCategoryPicker(selection: quick.category, owner: ObjectIdentifier(quick),
+                        enabled: !quickOwnerIsChanging) { category in
+                            guard entry == .quick, quick === dragOwner,
+                                  quickModel.projectSession.currentStore === dragStore else { return }
+                            selectCategory(category)
                         }
-                    }
-                    .overlay(alignment: .leading) {
-                        WorkbenchCategoryLensTrack(selection: categoryDragPreview ?? CGFloat(categoryIndex),
-                            titles: QuickCategory.allCases.map { workflowText(language, "quick.category.\($0.rawValue)", fallback: $0.rawValue) },
-                            engagement: categoryDragPreview != nil || pressedCategory != nil ? 1 : 0,
-                            hovered: hoveredCategory.flatMap { QuickCategory.allCases.firstIndex(of: $0) },
-                            pressed: pressedCategory.flatMap { QuickCategory.allCases.firstIndex(of: $0) },
-                            dragReceiver: WorkbenchCategoryDragReceiver(selection: categoryIndex, owner: ObjectIdentifier(quick),
-                                enabled: controlsEnabled && !quickOwnerIsChanging, onPreview: { categoryDragPreview = $0 },
-                                onCommit: { index in
-                                    guard entry == .quick, quick === dragOwner,
-                                          quickModel.projectSession.currentStore === dragStore else { return }
-                                    selectCategory(QuickCategory.allCases[index])
-                                }))
-                            .animation(categoryDragPreview == nil ? categoryMotion : nil, value: categoryDragPreview ?? CGFloat(categoryIndex))
-                            .animation(categoryMotion, value: categoryDragPreview != nil || pressedCategory != nil)
-                            .opacity(quickOwnerIsChanging ? 0.45 : 1)
-                    }
-                    .padding(4).frame(width: 264)
-                    .workbenchPanel(in: Capsule())
-                    .disabled(quickOwnerIsChanging)
-                    .onChange(of: quickOwnerIsChanging) { _, changing in
-                        if changing { hoveredCategory = nil; pressedCategory = nil; categoryDragPreview = nil }
-                    }
-                    .onChange(of: controlsEnabled) { _, enabled in if !enabled { categoryDragPreview = nil; pressedCategory = nil } }
-                    .onChange(of: ObjectIdentifier(quick)) { _, _ in categoryDragPreview = nil }
-                    .onChange(of: quick.category) { _, _ in categoryDragPreview = nil }
-                    .onDisappear { hoveredCategory = nil; pressedCategory = nil; categoryDragPreview = nil }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityLabel(t("category", "Creation category", "创作分类"))
-                    .accessibilityIdentifier("quick-category")
-                    .onMoveCommand { direction in
-                        guard !quickOwnerIsChanging else { return }
-                        let categories = QuickCategory.allCases
-                        guard let current = categories.firstIndex(of: focusedCategory ?? quick.category) else { return }
-                        let next: Int
-                        switch direction {
-                        case .left: next = max(0, current - 1)
-                        case .right: next = min(categories.count - 1, current + 1)
-                        default: return
-                        }
-                        guard next != current else { return }
-                        selectCategory(categories[next])
-                        focusedCategory = categories[next]
-                    }
                 } else { Text(t("workflow", "Node workflow", "节点工作流")).font(.headline).frame(width: 340) }
                 HStack(spacing: 8) {
                 Button(action: goBack) { Image(systemName: "chevron.left") }

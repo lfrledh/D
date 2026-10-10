@@ -17,6 +17,9 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
         return host
     }
     func updateNSView(_ host: NSHostingView<Content>, context: Context) {
+        #if DEBUG
+        WorkbenchCategoryUpdateProbe.retainedUpdate?()
+        #endif
         host.rootView = content
         // Only an actual close/open changes native visibility. Hiding can release
         // the first responder; a layout change must not transiently hide an editor.

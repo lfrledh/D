@@ -1912,6 +1912,7 @@ private enum WorkflowExampleChoice: String, CaseIterable, Identifiable {
 struct WorkflowPendingConnection: Equatable {
     let nodeID: UUID
     let port: String
+    var input: Bool = false
 }
 
 private struct WorkflowRunPreview: Identifiable {
