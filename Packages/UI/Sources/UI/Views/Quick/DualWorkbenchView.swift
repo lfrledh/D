@@ -99,6 +99,7 @@ public struct DualWorkbenchView: View {
     @State private var compatibilityVisible = false
     @State private var languageVisible = false
     @State private var settingsVisible = false
+    @State private var settingsSection = "appearance"
     @Binding private var settingsRequest: UUID?
     private let windowHasSheet: Bool
     private struct SettingsContext {
@@ -152,19 +153,20 @@ public struct DualWorkbenchView: View {
         settingsRequest = nil
         presentSettings()
     }
-    private func presentSettings() {
+    private func presentSettings(section: String = "appearance") {
         guard canPresentSettings else { return }
         let owner = entry == .quick ? quickModel : canvasModel
         let files = owner.manifest.flatMap { manifest in owner.projectSession.currentStore.map {
             FilesRoute(store: $0, instanceID: manifest.effectiveInstanceID, assetID: nil)
         } }
         // Match the owner Quick/Text will actually display, including temporary chat.
-        let searchOwner = automaticQuickModel.temporaryChatModel ?? quickModel
+        let searchOwner = chatModel
         let target = searchOwner.projectSession.chat
         settingsContext = .init(owner: owner, files: files, searchOwner: searchOwner, search: target,
             searchSessionID: target?.state.selectedSessionID,
             searchTitle: target.map { (searchOwner.manifest?.name ?? t("workspace", "Workspace", "工作区")) + " · " + ($0.selectedSession?.title ?? t("newConversation", "New conversation", "新会话")) })
         settingsDestination = nil
+        settingsSection = section
         settingsVisible = true
     }
     private func finishSettingsDismissal() {
@@ -180,23 +182,9 @@ public struct DualWorkbenchView: View {
                 return
             }
             filesRoute = route
-        } else if destination == "search" {
-            let expected = automaticQuickModel.temporaryChatModel ?? quickModel
-            guard expected === context.searchOwner, let target = context.search,
-                  expected.projectSession.chat === target,
-                  target.state.selectedSessionID == context.searchSessionID,
-                  !expected.projectSession.isChangingProject else {
-                issue = t("targetChanged", "The settings target changed. Open Settings again from the intended workspace.", "设置目标已改变，请回到目标工作区后重新打开设置。")
-                return
-            }
-            do {
-                // Only this explicit action, not opening Settings, may create a session.
-                if target.state.selectedSessionID == nil { _ = try target.newSession() }
-                navigate(to: .quick); quick.selectCategory(.text); quick.selectTextPresentation(.chat)
-                openToolsRequest = ChatToolsNavigationRequest(chat: target)
-            } catch { issue = error.localizedDescription }
         }
     }
+
     private func navigate(to destination: Entry) {
         guard destination != entry else { return }
         captureChatReading()
@@ -327,7 +315,7 @@ public struct DualWorkbenchView: View {
                 }.buttonStyle(WorkbenchIconButtonStyle(diameter: 40, panel: true))
                     .help(entry == .quick ? t("quickSwitch", "Quick generation · Switch to workflow", "快速生成 · 切换到工作流") : t("workflowSwitch", "Workflow · Switch to Quick generation", "工作流 · 切换到快速生成"))
                     .accessibilityLabel(entry == .quick ? t("switchToWorkflow", "Switch to workflow", "切换到工作流") : t("switchToQuick", "Switch to Quick generation", "切换到快速生成")).accessibilityIdentifier("workbench-entry").workbenchMotion(value: entry)
-                Button(action: presentSettings) { Image(systemName: "gearshape").frame(width: 30, height: 30) }
+                Button(action: { presentSettings() }) { Image(systemName: "gearshape").frame(width: 30, height: 30) }
                     .buttonStyle(WorkbenchIconButtonStyle(diameter: 40, panel: true)).help(t("settings", "Settings", "设置")).accessibilityLabel(t("settings", "Settings", "设置"))
                     .accessibilityIdentifier("workbench-settings").disabled(!canPresentSettings)
                 }
@@ -414,6 +402,7 @@ public struct DualWorkbenchView: View {
         }
         .frame(minWidth: WorkbenchSidebarLayout.minimumWindowWidth, minHeight: 580)
         .environment(\.workbenchSidebars, sidebarState)
+        .environment(\.openWorkbenchSettings, { section in presentSettings(section: section) })
         .workbenchTheme()
         .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences)
         .preferredColorScheme(automaticQuickModel.chatDisplaySettings.preferences.preferredColorScheme)
@@ -425,7 +414,14 @@ public struct DualWorkbenchView: View {
                 WorkbenchSettingsView(model: context.owner, library: library, language: language,
                     projectPath: context.files?.store.rootURL.path, searchTargetLabel: context.searchTitle,
                     onProjectFiles: { settingsDestination = "files"; settingsVisible = false },
-                    onSearchSettings: context.search == nil ? nil : { settingsDestination = "search"; settingsVisible = false })
+                    onSearchSettings: nil, chat: context.search, initialSection: settingsSection,
+                    isChatContextValid: {
+                        guard let target = context.search else { return false }
+                        return context.searchOwner.projectSession.chat === target
+                            && context.searchOwner.projectSession.currentStore === target.store
+                            && target.state.selectedSessionID == context.searchSessionID
+                            && !context.searchOwner.projectSession.isChangingProject
+                    })
             }
         }
         .sheet(isPresented: $libraryVisible, onDismiss: finishLibraryDismissal) {

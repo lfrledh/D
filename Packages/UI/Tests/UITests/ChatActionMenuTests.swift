@@ -4,6 +4,31 @@ import Testing
 
 @Suite("Native chat action menu lifecycle", .serialized)
 @MainActor struct ChatActionMenuTests {
+    @Test func groupedSeparatorsKeepUnlistedActionsAndTrackedSelectionRunsOnce() throws {
+        var calls: [String] = []
+        let grouped = ChatActionMenuItem.grouped([
+            .init(id: "first", title: "First") { calls.append("original") },
+            .init(id: "last", title: "Last") { calls.append("last") },
+            .init(id: "unlisted", title: "Unlisted") { calls.append("unlisted") }
+        ], ids: [["first"], [], ["missing"], ["last"]])
+        #expect(grouped.filter { !$0.isSeparator }.map(\.id) == ["first", "last", "unlisted"])
+        #expect(grouped.filter(\.isSeparator).count == 2)
+        let (coordinator, button, menu) = fixture(grouped)
+        defer { coordinator.dismantle(button) }
+        coordinator.menuWillOpen(menu)
+        let original = try #require(menu.item(at: 1))
+        let separator = try #require(menu.item(at: 2))
+        #expect(separator.isSeparatorItem && separator.representedObject == nil)
+        coordinator.update(button, title: "Changed", accessibilityIdentifier: "actions",
+            items: [.init(id: "first", title: "New title") { calls.append("new") }])
+        coordinator.selectItem(separator)
+        coordinator.selectItem(original)
+        coordinator.selectItem(original)
+        endTracking(coordinator, menu: menu)
+        coordinator.drainAfterTracking()
+        #expect(calls == ["original"])
+    }
+
     @Test func disablingControlRejectsTrackedSelectionAndCanEnableAgain() throws {
         var calls = 0
         let items: [ChatActionMenuItem] = [.init(id: "rename", title: "Rename") { calls += 1 }]

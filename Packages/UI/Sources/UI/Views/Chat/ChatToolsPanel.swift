@@ -9,6 +9,9 @@ struct ChatToolsPanel: View {
     let openArtifact: (ChatArtifactContent) -> Void
     let wording: (String, String) -> String
     @State private var tool = "web"
+    @State private var showAllHistory = false
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var colorScheme
     @State private var query = ""
     @State private var left = "0"
     @State private var right = "0"
@@ -31,24 +34,43 @@ struct ChatToolsPanel: View {
     """
 
     var body: some View {
-        DisclosureGroup(wording("Search and tools", "搜索与工具")) {
+        Group {
             VStack(alignment: .leading, spacing: 8) {
-                Picker(wording("Tool", "工具"), selection: $tool) {
+                Picker(wording("Task", "要做什么"), selection: $tool) {
                     Text(wording("Web search", "联网搜索")).tag("web")
                     Text(wording("Calculator", "计算器")).tag("calculator")
                     Text(wording("Units", "单位换算")).tag("units")
                     Text(wording("Time zones", "时区换算")).tag("time")
                     Text(wording("CSV statistics", "CSV统计")).tag("csv")
                     Text(wording("Python analysis", "Python 分析")).tag("python")
+                    Text(wording("External tools (MCP)", "外部工具连接（MCP）")).tag("mcp")
                 }.pickerStyle(.menu).accessibilityIdentifier("chat-tool-kind")
-                toolInput
+                if tool != "mcp" { toolInput }
+                RetainedContentHost(content: ScrollView {
+                    ChatMCPPanel(chat: chat, session: session, wording: wording).padding(.vertical, 4)
+                }.environment(\.dLanguageStore, language).environment(\.chatDisplayPreferences, preferences)
+                    .preferredColorScheme(colorScheme)
+                    .foregroundStyle(preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor, preferences.resolvedAppearance.palette(for: colorScheme).secondaryColor)
+                    .tint(preferences.resolvedAppearance.palette(for: colorScheme).accentColor).disabled(tool != "mcp"),
+                    visible: tool == "mcp", identifier: "chat-mcp-task")
+                    .frame(height: tool == "mcp" ? 440 : 0).clipped()
+                    .allowsHitTesting(tool == "mcp").accessibilityHidden(tool != "mcp")
+                Divider()
+                Text(wording("Task status and results", "任务状态与结果")).font(.headline)
+                Toggle(wording("Show history for all tasks", "查看所有工具记录"), isOn: $showAllHistory)
+                if (session.toolActivities ?? []).filter({ showAllHistory || family($0.request) == tool }).isEmpty {
+                    Text(wording("No records for this task.", "这项任务暂无记录。")).font(.caption).foregroundStyle(.secondary)
+                }
                 if chat.isToolRunning {
                     Button(wording("Stop tool", "停止工具")) { Task { await chat.cancelTool() } }
                 }
                 if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
-                ForEach((session.toolActivities ?? []).reversed()) { activity in
-                    DisclosureGroup(activity.request.identifier + " · " + status(activity.status)) {
-                        Text(requestText(activity.request)).font(.caption).textSelection(.enabled)
+                ForEach((session.toolActivities ?? []).filter { showAllHistory || family($0.request) == tool }.reversed()) { activity in
+                    DisclosureGroup(taskTitle(activity.request) + " · " + status(activity.status)) {
+                        DisclosureGroup(wording("Inputs and technical details", "输入与技术详情")) {
+                            Text(activity.request.identifier).font(.caption.monospaced()).textSelection(.enabled)
+                            Text(requestText(activity.request)).font(.caption).textSelection(.enabled)
+                        }
                         if activity.request.hasTransientResult, activity.status == .completed {
                             if let preview = chat.searchResponse(activityID: activity.id, sessionID: session.id) {
                                 Text(wording("Search summaries only. Read a page to obtain source text.", "以下是搜索摘要；读取网页后才获得正文。"))
@@ -115,8 +137,28 @@ struct ChatToolsPanel: View {
             }.padding(.top, 6)
         }
     }
+    private func family(_ request: ChatToolRequest) -> String {
+        switch request {
+        case .calculator: "calculator"; case .units: "units"; case .time: "time"; case .csv: "csv"
+        case .python: "python"; case .mcp: "mcp"
+        case .webSearch, .webRead, .providerSearch, .pageRead: "web"
+        }
+    }
+    private func taskTitle(_ request: ChatToolRequest) -> String {
+        switch request {
+        case .calculator: wording("Calculation", "计算")
+        case .units: wording("Unit conversion", "单位换算")
+        case .time: wording("Time conversion", "时区换算")
+        case .csv: wording("CSV statistics", "CSV 统计")
+        case .python: wording("Python analysis", "Python 分析")
+        case .mcp(_, let name, _): wording("External tool: ", "外部工具：") + name
+        case .webSearch, .providerSearch: wording("Web search", "联网搜索")
+        case .webRead, .pageRead: wording("Read web page", "读取网页")
+        }
+    }
     @ViewBuilder private var toolInput: some View {
         switch tool {
+        case "mcp": EmptyView()
         case "python":
             Text(wording("Runs only in bundled CPython/WASI. No network, host files, credentials, pip or native extensions. Selected text/CSV files are copied read-only. 30s guest time, 256 MiB linear memory; results are saved only when you choose.",
                          "仅在内置 CPython/WASI 中执行，不能访问网络、宿主文件或凭据，不支持 pip 和原生扩展。选中的文字/CSV以只读副本提供；guest 时限30秒、线性内存256 MiB。成果由您决定是否保存。"))
@@ -146,18 +188,12 @@ struct ChatToolsPanel: View {
                 Text(wording("Bocha Web Search", "博查 Web Search")).tag(Optional(ChatSearchProvider.bocha))
             }
             if let provider = session.webOptions?.provider {
-                HStack {
-                    Button(chat.configuredSearchProviders.contains(provider)
-                           ? wording("Change API key file…", "更换 API 密钥文件…")
-                           : wording("Choose API key file…", "选择 API 密钥文件…")) { chooseSearchCredential(provider) }
-                        .disabled(chat.isToolRunning)
-                    if chat.configuredSearchProviders.contains(provider) {
-                        Button(wording("Forget key", "移除密钥关联")) { chat.removeSearchCredential(provider) }
-                    }
-                }
-                Text(wording("Choose a local plain-text file containing only your API key, without a trailing newline. Only its bookmark stays in app settings; the key is excluded from projects and backups.", "选择仅含您本人 API 密钥、末尾无换行的本地纯文本文件。App 设置仅保存该文件的访问关联；密钥不进入项目与备份。"))
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(chat.configuredSearchProviders.contains(provider)
+                    ? wording("Local credential connected", "已关联本地凭据")
+                    : wording("Credential not configured", "尚未配置凭据")).font(.caption).foregroundStyle(.secondary)
+                Button(wording("Manage credentials in Settings…", "前往设置管理凭据…")) { chooseSearchCredential(provider) }
             }
+
             Toggle(wording("Allow this conversation to search online", "允许本会话联网搜索"), isOn: Binding(get: { session.webOptions?.allowed == true }, set: { value in
                 updateWeb { $0.allowed = value; if !value { $0.automaticSearch = false } }
             })).disabled(session.webOptions?.provider == nil && session.webOptions?.allowed != true)

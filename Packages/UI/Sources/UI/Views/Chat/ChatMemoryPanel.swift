@@ -56,6 +56,7 @@ struct ChatMemoryPanel: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(wording("Summaries replace only reviewed context. Originals remain. Memory is off until explicitly enabled.", "摘要仅替代经过确认的上下文，原文保留。记忆须显式启用。"))
                     .font(.caption).foregroundStyle(.secondary)
+                ChatAssistancePanel(chat: chat, session: session, section: .summary, wording: wording)
                 ForEach(summaries) { summary in
                     let provenance = ChatProvenancePresentation(summary: summary)
                     Toggle(wording("Summary revision ", "摘要版本 ") + String(provenance.revision), isOn: Binding(get: { summary.enabled }, set: { value in
@@ -72,6 +73,7 @@ struct ChatMemoryPanel: View {
                 }.disabled(summaryText.isEmpty || chat.isRunning)
                 Divider()
                 if !chat.isTemporary {
+                ChatAssistancePanel(chat: chat, session: session, section: .memory, wording: wording)
                 Toggle(wording("Use personal memories", "使用个人记忆"), isOn: scopeBinding(.personal))
                 if let id = chat.projectIdentity { Toggle(wording("Use this project's memories", "使用本项目记忆"), isOn: scopeBinding(.project(id))) }
                 ForEach(memories) { entry in

@@ -72,6 +72,51 @@ private actor ConfigurationPanelEngine: InferenceEngine {
         try FileManager.default.removeItem(at: root)
     }
 
+    @Test func presetManagementWithoutSessionDoesNotCreateOrRunConversation() async throws {
+        let (store, engine, chat, root) = try await fixture()
+        #expect(chat.state.sessions.isEmpty && chat.state.selectedSessionID == nil)
+        var preset = ChatPromptPreset(name: "Rules", prompt: "Be clear")
+        try ChatConfigurationActions.savePreset(preset, captureCurrentConfiguration: false, sessionID: nil, chat: chat)
+        preset.prompt = "Preserve uncertainty"
+        try ChatConfigurationActions.savePreset(preset, captureCurrentConfiguration: false, sessionID: nil, chat: chat)
+        let copy = try chat.copyPreset(preset.id, name: "Copy")
+        try chat.removePreset(copy)
+        #expect(throws: (any Error).self) {
+            try ChatConfigurationActions.savePreset(preset, captureCurrentConfiguration: true, sessionID: nil, chat: chat)
+        }
+        #expect(chat.state.sessions.isEmpty && chat.state.selectedSessionID == nil)
+        #expect(await engine.requests.isEmpty)
+        try await chat.flush()
+        #expect(try await store.chatState().presets == [preset])
+        try await close(store, root: root)
+    }
+
+    @Test func assistanceGroupsMergeIntoLatestOptionsWithoutOverwritingOtherGroups() {
+        let current = ChatAssistanceOptions(summary: true, title: false, tags: true, followUps: false,
+            memoryMode: .suggest, memoryTarget: .personal,
+            outputTokenBudgets: .init(summary: 101, title: 102, tags: 103, followUps: 104, memory: 105),
+            summaryThresholdEstimatedTokens: 800)
+        let draft = ChatAssistanceOptions(summary: false, title: true, tags: false, followUps: true,
+            memoryMode: .off, memoryTarget: nil,
+            outputTokenBudgets: .init(summary: 201, title: 202, tags: 203, followUps: 204, memory: 205),
+            summaryThresholdEstimatedTokens: 900)
+        let summary = ChatAssistanceSection.summary.merging(draft, into: current)
+        #expect(!summary.summary && summary.summaryThresholdEstimatedTokens == 900)
+        #expect(summary.memoryMode == current.memoryMode && summary.memoryTarget == current.memoryTarget)
+        #expect(summary.title == current.title && summary.tags == current.tags && summary.followUps == current.followUps)
+        #expect(summary.outputTokenBudgets == .init(summary: 201, title: 102, tags: 103, followUps: 104, memory: 105))
+        let memory = ChatAssistanceSection.memory.merging(draft, into: current)
+        #expect(memory.memoryMode == .off && memory.memoryTarget == nil)
+        #expect(memory.summary && memory.summaryThresholdEstimatedTokens == 800)
+        #expect(memory.title == current.title && memory.tags == current.tags && memory.followUps == current.followUps)
+        #expect(memory.outputTokenBudgets == .init(summary: 101, title: 102, tags: 103, followUps: 104, memory: 205))
+        let organization = ChatAssistanceSection.organization.merging(draft, into: current)
+        #expect(organization.title && !organization.tags && organization.followUps)
+        #expect(organization.summary && organization.summaryThresholdEstimatedTokens == 800)
+        #expect(organization.memoryMode == current.memoryMode && organization.memoryTarget == current.memoryTarget)
+        #expect(organization.outputTokenBudgets == .init(summary: 101, title: 202, tags: 203, followUps: 204, memory: 105))
+    }
+
     @Test func presetCaptureRejectsIncompleteNumberAndApplyLeavesDraftAndHistoryUntouched() async throws {
         let (store, _, chat, root) = try await fixture()
         let id = try chat.newSession()

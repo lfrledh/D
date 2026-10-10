@@ -22,6 +22,20 @@ struct ChatOutputFormatPanel: View {
         case .schema: wording("D structured schema", "D 结构定义")
         }
     }
+    private var saved: ChatOutputFormat { chat.state.sessions.first { $0.id == sessionID }?.outputFormat ?? .init() }
+    private func encodedSchema(_ format: ChatOutputFormat) -> String {
+        guard let schema = format.schema else { return "" }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return (try? encoder.encode(schema)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+    }
+    private var hasChanges: Bool {
+        guard kind == saved.kind else { return true }
+        guard kind == .schema else { return false }
+        guard (try? WorkflowStructuredText.validateJSONSyntax(schemaText)) != nil,
+              let schema = try? JSONDecoder().decode(WorkflowDataSchema.self, from: Data(schemaText.utf8)) else { return true }
+        return schema != saved.schema
+    }
+    private func load() { kind = saved.kind; schemaText = encodedSchema(saved); issue = nil }
     var body: some View {
         DisclosureGroup(wording("Response format", "回答格式")) {
             VStack(alignment: .leading, spacing: 8) {
@@ -44,6 +58,9 @@ struct ChatOutputFormatPanel: View {
                 }
                 Text(wording("Explicit format instructions are added to future requests. JSON is checked after generation; this does not force valid output. Invalid output stays available.", "显式格式要求加入之后的请求；JSON 在生成后检查，不保证模型一定遵守。未通过的原文仍保留。"))
                     .font(.caption).foregroundStyle(.secondary)
+                Text(hasChanges ? wording("Changes are not applied", "修改尚未应用") : wording("Showing saved format", "当前为已保存的格式"))
+                    .font(.caption).foregroundStyle(.secondary)
+                Button(wording("Discard format edits", "放弃格式修改")) { load() }.disabled(!hasChanges)
                 Button(wording("Apply to future answers", "应用到之后的回答")) {
                     do {
                         let schema: WorkflowDataSchema?
@@ -54,17 +71,12 @@ struct ChatOutputFormatPanel: View {
                         } else { schema = nil }
                         try chat.setOutputFormat(.init(kind: kind, schema: schema), sessionID: sessionID); issue = nil
                     } catch { issue = error.localizedDescription }
-                }.accessibilityIdentifier("chat-output-format-apply")
+                }.accessibilityIdentifier("chat-output-format-apply").disabled(!hasChanges)
                 if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             }.padding(.top, 6)
         }.onAppear {
             guard !loaded else { return }; loaded = true
-            let format = chat.state.sessions.first { $0.id == sessionID }?.outputFormat ?? .init()
-            kind = format.kind
-            if let schema = format.schema {
-                let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-                schemaText = (try? encoder.encode(schema)).map { String(decoding: $0, as: UTF8.self) } ?? ""
-            }
+            load()
         }
     }
 }

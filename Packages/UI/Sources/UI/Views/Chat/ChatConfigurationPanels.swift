@@ -50,10 +50,10 @@ import SwiftUI
     }
 
     static func savePreset(_ draft: ChatPromptPreset, captureCurrentConfiguration: Bool,
-                           sessionID: UUID, chat: ChatController) throws {
+                           sessionID: UUID?, chat: ChatController) throws {
         var preset = draft
         if captureCurrentConfiguration {
-            guard let session = chat.state.sessions.first(where: { $0.id == sessionID }),
+            guard let sessionID, let session = chat.state.sessions.first(where: { $0.id == sessionID }),
                   !chat.hasInvalidParameterText(sessionID: sessionID),
                   let configuration = session.configuration else {
                 throw WorkflowIssue("请先完成参数输入并选择模型，再保存当前配置。")
@@ -69,7 +69,7 @@ import SwiftUI
 struct ChatPresetsPanel: View {
     @Environment(\.dLanguageStore) private var language
     let chat: ChatController
-    let sessionID: UUID
+    let sessionID: UUID?
     let onImport: () -> Void
     let onExport: ([ChatPromptPreset]) -> Void
 
@@ -81,7 +81,7 @@ struct ChatPresetsPanel: View {
     @State private var captureConfiguration = false
     @State private var issue: String?
 
-    init(chat: ChatController, sessionID: UUID, onImport: @escaping () -> Void,
+    init(chat: ChatController, sessionID: UUID?, onImport: @escaping () -> Void,
          onExport: @escaping ([ChatPromptPreset]) -> Void) {
         self.chat = chat
         self.sessionID = sessionID
@@ -92,7 +92,7 @@ struct ChatPresetsPanel: View {
     private var session: ChatSession? { chat.state.sessions.first { $0.id == sessionID } }
     private var original: ChatPromptPreset? { chat.state.presets.first { $0.id == editingID } }
     private var invalidCapture: Bool {
-        captureConfiguration && (session?.configuration == nil || chat.hasInvalidParameterText(sessionID: sessionID))
+        captureConfiguration && (session?.configuration == nil || (sessionID.map { chat.hasInvalidParameterText(sessionID: $0) } ?? false))
     }
     private var validName: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && name.utf8.count <= 256
@@ -150,7 +150,7 @@ struct ChatPresetsPanel: View {
                     }
                     Spacer(minLength: 8)
                     Button(text("apply", "Apply", "应用")) {
-                        perform { try chat.applyPreset(preset.id, sessionID: sessionID) }
+                        if let sessionID { perform { try chat.applyPreset(preset.id, sessionID: sessionID) } }
                     }
                     .disabled(session == nil || session?.archived == true || session?.contextChoices?.deletedAt != nil || !chat.isLoaded || chat.saveIssue != nil)
                     .accessibilityIdentifier("chat-preset-apply-\(preset.id.uuidString)")

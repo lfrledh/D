@@ -185,15 +185,6 @@ struct ChatDisplayPreferencesPanel: View {
                 get: { state.preferences.wrapsCode }, set: { value in change { $0.wrapsCode = value } }))
                 .accessibilityIdentifier("chat-display-code-wrap")
 
-            Toggle(label("endSound", "Sound after a result is saved", "结果保存后播放提示音"), isOn: Binding(
-                get: { state.preferences.endSound == true }, set: { value in change { $0.endSound = value } }))
-                .accessibilityIdentifier("chat-display-end-sound")
-            Picker(label("sendShortcut", "Send shortcut", "发送快捷键"), selection: Binding(
-                get: { state.preferences.sendShortcut }, set: { value in change { $0.sendShortcut = value } })) {
-                    Text(label("commandReturn", "Command–Return", "Command–回车")).tag(ChatDisplayPreferences.SendShortcut.commandReturn)
-                    Text(label("return", "Return", "回车")).tag(ChatDisplayPreferences.SendShortcut.`return`)
-                }
-                .accessibilityIdentifier("chat-display-send-shortcut")
             }
             .disabled(state.hasInvalidStoredRecord)
 

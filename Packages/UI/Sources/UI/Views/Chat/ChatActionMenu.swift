@@ -8,17 +8,36 @@ struct ChatActionMenuItem: Identifiable {
     let title: String
     let enabled: Bool
     let selected: Bool
+    let isSeparator: Bool
     let children: [ChatActionMenuItem]?
     let action: (@MainActor () -> Void)?
 
     init(id: String, title: String, enabled: Bool = true, selected: Bool = false,
-         children: [ChatActionMenuItem]? = nil, action: (@MainActor () -> Void)? = nil) {
+         children: [ChatActionMenuItem]? = nil, isSeparator: Bool = false, action: (@MainActor () -> Void)? = nil) {
         self.id = id
         self.title = title
         self.enabled = enabled
         self.selected = selected
+        self.isSeparator = isSeparator
         self.children = children
         self.action = action
+    }
+    static func grouped(_ items: [Self], ids: [[String]]) -> [Self] {
+        var remaining = items, result: [Self] = []
+        for group in ids {
+            let members = group.compactMap { id -> Self? in
+                guard let index = remaining.firstIndex(where: { $0.id == id }) else { return nil }
+                return remaining.remove(at: index)
+            }
+            guard !members.isEmpty else { continue }
+            if !result.isEmpty { result.append(.init(id: "separator-" + group[0], title: "", enabled: false, isSeparator: true)) }
+            result += members
+        }
+        if !remaining.isEmpty {
+            if !result.isEmpty { result.append(.init(id: "separator-other", title: "", enabled: false, isSeparator: true)) }
+            result += remaining
+        }
+        return result
     }
 }
 
@@ -64,11 +83,12 @@ struct ChatActionMenu: NSViewRepresentable {
             let title: String
             let enabled: Bool
             let selected: Bool
+            let isSeparator: Bool
             let children: [RowPresentation]?
             let hasAction: Bool
 
             init(_ item: ChatActionMenuItem) {
-                id = item.id; title = item.title; enabled = item.enabled; selected = item.selected
+                id = item.id; title = item.title; enabled = item.enabled; selected = item.selected; isSeparator = item.isSeparator
                 children = item.children?.map(Self.init)
                 hasAction = item.action != nil
             }
@@ -185,6 +205,7 @@ struct ChatActionMenu: NSViewRepresentable {
 
         private func append(_ items: [ChatActionMenuItem], to menu: NSMenu, parentEnabled: Bool) {
             for value in items {
+                if value.isSeparator { menu.addItem(.separator()); continue }
                 let item = NSMenuItem(title: value.title, action: nil, keyEquivalent: "")
                 item.representedObject = value.id
                 item.isEnabled = parentEnabled && value.enabled

@@ -19,8 +19,12 @@ struct ChatKnowledgePanel: View {
     @State private var rerankBudget = "512"
 
     var body: some View {
-        DisclosureGroup(wording("Knowledge sources · lexical search", "资料来源 · 词法检索")) {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(wording("Find materials by keywords", "按关键词查找资料")).font(.headline)
             VStack(alignment: .leading, spacing: 8) {
+                DisclosureGroup(wording("How matching works", "查找方式说明")) {
+                    Text(wording("Matches keywords lexically; it is not vector search. Selecting a search scope does not send its content.", "使用关键词进行词法匹配，不是向量搜索。勾选检索范围不会发送其中内容。")).font(.caption).foregroundStyle(.secondary)
+                }
                 HStack {
                     Button(wording("Add documents…", "添加资料…"), action: importDocuments)
                     Button(wording("Choose folder…", "选择文件夹…"), action: importDirectory)

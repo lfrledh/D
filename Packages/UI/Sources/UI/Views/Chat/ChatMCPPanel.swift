@@ -14,8 +14,9 @@ struct ChatMCPPanel: View {
     @State private var issue: String?
     private var ownsConnection: Bool { chat.mcpSessionID == session.id }
     var body: some View {
-        DisclosureGroup("MCP") {
+        Group {
             VStack(alignment: .leading, spacing: 8) {
+                Text(wording("External tools (MCP)", "外部工具连接（MCP）")).font(.headline)
                 TextField("https://…/mcp", text: $endpoint).textFieldStyle(.roundedBorder)
                     .disabled(chat.mcpSessionID != nil)
                 Text(wording("Streamable HTTP. HTTPS or local loopback only. No login, credential URLs, subprocesses or automatic reconnect. Server-side actions may continue after local cancellation.",
@@ -56,7 +57,7 @@ struct ChatMCPPanel: View {
                     }
                 }
                 if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
-                Text(wording("Results appear in Search and tools below; they enter the model context only when explicitly adopted.", "结果记录在下方搜索与工具历史中；只有明确采用后才进入模型上下文。" )).font(.caption)
+                Text(wording("Results appear in task results below; they enter the model context only when explicitly adopted.", "结果记录在下方任务结果中；只有明确采用后才进入模型上下文。" )).font(.caption)
             }.padding(.top, 6)
         }.onAppear { endpoint = session.mcpEndpoint ?? "" }
     }

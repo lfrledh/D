@@ -69,7 +69,7 @@ private final class ContextPresentationSettings: UserDefaults, @unchecked Sendab
         var positions: [String: CGRect] = [:]
         let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model,
             onChooseModel: {}, onSavedAsset: { _ in }, onAssetsChanged: {},
-            initialInspectorVisible: inspector, initialContextPreviewVisible: preview,
+            initialInspectorVisible: inspector, initialSettingsVisible: preview, initialContextPreviewVisible: preview,
             initialInspectedAttemptID: attemptID)
             .observingLayout { positions[$0] = $1 })
         host.frame = .init(x: 0, y: 0, width: 1_300, height: height)
@@ -226,8 +226,15 @@ private final class ContextPresentationSettings: UserDefaults, @unchecked Sendab
         #expect(chat.selectedSession?.contextChoices?.adopted[assistant.id] == edited)
         #expect(try chat.contextPreview(sessionID: session.id).messagesJSON.contains(edited))
         #expect(render(chat, model: model)["adopted-version-\(assistant.id.uuidString)"] != nil)
-        let inspected = render(chat, model: model, inspector: true, preview: true, attemptID: attemptID)
-        #expect(inspected["context-preview-\(session.id.uuidString)"] != nil)
+        #expect(render(chat, model: model, preview: true)["context-preview-\(session.id.uuidString)"] != nil)
+        var inspected: [String: CGRect] = [:]
+        let detail = ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
+            onSavedAsset: { _ in }, onAssetsChanged: {}).observingLayout { inspected[$0] = $1 }
+        let detailHost = NSHostingView(rootView: detail.requestInspectionPanel(before))
+        detailHost.frame = .init(x: 0, y: 0, width: 760, height: 1000)
+        detailHost.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(50))
+        detailHost.layoutSubtreeIfNeeded()
         #expect(inspected["request-inspection-\(attemptID.uuidString)"] != nil)
         for field in ["input-system", "input-messages", "parameters-modelID", "parameters-temperature"] {
             #expect(inspected["request-field-\(field)-\(attemptID.uuidString)"] != nil)
