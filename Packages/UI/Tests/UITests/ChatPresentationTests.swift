@@ -227,7 +227,8 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             #expect(scroll.frame.height <= 36)
             let shortPlate = try #require(rectangles["composer-capsule"])
             #expect(ChatComposerShape(multiline: false).path(in: shortPlate) == Capsule().path(in: shortPlate))
-            editor.insertText(String(repeating: "Long draft line\n", count: 40),
+            let longDraft = String(repeating: "Long draft line\n", count: 40)
+            editor.insertText(longDraft,
                 replacementRange: .init(location: 0, length: editor.string.utf16.count))
             try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
             #expect(descendants(host).compactMap { $0 as? FileDropTextView }.first === editor)
@@ -246,9 +247,26 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
                     #expect(outline.contains(point), "Native editor and action corners must stay inside the continuous rounded outline")
                 }
             }
+            #expect(editor.frame.height > scroll.contentView.bounds.height + 1)
+            editor.breakUndoCoalescing()
+            let undo = try #require(editor.undoManager)
+            undo.beginUndoGrouping()
             editor.insertText("", replacementRange: .init(location: 0, length: editor.string.utf16.count))
+            undo.endUndoGrouping()
             try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
             #expect(scroll.frame.height <= 36)
+            #expect(editor.frame.height <= scroll.contentView.bounds.height + 1,
+                    "A shortened draft must release the old document height and overlay gutter")
+            #expect(abs(scroll.contentView.bounds.minY) <= 1)
+            let clip = scroll.contentView
+            let right = clip.convert(NSPoint(x: clip.bounds.maxX - 2, y: clip.bounds.minY + 12), to: host.superview)
+            #expect(host.hitTest(right) === editor, "Right-edge typing must recover after shrinking")
+            undo.undo()
+            try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
+            #expect(editor.string == longDraft && editor.frame.height > scroll.contentView.bounds.height + 1)
+            undo.redo()
+            try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
+            #expect(editor.string.isEmpty && editor.frame.height <= scroll.contentView.bounds.height + 1)
         }
         try await chat.flush(); try await close(store, root: root)
     }

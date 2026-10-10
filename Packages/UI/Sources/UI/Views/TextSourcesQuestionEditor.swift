@@ -232,10 +232,12 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
         // AppKit can leave a bare clip-view strip at the document's right edge.
-        // That visible input whitespace belongs to the editor. Keep real scrollers
-        // and every other child receiver intact, including during scrolling.
+        // In a non-scrolling draft that visible whitespace belongs to the editor.
+        // For longer documents leave even bare clip hits to AppKit: its overlay
+        // scroller can activate from that gutter before becoming a direct hit.
         guard hit === contentView, acceptsWhitespaceInput, let editor = documentView as? NSTextView,
               editor.isEditable, !editor.isHiddenOrHasHiddenAncestor,
+              editor.frame.height <= contentView.bounds.height + 1,
               contentView.bounds.contains(contentView.convert(point, from: superview)),
               editor.visibleRect.contains(editor.convert(point, from: superview)) else { return hit }
         return editor
