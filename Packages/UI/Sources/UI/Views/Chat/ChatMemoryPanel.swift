@@ -1,3 +1,4 @@
+import AppKit
 import DWorkbench
 import SwiftUI
 
@@ -35,6 +36,8 @@ struct ChatProvenancePresentation {
 /// Explicit, versioned context changes. Ordinary browsing never starts model work.
 struct ChatMemoryPanel: View {
     @Environment(\.dLanguageStore) private var language
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var colorScheme
     let chat: ChatController
     let session: ChatSession
     let wording: (String, String) -> String
@@ -67,7 +70,9 @@ struct ChatMemoryPanel: View {
                     Button(wording("Edit a new revision", "编辑为新版本")) { summaryText = summary.text; editingSummary = summary.id }
                 }
                 TextSourcesQuestionEditor(value: summaryText, editEpoch: 0, isEditable: true,
-                    accessibilityIdentifier: "chat-summary-editor", onEdit: { summaryText = $0 }).frame(minHeight: 65)
+                    accessibilityIdentifier: "chat-summary-editor", onEdit: { summaryText = $0 },
+                    transparentBackground: true, foregroundColor: NSColor(preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor))
+                    .frame(minHeight: 65).padding(8).workbenchPanel(cornerRadius: 10)
                 Button(editingSummary == nil ? wording("Save reviewed summary", "保存人工整理的摘要") : wording("Save summary revision", "保存摘要新版本")) {
                     change { try chat.writeSummary(text: summaryText, sessionID: session.id, replacingID: editingSummary); summaryText = ""; editingSummary = nil }
                 }.disabled(summaryText.isEmpty || chat.isRunning)
@@ -98,7 +103,9 @@ struct ChatMemoryPanel: View {
                 }
                 Toggle(wording("New memory is personal", "新增为个人记忆"), isOn: $personal).disabled(editingMemory != nil)
                 TextSourcesQuestionEditor(value: memoryText, editEpoch: 0, isEditable: true,
-                    accessibilityIdentifier: "chat-memory-editor", onEdit: { memoryText = $0 }).frame(minHeight: 65)
+                    accessibilityIdentifier: "chat-memory-editor", onEdit: { memoryText = $0 },
+                    transparentBackground: true, foregroundColor: NSColor(preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor))
+                    .frame(minHeight: 65).padding(8).workbenchPanel(cornerRadius: 10)
                 Button(wording("Save memory", "保存记忆")) {
                     write(clearEditor: true) {
                         if let editingMemory { return try editingMemory.edited(text: memoryText) }
