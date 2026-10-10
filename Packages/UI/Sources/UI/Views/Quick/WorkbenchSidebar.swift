@@ -21,11 +21,12 @@ enum WorkbenchSidebarLayout {
     static let leadingWidth: CGFloat = 260
     static let trailingWidth: CGFloat = 288
     static let buttonDiameter: CGFloat = 40
+    static let buttonInset: CGFloat = 8
     static let gap: CGFloat = 16
     // Two panes, two gaps, outer insets and at least 468pt for the working area.
     static let minimumWindowWidth: CGFloat = 1080
     static func occupiedWidth(_ expanded: Bool, leading: Bool) -> CGFloat {
-        (expanded ? (leading ? leadingWidth : trailingWidth) : buttonDiameter) + gap
+        (expanded ? (leading ? leadingWidth : trailingWidth) : buttonDiameter + buttonInset) + gap
     }
 }
 
@@ -74,9 +75,9 @@ struct WorkbenchSidebar<Content: View>: View {
                 VStack(spacing: 8) {
                     Text(title).font(.headline).lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: leading ? .trailing : .leading)
-                        .padding(.leading, leading ? 52 : 12)
-                        .padding(.trailing, leading ? 12 : 52)
-                        .frame(height: 40)
+                        .padding(.leading, leading ? 60 : 12)
+                        .padding(.trailing, leading ? 12 : 60)
+                        .frame(height: 56)
                         .opacity(visible ? 1 : 0)
                         .transaction { $0.animation = nil }
                         .accessibilityHidden(!visible)
@@ -99,7 +100,9 @@ struct WorkbenchSidebar<Content: View>: View {
                     Image(systemName: leading ? "sidebar.left" : "sidebar.right")
                         .font(.system(size: 17, weight: .medium))
                 }
-                .buttonStyle(WorkbenchIconButtonStyle(diameter: 40))
+                .buttonStyle(WorkbenchIconButtonStyle(diameter: 40, panel: true))
+                .padding(.top, WorkbenchSidebarLayout.buttonInset)
+                .padding(leading ? .leading : .trailing, WorkbenchSidebarLayout.buttonInset)
                 .help(title)
                 .accessibilityLabel(title)
                 .accessibilityValue(workflowText(language, expanded ? "sidebar.expanded" : "sidebar.collapsed",
@@ -142,13 +145,20 @@ struct WorkbenchSidebarPlate: View, Animatable {
         CGSize(width: max(34, min(width + 12, 40 + (width - 40) * progress)),
                height: max(34, min(height + 6, 40 + (height - 40) * progress)))
     }
+    static func origin(progress: CGFloat, size: CGSize, leading: Bool) -> CGPoint {
+        let inset = WorkbenchSidebarLayout.buttonInset * (1 - min(1, max(0, progress)))
+        return CGPoint(x: (inset + max(0, (40 - size.width) / 2)) * (leading ? 1 : -1),
+                       y: inset + max(0, (40 - size.height) / 2))
+    }
     var body: some View {
         let size = Self.size(progress: progress, width: expandedWidth, height: expandedHeight)
         Color.clear.frame(width: size.width, height: size.height)
             .workbenchGlassPlate(in: RoundedRectangle(cornerRadius: min(22, min(size.width, size.height) / 2), style: .continuous))
-            // When the droplet compresses, keep its center on the fixed icon.
-            .offset(x: max(0, (40 - size.width) / 2) * (leading ? 1 : -1),
-                    y: max(0, (40 - size.height) / 2))
+            // The expanded plate surrounds the fixed circular button. At rest
+            // the collapsed plate is fully absorbed, including its extra shadow.
+            .offset(x: Self.origin(progress: progress, size: size, leading: leading).x,
+                    y: Self.origin(progress: progress, size: size, leading: leading).y)
+            .opacity(min(1, max(0, progress * 6)))
     }
 }
 
@@ -157,22 +167,29 @@ struct WorkbenchSidebarPlate: View, Animatable {
 struct WorkbenchCategoryLensTrack: View, Animatable {
     nonisolated var selection: CGFloat
     let titles: [String]
+    nonisolated var engagement: CGFloat = 0
     var hovered: Int? = nil
     var pressed: Int? = nil
+    var dragReceiver: WorkbenchCategoryDragReceiver? = nil
     @Environment(\.chatDisplayPreferences) private var preferences
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
-    nonisolated var animatableData: CGFloat {
-        get { selection }
-        set { selection = newValue }
+    nonisolated var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(selection, engagement) }
+        set { selection = newValue.first; engagement = newValue.second }
     }
     var body: some View {
         let decorated = !preferences.resolvedAppearance.lightweight && !reduceTransparency && contrast != .increased
-        let width: CGFloat = (256 - 6) / 4
-        // A rebound can take the lens beyond an end item; reserve the capsule's
-        // existing 4pt inset rather than clipping the entire control or its shadow.
-        let x = min(256 - width + 3, max(-3, selection * (width + 2)))
+        let lift = preferences.resolvedAppearance.lightweight || reduceMotion || preferences.resolvedAppearance.motion == 0
+            ? 0 : min(1, max(0, engagement))
+        let width = WorkbenchCategoryDragView.itemWidth * (1 + 0.06 * lift)
+        let height = 36 * (1 + 0.08 * lift)
+        // Keep the lifted lens inside the bar's existing 4pt breathing room.
+        let x = min(256 - width + 3, max(-3, selection * WorkbenchCategoryDragView.stride
+            - (width - WorkbenchCategoryDragView.itemWidth) / 2))
+        let y = (36 - height) / 2
         let ink = preferences.resolvedAppearance.palette(for: scheme).foregroundColor
         HStack(spacing: 2) {
             ForEach(titles.indices, id: \.self) { index in
@@ -181,14 +198,24 @@ struct WorkbenchCategoryLensTrack: View, Animatable {
             }
         }
         .frame(width: 256, height: 36)
-        .modifier(WorkbenchCategoryRefraction(origin: x, enabled: decorated))
-        .overlay(alignment: .leading) {
+        .modifier(WorkbenchCategoryRefraction(origin: x, enabled: decorated,
+            verticalOrigin: y, size: CGSize(width: width, height: height)))
+        .overlay(alignment: .topLeading) {
             Capsule()
                 .strokeBorder(ink.opacity(decorated ? 0.22 : 1), lineWidth: decorated ? 0.6 : 1.5)
-                .frame(width: width, height: 36).offset(x: x)
+                .frame(width: width, height: height).offset(x: x, y: y)
         }
         .frame(width: 256, height: 36)
         .allowsHitTesting(false).accessibilityHidden(true)
+        .overlay {
+            if var receiver = dragReceiver {
+                // The native hit region follows this exact interpolated optical
+                // geometry, including a quick re-grab while the lens is settling.
+                let _ = receiver.presentation = CGRect(x: x + 4, y: y + 4, width: width, height: height)
+                let _ = receiver.presentationSelection = selection
+                receiver.frame(width: 264, height: 44)
+            }
+        }
     }
 }
 
@@ -198,9 +225,11 @@ struct WorkbenchCategoryLensTrack: View, Animatable {
 struct WorkbenchCategoryRefraction: ViewModifier {
     let origin: CGFloat
     let enabled: Bool
+    var verticalOrigin: CGFloat = 0
+    var size = CGSize(width: 62.5, height: 36)
     func body(content: Content) -> some View {
         content.layerEffect(ShaderLibrary.bundle(.module).workbenchCategoryRefraction(
-            .float2(origin, 0), .float2(62.5, 36)),
+            .float2(origin, verticalOrigin), .float2(size.width, size.height)),
             maxSampleOffset: CGSize(width: 8, height: 5), isEnabled: enabled)
     }
 }

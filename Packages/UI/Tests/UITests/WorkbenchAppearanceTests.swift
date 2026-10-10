@@ -54,6 +54,109 @@ import Testing
         }
     }
 
+    /// Split native host events prove there is no category commit before release.
+    /// This remains a component test, not desktop-pointer acceptance.
+    @Test func categoryLensDragDefersCommitAndCancelsWithoutTakingFocus() throws {
+        let application = NSApplication.shared
+        let oldPolicy = application.activationPolicy()
+        NSApp.setActivationPolicy(.regular)
+        defer { NSApp.setActivationPolicy(oldPolicy) }
+        let root = NSView(frame: CGRect(x: 0, y: 0, width: 420, height: 100))
+        let receiver = WorkbenchCategoryDragView(frame: CGRect(x: 10, y: 40, width: 256, height: 36))
+        let editor = NSTextView(frame: CGRect(x: 280, y: 0, width: 140, height: 90))
+        root.addSubview(receiver); root.addSubview(editor)
+        let window = NSWindow(contentRect: root.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = root
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))
+        defer { receiver.cancel(); window.close() }
+        try #require(window.isKeyWindow)
+        editor.string = "保留草稿"; editor.allowsUndo = true
+        try #require(window.makeFirstResponder(editor))
+        editor.setMarkedText("pinyin", selectedRange: NSRange(location: 6, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0))
+        let owner = NSObject(); receiver.owner = ObjectIdentifier(owner)
+        var previews: [CGFloat?] = [], commits: [Int] = []
+        receiver.onPreview = { previews.append($0) }; receiver.onCommit = { commits.append($0) }
+        func send(_ type: NSEvent.EventType, _ point: CGPoint) throws {
+            let event = try #require(NSEvent.mouseEvent(with: type, location: receiver.convert(point, to: nil),
+                modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 120, clickCount: 1, pressure: 1))
+            window.sendEvent(event)
+        }
+        // Start 1pt inside the visible lens edge, not its center.
+        let start = CGPoint(x: 1, y: 18), target = CGPoint(x: 194.5, y: 18)
+        try #require(root.hitTest(receiver.convert(start, to: root)) === receiver)
+        try send(.leftMouseDown, start)
+        #expect(commits.isEmpty && previews.last! == 0)
+        try send(.leftMouseDragged, target)
+        #expect(commits.isEmpty && previews.last! == 3)
+        #expect(window.firstResponder === editor && editor.hasMarkedText())
+        try send(.leftMouseUp, target)
+        #expect(commits == [3] && previews.last! == nil)
+        try send(.leftMouseUp, target)
+        #expect(commits == [3], "Only one commit per gesture")
+        try send(.leftMouseDown, start); try send(.leftMouseDragged, target)
+        try send(.leftMouseUp, CGPoint(x: 194.5, y: 90))
+        #expect(commits == [3] && previews.last! == nil)
+        try send(.leftMouseDown, start); try send(.leftMouseDragged, target)
+        NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
+        try send(.leftMouseUp, target)
+        #expect(commits == [3] && previews.last! == nil)
+        try send(.leftMouseDown, start)
+        receiver.enabled = false
+        try send(.leftMouseDragged, target); try send(.leftMouseUp, target)
+        #expect(commits == [3] && previews.last! == nil)
+        receiver.enabled = true
+        try send(.leftMouseDown, start)
+        let replacement = NSObject(); receiver.owner = ObjectIdentifier(replacement)
+        try send(.leftMouseUp, target)
+        #expect(commits == [3] && previews.last! == nil)
+        #expect(window.firstResponder === editor && editor.hasMarkedText())
+        #expect(root.hitTest(receiver.convert(CGPoint(x: 150, y: 18), to: root)) !== receiver,
+            "Other category buttons must remain reachable")
+        // A new press during settling grabs the actual visible lens, not the
+        // integer target or its old location, and continues without a position jump.
+        receiver.selection = 3; receiver.presentationSelection = 1.5
+        receiver.presentation = CGRect(x: 1.5 * 64.5, y: 0, width: 62.5, height: 36)
+        let middle = CGPoint(x: 128, y: 18)
+        try #require(root.hitTest(receiver.convert(middle, to: root)) === receiver)
+        try send(.leftMouseDown, middle)
+        #expect(previews.last! == 1.5)
+        try send(.leftMouseDragged, CGPoint(x: 160.25, y: 18))
+        #expect(previews.last! == 2 && commits == [3])
+        try send(.leftMouseUp, CGPoint(x: 160.25, y: 18))
+        #expect(commits == [3, 2])
+    }
+
+    @Test func sidebarPlateContainsWholeButtonAndDisappearsWhenCollapsed() throws {
+        let button = CGRect(x: 8, y: 8, width: 40, height: 40)
+        let renderer = ImageRenderer(content: WorkbenchSidebarPlate(progress: 1,
+            expandedWidth: 260, expandedHeight: 500, leading: true))
+        renderer.scale = 1
+        let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+        // Entire circular button plus 4pt breathing room must lie inside opaque plate.
+        for tick in 0..<120 {
+            let angle = Double(tick) * .pi / 60
+            let x = Int(button.midX + 24 * cos(angle)), y = Int(button.midY + 24 * sin(angle))
+            #expect(try #require(bitmap.colorAt(x: x, y: y)).alphaComponent == 1)
+        }
+        for leading in [true, false] {
+            let size = WorkbenchSidebarPlate.size(progress: 0, width: 288, height: 500)
+            #expect(size == CGSize(width: 40, height: 40))
+            #expect(WorkbenchSidebarPlate.origin(progress: 0, size: size, leading: leading)
+                == CGPoint(x: leading ? 8 : -8, y: 8))
+        }
+        let collapsed = ImageRenderer(content: WorkbenchSidebarPlate(progress: 0,
+            expandedWidth: 260, expandedHeight: 500, leading: true).padding(20))
+        collapsed.scale = 1
+        let empty = NSBitmapImageRep(cgImage: try #require(collapsed.cgImage))
+        for y in 0..<empty.pixelsHigh {
+            for x in 0..<empty.pixelsWide { #expect(try #require(empty.colorAt(x: x, y: y)).alphaComponent == 0) }
+        }
+    }
+
     @Test func categoryRefractionSamplesRealContentAndPreservesTransparency() throws {
         func pixels(enabled: Bool, offset: CGFloat) throws -> [NSColor] {
             let probe = Canvas { context, _ in
