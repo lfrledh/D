@@ -94,6 +94,123 @@ struct WorkflowBaseline02Tests {
         #expect(memory.state(for: context)?.rawVisibleCenter == manuallyObserved)
     }
 
+    @Test func nodeDragHostingMeasuresPresentationWork() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("node-drag-perf-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Scroll.dproject"), name: "Scroll")
+        let engine = Baseline02NoInferenceEngine()
+        let runtime = WorkbenchSession(engine: engine, backendID: "never",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let services = WorkflowServices(store: store, session: runtime,
+            resolveText: { throw WorkflowIssue("No model in scroll test") },
+            resolveImage: { throw WorkflowIssue("No model in scroll test") })
+        let controller = WorkflowController(services: services)
+        await controller.load()
+        controller.addExample("text")
+        let originalGraph = try #require(controller.graph)
+        var portCenters: [WorkflowPortIdentity: CGPoint] = [:]
+        let view = WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
+            onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in })
+            .observingPortCenters { portCenters = $0 }
+        let host = NSHostingView(rootView: view)
+        host.frame = CGRect(x: 0, y: 0, width: 860, height: 580)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.close() }
+        func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
+        func graphScrollView() -> NSScrollView? {
+            descendants(host).compactMap { $0 as? NSScrollView }.first {
+                ($0.documentView?.frame.width ?? 0) >= 1_400 && ($0.documentView?.frame.height ?? 0) >= 900
+            }
+        }
+        var scroll: NSScrollView?
+        for _ in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            scroll = graphScrollView()
+            if scroll != nil { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let canvas = try #require(scroll)
+        let probe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+        try await Task.sleep(for: .milliseconds(150))
+        let node = try #require(originalGraph.nodes.first)
+        let port = try #require(portCenters.keys.first { $0.nodeID == node.id })
+        let originalPort = try #require(portCenters[port])
+        let nativePort = try #require(descendants(host).compactMap { $0 as? WorkflowPortDragView }.first { $0.port == port })
+        let nativeStart = nativePort.convert(CGPoint(x: nativePort.bounds.midX, y: nativePort.bounds.midY), to: host)
+        let originalPosition = WorkflowGraphGeometry(graph: originalGraph).rawPosition(node.id)
+        let pointer = probe.onPointer
+        let sessionID = UUID()
+        func update(_ phase: WorkflowCanvasPointerUpdate.Phase, _ delta: CGSize) {
+            pointer(.init(phase: phase, sessionID: sessionID, target: .node(node.id),
+                startPoint: .zero, startOffset: canvas.contentView.bounds.origin,
+                viewport: canvas.contentView.bounds.size, translation: delta, extendingSelection: false))
+        }
+        update(.began, CGSize(width: 6, height: 0))
+        try await Task.sleep(for: .milliseconds(100))
+        var surfaceUpdates = 0, nodeUpdates: [UUID: Int] = [:], wireBuilds = 0, hitSeconds = 0.0
+        WorkflowCanvasUpdateProbe.surfaceBody = { surfaceUpdates += 1 }
+        WorkflowCanvasUpdateProbe.nodeBody = { nodeUpdates[$0, default: 0] += 1 }
+        WorkflowCanvasUpdateProbe.wireHitBuild = { wireBuilds += 1; hitSeconds += $0 }
+        defer {
+            WorkflowCanvasUpdateProbe.surfaceBody = nil
+            WorkflowCanvasUpdateProbe.nodeBody = nil
+            WorkflowCanvasUpdateProbe.wireHitBuild = nil
+        }
+        var positions: [CGPoint] = []
+        var nativePositions: [CGPoint] = []
+        for frame in 1...36 {
+            update(.changed, CGSize(width: frame * 4, height: frame * 2))
+            try await Task.sleep(for: .milliseconds(16))
+            host.layoutSubtreeIfNeeded()
+            positions.append(try #require(portCenters[port]))
+            nativePositions.append(nativePort.convert(CGPoint(x: nativePort.bounds.midX, y: nativePort.bounds.midY), to: host))
+        }
+        print("NODE_DRAG frames=36 surface=\(surfaceUpdates) cards=\(nodeUpdates.values.reduce(0,+)) stationaryCards=\(nodeUpdates.filter { $0.key != node.id }.values.reduce(0,+)) hitBuilds=\(wireBuilds) hitMs=\(hitSeconds * 1000) positions=\(Set(positions.map { Int($0.x) }).count)")
+        #expect(surfaceUpdates == 0 && nodeUpdates.isEmpty && wireBuilds == 0)
+        #expect(Set(nativePositions.map { Int($0.x) }).count >= 20)
+        #expect(abs(nativePositions.last!.x - nativeStart.x - 144) < 1)
+        #expect(descendants(host).contains { $0 === nativePort }, "Keep the native port identity")
+        #expect(controller.graph == originalGraph, "Preview must not write the graph")
+        #expect(Set(positions.map { Int($0.x) }).count >= 20, "Actual displayed port centers must move during the gesture")
+        #expect(abs((positions.last!.x - originalPort.x) - 144) < 1)
+        update(.ended, CGSize(width: 144, height: 72))
+        try await Task.sleep(for: .milliseconds(100))
+        let moved = try #require(controller.graph)
+        #expect(WorkflowGraphGeometry(graph: moved).rawPosition(node.id) == CGPoint(x: originalPosition.x + 144, y: originalPosition.y + 72))
+        controller.undo()
+        #expect(controller.graph == originalGraph, "One Undo must restore the graph")
+        try await Task.sleep(for: .milliseconds(100))
+        // A cancelled preview may leave the saved graph bounds, but must restore
+        // the real card/port and not create a layout edit.
+        let cancelledPointer = probe.onPointer
+        let cancelledID = UUID()
+        func cancelUpdate(_ phase: WorkflowCanvasPointerUpdate.Phase, _ delta: CGSize) {
+            cancelledPointer(.init(phase: phase, sessionID: cancelledID, target: .node(node.id),
+                startPoint: .zero, startOffset: canvas.contentView.bounds.origin,
+                viewport: canvas.contentView.bounds.size, translation: delta, extendingSelection: false))
+        }
+        let beforeCancel = nativePort.convert(CGPoint(x: nativePort.bounds.midX, y: nativePort.bounds.midY), to: host)
+        cancelUpdate(.began, CGSize(width: 6, height: 0))
+        cancelUpdate(.changed, CGSize(width: -800, height: -500))
+        try await Task.sleep(for: .milliseconds(50))
+        host.layoutSubtreeIfNeeded()
+        let outside = nativePort.convert(CGPoint(x: nativePort.bounds.midX, y: nativePort.bounds.midY), to: host)
+        #expect(abs(outside.x - beforeCancel.x + 800) < 1)
+        #expect(controller.graph == originalGraph)
+        cancelUpdate(.cancelled, CGSize(width: -800, height: -500))
+        try await Task.sleep(for: .milliseconds(50))
+        host.layoutSubtreeIfNeeded()
+        let restored = nativePort.convert(CGPoint(x: nativePort.bounds.midX, y: nativePort.bounds.midY), to: host)
+        #expect(abs(restored.x - beforeCancel.x) < 1)
+        #expect(controller.graph == originalGraph)
+        #expect(await engine.calls == 0)
+    }
+
     @Test func manualHostingScrollRestoresActualOffsetAfterGraphSwitch() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("baseline02-scroll-" + UUID().uuidString)

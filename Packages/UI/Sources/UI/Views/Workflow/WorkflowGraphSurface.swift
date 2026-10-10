@@ -1,6 +1,7 @@
 import AppKit
 import DWorkbench
 import Foundation
+import Observation
 import SwiftUI
 
 struct WorkflowGraphSurface: View {
@@ -28,7 +29,7 @@ struct WorkflowGraphSurface: View {
     var onInspect: (UUID) -> Void = { _ in }
     @Environment(\.dLanguageStore) private var languageStore
     @GestureState private var gestureScale: CGFloat = 1
-    @State private var nodeDrag = WorkflowCanvasNodeDragCoordinator()
+    @State private var nodeDrag = WorkflowCanvasNodeDragPresentation()
     @State private var stableOrigin: WorkflowCanvasStableOrigin?
     @State private var pendingConnectionScope: WorkflowCanvasScope?
     @State private var pendingDragPoint: CGPoint?
@@ -66,13 +67,10 @@ struct WorkflowGraphSurface: View {
                     retained: retainedOrigin,
                     active: activeOrigin
                 )
-                let previews = nodeDrag.active?.scope == scope
-                    ? nodeDrag.active!.previewPositions : [:]
                 let geometry = WorkflowGraphGeometry(
                     graph: graph,
                     tools: controller.tools,
                     registry: controller.registry,
-                    previewPositions: previews,
                     translation: origin
                 )
                 GeometryReader { viewport in
@@ -125,6 +123,8 @@ struct WorkflowGraphSurface: View {
                                 nodeSizeObserver?(node.id, size)
                             }
                             .position(geometry.displayPosition(node.id))
+                            .modifier(WorkflowNodeDragOffset(presentation: nodeDrag,
+                                moving: nodeDrag.movingNodeIDs.contains(node.id)))
                         }
                         if self.graph == nil {
                             ContentUnavailableView(
@@ -149,6 +149,7 @@ struct WorkflowGraphSurface: View {
                                 registry: controller.registry,
                                 tools: controller.tools,
                                 geometry: geometry,
+                                dragPresentation: nodeDrag,
                                 portCenters: centers,
                                 controlBounds: controlBounds,
                                 selectedConnectionID: selectedConnectionID,
@@ -172,8 +173,8 @@ struct WorkflowGraphSurface: View {
                         GeometryReader { proxy in
                             let frames = anchors.map { proxy[$0] }
                             Color.clear.allowsHitTesting(false)
-                                .onAppear { controlBounds = frames }
-                                .onChange(of: frames) { _, next in controlBounds = next }
+                                .onAppear { updateControlBounds(frames) }
+                                .onChange(of: frames) { _, next in updateControlBounds(next) }
                         }.allowsHitTesting(false)
                     }
                     .offset(x: edge.width, y: edge.height)
@@ -354,13 +355,24 @@ struct WorkflowGraphSurface: View {
     }
 
     private func updatePortCenters(_ centers: [WorkflowPortIdentity: CGPoint]) {
-        measuredPortCenters = centers
+        nodeDrag.latestPortCenters = centers
+        if nodeDrag.active == nil, measuredPortCenters != centers { measuredPortCenters = centers }
         portCenterObserver?(centers)
         if let pendingConnection, pendingDragPoint != nil,
            centers[WorkflowPortIdentity(nodeID: pendingConnection.nodeID,
                port: pendingConnection.port, input: pendingConnection.input)] == nil {
             clearConnection()
         }
+    }
+
+    private func updateControlBounds(_ frames: [CGRect]) {
+        nodeDrag.latestControlBounds = frames
+        if nodeDrag.active == nil, controlBounds != frames { controlBounds = frames }
+    }
+
+    private func restoreMeasuredHits() {
+        measuredPortCenters = nodeDrag.latestPortCenters
+        controlBounds = nodeDrag.latestControlBounds
     }
 
     private func canConnect(in scope: WorkflowCanvasScope) -> Bool {
@@ -449,7 +461,7 @@ struct WorkflowGraphSurface: View {
                         finishDrag(sessionID: update.sessionID, nodeID: id,
                             translation: update.translation, scope: scope)
                     case .cancelled:
-                        nodeDrag.cancel(sessionID: update.sessionID); viewportInteractionLocked = false
+                        nodeDrag.cancel(sessionID: update.sessionID); restoreMeasuredHits(); viewportInteractionLocked = false
                     case .clicked: onInspect(id)
                     }
                 case .blank:
@@ -622,6 +634,7 @@ struct WorkflowGraphSurface: View {
         translation: CGSize,
         scope: WorkflowCanvasScope
     ) {
+        defer { restoreMeasuredHits() }
         viewportInteractionLocked = false
         guard let drag = nodeDrag.finish(
             sessionID: sessionID,
@@ -759,6 +772,7 @@ private struct WorkflowConnectionLayer: View {
     let registry: WorkflowRegistry
     let tools: [WorkflowToolDefinition]
     let geometry: WorkflowGraphGeometry
+    let dragPresentation: WorkflowCanvasNodeDragPresentation
     let portCenters: [WorkflowPortIdentity: CGPoint]
     let controlBounds: [CGRect]
     let selectedConnectionID: UUID?
@@ -769,35 +783,47 @@ private struct WorkflowConnectionLayer: View {
     let onDisconnect: (WorkflowConnection) -> Void
 
     var body: some View {
-        Canvas { context, _ in
-            for connection in graph.connections {
-                let path = WorkflowConnectionGeometry.path(
-                    for: connection, geometry: geometry, portCenters: portCenters)
-                if connection.id == selectedConnectionID {
-                    context.stroke(path, with: .color(.primary.opacity(0.75)), lineWidth: 6)
+        let centers = WorkflowConnectionGeometry.movingFallbackCenters(
+            graph: graph, geometry: geometry, measured: portCenters,
+            moving: dragPresentation.movingNodeIDs, offset: dragPresentation.offset)
+        let paths = graph.connections.map {
+            WorkflowConnectionGeometry.path(for: $0, geometry: geometry, portCenters: centers)
+        }
+        let drawingBounds = WorkflowConnectionGeometry.drawingBounds(size: geometry.size, paths: paths)
+        let drawingOrigin = drawingBounds.origin
+        ZStack(alignment: .topLeading) {
+            Canvas { context, _ in
+                context.translateBy(x: -drawingOrigin.x, y: -drawingOrigin.y)
+                for (connection, path) in zip(graph.connections, paths) {
+                    if connection.id == selectedConnectionID {
+                        context.stroke(path, with: .color(.primary.opacity(0.75)), lineWidth: 6)
+                    }
+                    context.stroke(path, with: .color(WorkflowPortStyle.color(for: sourcePort(connection))),
+                                   lineWidth: 2.5)
                 }
-                context.stroke(path, with: .color(WorkflowPortStyle.color(for: sourcePort(connection))),
-                               lineWidth: 2.5)
             }
-        }
-        // Drawing is not an event surface. Only the explicit connection hit paths
-        // below participate, leaving the blank canvas drag target reachable.
-        .allowsHitTesting(false)
-        .overlay {
-            ForEach(graph.connections) { connection in
-                WorkflowConnectionInteraction(connection: connection, geometry: geometry,
-                    portCenters: portCenters, controlBounds: controlBounds, canDisconnect: canDisconnect,
-                    label: workflowText(language, "refinement.canvas.connectionLabel", fallback: "{type} connection from {source} to {target}",
-                        arguments: ["type": WorkflowPortStyle.label(for: sourcePort(connection), language: language),
-                                    "source": connection.sourcePort, "target": connection.targetPort]),
-                    onSelect: { onSelect(connection.id) }, onDisconnect: { onDisconnect(connection) })
+            // Reverse curves can bow beyond both endpoints. Include their actual
+            // bounds without resizing the scroll document or drawing its whole padding.
+            .frame(width: drawingBounds.width, height: drawingBounds.height)
+            .offset(x: drawingOrigin.x, y: drawingOrigin.y)
+            .allowsHitTesting(false)
+
+            // The captured node gesture owns the mouse until release/cancel.
+            // Rebuild precise native wire hits once afterwards, not for every preview.
+            if dragPresentation.movingNodeIDs.isEmpty {
+                ForEach(graph.connections) { connection in
+                    WorkflowConnectionInteraction(connection: connection, geometry: geometry,
+                        portCenters: centers, controlBounds: controlBounds, canDisconnect: canDisconnect,
+                        label: workflowText(language, "refinement.canvas.connectionLabel", fallback: "{type} connection from {source} to {target}",
+                            arguments: ["type": WorkflowPortStyle.label(for: sourcePort(connection), language: language),
+                                        "source": connection.sourcePort, "target": connection.targetPort]),
+                        onSelect: { onSelect(connection.id) }, onDisconnect: { onDisconnect(connection) })
+                }
             }
-        }
-        .overlay {
             if let pendingConnection, let pendingDragPoint {
                 let source = WorkflowPortIdentity(nodeID: pendingConnection.nodeID,
                     port: pendingConnection.port, input: pendingConnection.input)
-                if let start = portCenters[source] {
+                if let start = centers[source] {
                     WorkflowConnectionGeometry.curve(
                         from: pendingConnection.input ? pendingDragPoint : start,
                         to: pendingConnection.input ? start : pendingDragPoint)
@@ -807,6 +833,7 @@ private struct WorkflowConnectionLayer: View {
                 }
             }
         }
+        .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
     }
 
     private func sourcePort(_ connection: WorkflowConnection) -> WorkflowPortDefinition? {
@@ -832,8 +859,14 @@ private struct WorkflowConnectionInteraction: View {
     let onSelect: () -> Void
     let onDisconnect: () -> Void
     var body: some View {
+        #if DEBUG
+        let hitStart = CFAbsoluteTimeGetCurrent()
+        #endif
         let hit = WorkflowConnectionGeometry.hitPath(for: connection,
             geometry: geometry, portCenters: portCenters, excluding: controlBounds)
+        #if DEBUG
+        let _ = WorkflowCanvasUpdateProbe.wireHitBuild?(CFAbsoluteTimeGetCurrent() - hitStart)
+        #endif
         let ends = WorkflowConnectionGeometry.endpoints(for: connection,
             geometry: geometry, portCenters: portCenters)
         let middle = CGPoint(x: (ends.start.x + ends.end.x) / 2, y: (ends.start.y + ends.end.y) / 2)
@@ -868,6 +901,9 @@ private struct WorkflowNodeCard: View {
     private var collapsed: Bool { controller.graph?.layout.first(where: { $0.nodeID == node.id })?.collapsed == true }
 
     var body: some View {
+        #if DEBUG
+        let _ = WorkflowCanvasUpdateProbe.nodeBody?(node.id)
+        #endif
         VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -1270,6 +1306,75 @@ struct WorkflowCanvasGestureSessionState: Equatable {
     }
 }
 
+/// Session snapshots are not view dependencies. Only the moving wrappers and the
+/// wire drawing consume offset; the surface observes the start/end node set.
+@MainActor @Observable
+final class WorkflowCanvasNodeDragPresentation {
+    @ObservationIgnored private var coordinator = WorkflowCanvasNodeDragCoordinator()
+    @ObservationIgnored private var gestureZoom: CGFloat = 1
+    @ObservationIgnored var latestPortCenters: [WorkflowPortIdentity: CGPoint] = [:]
+    @ObservationIgnored var latestControlBounds: [CGRect] = []
+    private(set) var movingNodeIDs: Set<UUID> = []
+    private(set) var offset = CGSize.zero
+    var active: WorkflowCanvasNodeDragState? { coordinator.active }
+
+    @discardableResult
+    func begin(_ state: WorkflowCanvasNodeDragState, screenTranslation: CGSize, zoom: CGFloat) -> Bool {
+        guard coordinator.begin(state, screenTranslation: screenTranslation, zoom: zoom) else { return false }
+        gestureZoom = zoom
+        movingNodeIDs = Set(state.originalPositions.keys)
+        publishOffset()
+        return true
+    }
+
+    @discardableResult
+    func update(sessionID: UUID, nodeID: UUID, scope: WorkflowCanvasScope,
+                screenTranslation: CGSize, zoom: CGFloat) -> Bool {
+        guard coordinator.update(sessionID: sessionID, nodeID: nodeID, scope: scope,
+            screenTranslation: screenTranslation, zoom: gestureZoom) else { return false }
+        publishOffset()
+        return true
+    }
+
+    func finish(sessionID: UUID, nodeID: UUID, scope: WorkflowCanvasScope,
+                screenTranslation: CGSize, zoom: CGFloat) -> WorkflowCanvasNodeDragState? {
+        guard let result = coordinator.finish(sessionID: sessionID, nodeID: nodeID, scope: scope,
+            screenTranslation: screenTranslation, zoom: gestureZoom) else { return nil }
+        clearPresentation()
+        return result
+    }
+
+    func cancel(sessionID: UUID) {
+        coordinator.cancel(sessionID: sessionID)
+        if active == nil { clearPresentation() }
+    }
+
+    func invalidate() {
+        coordinator.invalidate()
+        clearPresentation()
+    }
+
+    private func publishOffset() {
+        guard let active else { return }
+        let next = CGSize(width: active.previewPosition.x - active.originalPosition.x,
+                          height: active.previewPosition.y - active.originalPosition.y)
+        if offset != next { offset = next }
+    }
+
+    private func clearPresentation() {
+        movingNodeIDs = []
+        offset = .zero
+    }
+}
+
+private struct WorkflowNodeDragOffset: ViewModifier {
+    let presentation: WorkflowCanvasNodeDragPresentation
+    let moving: Bool
+    func body(content: Content) -> some View {
+        content.offset(moving ? presentation.offset : .zero)
+    }
+}
+
 struct WorkflowCanvasNodeDragCoordinator: Equatable {
     private(set) var active: WorkflowCanvasNodeDragState?
 
@@ -1373,6 +1478,12 @@ struct WorkflowPortAnchorPreferenceKey: PreferenceKey {
 }
 
 enum WorkflowConnectionGeometry {
+    static func drawingBounds(size: CGSize, paths: [Path]) -> CGRect {
+        paths.reduce(CGRect(origin: .zero, size: size)) { bounds, path in
+            bounds.union(path.boundingRect.insetBy(dx: -3, dy: -3))
+        }
+    }
+
     static func canShowCut(at point: CGPoint, portCenters: [CGPoint], controls: [CGRect]) -> Bool {
         // A crowded midpoint must not cover another affordance. Its wire still has a menu.
         !portCenters.contains { hypot(point.x - $0.x, point.y - $0.y) <= 23 }
@@ -1396,6 +1507,27 @@ enum WorkflowConnectionGeometry {
         }
         for rect in controls { hit = hit.subtracting(Path(rect)) }
         return hit
+    }
+
+    /// Real anchors already include the card transform. Only collapsed/missing
+    /// anchors need an explicit offset, otherwise connected dots move twice.
+    static func movingFallbackCenters(graph: WorkflowGraph, geometry: WorkflowGraphGeometry,
+                                      measured: [WorkflowPortIdentity: CGPoint],
+                                      moving: Set<UUID>, offset: CGSize) -> [WorkflowPortIdentity: CGPoint] {
+        guard !moving.isEmpty else { return measured }
+        var centers = measured
+        for connection in graph.connections {
+            let ends = endpoints(for: connection, geometry: geometry, portCenters: measured)
+            let source = WorkflowPortIdentity(nodeID: connection.sourceNode, port: connection.sourcePort, input: false)
+            let target = WorkflowPortIdentity(nodeID: connection.targetNode, port: connection.targetPort, input: true)
+            if centers[source] == nil, moving.contains(source.nodeID) {
+                centers[source] = CGPoint(x: ends.start.x + offset.width, y: ends.start.y + offset.height)
+            }
+            if centers[target] == nil, moving.contains(target.nodeID) {
+                centers[target] = CGPoint(x: ends.end.x + offset.width, y: ends.end.y + offset.height)
+            }
+        }
+        return centers
     }
 
     static func endpoints(

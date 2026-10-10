@@ -6,6 +6,65 @@ import Testing
 
 @Suite @MainActor
 struct WorkflowCanvasDragTests {
+    @Test func draggedReverseCurveStaysInsideDrawingBounds() {
+        let size = CGSize(width: 2400, height: 900)
+        let paths = [
+            WorkflowConnectionGeometry.curve(from: CGPoint(x: 2000,y: 300), to: CGPoint(x: -1800,y: 500)),
+            WorkflowConnectionGeometry.curve(from: CGPoint(x: 4000,y: 1100), to: CGPoint(x: 200,y: -300))
+        ]
+        let bounds = WorkflowConnectionGeometry.drawingBounds(size: size, paths: paths)
+        #expect(bounds.contains(CGRect(origin: .zero, size: size)))
+        for path in paths {
+            #expect(bounds.contains(path.boundingRect.insetBy(dx: -3, dy: -3)))
+        }
+        #expect(bounds.minX < -2000 && bounds.maxX > 4000)
+        #expect(bounds.minY <= -303 && bounds.maxY >= 1103)
+    }
+
+    @Test func isolatedPreviewKeepsGroupZoomCancellationAndCollapsedWireEnds() throws {
+        let a = WorkflowNode(operationID: "d.text.input", title: "a")
+        let b = WorkflowNode(operationID: "d.text.confirm", title: "b")
+        let connection = WorkflowConnection(sourceNode: a.id, sourcePort: "output", targetNode: b.id, targetPort: "input")
+        let graph = WorkflowGraph(nodes: [a,b], connections: [connection], layout: [
+            .init(nodeID: a.id, x: -30, y: -40), .init(nodeID: b.id, x: 500, y: 80)])
+        let scope = WorkflowCanvasScope(rootGraphID: graph.id, rootRevision: graph.revision,
+            graphID: graph.id, bodyPath: [], projectID: UUID(), instanceID: UUID())
+        let presentation = WorkflowCanvasNodeDragPresentation()
+        let id = UUID()
+        let initial = [a.id: CGPoint(x: -30,y: -40), b.id: CGPoint(x: 500,y: 80)]
+        let drag = WorkflowCanvasNodeDragState(sessionID: id, scope: scope, nodeID: a.id,
+            originalPosition: initial[a.id]!, origin: CGSize(width: 180,height: 200),
+            originalPositions: initial,
+            originalLayouts: Dictionary(uniqueKeysWithValues: graph.layout.map { ($0.nodeID,$0) }))
+        #expect(presentation.begin(drag, screenTranslation: .zero, zoom: 0.025))
+        #expect(presentation.update(sessionID: id, nodeID: a.id, scope: scope,
+            screenTranslation: CGSize(width: -5,height: 10), zoom: 2))
+        #expect(presentation.offset == CGSize(width: -200,height: 400), "Use begin zoom even if later presentation zoom changed")
+        #expect(presentation.movingNodeIDs == Set([a.id,b.id]))
+        let geometry = WorkflowGraphGeometry(graph: graph)
+        let originalEnds = WorkflowConnectionGeometry.endpoints(for: connection, geometry: geometry, portCenters: [:])
+        let measuredSource = WorkflowPortIdentity(nodeID: a.id, port: "output", input: false)
+        let measured = [measuredSource: CGPoint(x: 72,y: 91)]
+        let centers = WorkflowConnectionGeometry.movingFallbackCenters(graph: graph, geometry: geometry,
+            measured: measured, moving: presentation.movingNodeIDs, offset: presentation.offset)
+        let movedEnds = WorkflowConnectionGeometry.endpoints(for: connection, geometry: geometry, portCenters: centers)
+        #expect(movedEnds.start == measured[measuredSource], "Real anchors already include the node transform")
+        #expect(movedEnds.end == CGPoint(x: originalEnds.end.x - 200,y: originalEnds.end.y + 400), "Collapsed input fallback follows the same delta")
+        // Repeated last offset is still a valid final commit, not a dedup failure.
+        let finished = try #require(presentation.finish(sessionID: id, nodeID: a.id, scope: scope,
+            screenTranslation: CGSize(width: -5,height: 10), zoom: 2))
+        #expect(finished.previewPositions[b.id] == CGPoint(x: 300,y: 480))
+        #expect(finished.previewPositions[a.id] == CGPoint(x: -230,y: 360))
+        #expect(presentation.active == nil && presentation.movingNodeIDs.isEmpty && presentation.offset == .zero)
+        #expect(presentation.finish(sessionID: id,nodeID: a.id,scope: scope,screenTranslation: .zero,zoom: 1) == nil)
+        #expect(presentation.begin(drag,screenTranslation: CGSize(width: 3,height: 2),zoom: 1))
+        presentation.cancel(sessionID: UUID())
+        #expect(presentation.active != nil)
+        presentation.invalidate()
+        #expect(presentation.active == nil && presentation.movingNodeIDs.isEmpty && presentation.offset == .zero)
+        #expect(!presentation.update(sessionID: id,nodeID: a.id,scope: scope,screenTranslation: .zero,zoom: 1))
+    }
+
     @Test
     func cardAndBlankAssetDropsKeepInstanceIdentityAndRejectAmbiguousLegacyPayload() throws {
         let project = UUID(), instance = UUID(), otherInstance = UUID(), asset = UUID()

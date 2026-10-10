@@ -508,5 +508,7 @@ struct WorkflowCanvasViewportGeometry: Equatable {
 enum WorkflowCanvasUpdateProbe {
     static var canvasBody: (() -> Void)?
     static var surfaceBody: (() -> Void)?
+    static var nodeBody: ((UUID) -> Void)?
+    static var wireHitBuild: ((Double) -> Void)?
 }
 #endif
