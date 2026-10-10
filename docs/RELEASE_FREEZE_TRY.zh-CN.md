@@ -1,34 +1,29 @@
-# D 节点命中、连线与平移修订候选
+# D 节点拖动性能修订候选
 
-2026-10-10 · **UI-PRESENTATION-REBUILD-01** · 生产 **0b48129c429a7c3a9726950d6a201ce4dc3851b3**。保留现有布局、材质、镜片与输入修复。
+2026-10-10 · **UI-PRESENTATION-REBUILD-01** · 生产 **2d2b8380c81b782a356432125ddf038f86a6f794**。本轮只处理节点拖动的额外开销，保留现有布局和交互。
 
 ## 唯一试用入口
 
 [启动聊天当前验收.command](/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/启动聊天当前验收.command)
 
-指向 [D UI Review 0b48129c.app](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback/delivery/D UI Review 0b48129c.app>)。实际包路径、隔离UUID与冷重开PID32256核实；入口拒绝双开，不覆盖普通D。当前留在独立 [Canvas review.dproject](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback/gui/Canvas review.dproject>) 的“双输入文字模板”。冷启动后可用文件→打开项目→切换到工作流→左上流程选择器打开它，无需模型。
+指向 [D UI Review 2d2b8380.app](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-node-drag-performance/delivery/D UI Review 2d2b8380.app>)。实际PID35328、包路径和隔离UUID核实；入口拒绝双开，不覆盖普通D。当前已打开独立 [Node drag review.dproject](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-node-drag-performance/gui/Node drag review.dproject>) 的“双输入文字模板”，可直接拖动，无需模型。重新启动后用文件→打开项目→工作流→左上流程选择器进入。
 
-## 这轮变化
+## 这轮修复
 
-- 端口接线只命中小色点附近的22点圆形区域；标题/说明可拖动节点。指针工具仍支持两个方向起拖。
-- 已存线和正在拖出的线都在节点前景，点到卡片边缘这一段不再被卡片遮住。前景命中让位于其他端口和卡片控件。
-- 手型、指针都可移动节点；只有手型拖空白才平移，指针拖空白框选。平移直接使用原生滚动，取消每帧上报造成的工作面重算。
-- 右键连线可“断开连接”；线上悬停出现中点圆钮，进入圆钮变剪刀，点击断开，支持“更多→撤销”。中点恰与端口/控件重叠时不显示剪刀，仍可在线的其他位置右键。
+节点移动现在只更新其外层位置和连线，不再逐帧重算整张工作面、所有卡片及连线命中区域。原生控件身份保持，松手只提交一次布局，仍支持一次撤销；折叠节点的线端跟随，反向曲线绘制范围完整。此前圆点命中、前景连线、两工具分工及右键/剪刀入口保留。
 
-## 同版原生证据
+相同36次连续位移的宿主测量：工作面重算72→0、卡片216→0、连线命中区144→0；实际端口仍有36个中间位置。17个相关方法分批通过，最后2方法复验通过不重复累加。普通构建28.98秒，签名/App Sandbox及7个包文件摘要匹配。这些是开销/行为证据，不是屏幕帧率。
 
-已实际操作端口标题拖节点、手型拖节点/空白、指针框选、正反向圆点边缘拖接、线选择打开详情、右键断开、剪刀可见圆钮上缘点击断开，以及菜单一次Undo恢复原连接ID。保存后正常退出、用同一入口冷重开，三条连接ID和新位置保留，既有运行/资产/媒体未改。原项目75/77文件摘要、个人scheme及源/main保持。
+## 同版原生检查
 
-- [节点画布全景](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback/gui/14-delivery-overview-0b48129c.png>)
-- [悬停中点圆钮](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback/gui/07-wire-midpoint-dot-0b48129c.png>) · [进入中点的剪刀状态](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback/gui/08-wire-scissors-0b48129c.png>)
-- [连线原生右键菜单](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback/gui/05-wire-context-menu-0b48129c.png>)
+已实际操作pointer/hand拖节点、折叠后拖动与展开、空白平移、移位后线右键断开及一次Undo恢复原ID、空处释放和保存。新快照仅改变测试节点位置，内容、连接、运行、资产与工具不变；旧项目75/77及上一轮用户保存后的81文件、个人scheme和源/main保持。
 
-上述均为0b48129c真实画面。中点状态通过在线上短拖移动指针到达；工具没有纯移鼠标API，未把未按键hover过程记为通过。截图不能证明连续跟手或在途预览的每帧状态。
+- [拖动后的节点与连线](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-node-drag-performance/gui/02-pointer-node-moved-2d2b8380.png>)
+- [拖动后的连线菜单](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-node-drag-performance/gui/06-moved-wire-menu-2d2b8380.png>)
+- [保存后的全景](</Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-node-drag-performance/gui/07-saved-overview-2d2b8380.png>)
 
-15项相关测试通过，最终4项受影响方法复验通过，不重复累加；36次跨runloop平移产生36个实际中间offset，canvas/surface/retained重算均0。此为开销隔离测量，不是屏幕帧率。普通构建27.85秒，严格签名/App Sandbox及7文件与普通产物一致。
+均为2d2b8380真实画面；独立复看无新增静态问题。截图不能证明在途每帧同步或持续FPS。当前工具无法分离按住拖动/释放，未用松手后的Escape冒充手势取消；宿主取消复位已验，原生按住Escape后立即点击仍保留。向上越过原边界松手时仍沿用旧坐标原点重定位逻辑。
 
 ## 剩余观察
 
-[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)保留实际步骤：纯hover与在途线连续过程、密集交叉及缩放后命中、失焦/Escape取消、手形抓握全程和大图连续平移手感。其他镜片/面板、输入滚动条、材料拖放、阅读/真实停止、新建封装组合按原版本继续，不因本轮通过关闭。Agent承担可独立完成的检查，不将确定的实现错误转交用户。
-
-本轮没有加载模型或扩展音频/E/收费/搜索，F26继续延期。R12超时与旧失败保留于任务回执；同版操作明细在R13/lead/native-review.json。
+[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)继续保留连续拖动手感/帧率、按住取消后的即时命中、缩放/失焦组合，以及旧镜片、输入滚动条、材料拖放、阅读/停止与封装余项。Agent承担可独立完成的检查，未把实现错误转交用户。旧R13的双向边缘连线与冷开证据按旧版保留，本轮未重复全矩阵。没有加载模型或扩展音频/E/收费/搜索，F26继续延期。

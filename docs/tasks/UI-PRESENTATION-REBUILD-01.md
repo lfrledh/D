@@ -256,3 +256,16 @@ GUI：库存与进程均确认无D，Finder原入口启动后，读取精确新�
 保存显示成功，正常退出后无D进程；同入口冷开、重新打开同副本并选择“双输入文字模板”，三条连接ID/节点位置保持。文件核对图内容/运行/资产相同，仅工作流revision递增；原资产媒体不变。原始UI review 75文件、Function review 77文件摘要不变；源/main/个人scheme内容与index摘要复核不变。候选留在该4节点现场，唯一入口更新。无本轮桌面失败/锁屏推断、权限变化或模型运行。
 
 证据根R13=`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback`；`lead/{canvas-targeted-02,canvas-final-targets,canvas-normal-delivery}-result.json`、`native-review.json`、`delivery-review.json`、`data-protection-final.json`，GUI 01–14均属同一生产。只在试用页选少量图。剩余为纯hover、密集交叉、缩放/取消/光标过程和连续大图手感，合并现有集中队列；原阅读、输入滚动条、Finder释放/采用、真实停止与封装组合门槛继续，不以本轮CPU/静态图全部关闭。
+
+
+## R14：节点拖动性能（2026-10-10）
+
+用户确认R13平移正常、节点移动仍低帧率。本轮沿用581bd0ab后继，不重新交接；生产 **2d2b8380c81b782a356432125ddf038f86a6f794**。Lead单写，两名非实现者只读调查/初审；反向Bézier超出位移边界问题一次修复、复核通过。源01758/main91bef/个人scheme的内容、索引与未暂存状态保持。
+
+瓶颈为高频nodeDrag值更新驱动全surface几何/卡片，再由端口/控件anchor回写驱动二次重算；wire hit还逐帧做全部端口/控件布尔裁切并更新原生接收器。现将会话快照与连续offset分离，只有移动节点包装与线绘制读取offset；卡片/输入身份保留，真实端口anchor持续更新，根命中缓存拖中不发布。线接收器在捕获节点手势期间移除，结束/取消重建；仅缺失/折叠anchor显式补offset。begin zoom固定，scope/session、原布局校验、Controller单次提交/Undo和取消不变。绘制范围union实际path边界加3点，避免反向线越界；不扩整页栅格。
+
+证据R14=`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-node-drag-performance`。`node-drag-baseline-measured`同一宿主36次位移：surface72、card216（静止144）、wire-hit144；`node-drag-regression`与`node-drag-boundary`修后均0。真实端口36个中间位置、NSView身份保持；预览未改图、结束一次Undo恢复、越界预览取消复位通过。旧平移36位置及根/surface/retained0未退化。17个相关方法分批通过，最终2方法通过不重复计数；首次`node-drag-baseline`漏方法括号导致0方法，保留为构建有效但无测试验收。测试不能换算实际屏幕FPS。XCTest后`node-drag-normal-delivery`普通构建28.98秒，独立包严格签名/沙盒和7文件摘要通过。
+
+原生同版PID35328、隔离UUID核实；只用R14副本。pointer标题(438,414)→(850,494)；hand标题(850,494)→(1010,354)，一次菜单Undo；折叠后标题(850,597)→(1060,767)，展开按钮新位置有效；展开后再拖分开。手形空白(2500,650)→(2630,720)全图平移。拖动后在线(1245,812)右键，断开BDA9360A，再一次Undo恢复同ID。移位端口到空处释放未改节点/连线，但在途未捕获不算预览验收。原生保存成功，新快照仅一节点布局raw delta(101,10)与快照revision变化；节点内容、三线、运行、资产与工具不变。GUI01–07为该普通包，非实现者复看02/04/07无新增静态问题。向负边界移动松手时仍有旧origin policy重新定位，未改其语义，不用该例宣称其他节点屏幕位置不变。
+
+旧0b中的用户改动已先原生保存再正常退出/复制；旧75/77及R13保存后81文件摘要未变。`lead/{review,native-review,delivery-review,data-protection-final,saved-content-check}.json`留详细边界。没有连续视频/FPS量化，工具无分离按住拖动/释放API，按住Escape后即时命中尚未原生补验；宿主取消和实际松手后控件/线命中各自通过，不互相代替。未重跑模型或旧全部矩阵；其他体验门槛沿用集中队列，唯一试用入口已更新。
