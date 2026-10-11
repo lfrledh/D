@@ -82,12 +82,4 @@ H05获准的4个精确容器尺寸夹具和后台预览检查已完成；138方�
 
 ## 最终本地接纳与恢复检查点（2026-09-08）
 
-用户批准解除本阶段时间窗口限制，Lead只补剩余新构建恢复与集成，没有新增产品实现或刷新Worker预算。gui3以正常签名的新DerivedData产物运行：既有图像项目/模型访问、实际作品显示、PNG独立草稿最大seed/Unicode、v2与中文正文重开全部通过；无新安全提示。应用正常退出0；v1/v2原始清单备份、原图片、用户普通D四个文件以及源个人scheme均保持。详见final-fresh-restore.json、final-fresh-restore-files.json、gui3-signature.json和gui3-exit.json。
-
-版本链：真实GUI/8项UI/前轮165方法代码a6c516ad6b52c944ce70a0bd764d68a94fd0f3bc → 仅任务文档05d5ffd3c4815d2c7b83889aa0ceca08a10ff682 → 在隔离树保留历史合入已批准源文档1d290a847766e69324d9b999ed8cc49425e2d07e，组合685ef0502586bc5785826a3dc938622d8401f0e7。后者代码/测试/工程/入口与a6相同；组合165方法/22套件通过后，源从1d290快进至685ef，源目录同一165方法再次通过。各轮独立记录，不累加场景；之后仅本轮结案文档变化，最终源SHA由外部final-stage-receipt.json关联，不为自引用amend。
-
-本次续办0轮代码修复；Terra原实现/有限修复，Astra共享接线/前轮有界收尾及真实验收，Sol非实现者静态审核归因不变。本轮另复用同一Sol/high/read-only链路只读汇总历史，非新增代码审阅或测试。完整Lead消耗及订阅扣费unknown，不重算历史样本。工具一次click参数形状拒绝和本机Git帮助拼写检查失败均发生在对应动作之前；更正有明确依据，没有权限扩大或修改冻结验收。
-
-当前源分支codex/inference-foundation，唯一scheme orderHint1→6个人差异未暂存，索引干净。原普通D.app保留，已验收的新产物仍在human-finish/signed-build/DerivedData-fresh，未安装替换或推送。本轮自有GUI/构建/测试/只读任务已结束；候选分支和证据保留，无系统写锁声明。下次恢复先核对Git/用户差异/任务进程，不只相信本记录。
-
-证据根：/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish；总索引final-stage-receipt.json，source-ff-result、final-merged-acceptance、final-source-acceptance记录实际入口、版本、环境与退出状态。本阶段结束，下一声音灵感工作台仅建议，不开始HUM/音乐模型/手机/新增元数据平台。
+META贡献为H05容器边界、预览检查及PNG导出/离线恢复；和T0组合的实际受测代码 `a6c516ad6b52c944ce70a0bd764d68a94fd0f3bc`、接纳组合 `685ef0502586bc5785826a3dc938622d8401f0e7`。完整共同回执统一保留在[D-T0-WORKBENCH原文](https://github.com/lfrledh/D/blob/bb821f1fe31a263d33b1feeb33ee3cf3e7294d74/docs/tasks/D-T0-WORKBENCH-01.md#L142-L152)，包含新构建恢复、独立源复验、来源、预算、进程及scheme保护。上段“仍待测试”是当时停点，后继接纳不倒改它；全部细节与原META副本亦可由固定提交恢复，不代表新版本重跑验收。

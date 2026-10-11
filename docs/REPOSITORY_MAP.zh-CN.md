@@ -1,36 +1,22 @@
 # D 实际仓库导航
 
-历史结构核实：`165c54471c4380eb5482312d6c2c70ab97db48a9`，2026-09-24；D-UI-READINESS-01增量涉及Nodes标签、UI呈现状态及对应测试，不改生产推理或项目schema。下方基础路径表保留2026-09-24核实快照；2026-09-26已接入的增量以上方专节为准，不能把历史schema12/无图执行描述当成现在的源状态。版本、产物、候选见[当前行动](CURRENT_ACTIONS.zh-CN.md)，目标见[原则](PRODUCT_PRINCIPLES.zh-CN.md)。先按所遇问题选一条路线，不通读全库。
+2026-10-11有限核实，结构基线 `708e35f4531b0dfe2ec7a0ca1a11b335b12496c4`。当前任务/候选/停点只有[当前行动](CURRENT_ACTIONS.zh-CN.md)一个入口；表格定位实现，不证明原生或全模型已验。
 
-**2026-09-26已集成增量导航**：M0与D-NODE-BOUNDARY-01已本地接入源，当前ProjectManifest格式16，已有Workflow节点组合执行及画布入口；实际受测组合及最终同步状态见CURRENT_ACTIONS。工作流的操作定义已分组到`DWorkbench/Workflow/Operations`，模型绑定/配方/私有授权记录到`Workflow/Models`；PNG/JPEG编码扩展在`DWorkbench/Media/ImageCodec{,Registry}.swift`；UI语言数据/校验在`UI/Localization`与`UI/Resources/Localization`。`WorkflowRemoveBlankLines.swift`移入Operations，类型/操作ID未改。`WorkflowController/Services`共用原Store和runtime；原型标签目录Nodes继续独立，用户标签键未迁移。App的Bootstrap注入语言和授权服务。具体已测/待验范围见[本批任务](tasks/D-NODE-BOUNDARY-01.md)，原生和离线补验已有直接证据；这不代表全模态节点化或发布。
+| 入口 | 当前职责与边界 |
+|---|---|
+| `D.xcworkspace` / scheme `D`；`scripts/build-local.sh` | 正式开发构建入口，外层 workspace 锁；依赖准备不等于模型安装、签名或发行通过。 |
+| `Packages/UI/Package.swift`；`scripts/test-workbench.sh` | DWorkbench/UI与对应测试。CPU夹具不运行模型，但集成测试仍编译MLX依赖。 |
+| `D/DApp.swift`、`WorkbenchBootstrap.swift`、`AppSessionFactory.swift` | App注入模型/运行时/授权，未建立新注册平台。 |
+| `Sources/DInference`、`Sources/DRuntime` | 值型契约与现有准入/取消/drain/release；UI不拥有推理资源。 |
+| `Backends/MLX`及音视频后端；`Vendor` | 具体实现、CLI、资源及许可；不把CLI可调用等同App路径已验。 |
+| `Packages/UI/Sources/DWorkbench/State/ProjectSession.swift` | 项目/共享操作身份和应用生命周期；仍有耦合债，本轮不拆分。 |
+| `Packages/UI/Sources/DWorkbench/Project` | `ProjectStore`、`ProjectModels`和现行格式20；旧格式兼容/迁移责任保留，不用旧schema12/16解释现存项目。 |
+| `Packages/UI/Sources/DWorkbench/Quick`、`Chat`、`Workflow` | Quick草稿、聊天与有界图执行；Workflow子目录Operations/Models，Controller/Services共用Store/runtime。 |
+| `Packages/UI/Sources/DWorkbench/Nodes` | 模型说明展示与标签；不是执行注册器，不从说明字符串生成规则。 |
+| `Packages/UI/Sources/UI/Views/Quick/DualWorkbenchView.swift`、`Chat/ChatWorkbenchView.swift`、`Workflow/WorkflowHostView.swift` | 共享外壳、实际输入/阅读与节点展示。RetainedContentHost、原生输入和局部拖动保护保留。 |
+| `Packages/UI/Sources/DWorkbench/Media`、UI的`Localization`/`Resources/Localization` | 媒体编码/来源与语言数据；资源/静态说明不替代实际执行能力。 |
 
-
-## 2026-10-08 当前展示切片导航
-
-- `UI/Sources/UI/Views/Quick/DualWorkbenchView.swift`：公共顶部、模式/临时会话及设置路由；不拥有推理。
-- `UI/Sources/UI/Views/Chat/ChatWorkbenchView.swift`：浮动面板、会话导航、阅读和完整输入组合；`ChatSpeechPanel.swift`为持续语音区域；`ChatSettingsPanels.swift`承接统一设置中的聊天默认、项目预设、声音与搜索凭据，复用原控制器/Store。
-- `UI/Sources/UI/Views/TextSourcesQuestionEditor.swift`：既有原生输入桥；仅聊天opt-in有界内容测量/透明背景，其他宿主默认保持。
-- `UI/Tests/UITests/ChatDisplayPreferencesTests.swift`、`ChatPresentationTests.swift`：真实输入身份/marked/Undo/高度、面板与停止/阅读检查。
-
-上述UI路径均相对`Packages/`（Views位于`Packages/UI/Sources/UI`，测试位于`Packages/UI/Tests/UITests`）。当前任务[UI-PRESENTATION-REBUILD-01](tasks/UI-PRESENTATION-REBUILD-01.md)，未称已在main或原生通过。
-
-## 2026-09-24基础入口快照（历史；现行增量见上方）
-
-| 入口/区域 | 实际调用与职责 | 状态/何时阅读 |
-| --- | --- | --- |
-| `D/DApp.swift` → `D/WorkbenchBootstrap.swift` → `D/AppSessionFactory.swift` → WorkbenchView | 原生App入口，具体runtime/backend及验证闭包装配 | active；调App启动/依赖装配，不把它当已统一模型注册 |
-| `Package.swift`；`Sources/DInference` | Sendable值型请求、能力/配置、进度结果、backend协议；无MLX/UI | active；先读请求/返回/所有权，不直接搬模型代码进去 |
-| `Sources/DRuntime` | InferenceRuntime、RuntimeConfiguration、ResourceBudgetPolicy：队列、预算、取消、终态 | active；生命周期问题。await不是整次推理锁 |
-| `Backends/MLX/Package.swift`、`Sources/DMLXBackend` | MLXTextBackend、MLXImageBackend与Python音视频桥接，MLXExecutionLease | active；加载、校验、执行、释放。目录MLX不表示每个组件都原生MLX |
-| `Backends/MLX/Sources/DInferenceCLI` | d-infer命令入口、text/image/audio/video/singing装配 | active CLI；CLI歌声通过不代表普通App已接入 |
-| `Packages/UI/Package.swift` | 两个target：DWorkbench→DInference；UI→DWorkbench/DInference | active；不能按UI目录名把服务当展示代码 |
-| `Packages/UI/Sources/DWorkbench/State/ProjectSession.swift` | 会话/提交/候选/保存等共享状态；具体text/audio/video控制器参与 | active且有耦合债；不属于本轮退役代码 |
-| `Packages/UI/Sources/DWorkbench/Project` | ProjectModels/ProjectStore、清单及媒体持久化；源schema12 | active；AP1/CORE schema15只在候选，不能用其版本解释源项目 |
-| `Packages/UI/Sources/DWorkbench/{Text,Audio,Video,Media,Models,Services}` | 文稿、音频/视频草稿、播放/派生、配方、安装/租约、值型应用服务 | active；按功能读控制器与对应存储/测试 |
-| `Packages/UI/Sources/UI/{State,Views}` | WorkbenchModel/WorkbenchView及模态视图、原生输入 | active四模态导航＋模型节点说明原型；无节点组合执行 |
-| `Packages/UI/Sources/DWorkbench/Nodes`、`UI/Views/ModelNodeViews.swift` | 静态模型能力展示投影、缺失/有效/损坏标签状态与详情视图 | 只说明已适配范围，不是推理注册器/安装状态/节点调度；适配变更须同步核对展示和回归 |
-| `D/BundledAudioEngine.swift`、音频/视频`Packaging` | engine.json、provider脚本和资源清单的封装/运行时校验 | active部署入口；普通build-local不自动制齐Python引擎 |
-| `D.xcworkspace`、`D.xcodeproj`、`DTests`、`DUITests` | workspace聚合App/MLX/Vendor；scheme D/d-infer/DMLXTests，自动收集源码 | active；Sources列表为空不表示无源码 |
+2026-09-24基础表、09-26增量及10-08展示路线完整保存在[整理前导航](https://github.com/lfrledh/D/blob/bb821f1fe31a263d33b1feeb33ee3cf3e7294d74/docs/REPOSITORY_MAP.zh-CN.md#L3-L33)。它们只解释当时的schema12/16、CLI/App与无图→有图变化；现行表不删除旧包、schema来源或兼容责任。固定历史与反向索引见[历史页](history/README.md#non-ui-20261011)。
 
 ## 兼容、参考、研究与候选
 
@@ -54,8 +40,8 @@
 ## 新增同类模型的最短阅读路线
 
 1. **契约**：`Sources/DInference/InferenceRequest.swift`、`InferenceBackend.swift`及对应`*Request.swift`/`*ExecutionCapability.swift`、`ExecutionProfileReference.swift`。区分真实限制与默认实测profile；estimate不加载，execute停止并drain，release清理。
-2. **适配与数值**：`Backends/MLX/Sources/DMLXBackend/MLXTextBackend.swift`/`LocalModelInventory.swift`（当前qwen2/4-bit/group64）；或MLXImageBackend/LocalImageModelInventory/ImageExecutionProfile（当前Klein）。不是改中央类显示名就支持新架构。
-3. **目录与安装**：DWorkbench的`Models/TextModelProfiles.swift`/`Resources/text-model*.json`；图像`ModelLibraryTypes.swift::ModelCatalog`。当前entries仅FLUX，文字单独登记，音视频依赖App验证/封装；统一模型安装尚未全面完成。FixedTextModel仍是0.5B兼容入口。
+2. **适配与数值**：`Backends/MLX/Sources/DMLXBackend/MLXTextBackend.swift`/`LocalModelInventory.swift`（具体架构/精度按现行固定资源与实现核对）；或MLXImageBackend/LocalImageModelInventory/ImageExecutionProfile（当前Klein）。不是改中央类显示名就支持新架构。
+3. **目录与安装**：DWorkbench的`Models/TextModelProfiles.swift`/`Resources/text-model*.json`；图像`ModelLibraryTypes.swift::ModelCatalog`。文字、图像和音视频已有各自固定资源/安装及App装配；实际支持以当前能力矩阵为准，不从旧FixedTextModel兼容入口推断支持上限，亦不宣称统一注册已完成。
 4. **Python族**：对应`*BackendConfiguration.swift`、`*ModelInventory.swift`、`*ProviderProtocol.swift`及`Backends/Audio/Python`/`Backends/Video/Python`、Models、Packaging。检查设备/精度、布局、许可、子进程协议及格式，别将新后端伪装已有profile。
 5. **执行与应用**：DRuntime与MLXExecutionLease→ModelLibrary/ModelLibraryFiles/ModelRangeDownload→BundledAudioEngine/AppSessionFactory/WorkbenchBootstrap→`Services/WorkbenchSession.swift`。安装与推理、操作与展示分别决定。
 6. **保存与呈现（仅确需时）**：ProjectSession、对应ProjectTextController/ProjectAudioController、ProjectStore、UI/WorkbenchModel/View；不要默认新增一套模态页。相关共享契约由Lead协调。

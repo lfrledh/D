@@ -1,6 +1,6 @@
 # 历史与替代索引
 
-current索引，2026-09-23。历史正文保留原义，不自动作为当前需求、授权或“下一步”。现行入口为[AGENTS](../../AGENTS.md)、[当前行动](../CURRENT_ACTIONS.zh-CN.md)、[原则](../PRODUCT_PRINCIPLES.zh-CN.md)和[协作规程](../MULTI_AGENT_WORKFLOW.zh-CN.md)。
+current索引，2026-10-11更新；原2026-09-23资料不改义。历史正文保留原义，不自动作为当前需求、授权或“下一步”。现行入口为[AGENTS](../../AGENTS.md)、[当前行动](../CURRENT_ACTIONS.zh-CN.md)、[原则](../PRODUCT_PRINCIPLES.zh-CN.md)和[协作规程](../MULTI_AGENT_WORKFLOW.zh-CN.md)。
 
 ## 整理前固定正文
 
@@ -41,3 +41,17 @@ UI-REFINEMENT-01 原位归档，展示被用户拒收，部分实现/证据保�
 - [旧任务原位记录](../tasks/UI-REFINEMENT-01.md)
 
 离线：`git show 6abf4e1d4a1d1b6cd0cd454c338920a681e6d1e0:docs/CURRENT_ACTIONS.zh-CN.md`；集中队列将冒号后路径改为`docs/FAILURE_AND_PERMISSION_AUDIT.zh-CN.md`。只压缩当前入口，不搬/删旧证据或个人文件。
+
+<a id="non-ui-20261011"></a>
+## 2026-10-11 非 UI 有限整理
+
+固定整理前版本 `bb821f1fe31a263d33b1feeb33ee3cf3e7294d74`（P）。离线使用 `git show <完整SHA>:<路径>`，无需切换/回退。
+
+| 原位置及日期 | 固定全文 | 现行替代/保留 |
+|---|---|---|
+| 当前行动，2026-10-10 R1—R16回顾 | [P/current](https://github.com/lfrledh/D/blob/bb821f1fe31a263d33b1feeb33ee3cf3e7294d74/docs/CURRENT_ACTIONS.zh-CN.md) | [当前行动](../CURRENT_ACTIONS.zh-CN.md)只保留本轮身份、保护和下一动作；失败/反馈/预算仍在固定正文及原任务，未验项在集中队列。 |
+| 导航，2026-09-24/26与10-08结构 | [P/map](https://github.com/lfrledh/D/blob/bb821f1fe31a263d33b1feeb33ee3cf3e7294d74/docs/REPOSITORY_MAP.zh-CN.md#L3-L33) | [现行导航](../REPOSITORY_MAP.zh-CN.md)；旧包/schema的兼容责任保留。 |
+| T0/META共同回执，2026-09-08 | [唯一共同原文](https://github.com/lfrledh/D/blob/bb821f1fe31a263d33b1feeb33ee3cf3e7294d74/docs/tasks/D-T0-WORKBENCH-01.md#L142-L152) | [META摘要](../tasks/D-META-PNG-01.md#最终本地接纳与恢复检查点2026-09-08)；T0原文不删。 |
+| AUDIO/HUM授权续办，2026-09-10 | [唯一共同原文](https://github.com/lfrledh/D/blob/bb821f1fe31a263d33b1feeb33ee3cf3e7294d74/docs/tasks/D-AUDIO-BACKEND-01.md#L54-L66) | [HUM摘要](../tasks/D-HUM-ENTRY-01.md)；AUDIO后继失败/预算及HUM后续录音故障保持。 |
+
+原文→当前的双向定位由本表、当前行动和导航链接构成；旧提交内容不可更改，不在固定历史中伪造新链接。本轮完整前后位置/字节变化/链接核验记录由[非 UI 交付](../tasks/D-NON-UI-REPAIR-20261011.md)关联。没有新复制一套完整历史、删除许可或清理旧候选。
