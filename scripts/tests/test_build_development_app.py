@@ -1082,16 +1082,18 @@ class BuildLocalCompatibilityTests(unittest.TestCase):
         derived = explicit / "Derived Data"
         packages = explicit / "Source Packages"
         log = explicit / "logs/xcode.log"
+        cache = explicit / "Package Cache"
         result = self.invoke([
             "--derived-data-path", str(derived),
             "--source-packages-path", str(packages),
+            "--package-cache-path", str(cache),
             "--log-path", str(log),
             "--offline",
         ], self.case / "unused development")
         self.assertEqual(result.returncode, 0, result.stderr)
         arguments = self.args_log.read_text().splitlines()
         for expected in (
-            str(derived), str(packages), "-disableAutomaticPackageResolution",
+            str(derived), str(packages), "-packageCachePath", str(cache), "-disableAutomaticPackageResolution",
             "-skipPackageUpdates", "-onlyUsePackageVersionsFromResolvedFile",
         ):
             self.assertIn(expected, arguments)

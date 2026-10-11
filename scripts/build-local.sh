@@ -6,10 +6,11 @@ DERIVED_DATA_PATH="$DEVELOPMENT_ROOT/DerivedData"
 SOURCE_PACKAGES_PATH="$DEVELOPMENT_ROOT/SourcePackages-App"
 LOG_PATH="$DEVELOPMENT_ROOT/Logs/build-local.log"
 PACKAGE_RESOLUTION_ARGS=(-onlyUsePackageVersionsFromResolvedFile)
+PACKAGE_CACHE_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --derived-data-path|--source-packages-path|--log-path)
+    --derived-data-path|--source-packages-path|--package-cache-path|--log-path)
       if [[ $# -lt 2 || -z "$2" ]]; then
         echo "缺少 $1 的路径参数" >&2
         exit 2
@@ -18,6 +19,7 @@ while [[ $# -gt 0 ]]; do
         --derived-data-path) DERIVED_DATA_PATH="$2" ;;
         --source-packages-path) SOURCE_PACKAGES_PATH="$2" ;;
         --log-path) LOG_PATH="$2" ;;
+        --package-cache-path) PACKAGE_CACHE_ARGS=(-packageCachePath "$2") ;;
       esac
       shift 2
       ;;
@@ -50,5 +52,5 @@ xcodebuild -workspace "$PROJECT_ROOT/D.xcworkspace" -scheme D \
   "${BUILD_CONFIG_ARGS[@]}" -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath "$DERIVED_DATA_PATH" \
   -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_PATH" \
-  "${PACKAGE_RESOLUTION_ARGS[@]}" build \
+  "${PACKAGE_RESOLUTION_ARGS[@]}" "${PACKAGE_CACHE_ARGS[@]}" build \
   2>&1 | tee "$LOG_PATH"
