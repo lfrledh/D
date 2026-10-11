@@ -7,6 +7,24 @@ struct WorkflowSaveFailure: LocalizedError {
     var errorDescription: String? { "计算结果仍保留，保存未完成：\(reason)。恢复磁盘后重试保存，不必重新推理。" }
 }
 
+/// A failed image calculation has no replacement result to publish. Keep its
+/// authoritative failure distinct from the failure to save that history.
+struct WorkflowImageHistoryFailure: LocalizedError {
+    let failure: InferenceFailure
+    let saveReason: String
+
+    init?(failure: any Error, saving: any Error) {
+        guard let failure = failure as? InferenceFailure else { return nil }
+        switch failure {
+        case .inputIntegrityChanged, .resourceCleanupUnconfirmed: break
+        default: return nil
+        }
+        self.failure = failure
+        saveReason = (saving as? WorkflowSaveFailure)?.reason ?? saving.localizedDescription
+    }
+    var errorDescription: String? { "\(failure.localizedDescription)\n失败记录保存错误：\(saveReason)" }
+}
+
 /// Concrete application operations share the existing Store and runtime. No view or global selected document is consulted.
 @MainActor public final class WorkflowServices: WorkflowOperationServices {
     public let store: ProjectStore
@@ -673,7 +691,11 @@ struct WorkflowSaveFailure: LocalizedError {
                         candidateProgress[context.stepID] = items
                         // Persist through the actual history consumer before surfacing
                         // the authoritative failure. Never start another unsafe attempt.
-                        try await candidatesChanged(context.stepID, items)
+                        do { try await candidatesChanged(context.stepID, items) }
+                        catch {
+                            if let combined = WorkflowImageHistoryFailure(failure: failure, saving: error) { throw combined }
+                            throw error
+                        }
                         throw failure
                     default: break
                     }

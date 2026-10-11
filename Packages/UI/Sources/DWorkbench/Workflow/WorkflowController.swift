@@ -1126,14 +1126,25 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     /// A cancellation is terminal only after the operation drained and its model leases were released.
     private func finishExecution(_ failure: (any Error)?) async {
         await services.finish()
-        if let failure, !(failure is CancellationError) {
+        let failedRun = runs.first { $0.id == activeRunID && ($0.status == .failed || $0.status == .saving) &&
+            $0.planCheckpoint?.records.contains(where: { $0.address.path.count == 1 && $0.step.status == .failed }) == true }
+        if let failedRun {
+            errorMessage = failedRun.planCheckpoint?.error ?? failedRun.steps.last(where: { $0.status == .failed })?.error
+            if let failure, !(failure is CancellationError),
+               errorMessage?.contains(failure.localizedDescription) != true {
+                errorMessage = [errorMessage, failure.localizedDescription].compactMap { $0 }.joined(separator: "\n")
+            }
+            progressMessage = failedRun.status == .saving || hasPendingSaves
+                ? "计算已失败，失败记录尚未保存；请重试保存记录。"
+                : "失败记录已保存；流程仍失败。需要重新计算时，请明确重试计算。"
+        } else if let failure, !(failure is CancellationError) {
             errorMessage = failure.localizedDescription
             progressMessage = "运行未完成，请查看错误；已完成的产物仍保留。"
         }
-        if hasPendingSaves {
+        if hasPendingSaves, failedRun == nil {
             progressMessage = "运行已停止，但保存尚未完成；请恢复保存。"
             if errorMessage == nil { errorMessage = "运行记录或结果尚未保存，请恢复保存。" }
-        } else if failure is CancellationError || (failure == nil && runs.first(where: { $0.id == activeRunID })?.status == .cancelled) {
+        } else if failedRun == nil && (failure is CancellationError || (failure == nil && runs.first(where: { $0.id == activeRunID })?.status == .cancelled)) {
             errorMessage = nil
             progressMessage = "已取消，计算已停止并释放资源。"
         }
@@ -1280,7 +1291,13 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         var failure: (any Error)?
         do {
             try WorkflowArchiveInspection.validateScopeHistory(runs, tools: tools, registry: registry)
-            if persistenceFailed { try await persist() }
+            activeRunID = runID
+            let savingFailure = runs[i].status == .saving && runs[i].planCheckpoint?.records.contains {
+                $0.address.path.count == 1 && $0.step.status == .failed
+            } == true
+            // Let the executor retain the failure diagnostics on every save
+            // attempt. Saving a failed record must not prepare a calculation retry.
+            if persistenceFailed && !savingFailure { try await persist() }
             let resumedCheckpoint = try checkpointForResume(i)
             runs[i].planCheckpoint = resumedCheckpoint
             activeRunID = runID
@@ -1295,7 +1312,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
               let si = runs[ri].steps.firstIndex(where: { $0.id == stepID }),
               registry.operation(runs[ri].steps[si].node.operationID)?.definition.modelKind == .image else { return }
         let old = runs[ri].steps[si]
-        guard !hasPendingSaves else { errorMessage = "先恢复保存并继续原运行，避免重复生成。"; return }
+        guard !hasPendingSaves else { errorMessage = "请先恢复保存记录或结果，再明确重试计算。"; return }
         guard !isStale(old), old.outputs["output"]?.candidates.contains(where: { $0.asset == nil }) == true else { return }
         editingOriginalID = editingRootID(for: runs[ri]); editingCopies = [:]
         isRunning = true; cancelled = false; errorMessage = nil

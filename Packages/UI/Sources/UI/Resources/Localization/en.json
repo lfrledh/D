@@ -1527,6 +1527,8 @@
     "workflow.run.range": "Scope",
     "workflow.run.plan": "Review Plan and Run…",
     "workflow.run.advanced": "More Scopes",
+    "workflow.action.saveFailureRecord": "Retry Saving Failure Record",
+    "workflow.action.retryComputation": "Retry Computation",
     "workflow.action.resumeSaving": "Recover Saving and Resume Workflow",
     "workflow.action.stop": "Stop Workflow",
     "workflow.results.snapshot": "Run Snapshot",

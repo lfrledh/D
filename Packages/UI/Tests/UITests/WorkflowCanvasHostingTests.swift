@@ -1,6 +1,6 @@
 import AppKit
 import DInference
-import DWorkbench
+@testable import DWorkbench
 import Foundation
 import SwiftUI
 import Testing
@@ -381,5 +381,109 @@ extension WorkflowCanvasHostingTests {
         host.rootView = AnyView(EmptyView())
         try await c.close(); replacement.deactivateAfterClose(); try await store.close()
         try await otherController.close(); try await otherStore.close()
+    }
+}
+
+private actor CanvasSeriousImageEngine: InferenceEngine {
+    private(set) var calls = 0
+    var onSubmit: (@MainActor @Sendable () -> Void)?
+    func configure(_ action: @escaping @MainActor @Sendable () -> Void) { onSubmit = action }
+    func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        calls += 1
+        await onSubmit?()
+        return InferenceRun(id: request.id, events: AsyncThrowingStream { $0.finish() }, cancel: {},
+            outcome: { .failed(.inputIntegrityChanged("DHA UI serious")) })
+    }
+}
+
+@MainActor private struct RecoveryButtonFixture: View {
+    let controller: WorkflowController
+    var body: some View {
+        VStack {
+            if let run = controller.runs.last {
+                WorkflowRunRecoveryButton(controller: controller, run: run, readOnly: false)
+            }
+        }
+        .padding()
+        .accessibilityElement(children: .contain)
+    }
+}
+
+extension WorkflowCanvasHostingTests {
+    @Test(arguments: ["zh-Hans", "en"])
+    func actualFailureRecoveryButtonSavesOnlyAndThenOffersExplicitRetry(locale: String) async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("dha-recovery-button-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Recovery.dproject"), name: "Recovery fixture")
+        let engine = CanvasSeriousImageEngine()
+        let session = WorkbenchSession(engine: engine, backendID: "fixture.image",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {},
+            validateModel: { _ in }, imageCapability: .scalableKlein4B)
+        let services = WorkflowServices(store: store, session: session) { _, identity in
+            .init(identity: identity, reference: .init(directory: root, revision: "fixture"), backendID: "fixture.image",
+                imageRecipe: .klein(capability: .scalableKlein4B))
+        }
+        let c = WorkflowController(services: services); await c.load()
+        c.addBlankGraph(name: "Failure recovery"); c.addNode(operationID: "d.image.generate")
+        let target = try #require(c.selectedNodeID)
+        c.setParameter(nodeID: target, key: "modelID", value: .text("image:frozen"))
+        c.setParameter(nodeID: target, key: "promptText", value: .text("fixture"))
+        c.setParameter(nodeID: target, key: "count", value: .integer(1))
+        await engine.configure { c.beforeHistorySave = { throw WorkflowIssue("DHA UI history write") } }
+        await c.run(target: target, only: false)
+        let run = try #require(c.runs.last)
+        try #require(run.status == .saving && run.steps.last?.status == .failed)
+        let host = NSHostingView(rootView: RecoveryButtonFixture(controller: c)
+            .environment(\.dLanguageStore, UILanguageStore(preferredLanguages: [locale])))
+        host.frame = CGRect(x: 0, y: 0, width: 420, height: 160)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        // Show only the fixture window when the desktop is available.
+        // Do not activate or replace the ordinary D app.
+        window.orderFront(nil)
+        defer { window.close() }
+        func control() async throws -> any NSAccessibilityProtocol {
+            for _ in 0..<100 {
+                host.layoutSubtreeIfNeeded()
+                var pending: [NSObject] = [host], visited = Set<ObjectIdentifier>()
+                while let object = pending.popLast(), visited.count < 2_000 {
+                    guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
+                    if let element = object as? any NSAccessibilityProtocol {
+                        if element.accessibilityIdentifier() == "workflow-run-recovery-" + run.id.uuidString { return element }
+                        pending.append(contentsOf: (element.accessibilityChildren() ?? []).compactMap { $0 as? NSObject })
+                    }
+                    if let view = object as? NSView { pending.append(contentsOf: view.subviews) }
+                }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            HostingControlClick.diagnoseTree(in: host)
+            throw WorkflowIssue("Actual recovery button was not mounted")
+        }
+        let savingButton = try await control()
+        #expect(savingButton.accessibilityLabel() == (locale == "en" ? "Retry Saving Failure Record" : "重试保存失败记录"))
+        c.beforeHistorySave = {}; await engine.configure {}
+        #expect(HostingControlClick.send(to: savingButton, in: host))
+        for _ in 0..<200 {
+            if c.runs.last?.status == .failed && !c.isRunning { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(c.runs.last?.id == run.id && c.runs.last?.status == .failed && !c.hasPendingSaves)
+        #expect(await engine.calls == 1)
+        #expect(c.errorMessage?.contains("DHA UI serious") == true && c.errorMessage?.contains("DHA UI history write") == true)
+        #expect(c.progressMessage.contains("失败记录已保存") && !c.progressMessage.contains("计算结果仍保留"))
+        // This is the same production button after recovery, with an explicit
+        // computation action. Test-process events do not certify foreground UI.
+        host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30))
+        let retryButton = try await control()
+        #expect(retryButton.accessibilityLabel() == (locale == "en" ? "Retry Computation" : "重试计算"))
+        #expect(HostingControlClick.send(to: retryButton, in: host))
+        for _ in 0..<200 {
+            if await engine.calls == 2, !c.isRunning { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await engine.calls == 2 && c.runs.last?.status == .failed)
+        #expect(c.errorMessage?.contains("DHA UI serious") == true)
+        try await c.close(); try await store.close()
     }
 }

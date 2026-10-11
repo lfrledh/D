@@ -1527,6 +1527,8 @@
     "workflow.run.range": "范围",
     "workflow.run.plan": "查看计划并运行…",
     "workflow.run.advanced": "更多范围",
+    "workflow.action.saveFailureRecord": "重试保存失败记录",
+    "workflow.action.retryComputation": "重试计算",
     "workflow.action.resumeSaving": "恢复保存并继续流程",
     "workflow.action.stop": "停止流程",
     "workflow.results.snapshot": "运行快照",

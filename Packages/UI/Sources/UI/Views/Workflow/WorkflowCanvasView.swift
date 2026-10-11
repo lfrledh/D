@@ -666,6 +666,7 @@ WorkflowNodeInspector(controller: controller, node: node,
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                     .lineLimit(2)
+                    .help(error)
                     .accessibilityIdentifier("workflow-error")
                 Button(workflowText(languageStore, "workflow.action.close", fallback: "关闭"),
                        systemImage: "xmark") { controller.errorMessage = nil }
@@ -1210,10 +1211,7 @@ private struct WorkflowNodeInspector: View {
                         }
                     }
                     if WorkflowCanvasPresentation.canResume(run.status) {
-                        Button(workflowText(languageStore, run.status == .saving ? "workflow.action.resumeSaving" : "workflow.action.resume", fallback: run.status == .saving ? "恢复保存并继续流程" : "继续流程")) {
-                            Task { await controller.resume(runID: run.id) }
-                        }
-                            .disabled(readOnly)
+                        WorkflowRunRecoveryButton(controller: controller, run: run, readOnly: readOnly)
                     }
                 }
                 .padding(8)
@@ -1685,6 +1683,28 @@ private struct WorkflowStepValues: View {
             guard isCurrent() else { return }
             data = nil; sourceMetadata = nil; failure = error.localizedDescription
         }
+    }
+}
+
+/// The actual history recovery action distinguishes saving a terminal failure
+/// from an explicit calculation retry. Neither decision is inferred from text.
+struct WorkflowRunRecoveryButton: View {
+    let controller: WorkflowController
+    let run: WorkflowRun
+    let readOnly: Bool
+    @Environment(\.dLanguageStore) private var languageStore
+
+    var body: some View {
+        let savingFailure = run.status == .saving && run.planCheckpoint?.records.contains {
+            $0.address.path.count == 1 && $0.step.status == .failed
+        } == true
+        let key = savingFailure ? "workflow.action.saveFailureRecord" : run.status == .failed ? "workflow.action.retryComputation" : run.status == .saving ? "workflow.action.resumeSaving" : "workflow.action.resume"
+        let fallback = savingFailure ? "重试保存失败记录" : run.status == .failed ? "重试计算" : run.status == .saving ? "恢复保存并继续流程" : "继续流程"
+        Button(workflowText(languageStore, key, fallback: fallback)) {
+            Task { await controller.resume(runID: run.id) }
+        }
+        .disabled(readOnly)
+        .accessibilityIdentifier("workflow-run-recovery-" + run.id.uuidString)
     }
 }
 

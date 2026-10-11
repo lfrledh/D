@@ -2590,3 +2590,158 @@ extension WorkflowLifecycleTests {
         try await c.close(); try await f.destination.close(); try await f.source.close()
     }
 }
+
+
+extension WorkflowLifecycleTests {
+    @Test(arguments: [false, true])
+    func auditSeriousImageFailureSurvivesOneHistorySaveFailure(cleanup: Bool) async throws {
+        let f = try await imageRepairFixture(count: 1)
+        let c = f.controller
+        let once = WorkflowSaveSwitch()
+        let failure: InferenceFailure = cleanup
+            ? .resourceCleanupUnconfirmed("audit serious cleanup")
+            : .inputIntegrityChanged("audit serious integrity")
+        await f.engine.configure(action: {
+            c.beforeHistorySave = {
+                if once.fails {
+                    once.fails = false
+                    throw WorkflowIssue("audit one history write failure")
+                }
+            }
+        }, failure: failure)
+        await c.run(target: f.nodeID, only: false)
+        let run = try #require(c.runs.last)
+        let step = try #require(run.steps.last)
+        print("HANDOFF_PROBE initial cleanup=\(cleanup) run=\(run.status) step=\(step.status) stepError=\(String(describing: step.error)) displayed=\(String(describing: c.errorMessage)) requests=\(await f.engine.requests.count)")
+        #expect(!once.fails)
+        #expect(await f.engine.requests.count == 1)
+        #expect(step.outputs["output"]?.candidates.first?.error == failure.localizedDescription)
+        #expect(step.status == .failed)
+        #expect(step.error == failure.localizedDescription)
+        #expect(c.errorMessage?.contains(failure.localizedDescription) == true)
+        c.beforeHistorySave = {}
+        await f.engine.configure()
+        await c.resume(runID: run.id)
+        let after = try #require(c.runs.last)
+        print("HANDOFF_PROBE resumed cleanup=\(cleanup) run=\(after.status) stepError=\(String(describing: after.steps.last?.error)) requests=\(await f.engine.requests.count) assets=\(await f.destination.snapshot().assets.count)")
+        #expect(await f.engine.requests.count == 1, "Saving the error must not generate a replacement image")
+        #expect(after.status == .failed)
+        #expect(after.steps.last?.error == failure.localizedDescription)
+        #expect(await f.destination.snapshot().assets.isEmpty)
+        try await c.close()
+        try await f.destination.close()
+        try await f.source.close()
+    }
+}
+
+
+extension WorkflowLifecycleTests {
+    @Test(arguments: [false, true], [0, 1, 2, 3])
+    func seriousImageHistoryRecoverySavesFailureWithoutComputing(cleanup: Bool, scenario: Int) async throws {
+        let finalRecord = scenario & 1 != 0, cancel = scenario & 2 != 0
+        let f = try await imageRepairFixture(count: 1), c = f.controller
+        let failure: InferenceFailure = cleanup ? .resourceCleanupUnconfirmed("DHA cleanup") : .inputIntegrityChanged("DHA integrity")
+        let originalGraph = try #require(c.graph)
+        await f.engine.configure(action: {
+            if cancel { await c.cancel() }
+            c.beforeHistorySave = {
+                if !finalRecord || c.runs.last?.steps.last?.status == .failed { throw WorkflowIssue("DHA initial history write") }
+            }
+        }, failure: failure)
+        await c.run(target: f.nodeID, only: false)
+        let run = try #require(c.runs.last), step = try #require(run.steps.last)
+        let checkpoint = try #require(run.planCheckpoint), candidate = try #require(step.outputs["output"]?.candidates.first)
+        #expect(run.status == .saving && checkpoint.state == .saving && step.status == .failed)
+        #expect(step.error == failure.localizedDescription && candidate.error == failure.localizedDescription)
+        #expect(c.errorMessage?.hasPrefix(failure.localizedDescription) == true)
+        #expect(checkpoint.error?.contains("DHA initial history write") == true)
+        #expect(c.errorMessage?.contains("计算结果仍保留") == false)
+        #expect(c.hasPendingSaves && !c.isRunning)
+        #expect(run.graph == originalGraph && run.targetNodeID == f.nodeID && c.graphs == [originalGraph])
+        #expect(checkpoint.records.last?.address.runID == run.id)
+        #expect(await f.engine.requests.count == 1 && f.probe.resolutions == 1 && f.probe.releases == 1)
+        let request = try #require(await f.engine.requests.first)
+        #expect(request.id == candidate.attemptID)
+        f.probe.modelAvailable = false
+        // The first retry write and the final state write must both preserve the
+        // failed computation; neither may turn into a model acquisition.
+        for failFinalWrite in [false, true] {
+            c.beforeHistorySave = {
+                if !failFinalWrite || c.runs.last?.status == .failed { throw WorkflowIssue("DHA repeated history write") }
+            }
+            await c.resume(runID: run.id)
+            let retry = try #require(c.runs.last)
+            #expect(retry.id == run.id && retry.status == .saving && retry.steps == run.steps)
+            #expect(retry.planCheckpoint?.error?.hasPrefix(failure.localizedDescription) == true)
+            #expect(retry.planCheckpoint?.error?.contains("DHA repeated history write") == true)
+            #expect(c.errorMessage == retry.planCheckpoint?.error && c.hasPendingSaves)
+            #expect(await f.engine.requests == [request] && f.probe.resolutions == 1)
+        }
+        c.beforeHistorySave = {}
+        await c.resume(runID: run.id)
+        let saved = try #require(c.runs.last)
+        #expect(saved.id == run.id && saved.targetNodeID == run.targetNodeID && saved.graph == run.graph)
+        #expect(saved.status == .failed && saved.steps == run.steps)
+        #expect(saved.planCheckpoint?.runID == checkpoint.runID && saved.planCheckpoint?.records == checkpoint.records)
+        #expect(saved.planCheckpoint?.error?.hasPrefix(failure.localizedDescription) == true)
+        #expect(saved.planCheckpoint?.error?.contains("DHA repeated history write") == true)
+        #expect(c.errorMessage == saved.planCheckpoint?.error && c.progressMessage.contains("失败记录已保存"))
+        #expect(!c.hasPendingSaves && !c.isRunning)
+        #expect(await f.engine.requests == [request] && f.probe.resolutions == 1 && f.probe.releases == 1)
+        #expect(await f.destination.snapshot().assets.isEmpty)
+        // A separate explicit retry remains available and uses a new attempt.
+        f.probe.modelAvailable = true; await f.engine.configure()
+        await c.retryFailedCandidates(stepID: step.id)
+        let retried = try #require(c.runs.last), newCandidate = try #require(retried.steps.last?.outputs["output"]?.candidates.first)
+        #expect(retried.id != saved.id && retried.status == .completed)
+        #expect(newCandidate.id == candidate.id && newCandidate.attemptID != candidate.attemptID && newCandidate.asset != nil)
+        #expect(await f.engine.requests.count == 2 && f.probe.resolutions == 2 && f.probe.releases == 2)
+        #expect(c.runs.first { $0.id == run.id } == saved)
+        try await c.close(); try await f.destination.close()
+        let cold = try await ProjectStore.open(at: f.destination.rootURL)
+        #expect(try await cold.workflowState().archive?.runs.first { $0.id == saved.id } == saved)
+        #expect(try await cold.workflowState().archive?.runs.last == retried)
+        try await cold.close(); try await f.source.close()
+    }
+}
+
+
+extension WorkflowLifecycleTests {
+    @Test(arguments: [false, true])
+    func nestedSeriousImageHistoryRecoverySettlesParentWithoutComputing(cleanup: Bool) async throws {
+        let f = try await imageRepairFixture(count: 1), c = f.controller
+        var body = try #require(c.graph)
+        body.interface = .init()
+        let tool = WorkflowToolDefinition(name: "DHA nested image", graph: body)
+        var invoke = try #require(c.registry.operation("d.control.invoke")).definition.makeNode()
+        invoke.control = .invoke(.init(id: tool.id, version: tool.version, digest: try WorkflowPlanCompiler.digest(tool)))
+        let graph = WorkflowGraph(nodes: [invoke])
+        let archive = try #require(try await f.destination.workflowState().archive)
+        _ = try await f.destination.saveWorkflow(graphs: [graph], runs: [], expectedRevision: archive.revision, tools: [tool])
+        await c.load()
+        let failure: InferenceFailure = cleanup ? .resourceCleanupUnconfirmed("DHA nested cleanup") : .inputIntegrityChanged("DHA nested integrity")
+        await f.engine.configure(action: {
+            c.beforeHistorySave = { throw WorkflowIssue("DHA nested history write") }
+        }, failure: failure)
+        await c.run(target: invoke.id, only: false)
+        let saving = try #require(c.runs.last), checkpoint = try #require(saving.planCheckpoint)
+        #expect(saving.status == .saving && checkpoint.records.count == 2)
+        #expect(checkpoint.records.allSatisfy { $0.step.status == .failed && $0.step.error == failure.localizedDescription })
+        let image = try #require(checkpoint.records.first { $0.step.node.id == f.nodeID })
+        let candidate = try #require(image.step.outputs["output"]?.candidates.first)
+        #expect(candidate.error == failure.localizedDescription && image.address.path.count > 1)
+        #expect(checkpoint.records.allSatisfy { $0.address.runID == saving.id })
+        c.beforeHistorySave = {}; f.probe.modelAvailable = false
+        await c.resume(runID: saving.id)
+        let saved = try #require(c.runs.last)
+        #expect(saved.status == .failed && saved.id == saving.id && saved.targetNodeID == invoke.id)
+        #expect(saved.planCheckpoint?.records == checkpoint.records && saved.planCheckpoint?.error == checkpoint.error)
+        #expect(c.errorMessage?.hasPrefix(failure.localizedDescription) == true && !c.hasPendingSaves)
+        #expect(await f.engine.requests.count == 1 && f.probe.resolutions == 1 && f.probe.releases == 1)
+        #expect(await f.destination.snapshot().assets.isEmpty)
+        try await c.close(); try await f.destination.close()
+        let cold = try await ProjectStore.open(at: f.destination.rootURL)
+        #expect(try await cold.workflowState().archive?.runs.last == saved)
+        try await cold.close(); try await f.source.close()
+    }
+}

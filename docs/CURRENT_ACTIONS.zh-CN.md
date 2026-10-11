@@ -1,23 +1,25 @@
 # 当前行动与接手点
 
-最后核实：2026-10-11。当前任务 **D-NON-UI-REPAIR-20261011**，仅在隔离候选完成可靠性修补、有限文档维护与独立复审；不自动合并、推送、部署或开始 UI 改版。主交付及验收状态见[任务记录](tasks/D-NON-UI-REPAIR-20261011.md)。
+最后核实：2026-10-12。当前任务 **D / DHA-01 有限可靠性修补**，从固定 N 隔离修补严重图像错误与历史保存失败的交汇；用户明确授权推送修补工作分支，交付停在独立复审，不合并 main、不部署或替换普通 App。主交付及验收状态见[既有非 UI 任务记录](tasks/D-NON-UI-REPAIR-20261011.md#dha-01-2026-10-12)。
 
 ## 版本与保护
 
+- DHA-01 预期及实际起点 N 均为 `49e8c4a9e7560ceb283b44ec2163e726242e724e`；原候选 `D-Worktrees/D-NON-UI-REPAIR-20261011` 在开工核对时无后继、索引及工作树干净。新隔离树 `/Volumes/CodexProjects/Codex/D-Worktrees/D-DHA-01-20261012`，分支 `codex/dha-01-20261012`；原 N 不回写。完整交付 SHA 与远端核实由本轮外部回执关联。
+
 - 原审计 B：`178d5685e1ff953e790a7e6dc112273d6f7e54dc`；审计与原始证据不回写。
 - 上轮 A1—A3 候选 P：`bb821f1fe31a263d33b1feeb33ee3cf3e7294d74`。其 A1/A3 有效证据复用；原初交、两轮修复和 Lead 收尾历史不重置。
-- 用户批准最新仍有的两处 A2 有限收尾：`708e35f4531b0dfe2ec7a0ca1a11b335b12496c4`。非实现者已接受源码与受控验证；普通 App 原生检查未做。此为本轮起点。
-- 本轮工作树 `/Volumes/CodexProjects/Codex/D-Worktrees/D-NON-UI-REPAIR-20261011`，分支 `codex/non-ui-repair-20261011`；完整最终 SHA 由外部回执关联，不为自引用反复提交。组合Q为`f119b0cd0c5a60f53b28abae206a9979f9ca2391`，干净严格测试和实际App构建已通过；最终独立报告及文档提交由任务记录的外部回执关联，不能替代既有推荐 App。
+- 用户批准最新仍有的两处 A2 有限收尾：`708e35f4531b0dfe2ec7a0ca1a11b335b12496c4`。非实现者已接受源码与受控验证；普通 App 原生检查未做。此为上一轮非 UI 修补的起点。
+- 上轮工作树 `/Volumes/CodexProjects/Codex/D-Worktrees/D-NON-UI-REPAIR-20261011`，分支 `codex/non-ui-repair-20261011`；完整最终 SHA 由外部回执关联，不为自引用反复提交。组合Q为`f119b0cd0c5a60f53b28abae206a9979f9ca2391`，干净严格测试和实际App构建已通过；最终独立报告及文档提交由任务记录的外部回执关联，不能替代既有推荐 App。
 - 受保护源 `/Volumes/CodexProjects/Codex/D` 仍为 `codex/inference-foundation` / `01758b81527dc27eb4563bf1b66fd1ceab6647ee`。个人 scheme orderHint 1→6、未暂存状态与索引保持；摘要 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`。
 - main 起点 `91bef7d720a8b6cb923207ef787230f36496f4cf`；UI 树保留 B。既有项目、普通 App、模型、旧候选和证据不清理。这里记录的是本轮核实快照，不是以后强制回退基线。
 
 ## 当前工作、待验与下一步
 
-DIA09 对齐真实 UI 包与外层 workspace 的锁；Store 组负责 DIA05 写入者冲突和 DIA08 使用定位；图像组负责 DIA06 同存活服务保存恢复和 DIA04 权威错误。各组结果、受测 SHA 与最终复审以任务记录为准。没有跨进程 pending 恢复承诺、无模型/依赖升级、项目磁盘格式与 UI 设计保持。
+DHA-01 沿真实 Services → Controller 候选消费者 → Executor → Store → 恢复按钮修补。两类严重图像错误叠加历史保存失败时，计算步骤立即 failed，保存状态单独为 saving；保留主诊断、最近次级保存错误和候选/调用身份。恢复保存不解析模型或重新推理，成功后仍 failed；明确“重试计算”继续沿原准入规则。运行原图保护及首次实际编辑复制继承既有 A2，查看/导航不复制，不重修 P-01/P-02。
 
-本地候选的非 UI 实现与工程验证已完成；独立复审结论及完整交付见任务记录。等待用户继续 UI 工作。UI 本轮暂停；R16布局/命中/运行保存、连续手感/组字、原生拖放及 A1—A3普通 App余项继续在[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)，不以受控服务测试关闭。F26搜索真实调用继续获准延期，不索取凭据；AP1/CORE/I2V旧候选不自动接纳。全模型数值、干净Mac发行及专项故障矩阵不在本轮。
+本轮核心/继承回归16方法、33情景通过；中英恢复按钮宿主2情景未找到AX节点，三次命令均因该项exit 1，随后已确认Mac锁屏并停止GUI验证。真实点击、完整提示可读性与普通App均未验，交付等待独立复审，不能宣称全部通过。详细状态以任务页及外部回执为准。仅更新本页和既有非 UI 任务页，不整理其他仓库文档。公开契约、Store schema、依赖、Runtime 与后端不改；历史接受回执仍是历史证据，不能替代 DHA-01 最终提交的独立验收。
 
-恢复时先核对源/候选 HEAD、索引、scheme 和自有进程，再读任务记录中的下一动作；不要依据本段自动重跑测试或恢复旧任务。外盘证据根：`D-Development/AgentTrials/D-NON-UI-REPAIR-20261011/run-20261011T095142Z`。
+R16布局/命中/运行保存、连续手感/组字、原生拖放及 A1—A3普通 App余项继续在[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)，不以受控测试关闭。F26搜索真实调用继续获准延期，不索取凭据；AP1/CORE/I2V旧候选不自动接纳。恢复时先核对源/候选 HEAD、索引、scheme 和自有进程。本轮证据根：`D-Development/AgentTrials/D-DHA-01/run-20261012-01`；上轮完整证据继续保留在 `D-Development/AgentTrials/D-NON-UI-REPAIR-20261011/run-20261011T095142Z`。
 
 ## 继承与历史
 

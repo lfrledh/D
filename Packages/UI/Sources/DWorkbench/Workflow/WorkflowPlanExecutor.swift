@@ -289,6 +289,11 @@ import Foundation
             try updateRecord(at: address) { record in record.step.status = .cancelled }
             try await persist()
             throw CancellationError()
+        } catch let failure as WorkflowImageHistoryFailure {
+            // Candidate persistence may already have set the checkpoint to
+            // saving. Still settle this call and its enclosing control records.
+            try recordImageFailure(failure, at: address)
+            throw failure
         } catch let error as WorkflowSaveFailure {
             if checkpoint?.state == .saving { throw error }
             // The service retains computed bytes; retry this same call only to publish them.
@@ -306,9 +311,25 @@ import Foundation
                 record.step.error = error.localizedDescription
                 if let failure = error as? WorkflowOutputValidationFailure { record.step.outputs["raw"] = .asset(failure.raw) }
             }
-            try await persist()
+            do { try await persist() }
+            catch let saveError {
+                if let combined = WorkflowImageHistoryFailure(failure: error, saving: saveError) {
+                    try recordImageFailure(combined, at: address)
+                    throw combined
+                }
+                throw saveError
+            }
             throw error
         }
+    }
+
+    private func recordImageFailure(_ failure: WorkflowImageHistoryFailure, at address: WorkflowExecutionAddress) throws {
+        try updateRecord(at: address) { record in
+            record.step.status = .failed
+            record.step.error = failure.failure.localizedDescription
+        }
+        checkpoint?.state = .saving
+        checkpoint?.error = failure.localizedDescription
     }
 
     private func executeCallStep(
@@ -946,8 +967,7 @@ import Foundation
         do {
             try await save(value)
         } catch {
-            value.state = .saving
-            value.error = "Save failed: \(error.localizedDescription)"
+            value = retainingSaveFailure(error, in: value)
             checkpoint = value
             throw error
         }
@@ -958,7 +978,11 @@ import Foundation
         do {
             try await save(saving)
         } catch {
-            checkpoint = saving
+            let failed = retainingSaveFailure(error, in: saving)
+            checkpoint = failed
+            if failed.records.contains(where: { $0.address.path.count == 1 && $0.step.status == .failed }) {
+                throw WorkflowIssue(failed.error ?? error.localizedDescription)
+            }
             throw error
         }
         let resumedState = derivedState(saving)
@@ -970,9 +994,18 @@ import Foundation
         var resumed = saving
         resumed.outputs = resumedOutputs
         resumed.state = resumedState
-        resumed.error = derivedError(saving, state: resumedState)
+        resumed.error = resumedState == .failed ? saving.error ?? derivedError(saving, state: resumedState) : derivedError(saving, state: resumedState)
         checkpoint = resumed
         try await persist()
+    }
+
+    private func retainingSaveFailure(_ error: any Error, in supplied: WorkflowPlanCheckpoint) -> WorkflowPlanCheckpoint {
+        var value = supplied
+        value.state = .saving
+        if let primary = value.records.last(where: { $0.address.path.count == 1 && $0.step.status == .failed })?.step.error {
+            value.error = "\(primary)\n失败记录保存错误：\(error.localizedDescription)"
+        } else { value.error = "Save failed: \(error.localizedDescription)" }
+        return value
     }
 
     private func derivedState(_ value: WorkflowPlanCheckpoint) -> WorkflowPlanState {
