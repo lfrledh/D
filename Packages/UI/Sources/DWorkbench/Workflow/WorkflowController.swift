@@ -305,7 +305,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         return graphs.contains(where: { $0.id == current.graph.id }) ? current.graph.id : nil
     }
     public func openBody(nodeID: UUID, slot: String) {
-        guard !isRunning, let rootGraph else { return }
+        // Navigation does not edit the frozen run or create an editing copy.
+        // Actual changes still pass through edit's original/copy ownership checks.
+        guard !closed, !closing, !externalOperationBusy(), let rootGraph else { return }
         do {
             let path = bodyPath + [.init(nodeID: nodeID, slot: slot)]
             let body = try WorkflowGraphEditing.body(in: rootGraph, path: path)
@@ -313,7 +315,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         } catch { errorMessage = error.localizedDescription }
     }
     public func closeBody() {
-        guard !isRunning, let location = bodyPath.last else { return }
+        guard !closed, !closing, !externalOperationBusy(), let rootGraph,
+              (try? WorkflowGraphEditing.body(in: rootGraph, path: bodyPath)) != nil,
+              let location = bodyPath.last else { return }
         bodyPath.removeLast(); selectedNodeID = location.nodeID; selectedNodeIDs = []
     }
     public func updateNode(_ node: WorkflowNode, in graphID: UUID) {

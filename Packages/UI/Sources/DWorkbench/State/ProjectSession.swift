@@ -1294,13 +1294,34 @@ public final class ProjectSession {
     }
     public private(set) var explicitModelChoices: [WorkflowModelChoice] = []
     public var selectedWorkflowImageIdentity: String? { selectedModelRevision.map { "image:" + $0 } }
+    /// Shared by the native panel and its asynchronous completion. Registration
+    /// keeps its existing idle requirement; selecting a registered model does not.
+    public func checkWorkflowModelRegistration(target: WorkflowModelSelectionTarget, controller: WorkflowController) throws {
+        guard workflow === controller, !isChangingProject, !closePending else {
+            throw WorkflowIssue("项目已关闭或切换，模型未绑定到其他项目。")
+        }
+        guard !isBusy else {
+            throw WorkflowIssue("当前任务正在运行或保存，请结束后再登记模型目录；已登记模型仍可用于编辑副本。")
+        }
+        guard controller.isCurrent(target) else {
+            throw WorkflowIssue("目标节点已改变，模型未绑定到其他节点。")
+        }
+    }
     public func registerWorkflowModel(at url: URL, target: WorkflowModelSelectionTarget, controller: WorkflowController) async {
-        guard workflow === controller, controller.isCurrent(target), !isBusy, !isChangingProject, !closePending else { return }
+        var registered = false
         do {
+            try checkWorkflowModelRegistration(target: target, controller: controller)
             let choice = try await registerExplicitModel(at: url, kind: target.kind)
-            guard workflow === controller, controller.isCurrent(target), !closePending else { return }
+            registered = true
+            try checkWorkflowModelRegistration(target: target, controller: controller)
             controller.bindModel(choice.id, to: target)
-        } catch { guard workflow === controller else { return }; report(error, context: "节点模型未绑定") }
+        } catch {
+            // Keep feedback with the controller that owned the panel, never the
+            // newly opened project. A successfully registered resource is retained.
+            controller.errorMessage = registered
+                ? "模型已登记，但节点未绑定：\(error.localizedDescription) 请稍后从已登记模型中选择。"
+                : error.localizedDescription
+        }
     }
     public func bindSelectedWorkflowModel() {
         refreshWorkflowModels()

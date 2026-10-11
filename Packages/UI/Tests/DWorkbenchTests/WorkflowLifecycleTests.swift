@@ -1946,3 +1946,145 @@ extension WorkflowLifecycleTests {
         try await reopened.close()
     }
 }
+
+
+extension WorkflowLifecycleTests {
+    @Test(arguments: ["map", "loop", "branch"])
+    func runningEditingCopyAllowsBodyNavigationWithoutChangingOriginal(kind: String) async throws {
+        let (_, store, engine, c) = try await fixture()
+        var original = WorkflowExamples.text()
+        let data = try WorkflowLanguageExamples.make(.data)
+        let control = try #require(data.graph.nodes.first { $0.operationID == "d.control." + kind })
+        original.nodes.append(control)
+        let revision = try #require(try await store.workflowState().archive?.revision)
+        _ = try await store.saveWorkflow(graphs: [original], runs: [], expectedRevision: revision)
+        await c.load()
+        let gate = WorkflowSubmitGate(); await engine.suspend(using: gate)
+        let execution = Task { await c.run(target: original.nodes[1].id, only: false) }
+        do {
+            try await waitForRepairGate(gate)
+            let protected = try #require(c.rootGraph), frozen = try #require(c.runs.last)
+            let slot = kind == "branch" ? "then" : "body"
+            c.moveNode(id: control.id, x: 300, y: 700)
+            let copy = try #require(c.rootGraph)
+            try #require(copy.id != protected.id && c.canEditCanvas)
+            let graphs = c.graphs, canUndo = c.canUndo
+            c.openBody(nodeID: control.id, slot: slot)
+            #expect(c.bodyPath == [.init(nodeID: control.id, slot: slot)])
+            #expect(c.graphs == graphs && c.canUndo == canUndo)
+            c.closeBody()
+            #expect(c.bodyPath.isEmpty && c.selectedNodeID == control.id)
+            #expect(c.graphs == graphs && c.canUndo == canUndo)
+            #expect(c.runs.last?.graph == frozen.graph && c.runs.last?.planCheckpoint == frozen.planCheckpoint)
+            #expect(c.graphs.first { $0.id == protected.id } == protected)
+            // A callback after an external owner or close acquired the surface cannot navigate.
+            c.externalOperationBusy = { true }
+            c.openBody(nodeID: control.id, slot: slot); #expect(c.bodyPath.isEmpty)
+            c.externalOperationBusy = { false }
+            await gate.open(); await execution.value
+            try await c.close()
+            c.openBody(nodeID: control.id, slot: slot); #expect(c.bodyPath.isEmpty)
+        } catch { await gate.open(); await execution.value; try? await c.close(); try? await store.close(); throw error }
+        try await store.close()
+    }
+
+    @Test func runningDirectoryRegistrationReportsRefusalWithoutReadingDirectory() async throws {
+        let (root, unused, engine, _) = try await fixture(); try await unused.close()
+        let suite = "D.A2.Directory." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite)); defer { settings.removePersistentDomain(forName: suite) }
+        var validations = 0
+        let owner = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: engine, backendID: "fixture.image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text",
+                validateTextModel: { url in validations += 1; return .init(directory: url, revision: "fixture") })
+        }, settings: settings)
+        await owner.createProject(at: root.appendingPathComponent("directory.dproject"))
+        await owner.registerTextModel(at: root); await owner.openWorkflow()
+        let c = try #require(owner.workflow); c.addExample("text"); c.selectedNodeID = c.graph?.nodes[1].id
+        let target = try #require(c.modelSelectionTarget())
+        c.modelChoices.append(.init(id: "text:already-registered", kind: .text, displayName: "Registered fixture"))
+        let gate = WorkflowSubmitGate(); await engine.suspend(using: gate)
+        let execution = Task { await c.run(target: target.nodeID, only: false) }
+        do {
+            try await waitForRepairGate(gate)
+            let before = validations, graphs = c.graphs, choices = owner.explicitModelChoices
+            await owner.registerWorkflowModel(at: root.appendingPathComponent("not-a-model"), target: target, controller: c)
+            #expect(owner.errorMessage != nil || c.errorMessage != nil, "Refusing a completed directory selection must provide visible feedback")
+            #expect(validations == before && c.graphs == graphs && owner.explicitModelChoices == choices)
+            // Already registered identity remains a normal edit, creating a copy rather than altering the run.
+            c.bindModel("text:already-registered", to: target)
+            #expect(c.rootGraph?.id != target.graphID)
+            #expect(c.graphs.first { $0.id == target.graphID } == graphs.first { $0.id == target.graphID })
+            await gate.open(); await execution.value
+        } catch { await gate.open(); await execution.value; _ = await owner.requestClose(); throw error }
+        #expect(await owner.requestClose())
+    }
+}
+
+
+extension WorkflowLifecycleTests {
+    @Test(arguments: ["map", "loop", "branch"])
+    func bodyNavigationOnRunningOriginalDefersCopyUntilActualEdit(kind: String) async throws {
+        let (_, store, engine, c) = try await fixture()
+        var original = WorkflowExamples.text()
+        let data = try WorkflowLanguageExamples.make(.data)
+        let control = try #require(data.graph.nodes.first { $0.operationID == "d.control." + kind })
+        original.nodes.append(control)
+        let revision = try #require(try await store.workflowState().archive?.revision)
+        _ = try await store.saveWorkflow(graphs: [original], runs: [], expectedRevision: revision)
+        await c.load()
+        let gate = WorkflowSubmitGate(); await engine.suspend(using: gate)
+        let execution = Task { await c.run(target: original.nodes[1].id, only: false) }
+        do {
+            try await waitForRepairGate(gate)
+            let protected = try #require(c.rootGraph), graphs = c.graphs, undo = c.canUndo
+            for slot in kind == "branch" ? ["then", "otherwise"] : ["body"] {
+                c.openBody(nodeID: control.id, slot: slot)
+                try #require(c.bodyPath == [.init(nodeID: control.id, slot: slot)])
+                #expect(c.graphs == graphs && c.canUndo == undo)
+                c.closeBody(); #expect(c.bodyPath.isEmpty)
+            }
+            let slot = kind == "branch" ? "otherwise" : "body"
+            c.openBody(nodeID: control.id, slot: slot)
+            let inner = try #require(c.graph?.nodes.first)
+            c.moveNode(id: inner.id, x: 43, y: 87)
+            #expect(c.rootGraph?.id != protected.id && c.graphs.count == graphs.count + 1)
+            #expect(c.bodyPath == [.init(nodeID: control.id, slot: slot)])
+            #expect(c.graphs.first { $0.id == protected.id } == protected)
+            c.externalOperationBusy = { true }; c.closeBody()
+            #expect(!c.bodyPath.isEmpty)
+            c.externalOperationBusy = { false }; c.closeBody(); #expect(c.bodyPath.isEmpty)
+            await gate.open(); await execution.value
+        } catch { await gate.open(); await execution.value; try? await c.close(); try? await store.close(); throw error }
+        try await c.close(); try await store.close()
+    }
+
+    @Test func directoryRegistrationAdmissionAndLateFeedbackKeepExplicitTarget() async throws {
+        let (root, unused, engine, _) = try await fixture(); try await unused.close()
+        let suite = "D.A2.DirectoryLate." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite)); defer { settings.removePersistentDomain(forName: suite) }
+        let validation = WorkflowSubmitGate()
+        var suspendValidation = false
+        let owner = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: engine, backendID: "fixture.image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text",
+                validateTextModel: { url in if suspendValidation { await validation.wait() }; return .init(directory: url, revision: "registered") })
+        }, settings: settings)
+        await owner.createProject(at: root.appendingPathComponent("late.dproject")); await owner.openWorkflow()
+        let c = try #require(owner.workflow); c.addExample("text"); c.selectedNodeID = c.graph?.nodes[1].id
+        let target = try #require(c.modelSelectionTarget())
+        try owner.checkWorkflowModelRegistration(target: target, controller: c)
+        suspendValidation = true
+        let registration = Task { await owner.registerWorkflowModel(at: root, target: target, controller: c) }
+        try await waitForRepairGate(validation)
+        c.setParameter(nodeID: target.nodeID, key: "modelID", value: .text("text:new-selection"))
+        #expect(throws: WorkflowIssue.self) { try owner.checkWorkflowModelRegistration(target: target, controller: c) }
+        await validation.open(); await registration.value
+        #expect(c.graph?.nodes.first { $0.id == target.nodeID }?.parameters["modelID"] == .text("text:new-selection"))
+        #expect(c.errorMessage?.contains("模型已登记，但节点未绑定") == true)
+        #expect(owner.explicitModelChoices.contains { $0.id == "text:registered" })
+        #expect(await engine.requests.isEmpty)
+        #expect(await owner.requestClose())
+        #expect(throws: WorkflowIssue.self) { try owner.checkWorkflowModelRegistration(target: target, controller: c) }
+    }
+}

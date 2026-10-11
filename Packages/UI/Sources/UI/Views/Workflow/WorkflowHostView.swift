@@ -58,13 +58,18 @@ struct WorkflowHostView: View {
         // Capture synchronously, before either the task or the native panel suspends.
         guard let target = controller.modelSelectionTarget(), target.kind == kind else { return }
         Task {
-            guard model.projectSession.workflow === controller, controller.isCurrent(target) else { return }
-            if kind == .pitch { model.projectSession.bindSelectedWorkflowModel(); return }
-            let panel = NSOpenPanel(); panel.title = (languageStore?.text("workflow.host.model", fallback: "选择此节点使用的已安装模型") ?? "选择此节点使用的已安装模型")
-            panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
-            guard await panel.begin() == .OK, let url = panel.url,
-                  model.projectSession.workflow === controller, controller.isCurrent(target) else { return }
-            await model.projectSession.registerWorkflowModel(at: url, target: target, controller: controller)
+            if kind == .pitch {
+                guard model.projectSession.workflow === controller, controller.isCurrent(target) else { return }
+                model.projectSession.bindSelectedWorkflowModel(); return
+            }
+            do {
+                try model.projectSession.checkWorkflowModelRegistration(target: target, controller: controller)
+                let panel = NSOpenPanel(); panel.title = (languageStore?.text("workflow.host.model", fallback: "选择此节点使用的已安装模型") ?? "选择此节点使用的已安装模型")
+                panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
+                guard await panel.begin() == .OK, let url = panel.url else { return }
+                try model.projectSession.checkWorkflowModelRegistration(target: target, controller: controller)
+                await model.projectSession.registerWorkflowModel(at: url, target: target, controller: controller)
+            } catch { controller.errorMessage = error.localizedDescription }
         }
     }
     private func importFile(nodeID: UUID, controller: WorkflowController) async {
