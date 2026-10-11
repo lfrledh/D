@@ -9,6 +9,14 @@ import zlib
 enum ProjectMigrationCheckpoint: Sendable { case backupDurable, beforePublication, publicationDurable }
 enum ProjectExportCheckpoint: Sendable { case contentDurable(URL), published(URL) }
 
+/// An in-memory writer's exact read baseline; never persisted or shared between controllers.
+struct QuickCreationWriteToken: Sendable {
+    fileprivate let storeID: UUID
+    fileprivate let ownerID: UUID
+    fileprivate let bytes: Data?
+    let revision: UInt64
+}
+
 /// Owns durable project records and media. Its actor keeps file I/O off the UI executor.
 /// The lock prevents two application sessions from silently replacing each other's manifest.
 public actor ProjectStore {
@@ -50,9 +58,10 @@ public actor ProjectStore {
         let archive: WorkflowArchive
     }
     private var validatedWorkflowRead: ValidatedWorkflowRead?
-    private var quickValidatedBytes: Data?
-    private var quickPendingBytes: Data?
-    private var quickPendingBaseRevision: UInt64?
+    private let quickStoreID = UUID()
+    private let quickLegacyOwnerID = UUID()
+    private var quickLegacyWriteToken: QuickCreationWriteToken?
+    private var quickPendingPublication: (ownerID: UUID, baseRevision: UInt64, baseBytes: Data?, bytes: Data, revision: UInt64)?
     private var chatValidatedBytes: Data?
     private var chatWriteBaselineInitialized = false
     private var chatPendingBytes: Data?
@@ -4069,12 +4078,27 @@ extension ProjectStore {
     }
 
     public func quickCreationState() throws -> QuickCreationState {
+        let read = try readQuickCreationState()
+        // Legacy callers share one frozen baseline, as chat callers do. Later inspection
+        // cannot adopt external bytes. Controllers carry separate, explicit load tokens.
+        if quickLegacyWriteToken == nil {
+            quickLegacyWriteToken = quickWriteToken(read, ownerID: quickLegacyOwnerID)
+        }
+        return read.state
+    }
+    func loadQuickCreationStateForWriting() throws -> (state: QuickCreationState, token: QuickCreationWriteToken) {
+        let read = try readQuickCreationState()
+        return (read.state, quickWriteToken(read, ownerID: UUID()))
+    }
+    private func quickWriteToken(_ read: (state: QuickCreationState, bytes: Data?), ownerID: UUID) -> QuickCreationWriteToken {
+        QuickCreationWriteToken(storeID: quickStoreID, ownerID: ownerID, bytes: read.bytes, revision: read.state.revision)
+    }
+    private func readQuickCreationState() throws -> (state: QuickCreationState, bytes: Data?) {
         try checkLocation()
         var info = stat()
         if fstatat(rootFD, "quick-creation.json", &info, AT_SYMLINK_NOFOLLOW) != 0 {
             guard errno == ENOENT else { throw ProjectFiles.error() }
-            quickValidatedBytes = nil
-            return QuickCreationState()
+            return (QuickCreationState(), nil)
         }
         let data = try ProjectFiles.read(relative: "quick-creation.json", in: rootFD, limit: 16 * 1_024 * 1_024)
         let state = try JSONDecoder().decode(QuickCreationState.self, from: data)
@@ -4085,23 +4109,39 @@ extension ProjectStore {
             try JSONSerialization.data(withJSONObject: JSONSerialization.jsonObject(with: value), options: [.sortedKeys, .fragmentsAllowed])
         }
         guard try normalized(data) == normalized(reencoded) else { throw WorkflowIssue("快速记录含有不能安全保存的扩展或数值，原件未改。") }
-        try state.validate(); quickValidatedBytes = data; return state
+        try state.validate(); return (state, data)
     }
     @discardableResult public func saveQuickCreationState(_ state: QuickCreationState, expectedRevision: UInt64) throws -> UInt64 {
         try saveQuickCreationState(state, expectedRevision: expectedRevision, afterPublication: nil)
     }
     func saveQuickCreationState(_ state: QuickCreationState, expectedRevision: UInt64,
                                afterPublication: (@Sendable () throws -> Void)?) throws -> UInt64 {
+        // Without a read, only creation of a missing file is permitted. Never lazily
+        // authorize replacement of an existing record from the caller's revision alone.
+        let token = quickLegacyWriteToken ?? QuickCreationWriteToken(storeID: quickStoreID,
+            ownerID: quickLegacyOwnerID, bytes: nil, revision: 0)
+        let saved = try saveQuickCreationState(state, expectedRevision: expectedRevision,
+            token: token, afterPublication: afterPublication)
+        quickLegacyWriteToken = saved
+        return saved.revision
+    }
+    func saveQuickCreationState(_ state: QuickCreationState, expectedRevision: UInt64,
+                               token: QuickCreationWriteToken,
+                               afterPublication: (@Sendable () throws -> Void)? = nil) throws -> QuickCreationWriteToken {
         try checkLocation(); try state.validate()
-        let expectedBytes = quickValidatedBytes
-        let previous = try quickCreationState()
-        let ownPublishedFailure = quickPendingBaseRevision == expectedRevision && quickPendingBytes != nil && quickValidatedBytes == quickPendingBytes
-        guard quickValidatedBytes == expectedBytes || ownPublishedFailure else {
-            quickValidatedBytes = expectedBytes
+        let read = try readQuickCreationState()
+        let previous = read.state
+        let pending = quickPendingPublication
+        let ownPublishedFailure = pending?.ownerID == token.ownerID && pending?.baseRevision == expectedRevision &&
+            pending?.baseBytes == token.bytes && pending?.bytes == read.bytes &&
+            pending?.revision == previous.revision
+        guard token.storeID == quickStoreID, token.revision == expectedRevision,
+              (read.bytes == token.bytes || ownPublishedFailure),
+              (previous.revision == expectedRevision || ownPublishedFailure), previous.revision < UInt64.max else {
             throw ProjectStoreError.externalModification
         }
-        guard (previous.revision == expectedRevision || ownPublishedFailure), previous.revision < UInt64.max else {
-            quickValidatedBytes = expectedBytes; throw ProjectStoreError.externalModification
+        if token.ownerID == quickLegacyOwnerID, quickLegacyWriteToken == nil {
+            quickLegacyWriteToken = token
         }
         var value = state; value.revision = previous.revision + 1
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
@@ -4118,12 +4158,20 @@ extension ProjectStore {
             // rename may succeed before the directory sync fails. Remember only our exact bytes,
             // even if the volume is currently unreadable. A retry must observe an exact match;
             // merely attempting these bytes does not authorize replacing another writer's content.
-            quickPendingBytes = data; quickPendingBaseRevision = expectedRevision
-            quickValidatedBytes = expectedBytes
+            quickPendingPublication = (token.ownerID, expectedRevision, token.bytes, data, value.revision)
             throw error
         }
-        quickValidatedBytes = data; quickPendingBytes = nil; quickPendingBaseRevision = nil
-        return value.revision
+        let saved = QuickCreationWriteToken(storeID: quickStoreID, ownerID: token.ownerID,
+            bytes: data, revision: value.revision)
+        // Keep the legacy API usable after an authorized save of its exact baseline;
+        // a new load or a readonly query never advances it to externally changed bytes.
+        if quickLegacyWriteToken == nil ||
+            (quickLegacyWriteToken?.bytes == token.bytes && quickLegacyWriteToken?.revision == token.revision) {
+            quickLegacyWriteToken = QuickCreationWriteToken(storeID: quickStoreID, ownerID: quickLegacyOwnerID,
+                bytes: data, revision: value.revision)
+        }
+        quickPendingPublication = nil
+        return saved
     }
     public func workflowAssets(forStepID stepID: UUID) throws -> [WorkflowAssetReference] {
         try editableWorkflow().assets.filter { $0.stepID == stepID }.map(\.reference)
@@ -4287,8 +4335,7 @@ extension ProjectStore {
             guard bytes.count == pointer.byteCount, AssetLocationFiles.hash(bytes) == pointer.sha256 else { throw ProjectStoreError.externalModification }
             inline(pointer.relativePath, bytes)
         }
-        _ = try quickCreationState()
-        if let bytes = quickValidatedBytes { inline("quick-creation.json", bytes) }
+        if let bytes = try readQuickCreationState().bytes { inline("quick-creation.json", bytes) }
         if let bytes = try readChatState().bytes { inline("quick-chat.json", bytes) }
         for index in manifest.assets.indices {
             try Task.checkCancellation()
@@ -4433,30 +4480,60 @@ extension ProjectStore {
         guard let asset = manifest.assets.first(where: { $0.id == id }), let format = WorkflowMediaFormat.descriptor(asset.mediaType) else { throw ProjectStoreError.missingAsset }
         let record = archive.assets.first { $0.reference.assetID == id }
         var uses = [AssetKnownUse]()
-        for graph in archive.graphs {
-            for node in graph.nodes where node.assetReference?.assetID == id {
-                uses.append(.init(id: "graph:\(graph.id):\(node.id)", kind: .graph,
-                    title: graph.name, detail: "节点 \(node.id.uuidString)", graphID: graph.id, nodeID: node.id, assetID: nil))
-            }
-        }
-        for derived in archive.assets where derived.parents.contains(where: { $0.assetID == id }) {
-            let child = derived.reference.assetID
-            let childAsset = manifest.assets.first(where: { $0.id == child })
-            uses.append(.init(id: "asset:\(child)", kind: .derivedAsset,
-                title: childAsset?.name ?? child.uuidString,
-                detail: "派生素材 · \(derived.operationID)", graphID: nil, nodeID: nil,
-                assetID: childAsset.flatMap { WorkflowMediaFormat.descriptor($0.mediaType) == nil ? nil : child }))
-        }
-        for run in archive.runs {
-            let referenced = run.graph.nodes.contains { $0.assetReference?.assetID == id } || run.steps.contains { step in
-                (Array(step.inputs.values) + Array(step.outputs.values)).contains {
-                    (($0.datum?.assetReferences ?? []) + $0.candidates.compactMap(\.asset)).contains { $0.assetID == id }
+        if let reference = record?.reference {
+            var historyNodePaths = [String]()
+            func inspect(_ graph: WorkflowGraph, root: WorkflowGraph, tool: WorkflowToolDefinition? = nil,
+                         rootNodeID: UUID? = nil, path: [String] = [], depth: Int = 0, history: Bool = false) throws {
+                try Task.checkCancellation()
+                guard depth <= 16 else { throw WorkflowIssue("素材使用位置超过嵌套深度上限。") }
+                for node in graph.nodes {
+                    let nodePath = path + ["流程 \(graph.name) (\(graph.id))", "节点 \(node.title) (\(node.id))"]
+                    let targetNodeID = rootNodeID ?? node.id
+                    if try WorkflowCheckpointValidation.assetReferences(in: node).contains(reference) {
+                        if history {
+                            historyNodePaths.append(nodePath.joined(separator: " / "))
+                        } else {
+                            let owner = tool.map { "tool:\($0.id):\($0.version)" } ?? "graph:\(root.id)"
+                            uses.append(.init(id: owner + ":" + nodePath.joined(separator: "/"), kind: .graph,
+                                title: tool.map { "工具 · \($0.name) · v\($0.version)" } ?? root.name,
+                                detail: (tool == nil ? "当前流程 · " : "工具定义 · ") + nodePath.joined(separator: " / "),
+                                graphID: tool == nil ? root.id : nil, nodeID: tool == nil ? targetNodeID : nil, assetID: nil))
+                        }
+                    }
+                    func nested(_ body: WorkflowGraph, _ label: String) throws {
+                        try inspect(body, root: root, tool: tool, rootNodeID: targetNodeID,
+                            path: nodePath + [label], depth: depth + 1, history: history)
+                    }
+                    switch node.control {
+                    case .branch(_, let then, let otherwise):
+                        try nested(then, "Branch then"); try nested(otherwise, "Branch otherwise")
+                    case .map(let body, _): try nested(body, "Map body")
+                    case .loop(let body, _, _, _): try nested(body, "Loop body")
+                    case .invoke, nil: break
+                    }
                 }
             }
-            if referenced {
-                uses.append(.init(id: "run:\(run.id)", kind: .run,
-                    title: "运行 \(run.id.uuidString)", detail: "运行证据 · \(run.createdAt.formatted())",
-                    graphID: nil, nodeID: nil, assetID: nil))
+            for graph in archive.graphs { try inspect(graph, root: graph) }
+            for tool in archive.tools ?? [] { try inspect(tool.graph, root: tool.graph, tool: tool) }
+            for derived in archive.assets where derived.parents.contains(reference) {
+                let child = derived.reference.assetID
+                let childAsset = manifest.assets.first(where: { $0.id == child })
+                uses.append(.init(id: "asset:\(child)", kind: .derivedAsset,
+                    title: childAsset?.name ?? child.uuidString,
+                    detail: "派生素材 · \(derived.operationID)", graphID: nil, nodeID: nil,
+                    assetID: childAsset.flatMap { WorkflowMediaFormat.descriptor($0.mediaType) == nil ? nil : child }))
+            }
+            for run in archive.runs {
+                if try WorkflowCheckpointValidation.assetReferences(in: run).contains(reference) {
+                    historyNodePaths.removeAll(keepingCapacity: true)
+                    try inspect(run.graph, root: run.graph, history: true)
+                    let location = historyNodePaths.first ?? "步骤或恢复点记录"
+                    let additional = historyNodePaths.count > 1 ? " · 另 \(historyNodePaths.count - 1) 个节点" : ""
+                    uses.append(.init(id: "run:\(run.id)", kind: .run,
+                        title: "运行 \(run.id.uuidString)",
+                        detail: "历史流程 · \(run.graph.name) (\(run.graph.id)) · \(location)\(additional) · 运行证据 · \(run.createdAt.formatted())",
+                        graphID: nil, nodeID: nil, assetID: nil))
+                }
             }
         }
         guard let placements = asset.fileLocations else {

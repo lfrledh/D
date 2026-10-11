@@ -32,6 +32,19 @@ public enum WorkflowCheckpointValidation {
         try collector.collect(graph: graph, depth: 0)
         return collector.references
     }
+    /// Local fields belong to this node; nested graph nodes are reported separately.
+    static func assetReferences(in node: WorkflowNode) throws -> [WorkflowAssetReference] {
+        var collector = CheckpointAssetCollector()
+        try collector.collect(node: node, depth: 0, includingNestedGraphs: false)
+        return collector.references
+    }
+    static func assetReferences(in run: WorkflowRun) throws -> [WorkflowAssetReference] {
+        var collector = CheckpointAssetCollector()
+        try collector.collect(graph: run.graph, depth: 0)
+        for step in run.steps { try collector.collect(step: step) }
+        if let checkpoint = run.planCheckpoint { try collector.collect(checkpoint) }
+        return collector.references
+    }
 }
 
 private struct CheckpointValidator {
@@ -1375,23 +1388,27 @@ private struct CheckpointAssetCollector {
             }
         }
         for record in checkpoint.records {
-            try collect(node: record.step.node, depth: 0)
-            for name in record.step.inputs.keys.sorted() {
-                if let value = record.step.inputs[name] { try collect(value: value, depth: 0) }
-            }
-            for name in record.step.outputs.keys.sorted() {
-                if let value = record.step.outputs[name] { try collect(value: value, depth: 0) }
-            }
-            if let task = record.step.humanTask {
-                try collect(datum: task.materials, depth: 0)
-                if let draft = task.draft { try collect(datum: draft, depth: 0) }
-                if let decision = task.decision { try collect(datum: decision, depth: 0) }
-            }
-            if let output = record.step.decision?.output { try append(output) }
+            try collect(step: record.step)
         }
         for name in checkpoint.outputs.keys.sorted() {
             if let value = checkpoint.outputs[name] { try collect(value: value, depth: 0) }
         }
+    }
+
+    mutating func collect(step: WorkflowStepRun) throws {
+        try collect(node: step.node, depth: 0)
+        for name in step.inputs.keys.sorted() {
+            if let value = step.inputs[name] { try collect(value: value, depth: 0) }
+        }
+        for name in step.outputs.keys.sorted() {
+            if let value = step.outputs[name] { try collect(value: value, depth: 0) }
+        }
+        if let task = step.humanTask {
+            try collect(datum: task.materials, depth: 0)
+            if let draft = task.draft { try collect(datum: draft, depth: 0) }
+            if let decision = task.decision { try collect(datum: decision, depth: 0) }
+        }
+        if let output = step.decision?.output { try append(output) }
     }
 
     private mutating func collect(plan: WorkflowPlan, depth: Int) throws {
@@ -1421,7 +1438,7 @@ private struct CheckpointAssetCollector {
         for node in graph.nodes { try collect(node: node, depth: depth + 1) }
     }
 
-    private mutating func collect(node: WorkflowNode, depth: Int) throws {
+    mutating func collect(node: WorkflowNode, depth: Int, includingNestedGraphs: Bool = true) throws {
         try count(depth)
         if let reference = node.assetReference { try append(reference) }
         if let configuration = node.dataConfiguration {
@@ -1434,13 +1451,15 @@ private struct CheckpointAssetCollector {
         switch node.control {
         case .branch(let predicate, let yes, let no):
             if let value = predicate.value { try collect(datum: value, depth: depth + 1) }
-            try collect(graph: yes, depth: depth + 1)
-            try collect(graph: no, depth: depth + 1)
+            if includingNestedGraphs {
+                try collect(graph: yes, depth: depth + 1)
+                try collect(graph: no, depth: depth + 1)
+            }
         case .map(let body, _):
-            try collect(graph: body, depth: depth + 1)
+            if includingNestedGraphs { try collect(graph: body, depth: depth + 1) }
         case .loop(let body, _, _, let until):
             if let value = until.value { try collect(datum: value, depth: depth + 1) }
-            try collect(graph: body, depth: depth + 1)
+            if includingNestedGraphs { try collect(graph: body, depth: depth + 1) }
         case .invoke, nil:
             break
         }
