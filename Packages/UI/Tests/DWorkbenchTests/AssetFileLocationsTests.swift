@@ -217,6 +217,158 @@ struct AssetFileLocationsTests {
         try await store.close()
     }
 
+    @Test func knownUsesCollectStructuredFieldsMusicSourcesAndDeduplicateEachOwner() async throws {
+        let (_, store, source) = try await fixture()
+        let first = try await store.importWorkflowMediaFile(at: source, mode: .reference)
+        let second = try await store.publishWorkflowAsset(data: Data("second".utf8), mediaType: "text/plain",
+            name: "second", operationID: "d.asset.import")
+        let unused = try await store.publishWorkflowAsset(data: Data("unused".utf8), mediaType: "text/plain",
+            name: "unused", operationID: "d.asset.import")
+        let ref = first.record.reference, other = second.record.reference
+        func node() throws -> WorkflowNode {
+            try #require(WorkflowRegistry.standard.operation("d.value.input")).definition.makeNode()
+        }
+        var value = try node(); value.dataConfiguration = .init(value: .asset(ref))
+        var duplicates = try node(); duplicates.assetReference = ref
+        duplicates.dataConfiguration = .init(value: .asset(ref),
+            rules: [.init(comparison: .equals, value: .asset(ref))],
+            items: [.init(id: "first", value: .asset(ref)), .init(id: "other", value: .asset(other))])
+        var itemOnly = try node()
+        itemOnly.dataConfiguration = .init(value: .text("item references"), items: [.init(id: "source", value: .asset(ref))])
+        var ruleOnly = try node()
+        ruleOnly.dataConfiguration = .init(value: .text("rule references"), rules: [.init(comparison: .equals, value: .asset(other))])
+        var music = try node()
+        music.dataConfiguration = .init(value: try WorkflowNoteSequence(clock: .seconds,
+            notes: [.init(id: "n", pitch: 60, start: 0, end: 0.2, velocity: 0.5)], duration: 0.2,
+            sources: [ref, other]).datum())
+        let graph = WorkflowGraph(name: "structured references", nodes: [value, duplicates, itemOnly, ruleOnly, music])
+        let derived = try await store.publishWorkflowAsset(data: Data("derived".utf8), mediaType: "text/plain",
+            name: "derived once", parents: [ref, ref], operationID: "test.derived")
+        let archive = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: archive.revision)
+        let firstUses = try await store.assetLocationOverview(first.asset.id)
+        #expect(firstUses.knownUseCount == 5)
+        #expect(firstUses.knownUses.filter { $0.kind == .graph }.count == 4)
+        #expect(firstUses.knownUses.contains { $0.nodeID == itemOnly.id })
+        #expect(firstUses.knownUses.filter { $0.nodeID == duplicates.id }.count == 1)
+        #expect(firstUses.knownUses.filter { $0.assetID == derived.asset.id }.count == 1)
+        let secondUses = try await store.assetLocationOverview(second.asset.id)
+        #expect(secondUses.knownUseCount == 3)
+        #expect(Set(secondUses.knownUses.compactMap(\.nodeID)) == Set([duplicates.id, ruleOnly.id, music.id]))
+        #expect(firstUses.knownUses.filter { $0.kind == .graph }.allSatisfy { $0.graphID == graph.id })
+        #expect(try await store.assetLocationOverview(unused.asset.id).knownUseCount == 0)
+        try await store.close()
+    }
+
+    @Test func nestedUsesNavigateRootContainerAndToolsAndHistoryHaveNoInventedTarget() async throws {
+        let (_, store, source) = try await fixture()
+        let first = try await store.importWorkflowMediaFile(at: source, mode: .copy)
+        let second = try await store.publishWorkflowAsset(data: Data("second".utf8), mediaType: "text/plain",
+            name: "second", operationID: "d.asset.import")
+        func node(_ operation: String, _ title: String) throws -> WorkflowNode {
+            var node = try #require(WorkflowRegistry.standard.operation(operation)).definition.makeNode()
+            node.title = title; return node
+        }
+        var yes = try node("d.value.input", "inner first")
+        yes.dataConfiguration = .init(value: .asset(first.record.reference))
+        var no = try node("d.value.input", "inner second")
+        no.dataConfiguration = .init(value: .asset(second.record.reference))
+        let yesGraph = WorkflowGraph(name: "then graph", nodes: [yes])
+        let noGraph = WorkflowGraph(name: "otherwise graph", nodes: [no])
+        var branch = try node("d.control.branch", "branch")
+        branch.control = .branch(predicate: .init(comparison: .equals, value: .boolean(true)),
+            then: yesGraph, otherwise: noGraph)
+        var loop = try node("d.control.loop", "loop")
+        loop.control = .loop(body: WorkflowGraph(name: "loop body", nodes: [branch]), stateSchema: .text,
+            maximumIterations: 2, until: .init(comparison: .equals, value: .text("done")))
+        var map = try node("d.control.map", "root container")
+        map.control = .map(body: WorkflowGraph(name: "map body", nodes: [loop]), continueOnFailure: false)
+        let graph = WorkflowGraph(name: "root workflow", nodes: [map])
+        var toolGraph = WorkflowGraph(name: "tool body", nodes: [yes])
+        toolGraph.interface = .init(outputs: [.init(name: "output", nodeID: yes.id, schema: .asset(.text))])
+        let tool = WorkflowToolDefinition(name: "retained tool", graph: toolGraph)
+        // The frozen history reuses node/graph identities but must remain a separate use.
+        var history = WorkflowRun(graph: yesGraph, targetNodeID: yes.id)
+        var step = WorkflowStepRun(node: yes, signature: "legacy history",
+            inputs: ["other": .asset(second.record.reference)],
+            outputs: ["first": .asset(first.record.reference),
+                "duplicates": .collection([.init(asset: first.record.reference, seed: "1"),
+                    .init(asset: first.record.reference, seed: "2")])])
+        step.humanTask = .init(id: step.id, kind: .editText, title: "materials",
+            materials: .asset(second.record.reference), resultSchema: .asset(.text))
+        history.steps = [step]
+        let archive = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [history], expectedRevision: archive.revision, tools: [tool])
+        let uses = try await store.assetLocationOverview(first.asset.id).knownUses
+        #expect(uses.count == 3)
+        let nested = try #require(uses.first { $0.graphID != nil })
+        #expect(nested.graphID == graph.id && nested.nodeID == map.id)
+        #expect(nested.detail.contains("Map body") && nested.detail.contains("Loop body") && nested.detail.contains("Branch then"))
+        #expect(nested.detail.contains(yesGraph.id.uuidString) && nested.detail.contains(yes.id.uuidString))
+        let toolUse = try #require(uses.first { $0.title.contains(tool.name) })
+        #expect(toolUse.detail.contains("工具定义") && toolUse.graphID == nil && toolUse.nodeID == nil)
+        let runUse = try #require(uses.first { $0.kind == .run })
+        #expect(runUse.detail.contains("历史流程") && runUse.graphID == nil && runUse.nodeID == nil)
+        #expect(runUse.detail.contains(yesGraph.id.uuidString) && runUse.detail.contains(yes.id.uuidString))
+        #expect(uses.filter { $0.kind == .run }.count == 1)
+        let otherUses = try await store.assetLocationOverview(second.asset.id).knownUses
+        #expect(otherUses.count == 2)
+        #expect(otherUses.contains { $0.graphID == graph.id && $0.nodeID == map.id && $0.detail.contains("Branch otherwise") })
+        #expect(otherUses.filter { $0.kind == .run }.count == 1)
+        try await store.close()
+    }
+
+    @Test func checkpointOnlyAssetArgumentsAreKnownRunUses() async throws {
+        let (_, store, source) = try await fixture()
+        let imported = try await store.importWorkflowMediaFile(at: source, mode: .copy)
+        var node = try #require(WorkflowRegistry.standard.operation("d.value.input")).definition.makeNode()
+        node.parameters["publicName"] = .text("source")
+        node.dataConfiguration = .init(schema: .asset(.text))
+        var graph = WorkflowGraph(name: "checkpoint history", nodes: [node])
+        graph.interface = .init(inputs: [.init("source", .asset(.text))])
+        let plan = try WorkflowPlanCompiler().compile(graph, target: node.id)
+        var run = WorkflowRun(graph: graph, targetNodeID: node.id)
+        run.planCheckpoint = .init(runID: run.id, plan: plan,
+            arguments: ["source": .asset(imported.record.reference)])
+        let archive = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [], runs: [run], expectedRevision: archive.revision)
+        let overview = try await store.assetLocationOverview(imported.asset.id)
+        #expect(overview.knownUseCount == 1)
+        #expect(overview.knownUses.first?.kind == .run)
+        #expect(overview.knownUses.first?.graphID == nil && overview.knownUses.first?.nodeID == nil)
+        try await store.close()
+    }
+
+    @Test(arguments: ["project", "version", "kind", "digest"])
+    func historyReferenceWithSameAssetIDButDifferentIdentityDoesNotCount(difference: String) async throws {
+        let (_, store, source) = try await fixture()
+        let imported = try await store.importWorkflowMediaFile(at: source, mode: .copy)
+        let ref = imported.record.reference
+        let mismatch = WorkflowAssetReference(projectID: difference == "project" ? UUID() : ref.projectID,
+            assetID: ref.assetID, version: difference == "version" ? UUID() : ref.version,
+            kind: difference == "kind" ? .image : ref.kind,
+            sha256: difference == "digest" ? String(repeating: "0", count: 64) : ref.sha256)
+        var node = try #require(WorkflowRegistry.standard.operation("d.value.input")).definition.makeNode()
+        node.dataConfiguration = .init(value: .text("no local references"))
+        let graph = WorkflowGraph(name: "legacy materials history", nodes: [node])
+        var step = WorkflowStepRun(node: node, signature: "legacy history")
+        // Legacy human materials may describe an external version; matching the local
+        // asset ID alone must not turn that description into a use of our published version.
+        step.humanTask = .init(id: step.id, kind: .editText, title: "external materials",
+            materials: .asset(mismatch), resultSchema: .asset(mismatch.kind))
+        let run = WorkflowRun(graph: graph, targetNodeID: node.id, steps: [step])
+        let archive = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [run], expectedRevision: archive.revision)
+        #expect(try await store.assetLocationOverview(imported.asset.id).knownUseCount == 0)
+        // The exact reference in that same field must produce one run use.
+        step.humanTask?.materials = .asset(ref)
+        var exact = run; exact.steps = [step]
+        let current = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [exact], expectedRevision: current.revision)
+        #expect(try await store.assetLocationOverview(imported.asset.id).knownUseCount == 1)
+        try await store.close()
+    }
+
     @Test func knownUsesNameGraphNodeAndDerivedAsset() async throws {
         let (_, store, source) = try await fixture()
         let imported = try await store.importWorkflowMediaFile(at: source, mode: .reference)

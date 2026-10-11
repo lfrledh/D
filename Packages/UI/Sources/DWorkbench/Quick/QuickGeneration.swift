@@ -125,6 +125,8 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     @ObservationIgnored private var debounce: Task<Void, Never>?
     @ObservationIgnored private var writeTail: Task<Void, Error>?
     @ObservationIgnored private var diskRevision: UInt64 = 0
+    @ObservationIgnored private var writeToken: QuickCreationWriteToken?
+    @ObservationIgnored private var isLoading = false
 
     public init(store: ProjectStore, allowsSubmission: @escaping @MainActor () -> Bool = { true }, makeServices: @escaping @MainActor () throws -> WorkflowServices) {
         self.store = store; self.allowsSubmission = allowsSubmission; self.makeServices = makeServices
@@ -201,9 +203,12 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         scheduleSave()
     }
     public func load() async {
-        guard !isLoaded else { return }
+        guard !isLoaded, !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
         do {
-            state = try await store.quickCreationState(); diskRevision = state.revision
+            let loaded = try await store.loadQuickCreationStateForWriting()
+            state = loaded.state; writeToken = loaded.token; diskRevision = state.revision
             let original = state
             for index in state.runs.indices where [.running, .failed, .cancelled, .interrupted].contains(state.runs[index].status) {
                 let ids = [state.runs[index].id] + state.runs[index].candidates.map(\.attemptID)
@@ -391,8 +396,10 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
             var value = state
             guard diskRevision < UInt64.max else { throw WorkflowIssue("快速记录版本已达上限。") }
             value.revision = diskRevision + 1
-            let savedRevision = try await store.saveQuickCreationState(value, expectedRevision: diskRevision)
-            diskRevision = savedRevision; state.revision = savedRevision; saveIssue = nil
+            guard let writeToken else { throw WorkflowIssue("快速记录没有有效的保存身份。") }
+            let saved = try await store.saveQuickCreationState(value, expectedRevision: diskRevision, token: writeToken)
+            self.writeToken = saved
+            diskRevision = saved.revision; state.revision = saved.revision; saveIssue = nil
         }
         writeTail = task
         do { try await task.value } catch { saveIssue = error.localizedDescription; throw error }

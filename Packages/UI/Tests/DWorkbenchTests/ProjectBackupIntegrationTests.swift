@@ -5,6 +5,38 @@ import Testing
 
 @Suite("Project backup snapshot and independent restore", .serialized)
 struct ProjectBackupIntegrationTests {
+    @Test @MainActor func quickConflictBackupRestoresCurrentDiskWithoutSavingStaleControllerDraft() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("QuickConflictBackup-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("original.dproject"), name: "conflict")
+        let quick = QuickGenerationController(store: store) { throw WorkflowIssue("No execution") }
+        await quick.load(); quick.select(operationID: "d.model.language", modelID: "fixture")
+        let draftID = try #require(quick.draft?.id)
+        quick.setParameter("task", value: .text("initial"), draftID: draftID)
+        try await quick.flush()
+        var external = quick.state
+        external.drafts[0].node.parameters["task"] = .text("external same revision")
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let bytes = try encoder.encode(external)
+        let file = store.rootURL.appendingPathComponent("quick-creation.json")
+        quick.setParameter("task", value: .text("unsaved local draft"), draftID: draftID)
+        let draft = quick.draft
+        try bytes.write(to: file)
+        let backup = root.appendingPathComponent("current.dbackup")
+        _ = try await store.createBackup(at: backup)
+        await #expect(throws: ProjectStoreError.externalModification) { try await quick.flush() }
+        #expect(quick.draft == draft && quick.saveIssue != nil)
+        #expect(try Data(contentsOf: file) == bytes)
+        let restoredURL = root.appendingPathComponent("restored.dproject")
+        _ = try await ProjectStore.restoreBackup(at: backup, to: restoredURL)
+        let restored = try await ProjectStore.open(at: restoredURL)
+        #expect(try await restored.quickCreationState() == external)
+        #expect(try Data(contentsOf: restoredURL.appendingPathComponent("quick-creation.json")) == bytes)
+        #expect(try Data(contentsOf: file) == bytes)
+        try await restored.close(); try await store.close()
+    }
+
     @Test @MainActor func restoredQuickUsesNamedOwnerAndColdReopensWithoutGlobalWrites() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("RestoredQuick-" + UUID().uuidString)
