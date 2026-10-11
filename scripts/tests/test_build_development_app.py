@@ -320,7 +320,7 @@ class Fixture:
         license_path.parent.mkdir()
         license_path.write_bytes(b"synthetic-tokenizers-license\n")
 
-        lock = self.source / "D.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+        lock = self.source / "D.xcworkspace/xcshareddata/swiftpm/Package.resolved"
         lock.parent.mkdir(parents=True)
         lock.write_text(json.dumps({
             "version": 3,
@@ -487,6 +487,10 @@ class BuildDevelopmentAppTests(unittest.TestCase):
 
     def test_success_runs_four_stages_and_reports_three_manifests(self) -> None:
         fixture = self.fixture()
+        # The obsolete inner lock must not control the outer workspace build.
+        inner = fixture.source / "D.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+        inner.parent.mkdir(parents=True, exist_ok=True)
+        inner.write_text('{"pins": []}', encoding="utf-8")
         protected = {
             path: _digest(path)
             for path in (
@@ -764,7 +768,10 @@ raise SystemExit(1)
 
     def test_locked_checkout_mismatch_fails_before_run_creation(self) -> None:
         fixture = self.fixture()
-        lock = fixture.source / "D.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+        lock = fixture.source / "D.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+        inner = fixture.source / "D.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+        inner.parent.mkdir(parents=True, exist_ok=True)
+        inner.write_bytes(lock.read_bytes())  # valid old lock cannot mask wrong actual lock
         value = json.loads(lock.read_text())
         value["pins"][0]["state"]["revision"] = "d" * 40
         lock.write_text(json.dumps(value), encoding="utf-8")

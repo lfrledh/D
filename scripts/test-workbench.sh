@@ -12,6 +12,8 @@ if ! cmp -s "$PROJECT_ROOT/Packages/UI/Sources/DWorkbench/Models/Resources/flux2
   echo "Model catalog differs from the backend's fixed manifest." >&2
   exit 1
 fi
-# CPU fixtures exercise application ownership and persistence; no MLX or model download.
+# CPU fixtures do not run models. The integration test target still compiles MLX.
+# Keep dependency selection locked; caller may pass filter/cache/job options.
 swift test --package-path "$PROJECT_ROOT/Packages/UI" --scratch-path "$WORKBENCH_CACHE" \
+  --force-resolved-versions --skip-update "$@" \
   2>&1 | tee "$DEVELOPMENT_ROOT/Logs/workbench-package-tests.log"

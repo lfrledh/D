@@ -449,7 +449,7 @@ def _validate_packaging_inputs(paths: dict[str, Path], source_root: Path) -> Non
 
 
 def _package_lock(source_root: Path) -> tuple[Path, list[tuple[str, str]]]:
-    path = source_root / "D.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+    path = source_root / "D.xcworkspace/xcshareddata/swiftpm/Package.resolved"
     _regular(path, "workspace Package.resolved")
     value = _read_json(path, "workspace Package.resolved")
     if not isinstance(value, dict) or not isinstance(value.get("pins"), list):
