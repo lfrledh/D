@@ -625,6 +625,81 @@ struct QuickGenerationTests {
         try await canvas.close(); try await store.close()
     }
 
+    @Test func independentQuickTokensKeepPublishedRetryOwnershipAndExactBytes() async throws {
+        let (store, _, quick, canvas) = try await fixture()
+        try await quick.flush()
+        let publisher = try await store.loadQuickCreationStateForWriting()
+        let other = try await store.loadQuickCreationStateForWriting()
+        #expect(publisher.state == other.state)
+        let baseRevision = publisher.state.revision
+        var attempted = publisher.state
+        attempted.drafts[0].node.parameters["task"] = .text("token-owned publication")
+        var competing = other.state
+        competing.drafts[0].node.parameters["task"] = .text("other token must not overwrite")
+        let injected = WorkflowIssue("controlled token publication failure")
+        await #expect(throws: injected) {
+            _ = try await store.saveQuickCreationState(attempted, expectedRevision: baseRevision,
+                token: publisher.token, afterPublication: { throw injected })
+        }
+        let file = store.rootURL.appendingPathComponent("quick-creation.json")
+        let published = try Data(contentsOf: file)
+        var expectedPublication = attempted; expectedPublication.revision = baseRevision + 1
+        #expect(try JSONDecoder().decode(QuickCreationState.self, from: published) == expectedPublication)
+        for inspect in [false, true] {
+            if inspect {
+                #expect(try await store.quickCreationState() == expectedPublication)
+                let plan = try await store.backupPlan()
+                #expect(plan.files.first { $0.relativePath == "quick-creation.json" }?.data == published)
+            }
+            await #expect(throws: ProjectStoreError.externalModification) {
+                _ = try await store.saveQuickCreationState(competing, expectedRevision: other.state.revision,
+                    token: other.token)
+            }
+            #expect(try Data(contentsOf: file) == published)
+        }
+        // Only the original token can recover its exact post-publication failure.
+        let advanced = try await store.saveQuickCreationState(attempted, expectedRevision: baseRevision,
+            token: publisher.token)
+        #expect(advanced.revision == baseRevision + 2)
+        var expectedRetry = attempted; expectedRetry.revision = advanced.revision
+        let retried = try Data(contentsOf: file)
+        #expect(try JSONDecoder().decode(QuickCreationState.self, from: retried) == expectedRetry)
+        await #expect(throws: ProjectStoreError.externalModification) {
+            _ = try await store.saveQuickCreationState(competing, expectedRevision: other.state.revision,
+                token: other.token)
+        }
+        #expect(try Data(contentsOf: file) == retried)
+        // Exercise exact-byte protection while this same token owns another pending
+        // publication. A legal change at its published revision must revoke the exception.
+        attempted.drafts[0].node.parameters["task"] = .text("second token-owned publication")
+        await #expect(throws: injected) {
+            _ = try await store.saveQuickCreationState(attempted, expectedRevision: advanced.revision,
+                token: advanced, afterPublication: { throw injected })
+        }
+        let secondPublication = try Data(contentsOf: file)
+        var external = try JSONDecoder().decode(QuickCreationState.self, from: secondPublication)
+        #expect(external.revision == advanced.revision + 1)
+        #expect(external.drafts[0].node.parameters["task"] == .text("second token-owned publication"))
+        external.drafts[0].node.parameters["task"] = .text("external change at same published revision")
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let externalBytes = try encoder.encode(external)
+        #expect(externalBytes != secondPublication)
+        try externalBytes.write(to: file)
+        #expect(try await store.quickCreationState() == external)
+        let plan = try await store.backupPlan()
+        #expect(plan.files.first { $0.relativePath == "quick-creation.json" }?.data == externalBytes)
+        await #expect(throws: ProjectStoreError.externalModification) {
+            _ = try await store.saveQuickCreationState(attempted, expectedRevision: advanced.revision, token: advanced)
+        }
+        #expect(try Data(contentsOf: file) == externalBytes)
+        await #expect(throws: ProjectStoreError.externalModification) {
+            _ = try await store.saveQuickCreationState(competing, expectedRevision: other.state.revision,
+                token: other.token)
+        }
+        #expect(try Data(contentsOf: file) == externalBytes)
+        try await canvas.close(); try await store.close()
+    }
+
     @Test func firstLegacyPublicationFailureKeepsItsBaselineThroughReadonlyInspection() async throws {
         let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("QuickPending-" + UUID().uuidString)
