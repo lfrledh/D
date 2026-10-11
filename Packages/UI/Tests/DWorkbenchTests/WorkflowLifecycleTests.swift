@@ -1982,6 +1982,13 @@ extension WorkflowLifecycleTests {
             c.openBody(nodeID: control.id, slot: slot); #expect(c.bodyPath.isEmpty)
             c.externalOperationBusy = { false }
             await gate.open(); await execution.value
+            try await c.prepareForClose()
+            c.openBody(nodeID: control.id, slot: slot); #expect(c.bodyPath.isEmpty)
+            c.cancelClosing(); c.openBody(nodeID: control.id, slot: slot)
+            let beforeClosing = c.bodyPath
+            try await c.prepareForClose(); c.closeBody()
+            #expect(c.bodyPath == beforeClosing && c.graphs == graphs)
+            c.cancelClosing(); c.closeBody()
             try await c.close()
             c.openBody(nodeID: control.id, slot: slot); #expect(c.bodyPath.isEmpty)
         } catch { await gate.open(); await execution.value; try? await c.close(); try? await store.close(); throw error }
@@ -1992,11 +1999,11 @@ extension WorkflowLifecycleTests {
         let (root, unused, engine, _) = try await fixture(); try await unused.close()
         let suite = "D.A2.Directory." + UUID().uuidString
         let settings = try #require(UserDefaults(suiteName: suite)); defer { settings.removePersistentDomain(forName: suite) }
-        var validations = 0
+        let validationProbe = A2DirectoryValidationProbe()
         let owner = ProjectSession(sessionFactory: { _ in
             WorkbenchSession(engine: engine, backendID: "fixture.image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
                 shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text",
-                validateTextModel: { url in validations += 1; return .init(directory: url, revision: "fixture") })
+                validateTextModel: { url in await validationProbe.validate(url, revision: "fixture") })
         }, settings: settings)
         await owner.createProject(at: root.appendingPathComponent("directory.dproject"))
         await owner.registerTextModel(at: root); await owner.openWorkflow()
@@ -2007,12 +2014,15 @@ extension WorkflowLifecycleTests {
         let execution = Task { await c.run(target: target.nodeID, only: false) }
         do {
             try await waitForRepairGate(gate)
-            let before = validations, graphs = c.graphs, choices = owner.explicitModelChoices
+            let before = await validationProbe.count, graphs = c.graphs, choices = owner.explicitModelChoices
+            c.errorMessage = nil; owner.errorMessage = nil
+            let currentTarget = try #require(c.modelSelectionTarget())
             await owner.registerWorkflowModel(at: root.appendingPathComponent("not-a-model"), target: target, controller: c)
-            #expect(owner.errorMessage != nil || c.errorMessage != nil, "Refusing a completed directory selection must provide visible feedback")
-            #expect(validations == before && c.graphs == graphs && owner.explicitModelChoices == choices)
+            #expect(c.errorMessage?.contains("当前任务正在运行或保存") == true, "Refusing a completed directory selection must provide visible feedback")
+            #expect(await validationProbe.count == before)
+            #expect(c.graphs == graphs && owner.explicitModelChoices == choices)
             // Already registered identity remains a normal edit, creating a copy rather than altering the run.
-            c.bindModel("text:already-registered", to: target)
+            c.bindModel("text:already-registered", to: currentTarget)
             #expect(c.rootGraph?.id != target.graphID)
             #expect(c.graphs.first { $0.id == target.graphID } == graphs.first { $0.id == target.graphID })
             await gate.open(); await execution.value
@@ -2059,32 +2069,58 @@ extension WorkflowLifecycleTests {
         try await c.close(); try await store.close()
     }
 
-    @Test func directoryRegistrationAdmissionAndLateFeedbackKeepExplicitTarget() async throws {
+
+    @Test(arguments: [false, true])
+    func directoryRegistrationAdmissionAndLateFeedbackKeepExplicitTarget(startRun: Bool) async throws {
         let (root, unused, engine, _) = try await fixture(); try await unused.close()
         let suite = "D.A2.DirectoryLate." + UUID().uuidString
         let settings = try #require(UserDefaults(suiteName: suite)); defer { settings.removePersistentDomain(forName: suite) }
-        let validation = WorkflowSubmitGate()
-        var suspendValidation = false
+        let probe = A2DirectoryValidationProbe()
+        let pending = root.appendingPathComponent("pending-model")
+        try FileManager.default.createDirectory(at: pending, withIntermediateDirectories: true)
         let owner = ProjectSession(sessionFactory: { _ in
             WorkbenchSession(engine: engine, backendID: "fixture.image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
                 shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text",
-                validateTextModel: { url in if suspendValidation { await validation.wait() }; return .init(directory: url, revision: "registered") })
+                validateTextModel: { url in await probe.validate(url, revision: "registered") })
         }, settings: settings)
-        await owner.createProject(at: root.appendingPathComponent("late.dproject")); await owner.openWorkflow()
+        await owner.createProject(at: root.appendingPathComponent("late.dproject"))
+        await owner.registerTextModel(at: root); await owner.openWorkflow()
         let c = try #require(owner.workflow); c.addExample("text"); c.selectedNodeID = c.graph?.nodes[1].id
+        let node = try #require(c.selectedNodeID)
+        c.setParameter(nodeID: node, key: "modelID", value: .text("text:registered"))
         let target = try #require(c.modelSelectionTarget())
         try owner.checkWorkflowModelRegistration(target: target, controller: c)
-        suspendValidation = true
-        let registration = Task { await owner.registerWorkflowModel(at: root, target: target, controller: c) }
-        try await waitForRepairGate(validation)
-        c.setParameter(nodeID: target.nodeID, key: "modelID", value: .text("text:new-selection"))
+        await probe.block(pending)
+        let registration = Task { await owner.registerWorkflowModel(at: pending, target: target, controller: c) }
+        try await waitForRepairGate(probe.gate)
+        let executionGate = WorkflowSubmitGate(); var execution: Task<Void, Never>?
+        if startRun {
+            await engine.suspend(using: executionGate)
+            execution = Task { await c.run(target: target.nodeID, only: false) }
+            try await waitForRepairGate(executionGate)
+            #expect(c.isCurrent(target))
+        } else { c.setParameter(nodeID: target.nodeID, key: "modelID", value: .text("text:new-selection")) }
         #expect(throws: WorkflowIssue.self) { try owner.checkWorkflowModelRegistration(target: target, controller: c) }
-        await validation.open(); await registration.value
-        #expect(c.graph?.nodes.first { $0.id == target.nodeID }?.parameters["modelID"] == .text("text:new-selection"))
+        let graphBefore = c.graph
+        await probe.gate.open(); await registration.value
+        #expect(c.graph == graphBefore)
         #expect(c.errorMessage?.contains("模型已登记，但节点未绑定") == true)
+        if startRun { #expect(c.errorMessage?.contains("正在运行或保存") == true) }
         #expect(owner.explicitModelChoices.contains { $0.id == "text:registered" })
-        #expect(await engine.requests.isEmpty)
+        await executionGate.open(); await execution?.value
         #expect(await owner.requestClose())
         #expect(throws: WorkflowIssue.self) { try owner.checkWorkflowModelRegistration(target: target, controller: c) }
+    }
+}
+
+private actor A2DirectoryValidationProbe {
+    private(set) var count = 0
+    private var blockedURL: URL?
+    let gate = WorkflowSubmitGate()
+    func block(_ url: URL) { blockedURL = url }
+    func validate(_ url: URL, revision: String) async -> ModelReference {
+        count += 1
+        if url == blockedURL { await gate.wait() }
+        return .init(directory: url, revision: revision)
     }
 }
