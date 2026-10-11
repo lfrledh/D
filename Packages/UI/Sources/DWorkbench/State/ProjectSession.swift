@@ -1540,13 +1540,26 @@ public final class ProjectSession {
         } catch { workflow?.errorMessage = error.localizedDescription }
     }
 
-    public func publishTextToWorkflow() async {
+    public func publishTextToWorkflow(target suppliedTarget: WorkflowCanvasInsertionTarget? = nil,
+                                      controller expectedController: WorkflowController? = nil) async {
         guard let text, let store, !isChangingProject, !closePending else { errorMessage = "请先在文字编辑器打开或创建文稿。"; return }
-        // Snapshot before suspension; later typing cannot modify the publication.
+        // Capture both ends before suspension. A native action can supply the
+        // scope it captured synchronously, before scheduling its Task.
         let document = text.editor.document
+        let initialController = expectedController ?? workflow
+        let initialTarget = suppliedTarget ?? initialController?.canvasInsertionTarget()
+        if let initialController {
+            guard workflow === initialController, initialController.services.store === store, initialTarget != nil else {
+                errorMessage = "目标流程已改变或当前不可编辑，文稿未发布。"; return
+            }
+        }
         await openWorkflow()
-        guard self.store === store, let controller = workflow, controller.services.store === store, !closePending else { return }
-        await controller.publishText(document.text, origin: "text-document:" + document.id.uuidString + ":" + document.revision.uuidString)
+        guard self.store === store, let controller = workflow, controller.services.store === store,
+              !isChangingProject, !closePending,
+              initialController == nil || initialController === controller,
+              let target = initialTarget ?? controller.canvasInsertionTarget() else { return }
+        await controller.publishText(document.text, origin: "text-document:" + document.id.uuidString + ":" + document.revision.uuidString,
+                                     target: target)
     }
 
     public func returnWorkflowText(_ reference: WorkflowAssetReference) async {

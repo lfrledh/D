@@ -572,7 +572,7 @@ struct WorkflowLifecycleTests {
         try await reopened.close()
     }
 
-    @Test func editsAndGraphSwitchDuringSubmittedModelRunKeepOriginalSnapshot() async throws {
+    @Test func editsAndGraphSwitchDuringSubmittedModelRunCreateCopyAndKeepOriginalSnapshot() async throws {
         let (_, store, engine, c) = try await fixture()
         let gate = WorkflowSubmitGate(); await engine.suspend(using: gate)
         c.addExample("text"); let original = try #require(c.graph)
@@ -583,6 +583,9 @@ struct WorkflowLifecycleTests {
         }
         let submitted = try #require(await engine.requests.first)
         c.setParameter(nodeID: original.nodes[0].id, key: "text", value: .text("new unsent input"))
+        let copy = try #require(c.graph)
+        #expect(copy.id != original.id)
+        #expect(copy.nodes[0].parameters["text"] == .text("new unsent input"))
         c.addExample("template"); let other = try #require(c.graph)
         let active = try #require(c.activePresentationRun)
         #expect(active.graph.id == original.id && active.targetNodeID == original.nodes[1].id)
@@ -598,7 +601,8 @@ struct WorkflowLifecycleTests {
         #expect(run.graph.id == original.id)
         #expect(run.graph.nodes[0].parameters["text"] == original.nodes[0].parameters["text"])
         #expect(await engine.requests == [submitted])
-        #expect(c.graphs.first { $0.id == original.id }?.nodes[0].parameters["text"] == .text("new unsent input"))
+        #expect(c.graphs.first { $0.id == original.id }?.nodes[0].parameters["text"] == original.nodes[0].parameters["text"])
+        #expect(c.graphs.first { $0.id == copy.id } == copy)
         try await c.close(); try await store.close()
     }
 
@@ -804,6 +808,8 @@ struct WorkflowLifecycleTests {
         }
         #expect(await engine.requests.count == 1)
         c.setParameter(nodeID: graph.nodes[0].id, key: "text", value: .text("A edited after submission"))
+        let copy = try #require(c.graph)
+        #expect(copy.id != graph.id)
         let switchProject = Task { await subject.openProject(at: bURL) }
         for _ in 0..<2000 {
             if subject.isChangingProject { break }
@@ -818,7 +824,8 @@ struct WorkflowLifecycleTests {
         let history = try #require(try await old.workflowState().archive)
         #expect(history.runs.last?.status == .completed)
         #expect(history.runs.last?.graph.nodes[0].parameters["text"] == graph.nodes[0].parameters["text"])
-        #expect(history.graphs[0].nodes[0].parameters["text"] == .text("A edited after submission"))
+        #expect(history.graphs.first { $0.id == graph.id }?.nodes[0].parameters["text"] == graph.nodes[0].parameters["text"])
+        #expect(history.graphs.first { $0.id == copy.id }?.nodes[0].parameters["text"] == .text("A edited after submission"))
         #expect(history.assets.allSatisfy { $0.reference.projectID != bID })
         try await old.close(); #expect(await subject.requestClose())
     }
@@ -939,7 +946,7 @@ struct WorkflowLifecycleTests {
 
     @Test func futureWorkflowAndUnknownNodePreserveRawBytes() async throws {
         for variant in 0..<4 {
-            let (_, store, _, c) = try await fixture()
+            let (_, store, engine, c) = try await fixture()
             c.addExample("text")
             if variant == 2 { await c.run(target: try #require(c.graph?.nodes[0].id), only: false) }
             await c.save(); let saved = await store.snapshot(); try await store.close()
@@ -968,6 +975,19 @@ struct WorkflowLifecycleTests {
             let state = try await reopened.workflowState(); #expect(state.archive == nil); #expect(state.originalBytes == bytes)
             let second = try await reopened.workflowState(); #expect(second.archive == nil); #expect(second.originalBytes == bytes)
             await #expect(throws: (any Error).self) { _ = try await reopened.saveWorkflow(graphs: [], runs: [], expectedRevision: UUID()) }
+            let runtime = WorkbenchSession(engine: engine, backendID: "fixture",
+                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+            let readonly = WorkflowController(services: WorkflowServices(store: reopened, session: runtime,
+                resolveModel: { _, _ in throw WorkflowIssue("Readonly must not run") }))
+            await readonly.load()
+            #expect(readonly.readOnlyReason != nil && !readonly.canEditCanvas)
+            let assets = await reopened.snapshot().assets
+            readonly.addBlankGraph(); readonly.addExample("text"); readonly.addNode(operationID: "d.text.input")
+            readonly.setParameter(nodeID: UUID(), key: "text", value: .text("blocked")); readonly.undo(); readonly.redo()
+            await readonly.publishText("blocked", origin: "readonly-fixture")
+            #expect(readonly.graphs.isEmpty && !readonly.canUndo && !readonly.canRedo)
+            #expect(await reopened.snapshot().assets == assets)
+            readonly.deactivateAfterClose()
             #expect(try Data(contentsOf: url) == bytes); try await reopened.close()
         }
     }
@@ -1648,5 +1668,281 @@ extension WorkflowLifecycleTests {
         #expect(c.graphs == before)
         #expect(await engine.requests.isEmpty)
         c.externalOperationBusy = { false }; try await c.close(); try await store.close()
+    }
+}
+
+// D-LIMITED-REPAIR-20261011: production Store publication with a controlled
+// return boundary; fixtures never open a user's project or execute a real model.
+extension WorkflowLifecycleTests {
+    private func waitForRepairGate(_ gate: WorkflowSubmitGate) async throws {
+        for _ in 0..<2000 {
+            if await gate.entered { return }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        Issue.record("Publication did not reach its controlled boundary")
+        throw WorkflowIssue("Timed out waiting for publication")
+    }
+
+    @Test(arguments: ["switch", "delete", "close", "cancel", "busy", "failure"])
+    func textPublicationKeepsSavedAssetWhenTargetBecomesUnavailable(_ change: String) async throws {
+        let (_, store, _, c) = try await fixture()
+        c.addExample("text")
+        let target = try #require(c.canvasInsertionTarget())
+        let gate = WorkflowSubmitGate()
+        c.afterTextPublication = { await gate.wait(); if change == "failure" { throw WorkflowIssue("controlled handoff failure") } }
+        let operation = Task { await c.publishText("immutable publication", origin: "repair-fixture", target: target) }
+        try await waitForRepairGate(gate)
+        let ref = try #require(try await store.workflowState().archive?.assets.last?.reference)
+        switch change {
+        case "switch": c.addExample("template")
+        case "delete": c.undo()
+        case "close": try await c.prepareForClose(); c.deactivateAfterClose()
+        case "cancel": operation.cancel()
+        case "busy": c.externalOperationBusy = { true }
+        default: break
+        }
+        let before = c.graphs, selected = c.selectedNodeID
+        await gate.open(); await operation.value
+        #expect(c.graphs == before)
+        #expect(c.selectedNodeID == selected)
+        #expect(c.errorMessage?.contains("已保存") == true)
+        #expect(try await store.workflowText(ref) == "immutable publication")
+        // The publication never owns or releases this newer external reservation.
+        if change == "busy" { #expect(c.externalOperationBusy()); c.externalOperationBusy = { false } }
+        if change != "close" { try await c.saveExplicitEdits(); try await c.close() }
+        try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await reopened.workflowText(ref) == "immutable publication")
+        #expect(try await reopened.workflowState().archive?.graphs == before)
+        try await reopened.close()
+    }
+
+    @Test func textPublicationKeepsLayoutAndUsesTheCapturedInternalBody() async throws {
+        let (_, store, _, c) = try await fixture()
+        c.addLanguageExample(.data)
+        let map = try #require(c.graph?.nodes.first { $0.operationID == "d.control.map" })
+        c.openBody(nodeID: map.id, slot: "body")
+        let body = try #require(c.graph), target = try #require(c.canvasInsertionTarget())
+        #expect(!target.path.isEmpty)
+        let gate = WorkflowSubmitGate(); c.afterTextPublication = { await gate.wait() }
+        let publish = Task { await c.publishText("nested", origin: "fixture", target: target) }
+        try await waitForRepairGate(gate)
+        let node = try #require(body.nodes.first)
+        c.moveNode(id: node.id, x: 913, y: 417)
+        let before = try #require(c.graph)
+        await gate.open(); await publish.value
+        #expect(c.errorMessage == nil)
+        #expect(c.graph?.id == body.id)
+        #expect(c.graph?.nodes.count == before.nodes.count + 1)
+        #expect(c.graph?.layout.first { $0.nodeID == node.id }?.x == 913)
+        let saved = try #require(c.graph?.nodes.last?.assetReference)
+        #expect(try await store.workflowText(saved) == "nested")
+        c.undo(); #expect(c.graph == before)
+        c.redo(); #expect(c.graph?.nodes.last?.assetReference == saved)
+        // A second request from the internal body cannot fall into the outer graph.
+        let gate2 = WorkflowSubmitGate(); c.afterTextPublication = { await gate2.wait() }
+        let second = Task { await c.publishText("stay saved", origin: "fixture") }
+        try await waitForRepairGate(gate2)
+        c.closeBody(); let outer = c.graphs
+        await gate2.open(); await second.value
+        #expect(c.graphs == outer && c.errorMessage?.contains("已保存") == true)
+        try await c.close(); try await store.close()
+    }
+
+    @Test func textPublicationCancellationBeforeSavingAndStoreFailureDoNotCreateNodes() async throws {
+        let (_, store, _, c) = try await fixture()
+        let task = Task { withUnsafeCurrentTask { $0?.cancel() }; await c.publishText("cancelled", origin: "fixture") }
+        await task.value
+        #expect(c.graphs.isEmpty)
+        #expect(try await store.workflowState().archive?.assets.isEmpty == true)
+        try await store.close()
+        await c.publishText("unavailable", origin: "fixture")
+        #expect(c.graphs.isEmpty && c.errorMessage != nil)
+        c.deactivateAfterClose()
+    }
+
+    @Test(arguments: ["busy", "closing", "closed", "invalid-selection"])
+    func ordinaryCommandsRejectUnavailableStatesWithoutChangingHistoryOrSelection(_ state: String) async throws {
+        let (_, store, _, c) = try await fixture()
+        c.addExample("text"); let g = try #require(c.graph)
+        c.setParameter(nodeID: g.nodes[0].id, key: "text", value: .text("new")); c.undo()
+        let before = c.graphs, selection = c.selectedNodeID
+        let undo = c.canUndo, redo = c.canRedo
+        let target = try #require(c.canvasInsertionTarget())
+        switch state {
+        case "busy": c.externalOperationBusy = { true }
+        case "closing": try await c.prepareForClose()
+        case "closed": try await c.close()
+        default: c.selectedGraphID = UUID()
+        }
+        let pending = c.hasPendingSaves
+        c.setParameter(nodeID: g.nodes[0].id, key: "text", value: .text("blocked"))
+        c.setDataConfiguration(nodeID: g.nodes[0].id, value: .init(value: .text("blocked")))
+        c.disconnect(try #require(g.connections.first?.id))
+        c.connect(source: g.nodes[0].id, sourcePort: "output", target: g.nodes[1].id, targetPort: "input")
+        c.toggleCollapsed(g.nodes[0].id); c.moveNode(id: g.nodes[0].id, x: 999, y: 999)
+        c.moveNodes([.init(nodeID: g.nodes[0].id, x: 999, y: 999)], target: target)
+        c.copySelected(); c.deleteSelected(); c.addNode(operationID: "d.text.input")
+        c.addBlankGraph(); c.addExample("template"); c.addLanguageExample(.data)
+        #expect(!c.deleteNode(id: g.nodes[0].id, target: target))
+        c.undo(); c.redo()
+        #expect(!c.canUndo && !c.canRedo && !c.canEditCanvas)
+        #expect(c.graphs == before && c.selectedNodeID == selection && c.hasPendingSaves == pending)
+        if state == "closed" { try await store.close(); return }
+        c.externalOperationBusy = { false }; c.cancelClosing(); c.selectedGraphID = g.id
+        #expect(c.canUndo == undo && c.canRedo == redo)
+        c.redo(); #expect(c.graph?.nodes[0].parameters["text"] == .text("new"))
+        try await c.close(); try await store.close()
+    }
+
+    @Test func runningOriginalForksOnlyForRealEditsAndHistoryNeverChangesIt() async throws {
+        let (_, store, engine, c) = try await fixture()
+        c.addExample("text"); let original = try #require(c.graph)
+        let gate = WorkflowSubmitGate(); await engine.suspend(using: gate)
+        let execution = Task { await c.run(target: original.nodes[1].id, only: false) }
+        try await waitForRepairGate(gate)
+        let protected = try #require(c.rootGraph), submitted = await engine.requests
+        #expect(c.canEditCanvas && !c.canUndo)
+        c.undo(); #expect(c.graphs == [protected])
+        c.setParameter(nodeID: original.nodes[0].id, key: "text", value: original.nodes[0].parameters["text"]!)
+        c.disconnect(UUID()); #expect(c.graphs.count == 1)
+        c.setParameter(nodeID: original.nodes[0].id, key: "text", value: .text("copy edit"))
+        let copy = try #require(c.graph)
+        #expect(copy.id != protected.id && c.graphs.count == 2)
+        #expect(c.graphs.first { $0.id == protected.id } == protected)
+        c.undo(); #expect(c.graphs == [protected] && c.graph?.id == protected.id)
+        #expect(!c.canUndo && c.canRedo)
+        c.redo(); #expect(c.graph == copy && c.graphs.count == 2)
+        c.selectedGraphID = protected.id
+        var stale = original.nodes[0]; stale.title = "stale original title"
+        c.updateNode(stale, in: original.id)
+        #expect(c.errorMessage?.contains("重试") == true)
+        #expect(c.graph == copy)
+        c.moveNode(id: original.nodes[0].id, x: 700, y: 500)
+        #expect(c.graph?.id == copy.id && c.graphs.count == 2)
+        #expect(c.graph?.nodes[0].parameters["text"] == .text("copy edit"))
+        #expect(c.graphs.first { $0.id == protected.id } == protected)
+        c.selectedGraphID = protected.id
+        let target = try #require(c.canvasInsertionTarget()), beforeInsertion = c.graphs
+        let draft = QuickDraft(id: "copy-admission", node: original.nodes[1])
+        await #expect(throws: (any Error).self) { try await c.insertQuickSettings(draft, target: target) }
+        #expect(c.graphs == beforeInsertion && c.selectedGraphID == copy.id)
+        #expect(c.selectedNodeID == nil || c.graph?.nodes.contains { $0.id == c.selectedNodeID } == true)
+        let copyTarget = try #require(c.canvasInsertionTarget())
+        try await c.insertQuickSettings(draft, target: copyTarget)
+        #expect(c.graph?.nodes.count == copy.nodes.count + 1)
+        #expect(c.graphs.first { $0.id == protected.id } == protected)
+        let deletion = try #require(c.canvasInsertionTarget())
+        #expect(c.deleteNode(id: original.nodes[0].id, target: deletion))
+        let afterDelete = c.graphs
+        c.selectedGraphID = protected.id; c.selectedNodeID = original.nodes[0].id
+        let staleDeletion = try #require(c.canvasInsertionTarget())
+        #expect(!c.deleteNode(id: original.nodes[0].id, target: staleDeletion))
+        #expect(c.graphs == afterDelete && c.selectedGraphID == copy.id && c.selectedNodeID == nil)
+        c.selectedGraphID = protected.id; c.selectedNodeID = original.nodes[0].id
+        c.setParameter(nodeID: original.nodes[0].id, key: "text", value: .text("stale"))
+        #expect(c.graphs == afterDelete && c.selectedNodeID == nil)
+        c.externalOperationBusy = { true }; let blocked = c.graphs
+        c.setParameter(nodeID: original.nodes[0].id, key: "text", value: .text("blocked")); c.undo()
+        #expect(c.graphs == blocked); c.externalOperationBusy = { false }
+        await gate.open(); await execution.value
+        #expect(await engine.requests == submitted)
+        let final = c.graphs
+        try await c.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await reopened.workflowState().archive?.graphs == final)
+        try await reopened.close()
+    }
+
+    @Test func publicationAndRunningCopyShareAdmissionWithoutReleasingExternalBusy() async throws {
+        let (_, store, engine, c) = try await fixture()
+        c.addExample("text"); let original = try #require(c.graph)
+        let compute = WorkflowSubmitGate(); await engine.suspend(using: compute)
+        let execution = Task { await c.run(target: original.nodes[1].id, only: false) }
+        try await waitForRepairGate(compute)
+        let protected = try #require(c.rootGraph)
+        let publication = WorkflowSubmitGate(); c.afterTextPublication = { await publication.wait() }
+        let request = Task { await c.publishText("joint", origin: "fixture") }
+        try await waitForRepairGate(publication)
+        await publication.open(); await request.value
+        let copy = try #require(c.graph), ref = try #require(copy.nodes.last?.assetReference)
+        #expect(copy.id != protected.id && copy.nodes.count == protected.nodes.count + 1)
+        #expect(c.graphs.first { $0.id == protected.id } == protected)
+        #expect(try await store.workflowText(ref) == "joint")
+        // An old target must not redirect into the already existing copy, even
+        // with no external busy condition to mask an identity bug.
+        c.selectedGraphID = protected.id
+        let before = c.graphs
+        await c.publishText("old target", origin: "fixture")
+        #expect(c.graphs == before && c.errorMessage != nil)
+        #expect(!c.externalOperationBusy())
+        // A request from the copy is invalidated solely by switching selection.
+        c.selectedGraphID = copy.id
+        let later = WorkflowSubmitGate(); c.afterTextPublication = { await later.wait() }
+        let old = Task { await c.publishText("changed selection", origin: "fixture") }
+        try await waitForRepairGate(later)
+        c.selectedGraphID = protected.id
+        await later.open(); await old.value
+        #expect(c.graphs == before && c.errorMessage?.contains("已保存") == true)
+        #expect(!c.externalOperationBusy())
+        await compute.open(); await execution.value
+        try await c.close(); try await store.close()
+    }
+}
+
+extension WorkflowLifecycleTests {
+    @Test(arguments: [false, true])
+    func sessionPublicationCannotReachAReplacementProject(closeOnly: Bool) async throws {
+        let (root, unused, engine, _) = try await fixture(); try await unused.close()
+        let suite = "D.Repair.Publication." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite)); defer { settings.removePersistentDomain(forName: suite) }
+        let subject = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: engine, backendID: "fixture.image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text")
+        }, settings: settings)
+        let a = root.appendingPathComponent("A.dproject"), b = root.appendingPathComponent("B.dproject")
+        let other = try await ProjectStore.create(at: b, name: "B"); try await other.close()
+        await subject.createProject(at: a); await subject.createTextDocument(name: "source")
+        let document = try #require(subject.text?.editor.document.id)
+        subject.editText("source snapshot", documentID: document); await subject.saveText(); await subject.openWorkflow()
+        let c = try #require(subject.workflow), target = try #require(c.canvasInsertionTarget())
+        let gate = WorkflowSubmitGate(); c.afterTextPublication = { await gate.wait() }
+        let operation = Task { await subject.publishTextToWorkflow(target: target, controller: c) }
+        try await waitForRepairGate(gate)
+        let ref = try #require(try await c.services.store.workflowState().archive?.assets.last?.reference)
+        #expect(await subject.requestClose())
+        if !closeOnly { await subject.openProject(at: b); await subject.createTextDocument(name: "B draft"); await subject.openWorkflow() }
+        let next = subject.workflow, graphs = subject.workflow?.graphs, draft = subject.text?.editor.document
+        await gate.open(); await operation.value
+        #expect(subject.workflow === next && subject.workflow?.graphs == graphs)
+        #expect(subject.text?.editor.document == draft)
+        if !closeOnly {
+            let before = try await next?.services.store.workflowState().archive?.assets
+            // A queued native callback carrying the old controller must fail before saving into B.
+            await subject.publishTextToWorkflow(target: target, controller: c)
+            #expect(try await next?.services.store.workflowState().archive?.assets == before)
+            #expect(await subject.requestClose())
+        }
+        let reopened = try await ProjectStore.open(at: a)
+        #expect(try await reopened.workflowText(ref) == "source snapshot")
+        #expect(try await reopened.workflowState().archive?.graphs.isEmpty == true)
+        try await reopened.close()
+    }
+
+    @Test func publicationHistorySaveFailureRetainsAssetAndRetryDoesNotRepublish() async throws {
+        let (_, store, _, c) = try await fixture()
+        c.addExample("text")
+        c.beforeHistorySave = { throw WorkflowIssue("controlled history write failure") }
+        await c.publishText("saved independently", origin: "fixture")
+        let ref = try #require(c.graph?.nodes.last?.assetReference)
+        #expect(c.hasPendingSaves && c.errorMessage?.contains("已保存") == true)
+        #expect(try await store.workflowText(ref) == "saved independently")
+        let count = try await store.workflowState().archive?.assets.count
+        c.beforeHistorySave = {}; try await c.saveExplicitEdits()
+        #expect(try await store.workflowState().archive?.assets.count == count)
+        try await c.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await reopened.workflowState().archive?.graphs.last?.nodes.last?.assetReference == ref)
+        try await reopened.close()
     }
 }

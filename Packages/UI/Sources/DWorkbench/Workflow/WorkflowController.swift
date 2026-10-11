@@ -39,7 +39,10 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public private(set) var projectID: UUID?
     public private(set) var projectInstanceID: UUID?
     public private(set) var assetReferences: [UUID: WorkflowAssetReference] = [:]
-    public var canEditCanvas: Bool { !closed && !closing && !isRunning && !externalOperationBusy() && readOnlyReason == nil }
+    public var canEditCanvas: Bool {
+        !closed && !closing && !externalOperationBusy() && readOnlyReason == nil &&
+        (!isRunning || editingOriginalID != nil) && (graphs.isEmpty || graph != nil)
+    }
     public var selectedGraphID: UUID? { didSet { if oldValue != selectedGraphID { bodyPath = []; selectedNodeIDs = [] } } }
     public private(set) var bodyPath: [WorkflowBodyLocation] = []
     public var selectedNodeIDs: Set<UUID> = []
@@ -69,8 +72,8 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public var rootGraph: WorkflowGraph? { graphs.first { $0.id == selectedGraphID } }
     public var graph: WorkflowGraph? { rootGraph.flatMap { try? WorkflowGraphEditing.body(in: $0, path: bodyPath) } }
     public var selectedNode: WorkflowNode? { graph?.nodes.first { $0.id == selectedNodeID } }
-    public var canUndo: Bool { !closed && !closing && !undoStack.isEmpty && readOnlyReason == nil }
-    public var canRedo: Bool { !closed && !closing && !redoStack.isEmpty && readOnlyReason == nil }
+    public var canUndo: Bool { canEditCanvas && undoStack.last.map(historyPreservesOriginal) == true }
+    public var canRedo: Bool { canEditCanvas && redoStack.last.map(historyPreservesOriginal) == true }
     public var hasPendingSaves: Bool { services.hasPendingSaves || persistenceFailed }
     @ObservationIgnored public let services: WorkflowServices
     @ObservationIgnored private var undoStack: [[WorkflowGraph]] = []
@@ -78,11 +81,17 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     @ObservationIgnored private var persistenceFailed = false
     @ObservationIgnored private var cancelled = false
     @ObservationIgnored private var activeRunID: UUID?
+    // Set before execution can suspend; decision-saving operations have no
+    // editable execution owner and retain their independent admission rules.
+    private var editingOriginalID: UUID?
+    @ObservationIgnored private var editingCopies: [UUID: UUID] = [:]
     @ObservationIgnored private var closed = false
     @ObservationIgnored private var closing = false
     @ObservationIgnored private var writeTail: Task<Void, Error>?
     // Internal fault injection at the actual history transaction, used only by CPU tests.
     @ObservationIgnored var beforeHistorySave: () throws -> Void = {}
+    // Controlled suspension/failure at the real asset-to-graph handoff in CPU tests.
+    @ObservationIgnored var afterTextPublication: () async throws -> Void = {}
     @ObservationIgnored public var onChange: @MainActor () async -> Void = {}
 
     public init(services: WorkflowServices, registry: WorkflowRegistry = .standard) {
@@ -170,12 +179,14 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         } catch { errorMessage = error.localizedDescription }
     }
     public func bindExistingAsset(_ id: UUID, nodeID: UUID) async {
-        guard !closed, !closing, !isRunning, readOnlyReason == nil else { return }
+        guard canEditCanvas else { return }
         guard let target = assetBindingTarget(nodeID: nodeID) else { return }
         do {
             let ref = try await services.store.pinWorkflowAsset(id)
-            guard isCurrent(target) else { throw WorkflowIssue("流程或输入节点已改变；素材未绑定到另一位置。") }
-            attach(ref, nodeID: nodeID); try await persist()
+            guard canEditCanvas, isCurrent(target) else { throw WorkflowIssue("流程或输入节点已改变；素材未绑定到另一位置。") }
+            attach(ref, nodeID: nodeID)
+            guard graph?.nodes.first(where: { $0.id == nodeID })?.assetReference == ref else { throw WorkflowIssue("素材已保存，但节点未绑定；请在当前编辑副本中重新选择。") }
+            try await persist()
         } catch { errorMessage = error.localizedDescription }
     }
     public func assetBindingTarget(nodeID: UUID) -> WorkflowAssetBindingTarget? {
@@ -191,10 +202,17 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         graph?.nodes.first(where: { $0.id == target.node.id }) == target.node
     }
     public func bindRecordedAsset(_ id: UUID, target: WorkflowAssetBindingTarget) async {
+        guard canEditCanvas, isCurrent(target) else {
+            errorMessage = "录音已保存，但原输入位置已改变或当前不可编辑；请从项目素材中重新选择。"
+            if !closed, !closing { await refreshAvailableAssets(instanceID: target.instanceID); await onChange() }
+            return
+        }
         do {
             let ref = try await services.store.pinWorkflowAsset(id)
-            guard isCurrent(target), ref.kind == .audio else { throw WorkflowIssue("录音已保存，但原输入位置已改变；请从项目素材中重新选择。") }
-            attach(ref, nodeID: target.node.id); try await persist(); await onChange()
+            guard canEditCanvas, isCurrent(target), ref.kind == .audio else { throw WorkflowIssue("录音已保存，但原输入位置已改变；请从项目素材中重新选择。") }
+            attach(ref, nodeID: target.node.id)
+            guard graph?.nodes.first(where: { $0.id == target.node.id })?.assetReference == ref else { throw WorkflowIssue("录音已保存，但节点未绑定；请重新选择。") }
+            try await persist(); await onChange()
         } catch { errorMessage = error.localizedDescription }
     }
     public func toggleCollapsed(_ id: UUID) {
@@ -217,19 +235,74 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         } catch { errorMessage = "确认草稿未改变：\(error.localizedDescription)" }
     }
 
-    private func edit(_ action: (inout WorkflowGraph) throws -> Void, changesConfiguration: Bool = true) {
-        guard !closed, !closing, readOnlyReason == nil, let index = graphs.firstIndex(where: { $0.id == selectedGraphID }) else { return }
+    @discardableResult
+    private func edit(_ action: (inout WorkflowGraph) throws -> Void, changesConfiguration: Bool = true) -> Bool {
+        guard canEditCanvas, let selectedIndex = graphs.firstIndex(where: { $0.id == selectedGraphID }) else { return false }
         do {
             let before = graphs
-            var value = try WorkflowGraphEditing.body(in: graphs[index], path: bodyPath)
+            let originalID = graphs[selectedIndex].id
+            let forksOriginal = isRunning && editingOriginalID == originalID
+            let path = bodyPath, selection = selectedNodeIDs
+            if forksOriginal, let copyID = editingCopies[originalID],
+               let copy = graphs.first(where: { $0.id == copyID }) {
+                // An action captured from the original must never overwrite an
+                // existing draft. Open it explicitly; the user can retry there.
+                selectedGraphID = copy.id
+                if (try? WorkflowGraphEditing.body(in: copy, path: path)) != nil { bodyPath = path }
+                selectedNodeIDs = selection.intersection(Set(graph?.nodes.map(\.id) ?? []))
+                if graph?.nodes.contains(where: { $0.id == selectedNodeID }) != true { selectedNodeID = nil }
+                errorMessage = "此运行已有编辑副本，已打开；请在副本中重试修改。"
+                return false
+            }
+            let index = selectedIndex
+            let body = try WorkflowGraphEditing.body(in: graphs[index], path: path)
+            var value = body
             try action(&value)
+            guard value != body else { return false }
             if changesConfiguration { value.revision = UUID() }
             try registry.validate(value, tools: tools)
-            let replacement = try WorkflowGraphEditing.replacingBody(in: graphs[index], path: bodyPath, with: value)
-            guard replacement != graphs[index] else { return }
+            var replacement = try WorkflowGraphEditing.replacingBody(in: graphs[index], path: path, with: value)
             undoStack.append(before); if undoStack.count > 100 { undoStack.removeFirst() }; redoStack = []
-            graphs[index] = replacement; errorMessage = nil
-        } catch { errorMessage = error.localizedDescription }
+            if forksOriginal {
+                replacement.id = UUID(); replacement.revision = UUID()
+                replacement.name += " · 编辑副本"
+                editingCopies[originalID] = replacement.id
+                graphs.append(replacement)
+            } else { graphs[index] = replacement }
+            if forksOriginal {
+                selectedGraphID = replacement.id; bodyPath = path
+                selectedNodeIDs = selection.intersection(Set(value.nodes.map(\.id)))
+                progressMessage = "正在编辑副本；运行中的原流程和已提交请求保持不变。"
+            }
+            errorMessage = nil
+            return true
+        } catch { errorMessage = error.localizedDescription; return false }
+    }
+
+    private func historyPreservesOriginal(_ candidate: [WorkflowGraph]) -> Bool {
+        guard isRunning, let id = editingOriginalID else { return true }
+        let original = graphs.filter { $0.id == id }, proposed = candidate.filter { $0.id == id }
+        return original.count == 1 && proposed == original
+    }
+    private func applyHistory(_ value: [WorkflowGraph]) {
+        let previous = selectedGraphID, path = bodyPath
+        graphs = value
+        if let original = editingOriginalID, previous == original, let copy = editingCopies[original], value.contains(where: { $0.id == copy }) {
+            selectedGraphID = copy
+        } else if !value.contains(where: { $0.id == previous }) {
+            selectedGraphID = value.first(where: { $0.id == editingOriginalID })?.id ?? value.first?.id
+        }
+        if let rootGraph, (try? WorkflowGraphEditing.body(in: rootGraph, path: path)) != nil { bodyPath = path } else { bodyPath = [] }
+        if graph?.nodes.contains(where: { $0.id == selectedNodeID }) != true { selectedNodeID = nil }
+        selectedNodeIDs.formIntersection(Set(graph?.nodes.map(\.id) ?? []))
+    }
+    private func editingRootID(for run: WorkflowRun) -> UUID? {
+        var current = run, seen: Set<UUID> = []
+        while let parent = current.scope?.originCall?.address.runID {
+            guard seen.insert(current.id).inserted, let value = runs.first(where: { $0.id == parent }) else { return nil }
+            current = value
+        }
+        return graphs.contains(where: { $0.id == current.graph.id }) ? current.graph.id : nil
     }
     public func openBody(nodeID: UUID, slot: String) {
         guard !isRunning, let rootGraph else { return }
@@ -257,7 +330,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         edit { $0.interface = interface }
     }
     public func extractSelection(name: String, inputs: [WorkflowToolInputBinding], outputs: [WorkflowNamedOutput], expectedGraphID: UUID, expectedRevision: UUID) {
-        guard !closed, !closing, !isRunning, readOnlyReason == nil, let graph,
+        guard canEditCanvas, !isRunning, let graph,
               graph.id == expectedGraphID, graph.revision == expectedRevision else { errorMessage = "封装期间原图已改变；请重新检查边界。"; return }
         do {
             let result = try WorkflowToolEditing.extract(graph, selected: selectedNodeIDs, name: name, inputs: inputs, outputs: outputs, tools: tools, registry: registry)
@@ -285,7 +358,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         } catch { errorMessage = error.localizedDescription }
     }
     public func openToolCopy(_ reference: WorkflowToolReference) {
-        guard !closed, !closing, !isRunning, readOnlyReason == nil,
+        guard canEditCanvas, !isRunning,
               let tool = tools.first(where: { $0.id == reference.id && $0.version == reference.version }) else { return }
         do {
             guard try WorkflowPlanCompiler.digest(tool) == reference.digest else { throw WorkflowIssue("工具内容与引用不一致。") }
@@ -294,7 +367,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         } catch { errorMessage = error.localizedDescription }
     }
     public func saveGraphAsTool(name: String) {
-        guard !closed, !closing, !isRunning, readOnlyReason == nil, let graph else { return }
+        guard canEditCanvas, !isRunning, let graph else { return }
         do {
             let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !title.isEmpty, title.utf8.count <= 256, !tools.contains(where: { $0.name == title }), graph.interface?.outputs.isEmpty == false else { throw WorkflowIssue("请填写唯一名称，并在公开接口中指定输出。") }
@@ -348,7 +421,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             node.dataConfiguration = .init(value: datum)
             inputs.append((node, port))
         }
-        edit { graph in
+        guard edit({ graph in
             graph.nodes.append(model)
             graph.layout.append(.init(nodeID: model.id, x: 400, y: 100))
             for (index, input) in inputs.enumerated() {
@@ -356,7 +429,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
                 graph.layout.append(.init(nodeID: input.0.id, x: 60, y: 100 + Double(index) * 180))
                 graph.connections.append(.init(sourceNode: input.0.id, targetNode: model.id, targetPort: input.1))
             }
-        }
+        }) else { throw WorkflowIssue("设置未插入；请在当前编辑副本中重试。") }
         selectedNodeID = model.id
         try await persist(); await onChange()
     }
@@ -436,7 +509,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             guard canEditCanvas, projectID == expectedProject, isCurrent(target) else {
                 throw WorkflowIssue("资产输入已改变；素材未绑定到其他节点。")
             }
-            attach(ref, nodeID: target.node.id); try await persist(); await onChange()
+            attach(ref, nodeID: target.node.id)
+            guard graph?.nodes.first(where: { $0.id == target.node.id })?.assetReference == ref else { throw WorkflowIssue("素材已保存，但节点未绑定；请重新选择。") }
+            try await persist(); await onChange()
         } catch { errorMessage = error.localizedDescription }
     }
     /// An explicit import publishes the chosen reference or copy in this project's existing Store.
@@ -462,15 +537,15 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     @discardableResult
     public func deleteNode(id: UUID, target: WorkflowCanvasInsertionTarget) -> Bool {
         guard isCurrent(target), graph?.nodes.contains(where: { $0.id == id }) == true else { return false }
-        edit { g in g.nodes.removeAll { $0.id == id }; g.connections.removeAll { $0.sourceNode == id || $0.targetNode == id }; g.layout.removeAll { $0.nodeID == id } }
+        guard edit({ g in g.nodes.removeAll { $0.id == id }; g.connections.removeAll { $0.sourceNode == id || $0.targetNode == id }; g.layout.removeAll { $0.nodeID == id } }) else { return false }
         guard graph?.nodes.contains(where: { $0.id == id }) == false else { return false }
         if selectedNodeID == id { selectedNodeID = nil }
         selectedNodeIDs.remove(id)
         return true
     }
     public func copySelected() {
-        guard var node = selectedNode else { return }; node.id = UUID(); node.title += " 副本"
-        edit { g in g.nodes.append(node); g.layout.append(.init(nodeID: node.id, x: 100, y: 100)) }; selectedNodeID = node.id
+        guard canEditCanvas, var node = selectedNode else { return }; node.id = UUID(); node.title += " 副本"
+        if edit({ g in g.nodes.append(node); g.layout.append(.init(nodeID: node.id, x: 100, y: 100)) }) { selectedNodeID = node.id }
     }
     public func moveNode(id: UUID, x: Double, y: Double) {
         guard canEditCanvas, x.isFinite, y.isFinite else { return }
@@ -494,13 +569,13 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         }, changesConfiguration: false)
     }
     public func modelSelectionTarget() -> WorkflowModelSelectionTarget? {
-        guard !isRunning, !closed, !closing, let graph, let node = selectedNode,
+        guard canEditCanvas, let graph, let node = selectedNode,
               let kind = registry.operation(node.operationID)?.definition.modelKind else { return nil }
         return .init(graphID: graph.id, nodeID: node.id, operationID: node.operationID, kind: kind,
                      previousIdentity: node.parameters["modelID"]?.string ?? "")
     }
     public func isCurrent(_ target: WorkflowModelSelectionTarget) -> Bool {
-        guard !closed, !closing, !isRunning, graph?.id == target.graphID,
+        guard canEditCanvas, graph?.id == target.graphID,
               let node = graph?.nodes.first(where: { $0.id == target.nodeID }),
               node.operationID == target.operationID,
               registry.operation(node.operationID)?.definition.modelKind == target.kind,
@@ -526,17 +601,17 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         edit { $0.connections.append(.init(sourceNode: source, sourcePort: sourcePort, targetNode: target, targetPort: targetPort)) }
     }
     public func disconnect(_ connectionID: UUID) { edit { $0.connections.removeAll { $0.id == connectionID } } }
-    public func undo() { guard canUndo, let value = undoStack.popLast() else { return }; redoStack.append(graphs); graphs = value }
-    public func redo() { guard canRedo, let value = redoStack.popLast() else { return }; undoStack.append(graphs); graphs = value }
+    public func undo() { guard canUndo, let value = undoStack.popLast() else { return }; redoStack.append(graphs); applyHistory(value) }
+    public func redo() { guard canRedo, let value = redoStack.popLast() else { return }; undoStack.append(graphs); applyHistory(value) }
     public func addExample(_ name: String) {
-        guard !closed, !closing, readOnlyReason == nil else { return }
+        guard canEditCanvas else { return }
         let next: WorkflowGraph
         switch name { case "image": next = WorkflowExamples.image(); case "file": next = WorkflowExamples.file()
         case "template": next = WorkflowExamples.template(); default: next = WorkflowExamples.text() }
         undoStack.append(graphs); redoStack = []; graphs.append(next); selectedGraphID = next.id; selectedNodeID = next.nodes.first?.id
     }
     public func addLanguageExample(_ choice: WorkflowLanguageExample) {
-        guard !closed, !closing, readOnlyReason == nil else { return }
+        guard canEditCanvas else { return }
         do {
             let bundle = try WorkflowLanguageExamples.make(choice)
             // Every addition is an independent editable copy. Tool identity and
@@ -552,25 +627,67 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         edit { g in guard let i = g.nodes.firstIndex(where: { $0.id == nodeID }), registry.operation(g.nodes[i].operationID)?.definition.interaction == .assetInput else { throw WorkflowIssue("请选择文件／资产输入节点。") }; g.nodes[i].assetReference = reference }
     }
     public func importFile(_ url: URL, nodeID: UUID, mode: AssetImportMode = .copy) async {
-        guard !closed, !closing, readOnlyReason == nil else { return }
+        guard canEditCanvas else { return }
         guard let target = assetBindingTarget(nodeID: nodeID) else { return }
         do {
             let asset = try await services.store.importWorkflowMediaFile(at: url, mode: mode)
-            guard isCurrent(target) else { throw WorkflowIssue("导入期间流程或输入已改变；资产已保存，未绑定到另一位置。") }
-            attach(asset.record.reference, nodeID: nodeID); try await persist(); await onChange()
+            guard canEditCanvas, isCurrent(target) else { throw WorkflowIssue("导入期间流程或输入已改变；资产已保存，未绑定到另一位置。") }
+            attach(asset.record.reference, nodeID: nodeID)
+            guard graph?.nodes.first(where: { $0.id == nodeID })?.assetReference == asset.record.reference else { throw WorkflowIssue("导入素材已保存，但节点未绑定；请在当前编辑副本中重新选择。") }
+            try await persist(); await onChange()
         } catch { errorMessage = error.localizedDescription }
     }
-    public func publishText(_ text: String, origin: String) async {
-        guard !closed, !closing, readOnlyReason == nil else { return }
+    public func publishText(_ text: String, origin: String, target suppliedTarget: WorkflowCanvasInsertionTarget? = nil) async {
+        guard let target = suppliedTarget ?? canvasInsertionTarget(), isCurrentTextPublication(target) else {
+            errorMessage = "目标流程已改变或当前不可编辑，文稿未发布。"; return
+        }
+        let execution = activeRunID, original = editingOriginalID
+        let copy = target.rootID.flatMap { editingCopies[$0] }
+        var published = false
         do {
+            try Task.checkCancellation()
             let asset = try await services.store.publishWorkflowAsset(data: Data(text.utf8), mediaType: "text/plain",
                 name: "已发布文稿", operationID: "d.text.publish", details: ["origin": origin])
-            if graph == nil { addExample("text") }
-            guard let operation = registry.operation("d.asset.reference") else { return }
+            published = true
+            try await afterTextPublication()
+            try Task.checkCancellation()
+            guard isCurrentTextPublication(target), activeRunID == execution, editingOriginalID == original,
+                  target.rootID.flatMap({ editingCopies[$0] }) == copy else {
+                throw WorkflowIssue("文稿素材已保存，但目标流程已改变或当前不可编辑，未添加节点。")
+            }
+            // Preserve the existing first-publication text example. Only an
+            // originally empty project may take this path, never a changed selection.
+            if target.rootID == nil { addExample("text") }
+            guard let operation = registry.operation("d.asset.reference") else { throw WorkflowIssue("文稿素材已保存，但素材节点不可用。") }
             var node = operation.definition.makeNode(); node.assetReference = asset.record.reference; node.title = "已发布文稿"
             edit { g in g.nodes.append(node); g.layout.append(.init(nodeID: node.id, x: 40, y: 360)) }
-            selectedNodeID = node.id; try await persist(); await onChange()
-        } catch { errorMessage = error.localizedDescription }
+            guard graph?.nodes.contains(where: { $0.id == node.id }) == true else {
+                throw WorkflowIssue("文稿素材已保存，但节点未加入流程。")
+            }
+            selectedNodeID = node.id; try await persist()
+        } catch {
+            errorMessage = published
+                ? "文稿素材已保存；流程插入或保存未完成：\(error.localizedDescription)"
+                : "文稿未发布：\(error.localizedDescription)"
+        }
+        // The asset is independently durable, including when insertion is refused.
+        // Closed owners must not be read again merely to refresh presentation.
+        if published, !closed, !closing, projectInstanceID == target.instanceID {
+            await refreshAvailableAssets(instanceID: target.instanceID)
+            if !closed, !closing { await onChange() }
+        }
+    }
+
+    private func isCurrentTextPublication(_ target: WorkflowCanvasInsertionTarget) -> Bool {
+        guard canEditCanvas, projectID == target.projectID, projectInstanceID == target.instanceID else { return false }
+        if target.rootID == nil {
+            return graphs.isEmpty && target.bodyID == nil && target.path.isEmpty && emptyInsertionRevision == target.revision
+        }
+        // Appending an independent asset does not consume graph configuration.
+        // Re-read the current body only after identity matches, preserving edits
+        // and layout changes without treating an ancestor layout revision as stale.
+        return rootGraph?.id == target.rootID && graph?.id == target.bodyID && bodyPath == target.path &&
+            !(isRunning && editingOriginalID == target.rootID && target.rootID.flatMap { editingCopies[$0] }.flatMap { id in graphs.first { $0.id == id } } != nil)
     }
 
     // One current-scope display cache, owned by this controller. Generations are
@@ -748,8 +865,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         guard bodyPath.isEmpty else { errorMessage = "请返回外层运行；不能把局部模板当作独立调用。"; return }
         guard !closed, !closing, !isRunning, readOnlyReason == nil, let original = graph else { return }
         guard !hasPendingSaves else { errorMessage = "请先恢复保存，避免重复计算。"; return }
+        editingOriginalID = original.id; editingCopies = [:]
         isRunning = true; cancelled = false; errorMessage = nil
-        defer { isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
+        defer { editingOriginalID = nil; editingCopies = [:]; isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
             let frozen = services.freezeModels(in: original)
@@ -854,8 +972,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
               original.id == expectedGraphID, original.revision == expectedRevision else {
             errorMessage = "运行范围或原图已改变，或当前有未完成操作；请重新确认。"; return
         }
+        editingOriginalID = original.id; editingCopies = [:]
         isRunning = true; cancelled = false; errorMessage = nil
-        defer { isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
+        defer { editingOriginalID = nil; editingCopies = [:]; isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
             let frozen = services.freezeModels(in: original), defaults = services.capturedModelDefaults()
@@ -890,8 +1009,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     /// It does not mutate or resume the original Map item, Loop iteration or waiting task.
     public func rerunCall(_ reference: WorkflowCallReference) async {
         guard !externalOperationBusy(), !closed, !closing, !isRunning, readOnlyReason == nil, !hasPendingSaves else { return }
+        editingOriginalID = runs.first(where: { $0.id == reference.address.runID }).flatMap { editingRootID(for: $0) }; editingCopies = [:]
         isRunning = true; cancelled = false; errorMessage = nil
-        defer { isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
+        defer { editingOriginalID = nil; editingCopies = [:]; isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
             guard let old = runs.first(where: { $0.id == reference.address.runID }) else { throw WorkflowIssue("原调用记录不存在。") }
@@ -1150,8 +1270,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             }
         }
         guard runs[i].status != .rejected && runs[i].status != .completed else { return }
+        editingOriginalID = editingRootID(for: runs[i]); editingCopies = [:]
         isRunning = true; cancelled = false; errorMessage = nil
-        defer { isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
+        defer { editingOriginalID = nil; editingCopies = [:]; isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
             try WorkflowArchiveInspection.validateScopeHistory(runs, tools: tools, registry: registry)
@@ -1172,8 +1293,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         let old = runs[ri].steps[si]
         guard !hasPendingSaves else { errorMessage = "先恢复保存并继续原运行，避免重复生成。"; return }
         guard !isStale(old), old.outputs["output"]?.candidates.contains(where: { $0.asset == nil }) == true else { return }
+        editingOriginalID = editingRootID(for: runs[ri]); editingCopies = [:]
         isRunning = true; cancelled = false; errorMessage = nil
-        defer { isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
+        defer { editingOriginalID = nil; editingCopies = [:]; isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
             let frozen = runs[ri].graph

@@ -285,3 +285,101 @@ struct WorkflowCanvasHostingTests {
         try await controller.close(); try await store.close()
     }
 }
+
+extension WorkflowCanvasHostingTests {
+    private func repairPreviewFixture() async throws -> (ProjectStore, WorkflowController, WorkflowAssetReference) {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("repair-preview-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Preview.dproject"), name: "Preview")
+        let runtime = WorkbenchSession(engine: CanvasNoInferenceEngine(), backendID: "never",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let controller = WorkflowController(services: WorkflowServices(store: store, session: runtime,
+            defaultIdentity: { _ in "" }, resolveText: { throw WorkflowIssue("No model") }, resolveImage: { throw WorkflowIssue("No model") }))
+        await controller.load()
+        let asset = try await store.publishWorkflowAsset(data: Data("original preview".utf8), mediaType: "text/plain",
+            name: "Original", operationID: "d.text.publish", details: ["origin": "repair-fixture"])
+        return (store, controller, asset.record.reference)
+    }
+
+    @Test(arguments: ["success", "failure", "cancel", "same-identity", "disappear", "metadata-success", "metadata-failure"])
+    func assetPreviewRejectsLateResultsThroughProductionState(_ outcome: String) async throws {
+        let (store, c, ref) = try await repairPreviewFixture()
+        let state = WorkflowAssetPreviewState(), gate = CanvasDelayGate()
+        let first = WorkflowAssetPreviewState.Identity(controller: c, reference: ref)
+        let other = WorkflowAssetReference(projectID: ref.projectID, assetID: UUID(), version: ref.version, kind: ref.kind, sha256: ref.sha256)
+        let next = outcome == "same-identity" ? first : WorkflowAssetPreviewState.Identity(controller: c, reference: other)
+        let old = Task {
+            await state.load(identity: first, preview: {
+                if !outcome.hasPrefix("metadata-") { await gate.wait() }
+                if outcome == "failure" { throw WorkflowIssue("late failure") }
+                return Data("late A".utf8)
+            }, metadata: {
+                if outcome.hasPrefix("metadata-") { await gate.wait() }
+                if outcome == "metadata-failure" { throw WorkflowIssue("late metadata failure") }
+                return "late source A"
+            })
+        }
+        for _ in 0..<100 { if await gate.started { break }; try await Task.sleep(for: .milliseconds(2)) }
+        #expect(await gate.started)
+        if outcome == "cancel" { old.cancel() }
+        if outcome == "disappear" { state.invalidate() }
+        else { await state.load(identity: next, preview: { Data("current B".utf8) }, metadata: { "source B" }) }
+        await gate.open(); await old.value
+        if outcome == "disappear" {
+            #expect(state.identity == nil && state.data == nil && state.sourceMetadata == nil && state.failure == nil)
+        } else {
+            #expect(state.identity == next && state.data == Data("current B".utf8))
+            #expect(state.sourceMetadata == "source B" && state.failure == nil)
+        }
+        // Current failures clear content and provenance together.
+        await state.load(identity: first, preview: { throw WorkflowIssue("current failure") }, metadata: { "must not appear" })
+        #expect(state.data == nil && state.sourceMetadata == nil && state.failure?.contains("current failure") == true)
+        #expect(try await store.workflowText(ref) == "original preview")
+        try await c.close(); try await store.close()
+    }
+
+    @Test func assetPreviewHostReusesSlotAndReloadsFullReferenceAndOwner() async throws {
+        let (store, c, ref) = try await repairPreviewFixture()
+        let state = WorkflowAssetPreviewState()
+        let host = NSHostingView(rootView: AnyView(WorkflowAssetPreview(controller: c, reference: ref, state: state)))
+        host.frame = CGRect(x: 0, y: 0, width: 440, height: 350)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.close() }
+        func settle(_ condition: () -> Bool) async throws {
+            for _ in 0..<150 {
+                host.layoutSubtreeIfNeeded()
+                if condition() { return }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            Issue.record("Preview host did not settle")
+        }
+        try await settle { state.sourceMetadata != nil }
+        #expect(state.data == Data("original preview".utf8) && state.failure == nil)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(state.sourceMetadata?.contains("repair-fixture") == true)
+        // Keep version identical: a version-only task key would never reload.
+        let missing = WorkflowAssetReference(projectID: ref.projectID, assetID: UUID(), version: ref.version, kind: ref.kind, sha256: ref.sha256)
+        host.rootView = AnyView(WorkflowAssetPreview(controller: c, reference: missing, state: state))
+        try await settle { state.failure != nil }
+        #expect(state.data == nil && state.sourceMetadata == nil)
+        let replacement = WorkflowController(services: c.services); await replacement.load()
+        host.rootView = AnyView(WorkflowAssetPreview(controller: replacement, reference: ref, state: state))
+        try await settle { state.identity == .init(controller: replacement, reference: ref) && state.sourceMetadata != nil }
+        #expect(state.data == Data("original preview".utf8) && state.failure == nil)
+        let (otherStore, otherController, _) = try await repairPreviewFixture()
+        host.rootView = AnyView(WorkflowAssetPreview(controller: otherController, reference: ref, state: state))
+        try await settle { state.identity == .init(controller: otherController, reference: ref) && state.failure != nil }
+        #expect(state.data == nil && state.sourceMetadata == nil)
+        host.rootView = AnyView(EmptyView())
+        try await settle { state.identity == nil }
+        host.rootView = AnyView(WorkflowAssetPreview(controller: c, reference: ref, state: state))
+        try await settle { state.sourceMetadata != nil }
+        #expect(state.data == Data("original preview".utf8) && state.failure == nil)
+        #expect(try await store.workflowText(ref) == "original preview")
+        host.rootView = AnyView(EmptyView())
+        try await c.close(); replacement.deactivateAfterClose(); try await store.close()
+        try await otherController.close(); try await otherStore.close()
+    }
+}

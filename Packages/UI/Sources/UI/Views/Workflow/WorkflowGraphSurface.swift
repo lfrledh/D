@@ -336,7 +336,7 @@ struct WorkflowGraphSurface: View {
                         )
                     }
                 }
-                .onChange(of: readOnly || controller.isRunning) { _, blocked in
+                .onChange(of: readOnly || !controller.canEditCanvas) { _, blocked in
                     if blocked {
                         nodeDrag.invalidate()
                         marquee = nil
@@ -404,7 +404,7 @@ struct WorkflowGraphSurface: View {
     }
 
     private func canConnect(in scope: WorkflowCanvasScope) -> Bool {
-        tool == .pointer && !readOnly && !controller.isRunning
+        tool == .pointer && !readOnly && controller.canEditCanvas
             && controller.readOnlyReason == nil && scope.isCurrent(in: controller)
     }
 
@@ -597,7 +597,7 @@ struct WorkflowGraphSurface: View {
         scope: WorkflowCanvasScope,
         origin: CGSize
     ) {
-        guard !readOnly, !controller.isRunning, controller.readOnlyReason == nil else {
+        guard !readOnly, controller.canEditCanvas, controller.readOnlyReason == nil else {
             nodeDrag.invalidate()
             return
         }
@@ -649,7 +649,7 @@ struct WorkflowGraphSurface: View {
         translation: CGSize,
         scope: WorkflowCanvasScope
     ) {
-        guard !readOnly, !controller.isRunning, controller.readOnlyReason == nil else {
+        guard !readOnly, controller.canEditCanvas, controller.readOnlyReason == nil else {
             nodeDrag.invalidate()
             return
         }
@@ -697,7 +697,7 @@ struct WorkflowGraphSurface: View {
                     ).rawPosition(nodeID)
                 },
                 readOnly: readOnly || controller.readOnlyReason != nil,
-                isRunning: controller.isRunning
+                isRunning: controller.isRunning && !controller.canEditCanvas
               ),
               let target = drag.target,
               controller.isCurrent(target),
@@ -724,7 +724,7 @@ struct WorkflowGraphSurface: View {
         at rawPoint: CGPoint,
         scope: WorkflowCanvasScope
     ) -> Bool {
-        guard items.count == 1, !readOnly, !controller.isRunning,
+        guard items.count == 1, !readOnly, controller.canEditCanvas,
               controller.readOnlyReason == nil,
               let item = try? items[0].validated() else { return false }
         if controller.graph == nil {
@@ -1152,7 +1152,7 @@ private struct WorkflowNodeCard: View {
     }
 
     private func acceptAsset(_ items: [WorkflowCanvasTransfer]) -> Bool {
-        guard items.count == 1, !readOnly, !controller.isRunning,
+        guard items.count == 1, !readOnly, controller.canEditCanvas,
               controller.readOnlyReason == nil,
               definition?.interaction == .assetInput,
               scope.isCurrent(in: controller),

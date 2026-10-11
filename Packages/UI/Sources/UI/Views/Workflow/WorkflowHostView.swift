@@ -20,7 +20,10 @@ struct WorkflowHostView: View {
                     onImageModel: { chooseModel(controller: controller, kind: .image) },
                     onImport: { id in Task { await importFile(nodeID: id, controller: controller) } },
                     onDestination: { Task { await destination(controller) } },
-                    onPublishText: { Task { await model.projectSession.publishTextToWorkflow() } },
+                    onPublishText: {
+                        guard let target = controller.canvasInsertionTarget() else { return }
+                        Task { await model.projectSession.publishTextToWorkflow(target: target, controller: controller) }
+                    },
                     onReturnText: { ref in Task { await model.projectSession.returnWorkflowText(ref) } },
                     onAdditionalModel: { chooseModel(controller: controller, kind: $0) },
                     onRecord: { nodeID in Task { await model.projectSession.startWorkflowRecording(nodeID: nodeID, controller: controller) } },

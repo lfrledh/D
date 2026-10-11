@@ -523,7 +523,7 @@ WorkflowNodeInspector(controller: controller, node: node,
                     .disabled(controller.graph == nil || !controller.canEditCanvas)
                 Button(text("workflow.language.tools", "管理自定义节点…")) { toolsPresented = true }
                 Divider()
-                Button(text("workflow.action.publishText", "将当前文稿存为流程素材")) { guarded(onPublishText)() }.disabled(isReadOnly)
+                Button(text("workflow.action.publishText", "将当前文稿存为流程素材")) { guarded(onPublishText)() }.disabled(!controller.canEditCanvas)
                 Button(text("workflow.action.exportDirectory", "选择导出文件夹…")) { guarded(onDestination)() }.disabled(isReadOnly)
                 Text(controller.destinationDescription)
             }.accessibilityIdentifier("canvas-more")
@@ -796,7 +796,7 @@ private struct WorkflowNodeInspector: View {
                     if node.operationID.hasPrefix("d.value.") || ["d.model.language", "d.control.human", "d.music.chords"].contains(node.operationID) {
                         WorkflowNodeDataEditor(node: Binding(get: { controller.graph?.nodes.first(where: { $0.id == node.id }) ?? node }, set: { edited in
                             controller.setDataConfiguration(nodeID: node.id, value: edited.dataConfiguration)
-                        }), availableRecordSchema: WorkflowFormSupport.connectedRecordFields(nodeID: node.id, graph: controller.graph, tools: controller.tools)).id(node.id).disabled(readOnly)
+                        }), availableRecordSchema: WorkflowFormSupport.connectedRecordFields(nodeID: node.id, graph: controller.graph, tools: controller.tools)).id(node.id).disabled(readOnly || !controller.canEditCanvas)
                     }
                     if node.operationID.hasPrefix("d.control."), node.operationID != "d.control.human", let graphID = controller.graph?.id {
                         WorkflowControlEditor(node: Binding(get: { controller.graph?.nodes.first(where: { $0.id == node.id }) ?? node }, set: { controller.updateNode($0, in: graphID) }), tools: controller.tools, onOpenBody: { slot in
@@ -804,7 +804,7 @@ private struct WorkflowNodeInspector: View {
                                 fixedToolPresentation = .init(reference: reference)
                             }
                             else { onOpenBody(node.id, slot) }
-                        }).id(node.id).disabled(readOnly)
+                        }).id(node.id).disabled(readOnly || !controller.canEditCanvas)
                     }
                     ports(node)
                     } else {
@@ -883,7 +883,7 @@ private struct WorkflowNodeInspector: View {
                     }
                 }
                 .buttonStyle(.bordered)
-                .disabled(readOnly || controller.isRunning)
+                .disabled(readOnly || !controller.canEditCanvas)
                 .accessibilityLabel(workflowText(
                     languageStore,
                     "workflow.videoPresets.\(preset.id).title",
@@ -949,7 +949,7 @@ private struct WorkflowNodeInspector: View {
     }
 
     private func applyVideoPreset(_ preset: WorkflowVideoPreset, target: WorkflowVideoPresetAction) {
-        guard !readOnly, !controller.isRunning, controller.readOnlyReason == nil,
+        guard !readOnly, controller.canEditCanvas,
               let graph = controller.graph,
               let replacement = target.replacement(in: graph, preset: preset) else { return }
         controller.updateNode(replacement, in: target.graphID)
@@ -1008,7 +1008,7 @@ private struct WorkflowNodeInspector: View {
                     controller.deleteNode(id: node.id, target: target)
                 }
             }
-            .disabled(readOnly)
+            .disabled(readOnly || !controller.canEditCanvas)
             if controller.registry.operation(node.operationID)?.definition.interaction == .assetInput {
                 Menu(workflowText(languageStore, "workflow.asset.referenceExisting", fallback: "引用项目已有素材")) {
                     ForEach(controller.availableAssets) { asset in
@@ -1016,10 +1016,10 @@ private struct WorkflowNodeInspector: View {
                             Task { await controller.bindExistingAsset(asset.id, nodeID: node.id) }
                         }
                     }
-                }.disabled(readOnly || controller.availableAssets.isEmpty)
+                }.disabled(readOnly || !controller.canEditCanvas || controller.availableAssets.isEmpty)
                 Button(workflowText(languageStore, "workflow.asset.chooseImport", fallback: "选择导入资产"),
                        systemImage: "square.and.arrow.down") { onImport(node.id) }
-                    .disabled(readOnly)
+                    .disabled(readOnly || !controller.canEditCanvas)
                     .accessibilityIdentifier("workflow-import-\(node.id.uuidString)")
                 Button(workflowText(languageStore, "workflow.asset.record", fallback: "录制原声"), systemImage: "mic") { onRecord(node.id) }
                     .disabled(readOnly || controller.isRunning)
@@ -1044,7 +1044,7 @@ private struct WorkflowNodeInspector: View {
                         field: field,
                         operationID: node.operationID,
                         value: node.parameters[field.id] ?? field.defaultValue,
-                        readOnly: readOnly,
+                        readOnly: readOnly || !controller.canEditCanvas,
                         modelChoices: controller.modelChoices.filter { $0.kind == definition.modelKind },
                         modelPicker: modelPicker(for: definition.modelKind),
                         onChange: { controller.setParameter(nodeID: node.id, key: field.id, value: $0) }
@@ -1641,16 +1641,66 @@ private struct WorkflowStepValues: View {
     }
 }
 
+/// One preview owns one reader, full reference and request generation. Both
+/// success and failure use this path, including readers which ignore cancellation.
+@MainActor @Observable final class WorkflowAssetPreviewState {
+    struct Identity: Hashable {
+        let controller: ObjectIdentifier
+        let store: ObjectIdentifier
+        let reference: WorkflowAssetReference
+
+        @MainActor init(controller: WorkflowController, reference: WorkflowAssetReference) {
+            self.controller = ObjectIdentifier(controller)
+            store = ObjectIdentifier(controller.services.store)
+            self.reference = reference
+        }
+    }
+
+    private(set) var identity: Identity?
+    private(set) var data: Data?
+    private(set) var sourceMetadata: String?
+    private(set) var failure: String?
+    private var request: UUID?
+
+    func invalidate() {
+        request = nil; identity = nil
+        data = nil; sourceMetadata = nil; failure = nil
+    }
+
+    func load(identity: Identity, preview: () async throws -> Data?, metadata: () async throws -> String) async {
+        guard !Task.isCancelled else { return }
+        let request = UUID()
+        self.request = request; self.identity = identity
+        data = nil; sourceMetadata = nil; failure = nil
+        func isCurrent() -> Bool {
+            !Task.isCancelled && self.request == request && self.identity == identity
+        }
+        do {
+            let bytes = try await preview()
+            guard isCurrent() else { return }
+            let source = try await metadata()
+            guard isCurrent() else { return }
+            data = bytes; sourceMetadata = source
+        } catch {
+            guard isCurrent() else { return }
+            data = nil; sourceMetadata = nil; failure = error.localizedDescription
+        }
+    }
+}
+
 struct WorkflowAssetPreview: View {
     let controller: WorkflowController
     let reference: WorkflowAssetReference
-    @State private var data: Data?
-    @State private var failure: String?
-    @State private var sourceMetadata: String?
+    @State var state = WorkflowAssetPreviewState()
     @Environment(\.dLanguageStore) private var languageStore
 
+    private var identity: WorkflowAssetPreviewState.Identity { .init(controller: controller, reference: reference) }
+    private var data: Data? { state.identity == identity ? state.data : nil }
+    private var failure: String? { state.identity == identity ? state.failure : nil }
+    private var sourceMetadata: String? { state.identity == identity ? state.sourceMetadata : nil }
+
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
             switch reference.kind {
             case .text:
                 if let data {
@@ -1701,20 +1751,12 @@ struct WorkflowAssetPreview: View {
                 }
             }
         }
-        .task(id: reference.version) {
-            data = nil
-            failure = nil
-            do {
-                let bytes = [.audio, .video].contains(reference.kind) ? nil : try await controller.preview(reference)
-                let metadata = try await controller.metadata(reference)
-                try Task.checkCancellation()
-                data = bytes; sourceMetadata = metadata
-                failure = nil
-            } catch {
-                data = nil
-                failure = error.localizedDescription
-            }
+        .task(id: identity) {
+            await state.load(identity: identity, preview: {
+                [.audio, .video].contains(reference.kind) ? nil : try await controller.preview(reference)
+            }, metadata: { try await controller.metadata(reference) })
         }
+        .onDisappear { if state.identity == identity { state.invalidate() } }
     }
 
     private func previewError(_ message: String) -> some View {
@@ -2069,7 +2111,7 @@ struct WorkflowRunPreview: Identifiable {
     }
     @MainActor func isCurrent(in controller: WorkflowController) -> Bool {
         target.isCurrent(in: controller) && graph == controller.rootGraph && tools == controller.tools
-            && defaults == controller.services.capturedModelDefaults() && controller.canEditCanvas
+            && defaults == controller.services.capturedModelDefaults() && controller.canEditCanvas && !controller.isRunning
             && (try? controller.plan(target: nodeID, only: only)) == lines
     }
 }
