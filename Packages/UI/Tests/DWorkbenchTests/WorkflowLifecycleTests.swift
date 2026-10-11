@@ -2081,7 +2081,7 @@ extension WorkflowLifecycleTests {
         let owner = ProjectSession(sessionFactory: { _ in
             WorkbenchSession(engine: engine, backendID: "fixture.image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
                 shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text",
-                validateTextModel: { url in await probe.validate(url, revision: "registered") })
+                validateTextModel: { url in await probe.validate(url, revision: url.lastPathComponent == "pending-model" ? "pending-registered" : "registered") })
         }, settings: settings)
         await owner.createProject(at: root.appendingPathComponent("late.dproject"))
         await owner.registerTextModel(at: root); await owner.openWorkflow()
@@ -2090,6 +2090,7 @@ extension WorkflowLifecycleTests {
         c.setParameter(nodeID: node, key: "modelID", value: .text("text:registered"))
         let target = try #require(c.modelSelectionTarget())
         try owner.checkWorkflowModelRegistration(target: target, controller: c)
+        #expect(!owner.explicitModelChoices.contains { $0.id == "text:pending-registered" })
         await probe.block(pending)
         let registration = Task { await owner.registerWorkflowModel(at: pending, target: target, controller: c) }
         try await waitForRepairGate(probe.gate)
@@ -2106,7 +2107,7 @@ extension WorkflowLifecycleTests {
         #expect(c.graph == graphBefore)
         #expect(c.errorMessage?.contains("模型已登记，但节点未绑定") == true)
         if startRun { #expect(c.errorMessage?.contains("正在运行或保存") == true) }
-        #expect(owner.explicitModelChoices.contains { $0.id == "text:registered" })
+        #expect(owner.explicitModelChoices.contains { $0.id == "text:pending-registered" })
         await executionGate.open(); await execution?.value
         #expect(await owner.requestClose())
         #expect(throws: WorkflowIssue.self) { try owner.checkWorkflowModelRegistration(target: target, controller: c) }
