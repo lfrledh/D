@@ -2125,3 +2125,468 @@ private actor A2DirectoryValidationProbe {
         return .init(directory: url, revision: revision)
     }
 }
+
+extension WorkflowLifecycleTests {
+    @MainActor private final class ImageRepairProbe {
+        var modelAvailable = true
+        var resolutions = 0
+        var releases = 0
+        var cancelOnProgress = false
+        var failSaveOnProgress = false
+    }
+
+    @MainActor private struct ImageRepairFixture: Sendable {
+        let root: URL
+        let source: ProjectStore
+        let destination: ProjectStore
+        let engine: WorkflowFixtureEngine
+        let controller: WorkflowController
+        let probe: ImageRepairProbe
+        let nodeID: UUID
+        var moved: URL { destination.rootURL.appendingPathExtension("unavailable") }
+
+        func backendPNG(attemptID: UUID) throws -> Data {
+            let folders = try FileManager.default.contentsOfDirectory(at: source.artifactDirectory, includingPropertiesForKeys: nil)
+            let folder = try #require(folders.first { $0.lastPathComponent.hasPrefix(attemptID.uuidString + "-") })
+            let data = try Data(contentsOf: folder.appendingPathComponent("image.png"))
+            let image = try #require(CGImageSourceCreateWithData(data as CFData, nil))
+            #expect(CGImageSourceGetStatus(image) == .statusComplete)
+            #expect(CGImageSourceGetCount(image) == 1)
+            return data
+        }
+
+        func restoreDestination() throws {
+            if FileManager.default.fileExists(atPath: moved.path) {
+                try FileManager.default.moveItem(at: moved, to: destination.rootURL)
+            }
+        }
+    }
+
+    private func imageRepairFixture(count: Int, resolveGate: WorkflowSubmitGate? = nil) async throws -> ImageRepairFixture {
+        let (root, source, engine, original) = try await fixture()
+        try await original.close()
+        let destination = try await ProjectStore.create(at: root.appendingPathComponent("image-recovery.dproject"), name: "image recovery")
+        let session = WorkbenchSession(engine: engine, backendID: "fixture.image",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {},
+            validateModel: { _ in }, imageCapability: .scalableKlein4B).borrowed(artifactStore: source)
+        let probe = ImageRepairProbe()
+        let service = WorkflowServices(store: destination, session: session) { kind, identity in
+            probe.resolutions += 1
+            #expect(kind == .image && identity == "image:frozen")
+            if let resolveGate { await resolveGate.wait() }
+            guard probe.modelAvailable else { throw WorkflowIssue("controlled image model unavailable") }
+            return .init(identity: identity, reference: .init(directory: root, revision: "fixture"), backendID: "fixture.image",
+                imageRecipe: .klein(capability: .scalableKlein4B), release: { probe.releases += 1 })
+        }
+        let c = WorkflowController(services: service); await c.load()
+        c.addBlankGraph(name: "Image repair")
+        c.addNode(operationID: "d.image.generate")
+        let node = try #require(c.selectedNodeID)
+        c.setParameter(nodeID: node, key: "modelID", value: .text("image:frozen"))
+        c.setParameter(nodeID: node, key: "promptText", value: .text("frozen image prompt"))
+        c.setParameter(nodeID: node, key: "count", value: .integer(count))
+        return .init(root: root, source: source, destination: destination, engine: engine, controller: c, probe: probe, nodeID: node)
+    }
+
+    @Test func imageControllerResumePublishesRetainedPNGWithoutModelAndColdReadsExactBytes() async throws {
+        let f = try await imageRepairFixture(count: 1); let c = f.controller
+        defer { try? f.restoreDestination() }
+        await f.engine.configure(action: { try FileManager.default.moveItem(at: f.destination.rootURL, to: f.moved) })
+        await c.run(target: f.nodeID, only: false)
+        let run = try #require(c.runs.last); let step = try #require(run.steps.last)
+        let pending = try #require(c.services.retainedCandidates(stepID: step.id)?.first)
+        let bytes = try f.backendPNG(attemptID: pending.attemptID)
+        let hash = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        #expect(c.services.hasPendingSaves && c.hasPendingSaves)
+        #expect(f.probe.resolutions == 1 && f.probe.releases == 1)
+        #expect(await f.engine.requests.count == 1)
+        do { try await c.prepareForClose(); Issue.record("Pending image must block close") } catch {}
+        // A repeated unavailable destination remains recoverable without inference.
+        await c.resume(runID: run.id)
+        #expect(c.services.hasPendingSaves && f.probe.resolutions == 1)
+        try f.restoreDestination(); await f.engine.configure(); f.probe.modelAvailable = false
+        // Stop at the real candidate/history handoff before pending publication.
+        let history = c.services.candidatesChanged
+        c.services.candidatesChanged = { stepID, items in
+            try await history(stepID, items)
+            if f.probe.failSaveOnProgress {
+                f.probe.failSaveOnProgress = false
+                try FileManager.default.moveItem(at: f.destination.rootURL, to: f.moved)
+            }
+            if f.probe.cancelOnProgress { f.probe.cancelOnProgress = false; await c.cancel() }
+        }
+        f.probe.failSaveOnProgress = true
+        await c.resume(runID: run.id)
+        #expect(c.services.hasPendingSaves && f.probe.resolutions == 1)
+        #expect(c.services.retainedCandidates(stepID: step.id)?.first?.attemptID == pending.attemptID)
+        try f.restoreDestination()
+        f.probe.cancelOnProgress = true
+        await c.resume(runID: run.id)
+        #expect(c.services.hasPendingSaves && f.probe.resolutions == 1)
+        #expect(await f.destination.snapshot().assets.isEmpty)
+        await c.resume(runID: run.id)
+        #expect(c.errorMessage == nil && c.runs.last?.status == .completed)
+        let saved = try #require(c.presentationStep(nodeID: f.nodeID, runID: run.id)?.outputs["output"]?.candidates.first)
+        let ref = try #require(saved.asset)
+        #expect(saved.id == pending.id && saved.attemptID == pending.attemptID)
+        #expect(ref.sha256 == hash && ref.projectID == c.projectID)
+        #expect(try await f.destination.workflowData(ref) == bytes)
+        #expect(!c.hasPendingSaves && !c.services.hasPendingSaves)
+        #expect(f.probe.resolutions == 1 && f.probe.releases == 1)
+        await c.resume(runID: run.id)
+        #expect(await f.engine.requests.count == 1)
+        #expect(await f.destination.snapshot().assets.count == 1)
+        #expect(await f.source.snapshot().assets.isEmpty)
+        try await c.close(); try await f.destination.close()
+        // Cold read proves durable bytes, not recovery of in-memory pending across processes.
+        let reopened = try await ProjectStore.open(at: f.destination.rootURL)
+        #expect(try await reopened.workflowData(ref) == bytes)
+        #expect(try await reopened.workflowState().archive?.runs.last?.steps.last?.outputs["output"]?.candidates.first?.asset == ref)
+        let coldAsset = try #require(await reopened.snapshot().assets.first { $0.id == ref.assetID })
+        let coldRecord = try #require(try await reopened.workflowState().archive?.assets.first { $0.reference == ref })
+        let frozenRequest = try #require(await f.engine.requests.first)
+        #expect(coldRecord.request == frozenRequest && coldRecord.stepID == saved.attemptID)
+        #expect(frozenRequest.id == saved.attemptID && coldRecord.operationID == step.node.operationID)
+        #expect(coldRecord.parents == step.inputs.values.flatMap { $0.datum?.assetReferences ?? [] })
+        guard case .image(let imageRequest) = frozenRequest.input else { throw WorkflowIssue("Expected frozen image request") }
+        #expect(imageRequest.prompt == step.node.parameters["promptText"]?.string)
+        #expect(imageRequest.seed == UInt64(pending.seed))
+        #expect(imageRequest.width == step.node.parameters["width"]?.integer && imageRequest.height == step.node.parameters["height"]?.integer)
+        #expect(coldAsset.mediaType == "image/png" && coldAsset.role == .result)
+        #expect(coldAsset.metadata.width == imageRequest.width && coldAsset.metadata.height == imageRequest.height)
+        // These are the generated-image declarations in Services, not inferred profile names from a preview.
+        #expect(coldAsset.metadata.bitDepth == 8 && coldAsset.metadata.colorSpace == "sRGB")
+        #expect(coldAsset.metadata.imageContentSHA256 == hash && coldAsset.metadata.imageContentSHA256 == ref.sha256)
+        try await reopened.close(); try await f.source.close()
+    }
+
+    @Test func quickImagePendingRetrySavePreservesFrozenParentsAndColdPNGWithoutModel() async throws {
+        let f = try await imageRepairFixture(count: 1)
+        defer { try? f.restoreDestination() }
+        try await f.controller.close()
+        let parent = try await f.destination.publishWorkflowAsset(data: Data("Quick frozen parent prompt".utf8),
+            mediaType: "text/plain", name: "Prompt parent", operationID: "d.text.input").record.reference
+        let quick = QuickGenerationController(store: f.destination) { f.controller.services }
+        await quick.load(); quick.select(operationID: "d.image.generate", modelID: "image:frozen")
+        let draftID = try #require(quick.draft?.id)
+        quick.setInput("prompt", value: .asset(parent), draftID: draftID)
+        try await quick.flush()
+        await f.engine.configure(action: { try FileManager.default.moveItem(at: f.destination.rootURL, to: f.moved) })
+        try #require(quick.canStart)
+        quick.start(); await quick.waitForCompletion()
+        let failedRun = try #require(quick.state.runs.last)
+        let pending = try #require(failedRun.candidates.first)
+        let bytes = try f.backendPNG(attemptID: pending.attemptID)
+        let hash = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        let request = try #require(await f.engine.requests.first)
+        #expect(failedRun.status == .failed && failedRun.draft.inputs["prompt"] == .asset(parent))
+        #expect(quick.pendingSaveRunID == failedRun.id && f.controller.services.hasPendingSaves)
+        #expect(f.controller.services.retainedCandidates(stepID: failedRun.id) == failedRun.candidates)
+        #expect(pending.asset == nil && pending.error != nil && request.id == pending.attemptID)
+        #expect(f.probe.resolutions == 1 && f.probe.releases == 1)
+        f.probe.modelAvailable = false
+        do { try await quick.prepareForTermination(); Issue.record("Quick pending result must block close") } catch {}
+        await quick.retrySave()
+        #expect(quick.pendingSaveRunID == failedRun.id && f.controller.services.hasPendingSaves)
+        #expect(f.probe.resolutions == 1)
+        #expect(await f.engine.requests.count == 1)
+        // Changing the editable draft cannot change the already-submitted parents or prompt.
+        quick.setInput("prompt", value: .data(.text("Different current draft prompt")), draftID: draftID)
+        try f.restoreDestination(); await f.engine.configure()
+        await quick.retrySave()
+        let savedRun = try #require(quick.state.runs.last)
+        let saved = try #require(savedRun.candidates.first)
+        let ref = try #require(saved.asset)
+        #expect(savedRun.id == failedRun.id && savedRun.draft == failedRun.draft)
+        #expect(savedRun.status == .completed && savedRun.issue == nil)
+        #expect(saved.id == pending.id && saved.attemptID == pending.attemptID)
+        #expect(quick.pendingSaveRunID == nil && !f.controller.services.hasPendingSaves && quick.saveIssue == nil && quick.error == nil)
+        #expect(ref.sha256 == hash)
+        #expect(try await f.destination.workflowData(ref) == bytes)
+        let liveRecord = try #require(try await f.destination.workflowState().archive?.assets.first { $0.reference == ref })
+        #expect(liveRecord.parents == [parent] && liveRecord.stepID == pending.attemptID)
+        #expect(liveRecord.request == request && liveRecord.operationID == failedRun.draft.node.operationID)
+        if case .image(let input) = request.input { #expect(input.prompt == "Quick frozen parent prompt") }
+        else { Issue.record("Quick did not submit an image request") }
+        await quick.retrySave()
+        #expect(quick.state.runs.count == 1 && quick.state.runs.last?.candidates == [saved])
+        #expect(f.probe.resolutions == 1 && f.probe.releases == 1)
+        #expect(await f.engine.requests.count == 1)
+        #expect(await f.destination.snapshot().assets.count == 2)
+        #expect(await f.source.snapshot().assets.isEmpty)
+        try await quick.prepareForTermination(); try await f.destination.close()
+        let reopened = try await ProjectStore.open(at: f.destination.rootURL)
+        #expect(try await reopened.workflowData(ref) == bytes)
+        let coldRecord = try #require(try await reopened.workflowState().archive?.assets.first { $0.reference == ref })
+        let coldAsset = try #require(await reopened.snapshot().assets.first { $0.id == ref.assetID })
+        #expect(coldRecord == liveRecord && coldAsset.metadata.imageContentSHA256 == hash)
+        let restored = QuickGenerationController(store: reopened) { throw WorkflowIssue("Cold saved-result inspection must not acquire a model") }
+        await restored.load()
+        #expect(restored.state.runs.last == savedRun && restored.pendingSaveRunID == nil)
+        await restored.retrySave(); try await restored.prepareForTermination()
+        #expect(await reopened.snapshot().assets.count == 2 && f.probe.resolutions == 1)
+        #expect(await f.engine.requests.count == 1)
+        try await reopened.close(); try await f.source.close()
+    }
+
+    @Test func cancelledLazyImageResolutionReleasesLateLeaseOnceWithoutSubmitting() async throws {
+        let gate = WorkflowSubmitGate()
+        let f = try await imageRepairFixture(count: 1, resolveGate: gate); let c = f.controller
+        let execution = Task { await c.run(target: f.nodeID, only: false) }
+        do {
+            try await waitForRepairGate(gate)
+            #expect(f.probe.resolutions == 1 && f.probe.releases == 0)
+            await c.cancel()
+            #expect(f.probe.releases == 0 && c.isRunning)
+            #expect(await f.engine.requests.isEmpty)
+            await gate.open(); await execution.value
+        } catch {
+            await gate.open(); await execution.value
+            try? await c.close(); try? await f.destination.close(); try? await f.source.close()
+            throw error
+        }
+        #expect(c.runs.last?.status == .cancelled && c.runs.last?.steps.last?.status == .cancelled)
+        #expect(c.errorMessage == nil && !c.isRunning && !c.hasPendingSaves)
+        #expect(f.probe.resolutions == 1 && f.probe.releases == 1)
+        #expect(await f.engine.requests.isEmpty)
+        #expect(await f.destination.snapshot().assets.isEmpty)
+        #expect(await f.source.snapshot().assets.isEmpty)
+        await c.services.finish(); await c.services.finish()
+        #expect(f.probe.releases == 1)
+        try await c.close(); try await f.destination.close(); try await f.source.close()
+    }
+
+    @Test func imagePendingAfterEarlierFailurePublishesBeforeUnavailableRetryModel() async throws {
+        let f = try await imageRepairFixture(count: 3); let c = f.controller
+        defer { try? f.restoreDestination() }
+        await f.engine.configure(action: {
+            let submitted = await f.engine.requests.count
+            if submitted == 1 { throw WorkflowIssue("ordinary earlier candidate failure") }
+            if submitted == 2 { try FileManager.default.moveItem(at: f.destination.rootURL, to: f.moved) }
+        })
+        await c.run(target: f.nodeID, only: false)
+        let run = try #require(c.runs.last); let step = try #require(run.steps.last)
+        let retained = try #require(c.services.retainedCandidates(stepID: step.id))
+        try #require(retained.count == 3 && retained[0].error?.contains("ordinary earlier candidate failure") == true)
+        #expect(retained[0].asset == nil && retained[1].asset == nil && retained[2].error == nil)
+        let bytes = try f.backendPNG(attemptID: retained[1].attemptID)
+        try f.restoreDestination(); await f.engine.configure(); f.probe.modelAvailable = false
+        await c.resume(runID: run.id)
+        let failed = try #require(c.runs.last?.steps.last)
+        let recovered = try #require(failed.outputs["output"]?.candidates)
+        let saved = try #require(recovered[1].asset)
+        #expect(recovered[1].id == retained[1].id && recovered[1].attemptID == retained[1].attemptID)
+        #expect(try await f.destination.workflowData(saved) == bytes)
+        #expect(saved.sha256 == SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
+        #expect(recovered[0].asset == nil && recovered[2].asset == nil)
+        #expect(c.runs.last?.status == .failed && failed.error?.contains("候选尚未全部完成") == true)
+        #expect(f.probe.resolutions == 2 && f.probe.releases == 1)
+        #expect(await f.engine.requests.count == 2)
+        #expect(await f.destination.snapshot().assets.count == 1)
+        #expect(!c.hasPendingSaves)
+        try await c.close(); try await f.destination.close(); try await f.source.close()
+    }
+
+    @Test func imageControllerMixedRecoverySavesPendingBeforeMissingModelAndNeverClaimsCompletion() async throws {
+        let f = try await imageRepairFixture(count: 3); let c = f.controller
+        defer { try? f.restoreDestination() }
+        await f.engine.configure(action: {
+            if await f.engine.requests.count == 2 { try FileManager.default.moveItem(at: f.destination.rootURL, to: f.moved) }
+        })
+        await c.run(target: f.nodeID, only: false)
+        let run = try #require(c.runs.last); let step = try #require(run.steps.last)
+        let retained = try #require(c.services.retainedCandidates(stepID: step.id))
+        try #require(retained.count == 3 && retained[0].asset != nil && retained[1].asset == nil && retained[2].error == nil)
+        let bytes = try f.backendPNG(attemptID: retained[1].attemptID)
+        #expect(await f.engine.requests.count == 2)
+        try f.restoreDestination(); await f.engine.configure(); f.probe.modelAvailable = false
+        await c.resume(runID: run.id)
+        let failed = try #require(c.runs.last?.steps.last)
+        let recovered = try #require(failed.outputs["output"]?.candidates)
+        #expect(c.runs.last?.status == .failed && failed.status == .failed)
+        #expect(failed.error?.contains("候选尚未全部完成") == true)
+        #expect(c.errorMessage?.contains("controlled image model unavailable") == true)
+        #expect(recovered.count == 3 && recovered[0].asset == retained[0].asset)
+        let saved = try #require(recovered[1].asset)
+        #expect(recovered[1].id == retained[1].id && recovered[1].attemptID == retained[1].attemptID)
+        #expect(try await f.destination.workflowData(saved) == bytes)
+        #expect(saved.sha256 == SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
+        #expect(recovered[2].asset == nil && recovered[2].error != nil)
+        #expect(!c.services.hasPendingSaves && !c.hasPendingSaves)
+        #expect(f.probe.resolutions == 2 && f.probe.releases == 1)
+        #expect(await f.engine.requests.count == 2)
+        #expect(await f.destination.snapshot().assets.count == 2)
+        await c.resume(runID: run.id)
+        #expect(await f.destination.snapshot().assets.count == 2)
+        #expect(await f.engine.requests.count == 2)
+        f.probe.modelAvailable = true
+        await c.resume(runID: run.id)
+        let completed = try #require(c.runs.last?.steps.last?.outputs["output"]?.candidates)
+        #expect(c.runs.last?.status == .completed && completed.allSatisfy { $0.asset != nil })
+        #expect(completed[0].asset == recovered[0].asset && completed[1].asset == saved)
+        #expect(f.probe.resolutions == 4 && f.probe.releases == 2)
+        #expect(await f.engine.requests.count == 3)
+        let lastRequest = try #require(await f.engine.requests.last)
+        if case .image(let input) = lastRequest.input { #expect(input.prompt == "frozen image prompt" && input.seed == 44) }
+        else { Issue.record("Expected missing image candidate") }
+        await c.resume(runID: run.id)
+        #expect(await f.destination.snapshot().assets.count == 3)
+        #expect(await f.engine.requests.count == 3)
+        try await c.close(); try await f.destination.close()
+        let reopened = try await ProjectStore.open(at: f.destination.rootURL)
+        #expect(try await reopened.workflowData(saved) == bytes)
+        #expect(await reopened.snapshot().assets.count == 3)
+        try await reopened.close(); try await f.source.close()
+    }
+
+    @Test func imagePendingRecoveryRejectsDifferentCallInputsRunNodeAndClosedTargets() async throws {
+        let f = try await imageRepairFixture(count: 1); let c = f.controller
+        defer { try? f.restoreDestination() }
+        await f.engine.configure(action: { try FileManager.default.moveItem(at: f.destination.rootURL, to: f.moved) })
+        await c.run(target: f.nodeID, only: false)
+        let run = try #require(c.runs.last); let record = try #require(run.planCheckpoint?.records.last)
+        let items = try #require(c.services.retainedCandidates(stepID: record.step.id))
+        try f.restoreDestination(); await f.engine.configure(); f.probe.modelAvailable = false
+        let before = try Data(contentsOf: f.destination.rootURL.appendingPathComponent("project.json"))
+        c.addBlankGraph(name: "Wrong selected workflow")
+        await c.resume(runID: run.id)
+        #expect(c.services.hasPendingSaves && c.errorMessage?.contains("当前流程已变化") == true)
+        #expect(try Data(contentsOf: f.destination.rootURL.appendingPathComponent("project.json")) == before)
+        // Exercise the service boundary too: a copied candidate UUID is insufficient.
+        let history = c.services.candidatesChanged; c.services.candidatesChanged = { _, _ in }
+        var wrongNode = record.step.node; wrongNode.id = UUID()
+        let wrongInputs: [String: WorkflowValue] = ["prompt": .data(.text("changed frozen prompt"))]
+        let contexts: [WorkflowExecutionContext] = [
+            .init(node: record.step.node, stepID: UUID(), inputs: record.step.inputs, retryCandidates: items, address: record.address, graphID: run.graph.id),
+            .init(node: record.step.node, stepID: record.step.id, inputs: wrongInputs, retryCandidates: items, address: record.address, graphID: run.graph.id),
+            .init(node: wrongNode, stepID: record.step.id, inputs: record.step.inputs, retryCandidates: items, address: record.address, graphID: run.graph.id),
+            .init(node: record.step.node, stepID: record.step.id, inputs: record.step.inputs, retryCandidates: items,
+                address: .init(runID: UUID(), path: record.address.path), graphID: run.graph.id)
+        ]
+        for context in contexts {
+            try c.services.beginPlan()
+            do { _ = try await c.services.executeCall(context); Issue.record("Wrong recovery owner accepted") } catch {}
+            #expect(c.services.hasPendingSaves && f.probe.resolutions == 1)
+            #expect(await f.destination.snapshot().assets.isEmpty)
+        }
+        c.services.candidatesChanged = history
+        c.selectedGraphID = run.graph.id
+        await c.resume(runID: run.id)
+        #expect(c.runs.last?.status == .completed && !c.hasPendingSaves)
+        try await c.close()
+        let savedBytes = try Data(contentsOf: f.destination.rootURL.appendingPathComponent("project.json"))
+        await c.resume(runID: run.id)
+        #expect(try Data(contentsOf: f.destination.rootURL.appendingPathComponent("project.json")) == savedBytes)
+        #expect(await f.engine.requests.count == 1 && f.probe.resolutions == 1)
+        try await f.destination.close(); try await f.source.close()
+    }
+
+    @Test(arguments: [false, true])
+    func imagePendingRecoveryNeverWritesClosedOrReplacedProject(closeStore: Bool) async throws {
+        let f = try await imageRepairFixture(count: 1); let c = f.controller
+        defer { try? f.restoreDestination() }
+        await f.engine.configure(action: { try FileManager.default.moveItem(at: f.destination.rootURL, to: f.moved) })
+        await c.run(target: f.nodeID, only: false)
+        let run = try #require(c.runs.last)
+        await f.engine.configure(); f.probe.modelAvailable = false
+        if closeStore {
+            try f.restoreDestination(); try await f.destination.close()
+            let bytes = try Data(contentsOf: f.destination.rootURL.appendingPathComponent("project.json"))
+            await c.resume(runID: run.id)
+            #expect(c.services.hasPendingSaves && f.probe.resolutions == 1)
+            #expect(try Data(contentsOf: f.destination.rootURL.appendingPathComponent("project.json")) == bytes)
+            c.deactivateAfterClose() // Fixture cleanup only; pending is intentionally not recovered into a new session.
+        } else {
+            // A distinct project occupies the same pathname while the original FD is live.
+            let other = try await ProjectStore.create(at: f.destination.rootURL, name: "Other project")
+            let otherID = await other.snapshot().id
+            let bytes = try Data(contentsOf: other.rootURL.appendingPathComponent("project.json"))
+            await c.resume(runID: run.id)
+            #expect(c.services.hasPendingSaves && f.probe.resolutions == 1)
+            #expect(await other.snapshot().assets.isEmpty && otherID != c.projectID)
+            #expect(try Data(contentsOf: other.rootURL.appendingPathComponent("project.json")) == bytes)
+            try await other.close()
+            try FileManager.default.moveItem(at: other.rootURL, to: f.root.appendingPathComponent("other-preserved.dproject"))
+            try f.restoreDestination()
+            await c.resume(runID: run.id)
+            #expect(c.runs.last?.status == .completed && !c.hasPendingSaves)
+            try await c.close(); try await f.destination.close()
+        }
+        #expect(await f.engine.requests.count == 1)
+        #expect(await f.source.snapshot().assets.isEmpty)
+        try await f.source.close()
+    }
+
+    @Test(arguments: [false, true], [false, true])
+    func imageAuthoritativeFailuresReachControllerHistory(cleanup: Bool, cancel: Bool) async throws {
+        let f = try await imageRepairFixture(count: 3); let c = f.controller
+        let failure: InferenceFailure = cleanup ? .resourceCleanupUnconfirmed("controlled image cleanup uncertainty")
+            : .inputIntegrityChanged("controlled image input integrity")
+        await f.engine.configure(action: { if cancel { await c.cancel() } }, failure: failure)
+        await c.run(target: f.nodeID, only: false)
+        let run = try #require(c.runs.last)
+        let presented = try #require(c.presentationStep(nodeID: f.nodeID, runID: run.id))
+        let candidate = try #require(presented.outputs["output"]?.candidates.first)
+        #expect(run.status == .failed && presented.status == .failed)
+        #expect(presented.error == failure.localizedDescription && candidate.error == failure.localizedDescription)
+        #expect(c.errorMessage == failure.localizedDescription)
+        #expect(await f.engine.requests.count == 1, "Authoritative failure stops the remaining candidates")
+        #expect(f.probe.resolutions == 1 && f.probe.releases == 1)
+        #expect(await f.destination.snapshot().assets.isEmpty)
+        let durable = try #require(try await f.destination.workflowState().archive?.runs.last?.steps.last)
+        #expect(durable.error == presented.error && durable.outputs == presented.outputs)
+        try await c.close(); try await f.destination.close(); try await f.source.close()
+    }
+
+    @Test(arguments: [false, true])
+    func imageLaterCancellationCannotEraseSeriousCandidateHistory(cleanup: Bool) async throws {
+        let f = try await imageRepairFixture(count: 3); let c = f.controller
+        let failure: InferenceFailure = cleanup ? .resourceCleanupUnconfirmed("later image cleanup uncertainty")
+            : .inputIntegrityChanged("later image integrity failure")
+        await f.engine.configure(action: {
+            if await f.engine.requests.count == 2 { await f.engine.configure(failure: failure) }
+        })
+        let history = c.services.candidatesChanged
+        c.services.candidatesChanged = { stepID, items in
+            try await history(stepID, items)
+            // Cancellation arrives after the serious candidate has reached its consumer.
+            if items.contains(where: { $0.error == failure.localizedDescription }) { await c.cancel() }
+        }
+        await c.run(target: f.nodeID, only: false)
+        let step = try #require(c.runs.last?.steps.last)
+        let items = try #require(step.outputs["output"]?.candidates)
+        #expect(c.runs.last?.status == .failed && step.status == .failed)
+        #expect(step.error == failure.localizedDescription && c.errorMessage == failure.localizedDescription)
+        #expect(items[0].asset != nil && items[1].error == failure.localizedDescription && items[2].asset == nil)
+        #expect(await f.engine.requests.count == 2)
+        #expect(await f.destination.snapshot().assets.count == 1)
+        #expect(f.probe.releases == 1)
+        try await c.close(); try await f.destination.close(); try await f.source.close()
+    }
+
+    @Test(arguments: ["success", "failure", "cancel"])
+    func ordinaryImageOutcomesKeepExistingControllerSemantics(mode: String) async throws {
+        let f = try await imageRepairFixture(count: 1); let c = f.controller
+        if mode == "failure" {
+            await f.engine.configure(action: { throw WorkflowIssue("ordinary image fixture failure") })
+        } else if mode == "cancel" { await f.engine.configure(action: { await c.cancel() }) }
+        await c.run(target: f.nodeID, only: false)
+        let step = try #require(c.runs.last?.steps.last)
+        if mode == "success" {
+            #expect(c.runs.last?.status == .completed && step.status == .completed)
+            #expect(step.outputs["output"]?.candidates.first?.asset != nil)
+            #expect(await f.destination.snapshot().assets.count == 1)
+        } else if mode == "failure" {
+            #expect(step.status == .partial)
+            #expect(step.outputs["output"]?.candidates.first?.error?.contains("ordinary image fixture failure") == true)
+            #expect(await f.destination.snapshot().assets.isEmpty)
+        } else {
+            #expect(c.runs.last?.status == .cancelled && step.status == .cancelled && c.errorMessage == nil)
+            #expect(await f.destination.snapshot().assets.isEmpty)
+        }
+        #expect(await f.engine.requests.count == 1)
+        #expect(f.probe.resolutions == 1 && f.probe.releases == 1)
+        #expect(!c.hasPendingSaves)
+        try await c.close(); try await f.destination.close(); try await f.source.close()
+    }
+}

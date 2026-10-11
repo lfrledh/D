@@ -39,6 +39,15 @@ struct WorkflowSaveFailure: LocalizedError {
     }
     private var pending: [UUID: Publication] = [:]
     private var candidateProgress: [UUID: [WorkflowCandidate]] = [:]
+    /// In-memory recovery belongs to the original Call, not merely a candidate UUID.
+    private struct ImageCallOwner: Equatable {
+        let projectID: UUID; let instanceID: UUID
+        let node: WorkflowNode; let inputs: [String: WorkflowValue]
+        let address: WorkflowExecutionAddress?; let graphID: UUID?
+        let prompt: String; let reference: WorkflowAssetReference?
+    }
+    private var imageCallOwners: [UUID: ImageCallOwner] = [:]
+    private var imageCandidateParents: [UUID: UUID] = [:]
     public var hasPendingSaves: Bool { !pending.isEmpty }
 
     public init(store: ProjectStore, session: WorkbenchSession, registry: WorkflowRegistry = .standard,
@@ -139,7 +148,9 @@ struct WorkflowSaveFailure: LocalizedError {
         languageCallActive = true
         defer { languageCallActive = false; activeOperation = nil }
         do {
-            if pending[context.stepID] == nil, let kind = operation.definition.modelKind {
+            // Image publications use candidate attempt IDs. Their service restores all
+            // retained bytes before lazily acquiring a model for any missing candidate.
+            if !WorkflowModelRoutes.isImage(context.node.operationID), pending[context.stepID] == nil, let kind = operation.definition.modelKind {
                 let identity = context.node.parameters["modelID"]?.string ?? ""
                 guard !identity.isEmpty else { throw WorkflowIssue("请为节点选择模型。", nodeID: context.node.id) }
                 let binding = try await resolveModel(kind, identity)
@@ -488,6 +499,7 @@ struct WorkflowSaveFailure: LocalizedError {
                     details: content.details, assetID: content.id)
             }
             pending.removeValue(forKey: context.stepID)
+            imageCandidateParents.removeValue(forKey: context.stepID)
             return result.record.reference
         } catch {
             if ["audio/wav", "video/mp4", PitchAnalysisResult.mediaType, WorkflowTextResponseFile.mediaType].contains(content.mediaType) {
@@ -536,19 +548,45 @@ struct WorkflowSaveFailure: LocalizedError {
     }
 
     public func generateImages(prompt: String, reference: WorkflowAssetReference?, context: WorkflowExecutionContext) async throws -> [WorkflowCandidate] {
-        let binding = try model(for: context)
+        let project = await store.snapshot()
+        let owner = ImageCallOwner(projectID: project.id, instanceID: project.effectiveInstanceID,
+            node: context.node, inputs: context.inputs, address: context.address, graphID: context.graphID,
+            prompt: prompt, reference: reference)
+        if let original = imageCallOwners[context.stepID], original != owner {
+            throw WorkflowIssue("待保存候选不属于此项目、运行或冻结调用；未发布到其他目标。")
+        }
         let p = context.node.parameters
         guard let seed = UInt64(p["seed"]?.string ?? ""), let count = p["count"]?.integer, (1...8).contains(count) else { throw WorkflowIssue("候选数量或 seed 无效。") }
         var items = candidateProgress[context.stepID] ?? context.retryCandidates ?? (0..<count).map { offset in
             WorkflowCandidate(seed: String(seed &+ UInt64(offset)))
         }
         guard items.count == count else { throw WorkflowIssue("候选重试数量与原快照不符。") }
+        guard items.allSatisfy({ pending[$0.attemptID] == nil || imageCandidateParents[$0.attemptID] == context.stepID }) else {
+            throw WorkflowIssue("待保存候选属于另一调用，未发布。")
+        }
+        imageCallOwners[context.stepID] = owner
         candidateProgress[context.stepID] = items
         try await candidatesChanged(context.stepID, items)
         let references = try context.inputs["ref"].map {
             try WorkflowPortDefinition("ref", "", kinds: [.image, .list], required: false, assetListKind: .image).resolveAssets($0)
         } ?? reference.map { [$0] } ?? []
         let parents = context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] }
+        // Save every already-generated candidate first, even if an earlier index
+        // still needs inference. Store validates the live destination on publication.
+        for i in items.indices where items[i].asset == nil && pending[items[i].attemptID] != nil {
+            try checkCancellation()
+            let old = items[i]
+            do {
+                let asset = try await publish(.init(node: context.node, stepID: old.attemptID, inputs: context.inputs))
+                items[i] = .init(id: old.id, attemptID: old.attemptID, asset: asset, seed: old.seed)
+            } catch {
+                items[i].error = error.localizedDescription
+                candidateProgress[context.stepID] = items
+                throw error
+            }
+            candidateProgress[context.stepID] = items
+            try await candidatesChanged(context.stepID, items)
+        }
         for i in items.indices {
             if items[i].asset != nil { continue }
             try checkCancellation()
@@ -556,6 +594,24 @@ struct WorkflowSaveFailure: LocalizedError {
             let old = items[i]
             let attempt = pending[old.attemptID] == nil && old.error != nil ? UUID() : old.attemptID
             let itemContext = WorkflowExecutionContext(node: context.node, stepID: attempt, inputs: context.inputs)
+            let binding: WorkflowModelBinding
+            do {
+                if bindings[context.node.id] == nil {
+                    let identity = context.node.parameters["modelID"]?.string ?? ""
+                    guard !identity.isEmpty else { throw WorkflowIssue("请为节点选择模型。", nodeID: context.node.id) }
+                    let acquired = try await resolveModel(.image, identity)
+                    bindings[context.node.id] = acquired
+                }
+                binding = try model(for: context)
+                try checkCancellation()
+            } catch is CancellationError { throw CancellationError() }
+            catch {
+                let incomplete = WorkflowIssue("候选尚未全部完成（已保存 \(items.filter { $0.asset != nil }.count)/\(count)）；缺少的候选仍需原模型：\(error.localizedDescription)", nodeID: context.node.id)
+                items[i] = .init(id: old.id, attemptID: attempt, error: incomplete.localizedDescription, seed: old.seed)
+                candidateProgress[context.stepID] = items
+                try await candidatesChanged(context.stepID, items)
+                throw incomplete
+            }
             do {
                 if pending[attempt] == nil {
                     let inputRefs = try await store.prepareWorkflowImageReferences(references, runID: attempt)
@@ -575,6 +631,12 @@ struct WorkflowSaveFailure: LocalizedError {
                         }
                     } catch { streamFailure = error; await run.cancel() }
                     let outcome = await run.outcome(); activeRun = nil
+                    if case .failed(let failure) = outcome {
+                        switch failure {
+                        case .inputIntegrityChanged, .resourceCleanupUnconfirmed: throw failure
+                        default: break
+                        }
+                    }
                     try checkCancellation()
                     if let streamFailure { throw streamFailure }
                     let result: InferenceResult
@@ -591,6 +653,7 @@ struct WorkflowSaveFailure: LocalizedError {
                     pending[attempt] = Publication(id: UUID(), data: data, mediaType: "image/png", metadata: metadata,
                         parents: parents, request: request,
                         details: result.metadata.merging(["backend": binding.backendID, "modelIdentity": binding.identity]) { _, new in new })
+                    imageCandidateParents[attempt] = context.stepID
                 }
                 let asset = try await publish(itemContext)
                 items[i] = WorkflowCandidate(id: old.id, attemptID: attempt, asset: asset, seed: old.seed)
@@ -604,12 +667,24 @@ struct WorkflowSaveFailure: LocalizedError {
                 throw failure
             } catch {
                 items[i] = WorkflowCandidate(id: old.id, attemptID: attempt, error: error.localizedDescription, seed: old.seed)
+                if let failure = error as? InferenceFailure {
+                    switch failure {
+                    case .inputIntegrityChanged, .resourceCleanupUnconfirmed:
+                        candidateProgress[context.stepID] = items
+                        // Persist through the actual history consumer before surfacing
+                        // the authoritative failure. Never start another unsafe attempt.
+                        try await candidatesChanged(context.stepID, items)
+                        throw failure
+                    default: break
+                    }
+                }
             }
             candidateProgress[context.stepID] = items
             // Each successful candidate is durable before starting the next expensive attempt.
             try await candidatesChanged(context.stepID, items)
         }
         candidateProgress.removeValue(forKey: context.stepID)
+        imageCallOwners.removeValue(forKey: context.stepID)
         return items
     }
     /// Save-only recovery for the Quick caller. This path never resolves a model or submits inference.
