@@ -28,6 +28,7 @@ struct WorkflowGraphSurface: View {
     var onDropItem: (WorkflowCanvasTransfer, CGPoint) -> Bool = { _, _ in false }
     var onBindAsset: (UUID, UUID?, UUID, UUID) -> Bool = { _, _, _, _ in false }
     var onInspect: (UUID) -> Void = { _ in }
+    var onClearSelection: () -> Void = {}
     @Environment(\.dLanguageStore) private var languageStore
     @GestureState private var gestureScale: CGFloat = 1
     @State private var nodeDrag = WorkflowCanvasNodeDragPresentation()
@@ -524,6 +525,7 @@ struct WorkflowGraphSurface: View {
                     case .clicked:
                         controller.selectedNodeID = nil; controller.selectedNodeIDs = []
                         selectedConnectionID = nil
+                        onClearSelection()
                     }
                 }
             },

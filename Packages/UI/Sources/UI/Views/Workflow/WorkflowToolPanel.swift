@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 struct WorkflowToolPanel: View {
     let controller: WorkflowController
+    var selectionOnly = false
     @State private var name = ""
     @State private var boundary: ToolBoundaryDraft?
     @Environment(\.dismiss) private var dismiss
@@ -11,7 +12,8 @@ struct WorkflowToolPanel: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text(t("title", "项目工具箱")).font(.title2)
+                Text(selectionOnly ? t("selectionTitle", "将选区组合为自定义节点") : t("title", "项目工具箱")).font(.title2)
+                if !selectionOnly {
                 ForEach(controller.tools, id: \.selfReference) { tool in
                     HStack {
                         Text(tool.name + " · v\(tool.version)")
@@ -31,11 +33,18 @@ struct WorkflowToolPanel: View {
                     if let graph = controller.graph { boundary = ToolBoundaryDraft(graph: graph, selected: controller.selectedNodeIDs, registry: controller.registry, tools: controller.tools) }
                 }
                 .disabled(controller.selectedNodeIDs.isEmpty)
+                }
                 if let error = controller.errorMessage { Text(error).foregroundStyle(.red) }
+                if selectionOnly { TextField(t("name", "新工具名称"), text: $name) }
                 if boundary != nil { boundaryEditor }
                 Button(t("done", "完成")) { dismiss() }
             }.padding(20)
         }.frame(minWidth: 680, minHeight: 520)
+            .onAppear {
+                if selectionOnly, boundary == nil, let graph = controller.graph {
+                    boundary = ToolBoundaryDraft(graph: graph, selected: controller.selectedNodeIDs, registry: controller.registry, tools: controller.tools)
+                }
+            }
     }
     @ViewBuilder private var boundaryEditor: some View {
         if let value = boundary {

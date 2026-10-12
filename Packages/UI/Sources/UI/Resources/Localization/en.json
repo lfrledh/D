@@ -1534,6 +1534,27 @@
     "workflow.results.snapshot": "Run Snapshot",
     "workflow.results.current": "View Current Nodes",
     "workflow.operation.d.model.qwen35-9b.field.chatTemplateOverride": "Chat Template Jinja (blank uses the model template)",
-    "workflow.operation.d.model.qwen38-27b.field.chatTemplateOverride": "Chat Template Jinja (blank uses the model template)"
+    "workflow.operation.d.model.qwen38-27b.field.chatTemplateOverride": "Chat Template Jinja (blank uses the model template)",
+    "workspace.preparation": "Preparation",
+    "workspace.output": "Outputs",
+    "workspace.configuration": "Configure",
+    "workspace.nodeResults": "Node results",
+    "workspace.runOverview": "Run overview",
+    "workspace.selectedRun": "Selected run",
+    "workspace.chooseRun": "Choose a run",
+    "workspace.pinResult": "Pin result",
+    "workspace.call": "Call",
+    "workspace.chooseCall": "Choose a call",
+    "workspace.resultIdentity": "Run and call identity",
+    "workspace.noResult": "No selected result in this scope",
+    "workspace.noResultDetail": "Choose a run and a specific call. The node may not have participated or the pinned object may be unavailable. No other run is substituted.",
+    "workspace.recordedDetails": "Recorded inputs and parameters",
+    "workspace.runningOriginal": "Running original · Edit creates a copy",
+    "workspace.editingCopy": "Editing copy",
+    "workspace.blankFlow": "Blank flow",
+    "workspace.advanced": "Advanced controls",
+    "workspace.commonSettings": "Common settings · future runs",
+    "workflow.scope.plan": "Nodes in this scope (inputs and resources are checked at execution)",
+    "workflow.language.tools.selectionTitle": "Create a custom node from selection"
   }
 }

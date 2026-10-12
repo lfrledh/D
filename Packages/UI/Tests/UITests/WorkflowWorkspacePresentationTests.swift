@@ -198,3 +198,41 @@ private actor WorkspaceNoInference: InferenceEngine {
         #expect(port.hitTest(CGPoint(x: 219, y: 91)) == nil)
     }
 }
+
+extension WorkflowWorkspacePresentationTests {
+    @Test func explicitPanelIntentPreservesResourcesPinAndRunTarget() {
+        let a = UUID(), b = UUID(), run = UUID()
+        var state = WorkflowWorkspacePanels()
+        state.selectPreparation(.assets)
+        state.selectRun(run)
+        state.inspect(a)
+        #expect(state.preparation == .configuration && state.output == .node)
+        state.pinned = true
+        state.inspect(b)
+        #expect(state.nodeID == a && state.runID == run)
+        state.clearSelection()
+        #expect(state.preparation == .assets && state.output == .node && state.nodeID == a)
+        state.pinned = false; state.clearSelection()
+        #expect(state.output == .overview && state.runID == run)
+        state.selectPreparation(.nodes)
+        #expect(state.lastResource == .nodes && state.runID == run)
+    }
+
+    @Test func selectedRunAndExactCallNeverFallBackToLatestOrOtherNode() {
+        let graph = WorkflowExamples.text(), node = graph.nodes[0]
+        let first = WorkflowStepRun(node: node, signature: "first", status: .completed)
+        let second = WorkflowStepRun(node: node, signature: "second", status: .completed)
+        let run = WorkflowRun(graph: graph, targetNodeID: node.id, steps: [first, second], status: .completed)
+        var state = WorkflowWorkspacePanels(); state.selectRun(run.id); state.inspect(node.id)
+        #expect(state.record(in: run) == nil) // Multiple calls require an explicit choice.
+        let call = WorkflowWorkspacePanels.records(in: run)[0]
+        state.selectResult(node: node.id, call: .init(address: call.address, stepID: call.id))
+        #expect(state.record(in: run)?.step.signature == "first")
+        var other = run; other.id = UUID()
+        #expect(state.record(in: other) == nil)
+        state.selectRun(other.id)
+        #expect(state.call == nil && state.record(in: run) == nil)
+        state.nodeID = UUID()
+        #expect(state.record(in: other) == nil)
+    }
+}

@@ -1534,6 +1534,27 @@
     "workflow.results.snapshot": "运行快照",
     "workflow.results.current": "查看当前节点",
     "workflow.operation.d.model.qwen35-9b.field.chatTemplateOverride": "聊天模板 Jinja（留空使用模型原模板）",
-    "workflow.operation.d.model.qwen38-27b.field.chatTemplateOverride": "聊天模板 Jinja（留空使用模型原模板）"
+    "workflow.operation.d.model.qwen38-27b.field.chatTemplateOverride": "聊天模板 Jinja（留空使用模型原模板）",
+    "workspace.preparation": "准备",
+    "workspace.output": "产出",
+    "workspace.configuration": "配置",
+    "workspace.nodeResults": "节点结果",
+    "workspace.runOverview": "运行总览",
+    "workspace.selectedRun": "所选运行",
+    "workspace.chooseRun": "选择运行记录",
+    "workspace.pinResult": "固定查看",
+    "workspace.call": "具体调用",
+    "workspace.chooseCall": "请选择一次调用",
+    "workspace.resultIdentity": "运行与调用身份",
+    "workspace.noResult": "此范围没有所选结果",
+    "workspace.noResultDetail": "请选择运行与具体调用。节点可能未参与此运行，或固定对象已不可访问；不会替换为其他运行。",
+    "workspace.recordedDetails": "当时的输入与参数",
+    "workspace.runningOriginal": "运行原图 · 编辑时创建副本",
+    "workspace.editingCopy": "编辑副本",
+    "workspace.blankFlow": "空白流程",
+    "workspace.advanced": "进阶控制",
+    "workspace.commonSettings": "常用设置 · 后续运行",
+    "workflow.scope.plan": "本次范围中的节点（执行时仍会校验输入与资源）",
+    "workflow.language.tools.selectionTitle": "将选区组合为自定义节点"
   }
 }

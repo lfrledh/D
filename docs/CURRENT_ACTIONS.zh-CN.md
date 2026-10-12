@@ -1,6 +1,8 @@
 # 当前行动与接手点
 
-最后核实：2026-10-12。当前任务 **D / DHA-01 有限可靠性修补**，从固定 N 隔离修补严重图像错误与历史保存失败的交汇；用户明确授权推送修补工作分支，交付停在独立复审，不合并 main、不部署或替换普通 App。主交付及验收状态见[既有非 UI 任务记录](tasks/D-NON-UI-REPAIR-20261011.md#dha-01-2026-10-12)。
+最后核实：2026-10-12。当前授权 **UI-PRESENTATION-REBUILD-01 / 元数据与标签整理**。实际及附件预期起点均为 `a6a50e6c4b8bc40a75b15e08a74a34902aeeb34c`，已核对远端 `codex/dha-01-20261012` 无后继。独立树 `D-Worktrees/D-UI-METADATA-20261012`，分支 `codex/ui-metadata-index-20261012`；Lead 单一写者，只读审查并行。按附件 S0—S4 完成左准备/右产出、标签单写、类型化检索和对象信息；允许现有 Library 格式及字段级注释命令的有限补齐，ProjectManifest20、运行/模型不扩展。用户授权完成后推送工作分支，**不合并、不发布、不替换现用 App**。
+
+唯一活动记录见[既有 UI 任务页](tasks/UI-PRESENTATION-REBUILD-01.md#2026-10-12-元数据与标签整理)。本轮外盘证据根 `D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261012-metadata`（下称 R），附件固定副本及清单在 `R/input`，保护摘要在 `R/lead`；最终 SHA/完整差分和分级证据统一写入 `R/delivery/receipt.md`。当前实施 S1，未宣称普通 App 或原生验收通过。旧 R16/A2/DHA 未验项继续留在[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。以下版本记录保留历史范围。
 
 ## 版本与保护
 
@@ -13,7 +15,7 @@
 - 受保护源 `/Volumes/CodexProjects/Codex/D` 仍为 `codex/inference-foundation` / `01758b81527dc27eb4563bf1b66fd1ceab6647ee`。个人 scheme orderHint 1→6、未暂存状态与索引保持；摘要 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`。
 - main 起点 `91bef7d720a8b6cb923207ef787230f36496f4cf`；UI 树保留 B。既有项目、普通 App、模型、旧候选和证据不清理。这里记录的是本轮核实快照，不是以后强制回退基线。
 
-## 当前工作、待验与下一步
+## 继承的 DHA-01 成果与待验
 
 DHA-01 沿真实 Services → Controller 候选消费者 → Executor → Store → 恢复按钮修补。两类严重图像错误叠加历史保存失败时，计算步骤立即 failed，保存状态单独为 saving；保留主诊断、最近次级保存错误和候选/调用身份。恢复保存不解析模型或重新推理，成功后仍 failed；明确“重试计算”继续沿原准入规则。运行原图保护及首次实际编辑复制继承既有 A2，查看/导航不复制，不重修 P-01/P-02。
 

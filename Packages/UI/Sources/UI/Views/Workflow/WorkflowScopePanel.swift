@@ -6,7 +6,9 @@ struct WorkflowScopePresentation: Identifiable {
     let graphID: UUID
     let revision: UUID
     let nodeID: UUID
-    init(graph: WorkflowGraph, nodeID: UUID) {
+    var mode = 0
+    init(graph: WorkflowGraph, nodeID: UUID, mode: Int = 0) {
+        self.mode = mode
         self.graphID = graph.id; self.revision = graph.revision; self.nodeID = nodeID
     }
 }
@@ -21,6 +23,11 @@ struct WorkflowScopePresentation: Identifiable {
     @Environment(\.dLanguageStore) private var language
     @State private var mode = 0
     @State private var choices: [String: UUID] = [:]
+
+    init(controller: WorkflowController, graphID: UUID, revision: UUID, nodeID: UUID, initialMode: Int = 0) {
+        self.controller = controller; self.graphID = graphID; self.revision = revision; self.nodeID = nodeID
+        _mode = State(initialValue: initialMode)
+    }
 
     private func text(_ key: String, _ fallback: String) -> String {
         language?.text("workflow.scope." + key, fallback: fallback) ?? fallback
@@ -55,7 +62,12 @@ struct WorkflowScopePresentation: Identifiable {
             }.onChange(of: mode) { _, _ in choices = [:] }
             Text(text("explanation", "边界输入必须选择一个明确的已保存结果；不会自动取最新版本。重新运行产生新记录，旧记录不变。"))
                 .font(.callout).foregroundStyle(.secondary)
-            if let boundaries = try? controller.scopeBoundaries(selection) {
+            if let graph = controller.rootGraph,
+               let slice = try? WorkflowScopePlanner.select(graph: graph, selection: selection, tools: controller.tools, registry: controller.registry) {
+                let boundaries = slice.boundaries
+                Text(text("plan", "本次范围中的节点（执行时仍会校验输入与资源）")).font(.subheadline)
+                Text(slice.plan.steps.map { step in graph.nodes.first(where: { $0.id == step.id })?.title ?? step.id.uuidString }.joined(separator: " → "))
+                    .font(.callout).textSelection(.enabled)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         ForEach(Array(boundaries.enumerated()), id: \.offset) { _, boundary in

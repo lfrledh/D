@@ -83,6 +83,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     @ObservationIgnored private var activeRunID: UUID?
     // Set before execution can suspend; decision-saving operations have no
     // editable execution owner and retain their independent admission rules.
+    /// Read-only UI identity; navigation and metadata inspection never create an editing copy.
+    public var presentationEditingOriginalID: UUID? { editingOriginalID }
+    public var presentationCopySourceID: UUID? { editingCopies.first(where: { $0.value == rootGraph?.id })?.key }
     private var editingOriginalID: UUID?
     @ObservationIgnored private var editingCopies: [UUID: UUID] = [:]
     @ObservationIgnored private var closed = false

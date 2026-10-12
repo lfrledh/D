@@ -84,6 +84,7 @@ public struct DualWorkbenchView: View {
     }
     @State private var entry: Entry = .quick
     @State private var entryHistory: [Entry] = []
+    @State private var navigationIntent = UUID()
     @State private var libraryVisible = false
     @State private var projectsVisible = false
     @State private var compatibilityVisible = false
@@ -177,12 +178,12 @@ public struct DualWorkbenchView: View {
 
     private func navigate(to destination: Entry) {
         guard destination != entry else { return }
-        captureChatReading()
+        captureChatReading(); navigationIntent = UUID()
         entryHistory.append(entry); entry = destination
     }
     private func goBack() {
         guard let previous = entryHistory.popLast() else { return }
-        captureChatReading()
+        captureChatReading(); navigationIntent = UUID()
         entry = previous
     }
     public var body: some View {
@@ -204,7 +205,11 @@ public struct DualWorkbenchView: View {
                 HStack(spacing: 8) {
                 Button(action: goBack) { Image(systemName: "chevron.left") }
                     .disabled(entryHistory.isEmpty).help(t("back", "Back", "返回")).accessibilityIdentifier("workbench-back")
-                Text("D").font(.title2.bold())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("D").font(.title2.bold())
+                    Text((entry == .quick ? quickModel.manifest?.name : canvasModel.manifest?.name) ?? t("project", "Project", "项目"))
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
                 Menu {
                     Button(t("projects", "Projects…", "项目…")) { projectsVisible = true }
                     if model.projectSession.projectQuick != nil {
@@ -358,6 +363,7 @@ public struct DualWorkbenchView: View {
                     })
             }
         }
+        .onChange(of: libraryVisible) { _, _ in navigationIntent = UUID() }
         .sheet(isPresented: $libraryVisible, onDismiss: finishLibraryDismissal) {
             VStack(spacing: 0) {
                 if !quickModel.projectSession.explicitModelChecking.isEmpty {
@@ -590,7 +596,7 @@ public struct DualWorkbenchView: View {
                 guard case .operation(let operation, _) = value.selection else { return false }
                 return QuickCategory.category(for: operation) == family
             }, store: metadata, compact: compact, state: canvasMode == .assets ? canvasAssetLibraryState : (compact ? compactLibraryState : fullLibraryState),
-                onUse: useLibraryEntry, onAdd: { value in Task { await addLibraryEntry(value, at: point) } },
+                onUse: useLibraryEntry, onAdd: { value in beginAddingLibraryEntry(value, at: point) },
                 onPreview: { value in Task { await previewLibraryEntry(value) } },
                 onLocation: { value in Task { await showAssetLocation(value) } },
                 onPrepare: { value in Task { await prepareModel(value) } },
@@ -838,12 +844,22 @@ public struct DualWorkbenchView: View {
         }
         catch { issue = error.localizedDescription }
     }
-    private func addLibraryEntry(_ value: SharedLibraryBrowserEntry, at point: CGPoint) async {
-        let target = canvasModel
-        await target.projectSession.openWorkflow()
-        guard let controller = target.projectSession.workflow else { return }
+    private func beginAddingLibraryEntry(_ value: SharedLibraryBrowserEntry, at point: CGPoint) {
+        let owner = canvasModel.projectSession
+        let intent = navigationIntent, wasLibraryVisible = libraryVisible
+        guard let controller = owner.workflow else {
+            // Opening is presentation only. A second explicit Add captures the now visible target.
+            Task { await owner.openWorkflow(); if canvasModel.projectSession === owner, navigationIntent == intent, libraryVisible == wasLibraryVisible { navigate(to: .workflow) } }
+            issue = t("openWorkflowBeforeAdd", "Workflow opened. Choose a destination and add again.", "正在打开工作流；请确认目标后再次添加。")
+            return
+        }
         if controller.graph == nil { controller.addBlankGraph() }
         guard let scope = controller.canvasInsertionTarget() else { return }
+        Task { await addLibraryEntry(value, at: point, owner: owner, controller: controller, scope: scope, navigationIntent: intent, wasLibraryVisible: wasLibraryVisible) }
+    }
+    private func addLibraryEntry(_ value: SharedLibraryBrowserEntry, at point: CGPoint,
+                                 owner: ProjectSession, controller: WorkflowController, scope: WorkflowCanvasInsertionTarget, navigationIntent intent: UUID, wasLibraryVisible: Bool) async {
+        guard canvasModel.projectSession === owner, owner.workflow === controller, controller.isCurrent(scope) else { return }
         do {
             switch value.selection {
             case .operation(let id, let modelID): controller.addNode(operationID: id, modelID: modelID, x: point.x, y: point.y)
@@ -855,12 +871,12 @@ public struct DualWorkbenchView: View {
                 let source = try await store(for: identity.0, instanceID: identity.1)
                 let ref = try await source.pinWorkflowAsset(identity.2)
                 let copied = try await copiedReference(ref, from: source, to: controller.services.store)
-                guard target.projectSession.workflow === controller else { throw WorkflowIssue("目标项目已改变。") }
+                guard canvasModel.projectSession === owner, owner.workflow === controller else { throw WorkflowIssue("目标项目已改变。") }
                 try await controller.insertQuickResult(copied, target: scope, x: point.x, y: point.y)
             case .unavailable(let reason): throw WorkflowIssue(reason)
             }
             try await controller.saveExplicitEdits()
-            libraryVisible = false; navigate(to: .workflow)
+            if canvasModel.projectSession === owner, owner.workflow === controller, navigationIntent == intent, libraryVisible == wasLibraryVisible { libraryVisible = false; navigate(to: .workflow) }
         } catch { issue = error.localizedDescription }
     }
     private func copiedReference(_ reference: WorkflowAssetReference, from source: ProjectStore, to destination: ProjectStore) async throws -> WorkflowAssetReference {

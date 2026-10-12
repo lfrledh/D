@@ -296,7 +296,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             } else if event.type == .leftMouseUp {
                 pointerSession = nil // Consume before controller mutations/revision changes.
                 if session.target == .blank, session.tool == .hand {
-                    if session.moved { finishPan(session) }
+                    if session.moved { finishPan(session) } else { session.update(.clicked) }
                 } else { session.update(session.moved ? .ended : .clicked) }
                 resetHandCursor(); updateHandCursor(for: event)
             }
