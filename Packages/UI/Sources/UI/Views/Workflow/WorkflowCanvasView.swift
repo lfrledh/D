@@ -389,9 +389,14 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         controller.selectedNodeID = node.id; return true
     }
     private func retained<V: View>(_ content: V, visible: Bool, id: String) -> some View {
-        RetainedContentHost(content: content.workbenchTheme()
+        // The surrounding panel owns its plate. A nested canvas fill would leave
+        // an opaque rectangle whose width changes with the pane's current content.
+        RetainedContentHost(content: content
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .workbenchTheme(paintsCanvas: false)
             .environment(\.dLanguageStore, languageStore)
             .environment(\.chatDisplayPreferences, displayPreferences), visible: visible, identifier: id)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .allowsHitTesting(visible).accessibilityHidden(!visible)
     }
     private var preparationPanel: some View {
@@ -540,7 +545,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 } else {
                     Text(text("workspace.chooseRun", "选择运行记录")).foregroundStyle(.secondary)
                 }
-            }.padding(14)
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(14)
         }
     }
 

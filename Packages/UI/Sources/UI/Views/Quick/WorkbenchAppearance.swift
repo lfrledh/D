@@ -283,16 +283,20 @@ extension View {
 
 /// A presentation environment shared by SwiftUI and retained native hosts.
 private struct WorkbenchThemeModifier: ViewModifier {
+    var paintsCanvas = true
     @Environment(\.chatDisplayPreferences) private var preferences
     @Environment(\.colorScheme) private var systemScheme
     func body(content: Content) -> some View {
         let palette = preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? systemScheme)
         content.foregroundStyle(palette.foregroundColor, palette.secondaryColor)
-            .tint(palette.accentColor).background(palette.canvasColor)
+            .tint(palette.accentColor)
+            .background { if paintsCanvas { palette.canvasColor } }
     }
 }
 extension View {
-    func workbenchTheme() -> some View { modifier(WorkbenchThemeModifier()) }
+    func workbenchTheme(paintsCanvas: Bool = true) -> some View {
+        modifier(WorkbenchThemeModifier(paintsCanvas: paintsCanvas))
+    }
 }
 
 /// Explicit foreground and fill keep primary actions readable in both palettes.

@@ -393,7 +393,7 @@ public struct SharedLibraryBrowser: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            header
+            if !compact { header }
             if let errorMessage {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -422,7 +422,7 @@ public struct SharedLibraryBrowser: View {
                 }
             }
         }
-        .background(.regularMaterial)
+        .background { if !compact { Rectangle().fill(.regularMaterial) } }
         .sheet(isPresented: $showOrganizer) { organizer }
         .sheet(item: $tagRequest) { request in
             SharedLibraryTagEditor(store: store, targets: request.targets, add: request.add, remove: request.remove,
@@ -465,34 +465,21 @@ public struct SharedLibraryBrowser: View {
                 .accessibilityIdentifier("shared-library-close")
             Text(word("title", "共享资料库")).font(.headline).lineLimit(1)
             Spacer(minLength: 0)
-            if compact {
-                Button(word("import", "导入素材"), action: onImport).font(.caption)
-                Menu {
-                    Button(word("organize", "整理资料库")) { showOrganizer = true }
-                    Button(word("undo", "撤销")) { perform { try store.undo() } }
-                        .disabled(!store.canUndo)
-                    Button(word("redo", "重做")) { perform { try store.redo() } }
-                        .disabled(!store.canRedo)
-                } label: { Image(systemName: "ellipsis.circle") }
-                    .accessibilityLabel(word("more", "更多"))
-            } else {
-                Button(action: onImport) { Image(systemName: "square.and.arrow.down") }
-                    .help(word("import", "导入素材")).accessibilityLabel(word("import", "导入素材"))
-                Button { showOrganizer = true } label: { Image(systemName: "square.stack.3d.up") }
-                    .help(word("organize", "整理资料库")).accessibilityLabel(word("organize", "整理资料库"))
-                Button { perform { try store.undo() } } label: { Image(systemName: "arrow.uturn.backward") }
-                    .disabled(!store.canUndo).help(word("undo", "撤销")).accessibilityLabel(word("undo", "撤销"))
-                Button { perform { try store.redo() } } label: { Image(systemName: "arrow.uturn.forward") }
-                    .disabled(!store.canRedo).help(word("redo", "重做")).accessibilityLabel(word("redo", "重做"))
-            }
+            Button(action: onImport) { Image(systemName: "square.and.arrow.down") }
+                .help(word("import", "导入素材")).accessibilityLabel(word("import", "导入素材"))
+            Button { showOrganizer = true } label: { Image(systemName: "square.stack.3d.up") }
+                .help(word("organize", "整理资料库")).accessibilityLabel(word("organize", "整理资料库"))
+            Button { perform { try store.undo() } } label: { Image(systemName: "arrow.uturn.backward") }
+                .disabled(!store.canUndo).help(word("undo", "撤销")).accessibilityLabel(word("undo", "撤销"))
+            Button { perform { try store.redo() } } label: { Image(systemName: "arrow.uturn.forward") }
+                .disabled(!store.canRedo).help(word("redo", "重做")).accessibilityLabel(word("redo", "重做"))
         }.buttonStyle(.borderless).padding(10)
     }
 
     private var compactBody: some View {
         VStack(alignment: .leading, spacing: 7) {
             searchControls
-            Text(word("legend", "能力 / 我的标签")).font(.caption2).foregroundStyle(.secondary)
-            bulkControls
+            if !validSelection.isEmpty { bulkControls }
             ScrollView {
                 LazyVStack(spacing: 6) {
                     ForEach(visible) { entry in entryRow(entry, compact: true) }
@@ -581,11 +568,26 @@ public struct SharedLibraryBrowser: View {
     }
     private var searchControls: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Menu(scopeTitle) {
-                Button(word("all", "全部")) { selectScope(.all) }
-                ForEach(SharedLibraryItemKind.allCases, id: \.self) { kind in Button(kindName(kind)) { selectScope(.kind(kind)) } }
-                ForEach(saved) { saved in Button(saved.name) { selectScope(.saved(saved.id)) } }
-            }.font(.caption)
+            HStack {
+                Menu(scopeTitle) {
+                    Button(word("all", "全部")) { selectScope(.all) }
+                    ForEach(SharedLibraryItemKind.allCases, id: \.self) { kind in Button(kindName(kind)) { selectScope(.kind(kind)) } }
+                    ForEach(saved) { saved in Button(saved.name) { selectScope(.saved(saved.id)) } }
+                }.font(.caption)
+                if compact {
+                    Spacer(minLength: 0)
+                    Menu {
+                        Button(word("import", "导入素材"), action: onImport)
+                        Button(word("saveQuery", "保存检索")) { tab = .saved; showOrganizer = true }
+                        Button(word("organize", "整理资料库")) { showOrganizer = true }
+                        Divider()
+                        Button(word("undo", "撤销")) { perform { try store.undo() } }.disabled(!store.canUndo)
+                        Button(word("redo", "重做")) { perform { try store.redo() } }.disabled(!store.canRedo)
+                    } label: { Image(systemName: "ellipsis.circle") }
+                        .accessibilityLabel(word("more", "更多"))
+                        .accessibilityIdentifier("shared-library-more")
+                }
+            }
             TextField(word("search", "搜索名称、说明或我的标签"), text: searchTextBinding)
                 .textFieldStyle(.roundedBorder).accessibilityIdentifier("shared-library-search")
             HStack {
@@ -599,7 +601,7 @@ public struct SharedLibraryBrowser: View {
                     .popover(isPresented: $showFilters, arrowEdge: .bottom) { filterPopover }
             }.font(.caption)
             SharedLibraryPropertySummary(query: Binding(get: { query }, set: { query = $0 }), items: entries.map(\.item), context: queryContext, store: store)
-            ScrollView(.horizontal) {
+            if hasSearchTokens { ScrollView(.horizontal) {
                 HStack(spacing: 4) {
                     if scope != .all { token(scopeTitle) { selectScope(.all) } }
                     if !query.text.isEmpty { token(query.text) { query.text = "" } }
@@ -613,14 +615,21 @@ public struct SharedLibraryBrowser: View {
                     dimensionTokens(query.readiness, path: \.readiness, label: readinessName)
                     dimensionTokens(query.compatibility, path: \.compatibility, label: compatibilityName)
                 }
-            }.scrollIndicators(.hidden)
+            }.scrollIndicators(.hidden) }
             HStack {
                 Text("\(Set(visible.map(\.item.key)).count)/\(Set(entries.map(\.item.key)).count) " + word("logicalObjects", "逻辑对象") + " · \(visible.count) " + word("locations", "活动位置"))
                     .font(.caption2).foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                Button(word("saveQuery", "保存检索")) { tab = .saved; showOrganizer = true }.font(.caption)
+                if !compact {
+                    Button(word("saveQuery", "保存检索")) { tab = .saved; showOrganizer = true }.font(.caption)
+                }
             }
         }
+    }
+    private var hasSearchTokens: Bool {
+        scope != .all || !query.text.isEmpty || !query.allTagIDs.isEmpty || !query.anyTagIDs.isEmpty
+            || !query.kinds.isEmpty || !query.roles.isEmpty || !query.inputs.isEmpty || !query.outputs.isEmpty
+            || !query.contentKinds.isEmpty || !query.readiness.isEmpty || !query.compatibility.isEmpty
     }
     private func countAddingTag(_ id: UUID) -> Int {
         var value = query; value.allTagIDs.insert(id)
