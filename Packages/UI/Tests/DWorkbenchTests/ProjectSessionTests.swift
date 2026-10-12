@@ -614,6 +614,30 @@ struct ProjectSessionTests {
         #expect(await subject.cancelAndCloseProject())
     }
 
+    @Test func capturedAnnotationOwnerRejectsStaleDraftClosedAndReplacedSession() async throws {
+        let folder = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: folder) }
+        let a = folder.appendingPathComponent("OwnerA.dproject"), b = folder.appendingPathComponent("OwnerB.dproject")
+        let subject = model(root: folder, backend: WorkbenchTestBackend(root: folder.appendingPathComponent("Tasks")))
+        await subject.createProject(at: a)
+        let owner = try #require(subject.currentStore)
+        let asset = try await owner.publishWorkflowAsset(data: Data("original".utf8), mediaType: "text/plain", name: "A", operationID: "d.text.input")
+        let snapshot = await owner.snapshot()
+        let baseline = ProjectAssetEditBaseline(project: snapshot, asset: asset.asset)
+        try await subject.saveAssetAnnotations(owner: owner, expected: baseline, note: "saved note")
+        await #expect(throws: WorkflowIssue.self) { try await subject.saveAssetAnnotations(owner: owner, expected: baseline, note: "old draft") }
+        #expect(await subject.cancelAndCloseProject())
+        await #expect(throws: WorkflowIssue.self) { try await subject.saveAssetAnnotations(owner: owner, expected: baseline, name: "closed") }
+        await subject.createProject(at: b)
+        let newOwner = try #require(subject.currentStore)
+        let beforeB = await newOwner.snapshot()
+        await #expect(throws: WorkflowIssue.self) { try await subject.saveAssetAnnotations(owner: owner, expected: baseline, name: "wrong instance") }
+        #expect(await newOwner.snapshot() == beforeB)
+        #expect(await subject.cancelAndCloseProject())
+        await subject.openProject(at: a)
+        #expect(subject.manifest?.assets.first?.name == "A" && subject.manifest?.assets.first?.note == "saved note")
+        #expect(await subject.cancelAndCloseProject())
+    }
+
     @Test func metadataAndAdoptionWritesFinishBeforeImmediateClose() async throws {
         let folder = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }

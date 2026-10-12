@@ -519,6 +519,13 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     if WorkflowCanvasPresentation.canResume(run.status) {
                         WorkflowRunRecoveryButton(controller: controller, run: run, readOnly: isReadOnly || controller.isRunning)
                     }
+                    DisclosureGroup(text("workspace.runAssets", "此运行的已保存结果")) {
+                        WorkflowStepValues(title: text("workspace.runAssets", "此运行的已保存结果"),
+                            values: runOutputValues(run), operationID: "", portsAreInputs: false, controller: controller,
+                            onReturnText: onReturnText, allowsReturn: false, metadata: metadata,
+                            resultScope: controller.projectID.map { .init(mode: .run, projectID: $0, instanceID: controller.projectInstanceID, runID: run.id) })
+                            .id(run.id)
+                    }
                     ForEach(WorkflowWorkspacePanels.records(in: run)) { record in
                         Button {
                             panelsState.selectResult(node: record.step.node.id, call: .init(address: record.address, stepID: record.id))
@@ -535,6 +542,14 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 }
             }.padding(14)
         }
+    }
+
+    private func runOutputValues(_ run: WorkflowRun) -> [String: WorkflowValue] {
+        var values: [String: WorkflowValue] = [:]
+        for call in WorkflowWorkspacePanels.records(in: run) {
+            for (port, value) in call.step.outputs { values[call.step.node.title + " · " + call.id.uuidString.prefix(8) + " · " + port] = value }
+        }
+        return values
     }
 
     private func dropItem(_ value: WorkflowCanvasTransfer, _ point: CGPoint) -> Bool {
@@ -1279,7 +1294,10 @@ private struct WorkflowNodeInspector: View {
                 WorkflowStepValues(title: workflowText(languageStore, "workflow.port.outputs", fallback: "输出"),
                                    values: step.outputs, operationID: node.operationID, portsAreInputs: false,
                                    controller: controller, onReturnText: onReturnText,
-                                   allowsReturn: !readOnly, metadata: metadata)
+                                   allowsReturn: !readOnly, metadata: metadata,
+                                   resultScope: resultRunID.flatMap { run in controller.projectID.map { project in
+                                       .init(mode: .run, projectID: project, instanceID: controller.projectInstanceID, runID: run, nodeID: step.node.id, stepID: step.id)
+                                   } })
                 if step.status == .waiting {
                     if let task = step.humanTask {
                         WorkflowHumanTaskForm(task: task, onSaveDraft: { controller.editHumanDraft(stepID: step.id, value: $0) },
@@ -1728,17 +1746,32 @@ private struct WorkflowStepValues: View {
     let onReturnText: (WorkflowAssetReference) -> Void
     let allowsReturn: Bool
     var metadata: SharedLibraryStore? = nil
+    var resultScope: SharedLibraryQueryScope? = nil
+    @State private var resultQuery = WorkflowResultQueryState()
+    @State private var annotationRequest: AssetAnnotationRequest?
+    private var references: [WorkflowAssetReference] {
+        var seen = Set<WorkflowAssetReference>()
+        return values.keys.sorted().flatMap { values[$0].map(savedAssets) ?? [] }.filter { seen.insert($0).inserted }
+    }
+    private var resultIdentity: WorkflowResultQueryState.Identity { .init(controller: controller, references: references) }
+    private func matches(_ reference: WorkflowAssetReference) -> Bool { portsAreInputs || resultQuery.matches(reference, store: metadata) }
+    private func visible(_ value: WorkflowValue) -> Bool {
+        portsAreInputs || resultQuery.keepsVisible(value, store: metadata)
+    }
     @Environment(\.dLanguageStore) private var languageStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.subheadline.weight(.semibold))
+            if !portsAreInputs, let metadata, !references.isEmpty {
+                WorkflowResultQueryControls(state: resultQuery, store: metadata, scope: resultScope)
+            }
             if values.isEmpty {
                 Text(workflowText(languageStore, "workflow.value.none", fallback: "无"))
                     .foregroundStyle(.secondary)
             }
             ForEach(values.keys.sorted(), id: \.self) { port in
-                if let value = values[port] {
+                if let value = values[port], visible(value) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(WorkflowCanvasPresentation.portTitle(
                             operationID: operationID,
@@ -1758,7 +1791,7 @@ private struct WorkflowStepValues: View {
                                 }
                             }
                         case .collection(let candidates):
-                            ForEach(candidates) { candidate in
+                            ForEach(candidates.filter { $0.asset.map(matches) ?? true }) { candidate in
                                 WorkflowCandidatePreview(controller: controller, candidate: candidate,
                                                          selected: false, onSelect: nil)
                             }
@@ -1769,8 +1802,10 @@ private struct WorkflowStepValues: View {
                             Text(receipt.hashes.joined(separator: "\n"))
                                 .font(.caption2.monospaced()).textSelection(.enabled)
                         }
-                        ForEach(savedAssets(value), id: \.self) { reference in
-                            WorkflowAssetOrganization(controller: controller, reference: reference, metadata: metadata)
+                        ForEach(savedAssets(value).filter(matches), id: \.self) { reference in
+                            WorkflowAssetOrganization(controller: controller, reference: reference, metadata: metadata,
+                                onQuery: portsAreInputs ? nil : { properties in resultQuery.query.properties = .merging(resultQuery.query.properties, properties) },
+                                onEdit: { annotationRequest = $0 })
                         }
                     }
                     .padding(8)
@@ -1778,17 +1813,17 @@ private struct WorkflowStepValues: View {
                 }
             }
         }
+        .task(id: resultIdentity) {
+            guard !portsAreInputs, metadata != nil, !references.isEmpty else { return }
+            await resultQuery.load(identity: resultIdentity) { try await controller.services.store.libraryMetadataSnapshots() }
+        }
+        .onDisappear { resultQuery.invalidate() }
+        .sheet(item: $annotationRequest) { request in
+            AssetAnnotationEditor(snapshot: request.snapshot, validate: request.validate, save: request.save) { annotationRequest = nil }
+        }
     }
     private func savedAssets(_ value: WorkflowValue) -> [WorkflowAssetReference] {
-        let references: [WorkflowAssetReference]
-        switch value {
-        case .asset(let reference): references = [reference]
-        case .collection(let candidates): references = candidates.compactMap(\.asset)
-        case .data(let datum): references = datum.assetReferences
-        case .receipt: references = []
-        }
-        var seen = Set<WorkflowAssetReference>()
-        return references.filter { seen.insert($0).inserted }
+        WorkflowResultQueryState.references(in: value)
     }
 
 }
@@ -1866,6 +1901,7 @@ struct WorkflowAssetPreview: View {
     let controller: WorkflowController
     let reference: WorkflowAssetReference
     @State var state = WorkflowAssetPreviewState()
+    @State private var inspectImage: NSImage?
     @Environment(\.dLanguageStore) private var languageStore
 
     private var identity: WorkflowAssetPreviewState.Identity { .init(controller: controller, reference: reference) }
@@ -1892,7 +1928,9 @@ struct WorkflowAssetPreview: View {
             case .image:
                 if let data {
                     if let image = NSImage(data: data) {
-                        Image(nsImage: image).resizable().scaledToFit().frame(maxHeight: 180)
+                        Button { inspectImage = image } label: {
+                            Image(nsImage: image).resizable().scaledToFit().frame(maxHeight: 180)
+                        }.buttonStyle(.plain).help(metadataText(languageStore, "inspectImage", "放大查看图像", "Inspect image"))
                     } else {
                         previewError(workflowText(
                             languageStore,
@@ -1925,6 +1963,12 @@ struct WorkflowAssetPreview: View {
                 }
             }
         }
+        .sheet(isPresented: Binding(get: { inspectImage != nil }, set: { if !$0 { inspectImage = nil } })) {
+            VStack {
+                HStack { Button(metadataText(languageStore, "close", "关闭", "Close")) { inspectImage = nil }; Spacer() }
+                if let inspectImage { ScrollView([.horizontal, .vertical]) { Image(nsImage: inspectImage).resizable().scaledToFit().frame(maxWidth: 1000, maxHeight: 750) } }
+            }.padding(18).frame(minWidth: 600, minHeight: 480)
+        }
         .task(id: identity) {
             await state.load(identity: identity, preview: {
                 [.audio, .video].contains(reference.kind) ? nil : try await controller.preview(reference)
@@ -1946,14 +1990,11 @@ private struct WorkflowCandidatePreview: View {
     @Environment(\.dLanguageStore) private var languageStore
 
     var body: some View {
-        Button {
-            onSelect?()
-        } label: {
-            VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 5) {
                 if let asset = candidate.asset {
                     WorkflowAssetPreview(controller: controller, reference: asset)
                 }
-                HStack {
+                Button { onSelect?() } label: { HStack {
                     Text(workflowText(
                         languageStore,
                         "workflow.candidate.seed",
@@ -1966,6 +2007,7 @@ private struct WorkflowCandidatePreview: View {
                               systemImage: "checkmark.circle.fill")
                     }
                 }
+                }.buttonStyle(.plain).disabled(onSelect == nil)
                 if let error = candidate.error {
                     Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
                 }
@@ -1974,9 +2016,6 @@ private struct WorkflowCandidatePreview: View {
             .background(selected ? Color.accentColor.opacity(0.14) : Color.clear,
                         in: RoundedRectangle(cornerRadius: 8))
             .contentShape(.interaction, RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .disabled(onSelect == nil)
     }
 }
 

@@ -548,6 +548,12 @@ struct QuickParameterField: View {
 }
 
 struct QuickAssetPreview: View {
+    private struct Identity: Hashable {
+        let store: ObjectIdentifier
+        let reference: WorkflowAssetReference
+    }
+    private var identity: Identity { .init(store: ObjectIdentifier(store), reference: reference) }
+    @State private var requestGeneration: UUID?
     @Environment(\.dLanguageStore) private var language
     let store: ProjectStore
     let reference: WorkflowAssetReference
@@ -564,20 +570,27 @@ struct QuickAssetPreview: View {
             else if let issue { Text(issue).foregroundStyle(.red) }
             else { ProgressView(baselineText(language, "label.0dee08a39132", fallback: "正在读取素材…")) }
         }
-        .task(id: reference) {
+        .task(id: identity) {
+            let generation = UUID(); requestGeneration = generation
             player?.pause(); player = nil; image = nil; text = nil; issue = nil
+            @MainActor func current() -> Bool { !Task.isCancelled && requestGeneration == generation }
             do {
                 if [.audio, .video].contains(reference.kind) {
-                    let (url, _) = try await store.workflowMedia(reference); player = AVPlayer(url: url)
+                    let (url, _) = try await store.workflowMedia(reference)
+                    guard current() else { return }
+                    player = AVPlayer(url: url)
+                } else if reference.kind == .text {
+                    let value = try await store.workflowText(reference)
+                    guard current() else { return }; text = value
                 } else {
                     let data = try await store.workflowData(reference)
+                    guard current() else { return }
                     if reference.kind == .image { image = NSImage(data: data) }
-                    else if reference.kind == .text { text = try await store.workflowText(reference) }
                     else if reference.kind == .document { text = "原始文档已保留；可加入聊天后读取文字。 / Original document preserved; add it to chat to read its text." }
                     else { text = String(data: data, encoding: .utf8) ?? "此素材不支持文本预览" }
                 }
-            } catch { issue = error.localizedDescription }
+            } catch { if current() { issue = error.localizedDescription } }
         }
-        .onDisappear { player?.pause() }
+        .onDisappear { requestGeneration = nil; player?.pause(); player = nil }
     }
 }

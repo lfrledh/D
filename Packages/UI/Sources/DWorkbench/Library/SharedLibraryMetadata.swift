@@ -36,14 +36,15 @@ public struct SharedLibraryItem: Sendable, Equatable, Identifiable {
     public let contentKind: WorkflowDataKind?
     public let readiness: SharedLibraryReadiness
     public let compatible: Bool?
+    public let assetFacts: SharedLibraryAssetFacts?
 
     public init(key: String, title: String, detail: String = "", kind: SharedLibraryItemKind,
                 role: String = "", inputs: Set<WorkflowDataKind> = [],
                 outputs: Set<WorkflowDataKind> = [], contentKind: WorkflowDataKind? = nil,
-                readiness: SharedLibraryReadiness = .unknown, compatible: Bool? = nil) {
+                readiness: SharedLibraryReadiness = .unknown, compatible: Bool? = nil, assetFacts: SharedLibraryAssetFacts? = nil) {
         self.key = key; self.title = title; self.detail = detail; self.kind = kind
         self.role = role; self.inputs = inputs; self.outputs = outputs
-        self.contentKind = contentKind; self.readiness = readiness; self.compatible = compatible
+        self.contentKind = contentKind; self.readiness = readiness; self.compatible = compatible; self.assetFacts = assetFacts
     }
 
     public static func == (lhs: Self, rhs: Self) -> Bool {
@@ -53,7 +54,7 @@ public struct SharedLibraryItem: Sendable, Equatable, Identifiable {
             && lhs.role.utf8.elementsEqual(rhs.role.utf8)
             && lhs.kind == rhs.kind && lhs.inputs == rhs.inputs && lhs.outputs == rhs.outputs
             && lhs.contentKind == rhs.contentKind && lhs.readiness == rhs.readiness
-            && lhs.compatible == rhs.compatible
+            && lhs.compatible == rhs.compatible && lhs.assetFacts == rhs.assetFacts
     }
 }
 
@@ -68,15 +69,18 @@ public struct SharedLibraryQuery: Codable, Sendable, Equatable {
     public var compatibility: Set<SharedLibraryCompatibility>
     public var allTagIDs: Set<UUID>
     public var anyTagIDs: Set<UUID>
+    public var scope: SharedLibraryQueryScope?
+    public var properties: SharedLibraryPropertyQuery?
 
     public init(text: String = "", kinds: Set<SharedLibraryItemKind> = [], roles: Set<String> = [],
                 inputs: Set<WorkflowDataKind> = [], outputs: Set<WorkflowDataKind> = [],
                 contentKinds: Set<WorkflowDataKind> = [], readiness: Set<SharedLibraryReadiness> = [],
                 compatibility: Set<SharedLibraryCompatibility> = [], allTagIDs: Set<UUID> = [],
-                anyTagIDs: Set<UUID> = []) {
+                anyTagIDs: Set<UUID> = [], scope: SharedLibraryQueryScope? = nil, properties: SharedLibraryPropertyQuery? = nil) {
         self.text = text; self.kinds = kinds; self.roles = roles; self.inputs = inputs
         self.outputs = outputs; self.contentKinds = contentKinds; self.readiness = readiness
         self.compatibility = compatibility; self.allTagIDs = allTagIDs; self.anyTagIDs = anyTagIDs
+        self.scope = scope; self.properties = properties
     }
 
     public static func == (lhs: Self, rhs: Self) -> Bool {
@@ -85,7 +89,7 @@ public struct SharedLibraryQuery: Codable, Sendable, Equatable {
             && lhs.kinds == rhs.kinds && lhs.inputs == rhs.inputs && lhs.outputs == rhs.outputs
             && lhs.contentKinds == rhs.contentKinds && lhs.readiness == rhs.readiness
             && lhs.compatibility == rhs.compatibility && lhs.allTagIDs == rhs.allTagIDs
-            && lhs.anyTagIDs == rhs.anyTagIDs
+            && lhs.anyTagIDs == rhs.anyTagIDs && lhs.scope == rhs.scope && lhs.properties == rhs.properties
     }
 }
 
@@ -154,7 +158,7 @@ public enum SharedLibraryError: Error, LocalizedError, Equatable {
     case invalidName, duplicateName(String), missingTag, missingFolder, missingQuery
     case invalidKey, invalidReference, folderCycle, folderDepth, invalidMembership, tagInSavedQuery
     case limitExceeded(String), unsupportedSchema(Int), corruptedMetadata(String)
-    case invalidFileURL, externalChange, staleTagEdit
+    case invalidFileURL, externalChange, staleTagEdit, invalidProperty
 
     public var errorDescription: String? {
         switch self {
@@ -172,6 +176,7 @@ public enum SharedLibraryError: Error, LocalizedError, Equatable {
         case .limitExceeded(let detail): "Metadata limit exceeded: \(detail)"
         case .unsupportedSchema(let version): "Unsupported library metadata schema \(version). Restore or upgrade the file before editing."
         case .corruptedMetadata(let detail): "Library metadata needs recovery: \(detail)"
+        case .invalidProperty: "Invalid typed query or scope. Missing values are not zero. / 属性条件或范围无效。"
         case .invalidFileURL: "Library metadata requires a local file URL."
         case .externalChange: "Library metadata changed on disk. Reopen or recover before editing."
         case .staleTagEdit: "These tags changed while editing. Your draft is retained; reopen to compare the current values."
@@ -192,6 +197,8 @@ public final class SharedLibraryStore {
     @ObservationIgnored private let fileURL: URL?
     /// Exact bytes read at open or written by this instance; nil means the file was absent.
     @ObservationIgnored private var diskBaseline: Data?
+    @ObservationIgnored private var diskSchema = 2
+    public static func schemaOneBackupURL(for url: URL) -> URL { url.appendingPathExtension("schema1-backup") }
     private var undoStack: [SharedLibraryMetadata] = []
     private var redoStack: [SharedLibraryMetadata] = []
     /// Retains at most 50 metadata snapshots, independent of the number of models or assets.
@@ -212,19 +219,24 @@ public final class SharedLibraryStore {
         let header: SharedLibraryHeader
         do { header = try JSONDecoder().decode(SharedLibraryHeader.self, from: data) }
         catch { throw SharedLibraryError.corruptedMetadata(error.localizedDescription) }
-        guard header.schema == 1 else { throw SharedLibraryError.unsupportedSchema(header.schema) }
-        try Self.rejectUnknownFields(data)
+        guard [1, 2].contains(header.schema) else { throw SharedLibraryError.unsupportedSchema(header.schema) }
+        try Self.rejectUnknownFields(data, schema: header.schema)
         let envelope: SharedLibraryEnvelope
         do { envelope = try JSONDecoder().decode(SharedLibraryEnvelope.self, from: data) }
         catch { throw SharedLibraryError.corruptedMetadata(error.localizedDescription) }
         try Self.validate(envelope.metadata)
         metadata = envelope.metadata
-        diskBaseline = data
+        diskBaseline = data; diskSchema = header.schema
     }
 
     /// Empty sets mean no constraint. Values within one dimension are OR; dimensions are AND.
     /// Text words must all match title, detail, or current user-tag names.
-    public func matches(_ item: SharedLibraryItem, query: SharedLibraryQuery) -> Bool {
+    public func matches(_ item: SharedLibraryItem, query: SharedLibraryQuery, context: SharedLibraryQueryContext = .init()) -> Bool {
+        guard (try? query.scope?.validate()) != nil || query.scope == nil,
+              (try? query.properties?.validate()) != nil || query.properties == nil else { return false }
+        if query.scope != nil || query.properties?.isEmpty == false {
+            guard item.assetFacts?.matches(scope: query.scope, properties: query.properties, context: context) == true else { return false }
+        }
         let ids = metadata.tagAssignments[item.key] ?? []
         if !query.kinds.isEmpty && !query.kinds.contains(item.kind) { return false }
         if !query.roles.isEmpty && !query.roles.contains(item.role) { return false }
@@ -235,19 +247,19 @@ public final class SharedLibraryStore {
         if !query.compatibility.isEmpty && !query.compatibility.contains(SharedLibraryCompatibility(item.compatible)) { return false }
         if !query.allTagIDs.isSubset(of: ids) { return false }
         if !query.anyTagIDs.isEmpty && query.anyTagIDs.isDisjoint(with: ids) { return false }
-        let haystack = ([item.title, item.detail] + ids.compactMap { metadata.tags[$0]?.name }).joined(separator: " ")
+        let haystack = ([item.title, item.detail, item.assetFacts?.note ?? ""] + ids.compactMap { metadata.tags[$0]?.name }).joined(separator: " ")
         return query.text.split(whereSeparator: \.isWhitespace).allSatisfy {
             haystack.localizedStandardContains(String($0))
         }
     }
 
-    public func filter(_ items: [SharedLibraryItem], query: SharedLibraryQuery) -> [SharedLibraryItem] {
-        items.filter { matches($0, query: query) }
+    public func filter(_ items: [SharedLibraryItem], query: SharedLibraryQuery, context: SharedLibraryQueryContext = .init()) -> [SharedLibraryItem] {
+        items.filter { matches($0, query: query, context: context) }
     }
 
-    public func filter(_ items: [SharedLibraryItem], savedQueryID: UUID) throws -> [SharedLibraryItem] {
+    public func filter(_ items: [SharedLibraryItem], savedQueryID: UUID, context: SharedLibraryQueryContext = .init()) throws -> [SharedLibraryItem] {
         guard let query = metadata.savedQueries[savedQueryID]?.query else { throw SharedLibraryError.missingQuery }
-        return filter(items, query: query)
+        return filter(items, query: query, context: context)
     }
 
     public func createTags(_ names: [String]) throws -> [UUID] {
@@ -478,15 +490,22 @@ public final class SharedLibraryStore {
     }
 
     private func persist(_ value: SharedLibraryMetadata) throws {
-        let data = try JSONEncoder().encode(SharedLibraryEnvelope(schema: 1, metadata: value))
+        let data = try JSONEncoder().encode(SharedLibraryEnvelope(schema: 2, metadata: value))
         guard data.count <= 8 * 1_024 * 1_024 else {
             throw SharedLibraryError.limitExceeded("file exceeds 8 MiB")
         }
         guard let fileURL else { return }
         let current = try Self.readDisk(fileURL)
         guard current == diskBaseline else { throw SharedLibraryError.externalChange }
+        if diskSchema == 1, let original = diskBaseline {
+            let backup = Self.schemaOneBackupURL(for: fileURL)
+            if let existing = try Self.readDisk(backup) {
+                guard existing == original else { throw SharedLibraryError.externalChange }
+            } else { try original.write(to: backup, options: .withoutOverwriting) }
+            guard try Self.readDisk(fileURL) == original else { throw SharedLibraryError.externalChange }
+        }
         try data.write(to: fileURL, options: .atomic)
-        diskBaseline = data
+        diskBaseline = data; diskSchema = 2
     }
 
     private static func readDisk(_ fileURL: URL) throws -> Data? {
@@ -512,7 +531,7 @@ public final class SharedLibraryStore {
     }
 
     /// Reject schema-1 fields we do not understand, so an edit cannot silently erase them.
-    private static func rejectUnknownFields(_ data: Data) throws {
+    private static func rejectUnknownFields(_ data: Data, schema: Int) throws {
         let rootObject: Any
         do { rootObject = try JSONSerialization.jsonObject(with: data) }
         catch { throw SharedLibraryError.corruptedMetadata(error.localizedDescription) }
@@ -539,8 +558,20 @@ public final class SharedLibraryStore {
                     throw SharedLibraryError.corruptedMetadata("invalid saved query")
                 }
                 try checkFields(fields, allowed: ["id", "name", "query"])
-                try checkFields(query, allowed: ["text", "kinds", "roles", "inputs", "outputs",
-                                                 "contentKinds", "readiness", "compatibility", "allTagIDs", "anyTagIDs"])
+                try checkFields(query, allowed: Set(["text", "kinds", "roles", "inputs", "outputs",
+                                                 "contentKinds", "readiness", "compatibility", "allTagIDs", "anyTagIDs"]).union(schema == 2 ? ["scope", "properties"] : []))
+                if let scope = query["scope"] as? [String: Any] {
+                    try checkFields(scope, allowed: ["mode", "projectID", "instanceID", "runID", "nodeID", "stepID"])
+                }
+                if let properties = query["properties"] as? [String: Any] {
+                    try checkFields(properties, allowed: ["favorite", "width", "height", "registeredAt", "model", "directParent"])
+                    for key in ["width", "height"] {
+                        if let fields = properties[key] as? [String: Any] { try checkFields(fields, allowed: ["minimum", "maximum"]) }
+                    }
+                    if let fields = properties["registeredAt"] as? [String: Any] { try checkFields(fields, allowed: ["start", "end"]) }
+                    if let fields = properties["model"] as? [String: Any] { try checkFields(fields, allowed: ["kind", "value", "revision"]) }
+                    if let fields = properties["directParent"] as? [String: Any] { try checkFields(fields, allowed: ["projectID", "assetID", "version", "kind", "sha256"]) }
+                }
             }
         }
     }
@@ -581,6 +612,8 @@ public final class SharedLibraryStore {
         for folder in value.folders.values { objects += folder.memberKeys.count }
         for saved in value.savedQueries.values {
             let query = saved.query
+            try query.scope?.validate(); try query.properties?.validate()
+            objects += (query.scope == nil ? 0 : 6) + (query.properties == nil ? 0 : 16)
             objects += query.kinds.count + query.roles.count + query.inputs.count + query.outputs.count
                 + query.contentKinds.count + query.readiness.count + query.compatibility.count
                 + query.allTagIDs.count + query.anyTagIDs.count

@@ -381,7 +381,12 @@ private struct CandidateDetails: View {
                 .accessibilityIdentifier("candidate-saved-name")
             if !asset.note.isEmpty { Text(asset.note).font(.caption).textSelection(.enabled) }
             Toggle("收藏", isOn: Binding(get: { asset.isFavorite }, set: { value in
-                Task { await model.updateAsset(id: asset.id, isFavorite: value) }
+                guard let owner = model.projectSession.currentStore, let project = model.manifest else { return }
+                let baseline = ProjectAssetEditBaseline(project: project, asset: asset)
+                Task {
+                    do { try await model.projectSession.saveAssetAnnotations(owner: owner, expected: baseline, isFavorite: value) }
+                    catch { if model.projectSession.currentStore === owner { model.errorMessage = "收藏未能保存：" + error.localizedDescription } }
+                }
             })).accessibilityIdentifier("candidate-favorite")
             Button("编辑名称与备注…", action: edit)
                 .accessibilityIdentifier("edit-candidate")
@@ -409,6 +414,8 @@ private struct CandidateMetadataEditor: View {
     @State private var note: String
     @State private var saving = false
     @State private var saveError: String?
+    @State private var owner: ProjectStore?
+    @State private var baseline: ProjectAssetEditBaseline?
     private let originalName: String
     private let originalNote: String
 
@@ -418,6 +425,8 @@ private struct CandidateMetadataEditor: View {
         self._isPresented = isPresented
         originalName = asset.name
         originalNote = asset.note
+        _owner = State(initialValue: model.projectSession.currentStore)
+        _baseline = State(initialValue: model.manifest.map { ProjectAssetEditBaseline(project: $0, asset: asset) })
         _name = State(initialValue: asset.name)
         _note = State(initialValue: asset.note)
     }
@@ -440,17 +449,15 @@ private struct CandidateMetadataEditor: View {
                 Button("保存") {
                     saving = true
                     Task {
-                        await model.updateAsset(id: asset.id, name: name == originalName ? nil : name,
-                                                note: note == originalNote ? nil : note)
-                        saving = false
-                        if let current = model.manifest?.assets.first(where: { $0.id == asset.id }),
-                           (name == originalName || current.name == name),
-                           (note == originalNote || current.note == note) {
+                        defer { saving = false }
+                        do {
+                            guard let owner, let baseline else { throw WorkflowIssue("作品所属实例不可访问，草稿保留。") }
+                            try await model.projectSession.saveAssetAnnotations(owner: owner, expected: baseline,
+                                name: name.utf8.elementsEqual(baseline.name.utf8) ? nil : name,
+                                note: note.utf8.elementsEqual(baseline.note.utf8) ? nil : note)
                             isPresented = false
-                        } else {
-                            saveError = model.errorMessage ?? "未能保存，输入仍然保留。"
-                            model.clearError()
-                        }
+                        } catch { saveError = error.localizedDescription }
+
                     }
                 }.keyboardShortcut(.defaultAction)
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

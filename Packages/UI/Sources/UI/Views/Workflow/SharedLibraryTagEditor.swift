@@ -1,4 +1,5 @@
 import DWorkbench
+import Observation
 import SwiftUI
 
 struct SharedLibraryTagTarget: Identifiable {
@@ -56,6 +57,7 @@ struct SharedLibraryTagEditor: View {
     @State private var names: [String] = []
     @State private var error: String?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.metadataEditorLifecycle) private var lifecycle
     @Environment(\.dLanguageStore) private var language
 
     init(store: SharedLibraryStore, targets: [SharedLibraryTagTarget], add: Set<UUID> = [], remove: Set<UUID> = [], validateTarget: @escaping () throws -> Void) {
@@ -136,7 +138,8 @@ struct SharedLibraryTagEditor: View {
                     } catch { self.error = error.localizedDescription }
                 }.buttonStyle(.borderedProminent).disabled(targets.isEmpty || targets.contains { $0.legacyFailure != nil && !baseline.integratedKeys.contains($0.key) } || !name.isEmpty)
             }
-        }.padding(18).frame(width: 460, height: 520)
+        }.padding(18).frame(width: 460, height: 520).interactiveDismissDisabled()
+        .onAppear { lifecycle.begin() }.onDisappear { lifecycle.end() }
     }
 }
 
@@ -146,15 +149,73 @@ struct WorkflowAssetOrganization: View {
     let controller: WorkflowController
     let reference: WorkflowAssetReference
     let metadata: SharedLibraryStore?
+    @State private var expanded = false
+    var onQuery: ((SharedLibraryPropertyQuery) -> Void)? = nil
+    var onEdit: ((AssetAnnotationRequest) -> Void)? = nil
     var body: some View {
-        if let asset = controller.availableAssets.first(where: { $0.id == reference.assetID }),
-           controller.projectID == reference.projectID {
-            DisclosureGroup(asset.name) {
-                SharedLibraryTagSection(store: metadata,
-                    target: .init(key: "asset:" + reference.projectID.uuidString + ":" + reference.assetID.uuidString,
-                                  title: asset.name, legacy: asset.tags),
-                    validateTarget: WorkflowMetadataTarget.validation(controller: controller, assetID: asset.id))
+        DisclosureGroup(controller.availableAssets.first(where: { $0.id == reference.assetID })?.name ?? "Asset", isExpanded: $expanded) {
+            if expanded { WorkflowAssetMetadataHost(controller: controller, reference: reference, metadata: metadata, onQuery: onQuery, onEdit: onEdit) }
+        }
+    }
+}
+
+@MainActor @Observable final class AssetMetadataLoadState {
+    private(set) var snapshot: ProjectAssetMetadataSnapshot?
+    private(set) var failure: String?
+    private(set) var identity: WorkflowAssetPreviewState.Identity?
+    private var generation: UUID?
+    func invalidate() { generation = nil; identity = nil; snapshot = nil; failure = nil }
+    func load(identity: WorkflowAssetPreviewState.Identity, read: () async throws -> ProjectAssetMetadataSnapshot) async {
+        guard !Task.isCancelled else { return }
+        let generation = UUID(); self.generation = generation; if self.identity != identity { snapshot = nil }
+        self.identity = identity; failure = nil
+        do {
+            let value = try await read()
+            guard !Task.isCancelled, self.generation == generation, self.identity == identity else { return }
+            snapshot = value
+        } catch {
+            guard !Task.isCancelled, self.generation == generation, self.identity == identity else { return }
+            failure = error.localizedDescription
+        }
+    }
+}
+
+struct WorkflowAssetMetadataHost: View {
+    let controller: WorkflowController
+    let reference: WorkflowAssetReference
+    let metadata: SharedLibraryStore?
+    var onQuery: ((SharedLibraryPropertyQuery) -> Void)? = nil
+    var onEdit: ((AssetAnnotationRequest) -> Void)? = nil
+    @State private var state = AssetMetadataLoadState()
+    @State private var source: WorkflowAssetReference?
+    @Environment(\.dLanguageStore) private var language
+    private struct ReadIdentity: Hashable { let target: WorkflowAssetPreviewState.Identity; let revision: UInt64 }
+    private var target: WorkflowAssetReference { source ?? reference }
+    private var identity: WorkflowAssetPreviewState.Identity { .init(controller: controller, reference: target) }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if source != nil { Button(metadataText(language, "backResult", "返回结果", "Back to result")) { source = nil } }
+            if state.identity == identity, let failure = state.failure {
+                Text(failure).font(.caption).foregroundStyle(.orange)
             }
+            if state.identity == identity, let snapshot = state.snapshot {
+                SharedAssetMetadataPanel(snapshot: snapshot, library: metadata,
+                    validate: WorkflowMetadataTarget.validation(controller: controller, assetID: target.assetID),
+                    save: { baseline, name, note, favorite in
+                        try await controller.saveAssetAnnotations(expected: baseline, name: name, note: note, isFavorite: favorite)
+                        await reload()
+                    }, onQuery: onQuery, onOpenSource: { parent in source = parent }, onEdit: onEdit)
+            } else if state.failure == nil { ProgressView() }
+        }
+        .task(id: ReadIdentity(target: identity, revision: controller.displayAssetGeneration)) { await reload() }
+        .onDisappear { state.invalidate() }
+    }
+    private func reload() async {
+        let requested = target, expected = identity
+        await state.load(identity: expected) {
+            let value = try await controller.services.store.assetMetadataSnapshot(id: requested.assetID, reference: requested)
+            guard controller.canReadLibraryMetadata, controller.projectInstanceID == value.instanceID else { throw WorkflowIssue("Metadata owner closed / 所属实例已关闭。") }
+            return value
         }
     }
 }

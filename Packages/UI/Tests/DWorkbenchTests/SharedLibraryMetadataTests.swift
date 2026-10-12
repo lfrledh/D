@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import Testing
 @testable import DWorkbench
 
@@ -6,6 +7,7 @@ import Testing
 @MainActor
 struct SharedLibraryMetadataTests {
     @Test func representativeIndexObservations() throws {
+        let memoryBefore = residentBytes()
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let file = directory.appendingPathComponent("metadata.json")
@@ -29,7 +31,19 @@ struct SharedLibraryMetadataTests {
         let reopened = try SharedLibraryStore(fileURL: file)
         #expect(reopened.filter(entries, query: .init(allTagIDs: [tags[1]])).count == 100)
         print("D_INDEX_OBSERVATION entries", entries.count, "bytes", before.count,
-              "open", openSeconds, "queries20", querySeconds, "tagSave100", saveSeconds)
+              "open", openSeconds, "queries20", querySeconds, "tagSave100", saveSeconds,
+              "rssBefore", memoryBefore, "rssAfter", residentBytes(), "os", ProcessInfo.processInfo.operatingSystemVersionString)
+    }
+
+    private func residentBytes() -> UInt64 {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / MemoryLayout<natural_t>.size)
+        let status = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        return status == KERN_SUCCESS ? info.resident_size : 0
     }
 
     private func item(_ key: String, kind: SharedLibraryItemKind = .model,
@@ -143,8 +157,8 @@ struct SharedLibraryMetadataTests {
         try Data("broken".utf8).write(to: file)
         #expect(throws: SharedLibraryError.self) { _ = try SharedLibraryStore(fileURL: file) }
         #expect(try Data(contentsOf: file) == Data("broken".utf8))
-        try Data(#"{"schema":2,"metadata":{}}"#.utf8).write(to: file)
-        #expect(throws: SharedLibraryError.unsupportedSchema(2)) { _ = try SharedLibraryStore(fileURL: file) }
+        try Data(#"{"schema":99,"metadata":{}}"#.utf8).write(to: file)
+        #expect(throws: SharedLibraryError.unsupportedSchema(99)) { _ = try SharedLibraryStore(fileURL: file) }
         try good.write(to: file)
         #expect(try SharedLibraryStore(fileURL: file).metadata.tags[tag]?.name == "saved")
         let directoryAsFile = directory.appendingPathComponent("not-a-file")

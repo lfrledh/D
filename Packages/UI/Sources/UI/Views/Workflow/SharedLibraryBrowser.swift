@@ -25,13 +25,14 @@ public struct SharedLibraryBrowserEntry: Identifiable, Equatable {
     public let id: String
     public var legacyTags: [String]
     public var legacyFailure: String?
+    public var metadataSnapshot: ProjectAssetMetadataSnapshot?
 
-    public init(item: SharedLibraryItem, selection: SharedLibraryBrowserSelection, facts: [String] = [], activityID: String? = nil, legacyTags: [String] = [], legacyFailure: String? = nil) {
+    public init(item: SharedLibraryItem, selection: SharedLibraryBrowserSelection, facts: [String] = [], activityID: String? = nil, legacyTags: [String] = [], legacyFailure: String? = nil, metadataSnapshot: ProjectAssetMetadataSnapshot? = nil) {
         self.item = item
         self.selection = selection
         self.facts = facts
         self.id = activityID ?? item.key
-        self.legacyTags = legacyTags; self.legacyFailure = legacyFailure
+        self.legacyTags = legacyTags; self.legacyFailure = legacyFailure; self.metadataSnapshot = metadataSnapshot
     }
 }
 
@@ -182,7 +183,7 @@ struct SharedLibraryBrowserRenameDrafts {
 
     static func visibleEntries(
         _ entries: [SharedLibraryBrowserEntry], store: SharedLibraryStore,
-        query: SharedLibraryQuery, scope: SharedLibraryBrowserScope
+        query: SharedLibraryQuery, scope: SharedLibraryBrowserScope, context: SharedLibraryQueryContext = .init()
     ) throws -> [SharedLibraryBrowserEntry] {
         let scopeKeys: Set<String>
         switch scope {
@@ -199,7 +200,7 @@ struct SharedLibraryBrowserRenameDrafts {
             scopeKeys = Set(entries.filter { folder.memberKeys.contains($0.item.key) }.map(\.id))
         }
         return entries.filter { entry in
-            guard scopeKeys.contains(entry.id), store.matches(entry.item, query: query) else { return false }
+            guard scopeKeys.contains(entry.id), store.matches(entry.item, query: query, context: context) else { return false }
             if case .kind(let kind) = scope { return entry.item.kind == kind }
             return true
         }
@@ -304,6 +305,8 @@ public struct SharedLibraryBrowser: View {
     private let onPrepare: (SharedLibraryBrowserEntry) -> Void
     private let onImport: () -> Void
     private let onClose: () -> Void
+    private let queryContext: SharedLibraryQueryContext
+    private let annotationSave: (SharedLibraryBrowserEntry) -> SharedLibraryAnnotationSave?
     private let tagValidation: (SharedLibraryBrowserEntry) -> (() throws -> Void)
 
     @Environment(\.dLanguageStore) private var language
@@ -337,13 +340,14 @@ public struct SharedLibraryBrowser: View {
         onLocation: @escaping (SharedLibraryBrowserEntry) -> Void = { _ in },
         onPrepare: @escaping (SharedLibraryBrowserEntry) -> Void,
         onImport: @escaping () -> Void, onClose: @escaping () -> Void,
-        tagValidation: @escaping (SharedLibraryBrowserEntry) -> (() throws -> Void) = { _ in {} }
+        tagValidation: @escaping (SharedLibraryBrowserEntry) -> (() throws -> Void) = { _ in {} },
+        queryContext: SharedLibraryQueryContext = .init(), annotationSave: @escaping (SharedLibraryBrowserEntry) -> SharedLibraryAnnotationSave? = { _ in nil }
     ) {
         self._state = State(initialValue: state ?? SharedLibraryBrowserState())
         self.entries = entries; self.store = store; self.compact = compact
         self.onUse = onUse; self.onAdd = onAdd; self.onPreview = onPreview; self.onLocation = onLocation
         self.onPrepare = onPrepare; self.onImport = onImport; self.onClose = onClose
-        self.tagValidation = tagValidation
+        self.tagValidation = tagValidation; self.queryContext = queryContext; self.annotationSave = annotationSave
     }
 
     private var query: SharedLibraryQuery {
@@ -383,7 +387,7 @@ public struct SharedLibraryBrowser: View {
         entries.first { $0.id == focusedKey } ?? entries.first { validSelection.contains($0.id) }
     }
     private var visibleResult: Result<[SharedLibraryBrowserEntry], Error> {
-        Result { try SharedLibraryBrowserLogic.visibleEntries(entries, store: store, query: query, scope: scope) }
+        Result { try SharedLibraryBrowserLogic.visibleEntries(entries, store: store, query: query, scope: scope, context: queryContext) }
     }
     private var visible: [SharedLibraryBrowserEntry] { (try? visibleResult.get()) ?? [] }
 
@@ -594,6 +598,7 @@ public struct SharedLibraryBrowser: View {
                 Button(word("filters", "筛选"), systemImage: "line.3.horizontal.decrease.circle") { showFilters.toggle() }
                     .popover(isPresented: $showFilters, arrowEdge: .bottom) { filterPopover }
             }.font(.caption)
+            SharedLibraryPropertySummary(query: Binding(get: { query }, set: { query = $0 }), items: entries.map(\.item), context: queryContext, store: store)
             ScrollView(.horizontal) {
                 HStack(spacing: 4) {
                     if scope != .all { token(scopeTitle) { selectScope(.all) } }
@@ -619,7 +624,7 @@ public struct SharedLibraryBrowser: View {
     }
     private func countAddingTag(_ id: UUID) -> Int {
         var value = query; value.allTagIDs.insert(id)
-        return Set(((try? SharedLibraryBrowserLogic.visibleEntries(entries, store: store, query: value, scope: scope)) ?? []).map(\.item.key)).count
+        return Set(((try? SharedLibraryBrowserLogic.visibleEntries(entries, store: store, query: value, scope: scope, context: queryContext)) ?? []).map(\.item.key)).count
     }
     private func token(_ title: String, remove: @escaping () -> Void) -> some View {
         Button(action: remove) { HStack(spacing: 3) { Text(title); Image(systemName: "xmark") }.padding(4) }
@@ -713,6 +718,9 @@ public struct SharedLibraryBrowser: View {
 
     private func details(_ entry: SharedLibraryBrowserEntry) -> some View {
         VStack(alignment: .leading, spacing: 10) {
+            if !visible.contains(where: { $0.id == entry.id }) {
+                Text(metadataText(language, "filteredSelection", "此对象已不匹配当前条件；详情仍绑定原对象。", "This item no longer matches; details remain bound to the same item.")).font(.caption).foregroundStyle(.orange)
+            }
             Text(entry.item.title).font(.headline).textSelection(.enabled)
             Text(entry.item.detail).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
             detailLine(word("kind", "类别"), kindName(entry.item.kind))
@@ -726,7 +734,21 @@ public struct SharedLibraryBrowser: View {
                 Text(word("facts", "能力事实")).font(.subheadline.weight(.semibold))
                 ForEach(entry.facts, id: \.self) { fact in Text(fact).font(.caption).textSelection(.enabled) }
             }
-            SharedLibraryTagSection(store: store, target: tagTarget(entry), validateTarget: tagValidation(entry))
+            if let snapshot = entry.metadataSnapshot {
+                SharedAssetMetadataPanel(snapshot: snapshot, library: store, validate: tagValidation(entry), save: annotationSave(entry),
+                    onQuery: { properties in
+                        var next = query; next.properties = SharedLibraryPropertyQuery.merging(next.properties, properties)
+                        state.setDraftQuery(next)
+                    }, onOpenSource: { reference in
+                        let matches = entries.filter { $0.metadataSnapshot?.record?.reference == reference }
+                        let sameInstance = matches.filter { $0.metadataSnapshot?.instanceID == snapshot.instanceID }
+                        if let target = sameInstance.first ?? (matches.count == 1 ? matches.first : nil) {
+                            focusedKey = target.id; compactDetailKey = compact ? target.id : nil
+                        } else { errorMessage = metadataText(language, "sourceMissing", "此精确来源不在当前已登记范围，或存在多个实例。", "This exact source is outside the registered scope, or has multiple instances.") }
+                    })
+            } else {
+                SharedLibraryTagSection(store: store, target: tagTarget(entry), validateTarget: tagValidation(entry))
+            }
             Text(word("legend", "能力 / 我的标签")).font(.caption2).foregroundStyle(.secondary)
             Divider()
             if canUse(entry) {
@@ -776,6 +798,7 @@ public struct SharedLibraryBrowser: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 9) {
                 Text(word("filters", "筛选")).font(.headline)
+                SharedLibraryPropertyControls(query: Binding(get: { query }, set: { query = $0 }), items: entries.map(\.item), context: queryContext)
                 filterGroup(word("kind", "类别"), values: SharedLibraryItemKind.allCases,
                             keyPath: \.kinds, label: kindName)
                 Menu(word("role", "用途") + " (\(query.roles.count))") {

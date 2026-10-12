@@ -12,7 +12,102 @@ private actor WorkspaceNoInference: InferenceEngine {
     }
 }
 
+@MainActor private final class MetadataHostProbeState {
+    var starts = 0
+    var updates = 0
+    var gateHits = 0
+}
+private struct MetadataHostProbe: NSViewRepresentable {
+    let state: MetadataHostProbeState
+    func makeNSView(context: Context) -> NSTextField {
+        state.starts += 1; context.environment.metadataEditorLifecycle.begin()
+        let field = NSTextField(string: "retained editor")
+        return field
+    }
+    func updateNSView(_ view: NSTextField, context: Context) {
+        state.updates += 1; context.environment.metadataEditorLifecycle.begin()
+    }
+}
+
 @Suite(.serialized) @MainActor struct WorkflowWorkspacePresentationTests {
+    @Test func retainedNativeHostsForwardMetadataCloseGateWithoutReplacingEditor() async throws {
+        let state = MetadataHostProbeState()
+        let lifecycle = MetadataEditorLifecycle(begin: { state.gateHits += 1 })
+        func view(_ visible: Bool) -> some View {
+            RetainedContentHost(content:
+                RetainedContentHost(content: MetadataHostProbe(state: state), visible: true, identifier: "inner"),
+                visible: visible, identifier: "outer")
+                .environment(\.metadataEditorLifecycle, lifecycle)
+        }
+        let host = NSHostingView(rootView: view(true)); host.frame = CGRect(x: 0, y: 0, width: 300, height: 200)
+        for _ in 0..<15 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        #expect(state.starts == 1 && state.gateHits > 0)
+        let gates = state.gateHits
+        host.rootView = view(false); host.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(50))
+        host.rootView = view(true); host.frame.size.width = 340
+        for _ in 0..<15 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        #expect(state.starts == 1 && state.gateHits >= gates && state.updates > 0)
+    }
+
+    @Test func metadataLateReadDoesNotReplaceNewObjectAndSameObjectRefreshRetainsDraftParent() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).resolvingSymlinksInPath()
+            .appendingPathComponent("metadata-identity-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Test.dproject"), name: "Metadata")
+        let runtime = WorkbenchSession(engine: WorkspaceNoInference(), backendID: "never",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let controller = WorkflowController(services: .init(store: store, session: runtime,
+            resolveText: { throw WorkflowIssue("No model") }, resolveImage: { throw WorkflowIssue("No model") }))
+        await controller.load()
+        let a = try await store.publishWorkflowAsset(data: Data("A".utf8), mediaType: "text/plain", name: "A", operationID: "d.text.input")
+        let b = try await store.publishWorkflowAsset(data: Data("B".utf8), mediaType: "text/plain", name: "B", operationID: "d.text.input")
+        let first = try await store.assetMetadataSnapshot(id: a.asset.id), second = try await store.assetMetadataSnapshot(id: b.asset.id)
+        let aid = WorkflowAssetPreviewState.Identity(controller: controller, reference: a.record.reference)
+        let bid = WorkflowAssetPreviewState.Identity(controller: controller, reference: b.record.reference)
+        let state = AssetMetadataLoadState()
+        var pending: CheckedContinuation<ProjectAssetMetadataSnapshot, Error>?
+        let slow = Task { @MainActor in await state.load(identity: aid) { try await withCheckedThrowingContinuation { pending = $0 } } }
+        await Task.yield()
+        let callback = try #require(pending)
+        await state.load(identity: bid) { second }
+        callback.resume(returning: first); await slow.value
+        #expect(state.snapshot?.asset.id == b.asset.id && state.identity == bid)
+        pending = nil
+        let refresh = Task { @MainActor in await state.load(identity: bid) { try await withCheckedThrowingContinuation { pending = $0 } } }
+        await Task.yield()
+        let refreshCallback = try #require(pending)
+        #expect(state.snapshot?.asset.id == b.asset.id) // Keep the editor's presentation parent during a refresh.
+        state.invalidate(); refreshCallback.resume(returning: second); await refresh.value
+        #expect(state.snapshot == nil && state.identity == nil)
+        let results = WorkflowResultQueryState(), tags = try SharedLibraryStore()
+        var waiting: CheckedContinuation<[ProjectAssetMetadataSnapshot], Error>?
+        let oldRead = Task { @MainActor in await results.load(identity: .init(controller: controller, references: [a.record.reference])) {
+            try await withCheckedThrowingContinuation { waiting = $0 }
+        } }
+        await Task.yield(); let oldCallback = try #require(waiting)
+        await results.load(identity: .init(controller: controller, references: [b.record.reference])) { [second] }
+        oldCallback.resume(returning: [first]); await oldRead.value
+        #expect(Set(results.items.keys) == [b.record.reference] && !results.isLoading)
+        results.query = .init(properties: .init(width: .init(minimum: 9999)))
+        #expect(!results.keepsVisible(.asset(b.record.reference), store: tags))
+        let failure = WorkflowCandidate(error: "failed before publication", seed: "none")
+        #expect(results.keepsVisible(.collection([failure]), store: tags))
+        #expect(results.keepsVisible(.data(.text("waiting for a decision")), store: tags))
+        await results.load(identity: .init(controller: controller, references: [b.record.reference])) { throw WorkflowIssue("Read unavailable") }
+        #expect(results.failure?.contains("Read unavailable") == true && !results.isLoading)
+        let before = await store.snapshot()
+        let expected = ProjectAssetEditBaseline(project: before, asset: b.asset)
+        try await controller.saveAssetAnnotations(expected: expected, name: nil, note: "Saved by current controller", isFavorite: nil)
+        await #expect(throws: WorkflowIssue.self) { try await controller.saveAssetAnnotations(expected: expected, name: nil, note: "Stale draft", isFavorite: nil) }
+        controller.deactivateAfterClose()
+        await #expect(throws: WorkflowIssue.self) { try await controller.saveAssetAnnotations(expected: expected, name: "Closed writer", note: nil, isFavorite: nil) }
+        let saved = try await store.assetMetadataSnapshot(id: b.asset.id)
+        #expect(saved.asset.name == b.asset.name && saved.asset.note == "Saved by current controller")
+        try await store.close()
+    }
+
     @Test func explicitTargetSurvivesInspectionButInvalidatesDeletionAndGraphChanges() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("workspace-target-" + UUID().uuidString)

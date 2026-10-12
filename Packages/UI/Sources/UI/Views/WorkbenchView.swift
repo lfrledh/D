@@ -105,6 +105,7 @@ public struct WorkbenchView: View {
         .onChange(of: model.creatorMode) { _, _ in
             nodePresentation.modalityChanged()
         }
+        .environment(\.metadataEditorLifecycle, MetadataEditorLifecycle(begin: model.beginEditing, end: model.endEditing))
         .focusedSceneValue(\.workbenchGeneration, visibleGenerationCommand)
         .disabled(model.isChangingProject)
         .overlay {

@@ -2401,13 +2401,29 @@ public final class ProjectSession {
 
     public var canEditLibraryMetadata: Bool { store != nil && !isChangingProject && !closePending }
 
-    public func updateCandidate(assetID: UUID, name: String? = nil, isFavorite: Bool? = nil, note: String? = nil) async {
-        guard let store, !isChangingProject, !closePending else { return }
-        let write = queueMetadataWrite {
-            try await store.updateAsset(id: assetID, name: name, note: note, isFavorite: isFavorite)
+    /// Captures the actual writer and per-field baseline; unrelated annotation edits survive.
+    public func saveAssetAnnotations(owner: ProjectStore, expected: ProjectAssetEditBaseline,
+                                     name: String? = nil, note: String? = nil, isFavorite: Bool? = nil) async throws {
+        guard canEditLibraryMetadata, store === owner, manifest?.id == expected.projectID,
+              manifest?.effectiveInstanceID == expected.instanceID else { throw WorkflowIssue("作品所属实例已改变，草稿未提交。") }
+        let write = queueMetadataWrite { [weak self] in
+            guard await MainActor.run(body: { self?.store === owner && self?.manifest?.effectiveInstanceID == expected.instanceID }) else {
+                throw WorkflowIssue("作品所属实例已改变，草稿未提交。")
+            }
+            return try await owner.updateAsset(id: expected.assetID, name: name, note: note, isFavorite: isFavorite, expected: expected)
         }
-        do { applyManifest(try await write.value) }
-        catch { report(error, context: "作品名称、收藏或备注未能保存") }
+        let updated = try await write.value
+        guard store === owner, manifest?.effectiveInstanceID == expected.instanceID else {
+            throw WorkflowIssue("注释已写入原实例；当前实例已改变，请重新查看原作品。")
+        }
+        applyManifest(updated)
+        await workflow?.refreshAvailableAssets(instanceID: expected.instanceID)
+    }
+
+    public func updateCandidate(assetID: UUID, name: String? = nil, isFavorite: Bool? = nil, note: String? = nil) async {
+        guard let owner = store, let manifest, let asset = manifest.assets.first(where: { $0.id == assetID }), canEditLibraryMetadata else { return }
+        do { try await saveAssetAnnotations(owner: owner, expected: .init(project: manifest, asset: asset), name: name, note: note, isFavorite: isFavorite) }
+        catch { if store === owner { report(error, context: "作品名称、收藏或备注未能保存") } }
     }
 
     public func adoptAsset(id: UUID) async {

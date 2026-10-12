@@ -52,7 +52,7 @@ import Foundation
         return Set(definition.outputs.flatMap { $0.kinds.count == WorkflowDataKind.allCases.count ? [] : $0.kinds })
     }
     static func entries(models: [WorkflowModelChoice], readiness: [String: SharedLibraryReadiness],
-                        tools: [WorkflowToolDefinition], projects: [ProjectManifest], language: UILanguageStore?) -> [SharedLibraryBrowserEntry] {
+                        tools: [WorkflowToolDefinition], projects: [ProjectManifest], language: UILanguageStore?, metadata: [String: ProjectAssetMetadataSnapshot] = [:]) -> [SharedLibraryBrowserEntry] {
         let registry = WorkflowRegistry.standard
         var result: [SharedLibraryBrowserEntry] = []
         var identities = Set<String>()
@@ -104,12 +104,15 @@ import Foundation
         for project in projects {
             for asset in project.assets {
                 let kind = asset.workflowContentKind
+                let activityID = "asset-instance:" + project.effectiveInstanceID.uuidString + ":" + asset.id.uuidString
+                let snapshot = metadata[activityID] ?? ProjectAssetMetadataSnapshot(project: project, asset: asset, record: nil,
+                    job: nil, occurrences: nil, sourceIssue: "Source index unavailable / 来源尚未索引。")
                 result.append(.init(item: .init(key: "asset:" + project.id.uuidString + ":" + asset.id.uuidString,
                     title: asset.name, detail: project.name, kind: .asset, role: asset.role.rawValue,
-                    contentKind: kind, readiness: .unknown), selection: .assetInstance(projectID: project.id,
+                    contentKind: kind, readiness: .unknown, assetFacts: snapshot.facts), selection: .assetInstance(projectID: project.id,
                         instanceID: project.effectiveInstanceID, assetID: asset.id),
                     facts: [asset.mediaType, "访问时核验所属项目、文件与摘要；不改变原件"],
-                    activityID: "asset-instance:" + project.effectiveInstanceID.uuidString + ":" + asset.id.uuidString, legacyTags: asset.tags))
+                    activityID: activityID, legacyTags: asset.tags, metadataSnapshot: snapshot))
             }
         }
         return result

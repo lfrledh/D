@@ -35,7 +35,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         guard presentationHasExecutor, !isSaving, let run = activePresentationRun else { return false }
         return run.status == .running && run.planCheckpoint?.state == .running
     }
-    public private(set) var availableAssets: [ProjectAsset] = []
+    public private(set) var availableAssets: [ProjectAsset] = [] { didSet { displayAssetGeneration &+= 1 } }
+    public private(set) var displayAssetGeneration: UInt64 = 0
+    public var canReadLibraryMetadata: Bool { !closed && !closing }
     public private(set) var projectID: UUID?
     public private(set) var projectInstanceID: UUID?
     public private(set) var assetReferences: [UUID: WorkflowAssetReference] = [:]
@@ -168,6 +170,15 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
               snapshot.id == projectID else { return }
         availableAssets = snapshot.assets.filter { WorkflowMediaFormat.descriptor($0.mediaType) != nil }
     }
+    public func saveAssetAnnotations(expected: ProjectAssetEditBaseline, name: String?, note: String?, isFavorite: Bool?) async throws {
+        guard canEditLibraryMetadata, projectID == expected.projectID, projectInstanceID == expected.instanceID else {
+            throw WorkflowIssue("作品所属实例已改变，草稿未提交。")
+        }
+        _ = try await services.store.updateAsset(id: expected.assetID, name: name, note: note, isFavorite: isFavorite, expected: expected)
+        guard !closed, projectInstanceID == expected.instanceID else { throw WorkflowIssue("注释已写入原实例，请重新打开原作品查看。") }
+        await refreshAvailableAssets(instanceID: expected.instanceID); await onChange()
+    }
+
     private func refreshAssets() async {
         let snapshot = await services.store.snapshot()
         projectID = snapshot.id

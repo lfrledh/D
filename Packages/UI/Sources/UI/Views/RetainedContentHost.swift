@@ -9,24 +9,32 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
     let identifier: String
     var fallbackSize = CGSize(width: 240, height: 640)
 
-    func makeNSView(context: Context) -> NSHostingView<Content> {
-        let host = NSHostingView(rootView: content)
+    func makeNSView(context: Context) -> NSHostingView<RetainedContentRoot<Content>> {
+        let host = NSHostingView(rootView: RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle))
         host.sizingOptions = []
         host.setAccessibilityIdentifier(identifier)
         host.isHidden = !visible
         return host
     }
-    func updateNSView(_ host: NSHostingView<Content>, context: Context) {
+    func updateNSView(_ host: NSHostingView<RetainedContentRoot<Content>>, context: Context) {
         #if DEBUG
         WorkbenchCategoryUpdateProbe.retainedUpdate?()
         #endif
-        host.rootView = content
+        host.rootView = RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle)
         // Only an actual close/open changes native visibility. Hiding can release
         // the first responder; a layout change must not transiently hide an editor.
         if host.isHidden != !visible { host.isHidden = !visible }
     }
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSHostingView<Content>, context: Context) -> CGSize? {
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSHostingView<RetainedContentRoot<Content>>, context: Context) -> CGSize? {
         .init(width: proposal.width ?? fallbackSize.width, height: proposal.height ?? fallbackSize.height)
     }
 }
 
+
+/// A fixed root type forwards the close gate through each native host boundary.
+/// Updating the gate does not replace the editor's structural identity.
+struct RetainedContentRoot<Content: View>: View {
+    let content: Content
+    let lifecycle: MetadataEditorLifecycle
+    var body: some View { content.environment(\.metadataEditorLifecycle, lifecycle) }
+}

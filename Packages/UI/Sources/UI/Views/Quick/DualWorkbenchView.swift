@@ -47,6 +47,8 @@ public struct DualWorkbenchView: View {
     let metadata: SharedLibraryStore?
     let metadataIssue: String?
     @State private var projects: [ProjectManifest] = []
+    @State private var libraryMetadata: [String: ProjectAssetMetadataSnapshot] = [:]
+    @State private var libraryRefreshGeneration = UUID()
     @State private var fullLibraryState = SharedLibraryBrowserState()
     @State private var canvasAssetLibraryState = SharedLibraryBrowserState()
     @State private var compactLibraryState = SharedLibraryBrowserState()
@@ -74,7 +76,7 @@ public struct DualWorkbenchView: View {
     private var entries: [SharedLibraryBrowserEntry] {
         SharedLibraryProjection.entries(models: quickModel.projectSession.explicitModelChoices,
             readiness: quickModel.projectSession.explicitModelReadiness,
-            tools: canvasModel.projectSession.workflow?.tools ?? [], projects: projects, language: language).map { entry in
+            tools: canvasModel.projectSession.workflow?.tools ?? [], projects: projects, language: language, metadata: libraryMetadata).map { entry in
                 guard entry.item.kind == .model || entry.item.kind == .program else { return entry }
                 var result = entry
                 let legacy = SharedLibraryTagTarget.legacy(nodeTags.readState(for: entry.item.key))
@@ -91,6 +93,7 @@ public struct DualWorkbenchView: View {
     @State private var entry: Entry = .quick
     @State private var entryHistory: [Entry] = []
     @State private var navigationIntent = UUID()
+    @State private var previewNavigationRequest = UUID()
     @State private var libraryVisible = false
     @State private var projectsVisible = false
     @State private var compatibilityVisible = false
@@ -557,6 +560,7 @@ public struct DualWorkbenchView: View {
                 if case .unavailable = value.selection { Button(baselineText(language, "label.32d818ead29f", fallback: "打开已有编辑器")) { returnToLibrary = false; libraryInfo = nil; libraryVisible = false; compatibilityVisible = true } }
             }.padding(24).frame(minWidth: 550, minHeight: 280)
         }
+        .environment(\.metadataEditorLifecycle, MetadataEditorLifecycle(begin: model.beginEditing, end: model.endEditing))
         .focusedSceneValue(\.workbenchGeneration, WorkbenchGenerationCommand(title: "快速生成", isEnabled: quickCommandEnabled,
             action: { if quickCommandEnabled { quick.start() } }))
     }
@@ -606,7 +610,9 @@ public struct DualWorkbenchView: View {
                 onPreview: { value in Task { await previewLibraryEntry(value) } },
                 onLocation: { value in Task { await showAssetLocation(value) } },
                 onPrepare: { value in Task { await prepareModel(value) } },
-                onImport: { Task { await importLibraryAsset(forCanvas: canvasMode != nil) } }, onClose: { if let onBack { onBack() } else { libraryVisible = false } }, tagValidation: libraryTagValidation)
+                onImport: { Task { await importLibraryAsset(forCanvas: canvasMode != nil) } }, onClose: { if let onBack { onBack() } else { libraryVisible = false } }, tagValidation: libraryTagValidation,
+                queryContext: libraryQueryContext(forCanvas: canvasMode != nil),
+                annotationSave: libraryAnnotationSave)
         } else {
             VStack(alignment: .leading) {
                 Button(baselineText(language, "label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left") {
@@ -640,7 +646,24 @@ public struct DualWorkbenchView: View {
         }
         return { guard navigationIntent == intent else { throw WorkflowIssue("Library page changed / 资料库页面已改变，草稿未提交。") } }
     }
+    private func libraryQueryContext(forCanvas: Bool) -> SharedLibraryQueryContext {
+        let owner = forCanvas || entry == .workflow ? canvasModel : quickModel
+        return .init(projectID: owner.manifest?.id, instanceID: owner.manifest?.effectiveInstanceID)
+    }
+    private func libraryAnnotationSave(_ value: SharedLibraryBrowserEntry) -> SharedLibraryAnnotationSave? {
+        guard let identity = assetIdentity(value.selection), let snapshot = value.metadataSnapshot else { return nil }
+        let sessions = [model.projectSession, automaticQuickModel.projectSession]
+        guard let session = sessions.first(where: { $0.manifest?.effectiveInstanceID == snapshot.instanceID && $0.manifest?.id == identity.0 }),
+              let owner = session.currentStore else { return nil }
+        let validation = libraryTagValidation(value)
+        return { expected, name, note, favorite in
+            try validation()
+            try await session.saveAssetAnnotations(owner: owner, expected: expected, name: name, note: note, isFavorite: favorite)
+            await refreshLibrary(checkModels: false)
+        }
+    }
     private func refreshLibrary(checkModels: Bool) async {
+        let generation = UUID(); libraryRefreshGeneration = generation
         quickModel.projectSession.refreshWorkflowModels()
         if model.projectSession !== quickModel.projectSession { model.projectSession.refreshWorkflowModels() }
         let installationSnapshot = await library.library.snapshot()
@@ -661,7 +684,20 @@ public struct DualWorkbenchView: View {
             projects.first(where: { $0.effectiveInstanceID == incoming.effectiveInstanceID })
                 .map { incoming.revision >= $0.revision } ?? true
         }) else { return }
-        projects = snapshots
+        var projected: [String: ProjectAssetMetadataSnapshot] = [:]
+        var owners = [automaticQuick.store]
+        if let otherStore, otherStore !== automaticQuick.store { owners.append(otherStore) }
+        for owner in owners {
+            if let values = try? await owner.libraryMetadataSnapshots() {
+                let current = await owner.snapshot()
+                guard snapshots.contains(where: { $0.effectiveInstanceID == current.effectiveInstanceID && $0.revision == current.revision }) else { return }
+                for value in values { projected["asset-instance:" + value.instanceID.uuidString + ":" + value.asset.id.uuidString] = value }
+            }
+        }
+        guard !Task.isCancelled, libraryRefreshGeneration == generation, model.projectSession.currentStore === otherStore else { return }
+        // This projection owns at most the currently open project and automatic quick project.
+        // A newer refresh, project switch, or closing instance replaces the entire map.
+        projects = snapshots; libraryMetadata = projected
 
     }
     private var quickSurface: some View {
@@ -767,23 +803,41 @@ public struct DualWorkbenchView: View {
         }
     }
     private func previewLibraryEntry(_ value: SharedLibraryBrowserEntry) async {
+        let request = UUID(); previewNavigationRequest = request
+        let intent = navigationIntent
         failedAssetRoute = nil
         guard let identity = assetIdentity(value.selection) else { presentLibraryDestination(.info(value)); return }
+        let owners = [model.projectSession, automaticQuickModel.projectSession].filter {
+            $0.manifest?.id == identity.0 && (identity.1 == nil || $0.manifest?.effectiveInstanceID == identity.1)
+        }
+        guard Set(owners.compactMap { $0.manifest?.effectiveInstanceID }).count == 1,
+              let owner = owners.first, let source = owner.currentStore else {
+            issue = "所属项目实例已关闭或不明确，请重新打开。 / Source instance unavailable or ambiguous."; return
+        }
+        let epoch = owner.navigationEpoch
+        @MainActor func current() -> Bool {
+            !Task.isCancelled && navigationIntent == intent && previewNavigationRequest == request &&
+                owner.currentStore === source && owner.navigationEpoch == epoch && owner.canEditLibraryMetadata
+        }
         let target = entry == .quick && quick.category == .text && quick.textPresentation == .chat ? chat : nil
         let targetSession = target?.state.selectedSessionID
-        do { let source = try await store(for: identity.0, instanceID: identity.1)
-            let ref = try await source.pinWorkflowAsset(identity.2)
+        do {
+            guard current() else { return }
+            let ref: WorkflowAssetReference
+            if let recorded = value.metadataSnapshot?.record?.reference { ref = recorded }
+            else { ref = try await source.pinWorkflowAsset(identity.2) } // Explicit preview compatibility, never the information reader.
             let manifest = await source.snapshot()
+            guard current(), manifest.id == identity.0, identity.1 == nil || manifest.effectiveInstanceID == identity.1 else { return }
             let choice = [.text, .image, .video, .document].contains(ref.kind)
                 ? ChatProjectAttachmentChoice(name: value.item.title, reference: ref, instanceID: manifest.effectiveInstanceID) : nil
             presentLibraryDestination(.asset(.init(store: source, reference: ref,
                 chatTarget: target, chatSessionID: targetSession, chatChoice: choice)))
         } catch {
-            if let source = try? await store(for: identity.0, instanceID: identity.1) {
-                let snapshot = await source.snapshot()
-                if snapshot.assets.contains(where: { $0.id == identity.2 }) {
-                    failedAssetRoute = .init(store: source, instanceID: snapshot.effectiveInstanceID, assetID: identity.2)
-                }
+            guard current() else { return }
+            let snapshot = await source.snapshot()
+            guard current() else { return }
+            if snapshot.assets.contains(where: { $0.id == identity.2 }) {
+                failedAssetRoute = .init(store: source, instanceID: snapshot.effectiveInstanceID, assetID: identity.2)
             }
             issue = error.localizedDescription
         }

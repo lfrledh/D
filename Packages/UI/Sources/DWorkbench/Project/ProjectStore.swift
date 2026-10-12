@@ -956,18 +956,28 @@ public actor ProjectStore {
     }
 
     public func updateAsset(id: UUID, name: String? = nil, note: String? = nil, isFavorite: Bool? = nil,
-                            tags: [String]? = nil) throws -> ProjectManifest {
-        try checkLocation()
+                            tags: [String]? = nil, expected: ProjectAssetEditBaseline? = nil) throws -> ProjectManifest {
+        try checkLocation(); try verifyUnchangedManifest()
         guard let index = manifest.assets.firstIndex(where: { $0.id == id }) else { throw ProjectStoreError.missingAsset }
+        let current = manifest.assets[index]
+        if let expected {
+            guard expected.projectID == manifest.id, expected.instanceID == manifest.effectiveInstanceID, expected.assetID == id,
+                  name == nil || current.name.utf8.elementsEqual(expected.name.utf8),
+                  note == nil || current.note.utf8.elementsEqual(expected.note.utf8),
+                  isFavorite == nil || current.isFavorite == expected.favorite else {
+                throw WorkflowIssue("作品注释已改变。草稿保留，请重新打开比较后保存。 / Asset annotations changed; draft retained.")
+            }
+        }
         var candidate = manifest
-        var tagBytesChanged = false
+        var tagBytesChanged = name.map { !current.name.utf8.elementsEqual($0.utf8) } ?? false
+        tagBytesChanged = tagBytesChanged || (note.map { !current.note.utf8.elementsEqual($0.utf8) } ?? false)
         if let name { candidate.assets[index].name = name }
         if let note { candidate.assets[index].note = note }
         if let isFavorite { candidate.assets[index].isFavorite = isFavorite }
         if let tags {
             let validated = try LibraryTags.validate(tags)
             let persisted = manifest.assets[index].tags
-            tagBytesChanged = persisted.count != validated.count ||
+            tagBytesChanged = tagBytesChanged || persisted.count != validated.count ||
                 !zip(persisted, validated).allSatisfy { $0.0.utf8.elementsEqual($0.1.utf8) }
             candidate.assets[index].tags = validated
         }
@@ -3274,6 +3284,50 @@ extension ProjectStore {
         try validateWorkflowArchive(archive, assets: manifest.assets)
         validatedWorkflowRead = .init(pointer: pointer, bytes: data, assets: manifest.assets, archive: archive)
         return .init(archive: archive)
+    }
+
+    /// One bounded, owner-local projection read per refresh. Unknown workflow data stays
+    /// read-only and is reported separately from valid ProjectAsset facts.
+    public func libraryMetadataSnapshots() throws -> [ProjectAssetMetadataSnapshot] {
+        try libraryMetadataSnapshots(assetID: nil, exactReference: nil)
+    }
+
+    private func libraryMetadataSnapshots(assetID: UUID?, exactReference: WorkflowAssetReference?) throws -> [ProjectAssetMetadataSnapshot] {
+        try checkLocation(); try verifyUnchangedManifest()
+        var archive: WorkflowArchive?, issue: String?
+        do { let state = try workflowState(); archive = state.archive; issue = state.readOnlyReason }
+        catch { issue = error.localizedDescription }
+        let records = Dictionary(grouping: (archive?.assets ?? []).filter { exactReference == nil || $0.reference == exactReference }, by: { $0.reference.assetID })
+        let jobs = Dictionary(manifest.jobs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var occurrences: [WorkflowAssetReference: [SharedLibraryAssetOccurrence]] = [:]
+        for run in archive?.runs ?? [] {
+            let calls = run.planCheckpoint?.records.map { ($0.step, Optional($0.address)) }
+                ?? run.steps.map { ($0, Optional<WorkflowExecutionAddress>.none) }
+            for (step, address) in calls {
+                for reference in Set(step.outputs.values.flatMap { value -> [WorkflowAssetReference] in
+                    if case .collection(let candidates) = value { return candidates.compactMap(\.asset) }
+                    return value.datum?.assetReferences ?? []
+                }) {
+                    occurrences[reference, default: []].append(.init(runID: run.id, nodeID: step.node.id, stepID: step.id, address: address))
+                }
+            }
+        }
+        return manifest.assets.filter { assetID == nil || $0.id == assetID }.map { asset in
+            let candidates = records[asset.id] ?? []
+            let record = candidates.count == 1 ? candidates[0] : nil
+            return .init(project: manifest, asset: asset, record: record, job: asset.jobID.flatMap { jobs[$0] },
+                         occurrences: archive == nil ? nil : candidates.flatMap { occurrences[$0.reference] ?? [] },
+                         sourceIssue: issue ?? (candidates.count > 1 ? "Multiple recorded versions; choose an exact result / 多个版本，请从精确结果查看来源。" : nil))
+        }
+    }
+
+    public func assetMetadataSnapshot(id: UUID, reference: WorkflowAssetReference? = nil) throws -> ProjectAssetMetadataSnapshot {
+        guard let snapshot = try libraryMetadataSnapshots(assetID: id, exactReference: reference).first else { throw ProjectStoreError.missingAsset }
+        if let reference {
+            guard reference.projectID == snapshot.projectID, reference.assetID == id else { throw WorkflowIssue("Asset identity mismatch / 素材身份不符。") }
+            guard snapshot.record?.reference == reference else { throw WorkflowIssue(snapshot.sourceIssue ?? "Exact asset version unavailable / 此素材版本未登记。") }
+        }
+        return snapshot
     }
 
     private func editableWorkflow() throws -> WorkflowArchive {
