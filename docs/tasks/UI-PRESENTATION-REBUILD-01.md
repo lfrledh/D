@@ -6,7 +6,13 @@ spec r1 · 2026-10-08 · Lead本聊天；G1/G3/G7，C2026-09-23.1。唯一当前
 
 本轮明确采用附件 `D_UI_Metadata_Tag_Plan_2026-10-12.zip` 的 S0—S4/B01—B28/A01—A28；替代旧左右功能分工，不撤销 R14/R15、A2 和 DHA-01。实际与预期起点 `a6a50e6c4b8bc40a75b15e08a74a34902aeeb34c`，新树/工作分支及当前授权见当前行动。固定附件、原始命令、日志和最终回执统一在 `D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261012-metadata`，不新建常驻文档。
 
-S0 已核对真实源、候选后继、依赖锁与个人 scheme；S1 正在实现左【节点/素材/配置】、右【节点结果/运行总览】、显式选择意图、精确 run/call、范围与恢复入口。之后顺序完成标签整合、有限 Library 格式/注释命令和原生验证。此状态不是完成回执；原生、真人和真实模型证据分别记录。现用 App 与原试用入口保持；最终只推送工作分支供用户验收及独立复审。
+S0—S3 实现完成。提交依次为 S1 `95739118`、S2 `62f8127f`、S3/受测源码 `22a2c1ea15ab3580bb80f5fb7ad911fbeea2ed55`。左【节点/素材/配置】、右【节点结果/运行总览】，显式选择意图、固定结果和精确 run/address/step 与底部终点独立；连续添加保留资源页，四种范围及原计划/恢复命令不改。选区封装进入原接口确认，不自动确认。
+
+组织标签统一 SharedLibraryStore，恢复实例共享逻辑资产 key；旧标签仅显式选择整合，一次事务/Undo，查看不导入。新信息面板从只读 typed projection 显示实际记录/缺失来源；名称、说明、收藏按捕获 owner/instance/字段基线保存，迟到响应和关闭后的写入被拒绝，失败保留草稿。结果资产检索在状态/待决定/失败恢复之外；已保存检索支持明确 scope、宽高/登记时间/模型/父素材等白名单条件。按 B10/B12 获准有限扩展原 Library schema2 和注释命令；schema1 首次显式写前保留同目录原字节备份，严格未知字段/外部修改保护。ProjectManifest20、Runtime、模型和运行协议不改；标签备份/跨机、完整标准元数据、权利、持久审计/AI全文等不造假入口。
+
+最终源码 70 个唯一方法/85 展开情景通过；受控 Store/Controller、离屏 AppKit/SwiftUI 与原生严格分级。`final-regression` exit1 的两项全局探针与其他宿主并行相互计数，原日志保留；相同源码分别 `final-node-isolated`/`final-pan-isolated` exit0，不改阈值或重计覆盖。36次节点移动与临时线 surface/card/hitBuilds均0；平移 canvas/surface/retained均0、offset36；不是屏幕FPS。1000条目连续20次标签查询26.76ms、100项保存1.50ms；两点RSS仅观察，不证明无泄漏。早期PCM路径、编译/夹具/嵌套Testing宏类型断言失败均留日志，修复后复验。三个只读审查者的有限初审/复核见 R/lead/review.json。
+
+S4独立普通包/严格签名/资源对应结果见 R/delivery/receipt.md 与 candidate.json；独立入口仅放 R/delivery，项目副本为 R/gui/Metadata review.dproject。一次桌面尝试明确返回“The Mac is locked and automatic unlock could not unlock it.”，立即停止GUI；没有同版原生截图、实际启动或输入/手感验收，不轮询/扩权。原六项目492文件、源/main和个人scheme字节/索引/未暂存状态未变，旧R16包7文件与历史回执一致，原试用入口不改。最终只推送工作分支，不合并、发布、替换现用App；最终SHA、完整双起点差分、A/B矩阵及余项集中在单份外部回执。原生确定性自检仍由Agent承担，复杂体验随后由用户集中反馈；F26继续延期。
 
 ## 规格
 

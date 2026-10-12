@@ -2,7 +2,7 @@
 
 最后核实：2026-10-12。当前授权 **UI-PRESENTATION-REBUILD-01 / 元数据与标签整理**。实际及附件预期起点均为 `a6a50e6c4b8bc40a75b15e08a74a34902aeeb34c`，已核对远端 `codex/dha-01-20261012` 无后继。独立树 `D-Worktrees/D-UI-METADATA-20261012`，分支 `codex/ui-metadata-index-20261012`；Lead 单一写者，只读审查并行。按附件 S0—S4 完成左准备/右产出、标签单写、类型化检索和对象信息；允许现有 Library 格式及字段级注释命令的有限补齐，ProjectManifest20、运行/模型不扩展。用户授权完成后推送工作分支，**不合并、不发布、不替换现用 App**。
 
-唯一活动记录见[既有 UI 任务页](tasks/UI-PRESENTATION-REBUILD-01.md#2026-10-12-元数据与标签整理)。本轮外盘证据根 `D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261012-metadata`（下称 R），附件固定副本及清单在 `R/input`，保护摘要在 `R/lead`；最终 SHA/完整差分和分级证据统一写入 `R/delivery/receipt.md`。当前实施 S1，未宣称普通 App 或原生验收通过。旧 R16/A2/DHA 未验项继续留在[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。以下版本记录保留历史范围。
+唯一活动记录见[既有 UI 任务页](tasks/UI-PRESENTATION-REBUILD-01.md#2026-10-12-元数据与标签整理)。本轮外盘证据根 `D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261012-metadata`（下称 R），附件固定副本及清单在 `R/input`，保护摘要在 `R/lead`；最终 SHA/完整差分和分级证据统一写入 `R/delivery/receipt.md`。S1—S3 已实现，受测源码 `22a2c1ea15ab3580bb80f5fb7ad911fbeea2ed55`；70 个唯一方法/85 情景通过（含两项全局探针分别复验）。S4 普通签名构建与独立包结果见外部回执；本轮未启动 App，原生截图/点击/手感因桌面明确锁定待验。最终 SHA 与源码等价范围只由该回执关联，不自引用追加提交。旧 R16/A2/DHA 未验项继续留在[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。以下版本记录保留历史范围。
 
 ## 版本与保护
 
