@@ -23,12 +23,15 @@ public struct SharedLibraryBrowserEntry: Identifiable, Equatable {
     public let selection: SharedLibraryBrowserSelection
     public let facts: [String]
     public let id: String
+    public var legacyTags: [String]
+    public var legacyFailure: String?
 
-    public init(item: SharedLibraryItem, selection: SharedLibraryBrowserSelection, facts: [String] = [], activityID: String? = nil) {
+    public init(item: SharedLibraryItem, selection: SharedLibraryBrowserSelection, facts: [String] = [], activityID: String? = nil, legacyTags: [String] = [], legacyFailure: String? = nil) {
         self.item = item
         self.selection = selection
         self.facts = facts
         self.id = activityID ?? item.key
+        self.legacyTags = legacyTags; self.legacyFailure = legacyFailure
     }
 }
 
@@ -195,12 +198,15 @@ struct SharedLibraryBrowserRenameDrafts {
             guard let folder = store.metadata.folders[id] else { throw SharedLibraryError.missingFolder }
             scopeKeys = Set(entries.filter { folder.memberKeys.contains($0.item.key) }.map(\.id))
         }
-        let filtered = Set(store.filter(entries.map(\.item), query: query).map(\.key))
         return entries.filter { entry in
-            guard scopeKeys.contains(entry.id), filtered.contains(entry.item.key) else { return false }
+            guard scopeKeys.contains(entry.id), store.matches(entry.item, query: query) else { return false }
             if case .kind(let kind) = scope { return entry.item.kind == kind }
             return true
         }
+    }
+
+    static func tagEditEntries(_ ids: Set<String>, in entries: [SharedLibraryBrowserEntry]) -> [SharedLibraryBrowserEntry] {
+        entries.filter { ids.contains($0.id) }
     }
 
     static func validatedDropKeys(_ candidates: [String], entries: [SharedLibraryBrowserEntry]) -> Set<String>? {
@@ -298,6 +304,7 @@ public struct SharedLibraryBrowser: View {
     private let onPrepare: (SharedLibraryBrowserEntry) -> Void
     private let onImport: () -> Void
     private let onClose: () -> Void
+    private let tagValidation: (SharedLibraryBrowserEntry) -> (() throws -> Void)
 
     @Environment(\.dLanguageStore) private var language
     @State private var state: SharedLibraryBrowserState
@@ -305,6 +312,14 @@ public struct SharedLibraryBrowser: View {
     @State private var showOrganizer = false
     @State private var compactDetailKey: String?
     @State private var errorMessage: String?
+    private struct TagRequest: Identifiable {
+        let id = UUID()
+        let targets: [SharedLibraryTagTarget]
+        let validations: [() throws -> Void]
+        var add: Set<UUID> = []
+        var remove: Set<UUID> = []
+    }
+    @State private var tagRequest: TagRequest?
     @State private var tab: OrganizerTab = .tags
     @State private var newName = ""
     @State private var renameDrafts = SharedLibraryBrowserRenameDrafts()
@@ -321,12 +336,14 @@ public struct SharedLibraryBrowser: View {
         onPreview: @escaping (SharedLibraryBrowserEntry) -> Void,
         onLocation: @escaping (SharedLibraryBrowserEntry) -> Void = { _ in },
         onPrepare: @escaping (SharedLibraryBrowserEntry) -> Void,
-        onImport: @escaping () -> Void, onClose: @escaping () -> Void
+        onImport: @escaping () -> Void, onClose: @escaping () -> Void,
+        tagValidation: @escaping (SharedLibraryBrowserEntry) -> (() throws -> Void) = { _ in {} }
     ) {
         self._state = State(initialValue: state ?? SharedLibraryBrowserState())
         self.entries = entries; self.store = store; self.compact = compact
         self.onUse = onUse; self.onAdd = onAdd; self.onPreview = onPreview; self.onLocation = onLocation
         self.onPrepare = onPrepare; self.onImport = onImport; self.onClose = onClose
+        self.tagValidation = tagValidation
     }
 
     private var query: SharedLibraryQuery {
@@ -403,6 +420,12 @@ public struct SharedLibraryBrowser: View {
         }
         .background(.regularMaterial)
         .sheet(isPresented: $showOrganizer) { organizer }
+        .sheet(item: $tagRequest) { request in
+            SharedLibraryTagEditor(store: store, targets: request.targets, add: request.add, remove: request.remove,
+                validateTarget: {
+                    for check in request.validations { try check() }
+                })
+        }
         .sheet(isPresented: Binding(
             get: { SharedLibraryBrowserLogic.detailEntry(key: compactDetailKey, entries: entries) != nil },
             set: { if !$0 { compactDetailKey = nil } }
@@ -439,8 +462,8 @@ public struct SharedLibraryBrowser: View {
             Text(word("title", "共享资料库")).font(.headline).lineLimit(1)
             Spacer(minLength: 0)
             if compact {
+                Button(word("import", "导入素材"), action: onImport).font(.caption)
                 Menu {
-                    Button(word("import", "导入素材"), action: onImport)
                     Button(word("organize", "整理资料库")) { showOrganizer = true }
                     Button(word("undo", "撤销")) { perform { try store.undo() } }
                         .disabled(!store.canUndo)
@@ -471,7 +494,7 @@ public struct SharedLibraryBrowser: View {
                     ForEach(visible) { entry in entryRow(entry, compact: true) }
                 }.padding(.horizontal, 6)
             }
-        }.padding(7).frame(width: 240).frame(maxHeight: .infinity)
+        }.padding(7).frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var sidebar: some View {
@@ -486,7 +509,8 @@ public struct SharedLibraryBrowser: View {
                 ForEach(tags) { tag in
                     scopeButton(tag.name, icon: "tag", value: .tag(tag.id))
                         .dropDestination(for: String.self) { (keys: [String], _: CGPoint) -> Bool in
-                            return acceptDrop(keys) { try store.addTags([tag.id], to: $0) }
+                            guard let ids = SharedLibraryBrowserLogic.validatedDropKeys(keys, entries: entries) else { return false }
+                            openTagEditor(activityIDs: ids, add: [tag.id]); return true
                         }
                 }
                 Text(word("folders", "分类")).font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 8)
@@ -532,14 +556,77 @@ public struct SharedLibraryBrowser: View {
         }.padding(8)
     }
 
+    private func tagTarget(_ entry: SharedLibraryBrowserEntry) -> SharedLibraryTagTarget {
+        let identity: String
+        if case .assetInstance(_, let instance, _) = entry.selection { identity = String(instance.uuidString.prefix(8)) }
+        else { identity = entry.id }
+        return .init(key: entry.item.key, title: entry.item.title + " · " + identity, legacy: entry.legacyTags, legacyFailure: entry.legacyFailure, activityID: entry.id)
+    }
+    private func openTagEditor(activityIDs: Set<String>, add: Set<UUID> = [], remove: Set<UUID> = []) {
+        let selected = SharedLibraryBrowserLogic.tagEditEntries(activityIDs, in: entries)
+        tagRequest = .init(targets: selected.map(tagTarget), validations: selected.map(tagValidation), add: add, remove: remove)
+    }
+    private var scopeTitle: String {
+        switch scope {
+        case .all: word("registered", "已登记条目")
+        case .kind(let value): kindName(value)
+        case .tag(let id): word("myTags", "我的标签") + ": " + (store.metadata.tags[id]?.name ?? "—")
+        case .folder(let id): word("folders", "分类") + ": " + (store.metadata.folders[id]?.name ?? "—")
+        case .saved(let id): word("savedQueries", "智能筛选") + ": " + (store.metadata.savedQueries[id]?.name ?? "—")
+        }
+    }
     private var searchControls: some View {
-        HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
+            Menu(scopeTitle) {
+                Button(word("all", "全部")) { selectScope(.all) }
+                ForEach(SharedLibraryItemKind.allCases, id: \.self) { kind in Button(kindName(kind)) { selectScope(.kind(kind)) } }
+                ForEach(saved) { saved in Button(saved.name) { selectScope(.saved(saved.id)) } }
+            }.font(.caption)
             TextField(word("search", "搜索名称、说明或我的标签"), text: searchTextBinding)
                 .textFieldStyle(.roundedBorder).accessibilityIdentifier("shared-library-search")
-            Button { showFilters.toggle() } label: { Image(systemName: "line.3.horizontal.decrease.circle") }
-                .accessibilityLabel(word("filters", "筛选"))
-                .popover(isPresented: $showFilters, arrowEdge: .bottom) { filterPopover }
+            HStack {
+                Menu(word("allTags", "同时包含这些标签")) {
+                    ForEach(tags) { tag in
+                        Toggle(tag.name + " (\(countAddingTag(tag.id)))", isOn: setBinding(\.allTagIDs, tag.id))
+                    }
+                    if tags.isEmpty { Text(word("noTags", "尚无我的标签")) }
+                }
+                Button(word("filters", "筛选"), systemImage: "line.3.horizontal.decrease.circle") { showFilters.toggle() }
+                    .popover(isPresented: $showFilters, arrowEdge: .bottom) { filterPopover }
+            }.font(.caption)
+            ScrollView(.horizontal) {
+                HStack(spacing: 4) {
+                    if scope != .all { token(scopeTitle) { selectScope(.all) } }
+                    if !query.text.isEmpty { token(query.text) { query.text = "" } }
+                    ForEach(tags.filter { query.allTagIDs.contains($0.id) }) { tag in token(word("all", "全部") + ": " + tag.name) { query.allTagIDs.remove(tag.id) } }
+                    ForEach(tags.filter { query.anyTagIDs.contains($0.id) }) { tag in token(word("anyTags", "至少一个标签") + ": " + tag.name) { query.anyTagIDs.remove(tag.id) } }
+                    dimensionTokens(query.kinds, path: \.kinds, label: kindName)
+                    dimensionTokens(query.roles, path: \.roles, label: { $0 })
+                    dimensionTokens(query.inputs, path: \.inputs, label: { word("inputs", "输入能力") + ": " + dataName($0) })
+                    dimensionTokens(query.outputs, path: \.outputs, label: { word("outputs", "输出能力") + ": " + dataName($0) })
+                    dimensionTokens(query.contentKinds, path: \.contentKinds, label: dataName)
+                    dimensionTokens(query.readiness, path: \.readiness, label: readinessName)
+                    dimensionTokens(query.compatibility, path: \.compatibility, label: compatibilityName)
+                }
+            }.scrollIndicators(.hidden)
+            HStack {
+                Text("\(Set(visible.map(\.item.key)).count)/\(Set(entries.map(\.item.key)).count) " + word("logicalObjects", "逻辑对象") + " · \(visible.count) " + word("locations", "活动位置"))
+                    .font(.caption2).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Button(word("saveQuery", "保存检索")) { tab = .saved; showOrganizer = true }.font(.caption)
+            }
         }
+    }
+    private func countAddingTag(_ id: UUID) -> Int {
+        var value = query; value.allTagIDs.insert(id)
+        return Set(((try? SharedLibraryBrowserLogic.visibleEntries(entries, store: store, query: value, scope: scope)) ?? []).map(\.item.key)).count
+    }
+    private func token(_ title: String, remove: @escaping () -> Void) -> some View {
+        Button(action: remove) { HStack(spacing: 3) { Text(title); Image(systemName: "xmark") }.padding(4) }
+            .buttonStyle(.bordered).font(.caption2).help(word("removeCondition", "仅移除检索条件，不改变对象标签"))
+    }
+    private func dimensionTokens<T: Hashable>(_ values: Set<T>, path: WritableKeyPath<SharedLibraryQuery, Set<T>>, label: @escaping (T) -> String) -> some View {
+        ForEach(Array(values).sorted { label($0) < label($1) }, id: \.self) { value in token(label(value)) { query[keyPath: path].remove(value) } }
     }
 
     private var bulkControls: some View {
@@ -547,12 +634,13 @@ public struct SharedLibraryBrowser: View {
             Text(word("selected", "已选") + " \(validSelection.count)").font(.caption).foregroundStyle(.secondary)
             Spacer()
             Menu {
+                Button(word("editTags", "编辑所选对象标签…")) { openTagEditor(activityIDs: validSelection) }
                 ForEach(tags) { tag in
                     Button(word("addTag", "添加标签") + " · " + tag.name) {
-                        perform { try store.addTags([tag.id], to: selectedMetadataKeys) }
+                        openTagEditor(activityIDs: validSelection, add: [tag.id])
                     }
                     Button(word("removeTag", "移除标签") + " · " + tag.name) {
-                        perform { try store.removeTags([tag.id], from: selectedMetadataKeys) }
+                        openTagEditor(activityIDs: validSelection, remove: [tag.id])
                     }
                 }
                 if tags.isEmpty { Text(word("noTags", "尚无我的标签")) }
@@ -579,6 +667,12 @@ public struct SharedLibraryBrowser: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.item.title).font(.callout.weight(.medium)).lineLimit(2)
                 Text(entry.item.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                if !(store.metadata.tagAssignments[entry.item.key] ?? []).isEmpty {
+                    Text(assignedTagNames(entry.item.key)).font(.caption2).lineLimit(2)
+                }
+                if !entry.legacyTags.isEmpty && !store.metadata.importedLegacyKeys.contains(entry.item.key) {
+                    Text(word("legacy", "有尚未整合的旧标签")).font(.caption2).foregroundStyle(.secondary)
+                }
                 Text(readinessName(entry.item.readiness) + " · " + kindName(entry.item.kind))
                     .font(.caption2).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading)
@@ -632,8 +726,7 @@ public struct SharedLibraryBrowser: View {
                 Text(word("facts", "能力事实")).font(.subheadline.weight(.semibold))
                 ForEach(entry.facts, id: \.self) { fact in Text(fact).font(.caption).textSelection(.enabled) }
             }
-            Text(word("myTags", "我的标签")).font(.subheadline.weight(.semibold))
-            Text(assignedTagNames(entry.item.key)).font(.caption).textSelection(.enabled)
+            SharedLibraryTagSection(store: store, target: tagTarget(entry), validateTarget: tagValidation(entry))
             Text(word("legend", "能力 / 我的标签")).font(.caption2).foregroundStyle(.secondary)
             Divider()
             if canUse(entry) {
@@ -700,7 +793,7 @@ public struct SharedLibraryBrowser: View {
                             keyPath: \.readiness, label: readinessName)
                 filterGroup(word("compatibility", "兼容性"), values: SharedLibraryCompatibility.allCases,
                             keyPath: \.compatibility, label: compatibilityName)
-                Menu(word("myTags", "我的标签") + " (\(query.anyTagIDs.count))") {
+                Menu(word("anyTags", "至少一个标签") + " (\(query.anyTagIDs.count))") {
                     ForEach(tags) { tag in Toggle(tag.name, isOn: setBinding(\.anyTagIDs, tag.id)) }
                 }
                 Menu(word("allTags", "同时包含这些标签") + " (\(query.allTagIDs.count))") {
@@ -834,10 +927,10 @@ public struct SharedLibraryBrowser: View {
             if let id = selectedTagID {
                 HStack {
                     Button(word("addSelected", "给已选条目添加")) {
-                        perform { try store.addTags([id], to: selectedMetadataKeys) }
+                        openTagEditor(activityIDs: validSelection, add: [id])
                     }
                     Button(word("removeSelected", "从已选条目移除")) {
-                        perform { try store.removeTags([id], from: selectedMetadataKeys) }
+                        openTagEditor(activityIDs: validSelection, remove: [id])
                     }
                 }.disabled(validSelection.isEmpty)
             }

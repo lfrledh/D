@@ -39,6 +39,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public private(set) var projectID: UUID?
     public private(set) var projectInstanceID: UUID?
     public private(set) var assetReferences: [UUID: WorkflowAssetReference] = [:]
+    public var canEditLibraryMetadata: Bool { !closed && !closing && !externalOperationBusy() }
     public var canEditCanvas: Bool {
         !closed && !closing && !externalOperationBusy() && readOnlyReason == nil &&
         (!isRunning || editingOriginalID != nil) && (graphs.isEmpty || graph != nil)

@@ -7,6 +7,7 @@ public struct WorkbenchView: View {
     @Bindable private var model: WorkbenchModel
     private let library: ModelLibraryModel?
     private let nodeTags: ModelNodeTagStore
+    private let metadata: SharedLibraryStore?
     @State private var nodePresentation = ModelNodePresentation()
     private var layoutProbe: ((String, CGRect) -> Void)?
     @State private var audioRangeState = AudioCreationRangeState()
@@ -28,10 +29,11 @@ public struct WorkbenchView: View {
     @State private var namingContext: DocumentNameContext?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(model: WorkbenchModel, library: ModelLibraryModel? = nil, nodeTags: ModelNodeTagStore? = nil) {
+    public init(model: WorkbenchModel, library: ModelLibraryModel? = nil, nodeTags: ModelNodeTagStore? = nil, metadata: SharedLibraryStore? = nil) {
         self.model = model
         self.library = library
         self.nodeTags = nodeTags ?? ModelNodeTagStore()
+        self.metadata = metadata
     }
 
     /// Inject the actual presentation owner for hosting regressions; no alternate command path.
@@ -63,7 +65,7 @@ public struct WorkbenchView: View {
                     }.padding(10).background(.bar)
                     Divider()
                     if workflowVisible {
-                        WorkflowHostView(model: model, nodeTags: nodeTags,
+                        WorkflowHostView(model: model, nodeTags: nodeTags, metadata: metadata,
                             acceptsLegacyAsset: { projectID, assetID in
                                 guard let manifest = model.manifest,
                                       manifest.id == projectID,
@@ -246,8 +248,12 @@ public struct WorkbenchView: View {
     @ViewBuilder private var workspaceEditor: some View {
         if pane == .nodes {
             if let node = visibleNodes.first(where: { $0.id == selectedNodeID }) {
+                let legacy = SharedLibraryTagTarget.legacy(nodeTags.readState(for: node.id))
                 ModelNodeDetail(node: node, tagState: nodeTags.readState(for: node.id),
-                    onTagsChange: nodePresentation.tagWriter(node: node, store: nodeTags, model: model))
+                    onTagsChange: { _ in "Use shared organization tags / 请使用共享组织标签" },
+                    organizationTags: AnyView(SharedLibraryTagSection(store: metadata,
+                        target: .init(key: node.id, title: node.title, legacy: legacy.names, legacyFailure: legacy.failure),
+                        validateTarget: nodePresentation.tagValidation(node: node, model: model))))
                 .id(node.id)
             } else {
                 ContentUnavailableView("查看模型节点", systemImage: "square.stack.3d.up",

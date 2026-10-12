@@ -57,17 +57,19 @@ public struct ModelNodeDetail: View {
     public let node: ModelNodeDescriptor
     private let tagState: ModelNodeTagReadState
     private let onTagsChange: ([String]) -> String?
+    private let organizationTags: AnyView?
     @State private var tagEditor: ModelNodeTagEditorState
     private var layoutProbe: ((String, CGRect) -> Void)?
 
     public init(
         node: ModelNodeDescriptor,
         tagState: ModelNodeTagReadState,
-        onTagsChange: @escaping ([String]) -> String?
+        onTagsChange: @escaping ([String]) -> String?, organizationTags: AnyView? = nil
     ) {
         self.node = node
         self.tagState = tagState
         self.onTagsChange = onTagsChange
+        self.organizationTags = organizationTags
         _tagEditor = State(initialValue: ModelNodeTagEditorState(tagState: tagState))
     }
 
@@ -82,7 +84,7 @@ public struct ModelNodeDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 identityAndExecution
-                tagsSection
+                if let organizationTags { organizationTags } else { tagsSection }
                 operationsSection
                 parametersSection
             }

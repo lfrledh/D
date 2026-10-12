@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 struct WorkflowHostView: View {
     let model: WorkbenchModel
     let nodeTags: ModelNodeTagStore
+    var metadata: SharedLibraryStore? = nil
     var onQuickUse: ((WorkflowNode) -> Void)? = nil
     var libraryContent: ((WorkflowCanvasLibraryMode, CGPoint, @escaping () -> Void) -> AnyView)? = nil
     var onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
@@ -27,7 +28,7 @@ struct WorkflowHostView: View {
                     onReturnText: { ref in Task { await model.projectSession.returnWorkflowText(ref) } },
                     onAdditionalModel: { chooseModel(controller: controller, kind: $0) },
                     onRecord: { nodeID in Task { await model.projectSession.startWorkflowRecording(nodeID: nodeID, controller: controller) } },
-                    nodeTags: nodeTags,
+                    nodeTags: nodeTags, metadata: metadata,
                     onImportAsset: { Task { await importAsset(controller) } },
                     onDropFile: { url in
                         guard model.projectSession.workflow === controller, controller.canEditCanvas else { return false }

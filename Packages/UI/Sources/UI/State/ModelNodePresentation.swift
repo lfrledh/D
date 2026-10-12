@@ -26,6 +26,17 @@ final class ModelNodePresentation {
         revision = UUID()
     }
 
+    func tagValidation(node: ModelNodeDescriptor, model: WorkbenchModel) -> () throws -> Void {
+        let capturedRevision = revision, epoch = model.projectSession.navigationEpoch
+        return {
+            guard self.revision == capturedRevision, self.pane == .nodes,
+                  self.selectedNodeID == node.id, model.creatorMode == node.modality,
+                  model.projectSession.navigationEpoch == epoch else {
+                throw WorkflowIssue("模型页面已改变，请在当前页面重新编辑标签。")
+            }
+        }
+    }
+
     func tagWriter(node: ModelNodeDescriptor, store: ModelNodeTagStore,
                    model: WorkbenchModel) -> ([String]) -> String? {
         let capturedRevision = revision

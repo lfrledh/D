@@ -147,6 +147,25 @@ struct ModelNodeWiringTests {
             #expect(await engine.submissions.isEmpty)
         }
     }
+    @Test func sharedTagValidationRejectsOldOwnerAndLeavesLegacyBytesUntouched() async throws {
+        try await withFixture { service, model, page, legacy, _, engine, project in
+            let node = try #require(ModelNodeCatalog.entries.first { $0.modality == .image })
+            try legacy.setTags(["legacy"], for: node.id)
+            let original = try Data(contentsOf: project.appendingPathComponent("project.json"))
+            let shared = try SharedLibraryStore()
+            page.selectPane(.nodes); page.selectNode(node.id)
+            let check = page.tagValidation(node: node, model: model)
+            try check()
+            try shared.editOrganizationTags(expected: .init(keys: [node.id], metadata: shared.metadata),
+                selectedLegacyNames: [node.id: ["legacy"]], confirmIntegration: [node.id])
+            page.selectNode("other"); page.selectNode(node.id)
+            #expect(throws: WorkflowIssue.self) { try check() }
+            #expect(legacy.readState(for: node.id) == .valid(["legacy"]))
+            #expect(try Data(contentsOf: project.appendingPathComponent("project.json")) == original)
+            #expect(await engine.submissions.isEmpty)
+        }
+    }
+
     private func settle<Content: View>(_ host: NSHostingView<Content>) {
         host.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))

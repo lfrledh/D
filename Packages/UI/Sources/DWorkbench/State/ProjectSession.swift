@@ -2399,6 +2399,8 @@ public final class ProjectSession {
         return write
     }
 
+    public var canEditLibraryMetadata: Bool { store != nil && !isChangingProject && !closePending }
+
     public func updateCandidate(assetID: UUID, name: String? = nil, isFavorite: Bool? = nil, note: String? = nil) async {
         guard let store, !isChangingProject, !closePending else { return }
         let write = queueMetadataWrite {

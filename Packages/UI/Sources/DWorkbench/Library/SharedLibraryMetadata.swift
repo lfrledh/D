@@ -138,11 +138,23 @@ public struct SharedLibraryMetadata: Codable, Sendable, Equatable {
     }
 }
 
+/// A tag draft is bound to logical objects, not the current selection or a list index.
+public struct SharedLibraryTagEditBaseline: Sendable {
+    public let assignments: [String: Set<UUID>]
+    public let integratedKeys: Set<String>
+    public let tags: [UUID: SharedLibraryTag]
+    public init(keys: Set<String>, metadata: SharedLibraryMetadata) {
+        assignments = Dictionary(uniqueKeysWithValues: keys.map { ($0, metadata.tagAssignments[$0] ?? []) })
+        integratedKeys = metadata.importedLegacyKeys.intersection(keys)
+        tags = metadata.tags
+    }
+}
+
 public enum SharedLibraryError: Error, LocalizedError, Equatable {
     case invalidName, duplicateName(String), missingTag, missingFolder, missingQuery
     case invalidKey, invalidReference, folderCycle, folderDepth, invalidMembership, tagInSavedQuery
     case limitExceeded(String), unsupportedSchema(Int), corruptedMetadata(String)
-    case invalidFileURL, externalChange
+    case invalidFileURL, externalChange, staleTagEdit
 
     public var errorDescription: String? {
         switch self {
@@ -162,6 +174,7 @@ public enum SharedLibraryError: Error, LocalizedError, Equatable {
         case .corruptedMetadata(let detail): "Library metadata needs recovery: \(detail)"
         case .invalidFileURL: "Library metadata requires a local file URL."
         case .externalChange: "Library metadata changed on disk. Reopen or recover before editing."
+        case .staleTagEdit: "These tags changed while editing. Your draft is retained; reopen to compare the current values."
         }
     }
 }
@@ -312,6 +325,48 @@ public final class SharedLibraryStore {
                 value.tagAssignments[key, default: []].insert(id)
             }
             value.importedLegacyKeys.insert(key)
+        }
+    }
+
+    /// The active UI uses this single transaction for ordinary edits AND explicit legacy
+    /// integration. Legacy snapshots are never read/unioned by the store on ordinary browsing.
+    /// All names, assignments, markers and this edit share one durable write and one Undo.
+    public func editOrganizationTags(expected: SharedLibraryTagEditBaseline,
+        add: Set<UUID> = [], remove: Set<UUID> = [], createNames: [String] = [],
+        selectedLegacyNames: [String: [String]] = [:], confirmIntegration: Set<String> = []) throws {
+        let keys = Set(expected.assignments.keys)
+        guard !keys.isEmpty, Set(selectedLegacyNames.keys).isSubset(of: confirmIntegration),
+              confirmIntegration.isSubset(of: keys), add.isDisjoint(with: remove) else { throw SharedLibraryError.invalidReference }
+        try change { value in
+            for key in keys {
+                guard value.tagAssignments[key, default: []] == expected.assignments[key],
+                      value.importedLegacyKeys.contains(key) == expected.integratedKeys.contains(key) else { throw SharedLibraryError.staleTagEdit }
+            }
+            for id in add.union(remove) {
+                guard let tag = expected.tags[id], value.tags[id] == tag else { throw SharedLibraryError.staleTagEdit }
+            }
+            @MainActor func resolve(_ names: [String]) throws -> Set<UUID> {
+                var result = Set<UUID>(), seen = Set<Data>()
+                for raw in names {
+                    let name = try Self.name(raw, maximum: 32)
+                    guard seen.insert(Data(name.utf8)).inserted else { throw SharedLibraryError.duplicateName(name) }
+                    let id: UUID
+                    if let tag = value.tags.values.first(where: { Self.sameBytes($0.name, name) }) { id = tag.id }
+                    else { id = UUID(); value.tags[id] = .init(id: id, name: name) }
+                    result.insert(id)
+                }
+                return result
+            }
+            let created = try resolve(createNames)
+            for key in keys {
+                if confirmIntegration.contains(key), !value.importedLegacyKeys.contains(key) {
+                    value.tagAssignments[key, default: []].formUnion(try resolve(selectedLegacyNames[key] ?? []))
+                    value.importedLegacyKeys.insert(key)
+                }
+                value.tagAssignments[key, default: []].formUnion(add.union(created))
+                value.tagAssignments[key]?.subtract(remove)
+                if value.tagAssignments[key]?.isEmpty == true { value.tagAssignments.removeValue(forKey: key) }
+            }
         }
     }
 

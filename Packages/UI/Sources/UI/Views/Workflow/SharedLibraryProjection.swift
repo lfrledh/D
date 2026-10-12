@@ -109,7 +109,7 @@ import Foundation
                     contentKind: kind, readiness: .unknown), selection: .assetInstance(projectID: project.id,
                         instanceID: project.effectiveInstanceID, assetID: asset.id),
                     facts: [asset.mediaType, "访问时核验所属项目、文件与摘要；不改变原件"],
-                    activityID: "asset-instance:" + project.effectiveInstanceID.uuidString + ":" + asset.id.uuidString))
+                    activityID: "asset-instance:" + project.effectiveInstanceID.uuidString + ":" + asset.id.uuidString, legacyTags: asset.tags))
             }
         }
         return result

@@ -74,7 +74,13 @@ public struct DualWorkbenchView: View {
     private var entries: [SharedLibraryBrowserEntry] {
         SharedLibraryProjection.entries(models: quickModel.projectSession.explicitModelChoices,
             readiness: quickModel.projectSession.explicitModelReadiness,
-            tools: canvasModel.projectSession.workflow?.tools ?? [], projects: projects, language: language)
+            tools: canvasModel.projectSession.workflow?.tools ?? [], projects: projects, language: language).map { entry in
+                guard entry.item.kind == .model || entry.item.kind == .program else { return entry }
+                var result = entry
+                let legacy = SharedLibraryTagTarget.legacy(nodeTags.readState(for: entry.item.key))
+                result.legacyTags = legacy.names; result.legacyFailure = legacy.failure
+                return result
+            }
     }
     @State private var sidebarState = WorkbenchSidebarState()
     @Environment(\.isEnabled) private var controlsEnabled
@@ -321,7 +327,7 @@ public struct DualWorkbenchView: View {
                         } else { quickSurface }
                     }
                 }
-                RetainedContentHost(content: WorkflowHostView(model: canvasModel, nodeTags: nodeTags, onQuickUse: useNode,
+                RetainedContentHost(content: WorkflowHostView(model: canvasModel, nodeTags: nodeTags, metadata: metadata, onQuickUse: useNode,
                     libraryContent: { mode, point, close in AnyView(libraryBrowser(compact: true, at: point, onBack: close, canvasMode: mode)) },
                     onSharedAssetDrop: acceptSharedAssetDrop,
                     acceptsLegacyAsset: { projectID, assetID in
@@ -460,7 +466,7 @@ public struct DualWorkbenchView: View {
         .sheet(isPresented: $compatibilityVisible) {
             VStack(spacing: 0) {
                 HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { compatibilityVisible = false }.keyboardShortcut(.cancelAction); Text(baselineText(language, "label.6f5cabc6a134", fallback: "创作文稿与模态编辑器")); Spacer() }.padding()
-                WorkbenchView(model: model, library: library, nodeTags: nodeTags)
+                WorkbenchView(model: model, library: library, nodeTags: nodeTags, metadata: metadata)
             }.frame(minWidth: 960, minHeight: 650)
         }
         .sheet(isPresented: Binding(get: { library.isPresented }, set: { library.isPresented = $0 }), onDismiss: restoreLibraryIfNeeded) {
@@ -600,7 +606,7 @@ public struct DualWorkbenchView: View {
                 onPreview: { value in Task { await previewLibraryEntry(value) } },
                 onLocation: { value in Task { await showAssetLocation(value) } },
                 onPrepare: { value in Task { await prepareModel(value) } },
-                onImport: { Task { await importLibraryAsset(forCanvas: canvasMode != nil) } }, onClose: { if let onBack { onBack() } else { libraryVisible = false } })
+                onImport: { Task { await importLibraryAsset(forCanvas: canvasMode != nil) } }, onClose: { if let onBack { onBack() } else { libraryVisible = false } }, tagValidation: libraryTagValidation)
         } else {
             VStack(alignment: .leading) {
                 Button(baselineText(language, "label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left") {
@@ -610,6 +616,29 @@ public struct DualWorkbenchView: View {
                 Button(baselineText(language, "label.17bb056515cd", fallback: "模型下载与安装…")) { libraryVisible = false; library.isPresented = true }
             }.padding()
         }
+    }
+    private func libraryTagValidation(_ value: SharedLibraryBrowserEntry) -> () throws -> Void {
+        let intent = navigationIntent
+        if let identity = assetIdentity(value.selection) {
+            let sessions = [model.projectSession, automaticQuickModel.projectSession]
+            let matches = sessions.filter { session in
+                session.manifest?.id == identity.0 && (identity.1 == nil || session.manifest?.effectiveInstanceID == identity.1)
+            }
+            guard let owner = matches.first, let store = owner.currentStore,
+                  Set(matches.compactMap { $0.manifest?.effectiveInstanceID }).count == 1 else {
+                return { throw WorkflowIssue("Metadata target unavailable / 素材所属实例不可访问。") }
+            }
+            let instance = owner.manifest?.effectiveInstanceID, epoch = owner.navigationEpoch
+            return {
+                guard navigationIntent == intent, owner.canEditLibraryMetadata,
+                      owner.currentStore === store, owner.navigationEpoch == epoch,
+                      owner.manifest?.effectiveInstanceID == instance,
+                      owner.manifest?.assets.contains(where: { $0.id == identity.2 }) == true else {
+                    throw WorkflowIssue("Metadata target changed / 所属项目实例或页面已改变，草稿未提交。")
+                }
+            }
+        }
+        return { guard navigationIntent == intent else { throw WorkflowIssue("Library page changed / 资料库页面已改变，草稿未提交。") } }
     }
     private func refreshLibrary(checkModels: Bool) async {
         quickModel.projectSession.refreshWorkflowModels()
@@ -633,17 +662,7 @@ public struct DualWorkbenchView: View {
                 .map { incoming.revision >= $0.revision } ?? true
         }) else { return }
         projects = snapshots
-        if let metadata {
-            do {
-                for value in entries where value.item.kind == .model || value.item.kind == .program {
-                    switch nodeTags.readState(for: value.item.key) {
-                    case .valid(let names): try metadata.importLegacyTags(names, for: value.item.key)
-                    case .missing: break
-                    case .corrupt: issue = "旧标签记录损坏，未迁移或覆盖：" + value.item.title
-                    }
-                }
-            } catch { issue = error.localizedDescription }
-        }
+
     }
     private var quickSurface: some View {
         let owner = quick.store.rootURL.standardizedFileURL.path

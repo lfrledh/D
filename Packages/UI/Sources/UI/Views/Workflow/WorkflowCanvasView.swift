@@ -38,6 +38,7 @@ func workflowText(
 public struct WorkflowCanvasView: View {
     private let controller: WorkflowController
     private let nodeTags: ModelNodeTagStore
+    private let metadata: SharedLibraryStore?
     private let onTextModel: () -> Void
     private let onImageModel: () -> Void
     private let onAdditionalModel: (WorkflowModelKind) -> Void
@@ -115,6 +116,7 @@ public struct WorkflowCanvasView: View {
         onAdditionalModel: @escaping (WorkflowModelKind) -> Void = { _ in },
         onRecord: @escaping (UUID) -> Void = { _ in },
         nodeTags: ModelNodeTagStore? = nil,
+        metadata: SharedLibraryStore? = nil,
         onImportAsset: @escaping () -> Void = {},
         onDropFile: @escaping (URL) -> Bool = { _ in false },
         onQuickUse: ((WorkflowNode) -> Void)? = nil,
@@ -124,6 +126,7 @@ public struct WorkflowCanvasView: View {
     ) {
         self.controller = controller
         self.nodeTags = nodeTags ?? ModelNodeTagStore()
+        self.metadata = metadata
         self.onTextModel = onTextModel
         self.onImageModel = onImageModel
         self.onAdditionalModel = onAdditionalModel
@@ -349,7 +352,7 @@ public struct WorkflowCanvasView: View {
                 Spacer()
             }.padding(14)
         } else if let node = selectedNodes.first {
-WorkflowNodeInspector(controller: controller, node: node,
+WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     readOnly: isReadOnly, onTextModel: { guard selectForAction(node) else { return }; guarded(onTextModel)() }, onImageModel: { guard selectForAction(node) else { return }; guarded(onImageModel)() },
                     onAdditionalModel: { kind in guard selectForAction(node) else { return }; guarded { onAdditionalModel(kind) }() },
                     onImport: { id in guard !isReadOnly else { return }; onImport(id) },
@@ -415,12 +418,12 @@ WorkflowNodeInspector(controller: controller, node: node,
                 if let libraryContent {
                     libraryContent(tab == .assets ? .assets : .nodes, canvasInsertionPoint, { showInspector = false })
                 } else if tab == .nodes {
-                    WorkflowNodeLibrary(controller: controller, tagStore: nodeTags) { entry in
+                    WorkflowNodeLibrary(controller: controller, tagStore: nodeTags, metadata: metadata) { entry in
                         controller.addNode(operationID: entry.operation.id, modelID: entry.model?.id,
                             x: canvasInsertionPoint.x, y: canvasInsertionPoint.y)
                     }
                 } else {
-                    WorkflowAssetLibrary(controller: controller, onAdd: { project, asset in
+                    WorkflowAssetLibrary(controller: controller, metadata: metadata, onAdd: { project, asset in
                         if controller.graph == nil { controller.addBlankGraph() }
                         guard let target = controller.canvasInsertionTarget() else { return }
                         Task { await controller.addAssetNode(projectID: project, assetID: asset,
@@ -494,7 +497,7 @@ WorkflowNodeInspector(controller: controller, node: node,
                     Text(record.address.runID.uuidString + " / " + record.id.uuidString + "\n" + String(describing: record.address.path))
                         .font(.caption2.monospaced()).textSelection(.enabled)
                 }.padding(.horizontal, 10)
-                WorkflowNodeInspector(controller: controller, node: record.step.node, readOnly: isReadOnly,
+                WorkflowNodeInspector(controller: controller, metadata: metadata, node: record.step.node, readOnly: isReadOnly,
                     onTextModel: {}, onImageModel: {}, onAdditionalModel: { _ in }, onImport: { _ in }, onRecord: { _ in },
                     onReturnText: { ref in guard !isReadOnly else { return }; onReturnText(ref) },
                     onPlan: presentPlan, onQuickUse: nil, onOpenBody: { _, _ in }, onOpenTool: { _ in },
@@ -876,6 +879,7 @@ private struct WorkflowFixedToolPresentation: Identifiable {
 
 private struct WorkflowNodeInspector: View {
     let controller: WorkflowController
+    var metadata: SharedLibraryStore? = nil
     let node: WorkflowNode?
     let readOnly: Bool
     let onTextModel: () -> Void
@@ -1275,7 +1279,7 @@ private struct WorkflowNodeInspector: View {
                 WorkflowStepValues(title: workflowText(languageStore, "workflow.port.outputs", fallback: "输出"),
                                    values: step.outputs, operationID: node.operationID, portsAreInputs: false,
                                    controller: controller, onReturnText: onReturnText,
-                                   allowsReturn: !readOnly)
+                                   allowsReturn: !readOnly, metadata: metadata)
                 if step.status == .waiting {
                     if let task = step.humanTask {
                         WorkflowHumanTaskForm(task: task, onSaveDraft: { controller.editHumanDraft(stepID: step.id, value: $0) },
@@ -1297,7 +1301,7 @@ private struct WorkflowNodeInspector: View {
                                    title: workflowText(languageStore, "workflow.execution.inputSnapshot", fallback: "输入快照"),
                                    values: step.inputs, operationID: node.operationID, portsAreInputs: true,
                                    controller: controller, onReturnText: onReturnText,
-                                   allowsReturn: false)
+                                   allowsReturn: false, metadata: metadata)
                     Text(String(describing: step.node.parameters)).font(.caption.monospaced()).textSelection(.enabled)
                 }
             } else {
@@ -1332,7 +1336,7 @@ private struct WorkflowNodeInspector: View {
                                     pendingCall = .init(address: call.address, stepID: call.step.id)
                                 }.disabled(readOnly)
                             }
-                            WorkflowStepValues(title: workflowText(languageStore, "workflow.port.outputs", fallback: "输出"), values: call.step.outputs, operationID: call.step.node.operationID, portsAreInputs: false, controller: controller, onReturnText: onReturnText, allowsReturn: !readOnly)
+                            WorkflowStepValues(title: workflowText(languageStore, "workflow.port.outputs", fallback: "输出"), values: call.step.outputs, operationID: call.step.node.operationID, portsAreInputs: false, controller: controller, onReturnText: onReturnText, allowsReturn: !readOnly, metadata: metadata)
                             if call.step.id != controller.presentationStep(nodeID: node.id, runID: resultRunID)?.id, call.step.status == .waiting {
                                 if let task = call.step.humanTask {
                                     WorkflowHumanTaskForm(task: task, onSaveDraft: { controller.editHumanDraft(stepID: call.id, value: $0) },
@@ -1723,6 +1727,7 @@ private struct WorkflowStepValues: View {
     let controller: WorkflowController
     let onReturnText: (WorkflowAssetReference) -> Void
     let allowsReturn: Bool
+    var metadata: SharedLibraryStore? = nil
     @Environment(\.dLanguageStore) private var languageStore
 
     var body: some View {
@@ -1764,6 +1769,9 @@ private struct WorkflowStepValues: View {
                             Text(receipt.hashes.joined(separator: "\n"))
                                 .font(.caption2.monospaced()).textSelection(.enabled)
                         }
+                        ForEach(savedAssets(value), id: \.self) { reference in
+                            WorkflowAssetOrganization(controller: controller, reference: reference, metadata: metadata)
+                        }
                     }
                     .padding(8)
                     .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
@@ -1771,6 +1779,18 @@ private struct WorkflowStepValues: View {
             }
         }
     }
+    private func savedAssets(_ value: WorkflowValue) -> [WorkflowAssetReference] {
+        let references: [WorkflowAssetReference]
+        switch value {
+        case .asset(let reference): references = [reference]
+        case .collection(let candidates): references = candidates.compactMap(\.asset)
+        case .data(let datum): references = datum.assetReferences
+        case .receipt: references = []
+        }
+        var seen = Set<WorkflowAssetReference>()
+        return references.filter { seen.insert($0).inserted }
+    }
+
 }
 
 /// One preview owns one reader, full reference and request generation. Both

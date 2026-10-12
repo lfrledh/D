@@ -57,16 +57,17 @@ struct WorkflowLibraryEntry: Identifiable {
 @MainActor struct WorkflowNodeLibrary: View {
     let controller: WorkflowController
     let tagStore: ModelNodeTagStore
+    var metadata: SharedLibraryStore? = nil
     let onAdd: (WorkflowLibraryEntry) -> Void
     @Environment(\.dLanguageStore) private var language
     @State private var query = ""
     @State private var filters: Set<String> = []
     @State private var edited: WorkflowLibraryEntry?
-    @State private var tagsRevision = 0
     private func text(_ key: String, _ fallback: String) -> String { workflowText(language, "canvas.library." + key, fallback: fallback) }
     private func tags(_ entry: WorkflowLibraryEntry) -> [String] {
-        _ = tagsRevision
-        if case .valid(let values) = tagStore.readState(for: entry.tagKey) { return values }; return []
+        guard let metadata else { return [] }
+        let ids = metadata.metadata.tagAssignments[entry.tagKey] ?? []
+        return metadata.metadata.tags.values.filter { ids.contains($0.id) }.map(\.name).sorted()
     }
     private var entries: [WorkflowLibraryEntry] { WorkflowLibraryProjection.entries(controller: controller, language: language) }
     var body: some View {
@@ -103,9 +104,10 @@ struct WorkflowLibraryEntry: Identifiable {
             }
         }.padding(12).background(.regularMaterial)
         .popover(item: $edited) { entry in
-            WorkflowTagsEditor(title: entry.title, initial: tags(entry), corrupt: tagStore.readState(for: entry.tagKey) == .corrupt) { values in
-                try tagStore.setTags(values, for: entry.tagKey); tagsRevision += 1
-            }.id(entry.tagKey)
+            let legacy = SharedLibraryTagTarget.legacy(tagStore.readState(for: entry.tagKey))
+            if let metadata {
+                SharedLibraryTagEditor(store: metadata, targets: [.init(key: entry.tagKey, title: entry.title, legacy: legacy.names, legacyFailure: legacy.failure)], validateTarget: WorkflowMetadataTarget.validation(controller: controller))
+            } else { Text(text("unavailableTags", "共享标签库不可用，旧记录只读保留。")).padding() }
         }
     }
 }
@@ -186,6 +188,7 @@ struct WorkflowLibraryFilters: View {
 
 @MainActor struct WorkflowAssetLibrary: View {
     let controller: WorkflowController
+    var metadata: SharedLibraryStore? = nil
     let onAdd: (UUID, UUID) -> Void
     let onImport: () -> Void
     let onDropFile: (URL) -> Bool
@@ -209,19 +212,19 @@ struct WorkflowLibraryFilters: View {
                     .help(text("import", "导入素材")) .accessibilityIdentifier("canvas-import-asset")
             }
             TextField(text("search", "搜索素材或标签"), text: $query).textFieldStyle(.roundedBorder).accessibilityIdentifier("canvas-asset-search")
-            WorkflowLibraryFilters(tags: Array(Set(controller.availableAssets.flatMap { systemTags($0) + $0.tags })).sorted(), selected: $filters)
+            WorkflowLibraryFilters(tags: Array(Set(controller.availableAssets.flatMap { systemTags($0) + tags($0) })).sorted(), selected: $filters)
             Text(text("hint", "拖到画布创建输入，或拖到已有素材节点。")) .font(.caption).foregroundStyle(.secondary)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
                     ForEach(controller.availableAssets.filter { LibrarySearch.matches(query: query, selectedTags: filters,
-                        title: $0.name, detail: $0.note, systemTags: systemTags($0), userTags: $0.tags) }) { asset in
+                        title: $0.name, detail: $0.note, systemTags: systemTags($0), userTags: tags($0)) }) { asset in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Image(systemName: icon(asset)).foregroundStyle(.secondary)
                                 Text(asset.name).font(.callout.weight(.medium)).lineLimit(2)
                                 Spacer(minLength: 0)
                             }
-                            Text((systemTags(asset) + asset.tags).joined(separator: " · ")).font(.caption2).foregroundStyle(.secondary)
+                            Text((systemTags(asset) + tags(asset)).joined(separator: " · ")).font(.caption2).foregroundStyle(.secondary)
                             HStack {
                                 Button(text("add", "加入画布")) { if let project = controller.projectID { onAdd(project, asset.id) } }
                                     .disabled(!controller.canEditCanvas)
@@ -232,7 +235,7 @@ struct WorkflowLibraryFilters: View {
                                     }
                                 }
                                 Button { edited = asset } label: { Image(systemName: "tag") }
-                                    .accessibilityLabel(text("tags", "编辑资产标签")).disabled(!controller.canEditCanvas)
+                                    .accessibilityLabel(text("tags", "编辑资产标签"))
                             }.font(.caption).buttonStyle(.borderless)
                         }.padding(9).frame(maxWidth: .infinity, alignment: .leading)
                         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
@@ -251,7 +254,9 @@ struct WorkflowLibraryFilters: View {
             return onDropFile(url)
         }
         .popover(item: $edited) { asset in
-            WorkflowTagsEditor(title: asset.name, initial: asset.tags) { try await controller.setAssetTags(id: asset.id, tags: $0) }.id(asset.id)
+            if let metadata, let project = controller.projectID {
+                SharedLibraryTagEditor(store: metadata, targets: [.init(key: "asset:" + project.uuidString + ":" + asset.id.uuidString, title: asset.name, legacy: asset.tags)], validateTarget: WorkflowMetadataTarget.validation(controller: controller, assetID: asset.id))
+            } else { Text(text("unavailableTags", "共享标签库不可用，旧记录只读保留。")).padding() }
         }
         .sheet(item: $preview) { reference in
             VStack {
@@ -259,6 +264,12 @@ struct WorkflowLibraryFilters: View {
                 Button(text("close", "关闭")) { preview = nil }
             }.padding(20).frame(minWidth: 420, minHeight: 240)
         }
+    }
+    private func tags(_ asset: ProjectAsset) -> [String] {
+        guard let metadata, let project = controller.projectID else { return [] }
+        let key = "asset:" + project.uuidString + ":" + asset.id.uuidString
+        let ids = metadata.metadata.tagAssignments[key] ?? []
+        return metadata.metadata.tags.values.filter { ids.contains($0.id) }.map(\.name).sorted()
     }
     private func icon(_ asset: ProjectAsset) -> String {
         switch controller.libraryKind(of: asset) {

@@ -236,3 +236,22 @@ extension WorkflowWorkspacePresentationTests {
         #expect(state.record(in: other) == nil)
     }
 }
+
+extension WorkflowWorkspacePresentationTests {
+    @Test func resultTagDraftCannotWriteAfterItsControllerCloses() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent("tag-owner-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Test.dproject"), name: "Test")
+        let published = try await store.publishWorkflowAsset(data: Data("text".utf8), mediaType: "text/plain", name: "source", operationID: "d.text.input")
+        let runtime = WorkbenchSession(engine: WorkspaceNoInference(), backendID: "never", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let controller = WorkflowController(services: WorkflowServices(store: store, session: runtime,
+            resolveText: { throw WorkflowIssue("No model") }, resolveImage: { throw WorkflowIssue("No model") }))
+        await controller.load()
+        let check = WorkflowMetadataTarget.validation(controller: controller, assetID: published.asset.id)
+        try check()
+        controller.deactivateAfterClose()
+        #expect(throws: WorkflowIssue.self) { try check() }
+        try await store.close()
+    }
+}

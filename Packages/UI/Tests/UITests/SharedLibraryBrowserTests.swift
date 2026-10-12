@@ -39,7 +39,32 @@ struct SharedLibraryBrowserTests {
         let payload = try #require(SharedLibraryBrowserLogic.canvasTransfer(for: rows[1]))
         #expect(try WorkflowCanvasTransfer.decode(payload.encoded()) ==
             .assetInstance(projectID: first.id, instanceID: second.effectiveInstanceID, assetID: asset.asset.id))
+        let metadata = try SharedLibraryStore(fileURL: root.appendingPathComponent("shared.json"))
+        let originalBytes = try Data(contentsOf: original.rootURL.appendingPathComponent("project.json"))
+        let restoredBytes = try Data(contentsOf: restored.rootURL.appendingPathComponent("project.json"))
+        let key = rows[0].item.key
+        try metadata.editOrganizationTags(expected: .init(keys: [key], metadata: metadata.metadata), createNames: ["shared across instances"], confirmIntegration: [key])
+        let tag = try #require(metadata.metadata.tags.values.first?.id)
+        let filtered = try SharedLibraryBrowserLogic.visibleEntries(rows, store: metadata, query: .init(allTagIDs: [tag]), scope: .all)
+        #expect(filtered.count == 2 && Set(filtered.map(\.item.key)).count == 1)
+        try metadata.editOrganizationTags(expected: .init(keys: [key], metadata: metadata.metadata), remove: [tag])
+        let reopened = try SharedLibraryStore(fileURL: root.appendingPathComponent("shared.json"))
+        #expect(try SharedLibraryBrowserLogic.visibleEntries(rows, store: reopened, query: .init(allTagIDs: [tag]), scope: .all).isEmpty)
+        #expect(try Data(contentsOf: original.rootURL.appendingPathComponent("project.json")) == originalBytes)
+        #expect(try Data(contentsOf: restored.rootURL.appendingPathComponent("project.json")) == restoredBytes)
         try await restored.close(); try await original.close()
+    }
+    @Test func selectingOneRestoredRowDoesNotIntegrateUnselectedLegacySource() throws {
+        let project = UUID(), asset = UUID(), a = UUID(), b = UUID()
+        let key = "asset:\(project):\(asset)"
+        let first = SharedLibraryBrowserEntry(item: .init(key: key, title: "same", kind: .asset),
+            selection: .assetInstance(projectID: project, instanceID: a, assetID: asset), activityID: "first", legacyTags: ["first only"])
+        let second = SharedLibraryBrowserEntry(item: first.item,
+            selection: .assetInstance(projectID: project, instanceID: b, assetID: asset), activityID: "second", legacyTags: ["not selected"])
+        let selected = SharedLibraryBrowserLogic.tagEditEntries(["first"], in: [first, second])
+        #expect(selected.map(\.id) == ["first"])
+        #expect(selected.flatMap(\.legacyTags) == ["first only"])
+        #expect(SharedLibraryBrowserLogic.tagEditEntries(["first", "second"], in: [first, second]).count == 2)
     }
     @Test func externalVideoModelsKeepExactQuickAndCanvasOperationBindings() throws {
         let profiles = ExternalVideoExecutionProfile.allCases

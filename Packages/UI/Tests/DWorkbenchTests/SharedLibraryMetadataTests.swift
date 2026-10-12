@@ -330,3 +330,77 @@ struct SharedLibraryMetadataTests {
         #expect(store.metadata.folders[leaf]?.parentID == grandchild)
     }
 }
+
+extension SharedLibraryMetadataTests {
+    @Test func explicitIntegrationAndRemovalAreOneUndoAndDoNotReviveAfterColdOpen() throws {
+        let directory = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("tags.json")
+        let store = try SharedLibraryStore(fileURL: file)
+        let shared = try #require(store.createTags(["shared"]).first)
+        try store.addTags([shared], to: ["asset:project:asset"])
+        let before = store.metadata
+        let baseline = SharedLibraryTagEditBaseline(keys: ["asset:project:asset"], metadata: before)
+        try store.editOrganizationTags(expected: baseline, remove: [shared], createNames: ["new"],
+            selectedLegacyNames: ["asset:project:asset": ["chosen legacy"]], confirmIntegration: ["asset:project:asset"])
+        #expect(store.metadata.importedLegacyKeys.contains("asset:project:asset"))
+        #expect(store.metadata.tags.values.contains { $0.name == "chosen legacy" })
+        #expect(!store.metadata.tags.values.contains { $0.name == "unselected legacy" })
+        #expect(store.metadata.tagAssignments["asset:project:asset"]?.contains(shared) == false)
+        let integrated = store.metadata
+        try store.undo(); #expect(store.metadata == before)
+        try store.redo(); #expect(store.metadata == integrated)
+        let ids = store.metadata.tagAssignments["asset:project:asset"] ?? []
+        try store.editOrganizationTags(expected: .init(keys: ["asset:project:asset"], metadata: store.metadata), remove: ids)
+        let reopened = try SharedLibraryStore(fileURL: file)
+        try reopened.importLegacyTags(["chosen legacy", "unselected legacy"], for: "asset:project:asset")
+        #expect(reopened.metadata.tagAssignments["asset:project:asset"] == nil)
+        #expect(reopened.metadata.importedLegacyKeys.contains("asset:project:asset"))
+    }
+
+    @Test func mixedBatchCreatesAndAssignsOnlyExplicitTargetsAtomically() throws {
+        let store = try SharedLibraryStore()
+        let existing = try #require(store.createTags(["existing"]).first)
+        try store.addTags([existing], to: ["a", "c"])
+        let baseline = SharedLibraryTagEditBaseline(keys: ["a", "b"], metadata: store.metadata)
+        let before = store.metadata
+        #expect(throws: SharedLibraryError.self) {
+            try store.editOrganizationTags(expected: baseline, createNames: ["good", " "], confirmIntegration: ["a", "b"])
+        }
+        #expect(store.metadata == before)
+        try store.editOrganizationTags(expected: baseline, createNames: ["batch"], confirmIntegration: ["a", "b"])
+        let created = try #require(store.metadata.tags.values.first { $0.name == "batch" })
+        #expect(store.metadata.tagAssignments["a"] == [existing, created.id])
+        #expect(store.metadata.tagAssignments["b"] == [created.id])
+        #expect(store.metadata.tagAssignments["c"] == [existing])
+    }
+
+    @Test func tagDraftRejectsChangedAssignmentAndRenameWithoutOverwriting() throws {
+        let store = try SharedLibraryStore()
+        let ids = try store.createTags(["a", "b"])
+        let baseline = SharedLibraryTagEditBaseline(keys: ["object"], metadata: store.metadata)
+        try store.addTags([ids[0]], to: ["object"])
+        #expect(throws: SharedLibraryError.staleTagEdit) { try store.editOrganizationTags(expected: baseline, add: [ids[1]]) }
+        let next = SharedLibraryTagEditBaseline(keys: ["object"], metadata: store.metadata)
+        try store.renameTags([ids[1]: "renamed"])
+        #expect(throws: SharedLibraryError.staleTagEdit) { try store.editOrganizationTags(expected: next, add: [ids[1]]) }
+        #expect(store.metadata.tagAssignments["object"] == [ids[0]])
+    }
+
+    @Test func failedIntegrationKeepsMarkerAssociationsAndUndoUnchanged() throws {
+        let directory = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("tags.json")
+        let store = try SharedLibraryStore(fileURL: file)
+        _ = try store.createTags(["existing"])
+        let bytes = try Data(contentsOf: file), before = store.metadata
+        // An external newer file is a deterministic failure without changing system permissions.
+        try Data("external update".utf8).write(to: file)
+        #expect(throws: SharedLibraryError.externalChange) {
+            try store.editOrganizationTags(expected: .init(keys: ["asset"], metadata: before), createNames: ["new"],
+                selectedLegacyNames: ["asset": ["legacy"]], confirmIntegration: ["asset"])
+        }
+        #expect(store.metadata == before)
+        #expect(try Data(contentsOf: file) == Data("external update".utf8))
+        try bytes.write(to: file)
+        try store.undo(); #expect(store.metadata.tags.isEmpty)
+    }
+}
