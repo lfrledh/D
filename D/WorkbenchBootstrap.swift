@@ -44,6 +44,9 @@ final class WorkbenchBootstrap {
     private var library: ModelLibrary?
     private var loading = false
     private var pendingProjectURL: URL?
+    #if DEBUG
+    private var reviewRootAccess: URL?
+    #endif
 
     func start() async {
         guard model == nil, !loading else { return }
@@ -68,9 +71,27 @@ final class WorkbenchBootstrap {
                     isDirectory: true)
                 if let path = ProcessInfo.processInfo.environment["D_DOWNLOAD_REVIEW_ROOT"] {
                     let root = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
-                    guard root.path.hasPrefix("/Volumes/"), root.lastPathComponent == id.uuidString,
-                          FileManager.default.fileExists(atPath: root.appendingPathComponent("download-review-fixture.json").path) else {
+                    guard root.path.hasPrefix("/Volumes/"), root.lastPathComponent == id.uuidString else {
                         throw WorkflowIssue("独立下载评审目录身份无效。")
+                    }
+                    // The review launcher cannot grant sandbox file access. Obtain it
+                    // through the native panel before reading the external fixture marker.
+                    if reviewRootAccess?.standardizedFileURL.path != root.path {
+                        let panel = NSOpenPanel()
+                        panel.title = "授权独立评审目录 / Authorize Isolated Review Folder"
+                        panel.message = "仅选择此评审目录 / Select only this review folder: " + root.path
+                        panel.canChooseDirectories = true; panel.canChooseFiles = false
+                        panel.allowsMultipleSelection = false; panel.directoryURL = root
+                        guard await panel.begin() == .OK, let selected = panel.url,
+                              selected.standardizedFileURL.path == root.path else {
+                            throw WorkflowIssue("评审目录未授权，未读取模型库。 / Review folder not authorized; no library was read.")
+                        }
+                        _ = selected.startAccessingSecurityScopedResource()
+                        reviewRootAccess?.stopAccessingSecurityScopedResource()
+                        reviewRootAccess = selected
+                    }
+                    guard FileManager.default.fileExists(atPath: root.appendingPathComponent("download-review-fixture.json").path) else {
+                        throw WorkflowIssue("独立下载评审标记不存在。 / Isolated review marker is missing.")
                     }
                     libraryDirectory = root.appendingPathComponent("ModelLibrary", isDirectory: true)
                 }
@@ -315,6 +336,9 @@ final class WorkbenchBootstrap {
             do { try await sharedSession?.cleanup() }
             catch { NSLog("D: shutdown completed; temporary cleanup pending: %@", error.localizedDescription) }
             libraryModel?.stop()
+            #if DEBUG
+            reviewRootAccess?.stopAccessingSecurityScopedResource(); reviewRootAccess = nil
+            #endif
             return true
         } catch {
             isTerminating = false
