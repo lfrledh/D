@@ -77,12 +77,20 @@ private actor CanvasSeriousImageEngine: InferenceEngine {
         host.frame = CGRect(x: 0, y: 0, width: 420, height: 160)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host
+        let waitsForUserActivation = ProcessInfo.processInfo.environment["D_NATIVE_RECOVERY_WAIT_FOR_ACTIVATION"] == "1"
+        window.title = "D — DHA " + locale + " / " + String(run.id.uuidString.prefix(8))
+            + " / PID " + String(ProcessInfo.processInfo.processIdentifier)
         // Establish and verify this test process's window prerequisites before
         // interpreting an absent accessibility element as a product failure.
         window.makeKeyAndOrderFront(nil)
         application.activate(ignoringOtherApps: true)
         defer { window.close() }
-        for _ in 0..<100 {
+        if waitsForUserActivation {
+            print("D_APP_HOST_WAITING_FOR_ACTIVATION", locale, run.id, ProcessInfo.processInfo.processIdentifier)
+        }
+        // Explicit attended runs allow a user gesture to activate this host when
+        // macOS declines programmatic activation. The readiness checks stay intact.
+        for _ in 0..<(waitsForUserActivation ? 12_000 : 100) {
             host.layoutSubtreeIfNeeded()
             if mounted && window.isVisible && window.isKeyWindow { break }
             try await Task.sleep(for: .milliseconds(10))
