@@ -153,9 +153,9 @@ private struct WorkbenchCommands: Commands {
                 .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.projectSession.text == nil || bootstrap.model?.creatorMode != .text)
         }
         CommandMenu(label("command.resources", "资源")) {
-            Button(label("command.models", "管理模型…")) {
+            Button(label("command.models", "模型与下载…")) {
                 openWindow(id: "workbench")
-                bootstrap.libraryModel?.isPresented = true
+                bootstrap.libraryModel?.presentManagement()
             }
             .keyboardShortcut("m", modifiers: [.command, .shift])
             .disabled(bootstrap.isTerminating || bootstrap.libraryModel == nil)

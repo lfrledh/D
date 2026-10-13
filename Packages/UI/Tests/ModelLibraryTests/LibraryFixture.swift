@@ -105,6 +105,12 @@ class Handler(BaseHTTPRequestHandler):
             active += 1
             with open(events, 'a') as f: f.write(json.dumps(dict(event='start', start=start, end=end, path=relative, active=active))+'\n')
         try:
+            if mode.startswith('http-'):
+                self.send_response(int(mode.split('-')[1]))
+                self.send_header('Retry-After', '120')
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+                return
             self.send_response(200 if mode == 'status' else 206)
             self.send_header('Content-Range', f'bytes {start+1 if mode == "range" else start}-{end}/{len(data)}')
             if mode != 'missing-length': self.send_header('Content-Length', str(len(body) + (1 if mode == 'length' else 0)))

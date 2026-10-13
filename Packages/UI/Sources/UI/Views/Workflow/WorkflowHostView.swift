@@ -8,6 +8,7 @@ struct WorkflowHostView: View {
     let model: WorkbenchModel
     let nodeTags: ModelNodeTagStore
     var metadata: SharedLibraryStore? = nil
+    var library: ModelLibraryModel? = nil
     var onQuickUse: ((WorkflowNode) -> Void)? = nil
     var libraryContent: ((WorkflowCanvasLibraryMode, CGPoint, @escaping () -> Void) -> AnyView)? = nil
     var onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
@@ -58,6 +59,35 @@ struct WorkflowHostView: View {
     private func chooseModel(controller: WorkflowController, kind: WorkflowModelKind) {
         // Capture synchronously, before either the task or the native panel suspends.
         guard let target = controller.modelSelectionTarget(), target.kind == kind else { return }
+        if kind != .pitch, let library {
+            let owner = model.projectSession
+            library.presentSelection { id in
+                do {
+                    guard model.projectSession === owner else { throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。")) }
+                    try owner.checkWorkflowModelSelection(target: target, controller: controller)
+                    let choice = try await owner.selectWorkflowInstallation(id: id) { choice in
+                        guard model.projectSession === owner else { throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。")) }
+                        try owner.checkWorkflowModelSelection(target: target, controller: controller)
+                        guard choice.kind == kind else { throw WorkflowIssue(library.managementText("wrongKind", "此模型与目标节点类型不符。")) }
+                    }
+                    try owner.checkWorkflowModelSelection(target: target, controller: controller)
+                    guard choice.kind == kind else { throw WorkflowIssue(library.managementText("wrongKind", "此模型与目标节点类型不符。")) }
+                    controller.bindModel(choice.id, to: target)
+                    library.isPresented = false
+                } catch { library.errorMessage = error.localizedDescription }
+            }
+            library.configurationSelectionAction = { item in
+                do {
+                    guard model.projectSession === owner,
+                          item.selectable, try owner.modelInventoryConfigurations().contains(item),
+                          item.identity.hasPrefix(kind.rawValue + ":") else { throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。")) }
+                    try owner.checkWorkflowModelSelection(target: target, controller: controller)
+                    controller.bindModel(item.identity, to: target)
+                    library.isPresented = false
+                } catch { library.errorMessage = error.localizedDescription }
+            }
+            return
+        }
         Task {
             if kind == .pitch {
                 guard model.projectSession.workflow === controller, controller.isCurrent(target) else { return }

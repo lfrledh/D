@@ -114,7 +114,7 @@ public struct ModelCatalogEntry: Identifiable, Codable, Sendable, Equatable {
 /// availability remains a separate concern checked when execution begins.
 public enum ModelLibrarySelection {
     public static func canUse(_ record: ModelRecord, entry: ModelCatalogEntry?, hasPendingAction: Bool) -> Bool {
-        guard record.state == .installed, record.availability == .available,
+        guard record.registrationState == .registered, record.state == .installed, record.availability == .available,
               !hasPendingAction, let entry, entry.id == record.catalogID,
               entry.revision == record.revision, entry.preparation == .none else { return false }
         // Old Klein installations predate the workflow fields.
@@ -173,6 +173,30 @@ public struct ModelRecord: Identifiable, Codable, Sendable, Equatable {
     public var error: String?
     public var directory: URL?
     public var activeLeaseCount: Int
+    public var registrationState: ModelRegistrationState = .registered
+    public init(id: ModelID, catalogID: String, revision: String, storage: ModelStorageKind,
+                state: ModelInstallationState, availability: ModelAvailability, downloadedBytes: UInt64,
+                totalBytes: UInt64, error: String?, directory: URL?, activeLeaseCount: Int,
+                registrationState: ModelRegistrationState = .registered) {
+        self.id = id; self.catalogID = catalogID; self.revision = revision; self.storage = storage
+        self.state = state; self.availability = availability; self.downloadedBytes = downloadedBytes
+        self.totalBytes = totalBytes; self.error = error; self.directory = directory
+        self.activeLeaseCount = activeLeaseCount; self.registrationState = registrationState
+    }
+    private enum CodingKeys: String, CodingKey {
+        case id, catalogID, revision, storage, state, availability, downloadedBytes, totalBytes, error, directory, activeLeaseCount, registrationState
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let state = try c.decode(ModelInstallationState.self, forKey: .state)
+        self.init(id: try c.decode(ModelID.self, forKey: .id), catalogID: try c.decode(String.self, forKey: .catalogID),
+            revision: try c.decode(String.self, forKey: .revision), storage: try c.decode(ModelStorageKind.self, forKey: .storage),
+            state: state, availability: try c.decode(ModelAvailability.self, forKey: .availability),
+            downloadedBytes: try c.decode(UInt64.self, forKey: .downloadedBytes), totalBytes: try c.decode(UInt64.self, forKey: .totalBytes),
+            error: try c.decodeIfPresent(String.self, forKey: .error), directory: try c.decodeIfPresent(URL.self, forKey: .directory),
+            activeLeaseCount: try c.decode(Int.self, forKey: .activeLeaseCount),
+            registrationState: try c.decodeIfPresent(ModelRegistrationState.self, forKey: .registrationState) ?? (state == .installed ? .registered : .unregistered))
+    }
 }
 
 public struct ModelLibrarySnapshot: Sendable, Equatable {
@@ -182,6 +206,10 @@ public struct ModelLibrarySnapshot: Sendable, Equatable {
     public let records: [ModelRecord]
     public let downloadCredentialConnected: Bool
     public let copyProgress: ModelCopyProgress?
+    public var resources: [ModelResource] = []
+    public var downloads: [ModelDownloadTask] = []
+    public var queueState: ModelDownloadQueueState = .waitingForResume
+    public var queueError: String? = nil
 }
 
 public struct ModelCopyProgress: Sendable, Equatable {
@@ -208,5 +236,96 @@ public enum ModelLibraryError: Error, LocalizedError, Sendable {
         case .insufficientSpace(let required, let available):
             "模型安装空间不足：还需 \(required) 字节，可用 \(available) 字节。请选择空间足够的磁盘。"
         }
+    }
+}
+
+
+/// A local copy and an execution registration have different command identities.
+/// Legacy copies retain the UUID of their original installation without rewriting projects.
+public struct ModelResourceID: RawRepresentable, Codable, Hashable, Sendable, CustomStringConvertible {
+    public let rawValue: UUID
+    public init(rawValue: UUID = UUID()) { self.rawValue = rawValue }
+    public var description: String { rawValue.uuidString }
+    public var modelID: ModelID { .init(rawValue: rawValue) }
+}
+public enum ModelRegistrationState: String, Codable, Sendable { case unregistered, pending, registered }
+public enum ModelResourceFileState: String, Codable, Sendable { case partial, unchecked, verified, invalid, deleting, deleted }
+public enum ModelResourceOrigin: String, Codable, Sendable { case download, local, prepared, legacy }
+public enum ModelResourceRole: String, Codable, Sendable { case original, execution }
+public enum ModelDownloadQueueState: String, Codable, Sendable { case running, paused, waitingForResume }
+public enum ModelDownloadPostAction: String, Codable, Sendable { case filesOnly, register }
+public enum ModelDownloadState: String, Codable, Sendable {
+    case queued, downloading, verifying, publishing, waitingRetry, paused, failed, completed, cancelled
+    public var isTerminal: Bool { [.failed, .completed, .cancelled].contains(self) }
+    public var isActive: Bool { [.downloading, .verifying, .publishing].contains(self) }
+}
+public struct ModelResourceEvent: Codable, Sendable, Equatable, Identifiable {
+    public var id = UUID()
+    public let action: String
+    public let date: Date?
+    public let result: String?
+}
+public struct ModelResourceControl: Codable, Sendable, Equatable {
+    public var fileState: ModelResourceFileState
+    public var origin: ModelResourceOrigin
+    public var role: ModelResourceRole = .original
+    public var parentResourceID: ModelResourceID?
+    public var executionRevision: String?
+    public var retryNotBefore: Date?
+    public var preparationRecipe: String?
+    public var requiredPaths: [String]?
+    public var lastVerified: Date?
+    public var lastAccessCheck: Date?
+    public var events: [ModelResourceEvent] = []
+    public init(fileState: ModelResourceFileState, origin: ModelResourceOrigin) {
+        self.fileState = fileState; self.origin = origin
+    }
+}
+public struct ModelResource: Identifiable, Sendable, Equatable {
+    public var id: ModelResourceID { .init(rawValue: record.id.rawValue) }
+    public let record: ModelRecord
+    public let control: ModelResourceControl
+}
+public struct ModelDownloadTask: Identifiable, Codable, Sendable, Equatable {
+    public let id: UUID
+    public let resourceID: ModelResourceID
+    public let catalogID: String
+    public let recipeIdentity: String
+    public var state: ModelDownloadState
+    public var postAction: ModelDownloadPostAction
+    public var attemptID: UUID
+    public var generation: UUID
+    public var attempts: Int
+    public var automaticRetries: Int
+    public var earliestRetry: Date?
+    public var error: String?
+    public var firstError: String?
+    public var postActionError: String?
+    public let createdAt: Date?
+    public var completedAt: Date?
+    public init(resourceID: ModelResourceID, catalogID: String, recipeIdentity: String,
+                postAction: ModelDownloadPostAction, createdAt: Date? = Date()) {
+        id = UUID(); self.resourceID = resourceID; self.catalogID = catalogID; self.recipeIdentity = recipeIdentity
+        state = .queued; self.postAction = postAction; attemptID = UUID(); generation = UUID()
+        attempts = 0; automaticRetries = 0; self.createdAt = createdAt
+    }
+}
+
+/// Only classified transport errors may schedule another attempt. No URL or token is retained.
+struct ModelTransientDownloadError: LocalizedError, Sendable {
+    let status: Int?
+    let retryAfter: Date?
+    var errorDescription: String? { status.map { "Temporary server failure (HTTP \($0))." } ?? "Temporary connection failure." }
+}
+
+/// Existing project configuration is inventory evidence, not a managed download.
+public struct ModelReadOnlyConfiguration: Identifiable, Sendable, Equatable {
+    public let id: String
+    public let title: String
+    public let identity: String
+    public let location: URL?
+    public let selectable: Bool
+    public init(id: String, title: String, identity: String, location: URL?, selectable: Bool = false) {
+        self.id = id; self.title = title; self.identity = identity; self.location = location; self.selectable = selectable
     }
 }

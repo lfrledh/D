@@ -15,7 +15,7 @@ enum AppSessionFactory {
         audioAccessRoot: URL? = nil,
         bundledVideoEngine: BundledAudioEngine? = nil, videoAccessRoot: URL? = nil,
         bundledPitchEngine: BundledAudioEngine? = nil,
-        bundledExternalVideoEngine: BundledAudioEngine? = nil, bundledACEEngine: BundledAudioEngine? = nil) async throws -> WorkbenchSession {
+        bundledExternalVideoEngine: BundledAudioEngine? = nil, bundledACEEngine: BundledAudioEngine? = nil, modelLibrary: ModelLibrary? = nil) async throws -> WorkbenchSession {
         let stages = BackendStageMonitor()
         let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory, profile: .scalableKlein4B),
                                          observer: { await stages.record($0) })
@@ -158,7 +158,7 @@ enum AppSessionFactory {
             }
         } else { validateVideoModel = nil }
         return WorkbenchSession(
-            engine: runtime,
+            engine: modelLibrary.map { ModelLibraryInferenceEngine(base: runtime, library: $0) as any InferenceEngine } ?? runtime,
             backendID: backend.descriptor.id,
             status: {
                 let snapshot = await runtime.snapshot()

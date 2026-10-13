@@ -1,6 +1,14 @@
 # 当前行动与接手点
 
-最后核实：2026-10-12。当前授权 **UI-PRESENTATION-REBUILD-01 / 元数据与标签整理**。实际及附件预期起点均为 `a6a50e6c4b8bc40a75b15e08a74a34902aeeb34c`，已核对远端 `codex/dha-01-20261012` 无后继。独立树 `D-Worktrees/D-UI-METADATA-20261012`，分支 `codex/ui-metadata-index-20261012`；Lead 单一写者，只读审查并行。按附件 S0—S4 完成左准备/右产出、标签单写、类型化检索和对象信息；允许现有 Library 格式及字段级注释命令的有限补齐，ProjectManifest20、运行/模型不扩展。用户授权完成后推送工作分支，**不合并、不发布、不替换现用 App**。
+最后核实：2026-10-13。当前任务 **D-DOWNLOAD-MANAGEMENT-01**，按用户附件 00/01、面板方案、状态与命令契约及 T01—T36 实施。固定起点与实际起点相同：`ad6383177a6a655c1a31c613008af61d44c88f02`；开工已核对原 metadata 候选无后继、索引及工作树干净。新隔离树 `D-Worktrees/D-DOWNLOAD-MANAGEMENT-20261013`，新分支 `codex/download-management-20261013`。Lead 单一写者，三个只读检查分工；不回写原候选、源树、个人 scheme 或其他 agent 的工作。用户明确授权完成后推送工作分支，**停在独立复审，不合并、不部署、不替换普通 D**。
+
+本轮状态、改动与验证更新到[既有模型库检查点](MODEL_LIBRARY_ACCEPTANCE.zh-CN.md#d-download-management-01-2026-10-13)。私有模型索引迁移、资源/登记/任务分离、持久串行队列、取消/清历史/精确删除、有限重试及统一两工作面已接到真实服务。固定目录、模型配方、推理能力、下载框架、ProjectManifest/Store schema、Runtime 与依赖保持。已有精确配置只读展示；明确登记不覆盖既有同身份绑定，选用另行捕获目标。准备副本单独登记；当前备份格式不支持执行包时明确拒绝，原始包备份保留。
+
+外盘证据根 `D-Development/AgentTrials/D-DOWNLOAD-MANAGEMENT-01/run-20261013-01`（R）。完整最终 SHA、远端核实、源码/构建身份、完整差分、T01—T36 证据矩阵与各次命令退出码统一在 `R/delivery/receipt.md`、`receipt.json`；不为文档自引用循环追加提交。已完成无桌面定向回归，最终构建与补充结果以该外部回执为准。独立评审入口 `R/delivery/review.py` 只在后续明确执行时构建正常签名包/启动，使用全新会话、偏好、索引和小文件回环来源。当前用户无法操作或解锁 Mac，本轮不尝试 GUI；原生 M01—M09、中文组字/滚动、真实授权/Finder及普通签名冷开留在[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。禁签名编译与 CPU fixture 不代表签名 App、真实模型/GPU或发行通过。
+
+## 上轮状态与历史保护
+
+上轮核实：2026-10-12。该轮授权 **UI-PRESENTATION-REBUILD-01 / 元数据与标签整理**。实际及附件预期起点均为 `a6a50e6c4b8bc40a75b15e08a74a34902aeeb34c`，已核对远端 `codex/dha-01-20261012` 无后继。独立树 `D-Worktrees/D-UI-METADATA-20261012`，分支 `codex/ui-metadata-index-20261012`；Lead 单一写者，只读审查并行。按附件 S0—S4 完成左准备/右产出、标签单写、类型化检索和对象信息；允许现有 Library 格式及字段级注释命令的有限补齐，ProjectManifest20、运行/模型不扩展。用户授权完成后推送工作分支，**不合并、不发布、不替换现用 App**。
 
 唯一活动记录见[既有 UI 任务页](tasks/UI-PRESENTATION-REBUILD-01.md#2026-10-12-元数据与标签整理)。本轮外盘证据根 `D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261012-metadata`（下称 R），附件固定副本及清单在 `R/input`；最终 SHA/完整差分和分级证据统一写入 `R/delivery/receipt.md`。S1—S3 的 `22a2c1ea` 有70个唯一方法/85情景通过。用户解锁后原生打开本轮独立包及副本，工作面全景1张、切素材页及文字检索已核实；发现嵌入侧栏重复标题、工具栏挤占及空态矩形底色，局部修补源码 **`054775ca08617372f9b124a2f2a2db048ce0467a`**，18项受影响检查与普通签名构建通过。点击素材详情时工具返回 `Sky Computer Use native pipe closed before response`，重建一次工具会话仍失败，暂停GUI；不是锁屏或App崩溃结论。修后包未启动、修后截图0，不把修前图算作最终原生通过。当前独立入口、精确包及状态见回执；旧 R16/A2/DHA 及本轮原生未验项保留在[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。后续文档提交由回执关联，不自引用追加。以下版本记录保留历史范围。
 

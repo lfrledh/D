@@ -55,6 +55,7 @@ struct URLSessionModelRangeTransport: ModelRangeTransport {
             } onCancel: { receiver.cancel() }
         } catch is CancellationError { throw CancellationError() }
         catch let error as ModelLibraryError { throw error }
+        catch let error as ModelTransientDownloadError { throw error }
         catch { throw ModelLibraryError.download("网络下载失败；请检查连接后重试。") }
     }
 }
@@ -168,6 +169,19 @@ final class ModelRangeReceiver: NSObject, URLSessionDataDelegate, Sendable {
             state.withLock { $0.failure = ModelLibraryError.accessDenied("模型来源拒绝访问（HTTP \(http.statusCode)）；请在来源平台完成所需访问手续。") }
             completionHandler(.cancel); return
         }
+        if let http = response as? HTTPURLResponse, allowed(http.url), [408, 429, 500, 502, 503, 504].contains(http.statusCode) {
+            let raw = http.value(forHTTPHeaderField: "Retry-After")
+            var deadline: Date?
+            if let raw, let seconds = TimeInterval(raw), seconds.isFinite, seconds >= 0 {
+                deadline = Date().addingTimeInterval(seconds)
+            } else if let raw {
+                let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.timeZone = TimeZone(secondsFromGMT: 0); formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
+                deadline = formatter.date(from: raw)
+            }
+            let retry = ModelTransientDownloadError(status: http.statusCode, retryAfter: deadline)
+            state.withLock { $0.failure = retry }; completionHandler(.cancel); return
+        }
         guard let http = response as? HTTPURLResponse, allowed(http.url), http.statusCode == 206,
               http.value(forHTTPHeaderField: "Content-Range") == expectedRange,
               http.value(forHTTPHeaderField: "Content-Length").flatMap(UInt64.init) == range.count,
@@ -197,6 +211,10 @@ final class ModelRangeReceiver: NSObject, URLSessionDataDelegate, Sendable {
             value.continuation = nil; value.task = nil
             if value.cancelled { return (continuation, CancellationError()) }
             if let failure = value.failure { return (continuation, failure) }
+            if let urlError = error as? URLError,
+               [.timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost, .dnsLookupFailed].contains(urlError.code) {
+                return (continuation, ModelTransientDownloadError(status: nil, retryAfter: nil))
+            }
             if error != nil { return (continuation, ModelLibraryError.download("网络下载失败；请检查连接后重试。")) }
             guard value.accepted, value.received == range.count else {
                 return (continuation, ModelLibraryError.download("下载分段不完整；已保留前面的完整分段。"))

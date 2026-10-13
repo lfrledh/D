@@ -377,6 +377,36 @@ final class ModelDirectory: Sendable {
         guard fsync(descriptor) == 0 else { throw Self.failure("保存模型目录更改") }
     }
 
+    /// Resume a previously persisted deletion intent. Missing owned leaves are
+    /// expected; any new, substituted or linked entry still rejects the operation.
+    func removeRemainingKnownFiles(_ known: [String: ModelFileIdentity], beforeUnlink: (String) throws -> Void = { _ in }) throws {
+        let actual = try entries(expectedPaths: Set(known.keys))
+        guard actual.allSatisfy({ known[$0.key] == $0.value }) else {
+            throw ModelLibraryError.unsafePath("删除目录含有未知或已改变的文件。")
+        }
+        for path in actual.keys.sorted() {
+            try beforeUnlink(path)
+            let (parent, name) = try parent(path); defer { Darwin.close(parent) }
+            guard try fileIdentity(path) == actual[path] else { throw ModelLibraryError.unsafePath("删除前文件身份改变。") }
+            guard unlinkat(parent, name, 0) == 0, fsync(parent) == 0 else { throw Self.failure("移除已确认文件") }
+        }
+        let directories = Set(known.keys.flatMap { path -> [String] in
+            let parts = path.split(separator: "/")
+            return (1..<parts.count).map { parts.prefix($0).joined(separator: "/") }
+        }).sorted { $0.count > $1.count }
+        for path in directories {
+            // An earlier attempt may already have removed this empty parent.
+            var value = stat()
+            if fstatat(descriptor, path, &value, AT_SYMLINK_NOFOLLOW) != 0 {
+                guard errno == ENOENT else { throw Self.failure("检查删除目录") }; continue
+            }
+            let (parent, name) = try parent(path); defer { Darwin.close(parent) }
+            guard unlinkat(parent, name, AT_REMOVEDIR) == 0, fsync(parent) == 0 else { throw Self.failure("移除空目录") }
+        }
+        try validateLocation()
+        guard fsync(descriptor) == 0 else { throw Self.failure("保存删除结果") }
+    }
+
     static func identity(_ fd: Int32, regular: Bool) throws -> ModelFileIdentity {
         var value = stat()
         guard fstat(fd, &value) == 0, value.st_mode & S_IFMT == (regular ? S_IFREG : S_IFDIR),

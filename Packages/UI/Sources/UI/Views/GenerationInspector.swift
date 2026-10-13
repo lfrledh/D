@@ -101,7 +101,13 @@ struct GenerationInspector: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("model-status")
             Button {
-                if let library { library.isPresented = true }
+                if let library {
+                    let owner = model.projectSession, store = model.projectSession.currentStore
+                    library.presentSelection(selected: model.selectedModelID) { id in
+                        guard model.projectSession === owner, owner.currentStore === store, !model.isChangingProject else { return }
+                        await model.selectModel(id: id)
+                    }
+                }
                 else { Task { await model.registerModel() } }
             } label: {
                 Label(library != nil ? "从模型库选择…" : (model.modelName == nil ? "选择模型文件夹…" : "更换或重新授权…"),

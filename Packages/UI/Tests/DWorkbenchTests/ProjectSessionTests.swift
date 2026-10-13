@@ -209,12 +209,14 @@ struct ProjectSessionTests {
         #expect(await library.snapshot().records.first?.activeLeaseCount == 2)
         #expect(first.request.model.revision == String(repeating: "a", count: 40))
         await #expect(throws: ModelLibraryError.self) { try await library.remove(id) }
+        await #expect(throws: ModelLibraryError.self) { try await library.unregister(id) }
         await subject.cancel(first.id)
         await execute.open()
         try await waitUntil { await backend.releaseStarted }
         #expect(subject.isBusy)
         #expect(await library.snapshot().records.first?.activeLeaseCount == 2)
         await #expect(throws: ModelLibraryError.self) { try await library.rebind(id, to: replacement) }
+        await #expect(throws: ModelLibraryError.self) { try await library.unregister(id) }
         await release.open()
         try await waitUntil { !subject.isBusy }
         #expect(await library.snapshot().records.first?.activeLeaseCount == 0)

@@ -35,6 +35,67 @@ private actor ReadinessValidator {
 
 @Suite(.serialized) @MainActor
 struct WorkflowModelReadinessTests {
+    @Test func pureRegistrationCannotReplaceExistingSharedInstallation() async throws {
+        try await withColdFixture { fixture in
+            let second = fixture.root.appendingPathComponent("register-copy")
+            try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+            try fixture.bytes.write(to: second.appendingPathComponent("weights.bin"))
+            let oldID = try #require(try WorkflowModelBookmarks(settings: fixture.settings).installation(for: fixture.identity))
+            let owner = await fixture.owner(at: "registration-owner")
+            await #expect(throws: WorkflowIssue.self) { try await owner.registerExplicitModel(at: second, kind: .image, preserveExistingBinding: true) }
+            #expect(owner.workflowInstallationID(for: fixture.identity) == oldID)
+            #expect(try await fixture.library.resolve(oldID).directory.path == fixture.model.path)
+            #expect(await fixture.library.snapshot().records.count == 2, "A newly registered copy is retained without rebinding the old target")
+            #expect(await fixture.engine.submissions == 0)
+            #expect(await owner.requestClose())
+        }
+    }
+    @Test func inventoryConfigurationFingerprintRejectsChangedBookmarkWithoutResolvingIt() async throws {
+        try await withColdFixture { fixture in
+            let owner = await fixture.owner(at: "inventory-owner")
+            let bookmarks = WorkflowModelBookmarks(settings: fixture.settings)
+            try bookmarks.remember(identity: "text:fixture", kind: .text, name: "Fixture", bookmark: Data([1, 2, 3]))
+            let first = try #require(owner.modelInventoryConfigurations().first { $0.identity == "text:fixture" })
+            #expect(first.selectable && first.location == nil)
+            try bookmarks.remember(identity: "text:fixture", kind: .text, name: "Fixture", bookmark: Data([1, 2, 4]))
+            #expect(try !owner.modelInventoryConfigurations().contains(first))
+            #expect(await fixture.engine.submissions == 0)
+            #expect(await owner.requestClose())
+        }
+    }
+
+    @Test func lateManagerSelectionCannotRedirectAnotherTargetsSharedInstallation() async throws {
+        try await withColdFixture { fixture in
+            let second = fixture.root.appendingPathComponent("selection-copy")
+            try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+            try fixture.bytes.write(to: second.appendingPathComponent("weights.bin"))
+            let oldID = try #require(try WorkflowModelBookmarks(settings: fixture.settings).installation(for: fixture.identity))
+            let newID = try await fixture.library.registerExisting(at: second, catalogID: ModelCatalog.flux2ID)
+            let owner = await fixture.owner(at: "selection-owner")
+            var targetCurrent = true, validationCalled = false
+            await fixture.validator.arm(fail: false)
+            let selecting = Task {
+                do {
+                    _ = try await owner.selectWorkflowInstallation(id: newID) { _ in
+                        validationCalled = true
+                        guard targetCurrent else { throw WorkflowIssue("fixture target changed") }
+                    }
+                    Issue.record("Late selection should have been rejected")
+                } catch { #expect(error.localizedDescription == "fixture target changed") }
+            }
+            let deadline = ContinuousClock.now + .seconds(3)
+            while !(await fixture.validator.waiting) && ContinuousClock.now < deadline { await Task.yield() }
+            try #require(await fixture.validator.waiting)
+            targetCurrent = false
+            await fixture.validator.finish(); await selecting.value
+            #expect(validationCalled)
+            #expect(owner.workflowInstallationID(for: fixture.identity) == oldID)
+            #expect(await fixture.library.snapshot().records.first { $0.id == newID }?.registrationState == .registered)
+            #expect(await fixture.engine.submissions == 0)
+            #expect(await owner.requestClose())
+        }
+    }
+
     @Test func selectionRefreshesReadinessAndPeerChoicesWithoutChangingDraftOrGraph() async throws {
         try await exercise(staleInspection: false)
     }

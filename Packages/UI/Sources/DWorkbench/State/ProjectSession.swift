@@ -1,4 +1,5 @@
 import DInference
+import CryptoKit
 import Foundation
 import Observation
 
@@ -1013,12 +1014,14 @@ public final class ProjectSession {
         for (kind, ref, lease) in [(WorkflowModelKind.music, musicReference, musicModelLease), (.video, videoReference, videoModelLease)] {
             if let ref, let lease {
                 let identity = kind.rawValue + ":" + (ref.revision ?? ref.directory.lastPathComponent)
-                if try !bookmarks.entries().contains(where: { $0.identity == identity && $0.kind == kind }) {
+                if try bookmarks.installation(for: identity) == nil,
+                   try !bookmarks.entries().contains(where: { $0.identity == identity && $0.kind == kind }) {
                     try bookmarks.remember(identity: identity, kind: kind, name: ref.directory.lastPathComponent, bookmark: lease.bookmark)
                 }
             }
         }
         if let ref = textReference, let lease = textModelLease,
+           try bookmarks.installation(for: "text:" + (ref.revision ?? ref.directory.lastPathComponent)) == nil,
            try !bookmarks.entries().contains(where: { $0.identity == "text:" + (ref.revision ?? ref.directory.lastPathComponent) }) {
             try bookmarks.remember(identity: "text:" + (ref.revision ?? ref.directory.lastPathComponent),
                 kind: .text, name: ref.directory.lastPathComponent, bookmark: lease.bookmark)
@@ -1054,6 +1057,7 @@ public final class ProjectSession {
             let lease = try await access.restore(entry.bookmark)
             do {
                 let reference = try await adapter.validateModel(lease.url)
+                try await modelLibrary?.checkKnownResourceRegistration(reference)
                 guard reference.revision == adapter.modelRevision else { throw WorkflowIssue("模型固定版本与所选身份不符。") }
                 let access = self.access
                 return .init(identity: identity, reference: reference, backendID: adapter.backendID,
@@ -1099,6 +1103,7 @@ public final class ProjectSession {
                 try await session.validateModel(lease.url)
                 reference = .init(directory: lease.url); backend = session.backendID
             }
+            try await modelLibrary?.checkKnownResourceRegistration(reference)
             guard kind.rawValue + ":" + (reference.revision ?? lease.url.lastPathComponent) == identity else { throw WorkflowIssue("模型文件与冻结身份不符。") }
             let access = self.access
             return .init(identity: identity, reference: reference, backendID: backend,
@@ -1112,9 +1117,9 @@ public final class ProjectSession {
     private func resolveInstalledWorkflowModel(_ id: ModelID, kind: WorkflowModelKind, identity: String,
                                                session: WorkbenchSession, library: ModelLibrary) async throws -> WorkflowModelBinding {
         let entry = try await library.catalogEntry(for: id)
-        guard identity == kind.rawValue + ":" + entry.revision else { throw WorkflowIssue("安装记录与节点的固定模型身份不符。") }
         let lease = try await library.acquire(id)
         do {
+            guard identity == kind.rawValue + ":" + (lease.reference.revision ?? "") else { throw WorkflowIssue("安装记录与节点的固定模型身份不符。") }
             let reference: ModelReference
             let backendID: String
             var operationID: String?, textCapability: TextExecutionCapability?, imageRecipe: WorkflowImageRecipe?, videoRecipe: WorkflowVideoRecipe?
@@ -1137,7 +1142,7 @@ public final class ProjectSession {
                       let validate = session.validateVideoModel, let backend = session.videoBackendID {
                 reference = try await validate(lease.reference.directory); backendID = backend; operationID = "d.video.generate"
             } else { throw WorkflowIssue("已取得模型文件，但此应用尚未准备对应的执行引擎。") }
-            guard reference.revision == entry.revision else { throw WorkflowIssue("执行引擎验证的版本与安装目录不符。") }
+            guard reference.revision == lease.reference.revision else { throw WorkflowIssue("执行引擎验证的版本与安装目录不符。") }
             return .init(identity: identity, reference: reference, backendID: backendID, operationID: operationID,
                 textCapability: textCapability, imageRecipe: imageRecipe, videoRecipe: videoRecipe,
                 release: { await library.release(lease) })
@@ -1150,18 +1155,22 @@ public final class ProjectSession {
         guard let identity else { return nil }
         return try? WorkflowModelBookmarks(settings: settings).installation(for: identity)
     }
-    public func selectWorkflowInstallation(id: ModelID) async throws -> WorkflowModelChoice {
+    public func selectWorkflowInstallation(id: ModelID,
+        validateTarget: @MainActor (WorkflowModelChoice) throws -> Void = { _ in }) async throws -> WorkflowModelChoice {
         guard let library = modelLibrary, let session, let owner = store, !isChangingProject, !closePending else {
             throw WorkflowIssue("请先打开项目，再选择模型。")
         }
         let selection = UUID(); workflowInstallationSelection = selection
         try Task.checkCancellation()
         let entry = try await library.catalogEntry(for: id)
-        guard let operation = entry.workflowProfileID,
-              let kind = WorkflowRegistry.standard.operation(operation)?.definition.modelKind else {
-            throw WorkflowIssue("模型文件仍需准备，尚不能绑定执行操作。")
-        }
-        let identity = kind.rawValue + ":" + entry.revision
+        let inventory = await library.snapshot()
+        let execution = inventory.resources.first { $0.record.id == id }?.control
+        let kind: WorkflowModelKind
+        if execution?.role == .execution { kind = .video }
+        else if let operation = entry.workflowProfileID,
+                let known = WorkflowRegistry.standard.operation(operation)?.definition.modelKind { kind = known }
+        else { throw WorkflowIssue("模型文件仍需准备，尚不能绑定执行操作。") }
+        let identity = kind.rawValue + ":" + (execution?.executionRevision ?? entry.revision)
         let binding = try await resolveInstalledWorkflowModel(id, kind: kind, identity: identity, session: session, library: library)
         await binding.release()
         let installationSnapshot = await library.snapshot()
@@ -1171,11 +1180,14 @@ public final class ProjectSession {
         // returns across the actor boundary. Do not resurrect that installation.
         guard installationSnapshot.revision >= modelAvailabilityRevision else { throw CancellationError() }
         guard store === owner, !isChangingProject, !closePending else { throw WorkflowIssue("校验期间项目已切换，未改变模型选择。") }
-        guard installationSnapshot.records.contains(where: { $0.id == id && $0.state == .installed && $0.availability == .available }) else {
+        guard installationSnapshot.records.contains(where: { $0.id == id && $0.registrationState == .registered && $0.state == .installed && $0.availability == .available }) else {
             throw WorkflowIssue("校验期间模型安装已改变，请重新选择。")
         }
-        try WorkflowModelBookmarks(settings: settings).rememberInstallation(identity: identity, id: id)
         let choice = WorkflowModelChoice(id: identity, kind: kind, displayName: entry.title)
+        // Recheck the caller's captured node/draft before mutating the shared
+        // identity-to-copy preference. No suspension follows this validation.
+        try validateTarget(choice)
+        try WorkflowModelBookmarks(settings: settings).rememberInstallation(identity: identity, id: id)
         explicitModelChoices.removeAll { $0.id == identity }; explicitModelChoices.append(choice)
         // This exact installation has just passed the real resolver and its lease
         // was released. Presentation becomes current without a second full scan.
@@ -1202,7 +1214,17 @@ public final class ProjectSession {
         return try await registerExplicitModel(at: prepared, kind: .video)
     }
     /// Registration has explicit identity and does not depend on a selected graph node.
-    public func registerExplicitModel(at url: URL, kind: WorkflowModelKind) async throws -> WorkflowModelChoice {
+    public func registerExplicitModel(at url: URL, kind: WorkflowModelKind, preserveExistingBinding: Bool = false) async throws -> WorkflowModelChoice {
+        func checkBinding(_ identity: String) throws {
+            guard preserveExistingBinding else { return }
+            let bookmarks = WorkflowModelBookmarks(settings: settings)
+            let installation = try bookmarks.installation(for: identity)
+            let entries = try bookmarks.entries(), inventory = try modelInventoryConfigurations()
+            guard installation == nil, !entries.contains(where: { $0.identity == identity }),
+                  !inventory.contains(where: { $0.identity == identity }) else {
+                throw WorkflowIssue("This exact configuration already has a binding. The existing selection is preserved. Use the fixed catalog to register another resource copy, then select it explicitly.")
+            }
+        }
         guard let session, let owner = store, !isChangingProject, !closePending else { throw WorkflowIssue("工作区未就绪。") }
         let candidates = session.modelAdapters.filter { $0.kind == kind }
         if !candidates.isEmpty {
@@ -1221,6 +1243,7 @@ public final class ProjectSession {
                 guard matches.count <= 1 else { throw WorkflowIssue("模型目录匹配多个身份，不能猜测。") }
                 if let (adapter, _) = matches.first {
                     guard store === owner, !closePending else { throw WorkflowIssue("工作区已切换。") }
+                    try checkBinding(adapter.identity)
                     try WorkflowModelBookmarks(settings: settings).remember(identity: adapter.identity, kind: kind,
                         name: adapter.title, bookmark: lease.bookmark)
                     await access.release(lease)
@@ -1242,6 +1265,7 @@ public final class ProjectSession {
             identity = "image:" + (lease.reference.revision ?? id.description)
             await library.release(lease)
             guard store === owner, !closePending else { throw WorkflowIssue("工作区已切换。") }
+            try checkBinding(identity)
             try WorkflowModelBookmarks(settings: settings).rememberInstallation(identity: identity, id: id)
         } else {
             let lease = try await access.acquire(selected: url)
@@ -1280,6 +1304,7 @@ public final class ProjectSession {
                 try Task.checkCancellation()
                 guard store === owner, !isChangingProject, !closePending else { throw WorkflowIssue("工作区已切换。") }
                 identity = kind.rawValue + ":" + (revision ?? lease.url.lastPathComponent)
+                try checkBinding(identity)
                 try WorkflowModelBookmarks(settings: settings).remember(identity: identity, kind: kind,
                     name: displayName, bookmark: lease.bookmark)
                 await access.release(lease)
@@ -1302,6 +1327,14 @@ public final class ProjectSession {
         }
         guard !isBusy else {
             throw WorkflowIssue("当前任务正在运行或保存，请结束后再登记模型目录；已登记模型仍可用于编辑副本。")
+        }
+        guard controller.isCurrent(target) else {
+            throw WorkflowIssue("目标节点已改变，模型未绑定到其他节点。")
+        }
+    }
+    public func checkWorkflowModelSelection(target: WorkflowModelSelectionTarget, controller: WorkflowController) throws {
+        guard workflow === controller, !isChangingProject, !closePending else {
+            throw WorkflowIssue("项目已关闭或切换，模型未绑定到其他项目。")
         }
         guard controller.isCurrent(target) else {
             throw WorkflowIssue("目标节点已改变，模型未绑定到其他节点。")
@@ -1374,7 +1407,7 @@ public final class ProjectSession {
             for identity in try bookmarks.installationIdentities() {
                 guard let id = try bookmarks.installation(for: identity) else { continue }
                 let record = snapshot.records.first { $0.id == id }
-                guard record?.state != .installed || record?.availability != .available else { continue }
+                guard record?.registrationState != .registered || record?.state != .installed || record?.availability != .available else { continue }
                 modelReadinessGeneration = UUID()
                 if let library = modelLibrary {
                     WorkflowModelReadiness.invalidate(.init(library: ObjectIdentifier(library), installation: id,
@@ -1437,6 +1470,7 @@ public final class ProjectSession {
                           let record = snapshot.records.first(where: { $0.id == installation }) else {
                         throw WorkflowIssue("模型安装记录已改变或移除。")
                     }
+                    guard record.registrationState == .registered else { throw WorkflowIssue("模型登记已解除，请在模型与下载中重新登记。") }
                     rawNeedsPreparation = record.state == .preparationRequired
                     let stamps = try WorkflowModelReadiness.stamps(for: record, in: snapshot)
                     let key = WorkflowModelReadiness.Key(library: ObjectIdentifier(library),
@@ -1462,6 +1496,7 @@ public final class ProjectSession {
                           current.records.contains(where: { $0.id == installation && $0.state == .installed &&
                               $0.availability == .available }),
                           let currentRecord = current.records.first(where: { $0.id == installation }),
+                          currentRecord.registrationState == .registered,
                           (try? WorkflowModelReadiness.stamps(for: currentRecord, in: current)) == stamps else {
                         WorkflowModelReadiness.invalidate(key, matching: stamps)
                         throw WorkflowIssue("核验期间模型文件或安装状态已改变。")
@@ -1472,7 +1507,10 @@ public final class ProjectSession {
                 }) {
                     let location = try await access.restore(entry.bookmark)
                     let stamps: [WorkflowModelReadiness.FileStamp]
-                    do { stamps = try WorkflowModelReadiness.stamps(in: location.url) }
+                    do {
+                        try await modelLibrary?.checkKnownResourceRegistration(.init(directory: location.url, revision: String(choice.id.dropFirst(choice.kind.rawValue.count + 1))))
+                        stamps = try WorkflowModelReadiness.stamps(in: location.url)
+                    }
                     catch { await access.release(location); throw error }
                     await access.release(location)
                     let key = WorkflowModelReadiness.Key(bookmark: entry.bookmark, identity: choice.id)
@@ -1497,7 +1535,10 @@ public final class ProjectSession {
                     }
                     let current = try await access.restore(entry.bookmark)
                     let currentStamps: [WorkflowModelReadiness.FileStamp]
-                    do { currentStamps = try WorkflowModelReadiness.stamps(in: current.url) }
+                    do {
+                        try await modelLibrary?.checkKnownResourceRegistration(.init(directory: current.url, revision: String(choice.id.dropFirst(choice.kind.rawValue.count + 1))))
+                        currentStamps = try WorkflowModelReadiness.stamps(in: current.url)
+                    }
                     catch { await access.release(current); throw error }
                     await access.release(current)
                     guard currentStamps == stamps else {
@@ -1538,7 +1579,7 @@ public final class ProjectSession {
             let catalog = try ModelCatalog.entries()
             for identity in try WorkflowModelBookmarks(settings: settings).installationIdentities() where !choices.contains(where: { $0.id == identity }) {
                 guard let kind = WorkflowModelKind(rawValue: String(identity.prefix { $0 != ":" })),
-                      let entry = catalog.first(where: { identity == kind.rawValue + ":" + $0.revision }) else { continue }
+                      let entry = catalog.first(where: { identity == kind.rawValue + ":" + $0.revision || identity == $0.workflowIdentity }) else { continue }
                 choices.append(.init(id: identity, kind: kind, displayName: entry.title))
             }
             for choice in explicitModelChoices where !choices.contains(where: { $0.id == choice.id }) { choices.append(choice) }
@@ -3468,5 +3509,27 @@ public final class ProjectSession {
 
     private func report(_ error: Error, context: String) {
         errorMessage = "\(context)。\n\(error.localizedDescription)"
+    }
+}
+
+extension ProjectSession {
+    /// Read only the existing preference records and already-held references.
+    /// This does not restore bookmarks, enumerate directories, validate, or register.
+    public func modelInventoryConfigurations() throws -> [ModelReadOnlyConfiguration] {
+        let bookmarks = WorkflowModelBookmarks(settings: settings)
+        var result: [ModelReadOnlyConfiguration] = []
+        for entry in try bookmarks.entries() where try bookmarks.installation(for: entry.identity) == nil {
+            let fingerprint = SHA256.hash(data: entry.bookmark).map { String(format: "%02x", $0) }.joined()
+            result.append(.init(id: "bookmark:" + entry.identity + ":" + fingerprint, title: entry.name, identity: entry.identity, location: nil, selectable: true))
+        }
+        for (kind, reference) in [("text", textReference), ("audio", audioReference), ("music", musicReference), ("video", videoReference)] {
+            if let reference {
+                let identity = kind + ":" + (reference.revision ?? reference.directory.lastPathComponent)
+                guard try bookmarks.installation(for: identity) == nil else { continue }
+                guard !result.contains(where: { $0.identity == identity }) else { continue }
+                result.append(.init(id: "reference:" + identity + ":" + reference.directory.standardizedFileURL.path, title: reference.directory.lastPathComponent, identity: identity, location: reference.directory))
+            }
+        }
+        return result
     }
 }

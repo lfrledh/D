@@ -37,20 +37,27 @@ import Foundation
     /// Metadata is deliberately cheap; ModelLibrary owns the strict file and
     /// installation checks. A missing file cannot match a cached success.
     static func stamps(for record: ModelRecord, in snapshot: ModelLibrarySnapshot) throws -> [FileStamp] {
-        guard record.state == .installed, record.availability == .available,
+        guard record.registrationState == .registered, record.state == .installed, record.availability == .available,
               let directory = record.directory,
               let entry = snapshot.catalog.first(where: { $0.id == record.catalogID }) else {
             throw WorkflowIssue(record.state == .preparationRequired
                 ? "模型原始文件已校验，仍需准备执行引擎。" : "模型安装或位置当前不可用。")
         }
-        return try entry.files.map { file in
-            let url = directory.appendingPathComponent(file.path)
+        let resource = snapshot.resources.first { $0.record.id == record.id }
+        let paths: [String]
+        if resource?.control.role == .execution {
+            guard let required = resource?.control.requiredPaths, !required.isEmpty else { throw WorkflowIssue("执行包缺少必要文件记录。") }
+            paths = required
+        } else { paths = entry.files.map(\.path) }
+        return try paths.map { path in
+            _ = try ModelDirectory.parts(path)
+            let url = directory.appendingPathComponent(path)
             let values = try url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .fileResourceIdentifierKey,
                                                           .isRegularFileKey])
             guard values.isRegularFile == true, let size = values.fileSize else {
                 throw WorkflowIssue("模型必要文件缺失或不是普通文件。")
             }
-            return FileStamp(path: file.path, size: size, modified: values.contentModificationDate,
+            return FileStamp(path: path, size: size, modified: values.contentModificationDate,
                              fileID: values.fileResourceIdentifier.map { String(describing: $0) } ?? "",
                              changedSeconds: nil, changedNanoseconds: nil)
         }

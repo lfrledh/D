@@ -17,9 +17,18 @@ public actor ModelLibrary {
         var verifiedDirectories: [String: ModelFileIdentity]?
         var verifiedRoot: ModelFileIdentity?
         var publicationRoot: ModelFileIdentity?
+        var control: ModelResourceControl?
+        var deletion: DeletionIntent?
+        var retiredLocations: [RetiredLocation]?
+    }
+    private struct RetiredLocation: Codable, Sendable { let url: URL; let root: ModelFileIdentity? }
+    private struct DeletionIntent: Codable, Sendable {
+        let path: String
+        let root: ModelFileIdentity
+        let files: [String: ModelFileIdentity]
     }
     private struct DiskState: Codable {
-        var schemaVersion = 1
+        var schemaVersion = 2
         var libraryID = UUID()
         var revision: UInt64 = 0
         var rootBookmark: Data?
@@ -27,7 +36,12 @@ public actor ModelLibrary {
         var rootIdentity: ModelFileIdentity?
         var downloadCredentialBookmark: Data?
         var records: [StoredRecord] = []
+        var downloads: [ModelDownloadTask]?
+        var queueState: ModelDownloadQueueState?
     }
+    private let now: @Sendable () -> Date
+    private let sleepUntil: @Sendable (Date) async throws -> Void
+    private let checkpoint: @Sendable (String) throws -> Void
     private let wanPreparation: ModelWanPreparation.Converter?
     private let stateDirectory: ModelDirectory
     private let stateLock: ModelFileHandle
@@ -44,6 +58,11 @@ public actor ModelLibrary {
     private var leases: [UUID: ModelUsageLease] = [:]
     private var preparationJobs: [ModelID: (job: Task<URL, any Error>, lease: ModelUsageLease, scope: ModelScopedLocation)] = [:]
     private var accepting = true
+    private var queueError: String?
+    private var retryWake: Task<Void, Never>?
+    private var activeDownload: (task: UUID, attempt: UUID, generation: UUID, resource: ModelID)?
+    private var queuePausing = false
+    private var cleanupReservations: Set<ModelID> = []
     private var cancelledOperations: Set<ModelID> = []
     private var copyJob: Task<[String: ModelFileIdentity], any Error>?
     private var currentCopy: ModelCopyProgress?
@@ -56,7 +75,10 @@ public actor ModelLibrary {
 
     /// Internal seams use tiny deterministic catalogs and loopback HTTP; production is fixed and HTTPS-only.
     init(stateDirectory: URL, catalog: [ModelCatalogEntry],
-         transport: any ModelRangeTransport = URLSessionModelRangeTransport(), sourceBaseURL: URL? = nil, availableBytesOverride: UInt64? = nil, wanPreparation: ModelWanPreparation.Converter? = nil) async throws {
+         transport: any ModelRangeTransport = URLSessionModelRangeTransport(), sourceBaseURL: URL? = nil, availableBytesOverride: UInt64? = nil, wanPreparation: ModelWanPreparation.Converter? = nil,
+         now: @escaping @Sendable () -> Date = { Date() },
+         sleepUntil: @escaping @Sendable (Date) async throws -> Void = { deadline in try await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow))) },
+         checkpoint: @escaping @Sendable (String) throws -> Void = { _ in }) async throws {
         try Self.validateCatalog(catalog)
         if let sourceBaseURL {
             guard let components = URLComponents(url: sourceBaseURL, resolvingAgainstBaseURL: false),
@@ -74,9 +96,11 @@ public actor ModelLibrary {
         self.catalog = catalog; self.transport = transport; self.sourceBaseURL = sourceBaseURL
         self.availableBytesOverride = availableBytesOverride
         self.wanPreparation = wanPreparation
-        if try Self.exists("index.json", in: directory) {
-            disk = try JSONDecoder().decode(DiskState.self, from: directory.read("index.json", maximum: 32 * 1024 * 1024))
-            guard disk.schemaVersion == 1, Set(disk.records.map(\.record.id)).count == disk.records.count else {
+        self.now = now; self.sleepUntil = sleepUntil; self.checkpoint = checkpoint
+        let originalIndex = try Self.exists("index.json", in: directory) ? directory.read("index.json", maximum: 32 * 1024 * 1024) : nil
+        if let originalIndex {
+            disk = try JSONDecoder().decode(DiskState.self, from: originalIndex)
+            guard [1, 2].contains(disk.schemaVersion), Set(disk.records.map(\.record.id)).count == disk.records.count else {
                 throw ModelLibraryError.integrity("模型库索引版本无效或记录重复，原文件已保留。")
             }
         } else { disk = DiskState() }
@@ -100,6 +124,11 @@ public actor ModelLibrary {
                 }
                 disk.records[index].recipeIdentity = identity
             }
+            if disk.records[index].control == nil {
+                let complete = [.installed, .preparationRequired].contains(value.record.state)
+                disk.records[index].control = .init(fileState: complete ? .verified : .partial,
+                    origin: value.record.storage == .external ? .local : .legacy)
+            }
             disk.records[index].record.activeLeaseCount = 0
             if [.queued, .downloading, .pausing, .verifying, .publishing].contains(value.record.state) {
                 disk.records[index].record.state = .paused
@@ -118,6 +147,30 @@ public actor ModelLibrary {
                 catch { }
             }
         }
+        if disk.schemaVersion == 1, let originalIndex {
+            try checkpoint("migration.backup")
+            let backup = "index.v1.backup.json"
+            if try Self.exists(backup, in: directory) {
+                guard try directory.read(backup, maximum: 32 * 1024 * 1024) == originalIndex else {
+                    throw ModelLibraryError.integrity("旧索引备份已存在且内容不同；原索引未修改。")
+                }
+            } else { try directory.atomicWrite(originalIndex, to: backup) }
+        }
+        disk.schemaVersion = 2
+        disk.downloads = disk.downloads ?? []
+        guard Set(disk.downloads!.map(\.id)).count == disk.downloads!.count else {
+            throw ModelLibraryError.integrity("下载任务身份重复。")
+        }
+        for index in disk.downloads!.indices {
+            let task = disk.downloads![index]
+            let resource = try stored(task.resourceID.modelID)
+            guard task.catalogID == resource.record.catalogID, task.recipeIdentity == resource.recipeIdentity,
+                  task.attempts >= 0, (0...3).contains(task.automaticRetries) else {
+                throw ModelLibraryError.integrity("下载任务与资源配方不符。")
+            }
+            if task.state.isActive { disk.downloads![index].state = .queued }
+        }
+        disk.queueState = .waitingForResume
         try persist()
     }
 
@@ -126,17 +179,37 @@ public actor ModelLibrary {
             let stored = disk.records[index]
             var availability = stored.record.availability
             var location = stored.record.directory
-            if stored.record.state == .installed || stored.record.state == .preparationRequired {
-                do { location = try resolved(stored).url; availability = .available }
-                catch { availability = stored.record.storage == .external && externalScopes[stored.record.id] == nil ? .needsAuthorization : .unavailable }
-            } else if stored.record.storage == .managed {
+            // Viewing never hashes files, adopts legacy identities, or mutates registration.
+            // Full required-tree verification stays at explicit admission/verification.
+            if stored.control?.fileState == .deleted || stored.deletion != nil { availability = .unavailable }
+            else if stored.record.storage == .managed {
                 do {
                     guard let root = libraryRoot else { throw ModelLibraryError.unavailable("模型库不可用。") }
                     try root.validateLocation(); availability = .available
+                    if let expected = stored.verifiedRoot {
+                        let directory = try root.child("Installations/" + stored.record.id.description)
+                        guard expected.sameNode(directory.identity) else { throw ModelLibraryError.integrity("模型位置已改变。") }
+                        guard try stored.verifiedFiles.allSatisfy({ try directory.fileIdentity($0.key) == $0.value }) else {
+                            throw ModelLibraryError.integrity("已知模型文件改变。")
+                        }
+                        location = directory.url
+                    }
                 } catch { availability = .unavailable }
             } else if let scope = externalScopes[stored.record.id] {
-                do { _ = try ModelDirectory(scope.url); availability = .available }
-                catch { availability = .unavailable }
+                do {
+                    let directory = try ModelDirectory(scope.url)
+                    if let expected = stored.verifiedRoot, !expected.sameNode(directory.identity) {
+                        throw ModelLibraryError.integrity("模型位置已改变。")
+                    }
+                    if !stored.verifiedFiles.isEmpty {
+                        let current = try directory.requiredTree(paths: Set(stored.verifiedFiles.keys))
+                        guard current.files == stored.verifiedFiles,
+                              stored.verifiedDirectories == nil || current.directories == stored.verifiedDirectories else {
+                            throw ModelLibraryError.integrity("已知模型文件或父目录改变。")
+                        }
+                    }
+                    location = scope.url; availability = .available
+                } catch { availability = .unavailable }
             } else { availability = .needsAuthorization }
             if availability != stored.record.availability || location != stored.record.directory {
                 disk.records[index].record.availability = availability
@@ -151,7 +224,9 @@ public actor ModelLibrary {
         }
         return .init(revision: disk.revision, rootURL: rootScope?.url ?? disk.rootURL, catalog: catalog,
                      records: records, downloadCredentialConnected: disk.downloadCredentialBookmark != nil,
-                     copyProgress: currentCopy)
+                     copyProgress: currentCopy,
+                     resources: zip(records, disk.records).map { .init(record: $0.0, control: $0.1.control ?? .init(fileState: .unchecked, origin: .local)) },
+                     downloads: disk.downloads ?? [], queueState: disk.queueState ?? .waitingForResume, queueError: queueError)
     }
 
     public func connectDownloadCredential(at selected: URL) throws {
@@ -190,28 +265,20 @@ public actor ModelLibrary {
         }
     }
 
+    /// Compatibility entry point for existing explicit install-and-register callers.
     public func install(catalogID: String = ModelCatalog.flux2ID) throws -> ModelID {
-        try requireAdmission()
-        let entry = try catalogEntry(catalogID)
-        if let existing = disk.records.first(where: { $0.record.catalogID == catalogID && $0.record.storage == .managed }) {
-            if existing.record.state != .installed && existing.record.state != .preparationRequired { try resume(existing.record.id) }
+        if let existing = disk.records.first(where: { $0.record.catalogID == catalogID && $0.record.storage == .managed && $0.control?.fileState == .verified && $0.deletion == nil }) {
+            if existing.record.state == .installed { try registerResource(.init(rawValue: existing.record.id.rawValue)) }
             return existing.record.id
         }
-        try requireIdleWorker()
-        guard let root = libraryRoot else { throw ModelLibraryError.unavailable("请先选择模型库所在的本地磁盘。") }
-        try root.validateLocation()
-        try requireSpace(entry.totalBytes)
-        let id = ModelID()
-        disk.records.append(StoredRecord(record: .init(id: id, catalogID: entry.id, revision: entry.revision,
-            storage: .managed, state: .queued, availability: .available, downloadedBytes: 0,
-            totalBytes: entry.totalBytes, error: nil, directory: nil, activeLeaseCount: 0), recipeIdentity: try Self.recipeIdentity(entry)))
-        do { try persist() } catch { disk.records.removeAll { $0.record.id == id }; throw error }
-        launchInstallation(id)
-        return id
+        return try enqueueDownloads([catalogID], postAction: .register)[0].resourceID.modelID
     }
 
     public func pause(_ id: ModelID) async throws {
         try requireAdmission()
+        if let task = downloadForResource(id), !task.state.isTerminal {
+            try await pauseDownload(task.id); return
+        }
         guard let worker = workers[id] else { return }
         setState(id, .pausing)
         worker.cancel()
@@ -221,7 +288,11 @@ public actor ModelLibrary {
         if let persistenceFailure { throw persistenceFailure }
     }
     public func resume(_ id: ModelID) throws {
-        try requireAdmission(); try requireIdleWorker()
+        try requireAdmission()
+        if try stored(id).record.storage == .managed {
+            _ = try continuePartial(.init(rawValue: id.rawValue), postAction: .register); return
+        }
+        try requireIdleWorker()
         let value = try stored(id)
         guard value.record.state != .installed && value.record.state != .preparationRequired else { return }
         if value.record.storage == .external {
@@ -278,12 +349,14 @@ public actor ModelLibrary {
         if let existing = disk.records.first(where: { $0.record.catalogID == catalogID &&
             $0.record.storage == .external && $0.verifiedRoot?.sameNode(directory.identity) == true }) {
             _ = try resolved(existing)
+            if existing.record.state == .installed { try registerResource(.init(rawValue: existing.record.id.rawValue)) }
             return existing.record.id
         }
         let id = ModelID()
         disk.records.append(StoredRecord(record: .init(id: id, catalogID: catalogID, revision: entry.revision,
             storage: .external, state: .registered, availability: .available, downloadedBytes: 0,
-            totalBytes: entry.totalBytes, error: nil, directory: scope.url, activeLeaseCount: 0), bookmark: scope.bookmark,
+            totalBytes: entry.totalBytes, error: nil, directory: scope.url, activeLeaseCount: 0,
+            registrationState: .pending), bookmark: scope.bookmark,
             recipeIdentity: try Self.recipeIdentity(entry)))
         externalScopes[id] = scope
         do { try persist() } catch { disk.records.removeAll { $0.record.id == id }; externalScopes[id] = nil; throw error }
@@ -295,6 +368,13 @@ public actor ModelLibrary {
         if cancelledOperations.contains(id) { throw ModelLibraryError.operationPaused }
         guard completed.record.state == .installed || completed.record.state == .preparationRequired else {
             throw ModelLibraryError.integrity(completed.record.error ?? "模型校验未完成。")
+        }
+        let verifiedRecord = try stored(id)
+        mutate(id) { $0.record.registrationState = entry.preparation == .none ? .registered : .unregistered }
+        do { try persist(purpose: "registration") }
+        catch {
+            if case ModelAtomicWriteError.publishedButUnsynced = error { throw error }
+            mutate(id) { $0 = verifiedRecord }; throw error
         }
         return id
     }
@@ -363,6 +443,7 @@ public actor ModelLibrary {
         currentCopy = .init(sourceID: sourceID, copiedBytes: 0, totalBytes: entry.totalBytes)
         defer {
             release(lease); copyJob = nil; currentCopy = nil; copyKnownFiles = [:]
+            scheduleDownloads()
             disk.revision &+= 1
         }
         let job = Task.detached { [self] in
@@ -402,9 +483,10 @@ public actor ModelLibrary {
             disk.records.append(StoredRecord(record: .init(id: id, catalogID: entry.id, revision: entry.revision,
                 storage: .managed, state: entry.preparation == .required ? .preparationRequired : .installed,
                 availability: .available, downloadedBytes: entry.totalBytes, totalBytes: entry.totalBytes,
-                error: nil, directory: installed.url, activeLeaseCount: 0),
+                error: nil, directory: installed.url, activeLeaseCount: 0, registrationState: original.record.registrationState),
                 recipeIdentity: try Self.recipeIdentity(entry), verifiedFiles: verified,
-                verifiedRoot: installed.identity, publicationRoot: installed.identity))
+                verifiedRoot: installed.identity, publicationRoot: installed.identity,
+                control: .init(fileState: .verified, origin: .local)))
             do { try persist(afterRename: afterIndexRename) }
             catch {
                 if case ModelAtomicWriteError.publishedButUnsynced(let reason) = error {
@@ -465,7 +547,8 @@ public actor ModelLibrary {
               fsync(staging.descriptor) == 0 else { throw ModelDirectory.failure("移除空复制暂存任务") }
     }
 
-    public func rebind(_ id: ModelID, to selected: URL) async throws {
+    public func rebind(_ id: ModelID, to selected: URL,
+        preparedValidator: (@Sendable (URL) async throws -> ModelReference)? = nil) async throws {
         try requireAdmission(); try requireIdleWorker()
         guard !leases.values.contains(where: { $0.modelID == id }) else { throw ModelLibraryError.busy("模型仍用于运行或排队任务，不能重新定位。") }
         let previous = try stored(id)
@@ -482,8 +565,20 @@ public actor ModelLibrary {
             do {
                 let entry = try await self.entry(for: id)
                 let directory = try ModelDirectory(candidate.url)
-                let job = Task.detached { try Self.verifyExternal(directory, entry: entry) }
-                let verified = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
+                let verified: ModelRequiredTree
+                if previous.control?.role == .execution {
+                    guard let preparedValidator else { throw ModelLibraryError.unavailable("执行包验证引擎尚不可用。") }
+                    let reference = try await preparedValidator(directory.url)
+                    guard reference.directory.standardizedFileURL == directory.url.standardizedFileURL,
+                          reference.revision?.isEmpty == false,
+                          previous.control?.executionRevision == nil || previous.control?.executionRevision == reference.revision else {
+                        throw ModelLibraryError.integrity("执行包身份与原记录不符。")
+                    }
+                    verified = try directory.requiredTree(paths: Set(previous.control?.requiredPaths ?? []))
+                } else {
+                    let job = Task.detached { try Self.verifyExternal(directory, entry: entry) }
+                    verified = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
+                }
                 try Task.checkCancellation()
                 await self.commitRebinding(id, scope: candidate, directory: directory, tree: verified, previous: previous, previousScope: previousScope)
             } catch { await self.rollbackRebinding(id, previous: previous, scope: previousScope, error: error) }
@@ -498,7 +593,12 @@ public actor ModelLibrary {
     private func commitRebinding(_ id: ModelID, scope: ModelScopedLocation, directory: ModelDirectory,
                                  tree: ModelRequiredTree, previous: StoredRecord, previousScope: ModelScopedLocation?) {
         externalScopes[id] = scope
-        mutate(id) { $0.bookmark = scope.bookmark }
+        mutate(id) {
+            if let old = previous.record.directory, old.standardizedFileURL != directory.url.standardizedFileURL || previous.verifiedRoot?.sameNode(directory.identity) != true {
+                $0.retiredLocations = (previous.retiredLocations ?? []) + [.init(url: old, root: previous.verifiedRoot)]
+            }
+            $0.bookmark = scope.bookmark
+        }
         verified(id, directory: directory, files: tree.files, directories: tree.directories)
         do { try persist(); workers.removeValue(forKey: id) }
         catch { rollbackRebinding(id, previous: previous, scope: previousScope, error: error) }
@@ -522,6 +622,10 @@ public actor ModelLibrary {
     public func resolve(_ id: ModelID) throws -> ModelReference {
         try requireAdmission()
         let value = try stored(id)
+        guard value.record.registrationState == .registered, value.deletion == nil,
+              value.control?.fileState != .deleted else {
+            throw ModelLibraryError.unavailable("该资源未登记或文件已删除；请在模型与下载中处理。")
+        }
         guard value.record.state == .installed else {
             if value.record.state == .preparationRequired {
                 throw ModelLibraryError.unavailable("模型原始文件已校验，但仍需准备执行引擎；当前不能用于任务。")
@@ -529,7 +633,7 @@ public actor ModelLibrary {
             throw ModelLibraryError.unavailable("模型尚未完成安装和完整校验。")
         }
         let directory = try resolved(value)
-        return .init(directory: directory.url, revision: value.record.revision)
+        return .init(directory: directory.url, revision: value.control?.executionRevision ?? value.record.revision)
     }
     public func canPrepareVideo(_ id: ModelID) throws -> Bool {
         try stored(id).record.state == .preparationRequired && (ModelVideoPreparation.profile(for: entry(for: id)) != nil || (wanPreparation != nil && ModelWanPreparation.supports(entry(for: id))))
@@ -550,12 +654,22 @@ public actor ModelLibrary {
         leases[lease.id] = lease; disk.revision &+= 1
         let name = entry.id + "-" + UUID().uuidString
         let converter = wanPreparation
-        let job = Task.detached {
+        let conversion = Task.detached {
             if ModelWanPreparation.supports(entry), let converter {
                 return try await ModelWanPreparation.prepare(source: source, entry: entry, parent: parent, name: name,
                     externalRawProjection: original.record.storage == .external && ModelWanPreparation.allowsExternalRawProjection(entry), converter: converter)
             }
             return try ModelVideoPreparation.prepare(source: source, entry: entry, parent: parent, name: name, checkpoint: checkpoint)
+        }
+        let job = Task { [weak self] in
+            try await withTaskCancellationHandler {
+                let url = try await conversion.value
+                guard let self else { throw CancellationError() }
+                // The tracked operation includes inventory publication, so shutdown
+                // drains this commit before releasing scopes and the source lease.
+                try await self.recordPreparedOutput(url, parentID: id)
+                return url
+            } onCancel: { conversion.cancel() }
         }
         preparationJobs[id] = (job, lease, scope)
         let result = await withTaskCancellationHandler { await job.result } onCancel: { job.cancel() }
@@ -572,6 +686,7 @@ public actor ModelLibrary {
         }
         if preparationJobs[id]?.lease.id == lease.id { preparationJobs.removeValue(forKey: id) }
         release(lease)
+        scheduleDownloads()
     }
     public func acquire(_ id: ModelID) throws -> ModelUsageLease {
         let reference = try resolve(id)
@@ -584,7 +699,10 @@ public actor ModelLibrary {
     public func acquireForBackup(_ id: ModelID) throws -> ModelUsageLease {
         try requireAdmission()
         let value = try stored(id)
-        guard [.installed, .preparationRequired].contains(value.record.state) else {
+        guard value.control?.role != .execution else {
+            throw ModelLibraryError.unavailable("Prepared execution-package backup is not supported by this backup format. The original package can be backed up separately.")
+        }
+        guard value.deletion == nil, value.control?.fileState != .deleted, [.installed, .preparationRequired].contains(value.record.state) else {
             throw ModelLibraryError.unavailable("模型尚未完成安装和完整校验，不能备份。")
         }
         let directory = try resolved(value)
@@ -605,6 +723,7 @@ public actor ModelLibrary {
         if value.record.storage == .external {
             let previousRecords = disk.records, previousScope = externalScopes[id]
             disk.records.removeAll { $0.record.id == id }; externalScopes.removeValue(forKey: id)
+            disk.downloads?.removeAll { $0.resourceID.modelID == id }
             do { try persist() } catch { disk.records = previousRecords; externalScopes[id] = previousScope; throw error }
             return
         }
@@ -664,12 +783,15 @@ public actor ModelLibrary {
     private func finishRemoval(_ id: ModelID) {
         let previous = disk.records
         disk.records.removeAll { $0.record.id == id }
+        disk.downloads?.removeAll { $0.resourceID.modelID == id }
         do { try persist(); workers.removeValue(forKey: id) }
         catch { disk.records = previous; workerEnded(id, error: error) }
     }
 
     public func shutdown() async throws {
         accepting = false
+        retryWake?.cancel(); retryWake = nil
+        disk.queueState = .waitingForResume
         do {
             let preparing = preparationJobs
             for task in preparing.values { task.job.cancel() }
@@ -728,19 +850,27 @@ public actor ModelLibrary {
         mutate(id) {
             $0.verifiedRoot = directory.identity; $0.verifiedFiles = files; $0.verifiedDirectories = directories
             $0.record.directory = directory.url; $0.record.downloadedBytes = $0.record.totalBytes
-            $0.record.state = needsPreparation ? .preparationRequired : .installed
+            $0.record.state = needsPreparation && $0.control?.role != .execution ? .preparationRequired : .installed
             $0.record.error = nil; $0.record.availability = .available
+            if $0.control == nil { $0.control = .init(fileState: .verified, origin: .local) }
+            $0.control?.fileState = .verified; $0.control?.lastVerified = Date()
+
         }
     }
     private func workerEnded(_ id: ModelID, error: (any Error)?) {
+        if let active = activeDownload, active.resource == id {
+            finishDownload(active.task, attempt: active.attempt, generation: active.generation, error: error)
+            return
+        }
         if let error {
             if error is CancellationError { cancelledOperations.insert(id) }
             setState(id, error is CancellationError ? .paused : .failed)
             mutate(id) { $0.record.error = error is CancellationError ? nil : error.localizedDescription }
         }
         do { try persist() }
-        catch { setState(id, .failed); mutate(id) { $0.record.error = "状态保存失败：\(error.localizedDescription)。已下载内容仍保留。" } }
+        catch { mutate(id) { $0.record.error = [$0.record.error, "状态保存失败：" + error.localizedDescription].compactMap { $0 }.joined(separator: "\n") } }
         workers.removeValue(forKey: id)
+        scheduleDownloads()
     }
 
     private func performInstallation(_ id: ModelID) async throws {
@@ -755,6 +885,7 @@ public actor ModelLibrary {
             setState(id, .verifying)
             let job = Task.detached { try candidate.verify(entry.files) }
             let files = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
+            try Task.checkCancellation()
             verified(id, directory: candidate, files: files)
             return
         }
@@ -830,6 +961,7 @@ public actor ModelLibrary {
                 range.authorizedPath = url.path
             }
             try await transport.download(range, to: fd)
+            try Task.checkCancellation()
             try content.validateLocation()
             offset = end + 1
             let current = try ModelDirectory.identity(fd, regular: true)
@@ -871,14 +1003,19 @@ public actor ModelLibrary {
         libraryRoot = root; libraryLock = lock; rootScope = scope
         disk.rootBookmark = scope.bookmark; disk.rootURL = scope.url; disk.rootIdentity = root.identity
         for index in disk.records.indices where disk.records[index].record.storage == .managed {
-            disk.records[index].record.directory = root.url.appendingPathComponent("Installations/" + disk.records[index].record.id.description)
+            let next = root.url.appendingPathComponent("Installations/" + disk.records[index].record.id.description)
+            if let old = disk.records[index].record.directory, old.standardizedFileURL != next.standardizedFileURL {
+                let prior = RetiredLocation(url: old, root: disk.records[index].verifiedRoot)
+                disk.records[index].retiredLocations = (disk.records[index].retiredLocations ?? []) + [prior]
+            }
+            disk.records[index].record.directory = next
         }
     }
 
     /// Relocation preserves the actual directory, not merely a copied owner marker.
     /// Older v1 indexes are upgraded after checking their existing installation/file identities.
     private func validateRootIdentity(_ root: ModelDirectory) throws {
-        let managed = disk.records.filter { $0.record.storage == .managed }
+        let managed = disk.records.filter { $0.record.storage == .managed && $0.control?.fileState != .deleted && $0.deletion == nil }
         guard !managed.isEmpty else { return }
         let rejected = ModelLibraryError.unavailable("所选位置是模型库的副本或已替换的目录。当前仅支持原模型库在同一磁盘卷内移动；原位置和模型记录已保留。")
         if let expected = disk.rootIdentity ?? libraryRoot?.identity {
@@ -918,10 +1055,10 @@ public actor ModelLibrary {
         }
         let entry = try entry(for: stored.record.id)
         if stored.record.storage == .external {
-            let current = try directory.requiredTree(paths: Set(entry.files.map(\.path)))
+            let current = try directory.requiredTree(paths: stored.control?.role == .execution ? Set(stored.verifiedFiles.keys) : Set(entry.files.map(\.path)))
             // Earlier external records tracked the exact root and leaves but no
             // parent map. Rehash those fixed leaves once before adopting parents.
-            if (stored.verifiedDirectories?.isEmpty ?? true) && !current.directories.isEmpty {
+            if stored.control?.role != .execution && (stored.verifiedDirectories?.isEmpty ?? true) && !current.directories.isEmpty {
                 let verified = try directory.verifyRequired(entry.files)
                 guard verified.files == stored.verifiedFiles,
                       verified == current else {
@@ -966,20 +1103,34 @@ public actor ModelLibrary {
         guard !overflow else { throw ModelLibraryError.invalidCatalog("模型总大小溢出。") }
         guard available >= required else { throw ModelLibraryError.insufficientSpace(required: required, available: available) }
     }
-    private func persist(afterRename: (@Sendable () throws -> Void)? = nil) throws {
+    private func persist(purpose: String = "state", afterRename: (@Sendable () throws -> Void)? = nil) throws {
         disk.revision &+= 1
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        try stateDirectory.atomicWrite(encoder.encode(disk), to: "index.json", afterRename: afterRename)
+        do {
+            try checkpoint(purpose + ".beforeWrite")
+            let checkpoint = self.checkpoint
+            try stateDirectory.atomicWrite(encoder.encode(disk), to: "index.json", afterRename: {
+                try checkpoint(purpose + ".afterRename"); try afterRename?()
+            })
+        }
+        catch { queueError = "状态保存失败；队列已停止：" + error.localizedDescription; retryWake?.cancel(); throw error }
     }
     private func requireAdmission() throws { if !accepting { throw ModelLibraryError.busy("模型库正在关闭，请等待应用退出。") } }
-    private func requireIdleWorker() throws { if !workers.isEmpty || !preparationJobs.isEmpty || copyJob != nil { throw ModelLibraryError.busy("请先等待或暂停当前模型操作。") } }
+    private func requireIdleWorker(allowingCleanup: ModelID? = nil) throws { if !workers.isEmpty || !preparationJobs.isEmpty || copyJob != nil || cleanupReservations.contains(where: { $0 != allowingCleanup }) { throw ModelLibraryError.busy("请先等待或暂停当前模型操作。") } }
     private func stored(_ id: ModelID) throws -> StoredRecord {
         guard let result = disk.records.first(where: { $0.record.id == id }) else { throw ModelLibraryError.unavailable("模型记录不存在。") }; return result
     }
     private func mutate(_ id: ModelID, _ body: (inout StoredRecord) -> Void) {
         if let index = disk.records.firstIndex(where: { $0.record.id == id }) { body(&disk.records[index]); disk.revision &+= 1 }
     }
-    private func setState(_ id: ModelID, _ state: ModelInstallationState) { mutate(id) { $0.record.state = state; $0.record.error = nil } }
+    private func setState(_ id: ModelID, _ state: ModelInstallationState) {
+        mutate(id) { $0.record.state = state; $0.record.error = nil }
+        if let active = activeDownload, active.resource == id,
+           let index = disk.downloads?.firstIndex(where: { $0.id == active.task }),
+           let phase = ModelDownloadState(rawValue: state.rawValue), disk.downloads![index].state.isActive {
+            disk.downloads![index].state = phase
+        }
+    }
     private func catalogEntry(_ id: String) throws -> ModelCatalogEntry {
         guard let value = catalog.first(where: { $0.id == id }) else { throw ModelLibraryError.invalidCatalog("不支持的模型目录条目。") }; return value
     }
@@ -1082,5 +1233,483 @@ private final class ModelScopedLocation: Sendable {
         var stale = false
         let url = try URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope, .withoutUI], relativeTo: nil, bookmarkDataIsStale: &stale)
         return try ModelScopedLocation(url)
+    }
+}
+
+// Resource commands and the single persistent download scheduler share the existing
+// library lock, file ledger and atomic index. Views never own these tasks.
+extension ModelLibrary {
+    private func downloadForResource(_ id: ModelID) -> ModelDownloadTask? {
+        (disk.downloads ?? []).last { $0.resourceID.modelID == id }
+    }
+    private func taskIndex(_ id: UUID) throws -> Int {
+        guard let index = disk.downloads?.firstIndex(where: { $0.id == id }) else {
+            throw ModelLibraryError.unavailable("下载任务已不存在。")
+        }
+        return index
+    }
+    private func event(_ id: ModelID, _ action: String, result: String? = nil) {
+        mutate(id) {
+            if $0.control == nil { $0.control = .init(fileState: .unchecked, origin: .local) }
+            $0.control?.events.append(.init(action: action, date: now(), result: result))
+            if ($0.control?.events.count ?? 0) > 24 { $0.control?.events.removeFirst() }
+        }
+    }
+    public func enqueueDownloads(_ catalogIDs: [String], postAction: ModelDownloadPostAction = .filesOnly) throws -> [ModelDownloadTask] {
+        try requireAdmission()
+        guard let root = libraryRoot else { throw ModelLibraryError.unavailable("请先选择模型库位置。") }
+        try root.validateLocation()
+        let previous = disk
+        let wasEmpty = (disk.downloads ?? []).allSatisfy { $0.state.isTerminal }
+        var result: [ModelDownloadTask] = []
+        var registerExisting: [ModelResourceID] = []
+        do {
+        for catalogID in catalogIDs {
+            let entry = try catalogEntry(catalogID), recipe = try Self.recipeIdentity(entry)
+            let existing = disk.records.first { $0.record.storage == .managed && $0.record.catalogID == catalogID && $0.recipeIdentity == recipe && $0.control?.fileState != .deleted && $0.deletion == nil }
+            let id: ModelID
+            if let existing { id = existing.record.id }
+            else {
+                try requireSpace(entry.totalBytes)
+                id = ModelID()
+                disk.records.append(StoredRecord(record: .init(id: id, catalogID: entry.id, revision: entry.revision,
+                    storage: .managed, state: .queued, availability: .available, downloadedBytes: 0,
+                    totalBytes: entry.totalBytes, error: nil, directory: nil, activeLeaseCount: 0,
+                    registrationState: .unregistered), recipeIdentity: recipe,
+                    control: .init(fileState: .partial, origin: .download)))
+            }
+            if let deadline = try stored(id).control?.retryNotBefore, deadline > now() {
+                throw ModelLibraryError.busy("来源要求等待至 \(deadline.formatted()) 后再试。")
+            }
+            if let current = downloadForResource(id), !current.state.isTerminal {
+                result.append(current); continue
+            }
+            if try stored(id).control?.fileState == .verified {
+                if postAction == .register { registerExisting.append(.init(rawValue: id.rawValue)) }
+                if let prior = downloadForResource(id) { result.append(prior) }
+                continue // do not invent another successful download for existing files
+            }
+            let task = ModelDownloadTask(resourceID: .init(rawValue: id.rawValue), catalogID: catalogID, recipeIdentity: recipe, postAction: postAction, createdAt: now())
+            disk.downloads = (disk.downloads ?? []) + [task]; result.append(task)
+            event(id, "downloadRequested")
+        }
+        if wasEmpty, disk.queueState == .waitingForResume { disk.queueState = .running }
+        try persist(purpose: "enqueue")
+        } catch {
+            if case ModelAtomicWriteError.publishedButUnsynced = error { throw error }
+            disk = previous; throw error
+        }
+        for id in registerExisting { try registerResource(id) }
+        scheduleDownloads()
+        return result
+    }
+    public func registerResource(_ resource: ModelResourceID) throws {
+        try requireAdmission()
+        let id = resource.modelID, value = try stored(id)
+        guard value.deletion == nil, value.control?.role != .execution, value.control?.fileState == .verified, value.record.state == .installed else {
+            throw ModelLibraryError.unavailable("文件须完整校验并完成必要准备，才能登记。")
+        }
+        _ = try resolved(value)
+        let previous = value.record.registrationState
+        mutate(id) { $0.record.registrationState = .registered }
+        event(id, "registered")
+        do { try persist(purpose: "registration") }
+        catch {
+            if case ModelAtomicWriteError.publishedButUnsynced = error { throw error }
+            mutate(id) { $0.record.registrationState = previous }; throw error
+        }
+    }
+    public func unregister(_ id: ModelID) throws {
+        try requireAdmission()
+        let value = try stored(id)
+        guard !leases.values.contains(where: { $0.modelID == id }), workers[id] == nil,
+              preparationJobs[id] == nil, currentCopy?.sourceID != id else {
+            throw ModelLibraryError.busy("该资源正在使用、排队或准备，不能解除登记。")
+        }
+        mutate(id) { $0.record.registrationState = .unregistered }
+        event(id, "unregistered")
+        do { try persist() }
+        catch {
+            if case ModelAtomicWriteError.publishedButUnsynced = error { throw error }
+            mutate(id) { $0 = value }; throw error
+        }
+    }
+    /// Old URL caches must obey revocation too. Locate the exact known copy first;
+    /// a missing/stale revision is never an escape from that copy's registration.
+    public func acquireKnownResource(_ reference: ModelReference) throws -> ModelUsageLease? {
+        try requireAdmission()
+        let url = reference.directory.standardizedFileURL
+        let physical = try? ModelDirectory(url).identity
+        guard let value = disk.records.first(where: {
+            $0.record.directory?.standardizedFileURL == url ||
+                (physical != nil && $0.verifiedRoot?.sameNode(physical!) == true)
+        }) else {
+            if disk.records.contains(where: { value in
+                (value.retiredLocations ?? []).contains { $0.url.standardizedFileURL == url || (physical != nil && $0.root?.sameNode(physical!) == true) }
+            }) { throw ModelLibraryError.unavailable("This resource location was retired. Select the registered copy explicitly.") }
+            return nil
+        }
+        guard reference.revision == (value.control?.executionRevision ?? value.record.revision) else {
+            throw ModelLibraryError.unavailable("已知模型资源的版本引用不符。")
+        }
+        return try acquire(value.record.id)
+    }
+    public func clearDownloadHistory(_ ids: Set<UUID>) throws {
+        try requireAdmission()
+        for id in ids {
+            guard (disk.downloads ?? []).first(where: { $0.id == id })?.state.isTerminal == true, activeDownload?.task != id,
+                  !(disk.downloads ?? []).contains(where: { $0.id == id && cleanupReservations.contains($0.resourceID.modelID) }) else {
+                throw ModelLibraryError.busy("只能清除已完成、失败或取消的下载记录。")
+            }
+        }
+        let previous = disk.downloads
+        disk.downloads?.removeAll { ids.contains($0.id) }
+        do { try persist() } catch {
+            if case ModelAtomicWriteError.publishedButUnsynced = error { throw error }
+            disk.downloads = previous; throw error
+        }
+    }
+    @discardableResult public func continuePartial(_ resource: ModelResourceID, postAction: ModelDownloadPostAction = .filesOnly) throws -> ModelDownloadTask {
+        try requireAdmission()
+        let value = try stored(resource.modelID)
+        guard value.record.storage == .managed, value.deletion == nil, value.control?.fileState != .deleted else {
+            throw ModelLibraryError.unavailable("该资源没有可继续的受管理下载。")
+        }
+        if let deadline = value.control?.retryNotBefore, deadline > now() {
+            throw ModelLibraryError.busy("来源要求等待至 \(deadline.formatted()) 后再试。")
+        }
+        if let current = downloadForResource(resource.modelID), current.state.isActive { return current }
+        let index: Int
+        if let current = downloadForResource(resource.modelID), !current.state.isTerminal {
+            index = try taskIndex(current.id)
+            if let earliest = current.earliestRetry, earliest > now() {
+                throw ModelLibraryError.busy("来源要求等待至 \(earliest.formatted()) 后再试。")
+            }
+            disk.downloads![index].state = .queued
+            disk.downloads![index].automaticRetries = 0
+            disk.downloads![index].earliestRetry = nil
+        } else {
+            var task = ModelDownloadTask(resourceID: resource, catalogID: value.record.catalogID,
+                recipeIdentity: value.recipeIdentity!, postAction: postAction)
+            if value.control?.fileState == .verified { task.state = .completed; task.completedAt = now() }
+            if let earliest = downloadForResource(resource.modelID)?.earliestRetry, earliest > now() {
+                throw ModelLibraryError.busy("来源要求等待至 \(earliest.formatted()) 后再试。")
+            }
+            disk.downloads = (disk.downloads ?? []) + [task]; index = disk.downloads!.count - 1
+        }
+        disk.queueState = .running
+        if disk.downloads![index].state == .queued { setState(resource.modelID, .queued) }
+        try persist(); queueError = nil
+        let task = disk.downloads![index]
+        if task.state == .completed { finishPostAction(task.id) }
+        scheduleDownloads(); return task
+    }
+    public func moveWaitingDownload(_ id: UUID, before next: UUID?) throws {
+        try requireAdmission()
+        let index = try taskIndex(id), value = disk.downloads![index]
+        guard value.state == .queued, value.attempts == 0 else { throw ModelLibraryError.busy("只有未开始的等待项可排序。") }
+        if let next {
+            let other = disk.downloads![try taskIndex(next)]
+            guard other.id != id, other.state == .queued, other.attempts == 0 else { throw ModelLibraryError.busy("目标不是未开始的等待项。") }
+        }
+        disk.downloads!.remove(at: index)
+        let destination = next.flatMap { next in disk.downloads!.firstIndex { $0.id == next } } ?? disk.downloads!.endIndex
+        disk.downloads!.insert(value, at: destination); try persist()
+    }
+    public func pauseDownload(_ id: UUID) async throws {
+        try await stopDownload(id, state: .paused)
+    }
+    public func cancelDownload(_ id: UUID, keepPartial: Bool = true) async throws {
+        let resource = disk.downloads![try taskIndex(id)].resourceID
+        if !keepPartial { cleanupReservations.insert(resource.modelID) }
+        defer { if !keepPartial { cleanupReservations.remove(resource.modelID); scheduleDownloads() } }
+        try await stopDownload(id, state: .cancelled)
+        if !keepPartial {
+            let task = disk.downloads![try taskIndex(id)]
+            try await deleteOwnedCopy(task.resourceID)
+        }
+    }
+    private func stopDownload(_ id: UUID, state: ModelDownloadState) async throws {
+        try requireAdmission()
+        let index = try taskIndex(id), task = disk.downloads![index]
+        guard !task.state.isTerminal else { throw ModelLibraryError.busy("该任务已经结束。") }
+        disk.downloads![index].state = state
+        let worker = workers[task.resourceID.modelID]
+        worker?.cancel()
+        retryWake?.cancel(); retryWake = nil
+        var failure: (any Error)?
+        do { try persist() } catch { failure = error }
+        await worker?.value
+        if let failure { throw failure }
+        scheduleDownloads()
+    }
+    public func pauseQueue() async throws {
+        try requireAdmission()
+        disk.queueState = .paused; queuePausing = true
+        retryWake?.cancel(); retryWake = nil
+        let worker = activeDownload.flatMap { workers[$0.resource] }
+        worker?.cancel()
+        var failure: (any Error)?
+        do { try persist() } catch { failure = error }
+        await worker?.value
+        queuePausing = false
+        if let failure { throw failure }
+    }
+    public func resumeQueue() throws {
+        try requireAdmission()
+        guard let root = libraryRoot else { throw ModelLibraryError.unavailable("模型库磁盘不可用。") }
+        try root.validateLocation()
+        disk.queueState = .running
+        try persist(); queueError = nil; scheduleDownloads()
+    }
+    private func scheduleDownloads() {
+        retryWake?.cancel(); retryWake = nil
+        guard accepting, queueError == nil, disk.queueState == .running, workers.isEmpty,
+              preparationJobs.isEmpty, copyJob == nil, cleanupReservations.isEmpty else { return }
+        let currentTime = now()
+        if let index = disk.downloads?.firstIndex(where: { $0.state == .queued || ($0.state == .waitingRetry && ($0.earliestRetry ?? .distantFuture) <= currentTime) }) {
+            let task = disk.downloads![index], id = task.resourceID.modelID
+            do {
+                guard let root = libraryRoot else { throw ModelLibraryError.unavailable("模型库磁盘不可用，队列等待重新定位。") }
+                try root.validateLocation()
+                let record = try stored(id)
+                guard record.deletion == nil, record.control?.fileState != .deleted, record.recipeIdentity == task.recipeIdentity else {
+                    throw ModelLibraryError.integrity("下载资源已改变。")
+                }
+                disk.downloads![index].state = .downloading
+                disk.downloads![index].attemptID = UUID(); disk.downloads![index].generation = UUID()
+                disk.downloads![index].attempts += 1
+                disk.downloads![index].earliestRetry = nil
+                try persist()
+                let started = disk.downloads![index]
+                activeDownload = (started.id, started.attemptID, started.generation, id)
+                launchInstallation(id)
+            } catch { queueError = "队列等待处理：" + error.localizedDescription; disk.revision &+= 1 }
+            return
+        }
+        if let next = disk.downloads?.filter({ $0.state == .waitingRetry }).compactMap(\.earliestRetry).min() {
+            let sleepUntil = self.sleepUntil
+            retryWake = Task { [weak self] in
+                do { try await sleepUntil(next) }
+                catch { return }
+                await self?.scheduleDownloads()
+            }
+        }
+    }
+    private func finishDownload(_ taskID: UUID, attempt: UUID, generation: UUID, error: (any Error)?) {
+        guard let active = activeDownload, active.task == taskID, active.attempt == attempt, active.generation == generation,
+              let index = disk.downloads?.firstIndex(where: { $0.id == taskID && $0.attemptID == attempt && $0.generation == generation && $0.resourceID.modelID == active.resource }) else { return }
+        let id = active.resource
+        if [.paused, .cancelled].contains(disk.downloads![index].state) {
+            setState(id, .paused)
+        } else if let error {
+            if error is CancellationError {
+                disk.downloads![index].state = queuePausing || !accepting ? .queued : .paused
+                setState(id, .paused)
+            } else {
+                let message = error.localizedDescription
+                disk.downloads![index].error = message
+                if disk.downloads![index].firstError == nil { disk.downloads![index].firstError = message }
+                disk.downloads![index].state = .failed
+                if let deadline = (error as? ModelTransientDownloadError)?.retryAfter {
+                    disk.downloads![index].earliestRetry = deadline
+                    mutate(id) { value in
+                        let previous = value.control?.retryNotBefore ?? .distantPast
+                        value.control?.retryNotBefore = max(previous, deadline)
+                    }
+                }
+                if let transient = error as? ModelTransientDownloadError, disk.downloads![index].automaticRetries < 3 {
+                    let count = disk.downloads![index].automaticRetries
+                    let deadline = max(now().addingTimeInterval([2.0, 5.0, 15.0][count]), transient.retryAfter ?? .distantPast)
+                    disk.downloads![index].earliestRetry = deadline
+                    if deadline.timeIntervalSince(now()) <= 3600 {
+                        disk.downloads![index].automaticRetries += 1
+                        disk.downloads![index].state = .waitingRetry
+                    }
+                }
+                setState(id, .failed)
+                mutate(id) { $0.record.error = message }
+            }
+        } else {
+            disk.downloads![index].state = .completed; disk.downloads![index].completedAt = now()
+            disk.downloads![index].error = nil
+            event(id, "downloadCompleted")
+        }
+        var saved = false
+        do { try persist(purpose: "completion"); saved = true }
+        catch {
+            if disk.downloads![index].state == .completed {
+                disk.downloads![index].state = .paused
+                disk.downloads![index].completedAt = nil
+                disk.downloads![index].error = "文件已保留；完成状态保存未获确认，请继续核验。"
+            }
+        }
+        workers.removeValue(forKey: id); activeDownload = nil
+        if saved, disk.downloads![index].state == .completed { finishPostAction(taskID) }
+        scheduleDownloads()
+    }
+    private func finishPostAction(_ id: UUID) {
+        guard let index = try? taskIndex(id), disk.downloads![index].state == .completed,
+              disk.downloads![index].postAction == .register else { return }
+        do { try registerResource(disk.downloads![index].resourceID); disk.downloads![index].postActionError = nil }
+        catch {
+            disk.downloads![index].postActionError = error.localizedDescription
+            mutate(disk.downloads![index].resourceID.modelID) { $0.record.registrationState = .pending }
+        }
+        do { try persist() } catch { /* download remains completed; secondary persistence error gates queue */ }
+    }
+    public func deleteOwnedCopy(_ resource: ModelResourceID) async throws {
+        try requireAdmission(); try requireIdleWorker(allowingCleanup: resource.modelID)
+        let id = resource.modelID, value = try stored(id)
+        guard value.record.storage == .managed, !leases.values.contains(where: { $0.modelID == id }),
+              !(disk.downloads ?? []).contains(where: { $0.resourceID == resource && !$0.state.isTerminal && $0.state != .paused }),
+              !disk.records.contains(where: { $0.control?.parentResourceID == resource && $0.control?.fileState != .deleted }) else {
+            throw ModelLibraryError.busy("该副本不受 D 管理，或仍有任务、准备副本及使用引用。")
+        }
+        guard value.control?.fileState != .deleted else { return }
+        guard let root = libraryRoot else { throw ModelLibraryError.unavailable("模型库磁盘不可用。") }
+        if value.deletion == nil {
+            let published = try Self.exists("Installations/" + id.description, in: root)
+            let directory = published ? try resolved(value) : try stagingContent(id, create: true)
+            let files = try directory.entries(expectedPaths: Set(try entry(for: id).files.map(\.path)))
+            if !published {
+                guard files.allSatisfy({ value.files[$0.key]?.identity.sameNode($0.value) == true }) else {
+                    throw ModelLibraryError.unsafePath("暂存中有未知文件；未删除。")
+                }
+            }
+            mutate(id) {
+                $0.deletion = .init(path: published ? "Installations/" + id.description : "Staging/" + id.description + "/Content", root: directory.identity, files: files)
+                $0.control?.fileState = .deleting; $0.record.availability = .unavailable
+            }
+            do { try persist(purpose: "deleteIntent") }
+            catch {
+                if case ModelAtomicWriteError.publishedButUnsynced = error { throw error }
+                mutate(id) { $0 = value }; throw error
+            } // no unlink is permitted until the intent is durable
+        }
+        try persist(purpose: "deleteIntent") // retries must also confirm durability before unlink
+        let intent = try stored(id).deletion!
+        // Actor does not yield through the destructive phase; no new lease/worker can enter.
+        do {
+            if try Self.exists(intent.path, in: root) {
+                let directory = try root.child(intent.path)
+                guard intent.root.sameNode(directory.identity) else { throw ModelLibraryError.unsafePath("删除目标身份已改变。") }
+                try directory.removeRemainingKnownFiles(intent.files) { try checkpoint("delete.unlink." + $0) }
+                let (parent, name) = try root.parent(intent.path); defer { Darwin.close(parent) }
+                guard unlinkat(parent, name, AT_REMOVEDIR) == 0, fsync(parent) == 0 else { throw ModelDirectory.failure("删除空副本目录") }
+            }
+            mutate(id) { $0.control?.fileState = .deleted; $0.deletion = nil; $0.record.availability = .unavailable; $0.record.error = nil }
+            event(id, "filesDeleted"); try persist(purpose: "deleteResult")
+        } catch {
+            mutate(id) { $0.record.error = "副本删除未完成：" + error.localizedDescription }
+            try? persist(); throw error
+        }
+        scheduleDownloads()
+    }
+}
+
+
+extension ModelLibrary {
+    private func recordPreparedOutput(_ url: URL, parentID: ModelID) throws {
+        let parent = try stored(parentID), scope = try ModelScopedLocation(url), directory = try ModelDirectory(scope.url)
+        let files = try directory.entries()
+        let tree = try directory.requiredTree(paths: Set(files.keys))
+        let id = ModelID()
+        var control = ModelResourceControl(fileState: .verified, origin: .prepared)
+        control.role = .execution; control.parentResourceID = .init(rawValue: parentID.rawValue)
+        control.preparationRecipe = parent.recipeIdentity; control.lastVerified = now(); control.requiredPaths = files.keys.sorted()
+        // The preparer owns publication. Inventory conservatively treats the output
+        // as external; this command never authorizes arbitrary output deletion.
+        disk.records.append(StoredRecord(record: .init(id: id, catalogID: parent.record.catalogID, revision: parent.record.revision,
+            storage: .external, state: .installed, availability: .available,
+            downloadedBytes: files.values.reduce(0) { $0 + UInt64(max(0, $1.size)) },
+            totalBytes: files.values.reduce(0) { $0 + UInt64(max(0, $1.size)) }, error: nil, directory: scope.url,
+            activeLeaseCount: 0, registrationState: .unregistered), bookmark: scope.bookmark,
+            recipeIdentity: parent.recipeIdentity, verifiedFiles: tree.files, verifiedDirectories: tree.directories,
+            verifiedRoot: directory.identity, control: control))
+        externalScopes[id] = scope; event(id, "prepared")
+        try persist(purpose: "prepared")
+    }
+    public func registerPreparedResource(_ resource: ModelResourceID,
+        validate: @escaping @Sendable (URL) async throws -> ModelReference) async throws {
+        try requireAdmission(); try requireIdleWorker()
+        let id = resource.modelID, original = try stored(id)
+        guard original.control?.role == .execution, original.control?.fileState == .verified else {
+            throw ModelLibraryError.unavailable("该资源不是已确认的执行包。")
+        }
+        let directory = try resolved(original)
+        let lease = ModelUsageLease(id: UUID(), modelID: id, reference: .init(directory: directory.url, revision: original.record.revision))
+        leases[lease.id] = lease
+        // Keep the heavy-operation slot until adapter validation and persistence finish.
+        workers[id] = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let reference = try await validate(directory.url)
+                try Task.checkCancellation()
+                try await self.commitPreparedRegistration(id, reference: reference, original: original)
+            } catch { await self.preparedRegistrationFailed(id, error: error) }
+            await self.release(lease)
+            await self.preparedRegistrationEnded(id)
+        }
+        let worker = workers[id]
+        await withTaskCancellationHandler { await worker?.value } onCancel: { worker?.cancel() }
+        if let error = try stored(id).record.error { throw ModelLibraryError.unavailable(error) }
+    }
+    private func commitPreparedRegistration(_ id: ModelID, reference: ModelReference, original: StoredRecord) throws {
+        let current = try resolved(original)
+        guard reference.directory.standardizedFileURL == current.url.standardizedFileURL, reference.revision?.isEmpty == false else {
+            throw ModelLibraryError.integrity("执行包验证返回错误的资源身份。")
+        }
+        mutate(id) { $0.control?.executionRevision = reference.revision; $0.record.registrationState = .registered; $0.record.error = nil }
+        event(id, "registered")
+        do { try persist(purpose: "registration") }
+        catch {
+            if case ModelAtomicWriteError.publishedButUnsynced = error { throw error }
+            mutate(id) { $0 = original }; throw error
+        }
+    }
+    private func preparedRegistrationFailed(_ id: ModelID, error: any Error) {
+        mutate(id) { $0.record.error = error.localizedDescription }; try? persist()
+    }
+    private func preparedRegistrationEnded(_ id: ModelID) { workers[id] = nil; scheduleDownloads() }
+}
+
+extension ModelLibrary {
+    /// Explicit full verification, separate from registration and selection.
+    public func reverifyResource(_ resource: ModelResourceID,
+        preparedValidator: (@Sendable (URL) async throws -> ModelReference)? = nil) async throws {
+        try requireAdmission(); try requireIdleWorker()
+        let id = resource.modelID, original = try stored(id)
+        guard !leases.values.contains(where: { $0.modelID == id }), original.deletion == nil,
+              original.control?.fileState != .partial, original.control?.fileState != .deleted else {
+            throw ModelLibraryError.busy("资源正在使用、未完成或已删除，不能完整校验。")
+        }
+        // External rebind already verifies and preserves the original registration.
+        if original.record.storage == .external {
+            guard let url = original.record.directory else { throw ModelLibraryError.unavailable("原位置尚不可用。") }
+            try await rebind(id, to: url, preparedValidator: preparedValidator)
+            return
+        }
+        guard let root = libraryRoot else { throw ModelLibraryError.unavailable("模型库不可用。") }
+        try root.validateLocation()
+        let directory = try root.child("Installations/" + id.description)
+        guard original.verifiedRoot?.sameNode(directory.identity) == true else { throw ModelLibraryError.unsafePath("原副本身份已改变。") }
+        let entry = try entry(for: id)
+        setState(id, .verifying); try persist()
+        workers[id] = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let job = Task.detached { try Self.verifyExternal(directory, entry: entry) }
+                let tree = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
+                try Task.checkCancellation()
+                await self.verified(id, directory: directory, files: tree.files, directories: tree.directories)
+                await self.workerEnded(id, error: nil)
+            } catch { await self.workerEnded(id, error: error) }
+        }
+        await workers[id]?.value
+        if let error = try stored(id).record.error { throw ModelLibraryError.integrity(error) }
+    }
+    public func checkKnownResourceRegistration(_ reference: ModelReference) throws {
+        if let lease = try acquireKnownResource(reference) { release(lease) }
     }
 }

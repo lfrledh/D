@@ -195,6 +195,54 @@ public struct DualWorkbenchView: View {
         captureChatReading(); navigationIntent = UUID()
         entry = previous
     }
+    private func presentQuickModelSelection() {
+        let owner = selectionModel.projectSession, temporary = usesTemporaryChat, controller = quick
+        let store = owner.currentStore
+        let selectedDraftID = controller.draft?.id, selectedChatID = chat?.state.selectedSessionID
+        library.presentSelection(selected: owner.workflowInstallationID(for: quickModelIdentity)) { id in
+            do {
+                guard !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
+                      temporary == usesTemporaryChat, quick === controller,
+                      controller.draft?.id == selectedDraftID, chat?.state.selectedSessionID == selectedChatID else {
+                    throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。"))
+                }
+                let choice = try await owner.selectWorkflowInstallation(id: id) { choice in
+                    guard !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
+                          temporary == usesTemporaryChat, quick === controller,
+                          controller.draft?.id == selectedDraftID, chat?.state.selectedSessionID == selectedChatID else {
+                        throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。"))
+                    }
+                    guard let operation = WorkflowModelRoutes.operation(for: choice),
+                          !temporary || [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(operation) else { throw WorkflowIssue(library.managementText("noRoute", "此配置没有可用的共享操作。")) }
+                }
+                guard !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
+                      temporary == usesTemporaryChat, quick === controller,
+                      controller.draft?.id == selectedDraftID, chat?.state.selectedSessionID == selectedChatID else {
+                    throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。"))
+                }
+                guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue(library.managementText("noRoute", "此配置没有可用的共享操作。")) }
+                try selectModel(operation: operation, identity: choice.id)
+                returnToLibrary = false; library.isPresented = false
+                await refreshLibrary(checkModels: false)
+            } catch is CancellationError { } catch { library.errorMessage = error.localizedDescription }
+        }
+        library.configurationSelectionAction = { item in
+            do {
+                guard !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
+                      temporary == usesTemporaryChat, quick === controller,
+                      controller.draft?.id == selectedDraftID, chat?.state.selectedSessionID == selectedChatID,
+                      item.selectable, try owner.modelInventoryConfigurations().contains(item),
+                      let prefix = item.identity.split(separator: ":").first,
+                      let kind = WorkflowModelKind(rawValue: String(prefix)) else { throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。")) }
+                let choice = WorkflowModelChoice(id: item.identity, kind: kind, displayName: item.title)
+                guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue(library.managementText("noRoute", "此配置没有可用的共享操作。")) }
+                try selectModel(operation: operation, identity: choice.id)
+                returnToLibrary = false; library.isPresented = false
+                await refreshLibrary(checkModels: false)
+            } catch { library.errorMessage = error.localizedDescription }
+        }
+    }
+
     public var body: some View {
         #if DEBUG
         let _ = WorkbenchCategoryUpdateProbe.workbenchBody?()
@@ -234,7 +282,7 @@ public struct DualWorkbenchView: View {
                         Button(t("projectFiles", "Project files and backups…", "项目文件与备份…")) { filesRoute = .init(store: store, instanceID: manifest.effectiveInstanceID, assetID: nil) }
                     }
                     Button(t("legacyEditors", "Documents and existing editors…", "创作文稿与原有编辑器…")) { compatibilityVisible = true }
-                    Button(t("models", "Model downloads and installation…", "模型下载与安装…")) { library.isPresented = true }
+                    Button(t("models", "Model downloads and installation…", "模型下载与安装…")) { library.presentManagement() }
                 } label: { Image(systemName: "folder") }.help(t("projectsAndFiles", "Projects and files", "项目与文件"))
                 Button { modelPickerCategory = nil; libraryVisible = true } label: { Image(systemName: "square.stack.3d.up") }
                     .help(t("library", "Library", "资料库")).accessibilityLabel(t("library", "Library", "资料库")).accessibilityIdentifier("shared-library-open")
@@ -330,7 +378,7 @@ public struct DualWorkbenchView: View {
                         } else { quickSurface }
                     }
                 }
-                RetainedContentHost(content: WorkflowHostView(model: canvasModel, nodeTags: nodeTags, metadata: metadata, onQuickUse: useNode,
+                RetainedContentHost(content: WorkflowHostView(model: canvasModel, nodeTags: nodeTags, metadata: metadata, library: library, onQuickUse: useNode,
                     libraryContent: { mode, point, close in AnyView(libraryBrowser(compact: true, at: point, onBack: close, canvasMode: mode)) },
                     onSharedAssetDrop: acceptSharedAssetDrop,
                     acceptsLegacyAsset: { projectID, assetID in
@@ -391,7 +439,7 @@ public struct DualWorkbenchView: View {
                     onNew: { Task { if await model.newProject() { projectsVisible = false; navigate(to: .workflow) } } },
                     onOpen: { Task { if await model.openProject() { projectsVisible = false; navigate(to: .workflow) } } },
                     onRecent: { id in Task { if await model.openRecentProject(id: id) { projectsVisible = false; navigate(to: .workflow) } } },
-                    onModels: { library.isPresented = true })
+                    onModels: { presentQuickModelSelection() })
                 if let error = model.errorMessage {
                     Text(error).foregroundStyle(.red).textSelection(.enabled).padding()
                 }
@@ -473,32 +521,9 @@ public struct DualWorkbenchView: View {
             }.frame(minWidth: 960, minHeight: 650)
         }
         .sheet(isPresented: Binding(get: { library.isPresented }, set: { library.isPresented = $0 }), onDismiss: restoreLibraryIfNeeded) {
-            ModelLibraryView(model: library, selectedModelID: selectionModel.projectSession.workflowInstallationID(for: quickModelIdentity), canSelect: true, onPrepare: { id, parent in
-                // Preparing resources does not navigate or replace a newer draft.
-                _ = try await quickModel.projectSession.prepareWorkflowVideo(id: id, in: parent)
-                await refreshLibrary(checkModels: false)
-            }) { id in
-                let owner = selectionModel.projectSession
-                let temporary = usesTemporaryChat
-                let controller = quick
-                let selectedDraftID = controller.draft?.id
-                let selectedChatID = chat?.state.selectedSessionID
-                do {
-                    guard !quickOwnerIsChanging else { throw WorkflowIssue("项目正在切换；模型选择未应用。") }
-                    let choice = try await owner.selectWorkflowInstallation(id: id)
-                    guard !quickOwnerIsChanging, selectionModel.projectSession === owner, temporary == usesTemporaryChat,
-                          quick === controller, controller.draft?.id == selectedDraftID,
-                          chat?.state.selectedSessionID == selectedChatID else {
-                        throw WorkflowIssue("快速草稿或所属项目已切换；模型选择未应用。")
-                    }
-                    guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue("此模型没有可用的共享操作。") }
-                    try selectModel(operation: operation, identity: choice.id)
-                    returnToLibrary = false; library.isPresented = false; navigate(to: .quick)
-                    await refreshLibrary(checkModels: false)
-                } catch is CancellationError { }
-                catch { issue = error.localizedDescription }
-            }
+            ModelLibraryView(model: library)
         }
+
         .sheet(isPresented: $languageVisible) {
             VStack {
                 HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { languageVisible = false }.keyboardShortcut(.cancelAction); Spacer() }
@@ -581,7 +606,7 @@ public struct DualWorkbenchView: View {
         switch value {
         case .asset(let preview): previewAsset = preview
         case .info(let item): libraryInfo = item
-        case .models: library.isPresented = true
+        case .models: library.presentManagement()
         }
     }
     private func restoreLibraryIfNeeded() {
@@ -619,7 +644,7 @@ public struct DualWorkbenchView: View {
                     if let onBack { onBack() } else { libraryVisible = false }
                 }
                 Text(metadataIssue ?? "资料整理暂不可用，原件未改。").textSelection(.enabled)
-                Button(baselineText(language, "label.17bb056515cd", fallback: "模型下载与安装…")) { libraryVisible = false; library.isPresented = true }
+                Button(baselineText(language, "label.17bb056515cd", fallback: "模型下载与安装…")) { libraryVisible = false; library.presentManagement() }
             }.padding()
         }
     }

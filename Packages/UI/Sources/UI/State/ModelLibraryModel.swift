@@ -1,13 +1,34 @@
 import AppKit
 import DWorkbench
+import DInference
 import Foundation
 import Observation
+import SwiftUI
 
 /// Native presentation for the model library. The actor owns installation tasks and leases;
 /// dismissing a sheet does not cancel, pause, or detach any of that work.
 @MainActor @Observable
 public final class ModelLibraryModel {
     public var isPresented = false
+    public var workspace = "resources"
+    public var resourceSearch = ""
+    public var taskSearch = ""
+    public var resourceFilter = "all"
+    public var taskFilter = "all"
+    public var resourceListScroll = ScrollPosition()
+    public var taskListScroll = ScrollPosition()
+    public var resourceDetailScroll = ScrollPosition()
+    public var taskDetailScroll = ScrollPosition()
+    public var selectedResource: ModelResourceID?
+    public var selectedTask: UUID?
+    public var selectionID: ModelID?
+    public private(set) var readOnlyConfigurations: [ModelReadOnlyConfiguration] = []
+    @ObservationIgnored public var inventoryProvider: (@MainActor () throws -> [ModelReadOnlyConfiguration])?
+    @ObservationIgnored public var explicitRegistration: (@MainActor (URL, WorkflowModelKind) async throws -> Void)?
+    @ObservationIgnored public var configurationSelectionAction: (@MainActor (ModelReadOnlyConfiguration) async -> Void)?
+    @ObservationIgnored public var selectionAction: (@MainActor (ModelID) async -> Void)?
+    @ObservationIgnored public var preparedValidator: (@Sendable (URL) async throws -> ModelReference)?
+    @ObservationIgnored private let language: UILanguageStore?
     public var errorMessage: String?
     public private(set) var preparationNotice: String?
     public private(set) var snapshot: ModelLibrarySnapshot?
@@ -51,7 +72,7 @@ public final class ModelLibraryModel {
         }
     }
 
-    public init(library: ModelLibrary) { self.library = library }
+    public init(library: ModelLibrary, language: UILanguageStore? = nil) { self.library = library; self.language = language }
 
     public var records: [ModelRecord] { snapshot?.records ?? [] }
     public var catalog: [ModelCatalogEntry] { snapshot?.catalog ?? [] }
@@ -87,8 +108,8 @@ public final class ModelLibraryModel {
         guard canChangeDownloadCredential else { return }
         isChoosingLocation = true
         let panel = NSOpenPanel()
-        panel.title = "选择 Hugging Face 下载令牌文件"
-        panel.message = "选择只包含一个令牌的纯文本文件。D 仅保存文件授权，下载时读取令牌；不会保存令牌内容。"
+        panel.title = managementText("tokenTitle", "选择 Hugging Face 下载令牌文件")
+        panel.message = managementText("tokenMessage", "选择只包含一个令牌的纯文本文件。D 仅保存文件授权，下载时读取令牌；不会保存令牌内容。")
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
@@ -102,7 +123,7 @@ public final class ModelLibraryModel {
         catch is CancellationError { return }
         catch {
             guard !Task.isCancelled else { return }
-            report(error, context: "未能连接下载令牌")
+            report(error, context: managementText("tokenConnectFailed", "未能连接下载令牌"))
         }
         guard !Task.isCancelled else { return }
         await refresh()
@@ -116,7 +137,7 @@ public final class ModelLibraryModel {
         catch is CancellationError { return }
         catch {
             guard !Task.isCancelled else { return }
-            report(error, context: "未能移除下载令牌连接")
+            report(error, context: managementText("tokenDisconnectFailed", "未能移除下载令牌连接"))
         }
         guard !Task.isCancelled else { return }
         await refresh()
@@ -154,10 +175,10 @@ public final class ModelLibraryModel {
         isChoosingLocation = true
         let panel = NSOpenPanel()
         let reconnecting = records.contains { $0.storage == .managed }
-        panel.title = reconnecting ? "重新定位模型库" : "选择模型库位置"
+        panel.title = reconnecting ? managementText("relocateTitle", "重新定位模型库") : managementText("rootTitle", "选择模型库位置")
         panel.message = reconnecting
-            ? "选择包含原有模型库的文件夹。当前支持原模型库在同一磁盘卷内移动后重新定位；跨盘搬迁尚未支持。"
-            : "D 会在此文件夹内建立自己的模型库。建议选择空间充足的外置 SSD。"
+            ? managementText("relocateMessage", "选择包含原有模型库的文件夹。当前支持原模型库在同一磁盘卷内移动后重新定位；跨盘搬迁尚未支持。")
+            : managementText("rootMessage", "D 会在此文件夹内建立自己的模型库。建议选择空间充足的外置 SSD。")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
@@ -174,7 +195,7 @@ public final class ModelLibraryModel {
         globalOperation = .choosingRoot
         defer { globalOperation = nil }
         do { try await library.configureRoot(at: url) }
-        catch { report(error, context: "无法连接这个模型库位置") }
+        catch { report(error, context: managementText("rootFailed", "无法连接这个模型库位置")) }
         await refresh()
     }
 
@@ -186,10 +207,10 @@ public final class ModelLibraryModel {
         }
         isChoosingLocation = true
         let panel = NSOpenPanel()
-        panel.title = "登记已有模型：\(entry.title)"
+        panel.title = managementText("importPrefix", "登记已有模型") + ": " + entry.title
         panel.message = storage == .external
-            ? "选择 \(entry.title) 的准确文件夹。D 只校验固定版本必要文件并保留原位置。"
-            : "选择 \(entry.title) 的准确文件夹。D 校验必要文件后复制进已配置的模型库，原件仍保留。"
+            ? managementText("importExternalMessage", "选择此模型的准确文件夹；校验必要文件并保留原位置。")
+            : managementText("importCopyMessage", "选择此模型的准确文件夹；校验后复制到模型库，保留原件。")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -207,7 +228,7 @@ public final class ModelLibraryModel {
             do { _ = try await library.registerExisting(at: url, catalogID: catalogID, storage: storage) }
             catch is CancellationError { }
             catch ModelLibraryError.operationPaused { }
-            catch { report(error, context: "未能登记此模型，请确认文件完整且属于受支持的版本") }
+            catch { report(error, context: managementText("importFailed", "未能登记此模型，请确认文件完整且属于受支持的版本")) }
         }
         importTask = task
         await task.value
@@ -216,12 +237,14 @@ public final class ModelLibraryModel {
     }
 
     public func copyExisting(_ id: ModelID) async {
-        guard !isChoosingLocation, globalOperation == nil, !hasActiveWork, rootURL != nil else { return }
+        guard !isChoosingLocation, globalOperation == nil, !hasActiveWork else { return }
+        if rootURL == nil { await chooseRoot() }
+        guard rootURL != nil else { return }
         globalOperation = .copying
         let task = Task { @MainActor in
             do { _ = try await library.copyExistingToLibrary(id) }
             catch is CancellationError { }
-            catch { report(error, context: "复制未完成；原位置登记仍保留") }
+            catch { report(error, context: managementText("copyFailed", "复制未完成；原位置登记仍保留")) }
         }
         importTask = task
         await task.value
@@ -240,12 +263,12 @@ public final class ModelLibraryModel {
             }
         } catch {
             isChoosingLocation = false
-            report(error, context: "执行包准备尚不可用")
+            report(error, context: managementText("prepareNotAvailable", "执行包准备尚不可用"))
             return
         }
         let panel = NSOpenPanel()
-        panel.title = "选择执行包存放位置"
-        panel.message = "D 将创建独立执行包并校验文件，保留原始模型。优先使用同一 APFS 外盘；不会加载模型。"
+        panel.title = managementText("preparedTitle", "选择执行包存放位置")
+        panel.message = managementText("preparedMessage", "D 将创建独立执行包并校验文件，保留原始模型。优先使用同一 APFS 外盘；不会加载模型。")
         panel.canChooseFiles = false; panel.canChooseDirectories = true
         panel.canCreateDirectories = true; panel.allowsMultipleSelection = false
         let response = await panel.begin(); isChoosingLocation = false
@@ -257,10 +280,10 @@ public final class ModelLibraryModel {
             do {
                 try await action(id, parent)
                 try Task.checkCancellation()
-                preparationNotice = "独立执行包已校验并登记。返回资料库选择该模型即可使用；原始下载记录保留，不自动运行或切换草稿。"
+                preparationNotice = managementText("preparedNotice", "独立执行包已准备并保留。请另行登记后选用；原始文件保留。")
             }
             catch is CancellationError { }
-            catch { self.report(error, context: "执行包准备或登记未完成") }
+            catch { self.report(error, context: managementText("prepareFailed", "执行包准备未完成")) }
         }
         preparation = task
         await task.value
@@ -273,7 +296,7 @@ public final class ModelLibraryModel {
         pendingCatalogIDs.insert(catalogID)
         defer { pendingCatalogIDs.remove(catalogID) }
         do { _ = try await library.install(catalogID: catalogID) }
-        catch { report(error, context: "未能开始安装") }
+        catch { report(error, context: managementText("installFailed", "未能开始安装")) }
         await refresh()
     }
 
@@ -292,10 +315,10 @@ public final class ModelLibraryModel {
     public func restart(_ id: ModelID) async {
         guard !isChoosingLocation, pendingActions[id] == nil, let record = records.first(where: { $0.id == id }) else { return }
         let alert = NSAlert()
-        alert.messageText = "从头下载这个模型？"
-        alert.informativeText = "已下载但尚未完成安装的进度将被清除，然后重新下载 \(Self.formatBytes(record.totalBytes))。"
-        alert.addButton(withTitle: "重新下载")
-        alert.addButton(withTitle: "保留当前进度")
+        alert.messageText = managementText("restartTitle", "从头下载这个模型？")
+        alert.informativeText = managementText("restartMessage", "清除本项已保存进度后从头下载。已保存字节：") + Self.formatBytes(record.downloadedBytes)
+        alert.addButton(withTitle: managementText("restartButton", "重新下载"))
+        alert.addButton(withTitle: managementText("keepProgress", "保留当前进度"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         await perform(.restarting, id: id) { try await self.library.restart(id) }
     }
@@ -309,8 +332,8 @@ public final class ModelLibraryModel {
         }
         isChoosingLocation = true
         let panel = NSOpenPanel()
-        panel.title = "重新定位模型"
-        panel.message = "选择这个模型当前所在的文件夹。D 会重新校验内容，保留模型在项目中的身份。"
+        panel.title = managementText("relinkTitle", "重新定位模型")
+        panel.message = managementText("relinkMessage", "选择这个模型当前所在的文件夹。D 会重新校验内容，保留模型在项目中的身份。")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -318,7 +341,7 @@ public final class ModelLibraryModel {
         let response = await panel.begin()
         isChoosingLocation = false
         guard response == .OK, let url = panel.url else { return }
-        await perform(.relinking, id: id) { try await self.library.rebind(id, to: url) }
+        await perform(.relinking, id: id) { try await self.library.rebind(id, to: url, preparedValidator: self.preparedValidator) }
     }
 
     public func remove(_ id: ModelID) async {
@@ -374,11 +397,97 @@ public final class ModelLibraryModel {
         defer { pendingActions.removeValue(forKey: id) }
         do { try await operation() }
         catch ModelLibraryError.operationPaused { }
-        catch { report(error, context: "模型操作未完成") }
+        catch { report(error, context: managementText("operationFailed", "模型操作未完成")) }
         await refresh()
     }
 
     private func report(_ error: Error, context: String) {
         errorMessage = "\(context)。\n\(error.localizedDescription)"
+    }
+}
+
+extension ModelLibraryModel {
+    public func clearSelectionContext() { selectionAction = nil; configurationSelectionAction = nil; selectionID = nil }
+    public func presentManagement() {
+        clearSelectionContext()
+        loadInventory()
+        isPresented = true
+    }
+    public func loadInventory() {
+        do { readOnlyConfigurations = try inventoryProvider?() ?? [] } catch { errorMessage = error.localizedDescription }
+    }
+    public func presentSelection(selected: ModelID? = nil, action: @escaping @MainActor (ModelID) async -> Void) {
+        clearSelectionContext(); loadInventory()
+        selectionAction = action; selectionID = selected; isPresented = true
+    }
+    public func importConfiguration(kind: WorkflowModelKind) async {
+        guard !isChoosingLocation, globalOperation == nil, let register = explicitRegistration else { return }
+        isChoosingLocation = true
+        let panel = NSOpenPanel()
+        panel.title = managementText("importExact", "登记已有精确配置…")
+        panel.message = managementText("importExactHelp", "沿用现有引擎的精确校验。保留原位置，不自动选用，不创建下载任务。")
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
+        let response = await panel.begin(); isChoosingLocation = false
+        guard response == .OK, let url = panel.url else { return }
+        globalOperation = .registering
+        defer { globalOperation = nil }
+        let task = Task { @MainActor in await command { try await register(url, kind) } }
+        importTask = task
+        await task.value
+        importTask = nil
+        loadInventory()
+    }
+    public func move(_ id: UUID, by offset: Int) async {
+        let waiting = snapshot?.downloads.filter { $0.state == .queued && $0.attempts == 0 } ?? []
+        guard let index = waiting.firstIndex(where: { $0.id == id }), waiting.indices.contains(index + offset) else { return }
+        let before = offset < 0 ? waiting[index - 1].id : (index + 2 < waiting.count ? waiting[index + 2].id : nil)
+        await command { try await self.library.moveWaitingDownload(id, before: before) }
+    }
+    public func reverify(_ resource: ModelResource) async {
+        await command { try await self.library.reverifyResource(resource.id, preparedValidator: self.preparedValidator) }
+    }
+    public func reveal(_ resource: ModelResource) {
+        guard let url = resource.record.directory else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+    public func enqueue(_ entries: [String], register: Bool) async {
+        await command { _ = try await self.library.enqueueDownloads(entries, postAction: register ? .register : .filesOnly) }
+    }
+    public func registerResource(_ resource: ModelResource) async {
+        await command {
+            if resource.control.role == .execution {
+                guard let validate = self.preparedValidator else { throw ModelLibraryError.unavailable(self.managementText("prepareUnavailable", "执行包验证引擎尚不可用。")) }
+                try await self.library.registerPreparedResource(resource.id, validate: validate)
+            } else { try await self.library.registerResource(resource.id) }
+        }
+    }
+    public func unregisterResource(_ resource: ModelResource) async {
+        await command { try await self.library.unregister(resource.record.id); self.preparationNotice = self.managementText("unregisteredReceipt", "已解除登记。文件仍在原位置；作品和生成记录保留。") }
+    }
+    public func deleteResource(_ resource: ModelResource) async {
+        await command { try await self.library.deleteOwnedCopy(resource.id); self.preparationNotice = self.managementText("deletedReceipt", "已删除此副本。登记保留但不可用；其他副本及作品保留。") }
+    }
+    public func continueResource(_ resource: ModelResource) async {
+        await command { _ = try await self.library.continuePartial(resource.id) }
+    }
+    public func pauseTask(_ id: UUID) async { await command { try await self.library.pauseDownload(id) } }
+    public func cancelTask(_ id: UUID, keepPartial: Bool) async { await command { try await self.library.cancelDownload(id, keepPartial: keepPartial) } }
+    public func clearTask(_ id: UUID) async { await command { try await self.library.clearDownloadHistory([id]); self.preparationNotice = self.managementText("clearedReceipt", "已清除一条下载历史。文件、登记和资源来源信息保留。") } }
+    public func pauseQueue() async { await command { try await self.library.pauseQueue() } }
+    public func resumeQueue() async { await command { try await self.library.resumeQueue() } }
+    public func moveNext(_ id: UUID) async {
+        let next = snapshot?.downloads.first { $0.id != id && $0.state == .queued && $0.attempts == 0 }?.id
+        await command { try await self.library.moveWaitingDownload(id, before: next) }
+    }
+    public func prepareResource(_ id: ModelID) async {
+        await prepareVideo(id) { id, parent in _ = try await self.library.prepareVideo(id, in: parent) }
+    }
+    private func command(_ body: () async throws -> Void) async {
+        errorMessage = nil
+        do { try await body() } catch is CancellationError { } catch { errorMessage = error.localizedDescription }
+        await refresh()
+    }
+    func managementText(_ key: String, _ fallback: String) -> String {
+        language?.text("modelManagement." + key, fallback: fallback) ?? fallback
     }
 }

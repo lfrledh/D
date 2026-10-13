@@ -86,7 +86,7 @@ public struct WorkbenchSettingsView: View {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 16) {
                                 Text(text("downloadNote", "Opening Settings does not connect or load a model.", "打开设置不会联网或加载模型。")).font(.caption)
-                                Button(text("downloadManager", "Downloads and installation…", "下载与安装管理…")) { modelsVisible = true }
+                                Button(text("downloadManager", "Downloads and installation…", "下载与安装管理…")) { library.clearSelectionContext(); library.loadInventory(); modelsVisible = true }
                                 Text(text("proxyNote", "D uses the system network configuration.", "沿用系统网络配置。")).font(.caption).foregroundStyle(.secondary)
                             Text(text("hf", "Hugging Face download credentials", "Hugging Face 下载凭据")).font(.headline)
                             Text(library.downloadCredentialConnected

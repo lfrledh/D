@@ -71,7 +71,7 @@ struct ModelLibraryTests {
         try await library.shutdown()
     }
 
-    @Test func pauseShutdownReopenAndResumeFromDurableRange() async throws {
+    @Test(arguments: [false, true]) func pauseShutdownReopenAndResumeFromDurableRange(migrateLegacy: Bool) async throws {
         let fixture = try LibraryFixture(large: true); defer { fixture.clean() }
         let server = try await LoopbackServer(fixture, mode: "gate")
         var library: ModelLibrary? = try await fixture.library(server: server)
@@ -90,7 +90,21 @@ struct ModelLibraryTests {
         #expect(paused.state == .paused)
         #expect(paused.downloadedBytes < paused.totalBytes)
         try await library!.shutdown(); library = nil
+        var legacyBytes: Data?
+        if migrateLegacy {
+            let path = fixture.state.appendingPathComponent("index.json")
+            var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: path)) as? [String: Any])
+            object["schemaVersion"] = 1; object.removeValue(forKey: "downloads"); object.removeValue(forKey: "queueState")
+            var rows = try #require(object["records"] as? [[String: Any]])
+            for index in rows.indices {
+                rows[index].removeValue(forKey: "control")
+                var record = try #require(rows[index]["record"] as? [String: Any]); record.removeValue(forKey: "registrationState"); rows[index]["record"] = record
+            }
+            object["records"] = rows
+            legacyBytes = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]); try legacyBytes!.write(to: path)
+        }
         let reopened = try await fixture.library(server: server)
+        if let legacyBytes { #expect(try Data(contentsOf: fixture.state.appendingPathComponent("index.v1.backup.json")) == legacyBytes) }
         #expect(await reopened.snapshot().records.first?.id == id)
         #expect(await reopened.snapshot().records.first?.state == .paused)
         let eventCount = try server.eventRows().filter { $0["event"] as? String == "start" }.count
@@ -100,6 +114,7 @@ struct ModelLibraryTests {
         try await reopened.resume(id)
         let finished = try await waitRecord(reopened, id: id) { [.installed, .failed].contains($0.state) }
         #expect(finished.state == .installed, "\(finished.error ?? "")")
+        for (path, bytes) in fixture.contents { #expect(try Data(contentsOf: finished.directory!.appendingPathComponent(path)) == bytes) }
         let starts = try server.eventRows().filter { ($0["event"] as? String) == "start" && ($0["path"] as? String) == "weights/payload.bin" }
         #expect(starts.filter { ($0["start"] as? Int) == 0 }.count == 1)
         #expect(starts.filter { ($0["start"] as? Int) == 16 * 1024 * 1024 }.count >= 1)
@@ -432,6 +447,7 @@ struct ModelLibraryTests {
         let lease = try await library.acquireForBackup(id)
         #expect(lease.reference.directory.path == fixture.source.path)
         #expect(await library.snapshot().records.first?.activeLeaseCount == 1)
+        await #expect(throws: ModelLibraryError.self) { try await library.unregister(id) }
         let candidate = fixture.root.appendingPathComponent("candidate")
         try fixture.writeModel(at: candidate)
         await #expect(throws: ModelLibraryError.self) { try await library.rebind(id, to: candidate) }

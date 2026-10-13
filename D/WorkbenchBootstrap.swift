@@ -1,5 +1,6 @@
 import AppKit
 import DWorkbench
+import DInference
 import DMLXBackend
 import Foundation
 import Observation
@@ -8,6 +9,25 @@ import UI
 /// One application owns the library and presentation observers, including with no project open.
 @MainActor @Observable
 final class WorkbenchBootstrap {
+    nonisolated private static func downloadPreparedValidator(_ shared: WorkbenchSession) -> @Sendable (URL) async throws -> ModelReference {
+        { url in
+                var matches: [ModelReference] = []
+                for adapter in shared.videoAdapters {
+                    do { matches.append(try await adapter.validateModel(url)) }
+                    catch is CancellationError { throw CancellationError() }
+                    catch { }
+                }
+                if let validate = shared.validateVideoModel {
+                    do { matches.append(try await validate(url)) }
+                    catch is CancellationError { throw CancellationError() }
+                    catch { }
+                }
+                guard matches.count == 1, let match = matches.first else {
+                    throw WorkflowIssue("执行包没有唯一匹配的现有验证引擎。")
+                }
+                return match
+            }
+    }
     private(set) var quickModel: WorkbenchModel?
     private(set) var quick: QuickGenerationController?
     private var sharedSession: WorkbenchSession?
@@ -46,6 +66,14 @@ final class WorkbenchBootstrap {
                 settings = isolated
                 libraryDirectory = support.appendingPathComponent("D/UITests/\(id.uuidString)/ModelLibrary",
                     isDirectory: true)
+                if let path = ProcessInfo.processInfo.environment["D_DOWNLOAD_REVIEW_ROOT"] {
+                    let root = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+                    guard root.path.hasPrefix("/Volumes/"), root.lastPathComponent == id.uuidString,
+                          FileManager.default.fileExists(atPath: root.appendingPathComponent("download-review-fixture.json").path) else {
+                        throw WorkflowIssue("独立下载评审目录身份无效。")
+                    }
+                    libraryDirectory = root.appendingPathComponent("ModelLibrary", isDirectory: true)
+                }
             }
             #endif
             languageStore = UILanguageStore(settings: settings, directory: libraryDirectory.deletingLastPathComponent()
@@ -128,7 +156,20 @@ final class WorkbenchBootstrap {
                     try await preparer.prepare(source: source, destination: destination)
                 }
             } else { wanPreparation = nil }
-            let library = try await ModelLibrary(stateDirectory: libraryDirectory, wanPreparation: wanPreparation)
+            let library: ModelLibrary
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["D_DOWNLOAD_REVIEW_ROOT"] != nil {
+                guard let token = ProcessInfo.processInfo.environment["D_UI_TEST_SESSION"], UUID(uuidString: token) != nil,
+                      let address = ProcessInfo.processInfo.environment["D_DOWNLOAD_REVIEW_SOURCE"], let source = URL(string: address) else {
+                    throw WorkflowIssue("独立下载评审必须指定隔离会话及回环来源。")
+                }
+                let destination = libraryDirectory.deletingLastPathComponent().appendingPathComponent("Files", isDirectory: true)
+                try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+                library = try await ModelDownloadReviewFixture.makeLibrary(stateDirectory: libraryDirectory, destination: destination, source: source)
+            } else { library = try await ModelLibrary(stateDirectory: libraryDirectory, wanPreparation: wanPreparation) }
+            #else
+            library = try await ModelLibrary(stateDirectory: libraryDirectory, wanPreparation: wanPreparation)
+            #endif
             let quickURL = libraryDirectory.deletingLastPathComponent().appendingPathComponent("Quick Creations.dproject", isDirectory: true)
             let quickStore: ProjectStore
             do {
@@ -138,13 +179,20 @@ final class WorkbenchBootstrap {
                 // A damaged automatic record never becomes an empty replacement or blocks existing named projects.
                 startupError = "快速创作记录暂不可用，原件保留；仍可打开已有项目。\n" + error.localizedDescription
                 self.library = library
-                let observer = ModelLibraryModel(library: library); self.libraryModel = observer
+                let observer = ModelLibraryModel(library: library, language: languageStore); self.libraryModel = observer
                 self.model = WorkbenchModel(sessionFactory: { artifactDirectory in
-                    try await AppSessionFactory.makeSession(artifactDirectory: artifactDirectory,
+                    let created = try await AppSessionFactory.makeSession(artifactDirectory: artifactDirectory,
                         bundledAudioEngine: engine, audioConsent: consent, bundledMusicEngine: musicEngine,
                         musicConsent: musicConsent, audioAccessRoot: accessRoot, bundledVideoEngine: videoEngine,
-                        videoAccessRoot: videoAccessRoot, bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine, bundledACEEngine: aceAvailability.engine)
+                        videoAccessRoot: videoAccessRoot, bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine, bundledACEEngine: aceAvailability.engine, modelLibrary: library)
+                    await MainActor.run { observer.preparedValidator = Self.downloadPreparedValidator(created) }
+                    return created
                 }, settings: settings, modelLibrary: library, audioEnabled: true, audioRecordingEnabled: true)
+                observer.inventoryProvider = { [weak self] in try self?.model?.projectSession.modelInventoryConfigurations() ?? [] }
+                observer.explicitRegistration = { [weak self] url, kind in
+                    guard let owner = self?.model?.projectSession else { throw WorkflowIssue("Workspace unavailable.") }
+                    _ = try await owner.registerExplicitModel(at: url, kind: kind, preserveExistingBinding: true)
+                }
                 observer.start()
                 if let pendingProjectURL { self.pendingProjectURL = nil; await self.model?.openProject(at: pendingProjectURL) }
                 return
@@ -153,7 +201,7 @@ final class WorkbenchBootstrap {
                 bundledAudioEngine: engine, audioConsent: consent,
                 bundledMusicEngine: musicEngine, musicConsent: musicConsent, audioAccessRoot: accessRoot,
                 bundledVideoEngine: videoEngine, videoAccessRoot: videoAccessRoot,
-                bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine, bundledACEEngine: aceAvailability.engine)
+                bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine, bundledACEEngine: aceAvailability.engine, modelLibrary: library)
             let borrowed = shared.borrowed(artifactStore: quickStore)
             let quickModel = WorkbenchModel(sessionFactory: { _ in borrowed }, settings: settings,
                 modelLibrary: library, audioEnabled: true, audioRecordingEnabled: true)
@@ -174,7 +222,17 @@ final class WorkbenchBootstrap {
             self.sharedSession = shared
             self.quickModel = quickModel
             self.quick = quick
-            let observer = ModelLibraryModel(library: library)
+            let observer = ModelLibraryModel(library: library, language: languageStore)
+            observer.inventoryProvider = { [weak model, weak quickModel] in
+                let values = (try model?.projectSession.modelInventoryConfigurations() ?? []) + (try quickModel?.projectSession.modelInventoryConfigurations() ?? [])
+                var seen = Set<String>()
+                return values.filter { seen.insert($0.id).inserted }
+            }
+            observer.explicitRegistration = { [weak quickModel] url, kind in
+                guard let owner = quickModel?.projectSession else { throw WorkflowIssue("Workspace unavailable.") }
+                _ = try await owner.registerExplicitModel(at: url, kind: kind, preserveExistingBinding: true)
+            }
+            observer.preparedValidator = Self.downloadPreparedValidator(shared)
             self.library = library
             self.model = model
             self.libraryModel = observer

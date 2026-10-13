@@ -65,7 +65,7 @@ public struct WorkbenchView: View {
                     }.padding(10).background(.bar)
                     Divider()
                     if workflowVisible {
-                        WorkflowHostView(model: model, nodeTags: nodeTags, metadata: metadata,
+                        WorkflowHostView(model: model, nodeTags: nodeTags, metadata: metadata, library: library,
                             acceptsLegacyAsset: { projectID, assetID in
                                 guard let manifest = model.manifest,
                                       manifest.id == projectID,
@@ -79,7 +79,7 @@ public struct WorkbenchView: View {
                     onNew: { Task { await model.newProject() } },
                     onOpen: { Task { await model.openProject() } },
                     onRecent: { id in Task { await model.openRecentProject(id: id) } },
-                    onModels: { library?.isPresented = true })
+                    onModels: { library?.presentManagement() })
             }
         }
         .toolbar {
@@ -132,16 +132,7 @@ public struct WorkbenchView: View {
             set: { library?.isPresented = $0 }
         )) {
             if let library {
-                ModelLibraryView(model: library, selectedModelID: model.selectedModelID,
-                    canSelect: model.manifest != nil && model.creatorMode == .image && !model.isChangingProject, onPrepare: nil) { id in
-                    await model.selectModel(id: id)
-                    if model.selectedModelID == id {
-                        library.isPresented = false
-                    } else if let message = model.errorMessage {
-                        library.errorMessage = message
-                        model.clearError()
-                    }
-                }
+                ModelLibraryView(model: library)
             }
         }
     }
@@ -171,7 +162,7 @@ public struct WorkbenchView: View {
             taskCount: model.projectSession.activeJobIDs.count + (model.projectSession.isTextWorking ? 1 : 0),
             onMode: { mode in Task { await model.switchCreatorMode(mode) } },
             onBack: { Task { await model.closeProject() } },
-            onTasks: { showTasks = true }, onModels: { library?.isPresented = true }) {
+            onTasks: { showTasks = true }, onModels: { library?.presentManagement() }) {
                 workspaceSidebar
             } editor: {
                 workspaceEditor
