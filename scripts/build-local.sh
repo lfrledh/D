@@ -7,10 +7,11 @@ SOURCE_PACKAGES_PATH="$DEVELOPMENT_ROOT/SourcePackages-App"
 LOG_PATH="$DEVELOPMENT_ROOT/Logs/build-local.log"
 PACKAGE_RESOLUTION_ARGS=(-onlyUsePackageVersionsFromResolvedFile)
 PACKAGE_CACHE_PATH=""
+REVIEW_INFO_PLIST=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --derived-data-path|--source-packages-path|--package-cache-path|--log-path)
+    --derived-data-path|--source-packages-path|--package-cache-path|--log-path|--review-info-plist)
       if [[ $# -lt 2 || -z "$2" ]]; then
         echo "缺少 $1 的路径参数" >&2
         exit 2
@@ -20,6 +21,7 @@ while [[ $# -gt 0 ]]; do
         --source-packages-path) SOURCE_PACKAGES_PATH="$2" ;;
         --log-path) LOG_PATH="$2" ;;
         --package-cache-path) PACKAGE_CACHE_PATH="$2" ;;
+        --review-info-plist) REVIEW_INFO_PLIST="$2" ;;
       esac
       shift 2
       ;;
@@ -48,6 +50,20 @@ if [[ -f "$SIGNING_CONFIG" ]]; then
 elif [[ -n "${D_SIGNING_CONFIG:-}" ]]; then
   echo "指定的签名配置不存在：$SIGNING_CONFIG" >&2
   exit 2
+fi
+if [[ -n "$REVIEW_INFO_PLIST" ]]; then
+  # Explicit review builds only. CLI overrides avoid stale/generated Info settings;
+  # the marker is processed and sealed by Xcode's normal signing step.
+  python3 - "$REVIEW_INFO_PLIST" <<'PY'
+import plistlib, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+assert path.is_absolute() and path.is_file()
+assert plistlib.loads(path.read_bytes()).get('DReviewLaunchMode') == 'isolated-download-v1'
+PY
+  BUILD_CONFIG_ARGS+=("INFOPLIST_FILE=$REVIEW_INFO_PLIST"
+    'PRODUCT_BUNDLE_IDENTIFIER=first-test.D.review.$(PRODUCT_NAME:rfc1034identifier)'
+    'SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) DEBUG D_REVIEW_ONLY')
 fi
 python3 "$PROJECT_ROOT/scripts/verify-mlx-vendor.py"
 mkdir -p "$(dirname "$LOG_PATH")"

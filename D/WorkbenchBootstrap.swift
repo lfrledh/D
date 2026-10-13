@@ -44,6 +44,16 @@ final class WorkbenchBootstrap {
     private var library: ModelLibrary?
     private var loading = false
     private var pendingProjectURL: URL?
+    private let launchContext: Result<WorkbenchLaunchContext, Error>
+    private var reviewLease: WorkbenchReviewLease?
+    private var admittedReview: WorkbenchLaunchContext.Review?
+    private let reviewAuthorizer: (@MainActor (URL) async throws -> URL)?
+
+    init(launchContext: Result<WorkbenchLaunchContext, Error> = WorkbenchLaunchContext.current,
+         reviewAuthorizer: (@MainActor (URL) async throws -> URL)? = nil) {
+        self.launchContext = launchContext
+        self.reviewAuthorizer = reviewAuthorizer
+    }
     #if DEBUG
     private var reviewRootAccess: URL?
     #endif
@@ -54,49 +64,65 @@ final class WorkbenchBootstrap {
         startupError = nil
         defer { loading = false }
         do {
-            // Only the small installation index/bookmarks live in the app container.
-            // Model bytes and partial downloads go to the user-selected external library.
-            let support = try FileManager.default.url(for: .applicationSupportDirectory,
-                in: .userDomainMask, appropriateFor: nil, create: true)
-            var settings = UserDefaults.standard
-            var libraryDirectory = support.appendingPathComponent("D/ModelLibrary", isDirectory: true)
-            #if DEBUG
-            // UI fixtures exercise the real services and native file panels, while keeping
-            // project bookmarks and installation recovery separate from the user's session.
-            if let token = ProcessInfo.processInfo.environment["D_UI_TEST_SESSION"],
-               let id = UUID(uuidString: token),
-               let isolated = UserDefaults(suiteName: "D.UITests.\(id.uuidString)") {
-                settings = isolated
-                libraryDirectory = support.appendingPathComponent("D/UITests/\(id.uuidString)/ModelLibrary",
-                    isDirectory: true)
-                if let path = ProcessInfo.processInfo.environment["D_DOWNLOAD_REVIEW_ROOT"] {
-                    let root = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
-                    guard root.path.hasPrefix("/Volumes/"), root.lastPathComponent == id.uuidString else {
-                        throw WorkflowIssue("独立下载评审目录身份无效。")
-                    }
-                    // The review launcher cannot grant sandbox file access. Obtain it
-                    // through the native panel before reading the external fixture marker.
-                    if reviewRootAccess?.standardizedFileURL.path != root.path {
+            // Resolve the persistent package policy before even selecting ordinary defaults
+            // or creating Application Support. The App and deployment entry share this result.
+            let context = try launchContext.get()
+            if case .review(let review) = context, reviewLease == nil {
+                #if DEBUG
+                do {
+                    reviewLease = try await WorkbenchReviewAdmission.admit(review) { root in
+                        if let reviewAuthorizer { return try await reviewAuthorizer(root) }
                         let panel = NSOpenPanel()
                         panel.title = "授权独立评审目录 / Authorize Isolated Review Folder"
                         panel.message = "仅选择此评审目录 / Select only this review folder: " + root.path
                         panel.canChooseDirectories = true; panel.canChooseFiles = false
                         panel.allowsMultipleSelection = false; panel.directoryURL = root
                         guard await panel.begin() == .OK, let selected = panel.url,
-                              selected.standardizedFileURL.path == root.path else {
-                            throw WorkflowIssue("评审目录未授权，未读取模型库。 / Review folder not authorized; no library was read.")
+                              selected.standardizedFileURL == root else {
+                            throw WorkbenchLaunchContext.Rejected(reason: "目录未授权。 / Review folder not authorized.")
                         }
                         _ = selected.startAccessingSecurityScopedResource()
-                        reviewRootAccess?.stopAccessingSecurityScopedResource()
                         reviewRootAccess = selected
+                        return selected
                     }
-                    guard FileManager.default.fileExists(atPath: root.appendingPathComponent("download-review-fixture.json").path) else {
-                        throw WorkflowIssue("独立下载评审标记不存在。 / Isolated review marker is missing.")
+                    admittedReview = review
+                } catch {
+                    reviewRootAccess?.stopAccessingSecurityScopedResource(); reviewRootAccess = nil
+                    throw error
+                }
+                #else
+                throw WorkbenchLaunchContext.Rejected(reason: "This build does not support review fixtures.")
+                #endif
+            }
+            if let review = admittedReview {
+                // A retained lease avoids duplicate authorization, but does not make
+                // paths immutable after a failed service initialization and Retry.
+                try WorkbenchReviewAdmission.validateStorage(review)
+            }
+            let settings: UserDefaults
+            let libraryDirectory: URL
+            switch context {
+            case .review(let review):
+                guard reviewLease != nil, let isolated = UserDefaults(suiteName: "D.UITests.\(review.session.uuidString)") else {
+                    throw WorkbenchLaunchContext.Rejected(reason: "Isolated settings unavailable.")
+                }
+                settings = isolated
+                libraryDirectory = review.root.appendingPathComponent("ModelLibrary", isDirectory: true)
+                NSLog("D_REVIEW_SERVICES_ADMITTED session=%@ pid=%d", review.session.uuidString, ProcessInfo.processInfo.processIdentifier)
+            case .ordinary, .uiTest:
+                let support = try FileManager.default.url(for: .applicationSupportDirectory,
+                    in: .userDomainMask, appropriateFor: nil, create: true)
+                if case .uiTest(let id) = context {
+                    guard let isolated = UserDefaults(suiteName: "D.UITests.\(id.uuidString)") else {
+                        throw WorkbenchLaunchContext.Rejected(reason: "Isolated test settings unavailable.")
                     }
-                    libraryDirectory = root.appendingPathComponent("ModelLibrary", isDirectory: true)
+                    settings = isolated
+                    libraryDirectory = support.appendingPathComponent("D/UITests/\(id.uuidString)/ModelLibrary", isDirectory: true)
+                } else {
+                    settings = UserDefaults.standard
+                    libraryDirectory = support.appendingPathComponent("D/ModelLibrary", isDirectory: true)
                 }
             }
-            #endif
             languageStore = UILanguageStore(settings: settings, directory: libraryDirectory.deletingLastPathComponent()
                 .appendingPathComponent("LanguagePacks", isDirectory: true))
             nodeTags = ModelNodeTagStore(settings: settings)
@@ -179,14 +205,10 @@ final class WorkbenchBootstrap {
             } else { wanPreparation = nil }
             let library: ModelLibrary
             #if DEBUG
-            if ProcessInfo.processInfo.environment["D_DOWNLOAD_REVIEW_ROOT"] != nil {
-                guard let token = ProcessInfo.processInfo.environment["D_UI_TEST_SESSION"], UUID(uuidString: token) != nil,
-                      let address = ProcessInfo.processInfo.environment["D_DOWNLOAD_REVIEW_SOURCE"], let source = URL(string: address) else {
-                    throw WorkflowIssue("独立下载评审必须指定隔离会话及回环来源。")
-                }
+            if let review = admittedReview {
                 let destination = libraryDirectory.deletingLastPathComponent().appendingPathComponent("Files", isDirectory: true)
                 try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-                library = try await ModelDownloadReviewFixture.makeLibrary(stateDirectory: libraryDirectory, destination: destination, source: source)
+                library = try await ModelDownloadReviewFixture.makeLibrary(stateDirectory: libraryDirectory, destination: destination, source: review.source)
             } else { library = try await ModelLibrary(stateDirectory: libraryDirectory, wanPreparation: wanPreparation) }
             #else
             library = try await ModelLibrary(stateDirectory: libraryDirectory, wanPreparation: wanPreparation)
@@ -216,6 +238,7 @@ final class WorkbenchBootstrap {
                 }
                 observer.start()
                 if let pendingProjectURL { self.pendingProjectURL = nil; await self.model?.openProject(at: pendingProjectURL) }
+                recordReviewReadiness(libraryDirectory: libraryDirectory, phase: "quick-unavailable")
                 return
             }
             let shared = try await AppSessionFactory.makeSession(artifactDirectory: quickStore.artifactDirectory,
@@ -262,10 +285,31 @@ final class WorkbenchBootstrap {
                 self.pendingProjectURL = nil
                 await model.openProject(at: pendingProjectURL)
             }
+            recordReviewReadiness(libraryDirectory: libraryDirectory, phase: "ready")
             // Ordinary launch remains at the project chooser. A recent project opens only
             // after an explicit selection; Finder open requests above retain their meaning.
         } catch {
+            NSLog("D_STARTUP_REJECTED: %@", error.localizedDescription)
             startupError = "无法准备工作台或内嵌引擎：\(error.localizedDescription)\n已有项目与模型文件未被删除。请检查存储后重试。"
+        }
+    }
+
+    private func recordReviewReadiness(libraryDirectory: URL, phase: String) {
+        guard let review = admittedReview else { return }
+        let receipt: [String: Any] = ["pid": ProcessInfo.processInfo.processIdentifier,
+            "phase": phase, "session": review.session.uuidString, "bundle": Bundle.main.bundleURL.path,
+            "bundleID": Bundle.main.bundleIdentifier ?? "", "executable": Bundle.main.executableURL?.path ?? "",
+            "root": review.root.path, "modelIndex": libraryDirectory.appendingPathComponent("index.json").path,
+            "quick": review.root.appendingPathComponent("Quick Creations.dproject").path,
+            "source": review.source.absoluteString]
+        do {
+            try JSONSerialization.data(withJSONObject: receipt, options: [.prettyPrinted, .sortedKeys])
+                .write(to: review.root.appendingPathComponent("review-runtime.json"), options: .atomic)
+            NSLog("D_REVIEW_READY phase=%@ session=%@ pid=%d", phase, review.session.uuidString, ProcessInfo.processInfo.processIdentifier)
+        } catch {
+            // Services are already admitted. Never misreport a receipt error as an isolation rejection.
+            startupError = "评审回执无法写入；请停止评审并保留会话。 / Review receipt could not be written; stop review and preserve this session.\n" + error.localizedDescription
+            NSLog("D_REVIEW_RECEIPT_FAILED: %@", error.localizedDescription)
         }
     }
 
@@ -284,6 +328,14 @@ final class WorkbenchBootstrap {
 
     func openProject(at url: URL) async {
         guard !isTerminating else { return }
+        do {
+            if case .review(let review) = try launchContext.get() {
+                let canonical = url.resolvingSymlinksInPath().standardizedFileURL.path
+                guard canonical.hasPrefix(review.root.path + "/") else {
+                    throw WorkbenchLaunchContext.Rejected(reason: "Review open request is outside the isolated root.")
+                }
+            }
+        } catch { startupError = error.localizedDescription; return }
         if let model { await model.openProject(at: url) }
         else { pendingProjectURL = url; await start() }
     }

@@ -21,6 +21,7 @@ struct DApp: App {
 
     private var deploymentProbeEnabled: Bool {
         #if DEBUG
+        guard (try? WorkbenchLaunchContext.current.get().permitsDeploymentProbe) == true else { return false }
         let env = ProcessInfo.processInfo.environment
         return UUID(uuidString: env["D_UI_TEST_SESSION"] ?? "") != nil
             && env["D_AUDIO_DEPLOYMENT_CHECK"] == "1"

@@ -1,0 +1,8 @@
+// Explicitly include this only for dedicated review artifacts, before signing.
+// Ordinary Debug and Release builds do not inherit this file.
+// Generated from the normal Info.plist by scripts/prepare-review-build.py.
+// An omitted input fails the build; the compile guard also rejects a missing marker.
+INFOPLIST_FILE = $(D_REVIEW_INFO_PLIST)
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) DEBUG D_REVIEW_ONLY
+// AppKit/window restoration also stays outside the ordinary application's container.
+PRODUCT_BUNDLE_IDENTIFIER = first-test.D.review.$(PRODUCT_NAME:rfc1034identifier)

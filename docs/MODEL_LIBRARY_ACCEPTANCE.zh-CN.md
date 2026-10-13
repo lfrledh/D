@@ -1,5 +1,13 @@
 # 模型库与应用服务检查点
 
+## 2026-10-13 评审隔离防复发收尾
+
+从 `aff5e40156a8b797b38f8e18ba1af76533214036` 建立 `codex/review-isolation-20261013`，只修专用评审启动边界，不重做 DDM-R01—R04、DUI-A01/A02。评审包签名前持久标记、编译保护、独立 bundle ID，加上授权/夹具/路径/独占租约门禁；普通非评审政策不变。完整 SHA、构建和签名、命令退出码与新评审入口见 `D-REVIEW-ISOLATION-20261013/run-01/delivery/receipt.md`。
+
+普通 index 仍准确保持已批准恢复的 v1，未再次恢复；Quick 结构/引用一致且事件后关键摘要未变，缺前置副本的部分继续 unknown。历史已验证默认仅下载、顺序队列、暂停等待、A 登记及 Finder 精确副本不重跑。当前 Mac 再次被工具确认锁定，四类清理操作和冷开/外观余项仍未完成；详情与既有授权只在[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)维护。148 方法/222 情景历史受控结果沿用，3 个真实模型方法仍跳过；不把本轮启动门禁测试升级成模型或原生 UI 通过。
+
+以下保留当时原生补验与接受历史。
+
 ## 2026-10-13 原生补验增量（未结案）
 
 受测包仍为 `a6a52f4999745f4ec7f6c457e4bc9649329c4f4f`，正常开发签名摘要核对后实际启动，UUID 评审目录经原生选择器授权。直接观察到空库存、A/B/C 默认仅下载、A/B 顺序完成、暂停后的等待项、等待期间已完成资源的恢复入口、A 显式登记成功及 Finder 精确副本。A/B 文件各 18,874,368 字节，摘要均为 `0224d4f90d5685908a558070d73f6663dc486c0e0ebe0a534bf803d18ebedfb9`；C queued、全局 paused。M01—M09 仅部分完成，不把按钮存在当作解除/删除/清历史通过。
@@ -11,7 +19,7 @@
 
 ## D-DOWNLOAD-MANAGEMENT-01 有限复审收尾 / 2026-10-13
 
-起点 `663c8b5df722b27e084923b49d2880c441d2fda6`，新树 `D-Worktrees/D-DOWNLOAD-FINITE-20261013`，新分支 `codex/download-finite-review-20261013`。本节为当前增量；下方初交及历史接受回执保留。证据根 R 为 `D-Development/AgentTrials/D-DOWNLOAD-FINITE-REVIEW-20261013/run-01`，不可变最终 SHA 与远端、完整差分、命令/退出码、环境、计数和独立评审入口均在 `R/delivery/receipt.md`、`receipt.json`。
+起点 `663c8b5df722b27e084923b49d2880c441d2fda6`，新树 `D-Worktrees/D-DOWNLOAD-FINITE-20261013`，新分支 `codex/download-finite-review-20261013`。本节保留有限复审交付当时记录；原生补验现状见顶部及集中队列。证据根 R 为 `D-Development/AgentTrials/D-DOWNLOAD-FINITE-REVIEW-20261013/run-01`，不可变最终 SHA 与远端、完整差分、命令/退出码、环境、计数和独立评审入口均在 `R/delivery/receipt.md`、`receipt.json`。
 
 | 条目 | 实际修改与证据 |
 |---|---|
