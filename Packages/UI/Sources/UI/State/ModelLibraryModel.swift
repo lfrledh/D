@@ -79,21 +79,22 @@ public final class ModelLibraryModel {
     public var rootURL: URL? { snapshot?.rootURL }
     public var downloadCredentialConnected: Bool { snapshot?.downloadCredentialConnected ?? false }
     public var copyProgress: ModelCopyProgress? { snapshot?.copyProgress }
-    public var hasActiveWork: Bool {
-        copyProgress != nil || records.contains { record in
+    public var hasActiveWork: Bool { activityCount > 0 }
+    public var activityCount: Int { Self.activityCount(in: snapshot) }
+    static func activityCount(in snapshot: ModelLibrarySnapshot?) -> Int {
+        // Waiting records are not executing work. They can remain queued after
+        // queue pause or cancellation; treating them as busy blocks recovery UI.
+        // Conversely, the scheduler can own an active task before its legacy
+        // record phase changes. Count either source once per resource.
+        let recordIDs = (snapshot?.records ?? []).compactMap { record -> ModelID? in
             switch record.state {
-            case .queued, .downloading, .pausing, .verifying, .publishing: true
-            default: false
+            case .downloading, .pausing, .verifying, .publishing: record.id
+            default: nil
             }
         }
-    }
-    public var activityCount: Int {
-        records.filter { record in
-            switch record.state {
-            case .queued, .downloading, .pausing, .verifying, .publishing: true
-            default: false
-            }
-        }.count + (copyProgress == nil ? 0 : 1)
+        let downloadIDs = (snapshot?.downloads ?? []).filter { $0.state.isActive }
+            .map { $0.resourceID.modelID }
+        return Set(recordIDs + downloadIDs).count + (snapshot?.copyProgress == nil ? 0 : 1)
     }
     public var failedCount: Int { records.filter { $0.state == .failed }.count }
     public var isInUse: Bool { records.contains { $0.activeLeaseCount > 0 } }

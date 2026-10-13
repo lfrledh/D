@@ -615,3 +615,233 @@ extension DownloadManagementTests {
         try await cold.shutdown()
     }
 }
+
+// DDM finite independent review regression — append in this existing test file
+// so its private fixtures are reused. These are macOS service tests, not GUI tests.
+extension DownloadManagementTests {
+    @Test(arguments: [false, true])
+    func independentReviewRebindingDrainsThenSchedulesQueuedDownload(validatorFails: Bool) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let raw = ModelCatalogEntry(id: "minimax-h3-fl2va-bf16", title: "H3 fixture",
+            repository: "fixture/model", revision: "42ed227ee7df40d41602854ae760620d6eb651fe",
+            files: f.entry.files, workflowProfileID: "d.video.minimax-h3-fl2va-bf16-full-v1",
+            preparation: .required)
+        let transfer = FixtureTransfer(f.contents)
+        let library = try await self.library(f, transport: transfer,
+            catalog: [raw, entry(f, id: "queued-after-rebind")])
+        try await library.configureRoot(at: f.destination)
+        let parent = try await library.registerExisting(at: f.source, catalogID: raw.id)
+        let output = try await library.prepareVideo(parent, in: f.destination)
+        let initial = await library.snapshot()
+        let prepared = try #require(initial.resources.first { $0.control.role == .execution })
+        let gate = IndependentReviewValidationGate()
+        let relocating = Task {
+            try await library.rebind(prepared.record.id, to: output) { url in
+                await gate.enter()
+                if validatorFails { throw ModelLibraryError.integrity("Independent review validator rejection") }
+                return ModelReference(directory: url,
+                    revision: "minimax-h3-fl2va-bf16-full-v1@" + raw.revision)
+            }
+        }
+        do {
+            try await gate.waitUntilEntered()
+            let queued = try await library.enqueueDownloads(["queued-after-rebind"])[0]
+            let during = await library.snapshot()
+            #expect(during.queueState == .running)
+            #expect(during.downloads.first { $0.id == queued.id }?.attempts == 0)
+            #expect(await transfer.requests == 0)
+            await gate.open()
+            if validatorFails {
+                await #expect(throws: ModelLibraryError.self) { try await relocating.value }
+            } else {
+                try await relocating.value
+            }
+            // No extra enqueue/resume/refresh-side-effect may be needed to wake it.
+            let done = try await wait(library) { snapshot in
+                snapshot.downloads.first { $0.id == queued.id }?.state == .completed
+            }
+            #expect(done.downloads.first { $0.id == queued.id }?.attempts == 1)
+            #expect(done.resources.first { $0.id == queued.resourceID }?.record.registrationState == .unregistered)
+            #expect(await transfer.maximumActive <= 2)
+            try await library.shutdown()
+        } catch {
+            await gate.open()
+            relocating.cancel()
+            _ = try? await relocating.value
+            try? await library.shutdown()
+            throw error
+        }
+    }
+
+    @Test(arguments: [ModelDownloadPostAction.filesOnly, .register], [false, true])
+    func independentReviewRestartPreservesIntentWithoutHistoryResurrection(
+        intent: ModelDownloadPostAction, clearHistory: Bool
+    ) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let server = try await LoopbackServer(f, mode: "corrupt")
+        let library = try await f.library(server: server)
+        try await library.configureRoot(at: f.destination)
+        let task = try await library.enqueueDownloads([f.entry.id], postAction: intent)[0]
+        _ = try await wait(library) { $0.downloads.first?.state == .failed }
+        if clearHistory { try await library.clearDownloadHistory([task.id]) }
+        try server.setMode("valid")
+        try await library.restart(task.resourceID.modelID)
+        let done = try await wait(library) { $0.downloads.last?.state == .completed }
+        let expectedIntent: ModelDownloadPostAction = clearHistory ? .filesOnly : intent
+        #expect(done.downloads.last?.postAction == expectedIntent)
+        #expect(done.resources.first { $0.id == task.resourceID }?.record.registrationState ==
+            (expectedIntent == .register ? .registered : .unregistered))
+        #expect(done.resources.first { $0.id == task.resourceID }?.control.fileState == .verified)
+        if clearHistory { #expect(!done.downloads.contains { $0.id == task.id }) }
+        try await library.shutdown()
+    }
+
+    @Test func independentReviewFailedRegistrationRollsBackSuccessEvent() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let fault = FixtureFault(), transfer = FixtureTransfer(f.contents)
+        let library = try await self.library(f, transport: transfer, fault: fault)
+        try await library.configureRoot(at: f.destination)
+        _ = try await library.enqueueDownloads([f.entry.id], postAction: .filesOnly)
+        let complete = try await wait(library) { $0.downloads.first?.state == .completed }
+        let before = try #require(complete.resources.first)
+        fault.arm("registration.beforeWrite")
+        await #expect(throws: (any Error).self) { try await library.registerResource(before.id) }
+        let after = try #require(await library.snapshot().resources.first)
+        #expect(after.record.registrationState == .unregistered)
+        #expect(after.control.events == before.control.events)
+        fault.clear()
+        // An unrelated successful write must not persist the failed command's event.
+        try await library.resumeQueue()
+        let index = try #require(JSONSerialization.jsonObject(
+            with: Data(contentsOf: f.state.appendingPathComponent("index.json"))) as? [String: Any])
+        let rows = try #require(index["records"] as? [[String: Any]])
+        let control = try #require(rows.first?["control"] as? [String: Any])
+        let events = try #require(control["events"] as? [[String: Any]])
+        #expect(events.count == before.control.events.count)
+        #expect(!events.contains { $0["action"] as? String == "registered" })
+        try await library.shutdown()
+    }
+}
+
+private actor IndependentReviewValidationGate {
+    private var entered = false
+    private var released = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    func enter() async {
+        entered = true
+        if !released { await withCheckedContinuation { waiters.append($0) } }
+    }
+    func waitUntilEntered() async throws {
+        for _ in 0..<500 {
+            if entered { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        throw ModelLibraryError.storage("Independent review validation gate timed out")
+    }
+    func open() {
+        released = true
+        let pending = waiters; waiters = []
+        for waiter in pending { waiter.resume() }
+    }
+}
+
+extension DownloadManagementTests {
+    @Test(arguments: ["paused", "shutdown", "saveError"])
+    func finiteReviewRebindRespectsNewerQueueGates(decision: String) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let raw = ModelCatalogEntry(id: "minimax-h3-fl2va-bf16", title: "H3 fixture",
+            repository: "fixture/model", revision: "42ed227ee7df40d41602854ae760620d6eb651fe",
+            files: f.entry.files, workflowProfileID: "d.video.minimax-h3-fl2va-bf16-full-v1", preparation: .required)
+        let transfer = FixtureTransfer(f.contents), fault = FixtureFault()
+        var owner: ModelLibrary? = try await self.library(f, transport: transfer,
+            catalog: [raw, entry(f, id: "waiting")], fault: fault)
+        do {
+            let library = try #require(owner)
+            try await library.configureRoot(at: f.destination)
+            let parent = try await library.registerExisting(at: f.source, catalogID: raw.id)
+            let output = try await library.prepareVideo(parent, in: f.destination)
+            let prepared = try #require(await library.snapshot().resources.first { $0.control.role == .execution })
+            let gate = IndependentReviewValidationGate()
+            let relocating = Task {
+                try await library.rebind(prepared.record.id, to: output) { url in
+                    await gate.enter()
+                    return ModelReference(directory: url, revision: "minimax-h3-fl2va-bf16-full-v1@" + raw.revision)
+                }
+            }
+            var closing: Task<Void, any Error>?
+            do {
+                try await gate.waitUntilEntered()
+                let task = try await library.enqueueDownloads(["waiting"])[0]
+                if decision == "paused" { try await library.pauseQueue() }
+                if decision == "shutdown" {
+                    closing = Task { try await library.shutdown() }
+                    _ = try await wait(library) { $0.queueState == .waitingForResume }
+                }
+                if decision == "saveError" {
+                    fault.arm("state.beforeWrite")
+                    await #expect(throws: (any Error).self) { try await library.resumeQueue() }
+                    fault.clear()
+                }
+                await gate.open()
+                if decision == "shutdown" { await #expect(throws: ModelLibraryError.self) { try await relocating.value } }
+                else { try await relocating.value }
+                try await closing?.value
+                let done = await library.snapshot()
+                #expect(done.downloads.first { $0.id == task.id }?.attempts == 0)
+                #expect(await transfer.requests == 0)
+                #expect(done.queueState == (decision == "paused" ? .paused : decision == "shutdown" ? .waitingForResume : .running))
+                if decision == "saveError" { #expect(done.queueError != nil) }
+                if decision != "shutdown" {
+                    try await library.resumeQueue()
+                    _ = try await wait(library) { $0.downloads.first?.state == .completed }
+                    try await library.shutdown()
+                }
+            } catch {
+                fault.clear(); await gate.open(); relocating.cancel()
+                _ = try? await relocating.value; _ = try? await closing?.value
+                try? await library.shutdown(); throw error
+            }
+        }
+        owner = nil
+        if decision == "shutdown" {
+            let cold = try await self.library(f, transport: transfer, catalog: [raw, entry(f, id: "waiting")])
+            #expect(await cold.snapshot().queueState == .waitingForResume)
+            #expect(await transfer.requests == 0)
+            try await cold.shutdown()
+        }
+    }
+
+    @Test func finiteReviewPublishedRegistrationIsRetainedAfterSyncFailure() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let fault = FixtureFault(), transfer = FixtureTransfer(f.contents)
+        var owner: ModelLibrary? = try await self.library(f, transport: transfer, fault: fault)
+        do {
+            let library = try #require(owner)
+            try await library.configureRoot(at: f.destination)
+            _ = try await library.enqueueDownloads([f.entry.id])
+            let before = try await wait(library) { $0.downloads.first?.state == .completed }
+            let resource = try #require(before.resources.first)
+            fault.arm("registration.afterRename")
+            await #expect(throws: ModelAtomicWriteError.self) { try await library.registerResource(resource.id) }
+            let after = await library.snapshot()
+            #expect(after.resources.first?.record.registrationState == .registered)
+            #expect(after.resources.first?.control.events.last?.action == "registered")
+            #expect(after.queueError != nil)
+            #expect(after.resources.first?.control.events.count == resource.control.events.count + 1)
+            fault.clear()
+            let index = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: f.state.appendingPathComponent("index.json"))) as? [String: Any])
+            let rows = try #require(index["records"] as? [[String: Any]])
+            #expect((rows.first?["record"] as? [String: Any])?["registrationState"] as? String == "registered")
+            let control = try #require(rows.first?["control"] as? [String: Any])
+            #expect((control["events"] as? [[String: Any]])?.last?["action"] as? String == "registered")
+            let directory = try #require(resource.record.directory)
+            for (path, bytes) in f.contents { #expect(try Data(contentsOf: directory.appendingPathComponent(path)) == bytes) }
+            // Cold-read the published index; do not let shutdown rewrite it first.
+        }
+        owner = nil
+        let cold = try await self.library(f, transport: transfer, fault: fault)
+        #expect(await cold.snapshot().resources.first?.record.registrationState == .registered)
+        #expect(await cold.snapshot().resources.first?.control.events.last?.action == "registered")
+        try await cold.shutdown()
+    }
+}

@@ -326,9 +326,13 @@ public actor ModelLibrary {
                 throw ModelLibraryError.unsafePath("暂存目录包含未知文件，未清理；请检查该模型的暂存目录。")
             }
         }
+        // Redownloading changes bytes, not the user's registration intent.
+        // If history was cleared, conservatively default to files-only.
+        let postAction = downloadForResource(id)?.postAction ?? .filesOnly
         try content.removeKnownFiles(actual)
         mutate(id) { $0.files = [:]; $0.record.downloadedBytes = 0; $0.publicationRoot = nil }
-        try persist(); try resume(id)
+        try persist()
+        _ = try continuePartial(.init(rawValue: id.rawValue), postAction: postAction)
     }
 
     public func registerExisting(at selected: URL, catalogID: String = ModelCatalog.flux2ID,
@@ -550,6 +554,9 @@ public actor ModelLibrary {
     public func rebind(_ id: ModelID, to selected: URL,
         preparedValidator: (@Sendable (URL) async throws -> ModelReference)? = nil) async throws {
         try requireAdmission(); try requireIdleWorker()
+        // Rebinding also owns the heavy-operation slot. Downloads enqueued while
+        // its validator runs must be reconsidered after either outcome drains.
+        defer { scheduleDownloads() }
         guard !leases.values.contains(where: { $0.modelID == id }) else { throw ModelLibraryError.busy("模型仍用于运行或排队任务，不能重新定位。") }
         let previous = try stored(id)
         guard previous.record.storage == .external else {
@@ -1310,13 +1317,15 @@ extension ModelLibrary {
             throw ModelLibraryError.unavailable("文件须完整校验并完成必要准备，才能登记。")
         }
         _ = try resolved(value)
-        let previous = value.record.registrationState
+        let previous = try stored(id)
         mutate(id) { $0.record.registrationState = .registered }
         event(id, "registered")
         do { try persist(purpose: "registration") }
         catch {
             if case ModelAtomicWriteError.publishedButUnsynced = error { throw error }
-            mutate(id) { $0.record.registrationState = previous }; throw error
+            // Roll back the event together with registration. A later unrelated
+            // save must not persist a success event for this failed command.
+            mutate(id) { $0 = previous }; throw error
         }
     }
     public func unregister(_ id: ModelID) throws {
