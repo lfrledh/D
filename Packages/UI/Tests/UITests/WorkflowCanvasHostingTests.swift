@@ -434,23 +434,42 @@ extension WorkflowCanvasHostingTests {
         await c.run(target: target, only: false)
         let run = try #require(c.runs.last)
         try #require(run.status == .saving && run.steps.last?.status == .failed)
-        let host = NSHostingView(rootView: RecoveryButtonFixture(controller: c)
+        let application = NSApplication.shared
+        let previousPolicy = application.activationPolicy()
+        application.setActivationPolicy(.regular)
+        defer { application.setActivationPolicy(previousPolicy) }
+        var mounted = false
+        let host = NSHostingView(rootView: VStack {
+            Button("Hosting accessibility probe") {}
+                .accessibilityIdentifier("dha-hosting-probe")
+            RecoveryButtonFixture(controller: c)
+        }
+            .onAppear { mounted = true }
             .environment(\.dLanguageStore, UILanguageStore(preferredLanguages: [locale])))
         host.frame = CGRect(x: 0, y: 0, width: 420, height: 160)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host
-        // Show only the fixture window when the desktop is available.
-        // Do not activate or replace the ordinary D app.
-        window.orderFront(nil)
+        // Establish and verify this test process's window prerequisites before
+        // interpreting an absent accessibility element as a product failure.
+        window.makeKeyAndOrderFront(nil)
+        application.activate(ignoringOtherApps: true)
         defer { window.close() }
-        func control() async throws -> any NSAccessibilityProtocol {
+        for _ in 0..<100 {
+            host.layoutSubtreeIfNeeded()
+            if mounted && window.isVisible && window.isKeyWindow { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(window.isVisible && window.isKeyWindow && host.window === window,
+            "Recovery fixture requires a visible key window in the test process")
+        try #require(mounted, "Recovery fixture SwiftUI view did not appear")
+        func control(_ identifier: String) async throws -> any NSAccessibilityProtocol {
             for _ in 0..<100 {
                 host.layoutSubtreeIfNeeded()
                 var pending: [NSObject] = [host], visited = Set<ObjectIdentifier>()
                 while let object = pending.popLast(), visited.count < 2_000 {
                     guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
                     if let element = object as? any NSAccessibilityProtocol {
-                        if element.accessibilityIdentifier() == "workflow-run-recovery-" + run.id.uuidString { return element }
+                        if element.accessibilityIdentifier() == identifier { return element }
                         pending.append(contentsOf: (element.accessibilityChildren() ?? []).compactMap { $0 as? NSObject })
                     }
                     if let view = object as? NSView { pending.append(contentsOf: view.subviews) }
@@ -458,9 +477,11 @@ extension WorkflowCanvasHostingTests {
                 try await Task.sleep(for: .milliseconds(10))
             }
             HostingControlClick.diagnoseTree(in: host)
-            throw WorkflowIssue("Actual recovery button was not mounted")
+            throw WorkflowIssue("Recovery fixture accessibility element was not mounted: " + identifier)
         }
-        let savingButton = try await control()
+        _ = try await control("dha-hosting-probe")
+        let recoveryID = "workflow-run-recovery-" + run.id.uuidString
+        let savingButton = try await control(recoveryID)
         #expect(savingButton.accessibilityLabel() == (locale == "en" ? "Retry Saving Failure Record" : "重试保存失败记录"))
         c.beforeHistorySave = {}; await engine.configure {}
         #expect(HostingControlClick.send(to: savingButton, in: host))
@@ -475,7 +496,7 @@ extension WorkflowCanvasHostingTests {
         // This is the same production button after recovery, with an explicit
         // computation action. Test-process events do not certify foreground UI.
         host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30))
-        let retryButton = try await control()
+        let retryButton = try await control(recoveryID)
         #expect(retryButton.accessibilityLabel() == (locale == "en" ? "Retry Computation" : "重试计算"))
         #expect(HostingControlClick.send(to: retryButton, in: host))
         for _ in 0..<200 {
