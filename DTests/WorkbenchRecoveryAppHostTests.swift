@@ -45,12 +45,13 @@ private actor CanvasSeriousImageEngine: InferenceEngine {
     let controller: WorkflowController
     let interaction: RecoveryHostInteraction
     let locale: String
+    @Environment(\.dLanguageStore) private var languageStore
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(locale == "en" ? "DHA recovery — isolated test" : "DHA 恢复 — 隔离测试").font(.headline)
             Text(instruction).fixedSize(horizontal: false, vertical: true)
-            Text(controller.errorMessage ?? "").textSelection(.enabled)
-            Text(controller.progressMessage).textSelection(.enabled)
+            Text(workflowRecoveryErrorText(controller.errorMessage ?? "", language: languageStore)).textSelection(.enabled)
+            Text(workflowRecoveryProgressText(controller.progressMessage, language: languageStore)).textSelection(.enabled)
             Button(locale == "en" ? "Begin this check" : "开始本项检查") {
                 interaction.probePressed = true
                 print("D_APP_HOST_HUMAN_PROBE", locale)
@@ -71,11 +72,11 @@ private actor CanvasSeriousImageEngine: InferenceEngine {
     }
     private var instruction: String {
         switch interaction.phase {
-        case .probe: return "请先点“开始本项检查”。 / Click Begin this check first."
-        case .save: return "请点击下方生产按钮：重试保存失败记录。 / Click Retry Saving Failure Record."
-        case .checking: return "正在核对保存与冷读，请等待。 / Verifying saved state; please wait."
-        case .retry: return "保存已核对，请点击重试计算。 / Saving verified; click Retry Computation."
-        case .finished: return "本项完成，即将关闭。 / Check complete; closing."
+        case .probe: return locale == "en" ? "Click Begin this check first." : "请先点“开始本项检查”。"
+        case .save: return locale == "en" ? "Click Retry Saving Failure Record below." : "请点击下方生产按钮：重试保存失败记录。"
+        case .checking: return locale == "en" ? "Verifying saved state; please wait." : "正在核对保存与冷读，请等待。"
+        case .retry: return locale == "en" ? "Saving verified; click Retry Computation." : "保存已核对，请点击重试计算。"
+        case .finished: return locale == "en" ? "Check complete; closing." : "本项完成，即将关闭。"
         }
     }
 }

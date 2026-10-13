@@ -17,6 +17,27 @@ private actor LocalizationNoInferenceEngine: InferenceEngine {
 
 @Suite(.serialized) @MainActor
 struct WorkflowLocalizationTests {
+    @Test(arguments: ["zh-Hans", "en"])
+    func failureRecordFeedbackTranslatesWithoutChangingDiagnostics(locale: String) throws {
+        let language = UILanguageStore(preferredLanguages: [locale]); try language.select(locale)
+        let pending = "计算已失败，失败记录尚未保存；请重试保存记录。"
+        let saved = "失败记录已保存；流程仍失败。需要重新计算时，请明确重试计算。"
+        #expect(workflowRecoveryProgressText(pending, language: language) == (locale == "en"
+            ? "Computation failed. The failure record has not been saved; retry saving the record." : pending))
+        #expect(workflowRecoveryProgressText(saved, language: language) == (locale == "en"
+            ? "The failure record is saved. The workflow is still failed. Retry computation explicitly when needed." : saved))
+        let primary = "DHA integrity / 私有路径/a%20b {runID}\n原始严重诊断"
+        let secondary = "write failed: /原样/🙂 {stepID}\nsecondary details"
+        let raw = primary + "\n失败记录保存错误：" + secondary
+        #expect(workflowRecoveryErrorText(raw, language: language) == primary + "\n"
+            + (locale == "en" ? "Failure record save error: " : "失败记录保存错误：") + secondary)
+        #expect(workflowRecoveryErrorText(primary, language: language) == primary)
+        #expect(workflowRecoveryProgressText(primary, language: language) == primary)
+        #expect(workflowRecoveryProgressText(pending, language: nil) == pending)
+        #expect(workflowRecoveryErrorText(raw, language: nil) == raw)
+        #expect(raw == primary + "\n失败记录保存错误：" + secondary)
+    }
+
     @Test func loadingChoicesTranslateWithoutChangingStoredValues() throws {
         for locale in ["en", "zh-Hans"] {
             let store = UILanguageStore(preferredLanguages: [locale]); try store.select(locale)

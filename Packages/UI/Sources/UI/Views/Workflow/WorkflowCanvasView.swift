@@ -32,6 +32,29 @@ func workflowText(
         ?? LanguagePackCodec.render(fallback, arguments: arguments)
 }
 
+// These are display-only projections of the two existing terminal-failure
+// messages. Unknown progress and the diagnostic payload remain unchanged.
+@MainActor
+func workflowRecoveryProgressText(_ value: String, language: UILanguageStore?) -> String {
+    let key: String
+    switch value {
+    case "计算已失败，失败记录尚未保存；请重试保存记录。": key = "workflow.failureRecord.pending"
+    case "失败记录已保存；流程仍失败。需要重新计算时，请明确重试计算。": key = "workflow.failureRecord.saved"
+    default: return value
+    }
+    return workflowText(language, key, fallback: value)
+}
+
+@MainActor
+func workflowRecoveryErrorText(_ value: String, language: UILanguageStore?) -> String {
+    let separator = "\n失败记录保存错误："
+    guard let boundary = value.range(of: separator) else { return value }
+    // Translate only the service-owned separator, preserving the primary error
+    // and everything after it byte-for-byte, including opaque paths/identities.
+    let title = workflowText(language, "workflow.failureRecord.saveError", fallback: "失败记录保存错误：")
+    return String(value[..<boundary.lowerBound]) + "\n" + title + String(value[boundary.upperBound...])
+}
+
 /// Native presentation for editable workflow graphs. Persistence and execution remain owned by
 /// ``WorkflowController``; this view never reads files or starts inference directly.
 @MainActor
@@ -782,9 +805,9 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 ProgressView().controlSize(.small)
                 Text(controller.progressMessage.isEmpty
                      ? workflowText(languageStore, "workflow.status.runningNow", fallback: "正在运行")
-                     : controller.progressMessage)
+                     : workflowRecoveryProgressText(controller.progressMessage, language: languageStore))
             } else if !controller.progressMessage.isEmpty {
-                Text(controller.progressMessage).foregroundStyle(.secondary)
+                Text(workflowRecoveryProgressText(controller.progressMessage, language: languageStore)).foregroundStyle(.secondary)
             }
             Spacer()
             Button(workflowText(languageStore, "refinement.workflow.typeLegend", fallback: "类型图例"), systemImage: "paintpalette") { portLegendPresented.toggle() }
@@ -802,7 +825,8 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     .padding(14)
                 }
                 .accessibilityIdentifier("workflow-port-legend")
-            if let error = controller.errorMessage {
+            if let rawError = controller.errorMessage {
+                let error = workflowRecoveryErrorText(rawError, language: languageStore)
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                     .lineLimit(2)
