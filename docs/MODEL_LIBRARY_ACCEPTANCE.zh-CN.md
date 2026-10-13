@@ -1,8 +1,29 @@
 # 模型库与应用服务检查点
 
+<a id="有限复审收尾2026-10-13"></a>
+
+## D-DOWNLOAD-MANAGEMENT-01 有限复审收尾 / 2026-10-13
+
+起点 `663c8b5df722b27e084923b49d2880c441d2fda6`，新树 `D-Worktrees/D-DOWNLOAD-FINITE-20261013`，新分支 `codex/download-finite-review-20261013`。本节为当前增量；下方初交及历史接受回执保留。证据根 R 为 `D-Development/AgentTrials/D-DOWNLOAD-FINITE-REVIEW-20261013/run-01`，不可变最终 SHA 与远端、完整差分、命令/退出码、环境、计数和独立评审入口均在 `R/delivery/receipt.md`、`receipt.json`。
+
+| 条目 | 实际修改与证据 |
+|---|---|
+| DDM-R01 | 活动计数排除 queued，按资源合并真实活动 task/record，并保留 copy、verifying、publishing、pausing；4 个闲置情景和 5 个生产投影情景、2 个真实下载/取消排空情景通过，释放前更换根/凭据及删除/解除登记仍拒绝。 |
+| DDM-R02 | rebind 准入后 defer 只调用既有 scheduler；成功/失败返回自动启动等待项 2 情景，pause/shutdown/queueError 三种较新门禁不唤醒 3 情景通过。 |
+| DDM-R03 | restart 使用最近 postAction，无历史默认 filesOnly；4 个意图×历史情景通过。既有显式 install 登记、默认仅下载、Readiness/租约回归通过。 |
+| DDM-R04 | resolved 协调后捕获全 StoredRecord，发布前失败回滚事件及状态；发布前异常与之后无关写入、发布后同步异常及原始 index/冷读两种情景通过，不误回滚已发布记录。 |
+| DUI-A01 | 真实 WorkflowResultQueryControls 从全部条件 UUID 显示可移除 chip；已删标签保留名称提示及完整身份。all/any 合法删除、Undo/Redo、移除及其他条件保持 2 情景通过。SharedLibraryBrowser 已有协调、Store 禁止删除保存检索所引用标签，作为反证保留。 |
+| DUI-A02 | 结果/保存检索共用完整五身份摘要；中英、精确调用区别、保存冷开及 Undo/Redo 2 情景通过。原中文包缺 noRoute/targetChanged 两键造成整包被拒，补齐这两键及本轮摘要键；强中文断言保留。 |
+
+附件四份完整 Git blob、干净状态、祖先与唯一锚点预检通过，先 dry-run 再应用，proposed/applied patch 相同。独立旧源码反例 4 方法 / 11 情景有 10 个失败、1 个显式登记对照通过（4 方法均报告失败，exit 1）；原日志保留。修后新增 10 方法 / 26 情景通过。最终明确无桌面选择集 **148 方法 / 222 情景通过，exit 0**，3 个真实模型方法明确跳过；方法与参数计数见 `R/delivery/test-counts.json`，不累计重复执行。
+
+保留两次非最终失败：首轮双语发现中文整包回退（补实际语言键后复验）；较宽本地化筛选选入离屏 NSWindow 宿主，因编辑器未挂载失败，未显示窗口或启动普通 App，保留待验且不重试原生驱动，不以更改期待取得通过。原 DUI 审计正文未在附件或原证据根取得，本次沿实际调用链独立复核；包内 Linux 日志仅沿用为审计来源，未充当 Apple SDK 验证。
+
+真实 D.xcworkspace / D scheme、Debug arm64、固定依赖离线构建 exit 0；现有 Apple Development 身份签名成功，codesign deep/strict 与 App Sandbox 核对通过，包身份见本轮外部回执。未需禁签名降级；没有启动此包或普通 App。尚未验：同包原生 M01—M09、长身份在窄面板中的阅读/点击、组字/焦点/滚动、真实授权/Finder、真实权重/GPU及发行。只读非实现者复核不是用户指定的最终独立验收；已授权推送新工作分支，停止在独立复审，不合并/部署。
+
 <a id="d-download-management-01-2026-10-13"></a>
 
-## D-DOWNLOAD-MANAGEMENT-01 / 2026-10-13
+## D-DOWNLOAD-MANAGEMENT-01 初交记录 / 2026-10-13
 
 当前任务与停点以[当前行动](CURRENT_ACTIONS.zh-CN.md)为入口。固定起点 `ad6383177a6a655c1a31c613008af61d44c88f02`，隔离分支 `codex/download-management-20261013`；原目录/后继核验和完整依赖摘要见外盘 R 的 `baseline.json`。R 为 `D-Development/AgentTrials/D-DOWNLOAD-MANAGEMENT-01/run-20261013-01`。此节只记录本次下载管理任务，不替代下方历史接受回执。
 

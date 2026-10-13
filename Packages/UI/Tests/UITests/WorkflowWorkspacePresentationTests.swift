@@ -350,3 +350,76 @@ extension WorkflowWorkspacePresentationTests {
         try await store.close()
     }
 }
+
+// DUI-A01/A02: production state and summaries, with no windows or inference.
+extension WorkflowWorkspacePresentationTests {
+    @Test(arguments: [false, true])
+    func finiteReviewDeletedResultTagStaysVisibleAndRemovable(any: Bool) throws {
+        let store = try SharedLibraryStore()
+        let tag = try #require(store.createTags(["temporary"]).first)
+        let reference = WorkflowAssetReference(projectID: UUID(), assetID: UUID(), version: UUID(), kind: .image, sha256: String(repeating: "a", count: 64))
+        let key = "asset:" + reference.projectID.uuidString + ":" + reference.assetID.uuidString
+        try store.addTags([tag], to: [key])
+        let state = WorkflowResultQueryState()
+        let path: WritableKeyPath<SharedLibraryQuery, Set<UUID>> = any ? \.anyTagIDs : \.allTagIDs
+        state.query[keyPath: path] = [tag]
+        state.query.contentKinds = [.image]
+        #expect(state.matches(reference, store: store))
+        try store.deleteTags([tag]) // Legal: this is a result draft, not a saved query.
+        #expect(!state.matches(reference, store: store))
+        #expect(throws: SharedLibraryError.self) { try store.createSavedQuery(name: "invalid", query: state.query) }
+        let chips = WorkflowResultQueryState.tagConditions(state.query[keyPath: path], store: store, missingLabel: "Deleted tag")
+        #expect(chips.count == 1 && chips[0].id == tag)
+        #expect(chips[0].title == "Deleted tag · " + tag.uuidString)
+        try store.undo()
+        #expect(state.matches(reference, store: store))
+        #expect(WorkflowResultQueryState.tagConditions(state.query[keyPath: path], store: store, missingLabel: "Deleted tag").first?.title == "temporary")
+        try store.redo()
+        state.query[keyPath: path].remove(chips[0].id) // Same mutation as the real chip button.
+        #expect(state.matches(reference, store: store))
+        #expect(state.query.contentKinds == [.image] && state.query[keyPath: path].isEmpty)
+        #expect(store.metadata.tags[tag] == nil && store.canUndo)
+    }
+
+    @Test(arguments: ["zh-Hans", "en"])
+    func finiteReviewSavedCallSummaryRetainsCompleteScope(languageID: String) throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("call-summary-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("library.json")
+        let store = try SharedLibraryStore(fileURL: file)
+        let scope = SharedLibraryQueryScope(mode: .run, projectID: UUID(), instanceID: UUID(), runID: UUID(), nodeID: UUID(), stepID: UUID())
+        let saved = try store.createSavedQuery(name: "one call", query: .init(scope: scope))
+        let reopened = try SharedLibraryStore(fileURL: file)
+        let query = try #require(reopened.metadata.savedQueries[saved]?.query)
+        #expect(query.scope == scope)
+        let language = UILanguageStore(preferredLanguages: [languageID])
+        try language.select(languageID)
+        #expect(language.effectiveLanguageIdentifier == languageID && language.diagnostics.isEmpty)
+        let text: (String, String, String) -> String = { metadataText(language, $0, $1, $2) }
+        let title = SharedLibraryScopeSummary.title(try #require(query.scope), text: text)
+        for id in [scope.projectID, scope.instanceID, scope.runID, scope.nodeID, scope.stepID] {
+            #expect(title.contains(try #require(id).uuidString))
+        }
+        #expect(title.contains(languageID == "en" ? "Call " : "具体调用 "))
+        var other = scope; other.stepID = UUID()
+        #expect(SharedLibraryScopeSummary.title(other, text: text) != title)
+        try reopened.updateSavedQuery(saved, name: "another call", query: .init(scope: other))
+        try reopened.undo()
+        #expect(reopened.metadata.savedQueries[saved]?.query.scope == scope)
+        #expect(SharedLibraryScopeSummary.title(try #require(reopened.metadata.savedQueries[saved]?.query.scope), text: text) == title)
+        try reopened.redo()
+        #expect(reopened.metadata.savedQueries[saved]?.query.scope == other)
+        let dynamic = SharedLibraryScopeSummary.title(.init(mode: .currentProject), text: text)
+        #expect(dynamic == (languageID == "en" ? "Current project instance when used" : "使用时的当前项目实例"))
+        let project = SharedLibraryScopeSummary.title(.init(mode: .project, projectID: scope.projectID), text: text)
+        #expect(project.contains(try #require(scope.projectID).uuidString))
+        #expect(!project.contains(try #require(scope.instanceID).uuidString))
+        #expect(!project.contains("Call") && !project.contains("具体调用"))
+        let facts = SharedLibraryAssetFacts(projectID: try #require(scope.projectID), instanceID: try #require(scope.instanceID),
+            registeredAt: Date(), occurrences: [.init(runID: try #require(scope.runID), nodeID: try #require(scope.nodeID), stepID: try #require(scope.stepID))])
+        #expect(facts.matches(scope: scope, properties: nil, context: .init()))
+        #expect(!facts.matches(scope: other, properties: nil, context: .init()))
+    }
+}

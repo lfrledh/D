@@ -148,12 +148,27 @@ struct SharedLibraryPropertySummary: View {
         }.count
     }
     private func scopeTitle(_ scope: SharedLibraryQueryScope) -> String {
-        if scope.mode == .currentProject { return t("dynamicScope", "使用时的当前项目实例", "Current project instance when used") }
-        return (scope.runID.map { "Run " + $0.uuidString.prefix(8) } ?? "Project " + (scope.projectID?.uuidString.prefix(8) ?? "?"))
-            + (scope.instanceID.map { " · " + $0.uuidString.prefix(6) } ?? "") + (scope.nodeID.map { " · Node " + $0.uuidString.prefix(8) } ?? "")
+        SharedLibraryScopeSummary.title(scope, text: t)
     }
     private func rangeLabel(_ value: SharedLibraryNumberRange) -> String { (value.minimum.map(String.init) ?? "…") + " – " + (value.maximum.map(String.init) ?? "…") + " px" }
     private func remove(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { Label(title, systemImage: "xmark.circle").multilineTextAlignment(.leading) }.buttonStyle(.borderless)
+    }
+}
+
+/// The saved query and its removable summary use the same complete identity.
+enum SharedLibraryScopeSummary {
+    static func title(_ scope: SharedLibraryQueryScope,
+                      text: (String, String, String) -> String) -> String {
+        if scope.mode == .currentProject {
+            return text("dynamicScope", "使用时的当前项目实例", "Current project instance when used")
+        }
+        var parts: [String] = []
+        if let id = scope.projectID { parts.append(text("scopeProject", "项目", "Project") + " " + id.uuidString) }
+        if let id = scope.instanceID { parts.append(text("scopeInstance", "项目实例", "Project instance") + " " + id.uuidString) }
+        if let id = scope.runID { parts.append(text("scopeRun", "运行", "Run") + " " + id.uuidString) }
+        if let id = scope.nodeID { parts.append(text("scopeNode", "节点", "Node") + " " + id.uuidString) }
+        if let id = scope.stepID { parts.append(text("scopeCall", "具体调用", "Call") + " " + id.uuidString) }
+        return parts.joined(separator: " · ")
     }
 }

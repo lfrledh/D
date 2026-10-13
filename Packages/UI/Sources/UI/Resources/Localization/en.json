@@ -3,6 +3,12 @@
   "locale": "en",
   "displayName": "English",
   "strings": {
+    "metadata.panel.deletedTagCondition": "Deleted tag",
+    "metadata.panel.scopeProject": "Project",
+    "metadata.panel.scopeInstance": "Project instance",
+    "metadata.panel.scopeRun": "Run",
+    "metadata.panel.scopeNode": "Node",
+    "metadata.panel.scopeCall": "Call",
     "refinement.workflow.fitReady": "Fit All Nodes (available after the pane resize)",
     "files.title": "Project Files and Locations",
     "files.inspect": "Inspect File Locations",

@@ -44,6 +44,15 @@ import SwiftUI
             failure = error.localizedDescription
         }
     }
+    /// A result filter can outlive a tag. Keep every condition visible and removable
+    /// without silently rewriting the draft, other conditions or Store history.
+    static func tagConditions(_ ids: Set<UUID>, store: SharedLibraryStore,
+                              missingLabel: String) -> [(id: UUID, title: String)] {
+        ids.map { id in
+            (id: id, title: store.metadata.tags[id]?.name ?? (missingLabel + " · " + id.uuidString))
+        }.sorted { $0.title == $1.title ? $0.id.uuidString < $1.id.uuidString : $0.title < $1.title }
+    }
+
     static func references(in value: WorkflowValue) -> [WorkflowAssetReference] {
         let values: [WorkflowAssetReference]
         switch value {
@@ -80,9 +89,7 @@ struct WorkflowResultQueryControls: View {
     private var query: Binding<SharedLibraryQuery> { Binding(get: { state.query }, set: { var value = $0; value.scope = nil; state.query = value }) }
     private var resultScopeTitle: String {
         guard let scope else { return t("displayedResults", "当前显示的输出范围", "Currently displayed outputs") }
-        return (scope.runID.map { "Run " + $0.uuidString.prefix(8) } ?? "")
-            + (scope.nodeID.map { " · Node " + $0.uuidString.prefix(8) } ?? "")
-            + (scope.stepID.map { " · Call " + $0.uuidString.prefix(8) } ?? "")
+        return SharedLibraryScopeSummary.title(scope, text: t)
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -122,14 +129,8 @@ struct WorkflowResultQueryControls: View {
                     }
             }
             SharedLibraryPropertySummary(query: query, items: Array(state.items.values), context: .init(), store: store, fixedScopeDescription: resultScopeTitle)
-            ForEach(store.metadata.tags.values.sorted { $0.name < $1.name }) { tag in
-                if state.query.allTagIDs.contains(tag.id) {
-                    Button { state.query.allTagIDs.remove(tag.id) } label: { Label(t("allTags", "同时包含标签", "Contains all tags") + ": " + tag.name, systemImage: "xmark.circle") }.buttonStyle(.borderless).font(.caption2)
-                }
-                if state.query.anyTagIDs.contains(tag.id) {
-                    Button { state.query.anyTagIDs.remove(tag.id) } label: { Label(t("anyTags", "至少包含一个标签", "Contains any tag") + ": " + tag.name, systemImage: "xmark.circle") }.buttonStyle(.borderless).font(.caption2)
-                }
-            }
+            tagConditions(state.query.allTagIDs, path: \.allTagIDs, title: t("allTags", "同时包含标签", "Contains all tags"))
+            tagConditions(state.query.anyTagIDs, path: \.anyTagIDs, title: t("anyTags", "至少包含一个标签", "Contains any tag"))
             HStack {
                 Text("\((state.identity?.references ?? []).filter { state.matches($0, store: store) }.count)/\(state.identity?.references.count ?? 0) · " + t("indexed", "已索引", "Indexed") + " \(state.items.count)").font(.caption2)
                 Button(t("clearQuery", "清除检索条件", "Clear query conditions")) { state.query = .init() }.font(.caption2)
@@ -138,4 +139,13 @@ struct WorkflowResultQueryControls: View {
             if let issue = state.failure { Text(issue).font(.caption).foregroundStyle(.orange) }
         }.font(.caption)
     }
+    private func tagConditions(_ ids: Set<UUID>, path: WritableKeyPath<SharedLibraryQuery, Set<UUID>>, title: String) -> some View {
+        let missing = t("deletedTagCondition", "已删除的标签", "Deleted tag")
+        return ForEach(WorkflowResultQueryState.tagConditions(ids, store: store, missingLabel: missing), id: \.id) { condition in
+            Button { state.query[keyPath: path].remove(condition.id) } label: {
+                Label(title + ": " + condition.title, systemImage: "xmark.circle")
+            }.buttonStyle(.borderless).font(.caption2)
+        }
+    }
+
 }
