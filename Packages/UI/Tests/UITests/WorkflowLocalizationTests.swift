@@ -63,7 +63,7 @@ struct WorkflowLocalizationTests {
     }
 
     private func failureFeedbackRun(primary: String, secondary: String) -> WorkflowRun {
-        let node = WorkflowNode(operationID: "d.image.generate")
+        let node = WorkflowNode(operationID: "d.image.generate", title: "Failure fixture")
         let graph = WorkflowGraph(nodes: [node])
         var step = WorkflowStepRun(node: node, signature: "fixture")
         step.status = .failed; step.error = primary
