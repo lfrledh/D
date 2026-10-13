@@ -87,6 +87,10 @@ private actor CanvasSeriousImageEngine: InferenceEngine {
             if mounted && window.isVisible && window.isKeyWindow { break }
             try await Task.sleep(for: .milliseconds(10))
         }
+        print("D_APP_HOST_WINDOW", locale, "active", application.isActive,
+              "visible", window.isVisible, "key", window.isKeyWindow,
+              "canBecomeKey", window.canBecomeKey, "mounted", mounted,
+              "window", window.windowNumber, "currentKey", application.keyWindow?.windowNumber ?? -1)
         try #require(window.isVisible && window.isKeyWindow && host.window === window,
             "Recovery fixture requires a visible key window in the test process")
         try #require(mounted, "Recovery fixture SwiftUI view did not appear")

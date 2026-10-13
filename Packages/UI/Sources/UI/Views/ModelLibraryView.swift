@@ -113,7 +113,9 @@ public struct ModelLibraryView: View {
                 Text(text("logical", "大小为逻辑文件字节，不保证等量释放空间。"))
             }.font(.caption).foregroundStyle(.secondary).padding(12)
         }
-        .frame(minWidth: 760, idealWidth: 1080, minHeight: 560, idealHeight: 740)
+        .presentationSizing(.fitted)
+        .frame(minWidth: 760, idealWidth: 1080, maxWidth: .infinity,
+               minHeight: 560, idealHeight: 740, maxHeight: .infinity)
         .accessibilityIdentifier("model-manager")
         .task { model.loadInventory(); await model.refresh() }
         .onDisappear { model.clearSelectionContext() }
