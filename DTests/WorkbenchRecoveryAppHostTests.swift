@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Observation
 import SwiftUI
 import Testing
 import DInference
@@ -33,10 +34,70 @@ private actor CanvasSeriousImageEngine: InferenceEngine {
     }
 }
 
+// Explicit human-click mode is separate evidence from the AX method below.
+@MainActor @Observable private final class RecoveryHostInteraction {
+    enum Phase { case probe, save, checking, retry, finished }
+    var phase = Phase.probe
+    var probePressed = false
+}
+
+@MainActor private struct AttendedRecoveryFixture: View {
+    let controller: WorkflowController
+    let interaction: RecoveryHostInteraction
+    let locale: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(locale == "en" ? "DHA recovery — isolated test" : "DHA 恢复 — 隔离测试").font(.headline)
+            Text(instruction).fixedSize(horizontal: false, vertical: true)
+            Text(controller.errorMessage ?? "").textSelection(.enabled)
+            Text(controller.progressMessage).textSelection(.enabled)
+            Button(locale == "en" ? "Begin this check" : "开始本项检查") {
+                interaction.probePressed = true
+                print("D_APP_HOST_HUMAN_PROBE", locale)
+            }.disabled(interaction.phase != .probe || interaction.probePressed)
+            RecoveryButtonFixture(controller: controller)
+                // A saved run cannot expose an enabled retry until the test has
+                // verified request count and cold-read the failure-only record.
+                .disabled(!actionAllowed)
+        }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+    private var actionAllowed: Bool {
+        guard !controller.isRunning else { return false }
+        switch interaction.phase {
+        case .save: return controller.runs.last?.status == .saving
+        case .retry: return controller.runs.last?.status == .failed
+        default: return false
+        }
+    }
+    private var instruction: String {
+        switch interaction.phase {
+        case .probe: return "请先点“开始本项检查”。 / Click Begin this check first."
+        case .save: return "请点击下方生产按钮：重试保存失败记录。 / Click Retry Saving Failure Record."
+        case .checking: return "正在核对保存与冷读，请等待。 / Verifying saved state; please wait."
+        case .retry: return "保存已核对，请点击重试计算。 / Saving verified; click Retry Computation."
+        case .finished: return "本项完成，即将关闭。 / Check complete; closing."
+        }
+    }
+}
+
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["D_NATIVE_RECOVERY_REVIEW"] == "1"), .serialized)
 @MainActor struct WorkbenchRecoveryAppHostTests {
-    @Test(arguments: ["zh-Hans", "en"])
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_NATIVE_RECOVERY_HUMAN_CLICKS"] != "1"),
+          arguments: ["zh-Hans", "en"])
     func appHostedRecoveryButtonSavesOnlyAndThenOffersExplicitRetry(locale: String) async throws {
+        try await verifyRecovery(locale: locale, attended: false)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_NATIVE_RECOVERY_HUMAN_CLICKS"] == "1"))
+    func attendedRecoveryButtonSavesOnlyAndThenOffersExplicitRetry() async throws {
+        // A prerequisite failure stops the whole attended run, including the
+        // second language, instead of opening another unusable test window.
+        for locale in ["zh-Hans", "en"] {
+            try await verifyRecovery(locale: locale, attended: true)
+        }
+    }
+
+    private func verifyRecovery(locale: String, attended: Bool) async throws {
         try #require(Bundle.main.bundleIdentifier == "first-test.D.review.D")
         try #require(Bundle.main.object(forInfoDictionaryKey: "DReviewLaunchMode") as? String == "isolated-download-v1")
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).resolvingSymlinksInPath()
@@ -67,21 +128,29 @@ private actor CanvasSeriousImageEngine: InferenceEngine {
         application.setActivationPolicy(.regular)
         defer { application.setActivationPolicy(previousPolicy) }
         var mounted = false
-        let host = NSHostingView(rootView: VStack {
-            Button("Hosting accessibility probe") { print("D_APP_HOST_PROBE_PRESSED") }
-                .accessibilityIdentifier("dha-hosting-probe")
-            RecoveryButtonFixture(controller: c)
+        let interaction = RecoveryHostInteraction()
+        let host = NSHostingView(rootView: Group {
+            if attended {
+                AttendedRecoveryFixture(controller: c, interaction: interaction, locale: locale)
+            } else {
+                VStack {
+                    Button("Hosting accessibility probe") { print("D_APP_HOST_PROBE_PRESSED") }
+                        .accessibilityIdentifier("dha-hosting-probe")
+                    RecoveryButtonFixture(controller: c)
+                }
+            }
         }
             .onAppear { mounted = true }
             .environment(\.dLanguageStore, UILanguageStore(preferredLanguages: [locale])))
-        host.frame = CGRect(x: 0, y: 0, width: 420, height: 160)
+        host.frame = CGRect(x: 0, y: 0, width: attended ? 640 : 420, height: attended ? 400 : 160)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host
-        let waitsForUserActivation = ProcessInfo.processInfo.environment["D_NATIVE_RECOVERY_WAIT_FOR_ACTIVATION"] == "1"
+        let waitsForUserActivation = attended || ProcessInfo.processInfo.environment["D_NATIVE_RECOVERY_WAIT_FOR_ACTIVATION"] == "1"
         window.title = "D — DHA " + locale + " / " + String(run.id.uuidString.prefix(8))
             + " / PID " + String(ProcessInfo.processInfo.processIdentifier)
         // Establish and verify this test process's window prerequisites before
         // interpreting an absent accessibility element as a product failure.
+        if attended { window.center() }
         window.makeKeyAndOrderFront(nil)
         application.activate(ignoringOtherApps: true)
         defer { window.close() }
@@ -119,17 +188,40 @@ private actor CanvasSeriousImageEngine: InferenceEngine {
             print("D_APP_HOST_RECOVERY_AX_MISSING", identifier)
             throw WorkflowIssue("Recovery fixture accessibility element was not mounted: " + identifier)
         }
-        let probe = try await control("dha-hosting-probe")
-        #expect(probe.accessibilityPerformPress())
-        print("D_APP_HOST_RECOVERY_PROBE", locale, window.isVisible, window.isKeyWindow)
+        func waitForHuman(_ stage: String, maximumCalls: Int,
+                          condition: @MainActor () async -> Bool) async throws {
+            print("D_APP_HOST_HUMAN_WAIT", locale, stage, run.id, ProcessInfo.processInfo.processIdentifier)
+            for _ in 0..<2_400 {
+                try #require(window.isVisible && host.window === window, "Attended window disappeared")
+                try #require(c.runs.last?.id == run.id, "Attended run identity changed")
+                try #require(await engine.calls <= maximumCalls, "Unexpected computation during attended check")
+                if await condition() { return }
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            throw WorkflowIssue("Attended recovery check timed out: " + stage)
+        }
         let recoveryID = "workflow-run-recovery-" + run.id.uuidString
-        let savingButton = try await control(recoveryID)
-        #expect(savingButton.accessibilityLabel() == (locale == "en" ? "Retry Saving Failure Record" : "重试保存失败记录"))
-        c.beforeHistorySave = {}; await engine.configure {}
-        #expect(savingButton.accessibilityPerformPress())
-        for _ in 0..<200 {
-            if c.runs.last?.status == .failed && !c.isRunning { break }
-            try await Task.sleep(for: .milliseconds(10))
+        if attended {
+            try await waitForHuman("begin", maximumCalls: 1) { interaction.probePressed }
+            c.beforeHistorySave = {}; await engine.configure {}
+            interaction.phase = .save
+            try await waitForHuman("save failure record", maximumCalls: 1) {
+                c.runs.last?.status == .failed && !c.isRunning && !c.hasPendingSaves
+            }
+            interaction.phase = .checking
+            try #require(await engine.calls == 1 && c.runs.last?.id == run.id)
+        } else {
+            let probe = try await control("dha-hosting-probe")
+            #expect(probe.accessibilityPerformPress())
+            print("D_APP_HOST_RECOVERY_PROBE", locale, window.isVisible, window.isKeyWindow)
+            let savingButton = try await control(recoveryID)
+            #expect(savingButton.accessibilityLabel() == (locale == "en" ? "Retry Saving Failure Record" : "重试保存失败记录"))
+            c.beforeHistorySave = {}; await engine.configure {}
+            #expect(savingButton.accessibilityPerformPress())
+            for _ in 0..<200 {
+                if c.runs.last?.status == .failed && !c.isRunning { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
         }
         #expect(c.runs.last?.id == run.id && c.runs.last?.status == .failed && !c.hasPendingSaves)
         #expect(await engine.calls == 1)
@@ -148,12 +240,24 @@ private actor CanvasSeriousImageEngine: InferenceEngine {
         // This is the same production button after recovery, with an explicit
         // computation action. Test-process events do not certify foreground UI.
         host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30))
-        let retryButton = try await control(recoveryID)
-        #expect(retryButton.accessibilityLabel() == (locale == "en" ? "Retry Computation" : "重试计算"))
-        #expect(retryButton.accessibilityPerformPress())
-        for _ in 0..<200 {
-            if await engine.calls == 2, !c.isRunning { break }
-            try await Task.sleep(for: .milliseconds(10))
+        if attended {
+            try #require(savedRun.status == .failed && savedRun.steps.last?.status == .failed)
+            try #require(savedRun.steps.last?.error?.contains("DHA UI serious") == true)
+            try #require(c.errorMessage?.contains("DHA UI serious") == true && c.errorMessage?.contains("DHA UI history write") == true)
+            try #require(c.progressMessage.contains("失败记录已保存") && !c.progressMessage.contains("计算结果仍保留"))
+            interaction.phase = .retry
+            try await waitForHuman("retry computation", maximumCalls: 2) {
+                await engine.calls == 2 && !c.isRunning
+            }
+            interaction.phase = .finished
+        } else {
+            let retryButton = try await control(recoveryID)
+            #expect(retryButton.accessibilityLabel() == (locale == "en" ? "Retry Computation" : "重试计算"))
+            #expect(retryButton.accessibilityPerformPress())
+            for _ in 0..<200 {
+                if await engine.calls == 2, !c.isRunning { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
         }
         #expect(await engine.calls == 2 && c.runs.last?.status == .failed)
         #expect(c.errorMessage?.contains("DHA UI serious") == true)
