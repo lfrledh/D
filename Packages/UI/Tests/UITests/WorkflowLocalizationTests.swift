@@ -29,13 +29,50 @@ struct WorkflowLocalizationTests {
         let primary = "DHA integrity / 私有路径/a%20b {runID}\n原始严重诊断"
         let secondary = "write failed: /原样/🙂 {stepID}\nsecondary details"
         let raw = primary + "\n失败记录保存错误：" + secondary
-        #expect(workflowRecoveryErrorText(raw, language: language) == primary + "\n"
+        let run = failureFeedbackRun(primary: primary, secondary: secondary)
+        #expect(workflowRecoveryErrorText(raw, runs: [run], language: language) == primary + "\n"
             + (locale == "en" ? "Failure record save error: " : "失败记录保存错误：") + secondary)
-        #expect(workflowRecoveryErrorText(primary, language: language) == primary)
+        #expect(workflowRecoveryErrorText(primary, runs: [run], language: language) == primary)
         #expect(workflowRecoveryProgressText(primary, language: language) == primary)
         #expect(workflowRecoveryProgressText(pending, language: nil) == pending)
-        #expect(workflowRecoveryErrorText(raw, language: nil) == raw)
+        #expect(workflowRecoveryErrorText(raw, runs: [run], language: nil) == raw)
         #expect(raw == primary + "\n失败记录保存错误：" + secondary)
+    }
+
+    @Test(arguments: ["zh-Hans", "en"])
+    func failureRecordTranslationRequiresAnUnambiguousRecordedBoundary(locale: String) throws {
+        let language = UILanguageStore(preferredLanguages: [locale]); try language.select(locale)
+        let primary = "DHA original\n失败记录保存错误：inside original e\u{301}"
+        let secondary = "\u{301}save detail\n失败记录保存错误：inside secondary 🙂"
+        let raw = primary + "\n失败记录保存错误：" + secondary
+        let run = failureFeedbackRun(primary: primary, secondary: secondary)
+        let expected = primary + "\n" + (locale == "en" ? "Failure record save error: " : "失败记录保存错误：") + secondary
+        #expect(Array(workflowRecoveryErrorText(raw, runs: [run], language: language).utf8) == Array(expected.utf8))
+        #expect(workflowRecoveryErrorText(raw, runs: [], language: language) == raw)
+        #expect(workflowRecoveryErrorText(raw + "!", runs: [run], language: language) == raw + "!")
+        var mismatched = run; mismatched.planCheckpoint?.runID = UUID()
+        #expect(workflowRecoveryErrorText(raw, runs: [mismatched], language: language) == raw)
+        mismatched = run; mismatched.planCheckpoint?.records[0].address.runID = UUID()
+        #expect(workflowRecoveryErrorText(raw, runs: [mismatched], language: language) == raw)
+        mismatched = run; mismatched.status = .completed
+        #expect(workflowRecoveryErrorText(raw, runs: [mismatched], language: language) == raw)
+        mismatched = run; mismatched.planCheckpoint?.error = raw.precomposedStringWithCanonicalMapping
+        #expect(workflowRecoveryErrorText(raw, runs: [mismatched], language: language) == raw)
+        let alternate = failureFeedbackRun(primary: "DHA original", secondary: "inside original e\u{301}\n失败记录保存错误：" + secondary)
+        #expect(workflowRecoveryErrorText(raw, runs: [run, alternate], language: language) == raw)
+    }
+
+    private func failureFeedbackRun(primary: String, secondary: String) -> WorkflowRun {
+        let node = WorkflowNode(operationID: "d.image.generate")
+        let graph = WorkflowGraph(nodes: [node])
+        var step = WorkflowStepRun(node: node, signature: "fixture")
+        step.status = .failed; step.error = primary
+        var run = WorkflowRun(graph: graph, targetNodeID: node.id, steps: [step], status: .saving)
+        let plan = WorkflowPlan(graphID: graph.id, graphRevision: graph.revision, steps: [.init(node: node, inputs: [])])
+        run.planCheckpoint = .init(runID: run.id, plan: plan,
+            records: [.init(address: .init(runID: run.id, path: [.node(node.id)]), step: step)], state: .saving)
+        run.planCheckpoint?.error = primary + "\n失败记录保存错误：" + secondary
+        return run
     }
 
     @Test func loadingChoicesTranslateWithoutChangingStoredValues() throws {

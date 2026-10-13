@@ -50,7 +50,7 @@ private actor CanvasSeriousImageEngine: InferenceEngine {
         VStack(alignment: .leading, spacing: 16) {
             Text(locale == "en" ? "DHA recovery — isolated test" : "DHA 恢复 — 隔离测试").font(.headline)
             Text(instruction).fixedSize(horizontal: false, vertical: true)
-            Text(workflowRecoveryErrorText(controller.errorMessage ?? "", language: languageStore)).textSelection(.enabled)
+            Text(workflowRecoveryErrorText(controller.errorMessage ?? "", runs: controller.runs, language: languageStore)).textSelection(.enabled)
             Text(workflowRecoveryProgressText(controller.progressMessage, language: languageStore)).textSelection(.enabled)
             Button(locale == "en" ? "Begin this check" : "开始本项检查") {
                 interaction.probePressed = true

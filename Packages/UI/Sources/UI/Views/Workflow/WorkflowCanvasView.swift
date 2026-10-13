@@ -46,13 +46,24 @@ func workflowRecoveryProgressText(_ value: String, language: UILanguageStore?) -
 }
 
 @MainActor
-func workflowRecoveryErrorText(_ value: String, language: UILanguageStore?) -> String {
+func workflowRecoveryErrorText(_ value: String, runs: [WorkflowRun], language: UILanguageStore?) -> String {
     let separator = "\n失败记录保存错误："
-    guard let boundary = value.range(of: separator) else { return value }
-    // Translate only the service-owned separator, preserving the primary error
-    // and everything after it byte-for-byte, including opaque paths/identities.
+    let bytes = Array(value.utf8)
+    let boundaries = Set(runs.compactMap { run -> Int? in
+        guard run.status == .saving || run.status == .failed,
+              let checkpoint = run.planCheckpoint, checkpoint.runID == run.id,
+              let recordedError = checkpoint.error, recordedError.utf8.elementsEqual(bytes),
+              let record = checkpoint.records.last(where: { $0.address.path.count == 1 && $0.step.status == .failed }),
+              record.address.runID == run.id, let primary = record.step.error,
+              bytes.starts(with: (primary + separator).utf8) else { return nil }
+        return primary.utf8.count
+    })
+    // No inferred delimiter: verify it against the stored primary diagnostic and
+    // exact run/checkpoint identity. Ambiguous histories remain unmodified.
+    guard boundaries.count == 1, let boundary = boundaries.first else { return value }
     let title = workflowText(language, "workflow.failureRecord.saveError", fallback: "失败记录保存错误：")
-    return String(value[..<boundary.lowerBound]) + "\n" + title + String(value[boundary.upperBound...])
+    return String(decoding: bytes.prefix(boundary), as: UTF8.self) + "\n" + title
+        + String(decoding: bytes.dropFirst(boundary + separator.utf8.count), as: UTF8.self)
 }
 
 /// Native presentation for editable workflow graphs. Persistence and execution remain owned by
@@ -826,7 +837,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 }
                 .accessibilityIdentifier("workflow-port-legend")
             if let rawError = controller.errorMessage {
-                let error = workflowRecoveryErrorText(rawError, language: languageStore)
+                let error = workflowRecoveryErrorText(rawError, runs: controller.runs, language: languageStore)
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                     .lineLimit(2)
