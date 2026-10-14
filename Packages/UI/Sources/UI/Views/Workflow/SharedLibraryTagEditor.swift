@@ -150,10 +150,11 @@ struct WorkflowAssetOrganization: View {
     let reference: WorkflowAssetReference
     let metadata: SharedLibraryStore?
     @State private var expanded = false
+    @Environment(\.dLanguageStore) private var language
     var onQuery: ((SharedLibraryPropertyQuery) -> Void)? = nil
     var onEdit: ((AssetAnnotationRequest) -> Void)? = nil
     var body: some View {
-        DisclosureGroup(controller.availableAssets.first(where: { $0.id == reference.assetID })?.name ?? "Asset", isExpanded: $expanded) {
+        DisclosureGroup(metadataText(language, "resultInformation", "结果信息", "Result information") + " · " + (controller.availableAssets.first(where: { $0.id == reference.assetID })?.name ?? metadataText(language, "unnamedResult", "未命名结果", "Untitled result")), isExpanded: $expanded) {
             if expanded { WorkflowAssetMetadataHost(controller: controller, reference: reference, metadata: metadata, onQuery: onQuery, onEdit: onEdit) }
         }
     }

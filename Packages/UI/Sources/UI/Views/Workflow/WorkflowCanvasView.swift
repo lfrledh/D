@@ -304,7 +304,7 @@ public struct WorkflowCanvasView: View {
                     viewContext: viewContext,
                     pendingConnection: $pendingConnection, selectedConnectionID: $selectedConnectionID,
                     readOnly: !controller.canEditCanvas,
-                    inspectedNodeID: inspectedNodeID,
+                    inspectedNodeID: inspectedNodeID, runTargetNodeID: validRunTarget?.id,
                     onPlan: presentPlan, onSetRunTarget: setRunTarget, nodeSizeObserver: { id, size in
                         measuredCardSizes[id] = size
                         nodeSizeObserver?(id, size)
@@ -496,7 +496,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             Picker(text("workspace.selectedRun", "所选运行"), selection: Binding(get: { panelsState.runID }, set: { panelsState.selectRun($0) })) {
                 Text(text("workspace.chooseRun", "选择运行记录")).tag(UUID?.none)
                 ForEach(controller.runs.reversed()) { run in
-                    Text(run.graph.name + " · " + run.createdAt.formatted(date: .omitted, time: .shortened) + " · " + run.id.uuidString.prefix(6))
+                    Text(WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore))
                         .tag(Optional(run.id))
                 }
             }.padding(.horizontal, 10).accessibilityIdentifier("workflow-result-run")
@@ -518,7 +518,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 panelsState.nodeID = id; panelsState.call = nil
             })) {
                 Text(text("workflow.results.choose", "选择节点")).tag(UUID?.none)
-                ForEach(resultSourceNodes) { node in Text(node.title).tag(Optional(node.id)) }
+                ForEach(resultSourceNodes) { node in Text(WorkflowHumanPresentation.name(node, in: resultSourceNodes, language: languageStore)).tag(Optional(node.id)) }
             }.padding(.horizontal, 10)
             if let run = selectedResultRun {
                 let calls = WorkflowWorkspacePanels.records(in: run).filter { $0.step.node.id == panelsState.nodeID }
@@ -527,18 +527,14 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                         panelsState.call = calls.first(where: { $0.id == id }).map { .init(address: $0.address, stepID: $0.id) }
                     })) {
                         Text(text("workspace.chooseCall", "请选择一次调用")).tag(UUID?.none)
-                        ForEach(Array(calls.enumerated()), id: \.element.id) { index, call in
-                            Text("\(index + 1) · " + call.id.uuidString.prefix(8)).tag(Optional(call.id))
+                        ForEach(calls) { call in
+                            Text(WorkflowHumanPresentation.call(call, in: WorkflowWorkspacePanels.records(in: run), language: languageStore)).tag(Optional(call.id))
                         }
                     }.padding(.horizontal, 10)
                 }
             }
             if let record = selectedResultRecord {
                 Text(record.step.node.title).font(.headline).padding(.horizontal, 10)
-                DisclosureGroup(text("workspace.resultIdentity", "运行与调用身份")) {
-                    Text(record.address.runID.uuidString + " / " + record.id.uuidString + "\n" + String(describing: record.address.path))
-                        .font(.caption2.monospaced()).textSelection(.enabled)
-                }.padding(.horizontal, 10)
                 WorkflowNodeInspector(controller: controller, metadata: metadata, node: record.step.node, readOnly: isReadOnly,
                     onTextModel: {}, onImageModel: {}, onAdditionalModel: { _ in }, onImport: { _ in }, onRecord: { _ in },
                     onReturnText: { ref in guard !isReadOnly else { return }; onReturnText(ref) },
@@ -556,24 +552,30 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 if let run = selectedResultRun {
                     Text(run.graph.name).font(.headline)
                     Text(WorkflowCanvasPresentation.statusTitle(run.status, language: languageStore)).font(.title3)
-                    Text(run.graph.nodes.first(where: { $0.id == run.targetNodeID })?.title ?? run.targetNodeID.uuidString).font(.callout)
+                    Text(run.graph.nodes.first(where: { $0.id == run.targetNodeID })?.title ?? text("workspace.unavailableTarget", "目标已不可访问")).font(.callout)
                     if let issue = run.planCheckpoint?.error { Label(issue, systemImage: "exclamationmark.triangle").foregroundStyle(.red) }
                     if WorkflowCanvasPresentation.canResume(run.status) {
-                        WorkflowRunRecoveryButton(controller: controller, run: run, readOnly: isReadOnly || controller.isRunning)
+                        recoveryActions(run)
                     }
                     DisclosureGroup(text("workspace.runAssets", "此运行的已保存结果")) {
+                        let outputs = WorkflowHumanPresentation.outputs(run)
                         WorkflowStepValues(title: text("workspace.runAssets", "此运行的已保存结果"),
-                            values: runOutputValues(run), operationID: "", portsAreInputs: false, controller: controller,
-                            onReturnText: onReturnText, allowsReturn: false, metadata: metadata,
-                            resultScope: controller.projectID.map { .init(mode: .run, projectID: $0, instanceID: controller.projectInstanceID, runID: run.id) })
+                            values: Dictionary(uniqueKeysWithValues: outputs.map { ($0.storageKey, $0.value) }),
+                            operationID: "", portsAreInputs: false, controller: controller, onReturnText: onReturnText,
+                            allowsReturn: false, metadata: metadata,
+                            resultScope: controller.projectID.map { .init(mode: .run, projectID: $0, instanceID: controller.projectInstanceID, runID: run.id) },
+                            displayTitles: Dictionary(uniqueKeysWithValues: outputs.map { output in
+                                (output.storageKey, WorkflowHumanPresentation.name(output.call.step.node, in: WorkflowHumanPresentation.nodes(in: run), language: languageStore) + " · " + WorkflowHumanPresentation.call(output.call, in: WorkflowWorkspacePanels.records(in: run), language: languageStore) + " · " + WorkflowCanvasPresentation.portTitle(operationID: output.call.step.node.operationID, portID: output.port, fallback: output.port, input: false, language: languageStore))
+                            }), scopeDescription: WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore))
                             .id(run.id)
+
                     }
                     ForEach(WorkflowWorkspacePanels.records(in: run)) { record in
                         Button {
                             panelsState.selectResult(node: record.step.node.id, call: .init(address: record.address, stepID: record.id))
                         } label: {
                             HStack {
-                                VStack(alignment: .leading) { Text(record.step.node.title); Text(record.id.uuidString.prefix(8)).font(.caption2.monospaced()) }
+                                VStack(alignment: .leading) { Text(WorkflowHumanPresentation.name(record.step.node, in: WorkflowHumanPresentation.nodes(in: run), language: languageStore)); Text(WorkflowHumanPresentation.call(record, in: WorkflowWorkspacePanels.records(in: run), language: languageStore)).font(.caption2) }
                                 Spacer()
                                 WorkflowStatusBadge(status: record.step.status, stale: false)
                             }.frame(maxWidth: .infinity, alignment: .leading)
@@ -584,14 +586,6 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(14)
         }
-    }
-
-    private func runOutputValues(_ run: WorkflowRun) -> [String: WorkflowValue] {
-        var values: [String: WorkflowValue] = [:]
-        for call in WorkflowWorkspacePanels.records(in: run) {
-            for (port, value) in call.step.outputs { values[call.step.node.title + " · " + call.id.uuidString.prefix(8) + " · " + port] = value }
-        }
-        return values
     }
 
     private func dropItem(_ value: WorkflowCanvasTransfer, _ point: CGPoint) -> Bool {
@@ -640,11 +634,11 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     Button(graph.name) { rememberViewContext(); controller.selectedGraphID = graph.id }
                 }
             } label: {
-                Label(controller.rootGraph?.name ?? text("workflow.toolbar.noGraph", "选择流程"), systemImage: "chevron.down")
+                Label(text("semantics.flowPrefix", "流程：") + (controller.rootGraph?.name ?? text("workflow.toolbar.noGraph", "选择流程")), systemImage: "chevron.down")
                     .lineLimit(1)
             }.accessibilityIdentifier("workflow-graph-picker")
             if !controller.bodyPath.isEmpty {
-                Text("/ " + (controller.graph?.name ?? "")).foregroundStyle(.secondary).lineLimit(1)
+                Text(bodyBreadcrumb).foregroundStyle(.secondary).lineLimit(1)
             }
             if controller.presentationEditingOriginalID == controller.rootGraph?.id {
                 Text(text("workspace.runningOriginal", "运行原图 · 编辑时创建副本")).font(.caption).foregroundStyle(.secondary)
@@ -665,12 +659,12 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 }.disabled(!controller.canEditCanvas)
             } label: { Label(text("canvas.new", "新流程"), systemImage: "plus") }
                 .disabled(!controller.canEditCanvas).accessibilityIdentifier("canvas-new-flow")
-            Button(text("workflow.action.save", "保存"), systemImage: "square.and.arrow.down") {
+            Button(text("semantics.saveFlows", "保存项目内所有流程与运行记录"), systemImage: "square.and.arrow.down") {
                 Task { await controller.save() }
             }.disabled(isReadOnly || controller.isSaving).accessibilityIdentifier("workflow-save")
             if controller.isSaving { ProgressView().controlSize(.small) }
             else if controller.hasPendingSaves { Text(text("workflow.status.pendingSave", "有待恢复保存")).foregroundStyle(.orange).font(.caption) }
-            Menu(text("canvas.flowMenu", "流程菜单"), systemImage: "ellipsis.circle") {
+            Menu(text("canvas.flowMenu", "流程设置"), systemImage: "ellipsis.circle") {
                 Button(text("workflow.language.interface", "设置流程输入与输出…")) { interfacePresented = true }
                     .disabled(controller.graph == nil || !controller.canEditCanvas)
                 Button(text("workflow.language.tools", "管理自定义节点…")) { extractSelection = false; toolsPresented = true }
@@ -679,6 +673,16 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 Text(controller.destinationDescription)
             }.accessibilityIdentifier("canvas-more")
         }.buttonStyle(.borderless).padding(.horizontal, 18).padding(.vertical, 10)
+    }
+
+    private var bodyBreadcrumb: String {
+        guard let root = controller.rootGraph else { return "" }
+        return controller.bodyPath.indices.compactMap { index in
+            let path = Array(controller.bodyPath.prefix(index))
+            guard let parent = try? WorkflowGraphEditing.body(in: root, path: path),
+                  let node = parent.nodes.first(where: { $0.id == controller.bodyPath[index].nodeID }) else { return nil }
+            return WorkflowHumanPresentation.name(node, in: parent.nodes, language: languageStore)
+        }.joined(separator: " / ")
     }
 
     private var runContext: WorkflowRunTarget.Context { .init(controller) }
@@ -696,7 +700,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
     private var recoveryRun: WorkflowRun? {
         if let selectedResultRun, WorkflowCanvasPresentation.canResume(selectedResultRun.status) { return selectedResultRun }
-        return recoveryRuns.first(where: { $0.status == .saving }) ?? recoveryRuns.first
+        return recoveryRuns.count == 1 ? recoveryRuns.first : nil
     }
     private var executionBar: some View {
         VStack(spacing: 8) {
@@ -714,11 +718,11 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     Task { await controller.cancel() }
                 }.accessibilityIdentifier("workflow-cancel")
             } else {
-                Picker(text("workflow.run.target", "运行终点"), selection: Binding(get: { validRunTarget?.id }, set: { id in
+                Picker(text(["semantics.targetThrough", "semantics.targetOnly", "semantics.targetFrom", "semantics.targetAfter"][runRange], ["运行终点", "执行节点", "重新运行起点", "使用其输出的节点"][runRange]), selection: Binding(get: { validRunTarget?.id }, set: { id in
                     if let id { setRunTarget(id) } else { runTarget = nil; runPreview = nil }
                 })) {
                     Text(text("workflow.run.choose", "请选择运行终点")).tag(UUID?.none)
-                    ForEach(controller.graph?.nodes ?? []) { node in Text(node.title).tag(Optional(node.id)) }
+                    ForEach(controller.graph?.nodes ?? []) { node in Text(WorkflowHumanPresentation.name(node, in: controller.graph?.nodes ?? [], language: languageStore)).tag(Optional(node.id)) }
                 }.frame(maxWidth: 280).accessibilityIdentifier("workflow-run-target")
                 Picker(text("workflow.run.range", "范围"), selection: $runRange) {
                     Text(text("workflow.action.runToHere", "运行到此节点")).tag(0)
@@ -747,22 +751,48 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 panelsState.output = .overview; showLibrary = true; narrowLibrary = true
             }
         }
+        if !controller.isRunning, recoveryRun == nil, !recoveryRuns.isEmpty {
+            Menu(text("semantics.choosePendingRun", "选择要处理的运行…")) {
+                ForEach(recoveryRuns) { run in
+                    Button(WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore)) {
+                        panelsState.selectRun(run.id); panelsState.output = .overview; showLibrary = true
+                    }
+                }
+            }
+        }
         if !controller.isRunning, let run = recoveryRun {
             HStack {
                 Menu {
                     ForEach(recoveryRuns) { item in
-                        Button(item.graph.name + " · " + item.id.uuidString.prefix(8) + " · " + WorkflowCanvasPresentation.statusTitle(item.status, language: languageStore)) {
+                        Button(WorkflowHumanPresentation.run(item, in: controller.runs, language: languageStore)) {
                             panelsState.selectRun(item.id); panelsState.output = .overview; showLibrary = true
                         }
                     }
                 } label: {
-                    Text(run.graph.name + " · " + run.id.uuidString.prefix(8) + " · " + WorkflowCanvasPresentation.statusTitle(run.status, language: languageStore))
+                    Text(WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore))
                 }
-                WorkflowRunRecoveryButton(controller: controller, run: run, readOnly: isReadOnly)
+                recoveryActions(run)
             }
         }
         }.controlSize(.small).padding(10).workbenchPanel(in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder private func recoveryActions(_ run: WorkflowRun) -> some View {
+        let waiting = WorkflowWorkspacePanels.records(in: run).filter { $0.step.status == .waiting }
+        if WorkflowHumanPresentation.opensPendingDecision(run) {
+            Menu(text("semantics.pending", "处理待确认内容")) {
+                ForEach(waiting) { call in
+                    Button(WorkflowHumanPresentation.name(call.step.node, in: WorkflowHumanPresentation.nodes(in: run), language: languageStore) + " · " + WorkflowHumanPresentation.call(call, in: WorkflowWorkspacePanels.records(in: run), language: languageStore)) {
+                        panelsState.selectRun(run.id)
+                        panelsState.selectResult(node: call.step.node.id, call: .init(address: call.address, stepID: call.id))
+                        showLibrary = true; narrowLibrary = true
+                    }
+                }
+            }.accessibilityIdentifier("workflow-open-pending-" + run.id.uuidString)
+        } else {
+            WorkflowRunRecoveryButton(controller: controller, run: run, readOnly: isReadOnly || controller.isRunning)
+        }
     }
 
     private func canvasTools(fitReady: Bool, targetWidth: CGFloat) -> some View {
@@ -1149,13 +1179,28 @@ private struct WorkflowNodeInspector: View {
                 definition: controller.registry.definition(for: node, tools: controller.tools),
                 modelChoices: controller.modelChoices, assets: controller.availableAssets,
                 tools: controller.tools, language: languageStore)
-            Text(resolved.title).font(.title3.weight(.semibold))
+            Text(WorkflowHumanPresentation.name(node, in: controller.graph?.nodes ?? [node], language: languageStore)).font(.title3.weight(.semibold))
             if let detail = resolved.detail {
-                Text(detail).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+                Text(detail).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
             if let annotation = resolved.annotation, annotation != resolved.title {
                 Text(annotation).font(.callout).foregroundStyle(.secondary)
             }
+            let commandScope = controller.rootGraph.flatMap { root in controller.graph.map { graph in
+                WorkflowCanvasScope(rootGraphID: root.id, rootRevision: root.revision, graphID: graph.id,
+                    bodyPath: controller.bodyPath, projectID: controller.projectID, instanceID: controller.projectInstanceID)
+            } }
+            let commandIsCurrent = { commandScope?.isCurrent(in: controller) == true && controller.graph?.nodes.contains(node) == true && controller.canEditCanvas && !readOnly }
+            Menu(workflowText(languageStore, "semantics.nodePlan", fallback: "查看计划并运行…")) {
+                Button(workflowText(languageStore, "workflow.action.runToHere", fallback: "运行到此节点")) { if commandIsCurrent() { onPlan(node.id, false) } }
+                Button(workflowText(languageStore, "workflow.action.rerunOnly", fallback: "只重跑此节点")) { if commandIsCurrent() { onPlan(node.id, true) } }
+                Button(workflowText(languageStore, "workflow.scope.from", fallback: "从这里重新运行（含此节点）")) {
+                    if commandIsCurrent(), let graph = controller.rootGraph { scopePresentation = .init(graph: graph, nodeID: node.id, mode: 2) }
+                }
+                Button(workflowText(languageStore, "workflow.scope.after", fallback: "从其输出继续（不重算此节点）")) {
+                    if commandIsCurrent(), let graph = controller.rootGraph { scopePresentation = .init(graph: graph, nodeID: node.id, mode: 3) }
+                }
+            }.disabled(readOnly || !controller.canEditCanvas || !controller.bodyPath.isEmpty)
             if let onQuickUse, controller.registry.definition(for: node, tools: controller.tools)?.modelKind != nil {
                 Button(workflowText(languageStore, "canvas.identity.quickUse", fallback: "在快速生成中使用设置")) {
                     onQuickUse(node)
@@ -1178,6 +1223,7 @@ private struct WorkflowNodeInspector: View {
             .buttonStyle(WorkbenchRowButtonStyle())
             .accessibilityIdentifier("canvas-technical-toggle")
             if showTechnical {
+                WorkflowTechnicalDetails(value: node.id.uuidString + "\n" + node.operationID + "\n" + String(node.definitionVersion) + "\n" + String(describing: node.parameters) + "\n" + String(describing: node.assetReference) + "\n" + String(describing: node.control))
                 WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.operation", fallback: "操作"),
                                     node.operationID)
                 WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.definitionVersion", fallback: "定义版本"),
@@ -1284,7 +1330,7 @@ private struct WorkflowNodeInspector: View {
                         }
                         ForEach(incoming) { connection in
                             HStack {
-                                Text(WorkflowCanvasPresentation.connectionIdentity(connection))
+                                Text(WorkflowConnectionPresentation.title(connection, graph: controller.graph, registry: controller.registry, tools: controller.tools, language: languageStore))
                                     .font(.caption.monospaced()).lineLimit(1)
                                 Spacer()
                                 Button(workflowText(languageStore, "workflow.action.disconnect", fallback: "断开"),
@@ -1328,19 +1374,12 @@ private struct WorkflowNodeInspector: View {
                 HStack {
                     WorkflowStatusBadge(status: step.status, stale: resultRunID == nil ? (controller.presentationStatus(for: node.id)?.stale ?? true) : controller.isStale(step))
                     Spacer()
-                    Text(step.id.uuidString).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                    Text(step.node.title).font(.caption).foregroundStyle(.secondary)
                 }
                 if let error = step.error {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
                 }
-                WorkflowStepValues(title: workflowText(languageStore, "workflow.port.outputs", fallback: "输出"),
-                                   values: step.outputs, operationID: node.operationID, portsAreInputs: false,
-                                   controller: controller, onReturnText: onReturnText,
-                                   allowsReturn: !readOnly, metadata: metadata,
-                                   resultScope: resultRunID.flatMap { run in controller.projectID.map { project in
-                                       .init(mode: .run, projectID: project, instanceID: controller.projectInstanceID, runID: run, nodeID: step.node.id, stepID: step.id)
-                                   } })
                 if step.status == .waiting {
                     if let task = step.humanTask {
                         WorkflowHumanTaskForm(task: task, onSaveDraft: { controller.editHumanDraft(stepID: step.id, value: $0) },
@@ -1350,6 +1389,18 @@ private struct WorkflowNodeInspector: View {
                         WorkflowWaitingDecision(controller: controller, step: step, readOnly: readOnly, preview: controller.preview).id(step.id)
                     }
                 }
+                if step.status != .waiting {
+                WorkflowStepValues(title: workflowText(languageStore, "workflow.port.outputs", fallback: "输出"),
+                                   values: step.outputs, operationID: node.operationID, portsAreInputs: false,
+                                   controller: controller, onReturnText: onReturnText,
+                                   allowsReturn: !readOnly, metadata: metadata,
+                                   resultScope: resultRunID.flatMap { run in controller.projectID.map { project in
+                                       .init(mode: .run, projectID: project, instanceID: controller.projectInstanceID, runID: run, nodeID: step.node.id, stepID: step.id)
+                                   } }, scopeDescription: controller.runs.first(where: { $0.id == resultRunID }).map { run in
+                                       WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore) + " · " + step.node.title + " · " + (resultRecord.map { WorkflowHumanPresentation.call($0, in: WorkflowWorkspacePanels.records(in: run), language: languageStore) } ?? "")
+                                   })
+                }
+                WorkflowTechnicalDetails(value: "Run: " + (resultRunID?.uuidString ?? "—") + "\nCall: " + step.id.uuidString + "\nNode: " + step.node.id.uuidString + "\n" + String(describing: resultRecord?.address))
                 if step.status == .partial {
                     Button(workflowText(languageStore, "workflow.action.retryFailedCandidates", fallback: "重试失败候选"),
                            systemImage: "arrow.clockwise") {
@@ -1388,10 +1439,10 @@ private struct WorkflowNodeInspector: View {
                         Text(WorkflowCanvasPresentation.statusTitle(run.status, language: languageStore))
                             .foregroundStyle(.secondary)
                     }
-                    Text(run.id.uuidString).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                    WorkflowTechnicalDetails(value: run.id.uuidString)
                     ForEach(controller.callRecords(runID: run.id)) { call in
                         DisclosureGroup(call.step.node.title + " · " + WorkflowCanvasPresentation.statusTitle(call.step.status, language: languageStore)) {
-                            Text(String(describing: call.address.path)).font(.caption2.monospaced()).textSelection(.enabled)
+                            WorkflowTechnicalDetails(value: String(describing: call.address) + "\n" + call.id.uuidString)
                             if controller.canRerunCall(call) {
                                 Button(workflowText(languageStore, "workflow.scope.rerunCall", fallback: "重新运行具体调用")) {
                                     pendingCall = .init(address: call.address, stepID: call.step.id)
@@ -1451,8 +1502,8 @@ private struct WorkflowFixedToolSheet: View {
                     .font(.title2.weight(.semibold))
                 Spacer()
             }
-            Text("v\(reference.version) · \(reference.id.uuidString)")
-                .font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+            Text("v\(reference.version)").font(.caption)
+            WorkflowTechnicalDetails(value: reference.id.uuidString + "\n" + reference.digest)
             if let tool {
                 Text(tool.name).font(.headline)
                 ScrollView {
@@ -1485,7 +1536,8 @@ private struct WorkflowFixedToolSheet: View {
                                     tools: controller.tools, language: language)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(identity.title).font(.callout.weight(.medium))
-                                    Text(node.operationID).font(.caption.monospaced()).foregroundStyle(.secondary)
+                                    Text(identity.detail ?? "").font(.caption).foregroundStyle(.secondary)
+                                    WorkflowTechnicalDetails(value: node.operationID + "\n" + node.id.uuidString)
                                     if let definition {
                                         Text(definition.inputs.map(\.id).joined(separator: ", ") + " → "
                                             + definition.outputs.map(\.id).joined(separator: ", "))
@@ -1500,8 +1552,7 @@ private struct WorkflowFixedToolSheet: View {
                                     .foregroundStyle(.secondary)
                             }
                             ForEach(tool.graph.connections) { connection in
-                                Text(connection.sourceNode.uuidString.prefix(8) + "." + connection.sourcePort
-                                     + " → " + connection.targetNode.uuidString.prefix(8) + "." + connection.targetPort)
+                                Text(WorkflowConnectionPresentation.title(connection, graph: tool.graph, registry: controller.registry, tools: controller.tools, language: language))
                                     .font(.caption.monospaced()).textSelection(.enabled)
                             }
                         }
@@ -1637,8 +1688,17 @@ struct WorkflowConnectionSnapshot: Identifiable {
     let address: [WorkflowAddressComponent]
     let operationID: String
     let value: WorkflowValue
+    let run: WorkflowRun
+    let call: WorkflowPlanCallRecord
 }
 enum WorkflowConnectionPresentation {
+    @MainActor static func title(_ connection: WorkflowConnection, graph: WorkflowGraph?, registry: WorkflowRegistry, tools: [WorkflowToolDefinition], language: UILanguageStore?) -> String {
+        func endpoint(_ id: UUID, _ port: String, input: Bool) -> String {
+            guard let node = graph?.nodes.first(where: { $0.id == id }) else { return metadataText(language, "unavailableNode", "节点不可访问", "Node unavailable") }
+            return WorkflowHumanPresentation.name(node, in: graph?.nodes ?? [node], language: language) + " · " + WorkflowCanvasPresentation.portTitle(operationID: node.operationID, portID: port, fallback: port, input: input, language: language)
+        }
+        return endpoint(connection.sourceNode, connection.sourcePort, input: false) + " → " + endpoint(connection.targetNode, connection.targetPort, input: true)
+    }
     static func snapshots(_ connection: WorkflowConnection, graphID: UUID, runs: [WorkflowRun]) -> [WorkflowConnectionSnapshot] {
         runs.flatMap { run in
             let records = run.planCheckpoint?.records ?? run.steps.map {
@@ -1657,7 +1717,7 @@ enum WorkflowConnectionPresentation {
                       let value = call.step.inputs[connection.targetPort] else { return nil }
                 return WorkflowConnectionSnapshot(runID: run.id, revision: owner?.graphRevision ?? run.graph.revision,
                     stepID: call.step.id, address: call.address.path,
-                    operationID: call.step.node.operationID, value: value)
+                    operationID: call.step.node.operationID, value: value, run: run, call: call)
             }
         }
     }
@@ -1705,11 +1765,9 @@ private struct WorkflowConnectionInspection: View {
                     .font(.caption)
             }
             ForEach(snapshots.reversed()) { snapshot in
-                DisclosureGroup(snapshot.runID.uuidString.prefix(8) + " / " + snapshot.stepID.uuidString.prefix(8)) {
-                    Text(workflowText(language, "workflow.connection.revision", fallback: "运行图版本") + ": " + snapshot.revision.uuidString)
-                        .font(.caption2.monospaced()).textSelection(.enabled)
-                    Text(String(describing: snapshot.address)).font(.caption2.monospaced()).textSelection(.enabled)
-                    WorkflowStepValues(title: snapshot.stepID.uuidString, values: [connection.targetPort: snapshot.value],
+                DisclosureGroup(WorkflowHumanPresentation.run(snapshot.run, in: controller.runs, language: language) + " · " + WorkflowHumanPresentation.call(snapshot.call, in: WorkflowWorkspacePanels.records(in: snapshot.run), language: language)) {
+                    WorkflowTechnicalDetails(value: snapshot.runID.uuidString + "\n" + snapshot.stepID.uuidString + "\n" + snapshot.revision.uuidString + "\n" + String(describing: snapshot.address))
+                    WorkflowStepValues(title: snapshot.call.step.node.title, values: [connection.targetPort: snapshot.value],
                         operationID: snapshot.operationID, portsAreInputs: true, controller: controller,
                         onReturnText: { _ in }, allowsReturn: false)
                 }
@@ -1743,9 +1801,9 @@ private struct WorkflowCanvasConnectionInspector: View {
                     let targetName = WorkflowNodeIdentity.resolve(node: target, definition: targetDefinition,
                         modelChoices: controller.modelChoices, assets: controller.availableAssets,
                         tools: controller.tools, language: language).title
-                    Text(sourceName + " · " + connection.sourcePort)
+                    Text(sourceName + " · " + WorkflowCanvasPresentation.portTitle(operationID: source.operationID, portID: connection.sourcePort, fallback: connection.sourcePort, input: false, language: language))
                     Image(systemName: "arrow.down").foregroundStyle(.secondary)
-                    Text(targetName + " · " + connection.targetPort)
+                    Text(targetName + " · " + WorkflowCanvasPresentation.portTitle(operationID: target.operationID, portID: connection.targetPort, fallback: connection.targetPort, input: true, language: language))
                     if let port = sourceDefinition?.outputs.first(where: { $0.id == connection.sourcePort }) {
                         Text(WorkflowCanvasPresentation.portDetail(port, language: language))
                             .font(.caption).foregroundStyle(.secondary)
@@ -1790,6 +1848,8 @@ private struct WorkflowStepValues: View {
     let allowsReturn: Bool
     var metadata: SharedLibraryStore? = nil
     var resultScope: SharedLibraryQueryScope? = nil
+    var displayTitles: [String: String] = [:]
+    var scopeDescription: String? = nil
     @State private var resultQuery = WorkflowResultQueryState()
     @State private var annotationRequest: AssetAnnotationRequest?
     private var references: [WorkflowAssetReference] {
@@ -1807,7 +1867,7 @@ private struct WorkflowStepValues: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.subheadline.weight(.semibold))
             if !portsAreInputs, let metadata, !references.isEmpty {
-                WorkflowResultQueryControls(state: resultQuery, store: metadata, scope: resultScope)
+                WorkflowResultQueryControls(state: resultQuery, store: metadata, scope: resultScope, scopeDescription: scopeDescription)
             }
             if values.isEmpty {
                 Text(workflowText(languageStore, "workflow.value.none", fallback: "无"))
@@ -1816,13 +1876,13 @@ private struct WorkflowStepValues: View {
             ForEach(values.keys.sorted(), id: \.self) { port in
                 if let value = values[port], visible(value) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(WorkflowCanvasPresentation.portTitle(
+                        Text(displayTitles[port] ?? WorkflowCanvasPresentation.portTitle(
                             operationID: operationID,
                             portID: port,
                             fallback: port,
                             input: portsAreInputs,
                             language: languageStore
-                        )).font(.caption.monospaced()).foregroundStyle(.secondary)
+                        )).font(.caption).foregroundStyle(.secondary)
                         switch value {
                         case .asset(let reference):
                             WorkflowAssetPreview(controller: controller, reference: reference)
@@ -1842,13 +1902,12 @@ private struct WorkflowStepValues: View {
                             WorkflowDatumSnapshotView(value: value)
                         case .receipt(let receipt):
                             Text(receipt.names.joined(separator: "、"))
-                            Text(receipt.hashes.joined(separator: "\n"))
-                                .font(.caption2.monospaced()).textSelection(.enabled)
+                            WorkflowTechnicalDetails(value: receipt.hashes.joined(separator: "\n"))
                         }
                         ForEach(savedAssets(value).filter(matches), id: \.self) { reference in
                             WorkflowAssetOrganization(controller: controller, reference: reference, metadata: metadata,
                                 onQuery: portsAreInputs ? nil : { properties in resultQuery.query.properties = .merging(resultQuery.query.properties, properties) },
-                                onEdit: { annotationRequest = $0 })
+                                onEdit: { request in var captured = request; captured.context = scopeDescription; annotationRequest = captured })
                         }
                     }
                     .padding(8)
@@ -1862,7 +1921,7 @@ private struct WorkflowStepValues: View {
         }
         .onDisappear { resultQuery.invalidate() }
         .sheet(item: $annotationRequest) { request in
-            AssetAnnotationEditor(snapshot: request.snapshot, validate: request.validate, save: request.save) { annotationRequest = nil }
+            AssetAnnotationEditor(snapshot: request.snapshot, context: request.context, validate: request.validate, save: request.save) { annotationRequest = nil }
         }
     }
     private func savedAssets(_ value: WorkflowValue) -> [WorkflowAssetReference] {
@@ -2025,7 +2084,7 @@ struct WorkflowAssetPreview: View {
     }
 }
 
-private struct WorkflowCandidatePreview: View {
+struct WorkflowCandidatePreview: View {
     let controller: WorkflowController
     let candidate: WorkflowCandidate
     let selected: Bool
@@ -2281,15 +2340,8 @@ private struct WorkflowAssetIdentity: View {
     let reference: WorkflowAssetReference
     @Environment(\.dLanguageStore) private var languageStore
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.type", fallback: "类型"),
-                                WorkflowCanvasPresentation.kind(reference.kind, language: languageStore))
-            WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.asset", fallback: "资产"),
-                                reference.assetID.uuidString)
-            WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.version", fallback: "版本"),
-                                reference.version.uuidString)
-            WorkflowMetadataRow("SHA-256", reference.sha256)
-        }
+        WorkflowTechnicalDetails(value: "Project: " + reference.projectID.uuidString + "\nAsset: " + reference.assetID.uuidString + "\nVersion: " + reference.version.uuidString + "\nSHA-256: " + reference.sha256)
+
     }
 }
 

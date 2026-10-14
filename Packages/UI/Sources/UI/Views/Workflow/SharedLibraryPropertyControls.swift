@@ -7,6 +7,8 @@ struct SharedLibraryPropertyControls: View {
     let items: [SharedLibraryItem]
     let context: SharedLibraryQueryContext
     var allowsScopeEditing = true
+    var onApply: () -> Void = {}
+    var onCancel: () -> Void = {}
     @State private var widthMin = ""
     @State private var widthMax = ""
     @State private var heightMin = ""
@@ -34,17 +36,17 @@ struct SharedLibraryPropertyControls: View {
                 Button(t("dynamicScope", "使用时的当前项目实例", "Current project instance when used")) { query.scope = .init(mode: .currentProject) }.disabled(context.projectID == nil)
                 ForEach(projectItems) { item in
                     if let facts = item.assetFacts {
-                        Button(item.detail + " · " + facts.instanceID.uuidString.prefix(6)) {
+                        Button(item.detail + " · " + t("recordedInstance", "已登记实例", "Recorded instance") + " \((projectItems.map { $0.assetFacts!.instanceID }.sorted { $0.uuidString < $1.uuidString }.firstIndex(of: facts.instanceID) ?? 0) + 1)") {
                             query.scope = .init(mode: .project, projectID: facts.projectID, instanceID: facts.instanceID)
                         }
                     }
                 }
                 Menu(t("runScope", "绑定已登记运行或节点", "Bind a recorded run or node")) {
                     ForEach(runScopes, id: \.key) { value in
-                        Menu(value.title) {
+                        Menu(value.title + " \((runScopes.firstIndex { $0.key == value.key } ?? 0) + 1)") {
                             Button(t("wholeRun", "此运行的全部结果", "All results of this run")) { query.scope = value.scope }
                             ForEach(value.nodes, id: \.self) { node in
-                                Button("Node " + node.uuidString.prefix(8)) { var scope = value.scope; scope.nodeID = node; query.scope = scope }
+                                Button(t("recordedNode", "已登记节点", "Recorded node") + " \((value.nodes.sorted { $0.uuidString < $1.uuidString }.firstIndex(of: node) ?? 0) + 1)") { var scope = value.scope; scope.nodeID = node; query.scope = scope }
                             }
                         }
                     }
@@ -65,14 +67,15 @@ struct SharedLibraryPropertyControls: View {
             if hasStart { DatePicker(t("dateAfter", "起始时间", "From"), selection: $dateStart).labelsHidden() }
             Toggle(t("dateBefore", "结束时间", "Until"), isOn: $hasEnd)
             if hasEnd { DatePicker(t("dateBefore", "结束时间", "Until"), selection: $dateEnd).labelsHidden() }
-            Button(t("applyProperties", "应用尺寸与时间条件", "Apply size & time conditions")) {
+            Button(t("applyAllFilters", "应用全部条件", "Apply all conditions")) {
                 do {
                     var next = properties
                     next.width = try range(widthMin, widthMax); next.height = try range(heightMin, heightMax)
                     next.registeredAt = hasStart || hasEnd ? .init(start: hasStart ? dateStart : nil, end: hasEnd ? dateEnd : nil) : nil
-                    try next.validate(); properties = next; failure = nil
+                    try next.validate(); try query.scope?.validate(); properties = next; failure = nil; onApply()
                 } catch { failure = t("invalidRange", "请输入正整数范围，结束值不能早于起始值。条件尚未应用。", "Use positive integer ranges and an end after the start. Conditions have not been applied.") }
             }
+            Button(t("cancel", "取消", "Cancel"), action: onCancel).keyboardShortcut(.cancelAction)
             if let failure { Text(failure).foregroundStyle(.red) }
             Text(t("sourceFilterHint", "模型和直接来源可从对象的“生成与来源”加入条件。保存检索会保存这些条件和明确范围，不修改对象。", "Add model and direct-source conditions from an item's provenance. Saving a query retains all conditions and its explicit scope, without editing items.")).foregroundStyle(.secondary)
         }.font(.caption).textFieldStyle(.roundedBorder)
@@ -100,7 +103,7 @@ struct SharedLibraryPropertyControls: View {
             guard let facts = item.assetFacts else { continue }
             for occurrence in facts.occurrences ?? [] {
                 let key = facts.instanceID.uuidString + occurrence.runID.uuidString
-                if values[key] == nil { values[key] = .init(key: key, title: item.detail + " · " + occurrence.runID.uuidString.prefix(8),
+                if values[key] == nil { values[key] = .init(key: key, title: item.detail + " · " + t("recordedRun", "已登记运行", "Recorded run"),
                     scope: .init(mode: .run, projectID: facts.projectID, instanceID: facts.instanceID, runID: occurrence.runID), nodes: []) }
                 if values[key]?.nodes.contains(occurrence.nodeID) == false { values[key]?.nodes.append(occurrence.nodeID) }
             }
@@ -125,6 +128,9 @@ struct SharedLibraryPropertySummary: View {
         VStack(alignment: .leading, spacing: 4) {
             if let scope = query.scope {
                 remove(scopeTitle(scope)) { query.scope = nil }
+                let sources = items.filter { $0.assetFacts?.matches(scope: scope, properties: nil, context: context) == true }
+                if !sources.isEmpty { Text(t("scopeSources", "此范围的已登记结果：", "Recorded results in this scope: ") + Array(Set(sources.map { $0.detail + " · " + $0.title })).sorted().prefix(3).joined(separator: "、")).foregroundStyle(.secondary) }
+                WorkflowTechnicalDetails(value: SharedLibraryScopeSummary.title(scope, text: t))
                 if !items.contains(where: { $0.assetFacts?.matches(scope: scope, properties: nil, context: context) == true }) {
                     Text(t("unavailableScope", "所绑定范围在当前索引中无条目；没有扩大为全库。", "The bound scope has no entries in this index; it has not expanded to the whole library.")).foregroundStyle(.orange)
                 }
@@ -133,8 +139,11 @@ struct SharedLibraryPropertySummary: View {
             if let width = p.width { remove(t("width", "宽度", "Width") + ": " + rangeLabel(width)) { p.width = nil } }
             if let height = p.height { remove(t("height", "高度", "Height") + ": " + rangeLabel(height)) { p.height = nil } }
             if let date = p.registeredAt { remove(t("registered", "项目登记时间（本地时区）", "Project registration (local time)") + ": " + (date.start?.formatted() ?? "…") + " – " + (date.end?.formatted() ?? "…")) { p.registeredAt = nil } }
-            if let model = p.model { remove(t("model", "实际记录模型", "Recorded model") + ": " + (model.kind == .localReference ? URL(fileURLWithPath: model.value).lastPathComponent : model.value) + " · " + (model.revision ?? t("allVersions", "此模型的所有已记录版本", "All recorded revisions of this model"))) { p.model = nil } }
-            if let parent = p.directParent { remove(t("directParent", "直接来源", "Direct source") + ": " + parent.assetID.uuidString.prefix(8)) { p.directParent = nil } }
+            if let model = p.model { remove(t("model", "实际记录模型", "Recorded model") + ": " + (model.kind == .localReference ? URL(fileURLWithPath: model.value).lastPathComponent : t("modelNameUnrecorded", "模型名称未记录", "Model name not recorded")) + " · " + (model.revision == nil ? t("allVersions", "此模型的所有已记录版本", "All recorded revisions of this model") : t("exactRecordedVersion", "精确已记录版本（见技术详情）", "Exact recorded revision (see technical details)"))) { p.model = nil } }
+            if p.directParent != nil { remove(t("directParent", "直接来源", "Direct source") + ": " + t("recordedSource", "已登记来源", "Recorded source")) { p.directParent = nil } }
+            if p.model != nil || p.directParent != nil {
+                WorkflowTechnicalDetails(value: (try? String(data: JSONEncoder().encode(p), encoding: .utf8)) ?? "—")
+            }
             if !p.isEmpty {
                 Text(t("missingFields", "当前范围中缺少所需属性的登记项", "Entries missing required properties in this scope") + ": \(missingCount)").foregroundStyle(.secondary)
             }
@@ -148,7 +157,7 @@ struct SharedLibraryPropertySummary: View {
         }.count
     }
     private func scopeTitle(_ scope: SharedLibraryQueryScope) -> String {
-        SharedLibraryScopeSummary.title(scope, text: t)
+        SharedLibraryScopeSummary.readable(scope, text: t)
     }
     private func rangeLabel(_ value: SharedLibraryNumberRange) -> String { (value.minimum.map(String.init) ?? "…") + " – " + (value.maximum.map(String.init) ?? "…") + " px" }
     private func remove(_ title: String, action: @escaping () -> Void) -> some View {
@@ -158,6 +167,14 @@ struct SharedLibraryPropertySummary: View {
 
 /// The saved query and its removable summary use the same complete identity.
 enum SharedLibraryScopeSummary {
+    static func readable(_ scope: SharedLibraryQueryScope, text: (String, String, String) -> String) -> String {
+        if scope.mode == .currentProject { return text("dynamicScope", "使用时的当前项目实例", "Current project instance when used") }
+        var parts = [scope.instanceID == nil ? text("fixedLogicalProject", "固定项目（所有已登记实例）", "Fixed project (all registered instances)") : text("fixedProject", "固定项目实例", "Fixed project instance")]
+        if scope.runID != nil { parts.append(text("fixedRun", "所选历史运行", "Selected historical run")) }
+        if scope.nodeID != nil { parts.append(text("fixedNode", "所选节点", "Selected node")) }
+        if scope.stepID != nil { parts.append(text("fixedCall", "所选具体调用", "Selected exact call")) }
+        return parts.joined(separator: " · ")
+    }
     static func title(_ scope: SharedLibraryQueryScope,
                       text: (String, String, String) -> String) -> String {
         if scope.mode == .currentProject {

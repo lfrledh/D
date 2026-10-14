@@ -226,6 +226,12 @@ public struct DualWorkbenchView: View {
                 await refreshLibrary(checkModels: false)
             } catch is CancellationError { } catch { library.errorMessage = error.localizedDescription }
         }
+        let targetTitle = (selectionModel.manifest?.name ?? "D") + " · " + t("quickMode", "Quick creation", "快速创作") + " · " + (controller.draft?.node.title ?? t("chat", "Chat", "聊天"))
+        library.captureSelectionPresentation(targetTitle) {
+            !quickOwnerIsChanging && selectionModel.projectSession === owner && owner.currentStore === store
+                && temporary == usesTemporaryChat && quick === controller
+                && controller.draft?.id == selectedDraftID && chat?.state.selectedSessionID == selectedChatID
+        }
         library.configurationSelectionAction = { item in
             do {
                 guard !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
@@ -305,12 +311,10 @@ public struct DualWorkbenchView: View {
                     }.fixedSize().accessibilityIdentifier("quick-text-surface")
                 }
                 Spacer(minLength: 8)
-                Button { navigate(to: entry == .quick ? .workflow : .quick) } label: {
-                    Image(systemName: entry == .quick ? "rectangle.3.group" : "bolt.fill").frame(width: 30, height: 30)
-                        .contentTransition(.symbolEffect(.replace))
-                }.buttonStyle(WorkbenchIconButtonStyle(diameter: 40, panel: true))
-                    .help(entry == .quick ? t("quickSwitch", "Quick generation · Switch to workflow", "快速生成 · 切换到工作流") : t("workflowSwitch", "Workflow · Switch to Quick generation", "工作流 · 切换到快速生成"))
-                    .accessibilityLabel(entry == .quick ? t("switchToWorkflow", "Switch to workflow", "切换到工作流") : t("switchToQuick", "Switch to Quick generation", "切换到快速生成")).accessibilityIdentifier("workbench-entry").workbenchMotion(value: entry)
+                Picker(t("workspaceMode", "Workspace", "工作区"), selection: Binding(get: { entry }, set: { navigate(to: $0) })) {
+                    Text(t("quickMode", "Quick creation", "快速创作")).tag(Entry.quick)
+                    Text(t("workflowMode", "Workflow", "工作流")).tag(Entry.workflow)
+                }.pickerStyle(.segmented).frame(width: 180).accessibilityIdentifier("workbench-entry")
                 Button(action: { presentSettings() }) { Image(systemName: "gearshape").frame(width: 30, height: 30) }
                     .buttonStyle(WorkbenchIconButtonStyle(diameter: 40, panel: true)).help(t("settings", "Settings", "设置")).accessibilityLabel(t("settings", "Settings", "设置"))
                     .accessibilityIdentifier("workbench-settings").disabled(!canPresentSettings)

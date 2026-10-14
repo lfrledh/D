@@ -76,6 +76,12 @@ struct WorkflowHostView: View {
                     library.isPresented = false
                 } catch { library.errorMessage = error.localizedDescription }
             }
+            let targetName = controller.graph?.nodes.first { $0.id == target.nodeID }.map { WorkflowHumanPresentation.name($0, in: controller.graph?.nodes ?? []) } ?? library.managementText("unknown", "未知")
+            let targetTitle = (model.manifest?.name ?? "D") + " · " + ([controller.rootGraph?.name, controller.bodyPath.isEmpty ? nil : controller.graph?.name].compactMap { $0 }.joined(separator: " / ")) + " · " + targetName
+            library.captureSelectionPresentation(targetTitle) {
+                guard model.projectSession === owner else { return false }
+                do { try owner.checkWorkflowModelSelection(target: target, controller: controller); return true } catch { return false }
+            }
             library.configurationSelectionAction = { item in
                 do {
                     guard model.projectSession === owner,

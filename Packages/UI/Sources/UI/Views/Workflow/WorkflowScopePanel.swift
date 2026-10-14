@@ -78,16 +78,16 @@ struct WorkflowScopePresentation: Identifiable {
                                     get: { choices[key(boundary)] }, set: { choices[key(boundary)] = $0 })) {
                                     Text(text("choose", "请选择一个结果")).tag(Optional<UUID>.none)
                                     ForEach(records) { call in
-                                        Text(call.step.node.title + " · " + call.address.runID.uuidString.prefix(8) + " / " + call.step.id.uuidString.prefix(8))
+                                        Text(call.step.node.title + " · " + (controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0, in: controller.runs, language: language) } ?? text("unavailableRun", "历史运行不可访问")) + " · " + WorkflowHumanPresentation.call(call, in: records, language: language))
                                             .tag(Optional(call.id))
                                     }
                                 }
                                 if let call = records.first(where: { $0.id == choices[key(boundary)] }) {
-                                    Text(String(describing: call.step.outputs[boundary.sourcePort]))
-                                        .font(.caption.monospaced()).lineLimit(4).textSelection(.enabled)
+                                    if let value = call.step.outputs[boundary.sourcePort] {
+                                        WorkflowHistoricalValuePreview(value: value, controller: controller)
+                                    } else { Text(text("missingOutput", "此输出不可访问")) }
                                     DisclosureGroup(text("identity", "完整来源身份")) {
-                                        Text(String(describing: call.address) + "\n" + call.step.id.uuidString + " / " + boundary.sourcePort)
-                                            .font(.caption2.monospaced()).textSelection(.enabled)
+                                        WorkflowTechnicalDetails(value: String(describing: call.address) + "\n" + call.step.id.uuidString + " / " + boundary.sourcePort)
                                     }
                                 }
                             }.padding(8).background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
@@ -109,5 +109,23 @@ struct WorkflowScopePresentation: Identifiable {
                 Button(text("close", "关闭")) { dismiss() }
             }
         }.padding(20).frame(minWidth: 580, idealWidth: 680, minHeight: 420)
+    }
+}
+
+/// Reads an explicitly selected frozen output. It never starts an operation or edits a draft.
+private struct WorkflowHistoricalValuePreview: View {
+    let value: WorkflowValue
+    let controller: WorkflowController
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            switch value {
+            case .data(let datum): WorkflowDatumSnapshotView(value: datum)
+            case .asset(let reference): WorkflowAssetPreview(controller: controller, reference: reference)
+            case .collection(let candidates):
+                ForEach(candidates) { candidate in WorkflowCandidatePreview(controller: controller, candidate: candidate, selected: false, onSelect: nil) }
+            case .receipt(let receipt): Text(receipt.names.joined(separator: "、"))
+            }
+            WorkflowTechnicalDetails(value: String(describing: value))
+        }
     }
 }

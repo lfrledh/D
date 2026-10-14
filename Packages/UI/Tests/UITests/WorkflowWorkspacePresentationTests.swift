@@ -370,7 +370,8 @@ extension WorkflowWorkspacePresentationTests {
         #expect(throws: SharedLibraryError.self) { try store.createSavedQuery(name: "invalid", query: state.query) }
         let chips = WorkflowResultQueryState.tagConditions(state.query[keyPath: path], store: store, missingLabel: "Deleted tag")
         #expect(chips.count == 1 && chips[0].id == tag)
-        #expect(chips[0].title == "Deleted tag · " + tag.uuidString)
+        #expect(chips[0].title == "Deleted tag")
+        #expect(!chips[0].title.contains(tag.uuidString))
         try store.undo()
         #expect(state.matches(reference, store: store))
         #expect(WorkflowResultQueryState.tagConditions(state.query[keyPath: path], store: store, missingLabel: "Deleted tag").first?.title == "temporary")

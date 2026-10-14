@@ -42,7 +42,7 @@ public struct ModelLibraryView: View {
         (model.snapshot?.resources ?? []).filter { resource in
             let record = resource.record
             let search = model.resourceSearch.trimmingCharacters(in: .whitespacesAndNewlines)
-            let matches = search.isEmpty || [model.entry(for: record)?.title, record.revision, record.directory?.path]
+            let matches = search.isEmpty || [model.presentationEntry(for: record)?.title, record.revision, record.directory?.path]
                 .compactMap { $0 }.contains { $0.localizedStandardContains(search) }
             let include: Bool
             switch model.resourceFilter {
@@ -156,13 +156,13 @@ public struct ModelLibraryView: View {
             List(selection: $model.selectedResource) {
                 ForEach(resources) { resource in
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(model.entry(for: resource.record)?.title ?? resource.record.catalogID).font(.headline)
-                        Text(resource.record.revision).font(.caption.monospaced()).lineLimit(1).truncationMode(.middle)
+                        Text(resourceTitle(resource)).font(.headline)
+                        Text(model.presentationEntry(for: resource.record).map { catalogText($0, field: "spec") } ?? text("unrecordedVariant", "此版本规格未记录")).font(.caption)
                         HStack {
-                            Text(fileState(resource)); Text("·"); Text(registration(resource.record.registrationState)); Text("·"); Text(text("role." + resource.control.role.rawValue, resource.control.role.rawValue)); Spacer()
+                            Text(fileState(resource)); Text("·"); Text(registration(resource.record.registrationState)); Text("·"); Text(preparation(resource)); Spacer()
                             Text(ModelLibraryModel.formatBytes(resource.record.totalBytes))
                         }.font(.caption).foregroundStyle(.secondary)
-                        Text((model.entry(for: resource.record)?.repository ?? "") + " · " + resourceLocation(resource)).font(.caption).lineLimit(1).truncationMode(.middle)
+                        Text((model.presentationEntry(for: resource.record)?.repository ?? "") + " · " + shortLocation(resource)).font(.caption).lineLimit(1).truncationMode(.middle)
                     }.padding(.vertical, 7).tag(resource.id).contentShape(Rectangle())
                         .onTapGesture { model.selectedResource = resource.id; narrowDetail = true }
                 }
@@ -171,11 +171,11 @@ public struct ModelLibraryView: View {
                         ForEach(model.readOnlyConfigurations.filter { model.resourceSearch.isEmpty || $0.title.localizedStandardContains(model.resourceSearch) || $0.identity.localizedStandardContains(model.resourceSearch) }) { item in
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(item.title).font(.headline)
-                                Text(item.identity).font(.caption.monospaced()).textSelection(.enabled)
+                                WorkflowTechnicalDetails(value: item.identity)
                                 Text(item.location?.path ?? text("locationUnread", "位置尚未读取")).font(.caption).textSelection(.enabled)
                                 Text(text("readOnlyHelp", "保留既有能力；此配置不由下载库直接管理。无文件扫描或虚构下载历史。")).font(.caption).foregroundStyle(.secondary)
                                 if item.selectable, let action = model.configurationSelectionAction {
-                                    Button(text("use", "用于已指定的目标")) { Task { await action(item) } }
+                                    Button(text("useTarget", "用于：") + (model.currentSelectionTitle ?? text("targetUnavailable", "目标已改变，请重新选择"))) { Task { await action(item) } }.disabled(model.currentSelectionTitle == nil)
                                 }
                             }.padding(.vertical, 6)
                         }
@@ -192,7 +192,7 @@ public struct ModelLibraryView: View {
                       ForEach(tasks) { task in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(model.catalog.first { $0.id == task.catalogID }?.title ?? task.catalogID).font(.headline)
-                        Text(taskLocation(task)).font(.caption).lineLimit(1).truncationMode(.middle)
+                        Text(model.snapshot?.resources.first(where: { $0.id == task.resourceID }).map(shortLocation) ?? text("unknownLocation", "位置尚未确认")).font(.caption).lineLimit(1)
                         HStack { Text(downloadState(task.state)); Spacer(); Text(task.postAction == .register ? text("downloadRegister", "下载后登记") : text("filesOnly", "仅下载文件")) }.font(.caption)
                         if let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) {
                             ProgressView(value: Double(resource.record.downloadedBytes), total: Double(max(1, resource.record.totalBytes)))
@@ -220,33 +220,19 @@ public struct ModelLibraryView: View {
         }.scrollPosition(model.workspace == "resources" ? $model.resourceDetailScroll : $model.taskDetailScroll).accessibilityIdentifier("model-manager-detail")
     }
     private func resourceDetail(_ resource: ModelResource) -> some View {
-        let record = resource.record, entry = model.entry(for: resource.record)
+        let record = resource.record, entry = model.presentationEntry(for: resource.record)
         return VStack(alignment: .leading, spacing: 16) {
-            Text(entry?.title ?? record.catalogID).font(.title2.bold())
+            Text(resourceTitle(resource)).font(.title2.bold())
             LabeledContent(text("files", "文件"), value: fileState(resource))
             LabeledContent(text("registration", "登记"), value: registration(record.registrationState))
-            LabeledContent(text("preparation", "准备"), value: resource.control.role == .execution ? text("prepared", "执行包已准备") : (entry?.preparation == .required ? text("needsPreparation", "需要准备") : text("notRequired", "不需要")))
+            LabeledContent(text("preparation", "准备"), value: preparation(resource))
             Text(entry.map { catalogText($0, field: "spec") } ?? "").font(.callout)
             Text(entry.map { catalogText($0, field: "memory") } ?? "").font(.caption).foregroundStyle(.secondary)
-            Divider()
-            DisclosureGroup(text("technical", "身份与来源详情")) {
-            field("resourceID", "资源身份", resource.id.description)
-            field("revision", "精确版本", record.revision)
-            field("recipe", "准备配方", resource.control.preparationRecipe ?? text("notRequired", "不需要"))
-            if let parent = resource.control.parentResourceID { field("parent", "原始资源", parent.description) }
             field("location", "位置", resourceLocation(resource))
             field("ownership", "文件控制", record.storage == .managed ? text("managed", "D 管理的确切副本") : text("external", "外部原件：不提供直接删除"))
             field("origin", "取得方式", text("origin." + resource.control.origin.rawValue, resource.control.origin.rawValue))
             field("repository", "内容来源", entry?.repository ?? text("unknown", "未知"))
-            field("verified", "最后完整核验", resource.control.lastVerified?.formatted() ?? text("unknown", "未知"))
-            field("knownFiles", "必要文件数量", String(resource.control.requiredPaths?.count ?? entry?.files.count ?? 0))
-            if let entry {
-                ForEach(entry.files, id: \.path) { file in
-                    Text(file.path).font(.caption.bold()).textSelection(.enabled)
-                    Text((file.sourceRepository ?? entry.repository) + " @ " + (file.sourceRevision ?? entry.revision) + " / " + (file.remotePath ?? file.path)).font(.caption).textSelection(.enabled)
-                }
-            }
-            }
+            Divider()
             Text(text("knownScope", "当前已知资源与引用；未扫描所有历史项目。")).font(.caption).foregroundStyle(.secondary)
             if record.activeLeaseCount > 0 { Text(text("inUse", "正在运行、排队、准备或备份中，文件受到保护。")) }
             if let error = record.error { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
@@ -286,11 +272,32 @@ public struct ModelLibraryView: View {
                 }
                 if (canSelect || model.selectionAction != nil), record.registrationState == .registered, record.state == .installed,
                    record.availability == .available {
-                    Button(text("use", "用于已指定的目标")) { Task { if let action = model.selectionAction { await action(record.id) } else { await onSelect(record.id) } } }
-                        .disabled(record.id == (model.selectionID ?? selectedModelID))
+                    Button(model.selectionAction == nil ? text("selectResource", "选择此资源") : text("useTarget", "用于：") + (model.currentSelectionTitle ?? text("targetUnavailable", "目标已改变，请重新选择"))) { Task { if let action = model.selectionAction { await action(record.id) } else { await onSelect(record.id) } } }
+                        .disabled(record.id == (model.selectionID ?? selectedModelID) || (model.selectionAction != nil && model.currentSelectionTitle == nil))
                 }
             }.buttonStyle(.bordered)
             if record.registrationState != .registered { Text(text("registrationHelp", "文件完整不等于已接入执行；登记不会改变当前节点或运行模型。")).font(.caption).foregroundStyle(.secondary) }
+            DisclosureGroup(text("technical", "身份与来源详情")) {
+            WorkflowTechnicalDetails(value: resource.id.description + "\n" + record.revision + "\n" + resourceLocation(resource))
+            field("resourceID", "资源身份", resource.id.description)
+            field("revision", "精确版本", record.revision)
+            field("recipe", "准备配方", resource.control.preparationRecipe ?? text("notRequired", "不需要"))
+            field("executionRevision", "执行副本版本", resource.control.executionRevision ?? text("unknown", "未知"))
+            if let parent = resource.control.parentResourceID { field("parent", "原始资源", parent.description) }
+            field("verified", "最后完整核验", resource.control.lastVerified?.formatted() ?? text("unknown", "未知"))
+            field("knownFiles", "必要文件数量", String(resource.control.requiredPaths?.count ?? entry?.files.count ?? 0))
+            if let paths = resource.control.requiredPaths {
+                field("actualPaths", "此副本已记录的必要文件", paths.joined(separator: "\n"))
+            }
+            if let entry {
+                Text(text("sourceRecipeFiles", "源配方组件及摘要（不代表准备输出的摘要）")).font(.caption)
+                ForEach(entry.files, id: \.path) { file in
+                    Text(file.path).font(.caption.bold()).textSelection(.enabled)
+                    WorkflowTechnicalDetails(value: file.sha256 + "\n" + String(describing: file.digestAlgorithm))
+                    Text((file.sourceRepository ?? entry.repository) + " @ " + (file.sourceRevision ?? entry.revision) + " / " + (file.remotePath ?? file.path)).font(.caption).textSelection(.enabled)
+                }
+            }
+            }
             ForEach(resource.control.events.reversed()) { event in
                 Text(text("event." + event.action, event.action) + " · " + (event.date?.formatted() ?? text("unknown", "未知"))).font(.caption)
             }
@@ -300,9 +307,10 @@ public struct ModelLibraryView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text(model.catalog.first { $0.id == task.catalogID }?.title ?? task.catalogID).font(.title2.bold())
             Text(downloadState(task.state)).font(.headline)
-            field("taskID", "任务身份", task.id.uuidString)
-            field("resourceID", "资源身份", task.resourceID.description)
-            field("attempt", "当前尝试", "\(task.attempts) · " + task.attemptID.uuidString)
+            if let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) {
+                ProgressView(value: Double(resource.record.downloadedBytes), total: Double(max(1, resource.record.totalBytes)))
+                Text(ModelLibraryModel.formatBytes(resource.record.downloadedBytes) + " / " + ModelLibraryModel.formatBytes(resource.record.totalBytes)).font(.caption.monospacedDigit())
+            }
             field("postAction", "下载完成后", task.postAction == .filesOnly ? text("filesOnly", "仅下载文件") : text("downloadRegister", "下载后登记"))
             if let deadline = task.earliestRetry { field("earliest", "最早重试", deadline.formatted()) }
             if let first = task.firstError { field("firstError", "最初错误", first) }
@@ -330,6 +338,8 @@ public struct ModelLibraryView: View {
                 }
             }
             if task.state.isTerminal { Button(text("clearHistory", "清除此下载记录…")) { confirmation = .clear(task) } }
+            WorkflowTechnicalDetails(value: ["Task: " + task.id.uuidString, "Resource: " + task.resourceID.description, "Attempt: " + task.attemptID.uuidString, "Attempts: " + String(task.attempts), "Generation: " + task.generation.uuidString].joined(separator: "\n"))
+
         }.buttonStyle(.bordered)
     }
     private var acquisition: some View {
@@ -340,7 +350,7 @@ public struct ModelLibraryView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle(entry.title, isOn: Binding(get: { downloadSelection.contains(entry.id) }, set: { if $0 { downloadSelection.insert(entry.id) } else { downloadSelection.remove(entry.id) } }))
                     Text(catalogText(entry, field: "spec") + " · " + ModelLibraryModel.formatBytes(entry.totalBytes)).font(.caption)
-                    Text(entry.revision).font(.caption.monospaced()).textSelection(.enabled)
+                    WorkflowTechnicalDetails(value: entry.id + "\n" + entry.revision)
                     Text(catalogText(entry, field: "memory")).font(.caption).foregroundStyle(.secondary)
                     Text(entry.repository).font(.caption)
                     Text(acquisitionState(entry)).font(.caption).foregroundStyle(.secondary)
@@ -452,6 +462,24 @@ public struct ModelLibraryView: View {
         if existingTask(entry) != nil { return text("reuseTask", "已有任务：保留原任务及完成后动作") }
         return text("newDownload", "需要新增下载任务")
     }
+    private func resourceTitle(_ resource: ModelResource) -> String {
+        let base = model.presentationEntry(for: resource.record)?.title ?? text("recordedResource", "已登记资源")
+        let peers = (model.snapshot?.resources ?? []).filter {
+            (model.presentationEntry(for: $0.record)?.title ?? text("recordedResource", "已登记资源")) == base
+        }.sorted { $0.id.description < $1.id.description }
+        guard peers.count > 1, let index = peers.firstIndex(where: { $0.id == resource.id }) else { return base }
+        return base + " · " + text("copyAlias", "副本") + " \(index + 1)"
+    }
+    private func shortLocation(_ resource: ModelResource) -> String {
+        resource.record.storage == .managed ? text("managedLocation", "D 模型库 · 受管理副本") : text("externalLocation", "外部目录 · 原件")
+    }
+    private func preparation(_ resource: ModelResource) -> String {
+        if resource.control.role == .execution {
+            return text("executionCopy", "独立执行副本（仍需文件与登记有效）")
+        }
+        guard let entry = model.presentationEntry(for: resource.record) else { return text("unknownPreparation", "准备要求未知") }
+        return entry.preparation == .required ? text("needsPreparation", "需要准备") : text("notRequired", "不需要")
+    }
     private func catalogText(_ entry: ModelCatalogEntry, field: String) -> String {
         text("catalog." + entry.id + "." + field, field == "spec" ? entry.modelSpec : entry.memoryGuidance)
     }
@@ -473,9 +501,9 @@ public struct ModelLibraryView: View {
         }
         guard let resource else { return consequence + "\n" + text("unknownLocation", "位置尚未确认") }
         let children = model.snapshot?.resources.filter { $0.control.parentResourceID == resource.id && $0.control.fileState != .deleted }.count ?? 0
-        return (model.entry(for: resource.record)?.title ?? resource.record.catalogID) + " · " + resource.record.revision + "\n" + resourceLocation(resource)
+        return (model.presentationEntry(for: resource.record)?.title ?? resource.record.catalogID) + " · " + resource.record.revision + "\n" + resourceLocation(resource)
             + "\n" + text("oneObject", "影响对象：1") + " · " + text("knownLeases", "当前占用") + ": \(resource.record.activeLeaseCount) · " + text("preparedChildren", "已知准备副本") + ": \(children)"
-            + "\n\n" + consequence
+            + "\n" + text("role." + resource.control.role.rawValue, resource.control.role.rawValue) + "\n\n" + consequence
     }
     private func confirm(_ action: Confirmation) async {
         switch action {

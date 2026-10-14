@@ -21,6 +21,15 @@ public final class ModelLibraryModel {
     public var taskDetailScroll = ScrollPosition()
     public var selectedResource: ModelResourceID?
     public var selectedTask: UUID?
+    private(set) var selectionTitle: String?
+    @ObservationIgnored private var selectionIsCurrent: (() -> Bool)?
+    var currentSelectionTitle: String? { selectionIsCurrent?() == true ? selectionTitle : nil }
+    func captureSelectionPresentation(_ title: String, isCurrent: @escaping () -> Bool) {
+        selectionTitle = title; selectionIsCurrent = isCurrent
+    }
+    func presentationEntry(for record: ModelRecord) -> ModelCatalogEntry? {
+        catalog.first { $0.id == record.catalogID && $0.revision == record.revision }
+    }
     public var selectionID: ModelID?
     public private(set) var readOnlyConfigurations: [ModelReadOnlyConfiguration] = []
     @ObservationIgnored public var inventoryProvider: (@MainActor () throws -> [ModelReadOnlyConfiguration])?
@@ -408,7 +417,7 @@ public final class ModelLibraryModel {
 }
 
 extension ModelLibraryModel {
-    public func clearSelectionContext() { selectionAction = nil; configurationSelectionAction = nil; selectionID = nil }
+    public func clearSelectionContext() { selectionTitle = nil; selectionIsCurrent = nil; selectionAction = nil; configurationSelectionAction = nil; selectionID = nil }
     public func presentManagement() {
         clearSelectionContext()
         loadInventory()

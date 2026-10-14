@@ -20,6 +20,7 @@ struct WorkflowGraphSurface: View {
     @Binding var selectedConnectionID: UUID?
     let readOnly: Bool
     var inspectedNodeID: UUID? = nil
+    var runTargetNodeID: UUID? = nil
     let onPlan: (UUID, Bool) -> Void
     var onSetRunTarget: (UUID) -> Void = { _ in }
     var nodeSizeObserver: ((UUID, CGSize) -> Void)?
@@ -108,6 +109,7 @@ struct WorkflowGraphSurface: View {
                                 readOnly: readOnly,
                                 selected: controller.selectedNodeID == node.id || controller.selectedNodeIDs.contains(node.id),
                                 inspecting: inspectedNodeID == node.id,
+                                runTarget: runTargetNodeID == node.id,
                                 onPlan: onPlan,
                                 onSetRunTarget: onSetRunTarget,
                                 onBindAsset: onBindAsset,
@@ -969,6 +971,7 @@ private struct WorkflowNodeCard: View {
     let readOnly: Bool
     let selected: Bool
     let inspecting: Bool
+    let runTarget: Bool
     let onPlan: (UUID, Bool) -> Void
     let onSetRunTarget: (UUID) -> Void
     let onBindAsset: (UUID, UUID?, UUID, UUID) -> Bool
@@ -992,7 +995,8 @@ private struct WorkflowNodeCard: View {
                     let identity = WorkflowNodeIdentity.resolve(node: node, definition: definition,
                         modelChoices: controller.modelChoices, assets: controller.availableAssets,
                         tools: controller.tools, language: languageStore)
-                    Text(identity.title).font(.headline).lineLimit(2)
+                    Text(WorkflowHumanPresentation.name(node, in: controller.graph?.nodes ?? [node], language: languageStore)).font(.headline).lineLimit(2)
+                    if runTarget { Label(workflowText(languageStore, "semantics.nextRunTarget", fallback: "下次运行目标"), systemImage: "flag.fill").font(.caption2).foregroundStyle(.tint) }
                     if let detail = identity.detail {
                         Text(detail).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1)
                     }

@@ -262,14 +262,14 @@ struct SharedLibraryBrowserTests {
             selectedKeys: ["entry:one"], focusedKey: "entry:one"
         )
         try SharedLibraryBrowserLogic.deleteTag(realTagID, store: store, state: state)
-        #expect(state.scope == .all)
-        #expect(state.query.anyTagIDs.isEmpty)
+        #expect(state.scope == .tag(realTagID))
+        #expect(state.query.anyTagIDs == [realTagID])
         state.scope = .folder(childID)
         try SharedLibraryBrowserLogic.deleteFolder(parentID, store: store, state: state)
-        #expect(state.scope == .all)
+        #expect(state.scope == .folder(childID))
         state.scope = .saved(savedID)
         try SharedLibraryBrowserLogic.deleteSavedQuery(savedID, store: store, state: state)
-        #expect(state.scope == .all)
+        #expect(state.scope == .saved(savedID))
         let protectedTagID = try #require(store.createTags(["受保护"]).first)
         _ = try store.createSavedQuery(
             name: "引用标签", query: .init(allTagIDs: [protectedTagID])
@@ -346,25 +346,25 @@ struct SharedLibraryBrowserTests {
         try state.selectScope(.folder(folderID), using: store)
         try store.undo()
         state.reconcile(using: store)
-        #expect(state.scope == .all)
+        #expect(state.scope == .folder(folderID))
         #expect(state.query.text == "自由搜索")
         #expect(state.selectedKeys == ["keep"])
         try store.redo()
         state.reconcile(using: store)
-        #expect(state.scope == .all)
+        #expect(state.scope == .folder(folderID))
 
         let tagID = try #require(store.createTags(["跨视图标签"]).first)
         try state.selectScope(.tag(tagID), using: store)
         try store.deleteTags([tagID])
         state.reconcile(using: store)
-        #expect(state.scope == .all)
+        #expect(state.scope == .tag(tagID))
         #expect(state.query.text == "自由搜索")
 
         let savedID = try store.createSavedQuery(name: "跨视图筛选", query: .init(kinds: [.model]))
         try state.selectScope(.saved(savedID), using: store)
         try store.deleteSavedQuery(savedID)
         state.reconcile(using: store)
-        #expect(state.scope == .all)
+        #expect(state.scope == .saved(savedID))
         #expect(state.query.text == "")
         #expect(state.selectedKeys == ["keep"])
         #expect(state.focusedKey == "keep")
@@ -399,18 +399,18 @@ struct SharedLibraryBrowserTests {
         ) == nil)
     }
 
-    @Test func externalTagDeletionAndUndoPruneOnlyRemovedFilterIDs() throws {
+    @Test func externalTagDeletionAndUndoKeepMissingConditionsExplicit() throws {
         let store = try SharedLibraryStore()
         let keep = try #require(store.createTags(["保留"]).first)
         let removed = try #require(store.createTags(["撤销创建"]).first)
         let state = SharedLibraryBrowserState(query: .init(text: "未保存草稿", inputs: [.image],
             allTagIDs: [removed], anyTagIDs: [keep, removed]), selectedKeys: ["unchanged"])
         try store.undo(); state.reconcile(using: store)
-        #expect(state.query.anyTagIDs == [keep] && state.query.allTagIDs.isEmpty)
+        #expect(state.query.anyTagIDs == [keep, removed] && state.query.allTagIDs == [removed])
         #expect(state.query.text == "未保存草稿" && state.query.inputs == [.image])
         #expect(state.selectedKeys == ["unchanged"])
         try store.deleteTags([keep]); state.reconcile(using: store)
-        #expect(state.query.anyTagIDs.isEmpty)
+        #expect(state.query.anyTagIDs == [keep, removed])
         #expect(state.query.text == "未保存草稿")
     }
 

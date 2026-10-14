@@ -46,6 +46,7 @@ public final class SharedLibraryBrowserState {
     public var query: SharedLibraryQuery
     public var scope: SharedLibraryBrowserScope
     public var selectedKeys: Set<String>
+    var tagPresentation = SharedLibraryTagPresentation()
     public var focusedKey: String?
 
     public init(
@@ -93,19 +94,9 @@ public final class SharedLibraryBrowserState {
 
     /// Called after local or external metadata changes. Drafts and selected keys are retained.
     public func reconcile(using store: SharedLibraryStore) {
-        let availableTags = Set(store.metadata.tags.keys)
-        query.anyTagIDs.formIntersection(availableTags)
-        query.allTagIDs.formIntersection(availableTags)
-        switch scope {
-        case .tag(let id) where store.metadata.tags[id] == nil,
-             .folder(let id) where store.metadata.folders[id] == nil,
-             .saved(let id) where store.metadata.savedQueries[id] == nil:
-            scope = .all
-        case .saved(let id):
-            if let saved = store.metadata.savedQueries[id] { query = saved.query }
-        default:
-            break
-        }
+        tagPresentation.observe(tags: store.metadata.tags, requested: query.allTagIDs.union(query.anyTagIDs))
+        // Missing conditions and scopes remain explicit; never widen a query on deletion.
+        if case .saved(let id) = scope, let saved = store.metadata.savedQueries[id] { query = saved.query }
     }
 
     public func repairScope(using store: SharedLibraryStore) {
@@ -142,8 +133,6 @@ struct SharedLibraryBrowserRenameDrafts {
 @MainActor enum SharedLibraryBrowserLogic {
     static func deleteTag(_ id: UUID, store: SharedLibraryStore, state: SharedLibraryBrowserState) throws {
         try store.deleteTags([id])
-        state.query.allTagIDs.remove(id)
-        state.query.anyTagIDs.remove(id)
         state.repairScope(using: store)
     }
 
@@ -312,6 +301,7 @@ public struct SharedLibraryBrowser: View {
     @Environment(\.dLanguageStore) private var language
     @State private var state: SharedLibraryBrowserState
     @State private var showFilters = false
+    @State private var saveQueryRequest: SharedLibrarySaveQueryRequest?
     @State private var showOrganizer = false
     @State private var compactDetailKey: String?
     @State private var errorMessage: String?
@@ -423,6 +413,7 @@ public struct SharedLibraryBrowser: View {
             }
         }
         .background { if !compact { Rectangle().fill(.regularMaterial) } }
+        .sheet(item: $saveQueryRequest) { request in SharedLibrarySaveQuerySheet(request: request, store: store) { saveQueryRequest = nil } }
         .sheet(isPresented: $showOrganizer) { organizer }
         .sheet(item: $tagRequest) { request in
             SharedLibraryTagEditor(store: store, targets: request.targets, add: request.add, remove: request.remove,
@@ -572,13 +563,14 @@ public struct SharedLibraryBrowser: View {
                 Menu(scopeTitle) {
                     Button(word("all", "全部")) { selectScope(.all) }
                     ForEach(SharedLibraryItemKind.allCases, id: \.self) { kind in Button(kindName(kind)) { selectScope(.kind(kind)) } }
+                    ForEach(folders) { folder in Button(folder.name) { selectScope(.folder(folder.id)) } }
                     ForEach(saved) { saved in Button(saved.name) { selectScope(.saved(saved.id)) } }
                 }.font(.caption)
                 if compact {
                     Spacer(minLength: 0)
                     Menu {
                         Button(word("import", "导入素材"), action: onImport)
-                        Button(word("saveQuery", "保存检索")) { tab = .saved; showOrganizer = true }
+                        Button(word("saveQuery", "保存检索")) { openSaveQuery() }
                         Button(word("organize", "整理资料库")) { showOrganizer = true }
                         Divider()
                         Button(word("undo", "撤销")) { perform { try store.undo() } }.disabled(!store.canUndo)
@@ -600,13 +592,13 @@ public struct SharedLibraryBrowser: View {
                 Button(word("filters", "筛选"), systemImage: "line.3.horizontal.decrease.circle") { showFilters.toggle() }
                     .popover(isPresented: $showFilters, arrowEdge: .bottom) { filterPopover }
             }.font(.caption)
-            SharedLibraryPropertySummary(query: Binding(get: { query }, set: { query = $0 }), items: entries.map(\.item), context: queryContext, store: store)
+            SharedLibraryPropertySummary(query: Binding(get: { query }, set: { query = $0 }), items: entries.map(\.item), context: queryContext, store: store, fixedScopeDescription: scopeTitle)
             if hasSearchTokens { ScrollView(.horizontal) {
                 HStack(spacing: 4) {
                     if scope != .all { token(scopeTitle) { selectScope(.all) } }
                     if !query.text.isEmpty { token(query.text) { query.text = "" } }
-                    ForEach(tags.filter { query.allTagIDs.contains($0.id) }) { tag in token(word("all", "全部") + ": " + tag.name) { query.allTagIDs.remove(tag.id) } }
-                    ForEach(tags.filter { query.anyTagIDs.contains($0.id) }) { tag in token(word("anyTags", "至少一个标签") + ": " + tag.name) { query.anyTagIDs.remove(tag.id) } }
+                    ForEach(WorkflowResultQueryState.tagConditions(query.allTagIDs, store: store, missingLabel: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag")), id: \.id) { tag in token(word("allTags", "同时包含标签") + ": " + state.tagPresentation.title(tag.id, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag"))) { query.allTagIDs.remove(tag.id) } }
+                    ForEach(WorkflowResultQueryState.tagConditions(query.anyTagIDs, store: store, missingLabel: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag")), id: \.id) { tag in token(word("anyTags", "至少一个标签") + ": " + state.tagPresentation.title(tag.id, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag"))) { query.anyTagIDs.remove(tag.id) } }
                     dimensionTokens(query.kinds, path: \.kinds, label: kindName)
                     dimensionTokens(query.roles, path: \.roles, label: { $0 })
                     dimensionTokens(query.inputs, path: \.inputs, label: { word("inputs", "输入能力") + ": " + dataName($0) })
@@ -616,13 +608,17 @@ public struct SharedLibraryBrowser: View {
                     dimensionTokens(query.compatibility, path: \.compatibility, label: compatibilityName)
                 }
             }.scrollIndicators(.hidden) }
+            if !query.allTagIDs.union(query.anyTagIDs).filter({ store.metadata.tags[$0] == nil }).isEmpty {
+                WorkflowTechnicalDetails(value: query.allTagIDs.union(query.anyTagIDs).filter { store.metadata.tags[$0] == nil }.sorted { $0.uuidString < $1.uuidString }.map { state.tagPresentation.title($0, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag")) + ": " + $0.uuidString }.joined(separator: "\n"))
+            }
             HStack {
-                Text("\(Set(visible.map(\.item.key)).count)/\(Set(entries.map(\.item.key)).count) " + word("logicalObjects", "逻辑对象") + " · \(visible.count) " + word("locations", "活动位置"))
-                    .font(.caption2).foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                if !compact {
-                    Button(word("saveQuery", "保存检索")) { tab = .saved; showOrganizer = true }.font(.caption)
+                if case .failure = visibleResult {
+                    Text(metadataText(language, "countUnavailable", "当前范围数量不可用", "Count unavailable for this scope")).font(.caption2)
+                } else {
+                    Text("\(visible.count)/\(entries.count) " + word("locations", "结果位置")).font(.caption2).foregroundStyle(.secondary)
                 }
+                Spacer(minLength: 0)
+                Button(word("saveQuery", "保存检索")) { openSaveQuery() }.font(.caption)
             }
         }
     }
@@ -715,7 +711,17 @@ public struct SharedLibraryBrowser: View {
             if compact { selectedKeys = [entry.id]; compactDetailKey = entry.id }
         }
         .accessibilityIdentifier("shared-library-entry-" + entry.id)
-        row.onDrag { dragProvider(for: entry.id) }
+        VStack(alignment: .leading, spacing: 4) {
+            row.onDrag { dragProvider(for: entry.id) }
+            if let ids = store.metadata.tagAssignments[entry.item.key], !ids.isEmpty {
+                HStack {
+                    ForEach(tags.filter { ids.contains($0.id) }) { tag in
+                        Button(tag.name) { query.allTagIDs.insert(tag.id) }.buttonStyle(.borderless)
+                            .help(metadataText(language, "tagFiltersOnly", "仅按此标签筛选", "Filter by this tag only"))
+                    }
+                }.font(.caption).padding(.horizontal, 6)
+            }
+        }
     }
 
     private var detailPane: some View {
@@ -732,32 +738,6 @@ public struct SharedLibraryBrowser: View {
             }
             Text(entry.item.title).font(.headline).textSelection(.enabled)
             Text(entry.item.detail).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
-            detailLine(word("kind", "类别"), kindName(entry.item.kind))
-            detailLine(word("readiness", "就绪状态"), readinessName(entry.item.readiness))
-            detailLine(word("compatibility", "兼容性"), compatibilityName(entry.item.compatible))
-            if !entry.item.role.isEmpty { detailLine(word("role", "用途"), entry.item.role) }
-            detailLine(word("inputs", "输入能力"), kindList(entry.item.inputs))
-            detailLine(word("outputs", "输出能力"), kindList(entry.item.outputs))
-            if let kind = entry.item.contentKind { detailLine(word("content", "内容类型"), dataName(kind)) }
-            if !entry.facts.isEmpty {
-                Text(word("facts", "能力事实")).font(.subheadline.weight(.semibold))
-                ForEach(entry.facts, id: \.self) { fact in Text(fact).font(.caption).textSelection(.enabled) }
-            }
-            if let snapshot = entry.metadataSnapshot {
-                SharedAssetMetadataPanel(snapshot: snapshot, library: store, validate: tagValidation(entry), save: annotationSave(entry),
-                    onQuery: { properties in
-                        var next = query; next.properties = SharedLibraryPropertyQuery.merging(next.properties, properties)
-                        state.setDraftQuery(next)
-                    }, onOpenSource: { reference in
-                        let matches = entries.filter { $0.metadataSnapshot?.record?.reference == reference }
-                        let sameInstance = matches.filter { $0.metadataSnapshot?.instanceID == snapshot.instanceID }
-                        if let target = sameInstance.first ?? (matches.count == 1 ? matches.first : nil) {
-                            focusedKey = target.id; compactDetailKey = compact ? target.id : nil
-                        } else { errorMessage = metadataText(language, "sourceMissing", "此精确来源不在当前已登记范围，或存在多个实例。", "This exact source is outside the registered scope, or has multiple instances.") }
-                    })
-            } else {
-                SharedLibraryTagSection(store: store, target: tagTarget(entry), validateTarget: tagValidation(entry))
-            }
             Text(word("legend", "能力 / 我的标签")).font(.caption2).foregroundStyle(.secondary)
             Divider()
             if canUse(entry) {
@@ -784,6 +764,31 @@ public struct SharedLibraryBrowser: View {
                 Button(prepareLabel(for: entry)) { dispatch(.prepare, key: entry.id) }
                     .accessibilityIdentifier("shared-library-prepare")
             }
+            detailLine(word("kind", "类别"), kindName(entry.item.kind))
+            detailLine(word("readiness", "就绪状态"), readinessName(entry.item.readiness))
+            detailLine(word("compatibility", "兼容性"), compatibilityName(entry.item.compatible))
+            if !entry.item.role.isEmpty { detailLine(word("role", "用途"), entry.item.role) }
+            detailLine(word("inputs", "输入能力"), kindList(entry.item.inputs))
+            detailLine(word("outputs", "输出能力"), kindList(entry.item.outputs))
+            if let kind = entry.item.contentKind { detailLine(word("content", "内容类型"), dataName(kind)) }
+            if !entry.facts.isEmpty {
+                WorkflowTechnicalDetails(value: entry.facts.joined(separator: "\n") + "\n" + entry.item.key)
+            }
+            if let snapshot = entry.metadataSnapshot {
+                SharedAssetMetadataPanel(snapshot: snapshot, library: store, validate: tagValidation(entry), save: annotationSave(entry),
+                    onQuery: { properties in
+                        var next = query; next.properties = SharedLibraryPropertyQuery.merging(next.properties, properties)
+                        state.setDraftQuery(next)
+                    }, onOpenSource: { reference in
+                        let matches = entries.filter { $0.metadataSnapshot?.record?.reference == reference }
+                        let sameInstance = matches.filter { $0.metadataSnapshot?.instanceID == snapshot.instanceID }
+                        if let target = sameInstance.first ?? (matches.count == 1 ? matches.first : nil) {
+                            focusedKey = target.id; compactDetailKey = compact ? target.id : nil
+                        } else { errorMessage = metadataText(language, "sourceMissing", "此精确来源不在当前已登记范围，或存在多个实例。", "This exact source is outside the registered scope, or has multiple instances.") }
+                    })
+            } else {
+                SharedLibraryTagSection(store: store, target: tagTarget(entry), validateTarget: tagValidation(entry))
+            }
             if case .unavailable(let reason) = entry.selection {
                 Text(reason).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
@@ -803,54 +808,19 @@ public struct SharedLibraryBrowser: View {
         return names.isEmpty ? word("none", "无") : names
     }
 
+    private var filterToken: String {
+        String(describing: ObjectIdentifier(state)) + String(describing: ObjectIdentifier(store)) + String(describing: scope)
+            + String(describing: queryContext.projectID) + String(describing: queryContext.instanceID)
+    }
     private var filterPopover: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 9) {
-                Text(word("filters", "筛选")).font(.headline)
-                SharedLibraryPropertyControls(query: Binding(get: { query }, set: { query = $0 }), items: entries.map(\.item), context: queryContext)
-                filterGroup(word("kind", "类别"), values: SharedLibraryItemKind.allCases,
-                            keyPath: \.kinds, label: kindName)
-                Menu(word("role", "用途") + " (\(query.roles.count))") {
-                    ForEach(Array(Set(entries.map(\.item.role).filter { !$0.isEmpty })).sorted(), id: \.self) { role in
-                        Toggle(role, isOn: setBinding(\.roles, role))
-                    }
-                }
-                filterGroup(word("inputs", "输入能力"), values: WorkflowDataKind.allCases,
-                            keyPath: \.inputs, label: dataName)
-                filterGroup(word("outputs", "输出能力"), values: WorkflowDataKind.allCases,
-                            keyPath: \.outputs, label: dataName)
-                filterGroup(word("content", "内容类型"), values: WorkflowDataKind.allCases,
-                            keyPath: \.contentKinds, label: dataName)
-                filterGroup(word("readiness", "就绪状态"), values: SharedLibraryReadiness.allCases,
-                            keyPath: \.readiness, label: readinessName)
-                filterGroup(word("compatibility", "兼容性"), values: SharedLibraryCompatibility.allCases,
-                            keyPath: \.compatibility, label: compatibilityName)
-                Menu(word("anyTags", "至少一个标签") + " (\(query.anyTagIDs.count))") {
-                    ForEach(tags) { tag in Toggle(tag.name, isOn: setBinding(\.anyTagIDs, tag.id)) }
-                }
-                Menu(word("allTags", "同时包含这些标签") + " (\(query.allTagIDs.count))") {
-                    ForEach(tags) { tag in Toggle(tag.name, isOn: setBinding(\.allTagIDs, tag.id)) }
-                }
-                Menu(word("browseScope", "浏览范围")) {
-                    Button(word("all", "全部")) { selectScope(.all) }
-                    ForEach(SharedLibraryItemKind.allCases, id: \.self) { kind in
-                        Button(kindName(kind)) { selectScope(.kind(kind)) }
-                    }
-                    ForEach(folders) { folder in
-                        Button(folder.name) { selectScope(.folder(folder.id)) }
-                    }
-                    ForEach(saved) { item in
-                        Button(item.name) { selectScope(.saved(item.id)) }
-                    }
-                }
-                Text(word("filterRule", "同组任一，跨组同时满足")).font(.caption).foregroundStyle(.secondary)
-                Text(filterSummary).font(.caption).foregroundStyle(.secondary)
-                Button(word("clearFilters", "清除筛选")) { query = SharedLibraryQuery() }
-                Button(word("saveQuery", "保存当前智能筛选")) {
-                    tab = .saved; showOrganizer = true; showFilters = false
-                }
-            }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
-        }.frame(width: 290, height: 460)
+        SharedLibraryFilterEditor(query: query, token: filterToken, store: store, items: entries.map(\.item), context: queryContext,
+            current: { (query, filterToken) }, apply: { query = $0 }, close: { showFilters = false })
+    }
+    private func openSaveQuery() {
+        do {
+            let captured = try SharedLibraryBrowserLogic.queryForSaving(query, scope: scope, store: store)
+            saveQueryRequest = .init(query: captured, scopeTitle: scopeTitle, tagTitles: Dictionary(uniqueKeysWithValues: captured.allTagIDs.union(captured.anyTagIDs).map { ($0, state.tagPresentation.title($0, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag"))) }))
+        } catch { errorMessage = error.localizedDescription }
     }
 
     private func filterGroup<Value: Hashable>(

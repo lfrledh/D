@@ -2,6 +2,22 @@ import DWorkbench
 import Observation
 import SwiftUI
 
+/// Local remembered names and stable aliases; deletion never changes the bound UUID.
+struct SharedLibraryTagPresentation {
+    private(set) var names: [UUID: String] = [:]
+    private(set) var aliases: [UUID: Int] = [:]
+    mutating func observe(tags: [UUID: SharedLibraryTag], requested: Set<UUID>) {
+        for tag in tags.values { names[tag.id] = tag.name }
+        for id in requested.union(tags.keys).sorted(by: { $0.uuidString < $1.uuidString }) where aliases[id] == nil {
+            aliases[id] = aliases.count + 1
+        }
+    }
+    func title(_ id: UUID, tags: [UUID: SharedLibraryTag], missing: String) -> String {
+        if let tag = tags[id] { return tag.name }
+        return missing + " · " + (names[id].map { $0 + " · " } ?? "") + String(aliases[id] ?? 0)
+    }
+}
+
 @MainActor @Observable final class WorkflowResultQueryState {
     struct Identity: Hashable {
         let owner: ObjectIdentifier
@@ -12,6 +28,7 @@ import SwiftUI
         }
     }
     var query = SharedLibraryQuery()
+    var tagPresentation = SharedLibraryTagPresentation()
     private(set) var items: [WorkflowAssetReference: SharedLibraryItem] = [:]
     private(set) var identity: Identity?
     private(set) var failure: String?
@@ -49,7 +66,7 @@ import SwiftUI
     static func tagConditions(_ ids: Set<UUID>, store: SharedLibraryStore,
                               missingLabel: String) -> [(id: UUID, title: String)] {
         ids.map { id in
-            (id: id, title: store.metadata.tags[id]?.name ?? (missingLabel + " · " + id.uuidString))
+            (id: id, title: store.metadata.tags[id]?.name ?? missingLabel)
         }.sorted { $0.title == $1.title ? $0.id.uuidString < $1.id.uuidString : $0.title < $1.title }
     }
 
@@ -81,71 +98,68 @@ struct WorkflowResultQueryControls: View {
     @Bindable var state: WorkflowResultQueryState
     let store: SharedLibraryStore
     let scope: SharedLibraryQueryScope?
+    var scopeDescription: String? = nil
+    @State private var expanded = false
     @State private var filters = false
-    @State private var saveName = ""
-    @State private var failure: String?
+    @State private var saveRequest: SharedLibrarySaveQueryRequest?
     @Environment(\.dLanguageStore) private var language
     private func t(_ key: String, _ zh: String, _ en: String) -> String { metadataText(language, key, zh, en) }
     private var query: Binding<SharedLibraryQuery> { Binding(get: { state.query }, set: { var value = $0; value.scope = nil; state.query = value }) }
-    private var resultScopeTitle: String {
-        guard let scope else { return t("displayedResults", "当前显示的输出范围", "Currently displayed outputs") }
-        return SharedLibraryScopeSummary.title(scope, text: t)
+    private var token: String { String(describing: state.identity) + String(describing: scope) + String(describing: ObjectIdentifier(store)) }
+    private var scopeTitle: String {
+        scopeDescription ?? scope.map { SharedLibraryScopeSummary.readable($0, text: t) } ?? t("displayedResults", "当前显示的输出范围", "Currently displayed outputs")
     }
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(t("localResults", "只筛选已保存资产；其他值、运行状态与待处理事项保持可见", "Filters saved assets only; other values, run status and pending decisions stay visible")).font(.caption2).foregroundStyle(.secondary)
-            TextField(t("searchResults", "搜索结果名称、说明和标签", "Search result names, notes & tags"), text: $state.query.text).textFieldStyle(.roundedBorder)
-            HStack {
-                Menu(t("allTags", "同时包含标签", "Contains all tags")) {
-                    ForEach(store.metadata.tags.values.sorted { $0.name < $1.name }) { tag in
-                        Toggle(tag.name, isOn: Binding(get: { state.query.allTagIDs.contains(tag.id) }, set: { selected in
-                            if selected { state.query.allTagIDs.insert(tag.id) } else { state.query.allTagIDs.remove(tag.id) }
-                        }))
-                    }
+        VStack(alignment: .leading, spacing: 6) {
+            DisclosureGroup(t("resultFilters", "筛选此范围的结果", "Filter results in this scope"), isExpanded: $expanded) {
+                Text(scopeTitle).font(.caption)
+                Text(t("localResults", "只筛选已保存资产；其他值、运行状态与待处理事项保持可见", "Filters saved assets only; other values, run status and pending decisions stay visible")).font(.caption2)
+                TextField(t("searchResults", "搜索结果名称、说明和标签", "Search result names, notes & tags"), text: $state.query.text).textFieldStyle(.roundedBorder)
+                HStack {
+                    Button(t("filters", "筛选条件…", "Filter conditions…")) { filters = true }
+                    Button(t("saveQuery", "保存此检索", "Save this query")) {
+                        guard let scope else { return }
+                        var captured = state.query; captured.scope = scope
+                        saveRequest = .init(query: captured, scopeTitle: scopeTitle, tagTitles: Dictionary(uniqueKeysWithValues: captured.allTagIDs.union(captured.anyTagIDs).map { ($0, state.tagPresentation.title($0, tags: store.metadata.tags, missing: t("deletedTagCondition", "已删除的标签", "Deleted tag"))) }))
+                    }.disabled(scope == nil)
                 }
-                Button(t("filters", "属性与高级筛选", "Properties & advanced filters")) { filters = true }
-                    .popover(isPresented: $filters) {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 10) {
-                                SharedLibraryPropertyControls(query: query, items: Array(state.items.values), context: .init(), allowsScopeEditing: false)
-                                Menu(t("anyTags", "至少包含一个标签", "Contains any tag")) {
-                                    ForEach(store.metadata.tags.values.sorted { $0.name < $1.name }) { tag in
-                                        Toggle(tag.name, isOn: Binding(get: { state.query.anyTagIDs.contains(tag.id) }, set: { selected in
-                                            if selected { state.query.anyTagIDs.insert(tag.id) } else { state.query.anyTagIDs.remove(tag.id) }
-                                        }))
-                                    }
-                                }
-                                if let scope {
-                                    Text(t("saveBoundResults", "保存时绑定此运行/节点/调用的结果范围", "Saved query binds this run/node/call result scope")).font(.caption)
-                                    TextField(t("queryName", "检索名称", "Query name"), text: $saveName)
-                                    Button(t("saveQuery", "保存此检索", "Save this query")) {
-                                        do { var saved = state.query; saved.scope = scope; _ = try store.createSavedQuery(name: saveName, query: saved); saveName = ""; failure = nil }
-                                        catch { failure = error.localizedDescription }
-                                    }.disabled(saveName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                                }
-                                if let failure { Text(failure).font(.caption).foregroundStyle(.red) }
-                            }.padding(14)
-                        }.frame(width: 330, height: 520)
-                    }
             }
-            SharedLibraryPropertySummary(query: query, items: Array(state.items.values), context: .init(), store: store, fixedScopeDescription: resultScopeTitle)
+            if !state.query.text.isEmpty {
+                Button { state.query.text = "" } label: { Label(state.query.text, systemImage: "xmark.circle") }.buttonStyle(.borderless)
+            }
             tagConditions(state.query.allTagIDs, path: \.allTagIDs, title: t("allTags", "同时包含标签", "Contains all tags"))
             tagConditions(state.query.anyTagIDs, path: \.anyTagIDs, title: t("anyTags", "至少包含一个标签", "Contains any tag"))
-            HStack {
-                Text("\((state.identity?.references ?? []).filter { state.matches($0, store: store) }.count)/\(state.identity?.references.count ?? 0) · " + t("indexed", "已索引", "Indexed") + " \(state.items.count)").font(.caption2)
-                Button(t("clearQuery", "清除检索条件", "Clear query conditions")) { state.query = .init() }.font(.caption2)
+            SharedLibraryQuerySummary(query: state.query, remove: { state.query = $0 })
+            if state.query.properties != nil && !state.isLoading && state.failure == nil {
+                SharedLibraryPropertySummary(query: query, items: Array(state.items.values), context: .init(), store: store, fixedScopeDescription: scopeTitle)
             }
-            if state.isLoading { Text(t("indexing", "正在读取当前结果的登记信息…", "Reading registered facts for these results…")).font(.caption2) }
-            if let issue = state.failure { Text(issue).font(.caption).foregroundStyle(.orange) }
+            if state.isLoading { Text(t("indexing", "正在读取当前结果的登记信息…", "Reading registered facts for these results…")) }
+            else if let issue = state.failure { Text(issue).foregroundStyle(.orange) }
+            else if state.identity == nil || state.items.count < (state.identity?.references.count ?? 0) {
+                Text(t("incompleteIndex", "登记信息尚不完整；不把未知当作无结果。", "Registration information is incomplete; unknown does not mean no results."))
+            } else {
+                Text(t("uniqueAssets", "独立素材", "Distinct assets") + " \((state.identity?.references ?? []).filter { state.matches($0, store: store) }.count)/\(state.identity?.references.count ?? 0)")
+            }
+            if state.query != SharedLibraryQuery() {
+                Button(t("clearQuery", "清除检索条件", "Clear query conditions")) { state.query = .init() }
+            }
         }.font(.caption)
+        .onAppear { rememberTags() }
+        .onChange(of: store.metadata) { _, _ in rememberTags() }
+        .onChange(of: state.query) { _, _ in rememberTags() }
+        .popover(isPresented: $filters) {
+            SharedLibraryFilterEditor(query: state.query, token: token, store: store, items: Array(state.items.values), context: .init(), allowsScopeEditing: false,
+                current: { (state.query, token) }, apply: { query.wrappedValue = $0 }, close: { filters = false })
+        }
+        .sheet(item: $saveRequest) { request in SharedLibrarySaveQuerySheet(request: request, store: store) { saveRequest = nil } }
     }
+    private func rememberTags() { state.tagPresentation.observe(tags: store.metadata.tags, requested: state.query.allTagIDs.union(state.query.anyTagIDs)) }
     private func tagConditions(_ ids: Set<UUID>, path: WritableKeyPath<SharedLibraryQuery, Set<UUID>>, title: String) -> some View {
-        let missing = t("deletedTagCondition", "已删除的标签", "Deleted tag")
-        return ForEach(WorkflowResultQueryState.tagConditions(ids, store: store, missingLabel: missing), id: \.id) { condition in
-            Button { state.query[keyPath: path].remove(condition.id) } label: {
-                Label(title + ": " + condition.title, systemImage: "xmark.circle")
-            }.buttonStyle(.borderless).font(.caption2)
+        ForEach(WorkflowResultQueryState.tagConditions(ids, store: store, missingLabel: t("deletedTagCondition", "已删除的标签", "Deleted tag")), id: \.id) { condition in
+            HStack {
+                Button { state.query[keyPath: path].remove(condition.id) } label: { Label(title + ": " + state.tagPresentation.title(condition.id, tags: store.metadata.tags, missing: t("deletedTagCondition", "已删除的标签", "Deleted tag")), systemImage: "xmark.circle") }.buttonStyle(.borderless)
+                if store.metadata.tags[condition.id] == nil { WorkflowTechnicalDetails(value: condition.id.uuidString) }
+            }
         }
     }
-
 }

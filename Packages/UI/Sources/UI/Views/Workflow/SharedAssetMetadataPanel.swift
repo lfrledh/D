@@ -24,6 +24,7 @@ public typealias SharedLibraryAnnotationSave = @MainActor (ProjectAssetEditBasel
 struct AssetAnnotationRequest: Identifiable {
         let id = UUID()
         let snapshot: ProjectAssetMetadataSnapshot
+        var context: String? = nil
         let validate: () throws -> Void
         let save: SharedLibraryAnnotationSave
     }
@@ -45,20 +46,6 @@ struct SharedAssetMetadataPanel: View {
     private var logicalKey: String { "asset:" + snapshot.projectID.uuidString + ":" + snapshot.asset.id.uuidString }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            GroupBox(t("identity", "身份", "Identity")) {
-                VStack(alignment: .leading, spacing: 5) {
-                    row(t("project", "项目", "Project"), snapshot.projectName)
-                    row(t("instance", "当前实例", "Open instance"), snapshot.instanceID.uuidString)
-                    row(t("asset", "资产", "Asset"), snapshot.asset.id.uuidString)
-                    if let record = snapshot.record {
-                        row(t("version", "内容版本", "Content version"), record.reference.version.uuidString)
-                        DisclosureGroup(t("digest", "内容摘要（登记记录）", "Content digest (recorded)")) {
-                            Text(record.reference.sha256).font(.caption.monospaced()).textSelection(.enabled)
-                            Text(t("digestLimit", "字节摘要不证明作者、许可或完全可复现。", "A byte digest does not establish authorship, rights, or full reproducibility.")).font(.caption2)
-                        }
-                    } else { row(t("version", "内容版本", "Content version"), unknown) }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-            }
             GroupBox(t("description", "说明与组织", "Description & organization")) {
                 VStack(alignment: .leading, spacing: 7) {
                     row(t("displayName", "显示名（不重命名文件）", "Display name (does not rename file)"), snapshot.asset.name)
@@ -76,10 +63,12 @@ struct SharedAssetMetadataPanel: View {
             GroupBox(t("technical", "技术属性（已记录值）", "Technical properties (recorded)")) {
                 VStack(alignment: .leading, spacing: 6) {
                     row(t("format", "格式", "Format"), snapshot.asset.mediaType)
+                    if snapshot.asset.workflowContentKind == .image || snapshot.asset.workflowContentKind == .video {
                     dimension(t("width", "宽度", "Width"), value: snapshot.asset.metadata.width, width: true)
                     dimension(t("height", "高度", "Height"), value: snapshot.asset.metadata.height, width: false)
                     row(t("depth", "位深", "Bit depth"), snapshot.asset.metadata.bitDepth.map { "\($0) bit" } ?? unknown)
                     row(t("color", "色彩空间", "Color space"), snapshot.asset.metadata.colorSpace ?? unknown)
+                    }
                     row(t("registered", "项目登记时间（本地时区）", "Project registration (local time)"), snapshot.asset.createdAt.formatted(date: .abbreviated, time: .standard))
                     if let audio = snapshot.asset.metadata.audio?.format {
                         row(t("audio", "音频", "Audio"), "\(audio.sampleRate) Hz · \(audio.channelCount) ch · \(audio.bitDepth) bit")
@@ -97,8 +86,9 @@ struct SharedAssetMetadataPanel: View {
                 VStack(alignment: .leading, spacing: 7) {
                     if let issue = snapshot.sourceIssue { Label(issue, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange) }
                     if let model = snapshot.facts.model {
-                        row(model.kind == .recordedIdentity ? t("model", "实际记录模型", "Recorded model") : t("localModel", "请求中的本地模型引用", "Local model reference in request"), model.kind == .recordedIdentity ? model.value : URL(fileURLWithPath: model.value).lastPathComponent)
-                        row(t("revision", "模型版本", "Model revision"), model.revision ?? unknown)
+                        row(model.kind == .recordedIdentity ? t("model", "实际记录模型", "Recorded model") : t("localModel", "请求中的本地模型引用", "Local model reference in request"), model.kind == .recordedIdentity ? t("modelNameUnrecorded", "模型名称未记录", "Model name not recorded") : URL(fileURLWithPath: model.value).lastPathComponent)
+                        row(t("revision", "模型版本", "Model revision"), model.revision == nil ? unknown : t("exactRecordedVersion", "精确已记录版本（见技术详情）", "Exact recorded revision (see technical details)"))
+                        WorkflowTechnicalDetails(value: model.value + "\n" + (model.revision ?? unknown))
                         if let onQuery {
                             Menu(t("filterModel", "按此模型筛选", "Filter by this model")) {
                                 if model.revision != nil { Button(t("exactVersion", "精确模型及版本", "Exact model & revision")) { onQuery(.init(model: model)) } }
@@ -109,11 +99,12 @@ struct SharedAssetMetadataPanel: View {
                     row(t("requestSeed", "提交请求的 Seed", "Seed in submitted request"), snapshot.requestedSeed ?? unknown)
                     row(t("backend", "后端报告", "Backend report"), snapshot.record?.metadata["backend"] ?? snapshot.job?.resultMetadata["backend"] ?? unknown)
                     if let record = snapshot.record {
-                        row(t("operation", "生成操作", "Operation"), record.operationID)
+                        WorkflowTechnicalDetails(value: record.operationID)
                         if record.parents.isEmpty { Text(t("noParents", "未登记直接来源资产", "No direct source assets recorded")).font(.caption) }
                         ForEach(record.parents, id: \.self) { parent in
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(parent.assetID.uuidString).font(.caption.monospaced()).textSelection(.enabled)
+                                Text(t("sourceAsset", "已登记来源素材", "Recorded source asset"))
+                                WorkflowTechnicalDetails(value: String(describing: parent))
                                 if let onOpenSource { Button(t("openParent", "查看此来源", "View this source")) { onOpenSource(parent) } }
                                 if let onQuery { Button(t("filterParent", "查找直接来自此资产的结果", "Find direct derivatives of this asset")) { onQuery(.init(directParent: parent)) } }
                             }
@@ -131,6 +122,20 @@ struct SharedAssetMetadataPanel: View {
                         if showsRaw { ScrollView { Text(rawSource).font(.caption2.monospaced()).textSelection(.enabled) }.frame(maxHeight: 200) }
                     }
                     row(t("rights", "作者、许可与拍摄时间", "Author, rights & capture time"), t("rightsUnknown", "未记录；不根据用户名或标签推定", "Not recorded; never inferred from user name or tags"))
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            DisclosureGroup(t("technicalDetails", "技术详情与完整身份", "Technical details & full identity")) {
+                VStack(alignment: .leading, spacing: 5) {
+                    row(t("project", "项目", "Project"), snapshot.projectName)
+                    row(t("instance", "当前实例", "Open instance"), snapshot.instanceID.uuidString)
+                    row(t("asset", "资产", "Asset"), snapshot.asset.id.uuidString)
+                    if let record = snapshot.record {
+                        row(t("version", "内容版本", "Content version"), record.reference.version.uuidString)
+                        DisclosureGroup(t("digest", "内容摘要（登记记录）", "Content digest (recorded)")) {
+                            Text(record.reference.sha256).font(.caption.monospaced()).textSelection(.enabled)
+                            Text(t("digestLimit", "字节摘要不证明作者、许可或完全可复现。", "A byte digest does not establish authorship, rights, or full reproducibility.")).font(.caption2)
+                        }
+                    } else { row(t("version", "内容版本", "Content version"), unknown) }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
             DisclosureGroup(t("files", "文件与导出", "Files & export")) {
@@ -167,6 +172,7 @@ struct SharedAssetMetadataPanel: View {
 
 struct AssetAnnotationEditor: View {
     @State private var snapshot: ProjectAssetMetadataSnapshot
+    @State private var context: String?
     @State private var validate: () throws -> Void
     @State private var save: SharedLibraryAnnotationSave
     let dismiss: () -> Void
@@ -177,25 +183,28 @@ struct AssetAnnotationEditor: View {
     @State private var failure: String?
     @Environment(\.metadataEditorLifecycle) private var lifecycle
     @Environment(\.dLanguageStore) private var language
-    init(snapshot: ProjectAssetMetadataSnapshot, validate: @escaping () throws -> Void, save: @escaping SharedLibraryAnnotationSave, dismiss: @escaping () -> Void) {
-        _snapshot = State(initialValue: snapshot); _validate = State(initialValue: validate); _save = State(initialValue: save)
+    init(snapshot: ProjectAssetMetadataSnapshot, context: String? = nil, validate: @escaping () throws -> Void, save: @escaping SharedLibraryAnnotationSave, dismiss: @escaping () -> Void) {
+        _context = State(initialValue: context); _snapshot = State(initialValue: snapshot); _validate = State(initialValue: validate); _save = State(initialValue: save)
         _name = State(initialValue: snapshot.asset.name); _note = State(initialValue: snapshot.asset.note)
         _favorite = State(initialValue: snapshot.asset.isFavorite); self.dismiss = dismiss
     }
     private func t(_ key: String, _ zh: String, _ en: String) -> String { metadataText(language, key, zh, en) }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(t("edit", "编辑名称、说明和收藏…", "Edit name, note & favorite…")).font(.headline)
-            Text(snapshot.projectName + " · " + snapshot.asset.id.uuidString.prefix(8)).font(.caption).textSelection(.enabled)
-            TextField(t("name", "显示名", "Display name"), text: $name).textFieldStyle(.roundedBorder).accessibilityIdentifier("asset-annotation-name")
-            TextField(t("note", "用户说明", "User note"), text: $note, axis: .vertical).lineLimit(4...10).textFieldStyle(.roundedBorder).accessibilityIdentifier("asset-annotation-note")
+            Text(t("editResultInfo", "编辑结果信息", "Edit result information") + " · " + snapshot.asset.name).font(.headline)
+            Text(context ?? (snapshot.projectName + " · " + snapshot.asset.createdAt.formatted(date: .abbreviated, time: .standard))).font(.caption).textSelection(.enabled)
+            Text(t("annotationImpact", "只修改此结果的信息；不改正文、节点参数或文件名。", "Changes this result’s information only; not its content, node parameters, or file name.")).font(.callout)
+            Text(t("resultName", "结果名称", "Result name")).font(.subheadline)
+            TextField(t("resultName", "结果名称", "Result name"), text: $name).textFieldStyle(.roundedBorder).accessibilityIdentifier("asset-annotation-name")
+            Text(t("resultNote", "结果说明", "Result note")).font(.subheadline)
+            TextField(t("resultNote", "结果说明", "Result note"), text: $note, axis: .vertical).lineLimit(4...10).textFieldStyle(.roundedBorder).accessibilityIdentifier("asset-annotation-note")
             Toggle(t("favorite", "收藏", "Favorite"), isOn: $favorite)
             Text(t("instanceWrite", "这些注释只写入此项目实例；共享组织标签按逻辑资产共享。", "These annotations belong to this project instance; organization tags are shared by logical asset.")).font(.caption)
             if let failure { Text(failure).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
                 Spacer()
                 Button(t("cancel", "取消", "Cancel"), action: dismiss).keyboardShortcut(.cancelAction)
-                Button(t("save", "保存", "Save")) {
+                Button(t("saveResultInfo", "保存结果信息", "Save result information")) {
                     saving = true
                     Task { @MainActor in
                         defer { saving = false }
@@ -209,7 +218,8 @@ struct AssetAnnotationEditor: View {
                     }
                 }.keyboardShortcut(.defaultAction).disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-        }.padding(24).frame(width: 410).disabled(saving).interactiveDismissDisabled()
+            WorkflowTechnicalDetails(value: snapshot.projectID.uuidString + "\n" + snapshot.instanceID.uuidString + "\n" + snapshot.asset.id.uuidString)
+        }.padding(24).frame(minWidth: 410, idealWidth: 480).disabled(saving).interactiveDismissDisabled()
         .onAppear { lifecycle.begin() }.onDisappear { lifecycle.end() }
     }
 }

@@ -107,6 +107,9 @@ struct GenerationInspector: View {
                         guard model.projectSession === owner, owner.currentStore === store, !model.isChangingProject else { return }
                         await model.selectModel(id: id)
                     }
+                    library.captureSelectionPresentation(model.manifest?.name ?? "D") {
+                        model.projectSession === owner && owner.currentStore === store && !model.isChangingProject
+                    }
                 }
                 else { Task { await model.registerModel() } }
             } label: {

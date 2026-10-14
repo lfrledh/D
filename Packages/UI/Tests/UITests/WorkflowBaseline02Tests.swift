@@ -31,9 +31,10 @@ struct WorkflowBaseline02Tests {
         let b = WorkflowNodeIdentity.resolve(node: second, definition: modelDefinition,
             modelChoices: choices, assets: [], tools: [], language: nil)
         #expect(first.id != second.id)
-        #expect(a.title == "模型 A" && b.title == "模型 A")
-        #expect(a.annotation == "写一首诗" && b.annotation == "摘要")
-        #expect(a.detail == "text:A" && b.detail == "text:A")
+        #expect(a.title == "写一首诗" && b.title == "摘要")
+        #expect(a.annotation == nil && b.annotation == nil)
+        #expect(a.detail == "模型操作 · 模型 A" && b.detail == a.detail)
+        #expect(first.parameters["modelID"]?.string == "text:A" && second.parameters["modelID"]?.string == "text:A")
     }
 
     @Test func unboundAndUnknownModelsRemainExplicit() {
@@ -45,9 +46,10 @@ struct WorkflowBaseline02Tests {
             modelChoices: [], assets: [], tools: [], language: nil)
         let missing = WorkflowNodeIdentity.resolve(node: unknown, definition: modelDefinition,
             modelChoices: [], assets: [], tools: [], language: nil)
-        #expect(empty.title == "选择模型" && empty.detail == nil)
-        #expect(missing.title == "未识别的模型")
-        #expect(missing.detail == "text:exact-unavailable")
+        #expect(empty.title == "注释" && empty.detail == "模型操作 · 选择模型")
+        #expect(missing.title == "注释")
+        #expect(missing.detail == "模型操作 · 未识别的模型")
+        #expect(unknown.parameters["modelID"]?.string == "text:exact-unavailable")
     }
 
     @Test func toolNameRequiresExactVersionAndDigest() throws {
@@ -58,11 +60,11 @@ struct WorkflowBaseline02Tests {
         node.control = .invoke(reference)
         let exact = WorkflowNodeIdentity.resolve(node: node, definition: nil,
             modelChoices: [], assets: [], tools: [tool], language: nil)
-        #expect(exact.title == "固定工具")
+        #expect(exact.title == "任务注释" && exact.detail?.contains("固定工具") == true)
         node.control = .invoke(.init(id: tool.id, version: tool.version, digest: "changed"))
         let changed = WorkflowNodeIdentity.resolve(node: node, definition: nil,
             modelChoices: [], assets: [], tools: [tool], language: nil)
-        #expect(changed.title == "未识别的工具")
+        #expect(changed.title == "任务注释" && changed.detail?.contains("未识别的工具") == true)
     }
 
     @Test func viewMemorySeparatesNestedBodiesAndRestoresSelection() {

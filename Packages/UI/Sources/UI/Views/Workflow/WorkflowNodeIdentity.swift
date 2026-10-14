@@ -2,8 +2,7 @@ import DWorkbench
 import Foundation
 import CoreGraphics
 
-/// A node's stored title is an annotation. Its executable identity comes from the
-/// bound model, versioned tool, asset reference, or operation definition.
+/// Human presentation only. Commands continue to use the full stored identities.
 struct WorkflowNodeIdentity: Equatable {
     let title: String
     let detail: String?
@@ -18,34 +17,25 @@ struct WorkflowNodeIdentity: Equatable {
         tools: [WorkflowToolDefinition],
         language: UILanguageStore?
     ) -> Self {
-        let annotation = node.title.isEmpty ? nil : node.title
+        let function = definition.map { WorkflowCanvasPresentation.operationTitle($0, language: language) }
+            ?? workflowText(language, "canvas.identity.unknownOperation", fallback: "未知操作")
+        let title = node.title.isEmpty ? function : node.title
+        var detail = function
         if let modelKind = definition?.modelKind {
             let modelID = node.parameters["modelID"]?.string ?? ""
-            guard !modelID.isEmpty else {
-                return Self(title: workflowText(language, "canvas.identity.chooseModel", fallback: "选择模型"),
-                            detail: nil, annotation: annotation)
-            }
-            if let model = modelChoices.first(where: { $0.id == modelID && $0.kind == modelKind }) {
-                return Self(title: model.displayName, detail: modelID, annotation: annotation)
-            }
-            return Self(title: workflowText(language, "canvas.identity.unknownModel", fallback: "未识别的模型"),
-                        detail: modelID, annotation: annotation)
+            let model = modelChoices.first { $0.id == modelID && $0.kind == modelKind }
+            let state = model?.displayName ?? workflowText(language,
+                modelID.isEmpty ? "canvas.identity.chooseModel" : "canvas.identity.unknownModel",
+                fallback: modelID.isEmpty ? "选择模型" : "未识别的模型")
+            detail += " · " + state
+        } else if let reference = node.assetReference {
+            detail += " · " + (assets.first { $0.id == reference.assetID }?.name
+                ?? workflowText(language, "canvas.identity.unknownAsset", fallback: "未识别的素材"))
+        } else if case .invoke(let reference) = node.control {
+            detail += " · " + (fixedTool(reference: reference, tools: tools)?.name
+                ?? workflowText(language, "canvas.identity.unknownTool", fallback: "未识别的工具")) + " · v\(reference.version)"
         }
-        if let reference = node.assetReference {
-            let name = assets.first(where: { $0.id == reference.assetID })?.name
-                ?? workflowText(language, "canvas.identity.unknownAsset", fallback: "未识别的素材")
-            return Self(title: name, detail: reference.assetID.uuidString, annotation: annotation)
-        }
-        if case .invoke(let reference) = node.control {
-            let matching = fixedTool(reference: reference, tools: tools)
-            let name = matching?.name
-                ?? workflowText(language, "canvas.identity.unknownTool", fallback: "未识别的工具")
-            return Self(title: name, detail: "v\(reference.version) · \(reference.id.uuidString)",
-                        annotation: annotation)
-        }
-        let title = definition.map { WorkflowCanvasPresentation.operationTitle($0, language: language) }
-            ?? workflowText(language, "canvas.identity.unknownOperation", fallback: "未知操作")
-        return Self(title: title, detail: node.operationID, annotation: annotation)
+        return Self(title: title, detail: detail == title ? nil : detail, annotation: nil)
     }
 
     static func fixedTool(reference: WorkflowToolReference,
