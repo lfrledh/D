@@ -286,6 +286,8 @@ public struct WorkflowCanvasView: View {
             - (shown.inspector ? WorkbenchSidebarLayout.leadingWidth : 48)
             - (shown.library ? WorkbenchSidebarLayout.trailingWidth : 48)
         let fitReady = canvasViewport?.permitsFit(targetWidth: targetCanvasWidth) == true
+        let inspectedNodeID = shown.inspector && panelsState.preparation == .configuration
+            && selectedNodes.count == 1 ? selectedNodes.first?.id : nil
         return VStack(spacing: 8) {
             HStack(spacing: 12) {
                 WorkbenchSidebar(leading: true, expanded: shown.inspector,
@@ -302,6 +304,7 @@ public struct WorkflowCanvasView: View {
                     viewContext: viewContext,
                     pendingConnection: $pendingConnection, selectedConnectionID: $selectedConnectionID,
                     readOnly: !controller.canEditCanvas,
+                    inspectedNodeID: inspectedNodeID,
                     onPlan: presentPlan, onSetRunTarget: setRunTarget, nodeSizeObserver: { id, size in
                         measuredCardSizes[id] = size
                         nodeSizeObserver?(id, size)

@@ -18,6 +18,10 @@ private actor ViewportNoInferenceEngine: InferenceEngine {
     @Published var quickVisible = false
 }
 
+@MainActor private final class ViewportFlippedDocument: NSView {
+    override var isFlipped: Bool { true }
+}
+
 @MainActor private struct ViewportDualLayerHost: View {
     @ObservedObject var visibility: ViewportLayerVisibility
     let canvas: WorkflowCanvasView
@@ -44,6 +48,106 @@ private actor ViewportNoInferenceEngine: InferenceEngine {
 
 @Suite(.serialized) @MainActor
 struct WorkflowCanvasViewportHostingTests {
+    @Test(arguments: ["horizontal", "scrollbar", "nested-scroll"])
+    func nativeNavigationTakesOwnershipBeforePendingWheelLayout(kind: String) throws {
+        _ = NSApplication.shared
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let scroll = NSScrollView(frame: .init(x: 0, y: 0, width: 600, height: 400))
+        scroll.hasHorizontalScroller = true; scroll.hasVerticalScroller = true
+        scroll.scrollerStyle = .legacy; scroll.autohidesScrollers = false
+        let document = ViewportFlippedDocument(frame: .init(x: 0, y: 0, width: 3000, height: 2400))
+        scroll.documentView = document
+        window.contentView = scroll
+        window.orderFront(nil)
+        let probe = WorkflowCanvasViewportInput.ProbeView(frame: .init(x: 0, y: 0, width: 10, height: 10))
+        document.addSubview(probe)
+        scroll.layoutSubtreeIfNeeded()
+        try #require(window.isVisible && probe.window === window && probe.enclosingScrollView === scroll,
+                     "The component window and the production probe must be attached before input")
+        let clip = scroll.contentView
+        try #require(document.isFlipped && clip.isFlipped)
+        let scope = WorkflowCanvasScope(rootGraphID: UUID(), rootRevision: UUID(), graphID: UUID(), bodyPath: [])
+        let layout = WorkflowCanvasViewportGeometry(graphSize: .init(width: 1200, height: 900),
+            viewportSize: clip.bounds.size, zoom: 1, translation: .zero)
+        document.setFrameSize(layout.contentSize)
+        clip.scroll(to: .init(x: 900, y: 700))
+        scroll.reflectScrolledClipView(clip)
+        probe.interactionScope = scope; probe.navigationAllowed = { true }
+        probe.allowsEvent = { _, _, _ in true }
+        let wheel = WorkflowCanvasWheelZoom()
+        probe.wheelZoom = wheel
+        let scale = wheel.request(delta: 8, mouse: .init(x: 100, y: 100), nativeOffset: clip.bounds.origin,
+                                  layout: layout, scope: scope)
+        let target = WorkflowCanvasViewportGeometry(graphSize: layout.graphSize, viewportSize: layout.viewportSize,
+            zoom: scale, translation: layout.translation)
+        probe.wheelLayout = { _ in target }
+        try #require(wheel.offset(in: target, scope: scope) != nil)
+        let originalCanvasOffset = clip.bounds.origin
+        func wheelEvent(at point: CGPoint, horizontal: Bool, owner: NSScrollView) throws -> NSEvent {
+            let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
+                wheelCount: 2, wheel1: horizontal ? 0 : -24, wheel2: horizontal ? -24 : 0, wheel3: 0))
+            let located = try #require(NSEvent.mouseEvent(with: .mouseMoved, location: point,
+                modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil,
+                eventNumber: 1, clickCount: 0, pressure: 0))
+            cg.location = try #require(located.cgEvent).location
+            cg.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: Int64(window.windowNumber))
+            cg.setIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent,
+                                    value: Int64(window.windowNumber))
+            let event = try #require(NSEvent(cgEvent: cg))
+            try #require(event.type == .scrollWheel && event.windowNumber == window.windowNumber,
+                         "The synthesized wheel must identify this window")
+            try #require(abs(event.locationInWindow.x - point.x) < 1
+                && abs(event.locationInWindow.y - point.y) < 1,
+                "The synthesized wheel must preserve the requested location")
+            try #require(horizontal ? event.scrollingDeltaX != 0 && event.scrollingDeltaY == 0
+                                    : event.scrollingDeltaY != 0)
+            let content = try #require(window.contentView)
+            let hitPoint = content.superview?.convert(event.locationInWindow, from: nil) ?? event.locationInWindow
+            var hit: NSView? = try #require(content.hitTest(hitPoint))
+            while let current = hit, current !== owner { hit = current.superview }
+            try #require(hit === owner, "The real hit chain must reach the expected scroll owner")
+            return event
+        }
+        if kind == "scrollbar" {
+            let scroller = try #require(scroll.verticalScroller)
+            let point = scroller.convert(.init(x: scroller.bounds.midX, y: scroller.bounds.midY), to: nil)
+            let down = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: point,
+                modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                eventNumber: 1, clickCount: 1, pressure: 1))
+            #expect(!probe.routePointer(down), "The real scrollbar retains mouse tracking")
+        } else if kind == "nested-scroll" {
+            let nested = NSScrollView(frame: .init(x: clip.bounds.minX + 40, y: clip.bounds.minY + 40,
+                                                  width: 160, height: 120))
+            nested.hasVerticalScroller = true
+            nested.documentView = ViewportFlippedDocument(frame: .init(x: 0, y: 0, width: 160, height: 900))
+            document.addSubview(nested); nested.layoutSubtreeIfNeeded()
+            nested.contentView.scroll(to: .init(x: 0, y: 300))
+            let point = nested.convert(.init(x: 70, y: 60), to: nil)
+            let event = try wheelEvent(at: point, horizontal: false, owner: nested)
+            #expect(!probe.routeWheel(event))
+            let before = nested.contentView.bounds.origin
+            nested.scrollWheel(with: event)
+            #expect(nested.contentView.bounds.origin != before, "The nested editor/list still scrolls")
+            #expect(clip.bounds.origin == originalCanvasOffset)
+        } else {
+            let point = clip.convert(.init(x: clip.bounds.minX + 100, y: clip.bounds.minY + 100), to: nil)
+            let event = try wheelEvent(at: point, horizontal: true, owner: scroll)
+            #expect(!probe.routeWheel(event))
+            scroll.scrollWheel(with: event)
+            #expect(clip.bounds.origin.x != originalCanvasOffset.x, "Native horizontal navigation remains available")
+        }
+        #expect(wheel.offset(in: target, scope: scope) == nil)
+        #expect(wheel.consumeScaleChange(to: scale))
+        let handedOffOffset = clip.bounds.origin
+        document.setFrameSize(target.contentSize)
+        probe.reportViewportSize()
+        #expect(clip.bounds.origin == handedOffOffset, "The late wheel layout cannot replay its old offset")
+    }
+
     @Test func nativeWindowWheelAndMiddleClickStayInsideVisibleCanvas() async throws {
         let temporaryRoot = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
         let root = URL(fileURLWithPath: temporaryRoot)
@@ -171,7 +275,7 @@ struct WorkflowCanvasViewportHostingTests {
         }
         let mouseInWindow = windowPoint(inClip: mouseInClip)
 
-        func dispatch(_ event: NSEvent) async throws {
+        func dispatchQueued(_ event: NSEvent) throws {
             NSApplication.shared.postEvent(event, atStart: true)
             let queued = try #require(NSApplication.shared.nextEvent(matching: [
                 .scrollWheel, .otherMouseDown, .leftMouseDown, .leftMouseDragged, .leftMouseUp
@@ -184,10 +288,14 @@ struct WorkflowCanvasViewportHostingTests {
             if !sameIdentity { NSApp.postEvent(queued, atStart: true) }
             try #require(sameIdentity, "The driver must dispatch its own queued event")
             NSApplication.shared.sendEvent(queued)
+        }
+        func dispatch(_ event: NSEvent) async throws {
+            try dispatchQueued(event)
             for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
         }
-        func wheel(at windowPoint: CGPoint, in target: NSWindow, delta: Int32) throws -> NSEvent {
-            let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
+        func wheel(at windowPoint: CGPoint, in target: NSWindow, delta: Int32,
+                   units: CGScrollEventUnit = .pixel) throws -> NSEvent {
+            let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: units,
                 wheelCount: 1, wheel1: delta, wheel2: 0, wheel3: 0))
             // NSEvent converts AppKit's bottom-left coordinates to Quartz's screen coordinates.
             let located = try #require(NSEvent.mouseEvent(with: .mouseMoved,
@@ -212,11 +320,14 @@ struct WorkflowCanvasViewportHostingTests {
                 eventNumber: gestureIdentity, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1))
         }
         let originalRaw = initialLayout.rawPoint(screenPoint: mouseInClip, offset: initialOffset)
-        try await dispatch(wheel(at: mouseInWindow, in: window, delta: 32))
+        // An ordinary mouse burst arrives without a layout/scroll observation between ticks.
+        for _ in 0..<4 { try dispatchQueued(wheel(at: mouseInWindow, in: window, delta: 1, units: .line)) }
+        for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
         #expect(scroll.documentView?.frame.width != initialDocumentSize.width,
                 "A real window wheel event must change the rendered canvas zoom")
         let zoomedSize = try #require(scroll.documentView).frame.size
         let zoomed = zoomedSize.width / initialDocumentSize.width
+        try #require(zoomed >= 0.5 && graphGeometry.size.width * zoomed >= viewport.width)
         let zoomedLayout = WorkflowCanvasViewportGeometry(graphSize: graphGeometry.size,
             viewportSize: viewport, zoom: zoomed, translation: graphGeometry.translation)
         let anchored = zoomedLayout.rawPoint(screenPoint: mouseInClip, offset: clip.bounds.origin)
@@ -267,9 +378,14 @@ struct WorkflowCanvasViewportHostingTests {
                                  y: cardCenter.y - (cardSize.height / 2 - 25) * zoomed)
         #expect(cardButton.x > 0 && cardButton.x < clip.bounds.width)
         #expect(cardButton.y > 0 && cardButton.y < clip.bounds.height)
+        let cardOffset = clip.bounds.origin
         try await dispatch(wheel(at: windowPoint(inClip: cardButton), in: window, delta: 24))
         #expect(scroll.documentView?.frame.size == zoomedSize,
                 "Virtual node controls keep their own input instead of zooming the canvas")
+        #expect(clip.bounds.origin == cardOffset,
+                "A rejected node wheel must not fall through as native canvas scrolling")
+        try await dispatch(wheel(at: windowPoint(inClip: cardCenter), in: window, delta: -24))
+        #expect(clip.bounds.origin == cardOffset && scroll.documentView?.frame.size == zoomedSize)
 
         let cardBackdrop = windowPoint(inClip: CGPoint(x: cardCenter.x - 75 * zoomed,
             y: cardCenter.y - (cardSize.height / 2 - 28) * zoomed))
@@ -366,9 +482,23 @@ struct WorkflowCanvasViewportHostingTests {
         #expect(scroll.documentView?.frame.size == quickSize)
         visibility.quickVisible = false
         for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
-        try await dispatch(wheel(at: mouseInWindow, in: window, delta: -16))
+        let beforeReverse = observations.last
+        let reverseZoom = (try #require(scroll.documentView).frame.width) / initialDocumentSize.width
+        try #require(clip.bounds.size == viewport && reverseZoom >= 0.5)
+        let reverseLayout = WorkflowCanvasViewportGeometry(graphSize: graphGeometry.size,
+            viewportSize: clip.bounds.size, zoom: reverseZoom, translation: graphGeometry.translation)
+        let reverseAnchor = reverseLayout.rawPoint(screenPoint: mouseInClip, offset: clip.bounds.origin)
+        for _ in 0..<4 { try dispatchQueued(wheel(at: mouseInWindow, in: window, delta: -4)) }
+        for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
         #expect(scroll.documentView?.frame.size != quickSize,
                 "The visible canvas must resume wheel zoom in the same window")
+        let afterReverse = WorkflowCanvasViewportGeometry(graphSize: graphGeometry.size,
+            viewportSize: clip.bounds.size,
+            zoom: (try #require(scroll.documentView).frame.width) / initialDocumentSize.width,
+            translation: graphGeometry.translation)
+        let keptReverse = afterReverse.rawPoint(screenPoint: mouseInClip, offset: clip.bounds.origin)
+        #expect(abs(keptReverse.x - reverseAnchor.x) < 3 && abs(keptReverse.y - reverseAnchor.y) < 3)
+        #expect(observations.last != beforeReverse)
 
         // A cancelled blank gesture must release its initial offset and permit the next click.
         let heldOffset = clip.bounds.origin
@@ -440,6 +570,55 @@ struct WorkflowCanvasViewportHostingTests {
         #expect(abs(resetCenter.x - resetLayout.centerRawPoint.x) < 3)
         #expect(abs(resetCenter.y - resetLayout.centerRawPoint.y) < 3)
         #expect(controller.graph == nil && controller.canUndo == undoBefore)
+
+        // The edit affordance follows the visible configuration panel, not ordinary
+        // selection or a separate "last clicked" flag. Use its actual production action.
+        controller.selectedGraphID = graph.id
+        for _ in 0..<15 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        let resetRestoredGraph = try #require(accessibilityElements(host).first {
+            $0.accessibilityIdentifier() == "workflow-canvas-reset-view"
+        })
+        try #require(HostingControlClick.send(to: resetRestoredGraph, in: host))
+        for _ in 0..<15 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        try #require(observations.last?.zoom == 1)
+        func inspectButton(_ nodeID: UUID) throws -> any NSAccessibilityProtocol {
+            try #require(accessibilityElements(host).first {
+                $0.accessibilityIdentifier() == "workflow-node-inspect-" + nodeID.uuidString
+            })
+        }
+        func revealNode(_ nodeID: UUID) async throws {
+            let layout = WorkflowCanvasViewportGeometry(graphSize: graphGeometry.size,
+                viewportSize: clip.bounds.size, zoom: 1, translation: graphGeometry.translation)
+            clip.scroll(to: layout.centeredOffset(on: graphGeometry.rawPosition(nodeID)))
+            scroll.reflectScrolledClipView(clip)
+            for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        }
+        let firstNode = try #require(graph.nodes.first)
+        let secondNode = try #require(graph.nodes.last)
+        try #require(firstNode.id != secondNode.id)
+        controller.selectedNodeID = firstNode.id
+        try await revealNode(firstNode.id)
+        #expect(try !inspectButton(firstNode.id).isAccessibilitySelected(),
+                "Ordinary selection has not opened configuration")
+        try #require(HostingControlClick.send(to: inspectButton(firstNode.id), in: host))
+        for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        #expect(try inspectButton(firstNode.id).isAccessibilitySelected())
+        #expect(HostingControlClick.contains("workflow-field-text", in: host))
+        try await revealNode(secondNode.id)
+        try #require(HostingControlClick.send(to: inspectButton(secondNode.id), in: host))
+        for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        #expect(controller.selectedNodeID == secondNode.id)
+        #expect(try inspectButton(secondNode.id).isAccessibilitySelected())
+        try await revealNode(firstNode.id)
+        #expect(try !inspectButton(firstNode.id).isAccessibilitySelected())
+        let inspectorToggle = try #require(accessibilityElements(host).first {
+            $0.accessibilityIdentifier() == "canvas-inspector-toggle"
+        })
+        try #require(HostingControlClick.send(to: inspectorToggle, in: host))
+        for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        try await revealNode(secondNode.id)
+        #expect(try !inspectButton(secondNode.id).isAccessibilitySelected(),
+                "A hidden configuration panel cannot leave a node looking inspected")
         #expect(!observations.isEmpty)
         #expect(controller.graphs == graphBefore && controller.availableAssets == assetsBefore)
         #expect(controller.runs == runsBefore && controller.canUndo == undoBefore)

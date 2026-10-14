@@ -87,6 +87,60 @@ struct WorkflowCanvasPointerUpdate {
 final class WorkflowCanvasScrollTracking {
     var offset = CGPoint.zero
     var isPanning = false
+    let wheelZoom = WorkflowCanvasWheelZoom()
+}
+
+/// Wheel events can arrive before SwiftUI lays out the preceding scale. Accumulate
+/// from the requested view, then apply its offset only to the matching native layout.
+/// No asynchronous scrollTo remains to overwrite a later pan or scrollbar action.
+final class WorkflowCanvasWheelZoom {
+    private struct Target {
+        let scope: WorkflowCanvasScope
+        let layout: WorkflowCanvasViewportGeometry
+        let offset: CGPoint
+    }
+    private var pending: Target?
+    private var requestedZoom: CGFloat?
+
+    func offset(in layout: WorkflowCanvasViewportGeometry, scope: WorkflowCanvasScope) -> CGPoint? {
+        guard let pending, pending.scope == scope, pending.layout == layout else { return nil }
+        return pending.offset
+    }
+
+    func request(delta: CGFloat, mouse: CGPoint, nativeOffset: CGPoint,
+                 layout: WorkflowCanvasViewportGeometry, scope: WorkflowCanvasScope) -> CGFloat {
+        let currentOffset = offset(in: layout, scope: scope) ?? nativeOffset
+        let next = layout.anchoredZoom(toward: layout.zoom * CGFloat(exp(Double(delta) * 0.015)),
+                                     mouse: mouse, offset: currentOffset)
+        guard next.zoom != layout.zoom else { return layout.zoom }
+        let target = WorkflowCanvasViewportGeometry(graphSize: layout.graphSize,
+            viewportSize: layout.viewportSize, zoom: next.zoom, translation: layout.translation)
+        pending = Target(scope: scope, layout: target, offset: next.offset)
+        requestedZoom = next.zoom
+        return next.zoom
+    }
+
+    /// Cancelled wheels still own their scale change; it must not become a
+    /// toolbar-style center zoom when its delayed onChange arrives.
+    func consumeScaleChange(to zoom: CGFloat) -> Bool {
+        let isWheel = requestedZoom == zoom
+        requestedZoom = nil
+        if !isWheel { cancel() }
+        return isWheel
+    }
+
+    func cancel() { pending = nil }
+
+    func takeReadyOffset(scope: WorkflowCanvasScope?, declaredLayout: WorkflowCanvasViewportGeometry?, contentSize: CGSize,
+                         viewport: CGSize) -> CGPoint? {
+        guard let pending, pending.scope == scope,
+              pending.layout == declaredLayout,
+              pending.layout.viewportSize == viewport,
+              abs(contentSize.width - pending.layout.contentSize.width) <= 1,
+              abs(contentSize.height - pending.layout.contentSize.height) <= 1 else { return nil }
+        self.pending = nil
+        return pending.offset
+    }
 }
 
 /// The probe lives inside the graph's scroll content. The local monitor is active only while
@@ -95,6 +149,8 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     typealias Coordinator = Void
     var tool: WorkflowCanvasTool = .pointer
     var interactionScope: WorkflowCanvasScope? = nil
+    var wheelZoom: WorkflowCanvasWheelZoom? = nil
+    var wheelLayout: (CGSize) -> WorkflowCanvasViewportGeometry? = { _ in nil }
     var pointerTarget: (CGPoint, CGPoint, CGSize) -> WorkflowCanvasPointerTarget = { _, _, _ in .control }
     var onPointer: (WorkflowCanvasPointerUpdate) -> Void = { _ in }
     var onPan: (Bool, CGPoint, CGSize) -> Void = { _, _, _ in }
@@ -113,6 +169,8 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     func updateNSView(_ view: ProbeView, context: Context) {
         if view.interactionScope != interactionScope { view.cancelPointer() }
         view.interactionScope = interactionScope
+        view.wheelZoom = wheelZoom
+        view.wheelLayout = wheelLayout
         view.setTool(tool)
         view.pointerTarget = pointerTarget
         view.onPointer = onPointer
@@ -127,6 +185,8 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
 
     final class ProbeView: NSView {
         var interactionScope: WorkflowCanvasScope?
+        var wheelZoom: WorkflowCanvasWheelZoom?
+        var wheelLayout: (CGSize) -> WorkflowCanvasViewportGeometry? = { _ in nil }
         var pointerTarget: (CGPoint, CGPoint, CGSize) -> WorkflowCanvasPointerTarget = { _, _, _ in .control }
         var onPointer: (WorkflowCanvasPointerUpdate) -> Void = { _ in }
         var onPan: (Bool, CGPoint, CGSize) -> Void = { _, _, _ in }
@@ -198,6 +258,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
 
         private var reportedSize: WorkflowCanvasViewportMeasurement?
         private weak var observedScroll: NSScrollView?
+        private weak var observedDocument: NSView?
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
         override func viewDidHide() { super.viewDidHide(); cancelPointer(); resetHandCursor() }
@@ -226,6 +287,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                     self.updateHandCursor(for: event); return event
                 default: break
                 }
+                if event.type == .scrollWheel { return self.routeWheel(event) ? nil : event }
                 guard self.accepts(event),
                       let scroll = self.enclosingScrollView else { return event }
                 let clip = scroll.contentView
@@ -238,11 +300,6 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                     return event.type == .scrollWheel ? nil : event
                 }
                 guard self.allowsViewportEvent(point, clip.bounds.origin, clip.bounds.size) else { return event }
-                if event.type == .scrollWheel {
-                    guard event.scrollingDeltaY != 0 else { return event }
-                    return self.dispatchWheel(event.scrollingDeltaY, point, clip.bounds.origin, clip.bounds.size)
-                        ? nil : event // A zoom wheel event must not also scroll the native view.
-                }
                 guard event.buttonNumber == 2 else { return event }
                 return self.dispatchMiddleClick(scroll.contentView.bounds.size) ? nil : event
             }
@@ -253,6 +310,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         @discardableResult
         func routePointer(_ event: NSEvent) -> Bool {
             if event.type == .leftMouseDown {
+                if canvasHit(event) != nil { wheelZoom?.cancel() }
                 guard window?.isKeyWindow == true, accepts(event), navigationAllowed(),
                       let clip = enclosingScrollView?.contentView else { return false }
                 let location = clip.convert(event.locationInWindow, from: nil)
@@ -308,6 +366,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         }
 
         func cancelPointer() {
+            wheelZoom?.cancel()
             guard let session = pointerSession else { return }
             pointerSession = nil
             if session.moved {
@@ -332,6 +391,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         @discardableResult
         func dispatchMiddleClick(_ viewport: CGSize) -> Bool {
             guard navigationAllowed() else { return false }
+            wheelZoom?.cancel()
             onMiddleClick(viewport)
             return true
         }
@@ -351,6 +411,8 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             guard let scroll = enclosingScrollView else { return }
             let measured = WorkflowCanvasViewportMeasurement(clip: scroll.contentView.bounds.size,
                                                               surfaceWidth: scroll.frame.width)
+            if let reportedSize, reportedSize.clip != measured.clip { wheelZoom?.cancel() }
+            applyWheelOffset()
             guard measured.clip.width > 0, measured.clip.height > 0,
                   reportedSize != measured else { return }
             reportedSize = measured
@@ -362,16 +424,22 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         // document layout that may never happen.
         private func updateViewportObservation() {
             let scroll = enclosingScrollView
-            guard observedScroll !== scroll else { return }
+            guard observedScroll !== scroll || observedDocument !== scroll?.documentView else { return }
             stopViewportObservation()
             guard let scroll else { return }
             observedScroll = scroll
+            observedDocument = scroll.documentView
             scroll.postsFrameChangedNotifications = true
             scroll.contentView.postsBoundsChangedNotifications = true
+            observedDocument?.postsFrameChangedNotifications = true
             NotificationCenter.default.addObserver(self, selector: #selector(viewportChanged),
                 name: NSView.frameDidChangeNotification, object: scroll)
             NotificationCenter.default.addObserver(self, selector: #selector(viewportChanged),
                 name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+            if let observedDocument {
+                NotificationCenter.default.addObserver(self, selector: #selector(viewportChanged),
+                    name: NSView.frameDidChangeNotification, object: observedDocument)
+            }
         }
 
         @objc private func viewportChanged(_ notification: Notification) { reportViewportSize() }
@@ -380,29 +448,87 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             NotificationCenter.default.removeObserver(self, name: NSView.frameDidChangeNotification, object: nil)
             NotificationCenter.default.removeObserver(self, name: NSView.boundsDidChangeNotification, object: nil)
             observedScroll = nil
+            observedDocument = nil
+        }
+
+        /// Establish canvas ownership before deciding whether a child owns scrolling.
+        /// Native controls such as ports must not leak an unused wheel into the canvas.
+        private func visibleCanvasScroll() -> NSScrollView? {
+            guard let window, window.attachedSheet == nil,
+                  !isHiddenOrHasHiddenAncestor,
+                  let scroll = enclosingScrollView, !scroll.isHiddenOrHasHiddenAncestor else { return nil }
+            var ancestor: NSView? = self
+            while let current = ancestor {
+                if current.alphaValue <= 0.01 || (current.layer?.opacity ?? 1) <= 0.01 { return nil }
+                ancestor = current.superview
+            }
+            return scroll
+        }
+
+        private func canvasHit(_ event: NSEvent) -> NSView? {
+            guard let window,
+                  event.window === window || event.windowNumber == window.windowNumber,
+                  let scroll = visibleCanvasScroll(), let content = window.contentView else { return nil }
+            let point = content.superview?.convert(event.locationInWindow, from: nil)
+                ?? event.locationInWindow
+            guard let hit = content.hitTest(point) else { return nil }
+            var view: NSView? = hit
+            while let current = view, current !== scroll { view = current.superview }
+            return view === scroll ? hit : nil
         }
 
         private func accepts(_ event: NSEvent) -> Bool {
-            guard let window,
-                  (event.window === window || event.windowNumber == window.windowNumber),
-                  window.attachedSheet == nil,
-                  !isHiddenOrHasHiddenAncestor,
-                  let scroll = enclosingScrollView, !scroll.isHiddenOrHasHiddenAncestor,
-                  let content = window.contentView else { return false }
-            var ancestor: NSView? = self
-            while let current = ancestor {
-                if current.alphaValue <= 0.01 || (current.layer?.opacity ?? 1) <= 0.01 { return false }
-                ancestor = current.superview
-            }
-            let point = content.superview?.convert(event.locationInWindow, from: nil)
-                ?? event.locationInWindow
-            guard let hit = content.hitTest(point) else { return false }
+            guard let hit = canvasHit(event), let scroll = enclosingScrollView else { return false }
             var view: NSView? = hit
             while let current = view, current !== scroll {
                 if current is NSControl || current is NSTextView || current is WorkflowPortDragView || current is WorkflowConnectionHitView { return false }
                 view = current.superview
             }
             return view === scroll
+        }
+
+        @discardableResult
+        func routeWheel(_ event: NSEvent) -> Bool {
+            guard let hit = canvasHit(event), let scroll = enclosingScrollView else { return false }
+            var view: NSView? = hit
+            var control = false
+            while let current = view, current !== scroll {
+                if current is NSScroller || current is NSScrollView {
+                    wheelZoom?.cancel()
+                    return false // A real nested scroll view or scrollbar keeps its own input.
+                }
+                control = control || current is NSControl || current is NSTextView
+                    || current is WorkflowNodePlateView || current is WorkflowPortDragView
+                    || current is WorkflowConnectionHitView
+                view = current.superview
+            }
+            guard pointerSession == nil, navigationAllowed() else { return true }
+            if control { return true }
+            let clip = scroll.contentView
+            let location = clip.convert(event.locationInWindow, from: nil)
+            let point = CGPoint(x: location.x - clip.bounds.minX,
+                y: clip.isFlipped ? location.y - clip.bounds.minY : clip.bounds.maxY - location.y)
+            guard allowsViewportEvent(point, clip.bounds.origin, clip.bounds.size) else { return true }
+            guard event.scrollingDeltaY != 0 else {
+                wheelZoom?.cancel()
+                return false // Preserve native horizontal navigation when no zoom was requested.
+            }
+            let consumed = dispatchWheel(event.scrollingDeltaY, point, clip.bounds.origin, clip.bounds.size)
+            applyWheelOffset()
+            return consumed
+        }
+
+        private func applyWheelOffset() {
+            guard let scroll = visibleCanvasScroll() else { wheelZoom?.cancel(); return }
+            guard let document = scroll.documentView,
+                  let offset = wheelZoom?.takeReadyOffset(scope: interactionScope,
+                      declaredLayout: wheelLayout(scroll.contentView.bounds.size),
+                      contentSize: document.frame.size, viewport: scroll.contentView.bounds.size) else { return }
+            let clip = scroll.contentView
+            var bounds = clip.bounds
+            bounds.origin = offset
+            clip.scroll(to: clip.constrainBoundsRect(bounds).origin)
+            scroll.reflectScrolledClipView(clip)
         }
 
         func stopMonitoring() {

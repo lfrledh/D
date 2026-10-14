@@ -19,6 +19,7 @@ struct WorkflowGraphSurface: View {
     @Binding var pendingConnection: WorkflowPendingConnection?
     @Binding var selectedConnectionID: UUID?
     let readOnly: Bool
+    var inspectedNodeID: UUID? = nil
     let onPlan: (UUID, Bool) -> Void
     var onSetRunTarget: (UUID) -> Void = { _ in }
     var nodeSizeObserver: ((UUID, CGSize) -> Void)?
@@ -42,7 +43,6 @@ struct WorkflowGraphSurface: View {
     @State private var nodeControlBounds: [UUID: [CGRect]] = [:]
     @State private var clipViewportSize: CGSize?
     @State private var resizeAnchorRaw: CGPoint?
-    @State private var pendingZoomOffset: CGPoint?
     @State private var cardSizes: [UUID: CGSize] = [:]
     @State private var marquee: WorkflowCanvasMarquee?
 
@@ -107,6 +107,7 @@ struct WorkflowGraphSurface: View {
                                 pendingConnectionScope: pendingConnectionScope,
                                 readOnly: readOnly,
                                 selected: controller.selectedNodeID == node.id || controller.selectedNodeIDs.contains(node.id),
+                                inspecting: inspectedNodeID == node.id,
                                 onPlan: onPlan,
                                 onSetRunTarget: onSetRunTarget,
                                 onBindAsset: onBindAsset,
@@ -255,6 +256,7 @@ struct WorkflowGraphSurface: View {
                 }
                 .onChange(of: navigationRequest) { _, request in
                     guard let request else { return }
+                    scrollTracking.wheelZoom.cancel()
                     Task { @MainActor in
                         guard navigationRequest == request else { return }
                         let current = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
@@ -266,6 +268,7 @@ struct WorkflowGraphSurface: View {
                 }
                 .onChange(of: clipViewportSize) { old, new in
                     guard let new, new.width > 0, new.height > 0 else { return }
+                    scrollTracking.wheelZoom.cancel()
                     let previous = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                         viewportSize: old ?? viewport.size,
                         zoom: effectiveZoom, translation: geometry.translation)
@@ -278,19 +281,20 @@ struct WorkflowGraphSurface: View {
                     scrollPosition.scrollTo(point: next.centeredOffset(on: raw))
                 }
                 .onChange(of: zoom) { old, new in
-                    guard old != new, !viewportInteractionLocked else { return }
+                    guard old != new, new == zoom, !viewportInteractionLocked else { return }
+                    if scrollTracking.wheelZoom.consumeScaleChange(to: new) { return }
                     let previous = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                         viewportSize: viewportSize, zoom: old, translation: geometry.translation)
                     let next = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                         viewportSize: viewportSize, zoom: new, translation: geometry.translation)
-                    let offset = pendingZoomOffset ?? next.centeredOffset(
+                    let offset = next.centeredOffset(
                         on: previous.visibleRawCenter(offset: scrollTracking.offset))
-                    pendingZoomOffset = nil
                     scrollPosition.scrollTo(point: offset)
                 }
                 .simultaneousGesture(
                     MagnificationGesture()
                         .updating($gestureScale) { value, state, _ in state = value }
+                        .onChanged { _ in scrollTracking.wheelZoom.cancel() }
                         .onEnded { value in
                             if !viewportInteractionLocked {
                                 zoom = WorkflowCanvasLayoutPolicy.clampedInteractiveZoom(zoom * value,
@@ -299,6 +303,7 @@ struct WorkflowGraphSurface: View {
                         }
                 )
                 .onChange(of: scope) { _, next in
+                    scrollTracking.wheelZoom.cancel()
                     marquee = nil
                     viewportInteractionLocked = false
                     if nodeDrag.active?.scope != next { nodeDrag.invalidate(); viewportInteractionLocked = false }
@@ -311,6 +316,7 @@ struct WorkflowGraphSurface: View {
                     }
                 }
                 .onChange(of: tool) { _, next in
+                    scrollTracking.wheelZoom.cancel()
                     marquee = nil
                     viewportInteractionLocked = false
                     if next == .hand {
@@ -345,6 +351,7 @@ struct WorkflowGraphSurface: View {
                     }
                 }
                 .onDisappear {
+                    scrollTracking.wheelZoom.cancel()
                     nodeDrag.invalidate()
                     marquee = nil
                     clearConnection()
@@ -450,6 +457,11 @@ struct WorkflowGraphSurface: View {
         WorkflowCanvasViewportInput(
             tool: tool,
             interactionScope: scope,
+            wheelZoom: scrollTracking.wheelZoom,
+            wheelLayout: { size in
+                WorkflowCanvasViewportGeometry(graphSize: geometry.size, viewportSize: size,
+                    zoom: effectiveZoom, translation: geometry.translation)
+            },
             pointerTarget: { point, offset, size in
                 let layout = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                     viewportSize: size, zoom: zoom, translation: geometry.translation)
@@ -551,7 +563,8 @@ struct WorkflowGraphSurface: View {
             allowsEvent: { point, offset, size in
                 let current = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                     viewportSize: size, zoom: zoom, translation: geometry.translation)
-                let raw = current.rawPoint(screenPoint: point, offset: offset)
+                let raw = current.rawPoint(screenPoint: point,
+                    offset: scrollTracking.wheelZoom.offset(in: current, scope: scope) ?? offset)
                 for node in geometry.graph.nodes {
                     let center = geometry.rawPosition(node.id)
                     let halfHeight = (cardSizes[node.id]?.height ?? 600) / 2
@@ -578,11 +591,8 @@ struct WorkflowGraphSurface: View {
             onWheel: { delta, point, offset, size in
                 let old = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                     viewportSize: size, zoom: zoom, translation: geometry.translation)
-                let requested = zoom * CGFloat(exp(Double(delta) * 0.015))
-                let next = old.anchoredZoom(toward: requested, mouse: point, offset: offset)
-                guard next.zoom != zoom else { return }
-                pendingZoomOffset = next.offset
-                zoom = next.zoom
+                zoom = scrollTracking.wheelZoom.request(delta: delta, mouse: point,
+                    nativeOffset: offset, layout: old, scope: scope)
             },
             onMiddleClick: { size in
                 let current = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
@@ -928,6 +938,25 @@ private struct WorkflowConnectionInteraction: View {
     }
 }
 
+private struct WorkflowNodeInspectButtonStyle: ButtonStyle {
+    let inspecting: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: 22, height: 22)
+            .foregroundStyle(inspecting || configuration.isPressed ? Color.accentColor : Color.primary)
+            .background {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color.accentColor.opacity(configuration.isPressed ? 0.32 : inspecting ? 0.16 : 0))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(Color.accentColor.opacity(inspecting || configuration.isPressed ? 0.7 : 0))
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 5))
+    }
+}
+
 private struct WorkflowNodeCard: View {
     let controller: WorkflowController
     let graph: WorkflowGraph
@@ -939,6 +968,7 @@ private struct WorkflowNodeCard: View {
     let pendingConnectionScope: WorkflowCanvasScope?
     let readOnly: Bool
     let selected: Bool
+    let inspecting: Bool
     let onPlan: (UUID, Bool) -> Void
     let onSetRunTarget: (UUID) -> Void
     let onBindAsset: (UUID, UUID?, UUID, UUID) -> Bool
@@ -979,9 +1009,12 @@ private struct WorkflowNodeCard: View {
                 Button { onInspect(node.id) } label: {
                     Image(systemName: "slider.horizontal.3")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(WorkflowNodeInspectButtonStyle(inspecting: inspecting))
                 .workflowNodeControl(node.id)
                 .help(workflowText(languageStore, "workflow.node.edit", fallback: "编辑节点"))
+                .accessibilityLabel(workflowText(languageStore, "workflow.node.edit", fallback: "编辑节点"))
+                .accessibilityIdentifier("workflow-node-inspect-" + node.id.uuidString)
+                .accessibilityAddTraits(inspecting ? [.isSelected] : [])
                 Button { controller.toggleCollapsed(node.id) } label: {
                     Image(systemName: collapsed ? "chevron.down" : "chevron.up")
                 }

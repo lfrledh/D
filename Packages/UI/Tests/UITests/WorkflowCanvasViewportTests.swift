@@ -5,6 +5,61 @@ import Testing
 
 @Suite @MainActor
 struct WorkflowCanvasViewportTests {
+    @Test(arguments: [CGFloat(8), CGFloat(-8)])
+    func wheelBurstKeepsAnchorUntilMatchingNativeLayout(delta: CGFloat) throws {
+        let scope = WorkflowCanvasScope(rootGraphID: UUID(), rootRevision: UUID(), graphID: UUID(), bodyPath: [])
+        let wheel = WorkflowCanvasWheelZoom()
+        var layout = WorkflowCanvasViewportGeometry(graphSize: .init(width: 1400, height: 900),
+            viewportSize: .init(width: 460, height: 330), zoom: 1, translation: .init(width: 240, height: 120))
+        let initial = layout
+        let nativeOffset = layout.centeredOffset(on: layout.centerRawPoint)
+        let mouse = CGPoint(x: 90, y: 210)
+        let anchor = layout.rawPoint(screenPoint: mouse, offset: nativeOffset)
+        for _ in 0..<5 {
+            let zoom = wheel.request(delta: delta, mouse: mouse, nativeOffset: nativeOffset,
+                                     layout: layout, scope: scope)
+            layout = WorkflowCanvasViewportGeometry(graphSize: layout.graphSize, viewportSize: layout.viewportSize,
+                zoom: zoom, translation: layout.translation)
+            // The native clip and document have not caught up, even after onChange ran.
+            #expect(wheel.consumeScaleChange(to: zoom))
+            #expect(wheel.takeReadyOffset(scope: scope, declaredLayout: layout, contentSize: initial.contentSize,
+                                         viewport: layout.viewportSize) == nil)
+            let target = try #require(wheel.offset(in: layout, scope: scope))
+            let retained = layout.rawPoint(screenPoint: mouse, offset: target)
+            #expect(abs(retained.x - anchor.x) < 0.001 && abs(retained.y - anchor.y) < 0.001)
+        }
+        let applied = try #require(wheel.takeReadyOffset(scope: scope, declaredLayout: layout, contentSize: layout.contentSize,
+                                                       viewport: layout.viewportSize))
+        let retained = layout.rawPoint(screenPoint: mouse, offset: applied)
+        #expect(abs(retained.x - anchor.x) < 0.001 && abs(retained.y - anchor.y) < 0.001)
+        #expect(wheel.takeReadyOffset(scope: scope, declaredLayout: layout, contentSize: layout.contentSize,
+                                     viewport: layout.viewportSize) == nil, "Apply a wheel target only once")
+    }
+
+    @Test func interruptedWheelNeverReplaysAsCenterZoom() {
+        let scope = WorkflowCanvasScope(rootGraphID: UUID(), rootRevision: UUID(), graphID: UUID(), bodyPath: [])
+        let wheel = WorkflowCanvasWheelZoom()
+        let initial = WorkflowCanvasViewportGeometry(graphSize: .init(width: 1400, height: 900),
+            viewportSize: .init(width: 460, height: 330), zoom: 1, translation: .zero)
+        let changed = wheel.request(delta: 8, mouse: .init(x: 90, y: 210),
+            nativeOffset: initial.centeredOffset(on: initial.centerRawPoint), layout: initial, scope: scope)
+        let target = WorkflowCanvasViewportGeometry(graphSize: initial.graphSize,
+            viewportSize: initial.viewportSize, zoom: changed, translation: initial.translation)
+        var otherOwner = scope; otherOwner.instanceID = UUID()
+        #expect(wheel.takeReadyOffset(scope: otherOwner, declaredLayout: target, contentSize: target.contentSize,
+                                     viewport: target.viewportSize) == nil)
+        #expect(wheel.takeReadyOffset(scope: scope, declaredLayout: target, contentSize: target.contentSize,
+                                     viewport: .init(width: 520, height: 330)) == nil)
+        #expect(wheel.takeReadyOffset(scope: scope, declaredLayout: initial, contentSize: target.contentSize,
+                                     viewport: target.viewportSize) == nil,
+                "A matching old native frame cannot apply after the declared scale changed")
+        wheel.cancel() // Native navigation takes ownership before its event is delivered.
+        #expect(wheel.consumeScaleChange(to: changed), "The late scale callback must not submit a center scrollTo")
+        #expect(wheel.takeReadyOffset(scope: scope, declaredLayout: target, contentSize: target.contentSize,
+                                     viewport: target.viewportSize) == nil)
+        #expect(!wheel.consumeScaleChange(to: 1), "An explicit toolbar scale still uses its own center rule")
+    }
+
     @Test func viewportProbeObservesAncestorResizeWithoutDocumentLayout() {
         let scroll = NSScrollView(frame: .init(x: 0, y: 0, width: 600, height: 400))
         let document = NSView(frame: .init(x: 0, y: 0, width: 1800, height: 1200))
