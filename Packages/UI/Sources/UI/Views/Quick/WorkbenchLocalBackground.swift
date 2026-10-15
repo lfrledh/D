@@ -291,12 +291,30 @@ extension EnvironmentValues {
     var strength = 0.55
     var drawsGlass = true
     var contour: ((CGRect, CGFloat) -> CGPath)?
+    var stylesWindowTitlebar = false
+    var legacyTitlebarBlend: Double?
+    private(set) var titlebar: WorkbenchWindowTitlebar?
     private var observers: [NSObjectProtocol] = []
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func viewDidMoveToSuperview() { super.viewDidMoveToSuperview(); observeGeometry() }
-    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); observeGeometry() }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow(); synchronizeTitlebar(); observeGeometry()
+    }
+    func synchronizeTitlebar() {
+        if titlebar?.window !== window || !stylesWindowTitlebar || !isCanvas {
+            let previous = titlebar; titlebar = nil; previous?.restore()
+        }
+        guard isCanvas, stylesWindowTitlebar, let window else { return }
+        if titlebar == nil {
+            titlebar = WorkbenchWindowTitlebar(window: window) { [weak self] in self?.needsDisplay = true }
+        }
+        titlebar?.update(palette: palette)
+    }
+    func releaseTitlebar() {
+        let previous = titlebar; titlebar = nil; stylesWindowTitlebar = false; previous?.restore()
+    }
     private func observeGeometry() {
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers.removeAll()
@@ -333,6 +351,24 @@ extension EnvironmentValues {
             image: isCanvas ? owner?.image : (drawsGlass ? owner?.blurred : nil),
             canvas: isCanvas || drawsGlass ? palette.canvas : palette.panel, panel: palette.panel,
             strength: strength, glass: !isCanvas && drawsGlass, contour: contour)
+        if isCanvas, let band = titlebar?.frame(in: self), !band.isEmpty, !band.isNull {
+            // Render the same local glass as the other controls, with the same
+            // window-space mapping. Never sample the native title, buttons or desktop.
+            c.saveGState(); c.clip(to: band); c.translateBy(x: band.minX, y: band.minY)
+            if let legacyTitlebarBlend {
+                // Valid older settings keep the same opaque color blend as panels.
+                c.setFillColor(NSColor(palette.panelFill(canvasBlend: legacyTitlebarBlend)).cgColor)
+                c.fill(CGRect(origin: .zero, size: band.size))
+            } else {
+                let mapped = root.map { convert(band, to: $0) } ?? band
+                WorkbenchLocalRenderer.draw(in: c, size: band.size, rect: mapped,
+                    viewport: root?.bounds.size ?? bounds.size,
+                    image: drawsGlass ? owner?.blurred : nil,
+                    canvas: drawsGlass ? palette.canvas : palette.panel, panel: palette.panel,
+                    strength: strength, glass: drawsGlass)
+            }
+            c.restoreGState()
+        }
     }
 }
 
@@ -344,6 +380,8 @@ struct WorkbenchLocalSurface: NSViewRepresentable {
     var drawsGlass = true
     var contour: ((CGRect, CGFloat) -> CGPath)? = nil
     var prepare: (() -> Void)? = nil
+    var stylesWindowTitlebar = false
+    var legacyTitlebarBlend: Double? = nil
     func makeNSView(context: Context) -> WorkbenchBackgroundNSView {
         let view = WorkbenchBackgroundNSView(); view.setAccessibilityElement(false)
         return view
@@ -352,22 +390,30 @@ struct WorkbenchLocalSurface: NSViewRepresentable {
         prepare?()
         view.owner = owner; view.palette = palette; view.isCanvas = isCanvas
         view.strength = strength; view.drawsGlass = drawsGlass; view.contour = contour
+        view.stylesWindowTitlebar = stylesWindowTitlebar; view.legacyTitlebarBlend = legacyTitlebarBlend
+        view.synchronizeTitlebar()
         owner?.surfaces.add(view)
         if isCanvas, owner?.root !== view { owner?.root = view; owner?.invalidate() }
         view.needsDisplay = true
+    }
+    static func dismantleNSView(_ view: WorkbenchBackgroundNSView, coordinator: ()) {
+        view.releaseTitlebar()
     }
 }
 
 struct WorkbenchCanvasModifier: ViewModifier {
     let state: ChatDisplayPreferencesState
+    var stylesWindowTitlebar = false
     @State private var owner = WorkbenchBackgroundOwner()
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
+    private var usesCanvasBlend: Bool {
+        WorkbenchEffectsPolicy(appearance: state.preferences.resolvedAppearance,
+            reduceMotion: false, reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased).usesCanvasBlend
+    }
     private var preparesBlur: Bool {
-        let appearance = state.preferences.resolvedAppearance
-        return appearance.local?.material == .glass && WorkbenchEffectsPolicy(appearance:appearance,
-            reduceMotion:false,reduceTransparency:reduceTransparency,increasedContrast:contrast == .increased).usesCanvasBlend
+        state.preferences.resolvedAppearance.local?.material == .glass && usesCanvasBlend
     }
     func body(content: Content) -> some View {
         let appearance = state.preferences.resolvedAppearance
@@ -375,7 +421,11 @@ struct WorkbenchCanvasModifier: ViewModifier {
         content.environment(\.workbenchBackground, owner)
             .environment(\.workbenchAppearanceState, state)
             .background {
-                WorkbenchLocalSurface(owner: owner, palette: palette, isCanvas: true, prepare: prepare)
+                WorkbenchLocalSurface(owner: owner, palette: palette, isCanvas: true,
+                    strength: appearance.local?.strength ?? 0, drawsGlass: preparesBlur,
+                    prepare: prepare, stylesWindowTitlebar: stylesWindowTitlebar,
+                    legacyTitlebarBlend: appearance.local == nil ? (usesCanvasBlend ? appearance.backgroundTransparency : 0) : nil)
+                    .ignoresSafeArea(.container, edges: stylesWindowTitlebar ? .top : [])
                     .allowsHitTesting(false).accessibilityHidden(true)
             }
             .onAppear {

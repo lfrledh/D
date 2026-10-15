@@ -48,6 +48,154 @@ private actor LocalGlassNoInference: InferenceEngine {
         let ptr = try #require(c.data).assumingMemoryBound(to: UInt8.self)
         return Array(UnsafeBufferPointer(start: ptr, count: c.bytesPerRow * c.height))
     }
+    private func titlebarPixel(_ canvas: WorkbenchBackgroundNSView, external: CGColor) throws -> [UInt8] {
+        let band = try #require(canvas.titlebar?.frame(in: canvas))
+        try #require(!band.isEmpty && !band.isNull)
+        let c = try #require(WorkbenchLocalRenderer.bitmap(width: Int(canvas.bounds.width), height: Int(canvas.bounds.height)))
+        c.setFillColor(external); c.fill(canvas.bounds)
+        // A flipped NSView's draw context uses top-left points. Bitmap contexts
+        // start bottom-left; the flipped flag alone does not transform the CTM.
+        c.translateBy(x: 0, y: CGFloat(c.height)); c.scaleBy(x: 1, y: -1)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: c, flipped: true)
+        canvas.draw(canvas.bounds)
+        NSGraphicsContext.restoreGraphicsState()
+        let data = try #require(c.data).assumingMemoryBound(to: UInt8.self)
+        let offset = Int(band.midY) * c.bytesPerRow + Int(band.midX) * 4
+        return Array(UnsafeBufferPointer(start: data + offset, count: 4))
+    }
+
+    @Test(arguments: [ColorScheme.light, .dark])
+    func titlebarKeepsLegacyColorBlendWithoutMigratingPreferences(scheme: ColorScheme) async throws {
+        let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
+        let state = ChatDisplayPreferencesState(appearanceDirectory: root)
+        var value = state.preferences; value.appearance?.local = nil
+        try #require(state.update(value))
+        func content() -> some View {
+            Text("Legacy").frame(maxWidth: .infinity, maxHeight: .infinity)
+                .modifier(WorkbenchCanvasModifier(state: state, stylesWindowTitlebar: true))
+                .environment(\.colorScheme, scheme)
+        }
+        let host = NSHostingView(rootView: content())
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 250),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        func children(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + children($0) } }
+        var images: [[UInt8]] = []
+        for blend in [0.0, 0.83, 1.0] {
+            value.appearance?.backgroundTransparency = blend; try #require(state.update(value))
+            host.rootView = content()
+            for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+            let canvas = try #require(children(host).compactMap { $0 as? WorkbenchBackgroundNSView }.first { $0.isCanvas })
+            #expect(canvas.legacyTitlebarBlend == blend && !canvas.drawsGlass)
+            #expect(state.preferences == value && state.preferences.appearance?.local == nil)
+            let pixel = try titlebarPixel(canvas, external: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+            let expected = try #require(NSColor(canvas.palette.panelFill(canvasBlend: blend)).usingColorSpace(.sRGB))
+            for (actual, expected) in zip(pixel.prefix(3), [expected.redComponent, expected.greenComponent, expected.blueComponent]) {
+                #expect(abs(Double(actual) - Double(expected) * 255) <= 1)
+            }
+            #expect(pixel[3] == 255); images.append(pixel)
+        }
+        #expect(images[0] != images[1] && images[1] != images[2])
+    }
+
+    @Test(arguments: [ColorScheme.light, .dark])
+    func titlebarUsesCanvasMaterialWithoutMovingContentOrReplacingControls(scheme: ColorScheme) async throws {
+        let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
+        let state = ChatDisplayPreferencesState(appearanceDirectory: root.appendingPathComponent("Appearance"))
+        let source = root.appendingPathComponent("source.png"); try png(pattern(), at: source)
+        await state.importWallpaper(source)
+        func content() -> some View {
+            TextField("Top input", text: .constant("Native content"))
+                .frame(height: 32).padding(8).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .modifier(WorkbenchCanvasModifier(state: state, stylesWindowTitlebar: true))
+                .environment(\.colorScheme, scheme).environment(\.chatDisplayPreferences, state.preferences)
+        }
+        let host = NSHostingView(rootView: content())
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 640, height: 400),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.title = "D native title"
+        let buttons = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { window.standardWindowButton($0) }
+        let movable = window.isMovableByWindowBackground, visibility = window.titleVisibility
+        let appearance = window.appearance
+        window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        func children(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + children($0) } }
+        func settle() async throws {
+            for _ in 0..<20 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        }
+        try await settle()
+        let canvas = try #require(children(host).compactMap { $0 as? WorkbenchBackgroundNSView }.first { $0.isCanvas })
+        let chrome = try #require(canvas.titlebar), owner = try #require(canvas.owner)
+        let input = try #require(children(host).compactMap { $0 as? NSTextField }.first)
+        #expect(window.makeFirstResponder(input))
+        let responder = window.firstResponder
+        #expect(window.titlebarAppearsTransparent && window.styleMask.contains(.fullSizeContentView) && window.isOpaque)
+        #expect(window.titlebarSeparatorStyle == .none && window.titleVisibility == visibility && window.title == "D native title")
+        #expect(window.isMovableByWindowBackground == movable && window.contentView === host && window.appearance === appearance)
+        #expect(zip(buttons, [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton]).allSatisfy { $0 === window.standardWindowButton($1) })
+        try #require(owner.image != nil && owner.blurred != nil)
+        func checkGeometry() throws {
+            let band = chrome.frame(in: canvas)
+            #expect(!band.isEmpty && !band.isNull)
+            let nativeBand = canvas.convert(band, to: nil)
+            #expect(abs(nativeBand.minY - window.contentLayoutRect.maxY) < 1)
+            #expect(abs(nativeBand.maxY - host.convert(host.bounds, to: nil).maxY) < 1)
+            #expect(input.convert(input.bounds, to: nil).maxY <= window.contentLayoutRect.maxY,
+                "Only the background extends into the native titlebar; input stays below it")
+            #expect(canvas.hitTest(band.origin) == nil)
+        }
+        try checkGeometry()
+        var images: [[UInt8]] = []
+        for strength in [0.0, 0.55, 1.0] {
+            var value = state.preferences; value.appearance?.local?.strength = strength
+            try #require(state.update(value)); host.rootView = content(); try await settle()
+            #expect(children(host).contains { $0 === canvas } && children(host).contains { $0 === input })
+            #expect(window.firstResponder === responder && canvas.strength == strength)
+            #expect(canvas.palette == (scheme == .dark ? .defaultDark : .defaultLight))
+            let a = try titlebarPixel(canvas, external: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+            let b = try titlebarPixel(canvas, external: CGColor(red: 0, green: 1, blue: 0, alpha: 1))
+            #expect(a == b && a[3] == 255, "Titlebar pixels exclude anything behind D")
+            images.append(a)
+        }
+        #expect(images[0] != images[1] && images[1] != images[2], "Titlebar follows the continuous glass setting: \(images), band \(chrome.frame(in: canvas)), bounds \(canvas.bounds)")
+        window.setContentSize(CGSize(width: 840, height: 520)); try await settle(); try checkGeometry()
+        #expect(owner.decodeCount == 1 && owner.blurCount == 1)
+        var value = state.preferences; value.appearance?.local?.material = .solid
+        try #require(state.update(value)); host.rootView = content(); try await settle()
+        #expect(!canvas.drawsGlass && window.isOpaque)
+        canvas.releaseTitlebar()
+        #expect(!window.titlebarAppearsTransparent && !window.styleMask.contains(.fullSizeContentView))
+        #expect(window.contentView === host && window.firstResponder === responder)
+    }
+
+    @Test func titlebarOwnershipIsLocalAndRestoresOnlyChrome() {
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 250),
+            styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        let other = NSWindow(contentRect: window.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        let panel = NSPanel(contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        for w in [window, other, panel] { w.isReleasedWhenClosed = false }
+        defer { for w in [window, other, panel] { w.contentView = nil; w.close() } }
+        let color = window.backgroundColor, separator = window.titlebarSeparatorStyle
+        let view = WorkbenchBackgroundNSView(frame: CGRect(x: 0, y: 0, width: 400, height: 250))
+        view.isCanvas = true; window.contentView = view
+        #expect(view.titlebar == nil && !window.titlebarAppearsTransparent)
+        view.stylesWindowTitlebar = true; view.synchronizeTitlebar()
+        #expect(view.titlebar?.window === window && window.titlebarAppearsTransparent)
+        #expect(!other.titlebarAppearsTransparent && !other.styleMask.contains(.fullSizeContentView))
+        #expect(WorkbenchWindowTitlebar(window: panel, invalidate: {}) == nil)
+        // Detachment releases the first window before attachment to the next.
+        window.contentView = nil; other.contentView = view
+        #expect(!window.titlebarAppearsTransparent && !window.styleMask.contains(.fullSizeContentView))
+        #expect(window.backgroundColor == color && window.titlebarSeparatorStyle == separator)
+        #expect(view.titlebar?.window === other && other.titlebarAppearsTransparent)
+        other.title = "Unrelated new title"; other.backgroundColor = .orange
+        view.releaseTitlebar(); view.releaseTitlebar()
+        #expect(other.title == "Unrelated new title" && other.backgroundColor == .orange)
+        #expect(!other.titlebarAppearsTransparent && !other.styleMask.contains(.fullSizeContentView))
+    }
+
     @Test(arguments: [false, true])
     func textInputShellsFollowSettingsAcrossNativeHosts(retained: Bool) async throws {
         let owner = WorkbenchBackgroundOwner()

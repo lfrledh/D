@@ -408,7 +408,7 @@ public struct DualWorkbenchView: View {
         .environment(\.workbenchSidebars, sidebarState)
         .environment(\.openWorkbenchSettings, { section in presentSettings(section: section) })
         .workbenchTheme(paintsCanvas: false)
-        .modifier(WorkbenchCanvasModifier(state: automaticQuickModel.chatDisplaySettings))
+        .modifier(WorkbenchCanvasModifier(state: automaticQuickModel.chatDisplaySettings, stylesWindowTitlebar: true))
         .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences)
         .preferredColorScheme(automaticQuickModel.chatDisplaySettings.preferences.preferredColorScheme)
         .onAppear { consumeSettingsRequest() }
