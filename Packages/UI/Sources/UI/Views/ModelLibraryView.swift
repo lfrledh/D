@@ -275,7 +275,7 @@ public struct ModelLibraryView: View {
                     Button(model.selectionAction == nil ? text("selectResource", "选择此资源") : text("useTarget", "用于：") + (model.currentSelectionTitle ?? text("targetUnavailable", "目标已改变，请重新选择"))) { Task { if let action = model.selectionAction { await action(record.id) } else { await onSelect(record.id) } } }
                         .disabled(record.id == (model.selectionID ?? selectedModelID) || (model.selectionAction != nil && model.currentSelectionTitle == nil))
                 }
-            }.buttonStyle(.bordered)
+            }.buttonStyle(WorkbenchGlassButtonStyle())
             if record.registrationState != .registered { Text(text("registrationHelp", "文件完整不等于已接入执行；登记不会改变当前节点或运行模型。")).font(.caption).foregroundStyle(.secondary) }
             DisclosureGroup(text("technical", "身份与来源详情")) {
             WorkflowTechnicalDetails(value: resource.id.description + "\n" + record.revision + "\n" + resourceLocation(resource))
@@ -340,7 +340,7 @@ public struct ModelLibraryView: View {
             if task.state.isTerminal { Button(text("clearHistory", "清除此下载记录…")) { confirmation = .clear(task) } }
             WorkflowTechnicalDetails(value: ["Task: " + task.id.uuidString, "Resource: " + task.resourceID.description, "Attempt: " + task.attemptID.uuidString, "Attempts: " + String(task.attempts), "Generation: " + task.generation.uuidString].joined(separator: "\n"))
 
-        }.buttonStyle(.bordered)
+        }.buttonStyle(WorkbenchGlassButtonStyle())
     }
     private var acquisition: some View {
         VStack(alignment: .leading, spacing: 16) {

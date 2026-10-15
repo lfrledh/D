@@ -209,9 +209,9 @@ struct ChatDisplayPreferencesPanel: View {
             Slider(value: Binding(get: { glassStrength ?? state.preferences.appearance?.local?.strength ?? 0.55 },
                 set: { glassStrength = $0 }), in: 0...1, onEditingChanged: { editing in
                     if !editing, let value = glassStrength { changeLocal { $0.strength = value }; glassStrength = nil }
-                }) { Text(wording("Glass strength", "玻璃强度")) }
+                }) { Text(wording("Glass transparency", "玻璃透明度")) }
                 .disabled(state.preferences.appearance?.local?.material != .glass)
-            Button(wording("Reset glass strength", "恢复默认玻璃强度")) { glassStrength = nil; changeLocal { $0.strength = 0.55 } }
+            Button(wording("Reset transparency", "恢复默认透明度")) { glassStrength = nil; changeLocal { $0.strength = 0.55 } }
             Text(wording("Panels sample only D’s canvas, never your desktop. Images are bounded sRGB appearance copies; original artwork and previews are unchanged.", "面板只映出 D 的画布，不透出系统桌面。背景使用有界 sRGB 外观副本，原作品和预览保持不变。"))
                 .font(.caption).foregroundStyle(.secondary)
         }.disabled(state.hasInvalidStoredRecord)

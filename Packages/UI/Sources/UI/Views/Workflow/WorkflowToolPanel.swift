@@ -68,7 +68,7 @@ struct WorkflowToolPanel: View {
                 guard let draft = boundary, controller.selectedNodeIDs == draft.selected else { controller.errorMessage = t("stale", "选区已改变，请重新检查边界。"); return }
                 controller.extractSelection(name: name, inputs: draft.inputs, outputs: draft.outputs.filter(\.included).map(\.value), expectedGraphID: draft.graphID, expectedRevision: draft.revision)
                 if controller.errorMessage == nil { boundary = nil; dismiss() }
-            }.buttonStyle(.borderedProminent).disabled(!controller.canEditCanvas)
+            }.buttonStyle(WorkbenchPrimaryButtonStyle()).disabled(!controller.canEditCanvas)
         }
     }
     private func t(_ suffix: String, _ fallback: String) -> String { language?.text("workflow.language.tools." + suffix, fallback: fallback) ?? fallback }

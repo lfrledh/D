@@ -237,7 +237,7 @@ struct WorkflowHumanTaskForm: View {
                 taskEditor.id(task.id)
                 HStack {
                     Button(humanTaskText("workflow.language.form.submit", fallback: "Submit")) { submit() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(WorkbenchPrimaryButtonStyle())
                         .disabled(!state.canSubmit)
                         .accessibilityIdentifier("workflow-human-task-submit")
                     Button(humanTaskText("workflow.language.form.reject", fallback: "Reject"), role: .destructive) {

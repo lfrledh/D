@@ -300,9 +300,9 @@ struct GenerationInspector: View {
 
     @ViewBuilder private var generateButton: some View {
         if reduceTransparency {
-            generateAction.buttonStyle(.borderedProminent)
+            generateAction.buttonStyle(WorkbenchPrimaryButtonStyle())
         } else {
-            generateAction.buttonStyle(.glassProminent)
+            generateAction.buttonStyle(WorkbenchPrimaryButtonStyle())
         }
     }
 

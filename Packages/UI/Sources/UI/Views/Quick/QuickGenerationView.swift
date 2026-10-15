@@ -112,7 +112,7 @@ struct QuickGenerationView: View {
                                         Button { preview = reference } label: {
                                             QuickInputAssetName(store: quick.store, reference: reference)
                                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                        }.buttonStyle(.bordered)
+                                        }.buttonStyle(WorkbenchGlassButtonStyle())
                                     }
                                     Divider()
                                 }
@@ -300,7 +300,7 @@ struct QuickGenerationView: View {
                 } else if quick.pendingSaveRunID != nil || quick.saveIssue != nil {
                     Button(baselineText(language, "label.fb412bfea70f", fallback: "重试保存（不重新生成）")) { Task { await quick.retrySave() } }
                 } else {
-                    Button(baselineText(language, "label.1ad1463fe16f", fallback: "生成")) { quick.start() }.buttonStyle(.glassProminent)
+                    Button(baselineText(language, "label.1ad1463fe16f", fallback: "生成")) { quick.start() }.buttonStyle(WorkbenchPrimaryButtonStyle())
                         .disabled(!quick.canStart)
                         .accessibilityIdentifier("quick-generate")
                 }

@@ -161,7 +161,7 @@ struct SharedLibraryPropertySummary: View {
     }
     private func rangeLabel(_ value: SharedLibraryNumberRange) -> String { (value.minimum.map(String.init) ?? "…") + " – " + (value.maximum.map(String.init) ?? "…") + " px" }
     private func remove(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Label(title, systemImage: "xmark.circle").multilineTextAlignment(.leading) }.buttonStyle(.borderless)
+        Button(action: action) { Label(title, systemImage: "xmark.circle").multilineTextAlignment(.leading) }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
     }
 }
 

@@ -82,7 +82,7 @@ struct WorkflowTechnicalDetails: View {
             Text(value).font(.caption2.monospaced()).textSelection(.enabled)
             Button(metadataText(language, "copyDetails", "复制完整详情", "Copy full details")) {
                 NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string)
-            }.buttonStyle(.borderless)
+            }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
         }.font(.caption)
     }
 }

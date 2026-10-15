@@ -144,7 +144,7 @@ public struct ModelNodeDetail: View {
                             Spacer(minLength: 4)
                             Button("移除 \(tag)", systemImage: "xmark") { remove(tag) }
                                 .labelStyle(.iconOnly)
-                                .buttonStyle(.borderless)
+                                .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                                 .accessibilityIdentifier("model-node-tag-remove-\(node.id)-\(tag)")
                                 .modelNodeMeasured("model-node-tag-remove-\(node.id)-\(tag)", probe: layoutProbe)
                         }
@@ -162,7 +162,7 @@ public struct ModelNodeDetail: View {
                     .onSubmit(addDraft)
                     .modelNodeMeasured("model-node-tag-draft-\(node.id)", probe: layoutProbe)
                 Button("添加", action: addDraft)
-                    .buttonStyle(.glass)
+                    .buttonStyle(WorkbenchGlassButtonStyle())
                     .disabled(!tagEditor.isEditable)
                     .accessibilityIdentifier("model-node-tag-add-\(node.id)")
                     .modelNodeMeasured("model-node-tag-add-\(node.id)", probe: layoutProbe)
@@ -355,7 +355,7 @@ private struct ModelNodeSection<Content: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .workbenchPanel(cornerRadius: 14)
         .accessibilityIdentifier("model-node-section-\(identifier)")
     }
 }

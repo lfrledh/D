@@ -154,7 +154,7 @@ public struct VideoCreationView: View {
                     _ = VideoCreationButtonHandler.submit(draft, hostAllowsGeneration: canGenerate,
                                                           isBusy: isBusy, actions: actions)
                 }
-                .buttonStyle(.glass).disabled(!canSubmit)
+                .buttonStyle(WorkbenchGlassButtonStyle()).disabled(!canSubmit)
                 .accessibilityIdentifier("video-create-generate")
             }
             Button("保存", action: actions.save).disabled(isBusy)

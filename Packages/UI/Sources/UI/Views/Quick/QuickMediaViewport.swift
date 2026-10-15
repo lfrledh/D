@@ -67,7 +67,7 @@ struct QuickMediaViewport: View {
                     Button(refinementText("zoomIn", fallback: "放大"), systemImage: "plus") { zoom = min(12, zoom * 1.25) }.labelStyle(.iconOnly)
                     Button(refinementText("fit", fallback: "适合窗口"), systemImage: "arrow.up.left.and.arrow.down.right") { zoom = 1; offset = .zero }
                         .accessibilityIdentifier("quick-media-fit")
-                }
+                }.buttonStyle(WorkbenchGlassButtonStyle()).controlSize(.small)
             }
         }
         .task(id: MediaLoadKey(store: ObjectIdentifier(store), reference: reference)) {

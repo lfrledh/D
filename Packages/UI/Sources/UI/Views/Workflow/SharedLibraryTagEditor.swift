@@ -136,7 +136,7 @@ struct SharedLibraryTagEditor: View {
                             selectedLegacyNames: legacy, confirmIntegration: keys)
                         dismiss()
                     } catch { self.error = error.localizedDescription }
-                }.buttonStyle(.borderedProminent).disabled(targets.isEmpty || targets.contains { $0.legacyFailure != nil && !baseline.integratedKeys.contains($0.key) } || !name.isEmpty)
+                }.buttonStyle(WorkbenchPrimaryButtonStyle()).disabled(targets.isEmpty || targets.contains { $0.legacyFailure != nil && !baseline.integratedKeys.contains($0.key) } || !name.isEmpty)
             }
         }.padding(18).frame(width: 460, height: 520).interactiveDismissDisabled()
         .onAppear { lifecycle.begin() }.onDisappear { lifecycle.end() }

@@ -84,7 +84,7 @@ struct WorkbenchTasks: View {
                     Image(systemName: "xmark.circle")
                         .font(.body).foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                 .disabled(!model.canCancel(job.id))
                 .help("取消这个任务")
                 .accessibilityLabel("取消任务")
@@ -95,7 +95,7 @@ struct WorkbenchTasks: View {
                 } label: {
                     Image(systemName: "arrow.up.right.square")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                 .help("查看作品")
                 .accessibilityLabel("查看作品")
             }

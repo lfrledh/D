@@ -48,6 +48,135 @@ private actor LocalGlassNoInference: InferenceEngine {
         let ptr = try #require(c.data).assumingMemoryBound(to: UInt8.self)
         return Array(UnsafeBufferPointer(start: ptr, count: c.bytesPerRow * c.height))
     }
+    @Test func liquidTransparencyKeepsARealContinuousRange() throws {
+        let source = try #require(WorkbenchLocalRenderer.bitmap(width: 100, height: 80))
+        source.setFillColor(CGColor(gray: 1, alpha: 1)); source.fill(CGRect(x: 0, y: 0, width: 100, height: 80))
+        let image = try #require(source.makeImage())
+        var levels: [UInt8] = []
+        for strength in [0.0, 0.55, 1.0] {
+            let c = try #require(WorkbenchLocalRenderer.bitmap(width: 100, height: 80))
+            WorkbenchLocalRenderer.draw(in: c, size: CGSize(width: 100, height: 80),
+                rect: CGRect(x: 0, y: 0, width: 100, height: 80), viewport: CGSize(width: 100, height: 80),
+                image: image, canvas: "#000000", panel: "#000000", strength: strength, glass: true)
+            let pixels = try #require(c.data).assumingMemoryBound(to: UInt8.self)
+            levels.append(pixels[(40 * 100 + 50) * 4])
+            #expect(pixels[(40 * 100 + 50) * 4 + 3] == 255)
+        }
+        #expect(levels[0] == 0)
+        #expect(levels[1] > 100 && levels[1] < 135)
+        #expect(levels[2] > 200 && levels[2] < 220)
+    }
+
+    @Test func liquidDiffusionKeepsFineBackgroundDetail() throws {
+        let raw = try pattern(width: 160, height: 100)
+        let diffuse = try #require(WorkbenchLocalRenderer.blur(raw))
+        let a = try render(raw, refract: false), b = try render(diffuse, refract: false)
+        func horizontalDetail(_ pixels: [UInt8]) -> Int {
+            (20..<40).reduce(0) { sum, y in
+                sum + (20..<60).reduce(0) { $0 + abs(Int(pixels[(y * 80 + $1) * 4]) - Int(pixels[(y * 80 + $1 - 1) * 4])) }
+            }
+        }
+        #expect(a != b, "The bounded optical diffusion is real")
+        #expect(Double(horizontalDetail(b)) / Double(horizontalDetail(a)) > 0.60,
+                "Clear glass must retain the local pattern, not a broad frosted blur")
+    }
+
+    @Test(arguments: ["capsule", "circle", "node"])
+    func liquidRefractionFollowsActualOutlineWithoutChangingTheCenter(shape: String) throws {
+        let size = shape == "circle" ? CGSize(width: 80, height: 80) : CGSize(width: 160, height: 80)
+        let outline: (CGRect, CGFloat) -> CGPath = { rect, inset in
+            if shape == "capsule" { return Capsule().inset(by: inset).path(in: rect).cgPath }
+            if shape == "circle" { return Circle().inset(by: inset).path(in: rect).cgPath }
+            return RoundedRectangle(cornerRadius: 13).inset(by: inset).path(in: rect).cgPath
+        }
+        let image = try pattern(width: 320, height: 200)
+        func pixels(_ refract: Bool) throws -> [UInt8] {
+            let c = try #require(WorkbenchLocalRenderer.bitmap(width: Int(size.width), height: Int(size.height)))
+            WorkbenchLocalRenderer.draw(in: c, size: size, rect: CGRect(origin: CGPoint(x: 20, y: 30), size: size),
+                viewport: CGSize(width: 320, height: 200), image: image, canvas: "#111D1A", panel: "#1D2B25",
+                strength: 0.85, glass: true, refraction: refract, contour: outline)
+            return Array(UnsafeBufferPointer(start: try #require(c.data).assumingMemoryBound(to: UInt8.self), count: c.bytesPerRow * c.height))
+        }
+        let straight = try pixels(false), lens = try pixels(true)
+        var changed = 0
+        for y in 0..<Int(size.height) { for x in 0..<Int(size.width) {
+            let point = CGPoint(x: CGFloat(x) + 0.5, y: CGFloat(y) + 0.5), index = (y * Int(size.width) + x) * 4
+            let same = straight[index..<index+4] == lens[index..<index+4]
+            if outline(CGRect(origin: .zero, size: size), 14).contains(point) { #expect(same) }
+            if !same { changed += 1 }
+        } }
+        #expect(changed > 100, "A real curved lens, not only a border")
+        // Rounded shoulders bend pixels outside the old rectangular 12-point rim.
+        let probe = CGPoint(x: 14.5, y: 14.5)
+        if shape == "capsule" || shape == "circle" {
+            #expect(outline(CGRect(origin: .zero, size: size), 0).contains(probe))
+            #expect(!outline(CGRect(origin: .zero, size: size), 12).contains(probe))
+        }
+    }
+
+    @Test func liquidControlFamiliesUseTheSameOwnerAndKeepNativeInput() async throws {
+        let owner = WorkbenchBackgroundOwner()
+        var preferences = ChatDisplayPreferences(); var appearance = WorkbenchAppearance()
+        appearance.local = WorkbenchLocalAppearance(); preferences.appearance = appearance
+        func content() -> some View {
+            VStack {
+                Button("Normal") {}.buttonStyle(WorkbenchGlassButtonStyle())
+                Button("Primary") {}.buttonStyle(WorkbenchPrimaryButtonStyle())
+                Button("Icon", systemImage: "gearshape") {}.buttonStyle(WorkbenchIconButtonStyle())
+                Button("Row") {}.buttonStyle(WorkbenchRowButtonStyle())
+                Menu("Menu") { Button("Action") {} }.menuStyle(WorkbenchGlassMenuStyle())
+                Text("Panel").padding(20).workbenchPanel(cornerRadius: 13)
+                TextField("Native input", text: .constant("unfiltered"))
+            }.environment(\.workbenchBackground, owner).environment(\.chatDisplayPreferences, preferences)
+        }
+        let host = NSHostingView(rootView: content()); host.frame = CGRect(x: 0, y: 0, width: 400, height: 500)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        for _ in 0..<20 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        func children(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + children($0) } }
+        let before = children(host), surfaces = before.compactMap { $0 as? WorkbenchBackgroundNSView }
+        #expect(surfaces.count == 6)
+        #expect(surfaces.allSatisfy { $0.owner === owner && $0.contour != nil && $0.hitTest(.zero) == nil })
+        let inputs = before.compactMap { $0 as? NSTextField }; #expect(!inputs.isEmpty)
+        preferences.appearance?.local?.strength = 1; host.rootView = content()
+        for _ in 0..<20 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        let after = children(host)
+        #expect(inputs.allSatisfy { input in after.contains { $0 === input } })
+        #expect(after.compactMap { $0 as? WorkbenchBackgroundNSView }.allSatisfy { $0.strength == 1 })
+    }
+
+    @Test func nestedPresentationOwnsItsCanvasAcrossTheRetainedBoundary() async throws {
+        let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
+        let state = ChatDisplayPreferencesState(appearanceDirectory: root.appendingPathComponent("Appearance"))
+        let file = root.appendingPathComponent("source.png"); try png(pattern(), at: file)
+        await state.importWallpaper(file)
+        let parent = NSHostingView(rootView: Text("Parent").padding(20).workbenchPanel()
+            .workbenchPresentation(state: state))
+        parent.frame = CGRect(x: 0, y: 0, width: 800, height: 500)
+        let parentWindow = NSWindow(contentRect: parent.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        parentWindow.isReleasedWhenClosed = false; parentWindow.contentView = parent
+        let child = NSHostingView(rootView: RetainedContentHost(content:
+            Text("Nested sheet").padding(20).workbenchPanel().workbenchPresentation(), visible: true, identifier: "nested")
+                .environment(\.workbenchAppearanceState, state))
+        child.frame = CGRect(x: 0, y: 0, width: 400, height: 300)
+        let childWindow = NSWindow(contentRect: child.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        childWindow.isReleasedWhenClosed = false; childWindow.contentView = child
+        defer { childWindow.contentView = nil; childWindow.close(); parentWindow.contentView = nil; parentWindow.close() }
+        for _ in 0..<40 { parent.layoutSubtreeIfNeeded(); child.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        func views(_ v: NSView) -> [WorkbenchBackgroundNSView] {
+            v.subviews.flatMap { ($0 as? WorkbenchBackgroundNSView).map { [$0] } ?? views($0) }
+        }
+        let parentCanvas = try #require(views(parent).first { $0.isCanvas }), childCanvas = try #require(views(child).first { $0.isCanvas })
+        let parentOwner = try #require(parentCanvas.owner), childOwner = try #require(childCanvas.owner)
+        #expect(parentOwner !== childOwner)
+        #expect(parentOwner.root === parentCanvas && childOwner.root === childCanvas)
+        #expect(parentCanvas.window !== childCanvas.window)
+        #expect(parentOwner.key == childOwner.key && parentOwner.image != nil && childOwner.image != nil)
+        #expect(views(child).allSatisfy { $0.owner === childOwner })
+        #expect(parentOwner.decodeCount == 1 && childOwner.decodeCount == 1)
+    }
+
     @Test(arguments: [false, true]) func externalIsExcludedButInternalPatternChanges(alpha: Bool) throws {
         let a = try pattern(alpha: alpha), b = try pattern(1, alpha: alpha)
         let red = try render(a), blue = try render(a, external: CGColor(red: 0, green: 0, blue: 1, alpha: 1))

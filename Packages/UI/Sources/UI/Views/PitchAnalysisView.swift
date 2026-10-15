@@ -219,7 +219,7 @@ public struct PitchAnalysisView: View {
                     _ = PitchAnalysisViewActionGate.analyze(result: result, isBusy: isBusy, hasSaved: hasSaved,
                                                             canAnalyze: canAnalyze, action: onAnalyze)
                 }
-                    .buttonStyle(.glass)
+                    .buttonStyle(WorkbenchGlassButtonStyle())
                     .disabled(!PitchAnalysisViewActionGate.canAnalyze(result: result, isBusy: isBusy, hasSaved: hasSaved, canAnalyze: canAnalyze))
                     .accessibilityIdentifier("pitch-analyze")
                 Button("取消", role: .destructive) {

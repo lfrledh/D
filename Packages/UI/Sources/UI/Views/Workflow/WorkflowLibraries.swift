@@ -88,11 +88,11 @@ struct WorkflowLibraryEntry: Identifiable {
                                     Text(entry.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                                 Button { onAdd(entry) } label: { Image(systemName: "plus.circle") }
-                                    .buttonStyle(.borderless).disabled(!controller.canEditCanvas)
+                                    .buttonStyle(WorkbenchGlassButtonStyle(compact: true)).disabled(!controller.canEditCanvas)
                                     .accessibilityLabel(text("add", "加入画布") + " " + entry.title)
                             }
                             Text((entry.systemTags + tags(entry)).joined(separator: " · ")).font(.caption2).foregroundStyle(.secondary)
-                            Button(text("editTags", "编辑标签")) { edited = entry }.font(.caption).buttonStyle(.borderless)
+                            Button(text("editTags", "编辑标签")) { edited = entry }.font(.caption).buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                         }
                         .padding(9).frame(maxWidth: .infinity, alignment: .leading)
                         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
@@ -102,7 +102,7 @@ struct WorkflowLibraryEntry: Identifiable {
                     }
                 }
             }
-        }.padding(12).background(.regularMaterial)
+        }.padding(12).workbenchPanel(cornerRadius: 12)
         .popover(item: $edited) { entry in
             let legacy = SharedLibraryTagTarget.legacy(tagStore.readState(for: entry.tagKey))
             if let metadata {
@@ -125,7 +125,7 @@ struct WorkflowLibraryFilters: View {
             } label: { Label(workflowText(language, "canvas.library.filter", fallback: "筛选标签") + (selected.isEmpty ? "" : " (\(selected.count))"), systemImage: "line.3.horizontal.decrease") }
             if !selected.isEmpty {
                 Button { selected = [] } label: { Image(systemName: "xmark.circle") }
-                    .buttonStyle(.borderless).accessibilityLabel(workflowText(language, "canvas.library.clear", fallback: "清除筛选"))
+                    .buttonStyle(WorkbenchGlassButtonStyle(compact: true)).accessibilityLabel(workflowText(language, "canvas.library.clear", fallback: "清除筛选"))
             }
         }
         if !selected.isEmpty { Text(selected.sorted().joined(separator: " + ")).font(.caption).foregroundStyle(.secondary) }
@@ -208,7 +208,7 @@ struct WorkflowLibraryFilters: View {
                 Label(text("title", "资产库"), systemImage: "photo.on.rectangle.angled").font(.headline)
                 Spacer()
                 Button(action: onImport) { Image(systemName: "square.and.arrow.down") }
-                    .buttonStyle(.borderless).disabled(!controller.canEditCanvas)
+                    .buttonStyle(WorkbenchGlassButtonStyle(compact: true)).disabled(!controller.canEditCanvas)
                     .help(text("import", "导入素材")) .accessibilityIdentifier("canvas-import-asset")
             }
             TextField(text("search", "搜索素材或标签"), text: $query).textFieldStyle(.roundedBorder).accessibilityIdentifier("canvas-asset-search")
@@ -236,7 +236,7 @@ struct WorkflowLibraryFilters: View {
                                 }
                                 Button { edited = asset } label: { Image(systemName: "tag") }
                                     .accessibilityLabel(text("tags", "编辑资产标签"))
-                            }.font(.caption).buttonStyle(.borderless)
+                            }.font(.caption).buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                         }.padding(9).frame(maxWidth: .infinity, alignment: .leading)
                         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
                         .draggable(WorkflowCanvasTransfer.asset(projectID: controller.projectID ?? UUID(), assetID: asset.id))
@@ -248,7 +248,7 @@ struct WorkflowLibraryFilters: View {
                     }
                 }
             }
-        }.padding(12).background(.regularMaterial)
+        }.padding(12).workbenchPanel(cornerRadius: 12)
         .dropDestination(for: URL.self) { urls, _ in
             guard urls.count == 1, let url = urls.first, url.isFileURL, controller.canEditCanvas else { return false }
             return onDropFile(url)

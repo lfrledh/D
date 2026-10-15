@@ -372,7 +372,7 @@ struct WorkflowGraphSurface: View {
                             Button(workflowText(languageStore, "workflow.connection.cancel", fallback: "取消连接")) {
                                 clearConnection()
                             }
-                                .buttonStyle(.borderless)
+                                .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                 .workflowNodeControl()
                         }
                         .font(.caption)
@@ -952,6 +952,7 @@ private struct WorkflowNodeInspectButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: 5)
                     .fill(Color.accentColor.opacity(configuration.isPressed ? 0.32 : inspecting ? 0.16 : 0))
             }
+            .background { Color.clear.workbenchPanel(cornerRadius: 5) }
             .overlay {
                 RoundedRectangle(cornerRadius: 5)
                     .strokeBorder(Color.accentColor.opacity(inspecting || configuration.isPressed ? 0.7 : 0))
@@ -1009,7 +1010,8 @@ private struct WorkflowNodeCard: View {
                 Spacer(minLength: 6)
                 Menu { nodeActions } label: {
                     Image(systemName: "ellipsis").frame(width: 22, height: 22)
-                }.menuStyle(.borderlessButton).fixedSize().workflowNodeControl(node.id)
+                }.menuStyle(.borderlessButton).fixedSize()
+                    .background { Color.clear.workbenchPanel(in: Circle()) }.workflowNodeControl(node.id)
                     .accessibilityIdentifier("workflow-node-menu-" + node.id.uuidString)
                 Button { onInspect(node.id) } label: {
                     Image(systemName: "slider.horizontal.3")
@@ -1023,7 +1025,7 @@ private struct WorkflowNodeCard: View {
                 Button { controller.toggleCollapsed(node.id) } label: {
                     Image(systemName: collapsed ? "chevron.down" : "chevron.up")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(WorkbenchIconButtonStyle(diameter: 22))
                 .workflowNodeControl(node.id)
                 .help(collapsed
                       ? workflowText(languageStore, "workflow.node.expand", fallback: "展开节点")
@@ -1033,7 +1035,7 @@ private struct WorkflowNodeCard: View {
                     guard scope.isCurrent(in: controller), let target = controller.canvasInsertionTarget() else { return }
                     controller.deleteNode(id: node.id, target: target)
                 } label: { Image(systemName: "trash") }
-                .buttonStyle(.borderless)
+                .buttonStyle(WorkbenchIconButtonStyle(diameter: 22))
                 .workflowNodeControl(node.id)
                 .help(workflowText(languageStore, "workflow.node.delete", fallback: "删除节点"))
                 .accessibilityLabel(workflowText(languageStore, "workflow.node.delete", fallback: "删除节点"))

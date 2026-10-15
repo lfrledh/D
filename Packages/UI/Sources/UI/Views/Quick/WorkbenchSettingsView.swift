@@ -184,11 +184,11 @@ public struct WorkbenchSettingsView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }.frame(minWidth: 700, idealWidth: 840, minHeight: 520, idealHeight: 660)
-            .workbenchTheme()
+            .workbenchTheme(paintsCanvas: false)
             .environment(\.dLanguageStore, language)
             .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
             .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
-            .sheet(isPresented: $modelsVisible) { ModelLibraryView(model: library).workbenchTheme()
+            .sheet(isPresented: $modelsVisible) { ModelLibraryView(model: library).workbenchPresentation(state: model.chatDisplaySettings)
                 .environment(\.dLanguageStore, language) }
     }
 }

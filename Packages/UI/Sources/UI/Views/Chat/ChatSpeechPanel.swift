@@ -71,7 +71,7 @@ struct ChatSpeechPanel: View {
                         .accessibilityIdentifier("chat-transcribe-file")
                     if project.chatRecordingSessionID != nil {
                         Button(text("Finish recording", "结束录音")) { Task { await project.finishChatRecording() } }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(WorkbenchPrimaryButtonStyle())
                     } else {
                         Button(text("Record voice", "录制语音")) {
                             if let recognitionLanguage {

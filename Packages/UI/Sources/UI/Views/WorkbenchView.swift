@@ -193,7 +193,7 @@ public struct WorkbenchView: View {
             HStack(spacing: 4) {
                 ForEach(WorkspacePane.allCases) { item in
                     Button { pane = item } label: { Text(item.title).frame(maxWidth: .infinity).padding(.vertical, 6) }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                         .background(pane == item ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 7))
                         .accessibilityAddTraits(pane == item ? .isSelected : [])
                         .accessibilityIdentifier("workspace-\(item.rawValue)")
@@ -257,7 +257,7 @@ public struct WorkbenchView: View {
             } description: {
                 Text("这个项目还没有此类创作。切换模态不会自动创建文档。")
             } actions: {
-                Button(model.creatorMode.newDocumentTitle, action: createDocument).buttonStyle(.glassProminent)
+                Button(model.creatorMode.newDocumentTitle, action: createDocument).buttonStyle(WorkbenchPrimaryButtonStyle())
             }
         } else {
             VStack(spacing: 0) {
@@ -432,7 +432,7 @@ public struct WorkbenchView: View {
                     HStack {
                         Text(project.textModelStatus).font(.caption)
                         Spacer()
-                        Button("选择文字模型") { Task { await model.chooseTextModel() } }.buttonStyle(.glass)
+                        Button("选择文字模型") { Task { await model.chooseTextModel() } }.buttonStyle(WorkbenchGlassButtonStyle())
                             .disabled(project.isBusy || project.isRegisteringTextModel)
                     }.padding(8)
                     if let pending = sources.unsavedCompletedRecord {

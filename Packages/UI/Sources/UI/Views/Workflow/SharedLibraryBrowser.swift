@@ -412,7 +412,7 @@ public struct SharedLibraryBrowser: View {
                 }
             }
         }
-        .background { if !compact { Rectangle().fill(.regularMaterial) } }
+        .background { if !compact { Color.clear.workbenchPanel(cornerRadius: 12) } }
         .sheet(item: $saveQueryRequest) { request in SharedLibrarySaveQuerySheet(request: request, store: store) { saveQueryRequest = nil } }
         .sheet(isPresented: $showOrganizer) { organizer }
         .sheet(item: $tagRequest) { request in
@@ -464,7 +464,7 @@ public struct SharedLibraryBrowser: View {
                 .disabled(!store.canUndo).help(word("undo", "撤销")).accessibilityLabel(word("undo", "撤销"))
             Button { perform { try store.redo() } } label: { Image(systemName: "arrow.uturn.forward") }
                 .disabled(!store.canRedo).help(word("redo", "重做")).accessibilityLabel(word("redo", "重做"))
-        }.buttonStyle(.borderless).padding(10)
+        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(10)
     }
 
     private var compactBody: some View {
@@ -633,7 +633,7 @@ public struct SharedLibraryBrowser: View {
     }
     private func token(_ title: String, remove: @escaping () -> Void) -> some View {
         Button(action: remove) { HStack(spacing: 3) { Text(title); Image(systemName: "xmark") }.padding(4) }
-            .buttonStyle(.bordered).font(.caption2).help(word("removeCondition", "仅移除检索条件，不改变对象标签"))
+            .buttonStyle(WorkbenchGlassButtonStyle()).font(.caption2).help(word("removeCondition", "仅移除检索条件，不改变对象标签"))
     }
     private func dimensionTokens<T: Hashable>(_ values: Set<T>, path: WritableKeyPath<SharedLibraryQuery, Set<T>>, label: @escaping (T) -> String) -> some View {
         ForEach(Array(values).sorted { label($0) < label($1) }, id: \.self) { value in token(label(value)) { query[keyPath: path].remove(value) } }
@@ -694,14 +694,14 @@ public struct SharedLibraryBrowser: View {
                 } label: {
                     Image(systemName: selectedKeys.contains(entry.id) ? "checkmark.circle.fill" : "circle")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                 .accessibilityLabel(selectedKeys.contains(entry.id)
                     ? word("deselect", "取消选择") : word("select", "选择"))
                 Button {
                     if canAdd(entry) { dispatch(.add, key: entry.id) }
                     else { compactDetailKey = entry.id }
                 } label: { Image(systemName: canAdd(entry) ? "plus.circle" : "info.circle") }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(WorkbenchGlassButtonStyle()).controlSize(.small)
                     .accessibilityLabel(canAdd(entry) ? word("addCanvas", "添加画布") : word("detail", "详情"))
             }
         }
@@ -716,7 +716,7 @@ public struct SharedLibraryBrowser: View {
             if let ids = store.metadata.tagAssignments[entry.item.key], !ids.isEmpty {
                 HStack {
                     ForEach(tags.filter { ids.contains($0.id) }) { tag in
-                        Button(tag.name) { query.allTagIDs.insert(tag.id) }.buttonStyle(.borderless)
+                        Button(tag.name) { query.allTagIDs.insert(tag.id) }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                             .help(metadataText(language, "tagFiltersOnly", "仅按此标签筛选", "Filter by this tag only"))
                     }
                 }.font(.caption).padding(.horizontal, 6)

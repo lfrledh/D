@@ -275,9 +275,9 @@ public struct TextSourcesView: View {
             }.frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 10) {
                 Button(action: actions.undo) { Label("撤销", systemImage: "arrow.uturn.backward") }
-                    .buttonStyle(.glass).disabled(!canUndo || isSaving).accessibilityIdentifier("text-sources-undo")
+                    .buttonStyle(WorkbenchGlassButtonStyle()).disabled(!canUndo || isSaving).accessibilityIdentifier("text-sources-undo")
                 Button(action: actions.save) { Label(isSaving ? "正在保存" : "保存", systemImage: "square.and.arrow.down") }
-                    .buttonStyle(.glass).disabled(isSaving).accessibilityIdentifier("text-sources-save")
+                    .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving).accessibilityIdentifier("text-sources-save")
             }.fixedSize(horizontal: true, vertical: false)
         }
         .padding(12).background(.bar)
@@ -296,7 +296,7 @@ public struct TextSourcesView: View {
                     Text("资料").font(.headline)
                     Spacer()
                     Button(action: actions.importSource) { Label("导入资料", systemImage: "plus") }
-                        .buttonStyle(.glass).disabled(isSaving).accessibilityIdentifier("text-sources-import")
+                        .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving).accessibilityIdentifier("text-sources-import")
                 }
                 if notebook.sources.isEmpty {
                     ContentUnavailableView("尚无资料", systemImage: "doc.text", description: Text("导入本地文字资料后可以提问。"))
@@ -328,14 +328,14 @@ public struct TextSourcesView: View {
             let actionsLayout = compactActions ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
             actionsLayout {
                 Button("使用全文") { actions.useExcerpt(source.id, nil) }
-                    .buttonStyle(.glass).disabled(isSaving)
+                    .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving)
                     .accessibilityIdentifier("text-sources-use-full")
                 Button("使用选中片段") { actions.useExcerpt(source.id, selection.excerptRange(for: source)) }
-                    .buttonStyle(.glass).disabled(isSaving || selection.excerptRange(for: source) == nil)
+                    .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving || selection.excerptRange(for: source) == nil)
                     .accessibilityIdentifier("text-sources-use-selection")
                 if !compactActions { Spacer() }
                 Button(role: .destructive, action: { actions.removeSource(source.id) }) { Label("移除资料", systemImage: "trash") }
-                    .buttonStyle(.glass).disabled(isSaving).accessibilityIdentifier("text-sources-remove")
+                    .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving).accessibilityIdentifier("text-sources-remove")
             }
         }
     }
@@ -365,10 +365,10 @@ public struct TextSourcesView: View {
                 .accessibilityIdentifier("text-sources-question")
                 HStack {
                     Button(action: actions.ask) { Label("生成", systemImage: "sparkles") }
-                        .buttonStyle(.glass).disabled(!canAsk || isRunning || isSaving)
+                        .buttonStyle(WorkbenchGlassButtonStyle()).disabled(!canAsk || isRunning || isSaving)
                         .accessibilityIdentifier("text-sources-ask")
                     Button(action: actions.cancel) { Label("取消", systemImage: "xmark") }
-                        .buttonStyle(.glass).disabled(!isRunning || isCancelling)
+                        .buttonStyle(WorkbenchGlassButtonStyle()).disabled(!isRunning || isCancelling)
                         .accessibilityIdentifier("text-sources-cancel")
                     Spacer()
                 }
@@ -402,10 +402,10 @@ public struct TextSourcesView: View {
             submittedExcerpts(record.submission.sources, excerpts: record.submission.excerpts)
             HStack {
                 Button("采用") { actions.accept(record.id) }
-                    .buttonStyle(.glass).disabled(!canAccept(record) || isRunning || isSaving)
+                    .buttonStyle(WorkbenchGlassButtonStyle()).disabled(!canAccept(record) || isRunning || isSaving)
                     .accessibilityIdentifier("text-sources-accept-\(record.id.uuidString)")
                 Button("拒绝") { actions.reject(record.id) }
-                    .buttonStyle(.glass).disabled(record.disposition != .pending || isRunning || isSaving)
+                    .buttonStyle(WorkbenchGlassButtonStyle()).disabled(record.disposition != .pending || isRunning || isSaving)
                     .accessibilityIdentifier("text-sources-reject-\(record.id.uuidString)")
             }
         }

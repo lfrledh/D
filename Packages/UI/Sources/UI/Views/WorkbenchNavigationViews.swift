@@ -158,10 +158,10 @@ public struct ProjectChooserView: View {
         .controlSize(.large)
 
         if reduceTransparency {
-            buttons.buttonStyle(.bordered)
+            buttons.buttonStyle(WorkbenchGlassButtonStyle())
         } else {
             GlassEffectContainer(spacing: 18) {
-                buttons.buttonStyle(.glass)
+                buttons.buttonStyle(WorkbenchGlassButtonStyle())
             }
         }
     }
@@ -553,7 +553,7 @@ public struct ModalityDocumentList: View {
                     .padding(.vertical, 8)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
             .accessibilityIdentifier(newDocumentIdentifier)
             .navigationMeasured(newDocumentIdentifier, probe: layoutProbe)
         }

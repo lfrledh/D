@@ -125,7 +125,7 @@ struct WorkflowResultQueryControls: View {
                 }
             }
             if !state.query.text.isEmpty {
-                Button { state.query.text = "" } label: { Label(state.query.text, systemImage: "xmark.circle") }.buttonStyle(.borderless)
+                Button { state.query.text = "" } label: { Label(state.query.text, systemImage: "xmark.circle") }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
             }
             tagConditions(state.query.allTagIDs, path: \.allTagIDs, title: t("allTags", "同时包含标签", "Contains all tags"))
             tagConditions(state.query.anyTagIDs, path: \.anyTagIDs, title: t("anyTags", "至少包含一个标签", "Contains any tag"))
@@ -157,7 +157,7 @@ struct WorkflowResultQueryControls: View {
     private func tagConditions(_ ids: Set<UUID>, path: WritableKeyPath<SharedLibraryQuery, Set<UUID>>, title: String) -> some View {
         ForEach(WorkflowResultQueryState.tagConditions(ids, store: store, missingLabel: t("deletedTagCondition", "已删除的标签", "Deleted tag")), id: \.id) { condition in
             HStack {
-                Button { state.query[keyPath: path].remove(condition.id) } label: { Label(title + ": " + state.tagPresentation.title(condition.id, tags: store.metadata.tags, missing: t("deletedTagCondition", "已删除的标签", "Deleted tag")), systemImage: "xmark.circle") }.buttonStyle(.borderless)
+                Button { state.query[keyPath: path].remove(condition.id) } label: { Label(title + ": " + state.tagPresentation.title(condition.id, tags: store.metadata.tags, missing: t("deletedTagCondition", "已删除的标签", "Deleted tag")), systemImage: "xmark.circle") }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                 if store.metadata.tags[condition.id] == nil { WorkflowTechnicalDetails(value: condition.id.uuidString) }
             }
         }

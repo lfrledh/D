@@ -1392,7 +1392,7 @@
     "refinement.appearance.backgroundBlendHint": "0% panel color; 100% canvas color.",
     "refinement.appearance.motion": "Decorative motion",
     "refinement.appearance.lightweight": "Lightweight appearance",
-    "refinement.appearance.performanceNote": "App-local glass blurs only D’s own canvas. Legacy color blending stays opaque. Accessibility and lightweight modes use solid panels.",
+    "refinement.appearance.performanceNote": "App-local glass refracts only D’s own canvas; transparency is adjustable. Legacy color blending, accessibility and lightweight modes keep solid panels.",
     "refinement.shell.workspace": "Workspace",
     "refinement.shell.newConversation": "New conversation",
     "refinement.shell.targetChanged": "The settings target changed. Open Settings again from the intended workspace.",

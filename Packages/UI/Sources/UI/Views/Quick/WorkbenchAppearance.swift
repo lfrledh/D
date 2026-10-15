@@ -234,7 +234,8 @@ private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
                 Group {
                     if let local = appearance.local {
                         WorkbenchLocalSurface(owner: background, palette: palette, strength: local.strength,
-                            drawsGlass: effects.usesCanvasBlend && local.material == .glass)
+                            drawsGlass: effects.usesCanvasBlend && local.material == .glass,
+                            contour: { rect, inset in shape.inset(by: inset).path(in: rect).cgPath })
                             .clipShape(shape)
                     } else {
                         shape.fill(palette.panelFill(canvasBlend:
@@ -243,7 +244,13 @@ private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
                 }
                     .accessibilityHidden(true)
                     .overlay {
-                        shape.strokeBorder(palette.foregroundColor.opacity(0.08), lineWidth: 0.5)
+                        // Thin curved rim, like the category lens. No light wash
+                        // over the interior or any filtering of the content layer.
+                        shape.strokeBorder(palette.foregroundColor.opacity(
+                            effects.usesCanvasBlend && appearance.local?.material == .glass ? 0.24 : 0.08), lineWidth: 0.6)
+                        if effects.usesCanvasBlend && appearance.local?.material == .glass {
+                            shape.inset(by: 1).strokeBorder(palette.canvasColor.opacity(0.30), lineWidth: 0.6)
+                        }
                     }
                     .shadow(color: effects.usesCanvasBlend ? .black.opacity(0.10) : .clear,
                             radius: effects.usesCanvasBlend ? 8 : 0, y: effects.usesCanvasBlend ? 2 : 0)
@@ -300,6 +307,8 @@ private struct WorkbenchThemeModifier: ViewModifier {
         let palette = preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? systemScheme)
         content.foregroundStyle(palette.foregroundColor, palette.secondaryColor)
             .tint(palette.accentColor)
+            .buttonStyle(WorkbenchGlassButtonStyle())
+            .menuStyle(WorkbenchGlassMenuStyle())
             .background { if paintsCanvas { palette.canvasColor } }
     }
 }
@@ -309,22 +318,111 @@ extension View {
     }
 }
 
-/// Explicit foreground and fill keep primary actions readable in both palettes.
-/// Native borderedProminent can reinterpret foregroundStyle as its control tint.
-struct WorkbenchPrimaryButtonStyle: ButtonStyle {
-    @Environment(\.chatDisplayPreferences) private var preferences
-    @Environment(\.colorScheme) private var systemScheme
-    @Environment(\.isEnabled) private var isEnabled
-
+/// All D action buttons share the same local lens as panels. Accent and role
+/// are ink/edge cues; the action, focus, keyboard shortcut and enabled state stay native.
+struct WorkbenchGlassButtonStyle: ButtonStyle {
+    var prominent = false
+    var compact = false
     func makeBody(configuration: Configuration) -> some View {
-        let palette = preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? systemScheme)
+        WorkbenchGlassButtonBody(configuration: configuration, prominent: prominent, compact: compact)
+    }
+}
+private struct WorkbenchGlassButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    let prominent: Bool
+    var compact = false
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.controlSize) private var size
+    var body: some View {
+        let palette = preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? scheme)
+        let ink = configuration.role == .destructive ? Color.red : prominent ? palette.accentColor : palette.foregroundColor
         configuration.label
-            .foregroundStyle(palette.canvasColor)
-            .padding(.horizontal, 12).padding(.vertical, 7)
-            .background(palette.accentColor, in: RoundedRectangle(cornerRadius: 10))
-            .modifier(WorkbenchButtonFeedback(shape: RoundedRectangle(cornerRadius: 10),
-                isPressed: configuration.isPressed, ink: palette.canvasColor))
+            .padding(.horizontal, compact ? 0 : size == .mini || size == .small ? 7 : 12)
+            .padding(.vertical, compact ? 0 : size == .mini || size == .small ? 3 : 6)
+            .background { Color.clear.workbenchPanel(in: Capsule()) }
+            .foregroundStyle(ink)
+            .overlay { Capsule().strokeBorder(ink.opacity(prominent ? 0.5 : 0), lineWidth: 1).allowsHitTesting(false) }
+            .modifier(WorkbenchButtonFeedback(shape: Capsule(), isPressed: configuration.isPressed, ink: ink))
             .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+/// Finite navigation choices keep their exact binding; only the selector shell
+/// changes. This does not reuse the category drag recognizer or commit commands.
+struct WorkbenchGlassSegments<Value: Hashable>: View {
+    let title: String
+    @Binding var selection: Value
+    let choices: [(Value, String)]
+    @Environment(\.isEnabled) private var enabled
+    @FocusState private var focus: Value?
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(choices, id: \.0) { value, label in
+                Button { if enabled && selection != value { selection = value } } label: {
+                    Text(label).lineLimit(1).frame(maxWidth: .infinity).padding(.vertical, 6)
+                        .background {
+                            if selection == value { Color.clear.workbenchPanel(in: Capsule()) }
+                        }
+                        .overlay { Capsule().strokeBorder(.primary.opacity(selection == value ? 0.22 : 0), lineWidth: 0.6).allowsHitTesting(false) }
+                        .contentShape(Capsule())
+                }.buttonStyle(.plain).focused($focus, equals: value)
+                    .accessibilityAddTraits(selection == value ? .isSelected : [])
+            }
+        }.padding(3).workbenchPanel(in: Capsule())
+            .accessibilityElement(children: .contain).accessibilityLabel(title)
+            .onMoveCommand { direction in
+                guard enabled, let index = choices.firstIndex(where: { $0.0 == (focus ?? selection) }) else { return }
+                let next: Int
+                switch direction {
+                case .left: next = max(0, index - 1)
+                case .right: next = min(choices.count - 1, index + 1)
+                default: return
+                }
+                if next != index { selection = choices[next].0; focus = choices[next].0 }
+            }
+    }
+}
+
+private struct WorkbenchAppearanceStateKey: EnvironmentKey {
+    static let defaultValue: ChatDisplayPreferencesState? = nil
+}
+extension EnvironmentValues {
+    var workbenchAppearanceState: ChatDisplayPreferencesState? {
+        get { self[WorkbenchAppearanceStateKey.self] }
+        set { self[WorkbenchAppearanceStateKey.self] = newValue }
+    }
+}
+private struct WorkbenchPresentedSurface: ViewModifier {
+    @Environment(\.workbenchAppearanceState) private var state
+    func body(content: Content) -> some View {
+        if let state { content.workbenchPresentation(state: state) }
+        else { content.workbenchTheme() }
+    }
+}
+
+/// Sheets own a separate canvas coordinate space instead of converting against
+/// the presenting window. Only the existing appearance preference owner is shared.
+extension View {
+    func workbenchPresentation() -> some View { modifier(WorkbenchPresentedSurface()) }
+    func workbenchPresentation(state: ChatDisplayPreferencesState) -> some View {
+        workbenchTheme(paintsCanvas: false)
+            .modifier(WorkbenchCanvasModifier(state: state))
+            .environment(\.chatDisplayPreferences, state.preferences)
+            .preferredColorScheme(state.preferences.preferredColorScheme)
+    }
+}
+
+struct WorkbenchGlassMenuStyle: MenuStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Menu(configuration).menuStyle(.borderlessButton)
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background { Color.clear.workbenchPanel(in: Capsule()) }
+    }
+}
+struct WorkbenchPrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        WorkbenchGlassButtonBody(configuration: configuration, prominent: true)
     }
 }
 
@@ -336,14 +434,8 @@ struct WorkbenchIconButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        Group {
-            if panel {
-                configuration.label.frame(width: diameter, height: diameter)
-                    .workbenchPanel(in: Circle())
-            } else {
-                configuration.label.frame(width: diameter, height: diameter)
-            }
-        }
+        configuration.label.frame(width: diameter, height: diameter)
+            .background { Color.clear.workbenchPanel(in: Circle()) }
         .modifier(WorkbenchButtonFeedback(shape: Circle(), isPressed: configuration.isPressed))
         .opacity(isEnabled ? 1 : 0.45)
     }
@@ -369,6 +461,7 @@ struct WorkbenchRowButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .background { Color.clear.workbenchPanel(cornerRadius: cornerRadius) }
             .modifier(WorkbenchButtonFeedback(shape: RoundedRectangle(cornerRadius: cornerRadius),
                 isPressed: configuration.isPressed))
             .opacity(isEnabled ? 1 : 0.45)

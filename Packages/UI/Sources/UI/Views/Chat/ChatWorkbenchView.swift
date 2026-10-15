@@ -2586,7 +2586,7 @@ private struct ChatMessageQuickActions: View {
         HStack(spacing: 4) {
             ForEach(items) { item in
                 Button(action: item.action) { Image(systemName: item.symbol).frame(width: 22, height: 22) }
-                    .buttonStyle(.borderless).help(item.title).accessibilityLabel(item.title)
+                    .buttonStyle(WorkbenchGlassButtonStyle()).controlSize(.small).help(item.title).accessibilityLabel(item.title)
                     .disabled(!item.enabled).focused($focused, equals: item.id)
             }
         }.fixedSize().opacity(hovered || focused != nil ? 1 : 0.6)

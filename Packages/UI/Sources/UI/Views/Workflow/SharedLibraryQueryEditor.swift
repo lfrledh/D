@@ -142,7 +142,7 @@ struct SharedLibraryQuerySummary: View {
     private func dimensions<T: Hashable>(_ values: Set<T>, path: WritableKeyPath<SharedLibraryQuery, Set<T>>, title: String, label: @escaping (T) -> String) -> some View {
         ForEach(Array(values).sorted { label($0) < label($1) }, id: \.self) { value in
             if let remove {
-                Button { var next = query; next[keyPath: path].remove(value); remove(next) } label: { Label(title + ": " + label(value), systemImage: "xmark.circle") }.buttonStyle(.borderless)
+                Button { var next = query; next[keyPath: path].remove(value); remove(next) } label: { Label(title + ": " + label(value), systemImage: "xmark.circle") }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
             } else { Text(title + ": " + label(value)) }
         }
     }

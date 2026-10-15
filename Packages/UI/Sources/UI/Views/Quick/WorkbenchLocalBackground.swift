@@ -130,13 +130,14 @@ enum WorkbenchLocalRenderer {
         let context = CIContext(options: [.useSoftwareRenderer: true, .cacheIntermediates: false,
             .workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!])
         return context.createCGImage(input.clampedToExtent().applyingFilter("CIGaussianBlur",
-            parameters: [kCIInputRadiusKey: 12]).cropped(to: input.extent), from: input.extent)
+            parameters: [kCIInputRadiusKey: 0.65]).cropped(to: input.extent), from: input.extent)
     }
     /// rect and viewport use top-left workspace points, independent of desktop
     /// position and graph coordinates. Edges clamp via an opaque base + aspect fill.
     static func draw(in c: CGContext, size: CGSize, rect: CGRect, viewport: CGSize,
                      image: CGImage?, canvas: String, panel: String, strength: Double,
-                     glass: Bool, refraction: Bool = true) {
+                     glass: Bool, refraction: Bool = true,
+                     contour: ((CGRect, CGFloat) -> CGPath)? = nil) {
         guard size.width > 0, size.height > 0, rect.width > 0, rect.height > 0 else { return }
         let bounds = CGRect(origin: .zero, size: size)
         c.saveGState(); defer { c.restoreGState() }
@@ -144,44 +145,55 @@ enum WorkbenchLocalRenderer {
         if let image {
             let mapped = mapping(image: CGSize(width: image.width, height: image.height), viewport: viewport)
             let sx = size.width / rect.width, sy = size.height / rect.height
-            func sample(clip: CGRect, dx: CGFloat = 0, dy: CGFloat = 0) {
+            func sample(clip: CGRect, lens: CGPath? = nil, magnification: CGFloat = 1) {
                 c.saveGState()
-                // Hard rectangular sample bands must not partially blend the
-                // canvas reset and the image separately at fractional boundaries.
+                // Ring samples must not blend the canvas reset and translucent
+                // wallpaper separately at fractional boundaries.
                 // The outer rounded shell owns its normal edge antialiasing.
                 c.setAllowsAntialiasing(false); c.setShouldAntialias(false); c.clip(to: clip)
+                if let lens { c.addPath(lens); c.clip(using: .evenOdd) }
                 // Each displaced sample composites once over D's canvas. Reusing
                 // the previous sample would accumulate alpha at the rim/corners.
                 c.setFillColor(color(canvas)); c.fill(bounds)
-                let boundedX = dx > 0 ? min(dx, max(0, rect.minX + clip.minX / sx))
-                    : max(dx, min(0, rect.minX + clip.maxX / sx - viewport.width))
-                let boundedY = dy > 0 ? min(dy, max(0, rect.minY + clip.minY / sy))
-                    : max(dy, min(0, rect.minY + clip.maxY / sy - viewport.height))
-                let target = CGRect(x: (mapped.minX - rect.minX + boundedX) * sx,
-                    y: (mapped.minY - rect.minY + boundedY) * sy, width: mapped.width * sx, height: mapped.height * sy)
+                var target = CGRect(x: (mapped.minX - rect.minX) * sx,
+                    y: (mapped.minY - rect.minY) * sy, width: mapped.width * sx, height: mapped.height * sy)
+                // A shallow convex lens enlarges only the D background near its
+                // curved shoulder. The clear central content remains undistorted.
+                target = CGRect(x: size.width / 2 + (target.minX - size.width / 2) * magnification,
+                    y: size.height / 2 + (target.minY - size.height / 2) * magnification,
+                    width: target.width * magnification, height: target.height * magnification)
                 // CGContext image coordinates are bottom-up; the native view is flipped.
                 c.translateBy(x: target.minX, y: target.maxY); c.scaleBy(x: 1, y: -1)
                 c.draw(image, in: CGRect(origin: .zero, size: target.size)); c.restoreGState()
             }
             sample(clip: bounds)
             if glass && refraction {
-                // A narrow lens rim displaces only background pixels. Eight bands
-                // approximate a smooth bounded refraction profile, with no extra image.
+                // Follow the actual Capsule/Circle/rounded panel outline. Each
+                // ring resets its own sample, so translucent wallpaper cannot
+                // accumulate. Twelve shared-source samples, no per-control texture.
                 let rim = min(12, min(rect.width, rect.height) / 4)
-                for i in 0..<8 {
-                    let a = CGFloat(i) * rim / 8, b = rim / 8 + 0.25
-                    let shift = sin((CGFloat(i) + 0.5) / 8 * .pi) * 2.5 * strength
-                    sample(clip: CGRect(x: a*sx, y: 0, width: b*sx, height: size.height), dx: shift)
-                    sample(clip: CGRect(x: size.width-(a+b)*sx, y: 0, width: b*sx, height: size.height), dx: -shift)
-                    sample(clip: CGRect(x: 0, y: a*sy, width: size.width, height: b*sy), dy: shift)
-                    sample(clip: CGRect(x: 0, y: size.height-(a+b)*sy, width: size.width, height: b*sy), dy: -shift)
+                let outline = contour ?? { box, inset in
+                    CGPath(rect: box.insetBy(dx: inset, dy: inset), transform: nil)
+                }
+                for i in 0..<12 {
+                    let start = CGFloat(i) * rim / 12
+                    let end = CGFloat(i + 1) * rim / 12
+                    let ring = CGMutablePath()
+                    ring.addPath(outline(bounds, start * min(sx, sy)))
+                    ring.addPath(outline(bounds, end * min(sx, sy)))
+                    let shoulder = sin((CGFloat(i) + 0.5) / 12 * .pi)
+                    let shift = shoulder * 5.5 * min(1, max(0, strength))
+                    // Cap the displacement at 5.5 workspace points on any size.
+                    let magnification = 1 + shift / max(1, max(rect.width, rect.height) / 2)
+                    sample(clip: bounds, lens: ring, magnification: magnification)
                 }
             }
         }
         if glass {
-            // Keep an image-independent readability floor. Real spatial detail still
-            // contributes 10–16%; this is compositing, not a uniform opaque patch.
-            c.setFillColor(color(panel).copy(alpha: 0.90 - min(1,max(0,strength)) * 0.06)!)
+            // The saved strength is the user's transparency control: opaque at
+            // zero, up to 82% of the clear local background at one. Only this
+            // decorative plate is composited; glyphs, editors and media stay sharp.
+            c.setFillColor(color(panel).copy(alpha: 1 - min(1,max(0,strength)) * 0.82)!)
             c.fill(bounds)
         }
     }
@@ -243,6 +255,7 @@ extension EnvironmentValues {
     var palette = WorkbenchPalette.defaultLight
     var strength = 0.55
     var drawsGlass = true
+    var contour: ((CGRect, CGFloat) -> CGPath)?
     private var observers: [NSObjectProtocol] = []
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { true }
@@ -279,12 +292,12 @@ extension EnvironmentValues {
             WorkbenchCategoryUpdateProbe.phase("visible-background-draw")
         }
         #endif
-        let root = owner?.root
+        let root: NSView? = owner?.root.flatMap { $0.window === window ? $0 : nil } ?? window?.contentView
         let rect = root.map { convert(bounds, to: $0) } ?? bounds
         WorkbenchLocalRenderer.draw(in: c, size: bounds.size, rect: rect, viewport: root?.bounds.size ?? bounds.size,
             image: isCanvas ? owner?.image : (drawsGlass ? owner?.blurred : nil),
             canvas: isCanvas || drawsGlass ? palette.canvas : palette.panel, panel: palette.panel,
-            strength: strength, glass: !isCanvas && drawsGlass)
+            strength: strength, glass: !isCanvas && drawsGlass, contour: contour)
     }
 }
 
@@ -294,13 +307,14 @@ struct WorkbenchLocalSurface: NSViewRepresentable {
     var isCanvas = false
     var strength = 0.55
     var drawsGlass = true
+    var contour: ((CGRect, CGFloat) -> CGPath)? = nil
     func makeNSView(context: Context) -> WorkbenchBackgroundNSView {
         let view = WorkbenchBackgroundNSView(); view.setAccessibilityElement(false)
         return view
     }
     func updateNSView(_ view: WorkbenchBackgroundNSView, context: Context) {
         view.owner = owner; view.palette = palette; view.isCanvas = isCanvas
-        view.strength = strength; view.drawsGlass = drawsGlass
+        view.strength = strength; view.drawsGlass = drawsGlass; view.contour = contour
         owner?.surfaces.add(view)
         if isCanvas, owner?.root !== view { owner?.root = view; owner?.invalidate() }
         view.needsDisplay = true
@@ -322,6 +336,7 @@ struct WorkbenchCanvasModifier: ViewModifier {
         let appearance = state.preferences.resolvedAppearance
         let palette = appearance.palette(for: state.preferences.preferredColorScheme ?? scheme)
         content.environment(\.workbenchBackground, owner)
+            .environment(\.workbenchAppearanceState, state)
             .background {
                 WorkbenchLocalSurface(owner: owner, palette: palette, isCanvas: true)
                     .allowsHitTesting(false).accessibilityHidden(true)

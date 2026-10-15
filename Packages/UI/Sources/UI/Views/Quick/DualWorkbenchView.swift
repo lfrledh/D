@@ -314,10 +314,11 @@ public struct DualWorkbenchView: View {
                     }.fixedSize().accessibilityIdentifier("quick-text-surface")
                 }
                 Spacer(minLength: 8)
-                Picker(t("workspaceMode", "Workspace", "工作区"), selection: Binding(get: { entry }, set: { navigate(to: $0) })) {
-                    Text(t("quickMode", "Quick creation", "快速创作")).tag(Entry.quick)
-                    Text(t("workflowMode", "Workflow", "工作流")).tag(Entry.workflow)
-                }.pickerStyle(.segmented).frame(width: 180).accessibilityIdentifier("workbench-entry")
+                WorkbenchGlassSegments(title: t("workspaceMode", "Workspace", "工作区"),
+                    selection: Binding(get: { entry }, set: { navigate(to: $0) }), choices: [
+                        (Entry.quick, t("quickMode", "Quick creation", "快速创作")),
+                        (Entry.workflow, t("workflowMode", "Workflow", "工作流"))])
+                    .frame(width: 180).accessibilityIdentifier("workbench-entry")
                 Button(action: { presentSettings() }) { Image(systemName: "gearshape").frame(width: 30, height: 30) }
                     .buttonStyle(WorkbenchIconButtonStyle(diameter: 40, panel: true)).help(t("settings", "Settings", "设置")).accessibilityLabel(t("settings", "Settings", "设置"))
                     .accessibilityIdentifier("workbench-settings").disabled(!canPresentSettings)
@@ -425,7 +426,7 @@ public struct DualWorkbenchView: View {
                             && context.searchOwner.projectSession.currentStore === target.store
                             && target.state.selectedSessionID == context.searchSessionID
                             && !context.searchOwner.projectSession.isChangingProject
-                    })
+                    }).workbenchPresentation(state: context.owner.chatDisplaySettings)
             }
         }
         .onChange(of: libraryVisible) { _, _ in navigationIntent = UUID() }
@@ -439,6 +440,7 @@ public struct DualWorkbenchView: View {
             }
             .frame(minWidth: 820, minHeight: 540)
             .task { await refreshLibrary(checkModels: true) }
+            .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
         .sheet(isPresented: $projectsVisible) {
             VStack(spacing: 0) {
@@ -452,6 +454,7 @@ public struct DualWorkbenchView: View {
                     Text(error).foregroundStyle(.red).textSelection(.enabled).padding()
                 }
             }.frame(minWidth: 640, minHeight: 420)
+            .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
         .sheet(item: $filesRoute) { route in
             ProjectFilesView(store: route.store, instanceID: route.instanceID,
@@ -521,15 +524,18 @@ public struct DualWorkbenchView: View {
                     returnToLibrary = false; filesRoute = nil; navigate(to: .workflow)
                     return true
                 }, onClose: { filesRoute = nil }, initialAssetID: route.assetID)
+            .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
         .sheet(isPresented: $compatibilityVisible) {
             VStack(spacing: 0) {
                 HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { compatibilityVisible = false }.keyboardShortcut(.cancelAction); Text(baselineText(language, "label.6f5cabc6a134", fallback: "创作文稿与模态编辑器")); Spacer() }.padding()
                 WorkbenchView(model: model, library: library, nodeTags: nodeTags, metadata: metadata)
             }.frame(minWidth: 960, minHeight: 650)
+            .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
         .sheet(isPresented: Binding(get: { library.isPresented }, set: { library.isPresented = $0 }), onDismiss: restoreLibraryIfNeeded) {
             ModelLibraryView(model: library)
+            .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
 
         .sheet(isPresented: $languageVisible) {
@@ -537,6 +543,7 @@ public struct DualWorkbenchView: View {
                 HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { languageVisible = false }.keyboardShortcut(.cancelAction); Spacer() }
                 if let language { LanguageSettingsView(store: language) }
             }.padding().frame(width: 560, height: 440)
+            .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
         .alert("操作未完成", isPresented: Binding(get: { issue != nil }, set: { if !$0 { issue = nil; failedAssetRoute = nil } })) {
             Button(baselineText(language, "label.f867f3417859", fallback: "好")) { issue = nil; failedAssetRoute = nil }
@@ -586,12 +593,14 @@ public struct DualWorkbenchView: View {
                     }
                 }
             }.padding(20).frame(minWidth: 560, minHeight: 360)
+            .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
         .sheet(item: $libraryInfo, onDismiss: restoreLibraryIfNeeded) { value in
             VStack(alignment: .leading, spacing: 14) { HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { libraryInfo = nil }; Text(value.item.title).font(.title2); Spacer() }
                 Text(value.item.detail); ForEach(value.facts, id: \.self) { Text($0).textSelection(.enabled) }
                 if case .unavailable = value.selection { Button(baselineText(language, "label.32d818ead29f", fallback: "打开已有编辑器")) { returnToLibrary = false; libraryInfo = nil; libraryVisible = false; compatibilityVisible = true } }
             }.padding(24).frame(minWidth: 550, minHeight: 280)
+            .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
         .environment(\.metadataEditorLifecycle, MetadataEditorLifecycle(begin: model.beginEditing, end: model.endEditing))
         .focusedSceneValue(\.workbenchGeneration, WorkbenchGenerationCommand(title: "快速生成", isEnabled: quickCommandEnabled,

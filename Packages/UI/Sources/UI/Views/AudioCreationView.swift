@@ -343,7 +343,7 @@ public struct AudioCreationView: View {
                                                           hasPendingRangeInput: draft.operation == .inpaint && rangeInputMessage != nil,
                                                           actions: actions)
                 }
-                    .buttonStyle(.glass)
+                    .buttonStyle(WorkbenchGlassButtonStyle())
                     .disabled(!canSubmit)
                     .accessibilityIdentifier("audio-create-generate")
             }

@@ -153,7 +153,7 @@ public struct TextWorkbenchView: View {
             HStack(spacing: 10) {
                 if presentation == .complete {
                     Button(action: onChooseModel) { Label("选择模型", systemImage: "cube.transparent") }
-                        .buttonStyle(.glass).accessibilityIdentifier("text-model-select")
+                        .buttonStyle(WorkbenchGlassButtonStyle()).accessibilityIdentifier("text-model-select")
                 }
                 Button(action: onUndo) { Label("撤销", systemImage: "arrow.uturn.backward") }
                     .disabled(!canUndo).accessibilityIdentifier("text-undo")

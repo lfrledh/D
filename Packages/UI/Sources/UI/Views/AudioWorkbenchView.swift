@@ -208,10 +208,10 @@ public struct AudioWorkbenchView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 126, maximum: 210), spacing: 8)],
                       alignment: .leading, spacing: 8) {
                 Button("导出原件", systemImage: "square.and.arrow.up", action: exportOriginal)
-                    .buttonStyle(.glass)
+                    .buttonStyle(WorkbenchGlassButtonStyle())
                     .accessibilityIdentifier("audio-export-original")
                     .audioMeasured("audio-export-original", probe: layoutProbe)
-                recordingControl.buttonStyle(.glass)
+                recordingControl.buttonStyle(WorkbenchGlassButtonStyle())
             }
             if !recordingEnabled && !isRecordingOrRequesting {
                 Text("麦克风录音尚未启用；录音保持关闭，也不会请求系统许可。")
@@ -263,7 +263,7 @@ public struct AudioWorkbenchView: View {
                         catch { transport.present(error) }
                     }
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(WorkbenchGlassButtonStyle())
                 .accessibilityIdentifier("audio-play-pause")
                 Text(time(transport.positionFrame, format: format)).monospacedDigit()
                 Spacer()
