@@ -44,5 +44,6 @@ struct RetainedContentRoot<Content: View>: View {
             .environment(\.workbenchAppearanceState, appearance)
             .buttonStyle(WorkbenchGlassButtonStyle())
             .menuStyle(WorkbenchGlassMenuStyle())
+            .textFieldStyle(WorkbenchGlassTextFieldStyle())
     }
 }

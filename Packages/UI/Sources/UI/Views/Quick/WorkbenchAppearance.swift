@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Colors are stored as opaque sRGB values so saved choices are independent of the current system theme.
@@ -309,6 +310,7 @@ private struct WorkbenchThemeModifier: ViewModifier {
             .tint(palette.accentColor)
             .buttonStyle(WorkbenchGlassButtonStyle())
             .menuStyle(WorkbenchGlassMenuStyle())
+            .textFieldStyle(WorkbenchGlassTextFieldStyle())
             .background { if paintsCanvas { palette.canvasColor } }
     }
 }
@@ -489,5 +491,38 @@ private struct WorkbenchButtonFeedback<S: InsettableShape>: ViewModifier {
             .onHover { hovered = $0 }
             .workbenchMotion(value: hovered)
             .workbenchMotion(value: isPressed)
+    }
+}
+
+
+/// Keep the native field and its binding. Only the shell samples D's background;
+/// the field editor, marked text, selection and Undo never enter the renderer.
+struct WorkbenchGlassTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration.textFieldStyle(.plain)
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .modifier(WorkbenchInputSurface())
+    }
+}
+
+private struct WorkbenchInputSurface: ViewModifier {
+    func body(content: Content) -> some View {
+        content.scrollContentBackground(.hidden).workbenchPanel(cornerRadius: 8)
+    }
+}
+
+extension View {
+    func workbenchInputSurface() -> some View { modifier(WorkbenchInputSurface()) }
+}
+
+/// Native text remains an unfiltered foreground over the same SwiftUI shell.
+/// Appearance updates deliberately do not touch contents, selection or Undo.
+@MainActor enum WorkbenchNativeTextAppearance {
+    static func apply(_ scroll: NSScrollView, editor: NSTextView, color: NSColor) {
+        scroll.drawsBackground = false
+        scroll.contentView.drawsBackground = false
+        editor.drawsBackground = false
+        if editor.textColor != color { editor.textColor = color }
+        if editor.insertionPointColor != color { editor.insertionPointColor = color }
     }
 }

@@ -581,7 +581,7 @@ public struct SharedLibraryBrowser: View {
                 }
             }
             TextField(word("search", "搜索名称、说明或我的标签"), text: searchTextBinding)
-                .textFieldStyle(.roundedBorder).accessibilityIdentifier("shared-library-search")
+                .textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("shared-library-search")
             HStack {
                 Menu(word("allTags", "同时包含这些标签")) {
                     ForEach(tags) { tag in

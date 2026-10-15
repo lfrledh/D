@@ -200,13 +200,13 @@ struct ChatPresetsPanel: View {
                     accessibilityIdentifier: "chat-preset-prompt", onEdit: { prompt = $0 })
                     .id("prompt:" + (editingID?.uuidString ?? "new"))
                     .accessibilityLabel(text("system", "System prompt", "系统提示"))
-                    .frame(height: 90)
+                    .frame(height: 90).workbenchInputSurface()
                 Text(text("selection", "Selection instruction (optional)", "选段指令（可选）"))
                 TextSourcesQuestionEditor(value: selectionInstruction, editEpoch: 0, isEditable: true,
                     accessibilityIdentifier: "chat-preset-selection", onEdit: { selectionInstruction = $0 })
                     .id("selection:" + (editingID?.uuidString ?? "new"))
                     .accessibilityLabel(text("selection", "Selection instruction (optional)", "选段指令（可选）"))
-                    .frame(height: 70)
+                    .frame(height: 70).workbenchInputSurface()
                 Toggle(text("capture", "Capture current model settings", "保存当前模型参数"),
                     isOn: $captureConfiguration)
                     .disabled(session?.configuration == nil)

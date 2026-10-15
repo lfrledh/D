@@ -162,7 +162,7 @@ public struct AudioCreationView: View {
             capabilitySummaryContent
             profilePicker
             TextField(draft.profile == .conditionedMusic ? "描述想要的器乐风格" : "描述想要的声音", text: $draft.prompt, axis: .vertical)
-                .lineLimit(3...6).textFieldStyle(.roundedBorder)
+                .lineLimit(3...6).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .disabled(isBusy).accessibilityIdentifier("audio-create-prompt")
             if draft.profile == .conditionedMusic {
                 musicControls
@@ -309,7 +309,7 @@ public struct AudioCreationView: View {
     private func parameterRow(_ title: String, text: Binding<String>, id: String, disabled: Bool) -> some View {
         GridRow {
             Text(title)
-            TextField(title, text: text).textFieldStyle(.roundedBorder).disabled(disabled)
+            TextField(title, text: text).textFieldStyle(WorkbenchGlassTextFieldStyle()).disabled(disabled)
                 .accessibilityIdentifier("audio-create-\(id)")
         }
     }
@@ -318,9 +318,9 @@ public struct AudioCreationView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("重绘区间（秒，含开始不含结束）").font(.headline)
             VStack(alignment: .leading, spacing: 8) {
-                TextField("开始", text: Binding(get: { rangeState.startText }, set: { rangeState.startText = $0 })).textFieldStyle(.roundedBorder).disabled(isBusy)
+                TextField("开始", text: Binding(get: { rangeState.startText }, set: { rangeState.startText = $0 })).textFieldStyle(WorkbenchGlassTextFieldStyle()).disabled(isBusy)
                     .accessibilityIdentifier("audio-create-range-start")
-                TextField("结束", text: Binding(get: { rangeState.endText }, set: { rangeState.endText = $0 })).textFieldStyle(.roundedBorder).disabled(isBusy)
+                TextField("结束", text: Binding(get: { rangeState.endText }, set: { rangeState.endText = $0 })).textFieldStyle(WorkbenchGlassTextFieldStyle()).disabled(isBusy)
                     .accessibilityIdentifier("audio-create-range-end")
                 Button("应用区间", action: applyRange)
                     .disabled(isBusy).accessibilityIdentifier("audio-create-range-apply")

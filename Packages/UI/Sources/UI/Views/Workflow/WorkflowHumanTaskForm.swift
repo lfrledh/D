@@ -261,7 +261,7 @@ struct WorkflowHumanTaskForm: View {
                 set: { text in save(state.updateDraft(.text(text), taskID: task.id), taskID: task.id) }
             ))
             .frame(minHeight: 110)
-            .overlay { RoundedRectangle(cornerRadius: 6).stroke(.quaternary) }
+            .workbenchInputSurface()
             .accessibilityIdentifier("workflow-human-task-edit-text")
         case .singleChoice:
             choiceList(multiple: false)

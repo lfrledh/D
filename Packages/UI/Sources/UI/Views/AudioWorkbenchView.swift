@@ -285,7 +285,7 @@ public struct AudioWorkbenchView: View {
             Text("注释与片段").font(.headline)
             TextField("原始媒体注释", text: noteBinding(document), axis: .vertical)
                 .lineLimit(3...6)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .disabled(!canEdit)
                 .accessibilityIdentifier("audio-note")
                 .audioMeasured("audio-note", probe: layoutProbe)

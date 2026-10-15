@@ -78,7 +78,7 @@ struct SharedLibraryPropertyControls: View {
             Button(t("cancel", "取消", "Cancel"), action: onCancel).keyboardShortcut(.cancelAction)
             if let failure { Text(failure).foregroundStyle(.red) }
             Text(t("sourceFilterHint", "模型和直接来源可从对象的“生成与来源”加入条件。保存检索会保存这些条件和明确范围，不修改对象。", "Add model and direct-source conditions from an item's provenance. Saving a query retains all conditions and its explicit scope, without editing items.")).foregroundStyle(.secondary)
-        }.font(.caption).textFieldStyle(.roundedBorder)
+        }.font(.caption).textFieldStyle(WorkbenchGlassTextFieldStyle())
         .onAppear {
             widthMin = properties.width?.minimum.map(String.init) ?? ""; widthMax = properties.width?.maximum.map(String.init) ?? ""
             heightMin = properties.height?.minimum.map(String.init) ?? ""; heightMax = properties.height?.maximum.map(String.init) ?? ""

@@ -149,7 +149,7 @@ struct GenerationInspector: View {
                         .accessibilityHidden(true)
                 }
             }
-            .background(.background, in: RoundedRectangle(cornerRadius: 10))
+            .workbenchInputSurface()
             .overlay(RoundedRectangle(cornerRadius: 10)
                 .stroke(promptFocused ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: 1))
             Text("编辑草稿不会改变已经排队的任务。")
@@ -171,7 +171,7 @@ struct GenerationInspector: View {
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 TextField("0", text: $model.seedText)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .monospacedDigit()
                     .accessibilityLabel("固定 seed")
                     .accessibilityIdentifier("seed-field")
@@ -187,12 +187,12 @@ struct GenerationInspector: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("宽度（像素）").font(.caption).foregroundStyle(.secondary)
                 TextField("宽度（像素）", text: imageWidth)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .accessibilityLabel("宽度（像素）")
                     .accessibilityIdentifier("image-width")
                 Text("高度（像素）").font(.caption).foregroundStyle(.secondary)
                 TextField("高度（像素）", text: imageHeight)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .accessibilityLabel("高度（像素）")
                     .accessibilityIdentifier("image-height")
             }
@@ -443,10 +443,10 @@ private struct CandidateMetadataEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("编辑候选作品").font(.headline)
-            TextField("作品名称", text: $name).textFieldStyle(.roundedBorder)
+            TextField("作品名称", text: $name).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .accessibilityIdentifier("candidate-name")
             TextField("备注", text: $note, axis: .vertical).lineLimit(4...8)
-                .textFieldStyle(.roundedBorder).accessibilityIdentifier("candidate-note")
+                .textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("candidate-note")
             if let saveError { Text(saveError).font(.caption).foregroundStyle(.red) }
             if model.editorCloseAttempted {
                 Text("请先保存或取消编辑，再关闭项目或退出 D。")

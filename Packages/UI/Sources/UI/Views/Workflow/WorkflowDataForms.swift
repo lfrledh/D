@@ -449,7 +449,7 @@ struct WorkflowDatumValueEditor: View {
                     set: { value = .text($0) }
                 ))
                 .frame(minHeight: 64)
-                .overlay { RoundedRectangle(cornerRadius: 6).stroke(.quaternary) }
+                .workbenchInputSurface()
             case .number(let unit):
                 WorkflowNumberDatumEditor(value: $value, unit: unit, allowsUnitEditing: allowsSchemaEditing)
             case .boolean:

@@ -195,9 +195,9 @@ struct AssetAnnotationEditor: View {
             Text(context ?? (snapshot.projectName + " · " + snapshot.asset.createdAt.formatted(date: .abbreviated, time: .standard))).font(.caption).textSelection(.enabled)
             Text(t("annotationImpact", "只修改此结果的信息；不改正文、节点参数或文件名。", "Changes this result’s information only; not its content, node parameters, or file name.")).font(.callout)
             Text(t("resultName", "结果名称", "Result name")).font(.subheadline)
-            TextField(t("resultName", "结果名称", "Result name"), text: $name).textFieldStyle(.roundedBorder).accessibilityIdentifier("asset-annotation-name")
+            TextField(t("resultName", "结果名称", "Result name"), text: $name).textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("asset-annotation-name")
             Text(t("resultNote", "结果说明", "Result note")).font(.subheadline)
-            TextField(t("resultNote", "结果说明", "Result note"), text: $note, axis: .vertical).lineLimit(4...10).textFieldStyle(.roundedBorder).accessibilityIdentifier("asset-annotation-note")
+            TextField(t("resultNote", "结果说明", "Result note"), text: $note, axis: .vertical).lineLimit(4...10).textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("asset-annotation-note")
             Toggle(t("favorite", "收藏", "Favorite"), isOn: $favorite)
             Text(t("instanceWrite", "这些注释只写入此项目实例；共享组织标签按逻辑资产共享。", "These annotations belong to this project instance; organization tags are shared by logical asset.")).font(.caption)
             if let failure { Text(failure).font(.caption).foregroundStyle(.red).textSelection(.enabled) }

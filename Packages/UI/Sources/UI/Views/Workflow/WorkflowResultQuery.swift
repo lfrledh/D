@@ -114,7 +114,7 @@ struct WorkflowResultQueryControls: View {
             DisclosureGroup(t("resultFilters", "筛选此范围的结果", "Filter results in this scope"), isExpanded: $expanded) {
                 Text(scopeTitle).font(.caption)
                 Text(t("localResults", "只筛选已保存资产；其他值、运行状态与待处理事项保持可见", "Filters saved assets only; other values, run status and pending decisions stay visible")).font(.caption2)
-                TextField(t("searchResults", "搜索结果名称、说明和标签", "Search result names, notes & tags"), text: $state.query.text).textFieldStyle(.roundedBorder)
+                TextField(t("searchResults", "搜索结果名称、说明和标签", "Search result names, notes & tags"), text: $state.query.text).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 HStack {
                     Button(t("filters", "筛选条件…", "Filter conditions…")) { filters = true }
                     Button(t("saveQuery", "保存此检索", "Save this query")) {

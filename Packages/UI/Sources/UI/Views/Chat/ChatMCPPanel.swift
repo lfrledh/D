@@ -17,7 +17,7 @@ struct ChatMCPPanel: View {
         Group {
             VStack(alignment: .leading, spacing: 8) {
                 Text(wording("External tools (MCP)", "外部工具连接（MCP）")).font(.headline)
-                TextField("https://…/mcp", text: $endpoint).textFieldStyle(.roundedBorder)
+                TextField("https://…/mcp", text: $endpoint).textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .disabled(chat.mcpSessionID != nil)
                 Text(wording("Streamable HTTP. HTTPS or local loopback only. No login, credential URLs, subprocesses or automatic reconnect. Server-side actions may continue after local cancellation.",
                              "Streamable HTTP；仅HTTPS或本机回环。不接管登录、凭据网址、子进程，也不自动重连。停止本地请求不保证服务端动作撤回。"))
@@ -47,7 +47,7 @@ struct ChatMCPPanel: View {
                         DisclosureGroup(wording("Declared arguments (untrusted server data)", "参数声明（服务端资料）")) {
                             Text(selected.inputSchemaJSON).font(.caption.monospaced()).textSelection(.enabled)
                         }
-                        TextEditor(text: $arguments).font(.body.monospaced()).frame(minHeight: 100, maxHeight: 180)
+                        TextEditor(text: $arguments).font(.body.monospaced()).frame(minHeight: 100, maxHeight: 180).workbenchInputSurface()
                             .accessibilityLabel(wording("MCP arguments JSON", "MCP参数JSON"))
                         Button(wording("Send these arguments and call tool", "发送上述参数并调用")) {
                             guard case .connected(let address) = chat.mcpStatus else { return }

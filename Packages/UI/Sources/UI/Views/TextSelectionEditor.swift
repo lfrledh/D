@@ -33,6 +33,8 @@ enum TextSelectionEditorState {
 /// An AppKit text view keeps IME composition and selection handling out of the
 /// SwiftUI update cycle.  Edits and selections are merely reported to its owner.
 public struct TextSelectionEditor: NSViewRepresentable {
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var scheme
     public let document: TextDraftDocument
     public let selection: NSRange
     public let onEdit: (String) -> Void
@@ -77,6 +79,8 @@ public struct TextSelectionEditor: NSViewRepresentable {
         scroll.borderType = .noBorder
         scroll.drawsBackground = true
         scroll.documentView = textView
+        WorkbenchNativeTextAppearance.apply(scroll, editor: textView,
+            color: NSColor(preferences.resolvedAppearance.palette(for: scheme).foregroundColor))
         context.coordinator.install(document: document, selection: selection,
                                     in: textView, edit: onEdit, select: onSelection)
         return scroll
@@ -92,6 +96,8 @@ public struct TextSelectionEditor: NSViewRepresentable {
 
     public func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let textView = scroll.documentView as? NSTextView else { return }
+        WorkbenchNativeTextAppearance.apply(scroll, editor: textView,
+            color: NSColor(preferences.resolvedAppearance.palette(for: scheme).foregroundColor))
         context.coordinator.update(document: document, requestedSelection: selection,
                                    in: textView, edit: onEdit, select: onSelection)
     }

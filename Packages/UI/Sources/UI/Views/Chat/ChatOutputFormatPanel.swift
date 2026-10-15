@@ -49,7 +49,7 @@ struct ChatOutputFormatPanel: View {
                         .font(.caption).foregroundStyle(.secondary)
                     TextSourcesQuestionEditor(value: schemaText, editEpoch: 0, isEditable: true,
                         accessibilityIdentifier: "chat-output-schema-" + sessionID.uuidString, onEdit: { schemaText = $0 })
-                        .frame(height: 120)
+                        .frame(height: 120).workbenchInputSurface()
                     Button(wording("Insert record example", "填入记录示例")) {
                         let schema = WorkflowDataSchema.record([.init("title", .text), .init("tags", .list(.text), required: false)])
                         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

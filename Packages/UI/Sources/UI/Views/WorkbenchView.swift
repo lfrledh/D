@@ -731,7 +731,7 @@ private struct DocumentNameEditor: View {
                 .accessibilityLabel(context.title)
                 .accessibilityIdentifier("document-name-title")
             TextField("创作名称", text: $name)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .accessibilityIdentifier("document-name")
             if let saveError { Text(saveError).font(.caption).foregroundStyle(.red) }
             if model.editorCloseAttempted {

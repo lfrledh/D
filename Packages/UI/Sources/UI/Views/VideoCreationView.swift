@@ -101,10 +101,10 @@ public struct VideoCreationView: View {
             Text("Wan2.1 T2V-1.3B：宽高为 16 的倍数，帧数为 4n+1，步数 1…1000；T5/DiT BF16（保留原 FP32 张量），VAE FP32。")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             TextField("描述想要的视频", text: $draft.prompt, axis: .vertical)
-                .lineLimit(3...6).textFieldStyle(.roundedBorder).disabled(isBusy)
+                .lineLimit(3...6).textFieldStyle(WorkbenchGlassTextFieldStyle()).disabled(isBusy)
                 .accessibilityIdentifier("video-create-prompt")
             TextField("负面提示（可选）", text: $draft.negativePrompt, axis: .vertical)
-                .lineLimit(2...4).textFieldStyle(.roundedBorder).disabled(isBusy)
+                .lineLimit(2...4).textFieldStyle(WorkbenchGlassTextFieldStyle()).disabled(isBusy)
                 .accessibilityIdentifier("video-create-negative-prompt")
             parameterFields
             Text("当前样本为 832×480、17 帧、16 fps、50 步；实际范围由已部署适配器核验，长序列估计未校准。")
@@ -139,7 +139,7 @@ public struct VideoCreationView: View {
     private func parameterRow(_ title: String, text: Binding<String>, id: String) -> some View {
         GridRow {
             Text(title)
-            TextField(title, text: text).textFieldStyle(.roundedBorder).disabled(isBusy)
+            TextField(title, text: text).textFieldStyle(WorkbenchGlassTextFieldStyle()).disabled(isBusy)
                 .accessibilityIdentifier("video-create-\(id)")
         }
     }

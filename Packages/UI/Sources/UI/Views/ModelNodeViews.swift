@@ -156,7 +156,7 @@ public struct ModelNodeDetail: View {
             }
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 TextField("添加标签", text: $tagEditor.draft)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .disabled(!tagEditor.isEditable)
                     .accessibilityIdentifier("model-node-tag-draft-\(node.id)")
                     .onSubmit(addDraft)

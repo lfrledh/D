@@ -185,7 +185,7 @@ struct QuickGenerationView: View {
                                 Text(baselineText(language, "label.bf8881ad5d3a", fallback: "参考正文（可选）")).font(.subheadline)
                                 TextEditor(text: Binding(get: { draft.inputs["content"]?.datum?.text ?? "" },
                                     set: { quick.setInput("content", value: $0.isEmpty ? nil : .data(.text($0)), draftID: draft.id) }))
-                                    .frame(minHeight: 100).padding(6).background(.quaternary, in: RoundedRectangle(cornerRadius: 9))
+                                    .frame(minHeight: 100).padding(6).workbenchInputSurface()
                             }
                             ForEach(definition.inputs.filter { $0.assetListKind != nil || !["task", "prompt", "content"].contains($0.id) }) { port in
                                 VStack(alignment: .leading) {
@@ -534,14 +534,14 @@ struct QuickParameterField: View {
                         accessibilityIdentifier: "quick-field-" + field.id,
                         onEdit: { onChange(.text($0)) })
                         .id([ownerID, field.id])
-                        .frame(minHeight: 130).padding(6).background(.quaternary, in: RoundedRectangle(cornerRadius: 9))
+                        .frame(minHeight: 130).padding(6).workbenchInputSurface()
                 }
-                else { TextField(title, text: stringBinding).textFieldStyle(.roundedBorder) }
+                else { TextField(title, text: stringBinding).textFieldStyle(WorkbenchGlassTextFieldStyle()) }
             case .choice(let options):
                 Picker(title, selection: stringBinding) { ForEach(options, id: \.self) { Text(WorkflowCanvasPresentation.choiceTitle(fieldID: field.id, value: $0, language: language)).tag($0) } }.labelsHidden()
             case .flag: Toggle(title, isOn: Binding(get: { if case .flag(let b) = value { b } else { false } }, set: { onChange(.flag($0)) })).labelsHidden()
             case .integer, .decimal:
-                TextField(title, text: Binding(get: { raw ?? numberString }, set: { onRaw($0) })).textFieldStyle(.roundedBorder)
+                TextField(title, text: Binding(get: { raw ?? numberString }, set: { onRaw($0) })).textFieldStyle(WorkbenchGlassTextFieldStyle())
             }
         }
     }

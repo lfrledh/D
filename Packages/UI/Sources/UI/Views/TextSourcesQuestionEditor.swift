@@ -16,7 +16,9 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     var onFileDrop: (([URL]) -> Void)? = nil
     // Opt-in for the chat composer. Other native editors keep their existing sizing.
     var contentHeight: ClosedRange<CGFloat>? = nil
-    var transparentBackground = false
+    var transparentBackground = true
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var scheme
     var foregroundColor: NSColor? = nil
     var placeholder: String? = nil
     // An explicit click in the composer's surrounding whitespace, never a redraw.
@@ -60,11 +62,10 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     }
 
     private func applyAppearance(_ scroll: NSScrollView, editor: NSTextView) {
+        let color = foregroundColor ?? NSColor(preferences.resolvedAppearance.palette(for: scheme).foregroundColor)
+        WorkbenchNativeTextAppearance.apply(scroll, editor: editor, color: color)
         scroll.drawsBackground = !transparentBackground
         editor.drawsBackground = !transparentBackground
-        let color = foregroundColor ?? .labelColor
-        if editor.textColor != color { editor.textColor = color }
-        if editor.insertionPointColor != color { editor.insertionPointColor = color }
         (editor as? FileDropTextView)?.placeholder = placeholder
     }
 

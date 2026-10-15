@@ -32,7 +32,7 @@ struct ChatQuoteSelectionView: View {
                 // cannot enable or dispatch an action for the new source.
                 selection = selected
             }
-            .frame(minHeight: 120)
+            .frame(minHeight: 120).workbenchInputSurface()
 
             ScrollView(.horizontal) { actionRow }
 
@@ -69,6 +69,8 @@ struct ChatQuoteSelectionView: View {
     }
 
     struct NativeTextView: NSViewRepresentable {
+        @Environment(\.chatDisplayPreferences) private var preferences
+        @Environment(\.colorScheme) private var scheme
         let source: ChatQuoteSource
         let onSelection: (ChatQuoteSelection?) -> Void
 
@@ -100,12 +102,16 @@ struct ChatQuoteSelectionView: View {
             scroll.autohidesScrollers = true
             scroll.borderType = .noBorder
             scroll.documentView = textView
+            WorkbenchNativeTextAppearance.apply(scroll, editor: textView,
+                color: NSColor(preferences.resolvedAppearance.palette(for: scheme).foregroundColor))
             context.coordinator.update(source: source, textView: textView, onSelection: onSelection)
             return scroll
         }
 
         func updateNSView(_ scroll: NSScrollView, context: Context) {
             guard let textView = scroll.documentView as? NSTextView else { return }
+            WorkbenchNativeTextAppearance.apply(scroll, editor: textView,
+                color: NSColor(preferences.resolvedAppearance.palette(for: scheme).foregroundColor))
             context.coordinator.update(source: source, textView: textView, onSelection: onSelection)
         }
 

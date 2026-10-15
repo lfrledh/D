@@ -85,7 +85,7 @@ struct SharedLibrarySaveQuerySheet: View {
             Text(request.scopeTitle).font(.callout)
             if let scope = request.query.scope { Text(SharedLibraryScopeSummary.readable(scope, text: t)).font(.callout) }
             Text(t("queryName", "检索名称", "Query name"))
-            TextField("", text: $name).textFieldStyle(.roundedBorder)
+            TextField("", text: $name).textFieldStyle(WorkbenchGlassTextFieldStyle())
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
                     if !request.query.text.isEmpty { Text(t("searchText", "搜索文字：", "Search text: ") + request.query.text) }

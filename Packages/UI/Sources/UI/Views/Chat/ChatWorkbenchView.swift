@@ -876,7 +876,7 @@ struct ChatWorkbenchView: View {
             Button(newLabel("importConversation", english: "Import conversation…", chinese: "导入会话…")) { Task { await importConversation() } }
                 .disabled(filePanelBusy || !chat.isLoaded || chat.saveIssue != nil)
             TextField(newLabel("lexicalSearch", english: "Lexical search", chinese: "词法搜索"), text: $search)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .accessibilityIdentifier("chat-history-search")
                 .disabled(showDeleted)
             HStack {
@@ -2555,7 +2555,7 @@ private struct ChatEditForm: View {
             }
             TextSourcesQuestionEditor(value: text, editEpoch: 0, isEditable: true,
                 accessibilityIdentifier: "chat-edit-\(edit.sessionID.uuidString)", accessibilityLabel: title, onEdit: { text = $0 })
-                .id(edit.id).frame(height: edit.kind == .rename ? 70 : 220)
+                .id(edit.id).frame(height: edit.kind == .rename ? 70 : 220).workbenchInputSurface()
             if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
                 Spacer()

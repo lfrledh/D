@@ -48,6 +48,111 @@ private actor LocalGlassNoInference: InferenceEngine {
         let ptr = try #require(c.data).assumingMemoryBound(to: UInt8.self)
         return Array(UnsafeBufferPointer(start: ptr, count: c.bytesPerRow * c.height))
     }
+    @Test(arguments: [false, true])
+    func textInputShellsFollowSettingsAcrossNativeHosts(retained: Bool) async throws {
+        let owner = WorkbenchBackgroundOwner()
+        var preferences = ChatDisplayPreferences(); var appearance = WorkbenchAppearance()
+        appearance.local = WorkbenchLocalAppearance(); preferences.appearance = appearance
+        var scheme = ColorScheme.light
+        func inputs() -> some View {
+            VStack {
+                TextField("Search", text: .constant("未过滤 e\u{301}"))
+                TextField("Number", value: .constant(42), format: .number)
+                TextField("Note", text: .constant("多行说明\nunchanged"), axis: .vertical).lineLimit(2...4)
+                TextEditor(text: .constant("Multi-line\n内容")).frame(height: 80).workbenchInputSurface()
+                TextSourcesQuestionEditor(value: "原生输入", editEpoch: 0, isEditable: true, onEdit: { _ in })
+                    .frame(height: 80).workbenchInputSurface()
+            }.environment(\.chatDisplayPreferences, preferences).environment(\.colorScheme, scheme)
+        }
+        @ViewBuilder func content() -> some View {
+            if retained {
+                RetainedContentHost(content: inputs(), visible: true, identifier: "input-fixture")
+                    .environment(\.workbenchBackground, owner)
+            } else {
+                inputs().workbenchTheme(paintsCanvas: false).environment(\.workbenchBackground, owner)
+            }
+        }
+        let host = NSHostingView(rootView: content()); host.frame = CGRect(x: 0, y: 0, width: 420, height: 360)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        func children(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + children($0) } }
+        func settle() async throws {
+            for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        }
+        try await settle()
+        let before = children(host)
+        let native = before.filter { $0 is NSTextField || $0 is NSTextView }
+        #expect(native.count >= 5)
+        let initialSurfaces = before.compactMap { $0 as? WorkbenchBackgroundNSView }
+        #expect(initialSurfaces.count == 5, "Each input has one local shell, including plain inherited fields")
+        #expect(initialSurfaces.allSatisfy { $0.owner === owner && $0.drawsGlass })
+        #expect(before.compactMap { $0 as? NSTextField }.allSatisfy { !$0.drawsBackground && !$0.isBezeled })
+        #expect(before.compactMap { $0 as? NSTextView }.allSatisfy { !$0.drawsBackground })
+        for strength in [0.0, 0.55, 1.0] {
+            preferences.appearance?.local?.strength = strength; scheme = .dark
+            host.rootView = content(); try await settle()
+            let after = children(host), surfaces = after.compactMap { $0 as? WorkbenchBackgroundNSView }
+            #expect(surfaces.count == 5 && surfaces.allSatisfy { $0.owner === owner && $0.strength == strength && $0.drawsGlass })
+            #expect(surfaces.allSatisfy { $0.palette == WorkbenchPalette.defaultDark })
+            #expect(native.allSatisfy { input in after.contains { $0 === input } })
+        }
+        preferences.appearance?.local?.material = .solid
+        host.rootView = content(); try await settle()
+        #expect(children(host).compactMap { $0 as? WorkbenchBackgroundNSView }.allSatisfy { !$0.drawsGlass })
+    }
+
+    @Test(arguments: [false, true])
+    func inputAppearanceChangesPreserveCompositionUndoFocusAndScroll(manuscript: Bool) async throws {
+        var value = String(repeating: "中文 e\u{301} 👩‍💻 — unchanged paragraph\n", count: 35)
+        var document = try TextDraftDocument(text: value)
+        var preferences = ChatDisplayPreferences(); var appearance = WorkbenchAppearance()
+        appearance.local = WorkbenchLocalAppearance(); preferences.appearance = appearance
+        var scheme = ColorScheme.light
+        @ViewBuilder func editor() -> some View {
+            if manuscript {
+                TextSelectionEditor(document: document, selection: NSRange(location: 0, length: 0), onEdit: { text in
+                    value = text
+                    document = try! TextDraftDocument(id: document.id, text: text)
+                }, onSelection: { _ in })
+            } else {
+                TextSourcesQuestionEditor(value: value, editEpoch: 0, isEditable: true, onEdit: { value = $0 })
+            }
+        }
+        func content() -> some View {
+            editor().workbenchInputSurface().environment(\.chatDisplayPreferences, preferences).environment(\.colorScheme, scheme)
+        }
+        let host = NSHostingView(rootView: content()); host.frame = CGRect(x: 0, y: 0, width: 420, height: 160)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        func children(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + children($0) } }
+        func settle() async throws {
+            for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        }
+        try await settle()
+        let native = try #require(children(host).compactMap { $0 as? NSTextView }.first)
+        #expect(window.makeFirstResponder(native))
+        let undo = try #require(native.undoManager)
+        undo.beginUndoGrouping(); native.insertText("!", replacementRange: NSRange(location: 0, length: 0)); undo.endUndoGrouping()
+        #expect(undo.canUndo)
+        native.setMarkedText("pinyin", selectedRange: NSRange(location: 6, length: 0), replacementRange: NSRange(location: 12, length: 0))
+        let composed = Array(native.string.utf8), selected = native.selectedRange(), marked = native.markedRange()
+        let scroll = try #require(native.enclosingScrollView)
+        scroll.contentView.scroll(to: CGPoint(x: 0, y: 60)); scroll.reflectScrolledClipView(scroll.contentView)
+        let position = scroll.contentView.bounds.origin
+        preferences.appearance?.local?.strength = 0.9; scheme = .dark
+        host.rootView = content(); try await settle()
+        #expect(children(host).contains { $0 === native })
+        #expect(window.firstResponder === native && native.undoManager === undo && undo.canUndo)
+        #expect(native.hasMarkedText() && native.markedRange() == marked && native.selectedRange() == selected)
+        #expect(Array(native.string.utf8) == composed && scroll.contentView.bounds.origin == position)
+        #expect(!native.drawsBackground && !scroll.drawsBackground && !scroll.contentView.drawsBackground)
+        #expect(native.textColor == NSColor(WorkbenchPalette.defaultDark.foregroundColor))
+        native.unmarkText(); undo.undo()
+        #expect(Array(native.string.utf8) != composed, "Native undo remains operational after appearance changes")
+    }
+
     @Test func liquidTransparencyKeepsARealContinuousRange() throws {
         let source = try #require(WorkbenchLocalRenderer.bitmap(width: 100, height: 80))
         source.setFillColor(CGColor(gray: 1, alpha: 1)); source.fill(CGRect(x: 0, y: 0, width: 100, height: 80))

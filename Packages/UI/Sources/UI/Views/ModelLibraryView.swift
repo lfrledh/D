@@ -131,13 +131,13 @@ public struct ModelLibraryView: View {
         HStack {
             if model.workspace == "resources" {
                 TextField(text("searchResources", "搜索名称、版本或位置"), text: $model.resourceSearch)
-                    .textFieldStyle(.roundedBorder).accessibilityIdentifier("model-manager-resource-search")
+                    .textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("model-manager-resource-search")
                 Picker(text("filter", "筛选"), selection: $model.resourceFilter) {
                     Text(text("all", "全部")).tag("all"); Text(text("registered", "已登记")).tag("registered"); Text(text("unregistered", "未登记／待处理")).tag("unregistered")
                     Text(text("attention", "需要处理")).tag("attention"); Text(text("unavailable", "暂不可访问")).tag("unavailable")
                 }.frame(width: 190)
             } else {
-                TextField(text("searchDownloads", "搜索下载任务"), text: $model.taskSearch).textFieldStyle(.roundedBorder)
+                TextField(text("searchDownloads", "搜索下载任务"), text: $model.taskSearch).textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .accessibilityIdentifier("model-manager-task-search")
                 Picker(text("filter", "筛选"), selection: $model.taskFilter) {
                     Text(text("all", "全部")).tag("all"); Text(text("pending", "待处理")).tag("active"); Text(text("history", "历史")).tag("history")

@@ -181,7 +181,7 @@ struct ChatToolsPanel: View {
                 Text("/inputs/input-\(index + 1).csv ← \(item.name)").font(.caption.monospaced()).textSelection(.enabled)
             }
             TextSourcesQuestionEditor(value: pythonCode, editEpoch: 0, isEditable: !chat.isToolRunning,
-                accessibilityIdentifier: "chat-python-code", onEdit: { pythonCode = $0 }).frame(height: 180)
+                accessibilityIdentifier: "chat-python-code", onEdit: { pythonCode = $0 }).frame(height: 180).workbenchInputSurface()
             Text(wording("Use csv/statistics from Python’s standard library. d_result.publish(name, kind, text) offers a .txt/.csv/.svg artifact; it never writes to your project by itself.",
                          "可使用标准库 csv/statistics。d_result.publish(name, kind, text) 提交 .txt/.csv/.svg 成果，不会自行写入项目。"))
                 .font(.caption).foregroundStyle(.secondary)

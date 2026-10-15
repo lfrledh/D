@@ -121,7 +121,7 @@ struct ChatDisplayPreferencesPanel: View {
             TextField(title, text: Binding(
                 get: { hexDrafts[key] ?? field.value(in: selectedPalette) },
                 set: { editHex(field, value: $0) }))
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .accessibilityLabel(title)
                 .accessibilityIdentifier("workbench-\(key)")
             if let draft, !WorkbenchPalette.isValidHex(draft) {

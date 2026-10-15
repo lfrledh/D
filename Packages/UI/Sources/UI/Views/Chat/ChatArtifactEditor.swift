@@ -251,7 +251,7 @@ struct ChatArtifactEditor: View {
             }
             TextSourcesQuestionEditor(value: state.draft.text, editEpoch: 0, isEditable: true,
                 accessibilityIdentifier: "chat-artifact-source", onEdit: { state.updateText($0) })
-                .frame(height: 240)
+                .frame(height: 240).workbenchInputSurface()
             HStack {
                 Toggle(wording("Preview", "预览"), isOn: Binding(
                     get: { state.isPreviewing },

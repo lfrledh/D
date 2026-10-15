@@ -1645,7 +1645,7 @@ private struct WorkflowFieldEditor: View {
                 TextEditor(text: textBinding)
                     .font(.body)
                     .frame(minHeight: 72)
-                    .overlay { RoundedRectangle(cornerRadius: 6).stroke(.quaternary) }
+                    .workbenchInputSurface()
                     .disabled(readOnly)
             } else {
                 TextField(title, text: textBinding).disabled(readOnly)
@@ -2160,7 +2160,7 @@ struct WorkflowWaitingDecision: View {
                         controller.editReviewText(stepID: step.id, text: value)
                     }
                     .frame(minHeight: 100)
-                    .overlay { RoundedRectangle(cornerRadius: 6).stroke(.quaternary) }
+                    .workbenchInputSurface()
                     .task(id: textReference?.version) { await loadDraft() }
                 HStack {
                     Button(workflowText(languageStore, "workflow.action.acceptText", fallback: "接受文字")) {

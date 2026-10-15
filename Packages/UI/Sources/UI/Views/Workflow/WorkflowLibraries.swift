@@ -73,7 +73,7 @@ struct WorkflowLibraryEntry: Identifiable {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(text("nodes", "节点库"), systemImage: "square.grid.2x2").font(.headline)
-            TextField(text("search", "搜索名称或标签"), text: $query).textFieldStyle(.roundedBorder).accessibilityIdentifier("canvas-node-search")
+            TextField(text("search", "搜索名称或标签"), text: $query).textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("canvas-node-search")
             WorkflowLibraryFilters(tags: Array(Set(entries.flatMap { $0.systemTags + tags($0) })).sorted(), selected: $filters)
             Text(text("dragHint", "拖到画布，或点 ＋ 添加。双击节点编辑。"))
                 .font(.caption).foregroundStyle(.secondary)
@@ -164,7 +164,7 @@ struct WorkflowLibraryFilters: View {
             }.frame(maxHeight: 160)
             HStack {
                 TextField(workflowText(language, "canvas.tags.new", fallback: "新标签（最多32个字符）"), text: $draft)
-                    .textFieldStyle(.roundedBorder).onSubmit { commit(values + [draft], addition: true) }
+                    .textFieldStyle(WorkbenchGlassTextFieldStyle()).onSubmit { commit(values + [draft], addition: true) }
                     .accessibilityIdentifier("canvas-tag-draft")
                 Button(workflowText(language, "canvas.tags.add", fallback: "添加")) { commit(values + [draft], addition: true) }
             }
@@ -211,7 +211,7 @@ struct WorkflowLibraryFilters: View {
                     .buttonStyle(WorkbenchGlassButtonStyle(compact: true)).disabled(!controller.canEditCanvas)
                     .help(text("import", "导入素材")) .accessibilityIdentifier("canvas-import-asset")
             }
-            TextField(text("search", "搜索素材或标签"), text: $query).textFieldStyle(.roundedBorder).accessibilityIdentifier("canvas-asset-search")
+            TextField(text("search", "搜索素材或标签"), text: $query).textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("canvas-asset-search")
             WorkflowLibraryFilters(tags: Array(Set(controller.availableAssets.flatMap { systemTags($0) + tags($0) })).sorted(), selected: $filters)
             Text(text("hint", "拖到画布创建输入，或拖到已有素材节点。")) .font(.caption).foregroundStyle(.secondary)
             ScrollView {

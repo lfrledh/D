@@ -172,8 +172,7 @@ public struct TextWorkbenchView: View {
             TextSelectionEditor(document: session.document, selection: selection, onEdit: onEdit, onSelection: onSelection)
                 .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                 .accessibilityIdentifier("text-draft-editor")
-                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor)))
+                .workbenchInputSurface()
             if presentation == .complete { rewriteControls }
             else { Text(saveStatus).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("text-save-status") }
 
@@ -186,7 +185,7 @@ public struct TextWorkbenchView: View {
             generationSettingsControls
             Text("选中文字后描述修改意图").font(.caption).foregroundStyle(.secondary)
             TextField("修改要求", text: $instruction, axis: .vertical)
-                .lineLimit(2...5).textFieldStyle(.roundedBorder)
+                .lineLimit(2...5).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .accessibilityIdentifier("text-instruction")
             HStack {
                 Button(action: generate) { Label("改写", systemImage: "sparkles") }
@@ -209,13 +208,13 @@ public struct TextWorkbenchView: View {
                 Text("生成额度").font(.subheadline.weight(.semibold))
                 Text("输入 token 上限").font(.caption).foregroundStyle(.secondary)
                 TextField("输入 token 上限", text: promptTokenLimit)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .accessibilityLabel("输入 token 上限")
                     .accessibilityIdentifier("text-input-limit")
                     .textParameterMeasured("text-input-limit", probe: parameterLayoutProbe)
                 Text("输出 token 上限").font(.caption).foregroundStyle(.secondary)
                 TextField("输出 token 上限", text: outputTokenLimit)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .accessibilityLabel("输出 token 上限")
                     .accessibilityIdentifier("text-output-limit")
                     .textParameterMeasured("text-output-limit", probe: parameterLayoutProbe)

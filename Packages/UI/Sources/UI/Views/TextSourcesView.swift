@@ -128,6 +128,8 @@ enum TextSourcesHistoryPresentation {
 
 /// A selectable, non-editable AppKit view. It only reports a valid selection.
 private struct TextSourcesReadOnlyTextView: NSViewRepresentable {
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var scheme
     let source: TextSourceSnapshot
     let selection: NSRange?
     let onSelection: (NSRange) -> Void
@@ -158,12 +160,16 @@ private struct TextSourcesReadOnlyTextView: NSViewRepresentable {
         scroll.autohidesScrollers = true
         scroll.borderType = .noBorder
         scroll.documentView = textView
+        WorkbenchNativeTextAppearance.apply(scroll, editor: textView,
+            color: NSColor(preferences.resolvedAppearance.palette(for: scheme).foregroundColor))
         context.coordinator.update(source: source, selection: selection, textView: textView, onSelection: onSelection)
         return scroll
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let textView = scroll.documentView as? NSTextView else { return }
+        WorkbenchNativeTextAppearance.apply(scroll, editor: textView,
+            color: NSColor(preferences.resolvedAppearance.palette(for: scheme).foregroundColor))
         context.coordinator.update(source: source, selection: selection, textView: textView, onSelection: onSelection)
     }
 
@@ -322,8 +328,7 @@ public struct TextSourcesView: View {
                 selection.record(range, for: source)
             }
             .frame(minHeight: 220, maxHeight: 420)
-            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor)))
+            .workbenchInputSurface()
             .accessibilityIdentifier("text-sources-source-text")
             let actionsLayout = compactActions ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
             actionsLayout {
@@ -361,7 +366,7 @@ public struct TextSourcesView: View {
                     // This is a render input, never an editor identity.
                     questionEditEpoch &+= 1
                 }
-                .frame(minHeight: 90)
+                .frame(minHeight: 90).workbenchInputSurface()
                 .accessibilityIdentifier("text-sources-question")
                 HStack {
                     Button(action: actions.ask) { Label("生成", systemImage: "sparkles") }

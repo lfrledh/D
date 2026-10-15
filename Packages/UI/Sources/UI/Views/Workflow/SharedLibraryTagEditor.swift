@@ -109,7 +109,7 @@ struct SharedLibraryTagEditor: View {
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack {
-                TextField(text("new", "创建标签并添加到这些对象"), text: $name).textFieldStyle(.roundedBorder)
+                TextField(text("new", "创建标签并添加到这些对象"), text: $name).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 Button(text("stage", "加入待保存")) {
                     let next = name.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !next.isEmpty, next.count <= 32 else { error = text("invalidName", "标签名称需要 1–32 个字符。"); return }

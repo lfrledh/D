@@ -52,11 +52,11 @@ struct MusicConditionEditor: View {
 
     private func noteRow(_ note: Binding<MusicNoteDraft>) -> some View {
         HStack(spacing: 6) {
-            TextField("音名或 MIDI", text: note.pitchText).textFieldStyle(.roundedBorder)
+            TextField("音名或 MIDI", text: note.pitchText).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .disabled(isBusy).accessibilityIdentifier("audio-create-music-pitch-\(note.wrappedValue.id.uuidString)")
-            TextField("开始秒", text: note.startText).textFieldStyle(.roundedBorder)
+            TextField("开始秒", text: note.startText).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .disabled(isBusy).accessibilityIdentifier("audio-create-music-start-\(note.wrappedValue.id.uuidString)")
-            TextField("持续秒", text: note.durationText).textFieldStyle(.roundedBorder)
+            TextField("持续秒", text: note.durationText).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .disabled(isBusy).accessibilityIdentifier("audio-create-music-duration-\(note.wrappedValue.id.uuidString)")
             Button("移除") { draft.notes.removeAll { $0.id == note.wrappedValue.id } }
                 .disabled(isBusy).accessibilityIdentifier("audio-create-music-remove-\(note.wrappedValue.id.uuidString)")
