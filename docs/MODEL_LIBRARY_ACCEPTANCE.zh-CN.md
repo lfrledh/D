@@ -1,5 +1,9 @@
 # 模型库与应用服务检查点
 
+## 2026-10-16 设置首绘增量（业务保持）
+
+生产 `748cda3c21d7db31a14fde0ff6984a898abb344f` 只修改外观缓存/背景入口，模型与下载契约、身份、状态机、Runtime及Store没有差分。历史下载和模型证据仍按原版本沿用，无真实模型/GPU重验。唯一新入口 `D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/delivery/README.md`；下方保留历史状态。
+
 ## 2026-10-15 共享材质修订（模型与下载业务保持）
 
 生产 `7e9d091219ca0a3a213e0879cb15b06dbe78b39a` 只将模型页面既有按钮、弹窗外观接到 D 自有画布透镜。ModelLibrary/下载状态机、登记意图、危险动作目标及 Runtime 无改动；旧通过回执继续按原版本沿用，未重跑模型/GPU矩阵。新 A/B/C 只为隔离评审，回环合成资源、推理请求0；不自动登记新模型或选入节点。最终入口 `D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-02/delivery/README.md`，原生显示与真人观感仍待验，见当前集中队列。下方均为历史接受与当时状态。
