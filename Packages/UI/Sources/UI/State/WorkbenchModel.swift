@@ -476,14 +476,14 @@ public final class WorkbenchModel {
 
     public init(sessionFactory: @escaping @Sendable (URL) async throws -> WorkbenchSession,
                 settings: UserDefaults = .standard, modelLibrary: ModelLibrary? = nil,
-                displaySettingsOwner: WorkbenchModel? = nil,
+                displaySettingsOwner: WorkbenchModel? = nil, appearanceDirectory: URL? = nil,
                 audioEnabled: Bool = false, audioRecordingEnabled: Bool = false,
                 audioTransport: AudioTransport? = nil,
                 textSourcesEnabled: Bool = true,
                 audioPanels: any AudioWorkbenchPanelProviding = NativeAudioWorkbenchPanels()) {
         self.audioRecordingEnabled = audioRecordingEnabled
         self.audioPanels = audioPanels
-        chatDisplaySettings = displaySettingsOwner?.chatDisplaySettings ?? ChatDisplayPreferencesState(settings: settings)
+        chatDisplaySettings = displaySettingsOwner?.chatDisplaySettings ?? ChatDisplayPreferencesState(settings: settings, appearanceDirectory: appearanceDirectory)
         projectSession = ProjectSession(sessionFactory: sessionFactory, settings: settings,
                                         modelLibrary: modelLibrary, audioEnabled: audioEnabled,
                                         audioRecordingEnabled: audioRecordingEnabled,

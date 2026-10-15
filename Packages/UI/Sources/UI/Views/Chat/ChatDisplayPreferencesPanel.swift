@@ -1,8 +1,15 @@
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 struct ChatDisplayPreferencesPanel: View {
     let state: ChatDisplayPreferencesState
     @Environment(\.dLanguageStore) private var language
+    @State private var glassStrength: Double?
+    @State private var choosingWallpaper = false
+    @State private var selectionTask: Task<Void, Never>?
+    @State private var wallpaperPanel: NSOpenPanel?
+    @State private var selectionTicket = UUID()
     @State private var editingScheme: ColorScheme = .light
     @State private var hexDrafts: [String: String] = [:]
 
@@ -149,6 +156,67 @@ struct ChatDisplayPreferencesPanel: View {
         .accessibilityIdentifier("workbench-appearance-preview")
     }
 
+    private func changeLocal(_ edit: (inout WorkbenchLocalAppearance) -> Void) {
+        change { candidate in
+            var appearance = candidate.resolvedAppearance
+            var local = appearance.local ?? WorkbenchLocalAppearance()
+            edit(&local); appearance.local = local; candidate.appearance = appearance
+        }
+    }
+
+    private func chooseWallpaper() {
+        guard !choosingWallpaper else { return }
+        choosingWallpaper = true
+        let ticket = UUID(); selectionTicket = ticket
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg]; panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = wording("Choose a static image for D’s canvas. Your original stays unchanged.", "为 D 的画布选择一张静态图片，原图保持不变。")
+        wallpaperPanel = panel
+        selectionTask = Task { @MainActor in
+            defer { if selectionTicket == ticket { choosingWallpaper = false; wallpaperPanel = nil; selectionTask = nil } }
+            guard await panel.begin() == .OK, let url = panel.url,
+                  selectionTicket == ticket, !Task.isCancelled else { return }
+            await state.importWallpaper(url)
+        }
+    }
+
+    private var canvasSettings: some View {
+        Section(wording("Canvas and panels", "画布与面板")) {
+            LabeledContent(wording("Canvas background", "画布背景"),
+                value: state.preferences.appearance?.local?.wallpaper == nil
+                    ? wording("Solid color", "纯色") : wording("Local image", "本地图像"))
+            HStack {
+                Button(wording("Choose image…", "选择图像…"), action: chooseWallpaper)
+                    .disabled(choosingWallpaper || state.wallpaperPreparing || state.appearanceDirectory == nil)
+                Button(wording("Restore solid color", "恢复纯色")) { state.restoreSolidCanvas() }
+            }
+            if state.wallpaperPreparing { ProgressView().controlSize(.small) }
+            if state.wallpaperIssue {
+                Text(wording("The canvas image could not be prepared or read. Your previous choice is kept; a solid background is used when unavailable.", "画布图片未能准备或读取。原选择保留；无法读取时使用纯色背景。"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Picker(wording("Panel material", "面板材质"), selection: Binding(
+                get: { state.preferences.appearance?.local?.material ?? .solid },
+                set: { value in changeLocal { $0.material = value } })) {
+                    Text(wording("App-local glass", "应用内玻璃")).tag(WorkbenchLocalAppearance.Material.glass)
+                    Text(wording("Solid", "实色")).tag(WorkbenchLocalAppearance.Material.solid)
+                }
+            if state.preferences.appearance?.local == nil {
+                Text(wording("Your previous canvas color blend is preserved until you choose a new material.", "选择新材质前，保留原来的画布底色混合效果。"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Slider(value: Binding(get: { glassStrength ?? state.preferences.appearance?.local?.strength ?? 0.55 },
+                set: { glassStrength = $0 }), in: 0...1, onEditingChanged: { editing in
+                    if !editing, let value = glassStrength { changeLocal { $0.strength = value }; glassStrength = nil }
+                }) { Text(wording("Glass strength", "玻璃强度")) }
+                .disabled(state.preferences.appearance?.local?.material != .glass)
+            Button(wording("Reset glass strength", "恢复默认玻璃强度")) { glassStrength = nil; changeLocal { $0.strength = 0.55 } }
+            Text(wording("Panels sample only D’s canvas, never your desktop. Images are bounded sRGB appearance copies; original artwork and previews are unchanged.", "面板只映出 D 的画布，不透出系统桌面。背景使用有界 sRGB 外观副本，原作品和预览保持不变。"))
+                .font(.caption).foregroundStyle(.secondary)
+        }.disabled(state.hasInvalidStoredRecord)
+    }
+
     var body: some View {
         Form {
             if state.hasInvalidStoredRecord {
@@ -220,7 +288,10 @@ struct ChatDisplayPreferencesPanel: View {
             }
             .disabled(state.hasInvalidStoredRecord)
 
+            canvasSettings
+
             Section(label("effects", "Effects", "视觉效果")) {
+                if state.preferences.appearance?.local == nil {
                 VStack(alignment: .leading) {
                     Text("\(label("backgroundTransparency", "Canvas color blend", "画布底色占比")): \(Int(state.preferences.resolvedAppearance.backgroundTransparency * 100))%")
                     Slider(value: Binding(
@@ -234,6 +305,7 @@ struct ChatDisplayPreferencesPanel: View {
                         .accessibilityValue("\(Int(state.preferences.resolvedAppearance.backgroundTransparency * 100))%")
                         .accessibilityIdentifier("workbench-background-transparency")
                         .help(label("backgroundBlendHint", "0% panel color; 100% canvas color.", "0% 为面板色，100% 为画布色。"))
+                }
                 }
                 VStack(alignment: .leading) {
                     Text("\(label("motion", "Decorative motion", "装饰性动态")): \(Int(state.preferences.resolvedAppearance.motion * 100))%")
@@ -264,5 +336,10 @@ struct ChatDisplayPreferencesPanel: View {
             .disabled(state.hasInvalidStoredRecord)
         }
         .onAppear { if state.preferences.theme == .dark { editingScheme = .dark } }
+        .onDisappear {
+            selectionTicket = UUID(); selectionTask?.cancel(); selectionTask = nil
+            wallpaperPanel?.cancel(nil); wallpaperPanel = nil; choosingWallpaper = false
+            state.cancelWallpaperPreparation()
+        }
     }
 }

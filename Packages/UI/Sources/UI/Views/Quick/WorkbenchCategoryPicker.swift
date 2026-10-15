@@ -97,10 +97,35 @@ struct WorkbenchCategoryPicker: View {
     private static var started: TimeInterval?
     private static var lastInput: TimeInterval?
     private static var maxLag: TimeInterval = 0
+    static var phaseObserver: ((String) -> Void)?
+    private static var committedAt: TimeInterval?
+    private static var deliveredPhases = Set<String>()
+    private static var postCommitRoots = 0, postCommitHosts = 0
+    private static var backgroundStart = WorkbenchBackgroundCounters.Snapshot()
+    static func beginCommit() {
+        phaseObserver?("commit")
+        guard enabled else { return }
+        committedAt = ProcessInfo.processInfo.systemUptime; deliveredPhases = []
+        backgroundStart = WorkbenchBackgroundCounters.snapshot
+        postCommitRoots = 0; postCommitHosts = 0
+        workbenchBody = { postCommitRoots += 1 }
+        retainedUpdate = { postCommitHosts += 1 }
+        phase("commit")
+    }
+    static func phase(_ name: String) {
+        phaseObserver?(name)
+        guard let committedAt, deliveredPhases.insert(name).inserted else { return }
+        let ms = (ProcessInfo.processInfo.systemUptime - committedAt) * 1000
+        let background = WorkbenchBackgroundCounters.snapshot
+        Logger(subsystem: "com.dworkbench.ui", category: "category-release").notice(
+            "phase=\(name) elapsedMs=\(ms) root=\(postCommitRoots) retained=\(postCommitHosts) decodes=\(background.decodes-backgroundStart.decodes) blurs=\(background.blurs-backgroundStart.blurs) backgroundDraws=\(background.draws-backgroundStart.draws)")
+    }
     static func beginTrace() {
         guard enabled else { return }
+        committedAt = nil; deliveredPhases = []
         events = 0; rootUpdates = 0; retainedUpdates = 0; presentations = 0; maxLag = 0
         started = ProcessInfo.processInfo.systemUptime
+        backgroundStart = WorkbenchBackgroundCounters.snapshot
         workbenchBody = { rootUpdates += 1 }; retainedUpdate = { retainedUpdates += 1 }
     }
     static func inputTrace() {
@@ -115,8 +140,9 @@ struct WorkbenchCategoryPicker: View {
     static func endTrace() {
         guard let started else { return }
         let seconds = ProcessInfo.processInfo.systemUptime - started
+        let background = WorkbenchBackgroundCounters.snapshot
         Logger(subsystem: "com.dworkbench.ui", category: "category-drag").notice(
-            "drag events=\(events) root=\(rootUpdates) retained=\(retainedUpdates) presentations=\(presentations) maxDeliveryMs=\(maxLag * 1000) seconds=\(seconds)")
+            "drag events=\(events) root=\(rootUpdates) retained=\(retainedUpdates) presentations=\(presentations) maxDeliveryMs=\(maxLag * 1000) seconds=\(seconds) decodes=\(background.decodes-backgroundStart.decodes) blurs=\(background.blurs-backgroundStart.blurs) backgroundDraws=\(background.draws-backgroundStart.draws)")
         self.started = nil; lastInput = nil; workbenchBody = nil; retainedUpdate = nil
     }
 }

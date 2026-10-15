@@ -66,6 +66,7 @@ struct WorkbenchAppearance: Codable, Equatable {
     /// 0 disables decorative motion; 1 selects the full subtle transition.
     var motion = 0.5
     var lightweight = false
+    var local: WorkbenchLocalAppearance? = nil
 
     func palette(for colorScheme: ColorScheme) -> WorkbenchPalette {
         colorScheme == .dark ? dark : light
@@ -78,7 +79,7 @@ struct WorkbenchAppearance: Codable, Equatable {
 
     var isValid: Bool {
         light.isValid && dark.isValid && backgroundTransparency.isFinite && motion.isFinite
-            && (0...1).contains(backgroundTransparency) && (0...1).contains(motion)
+            && (0...1).contains(backgroundTransparency) && (0...1).contains(motion) && (local?.isValid ?? true)
     }
 }
 
@@ -135,9 +136,8 @@ struct WorkbenchRebound: CustomAnimation {
     }
 }
 
-/// App-local glass appearance over the opaque canvas blend. No platform backdrop
-/// sampler is introduced here. A quiet boundary defines the local lens; there
-/// is no painted light source or full-surface reflection. This is not refraction.
+/// Quiet shell over the shared app-owned background. Legacy records keep their
+/// opaque blend; local material samples only prepared D background pixels.
 private struct WorkbenchGlassPlate<S: InsettableShape>: ViewModifier {
     let shape: S
     @Environment(\.chatDisplayPreferences) private var preferences
@@ -215,6 +215,7 @@ private extension Color {
 
 private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
     let shape: S
+    @Environment(\.workbenchBackground) private var background
     @Environment(\.chatDisplayPreferences) private var preferences
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -230,8 +231,17 @@ private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
         content
             .foregroundStyle(palette.foregroundColor)
             .background {
-                shape.fill(palette.panelFill(canvasBlend:
-                    effects.usesCanvasBlend ? appearance.backgroundTransparency : 0))
+                Group {
+                    if let local = appearance.local {
+                        WorkbenchLocalSurface(owner: background, palette: palette, strength: local.strength,
+                            drawsGlass: effects.usesCanvasBlend && local.material == .glass)
+                            .clipShape(shape)
+                    } else {
+                        shape.fill(palette.panelFill(canvasBlend:
+                            effects.usesCanvasBlend ? appearance.backgroundTransparency : 0))
+                    }
+                }
+                    .accessibilityHidden(true)
                     .overlay {
                         shape.strokeBorder(palette.foregroundColor.opacity(0.08), lineWidth: 0.5)
                     }

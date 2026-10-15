@@ -60,13 +60,47 @@ struct ChatDisplayPreferences: Codable, Equatable {
 /// An invalid stored record remains untouched until the user explicitly resets it.
 @MainActor @Observable
 final class ChatDisplayPreferencesState {
+    private static let seedConsumedKey = "D.Appearance.initialSeedConsumed"
     private let settings: UserDefaults?
+    let appearanceDirectory: URL?
+    @ObservationIgnored private let commitAppearance: (UserDefaults) -> Bool
+    private var wallpaperRequest = UUID()
+    private(set) var wallpaperPreparing = false
+    private(set) var wallpaperIssue = false
     private(set) var preferences = ChatDisplayPreferences()
     private(set) var hasInvalidStoredRecord = false
 
-    init(settings: UserDefaults? = nil) {
+    init(settings: UserDefaults? = nil, appearanceDirectory: URL? = nil,
+         commitAppearance: @escaping (UserDefaults) -> Bool = { $0.synchronize() }) {
         self.settings = settings
-        guard let settings, let stored = settings.object(forKey: ChatDisplayPreferences.storageKey) else { return }
+        self.commitAppearance = commitAppearance
+        self.appearanceDirectory = appearanceDirectory
+        guard let settings, let stored = settings.object(forKey: ChatDisplayPreferences.storageKey) else {
+            // A prepared review can seed this one new instance. Never overwrite a
+            // persisted record, follow a link, or borrow another instance's suite.
+            if let directory = appearanceDirectory {
+                let seed = directory.appendingPathComponent("initial-preferences.json")
+                if settings?.bool(forKey: Self.seedConsumedKey) != true,
+                   FileManager.default.fileExists(atPath: seed.path) {
+                    guard seed.resolvingSymlinksInPath().standardizedFileURL == seed.standardizedFileURL,
+                          let size = try? seed.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 32768,
+                          let data = try? Data(contentsOf: seed),
+                          let decoded = try? JSONDecoder().decode(ChatDisplayPreferences.self, from: data), decoded.isValid else {
+                        hasInvalidStoredRecord = true; return
+                    }
+                    preferences = decoded
+                    settings?.set(data, forKey: ChatDisplayPreferences.storageKey)
+                    settings?.set(true, forKey: Self.seedConsumedKey)
+                    return
+                }
+            }
+            // New installations only. Decoded old records retain nil/legacy semantics.
+            if appearanceDirectory != nil {
+                var appearance = WorkbenchAppearance(); appearance.local = WorkbenchLocalAppearance()
+                preferences.appearance = appearance
+            }
+            return
+        }
         guard let data = stored as? Data,
               let decoded = try? JSONDecoder().decode(ChatDisplayPreferences.self, from: data),
               decoded.isValid else {
@@ -94,7 +128,105 @@ final class ChatDisplayPreferencesState {
         return true
     }
 
+    func cancelWallpaperPreparation() {
+        wallpaperRequest = UUID(); wallpaperPreparing = false
+    }
+
+    func markWallpaperUnavailable() { wallpaperIssue = true }
+
+    func wallpaperURL() -> URL? {
+        guard let name = preferences.appearance?.local?.wallpaper else { return nil }
+        return try? ownedWallpaperURL(name, createDirectory: false)
+    }
+
+    private func ownedWallpaperURL(_ name: String, createDirectory: Bool) throws -> URL {
+        guard WorkbenchLocalAppearance.isOwnedName(name), let directory = appearanceDirectory,
+              directory.isFileURL,
+              directory.standardizedFileURL.path == directory.resolvingSymlinksInPath().standardizedFileURL.path else {
+            throw WorkbenchWallpaperError.unavailable
+        }
+        if createDirectory { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
+        let url = directory.appendingPathComponent(name)
+        guard url.resolvingSymlinksInPath().standardizedFileURL.path == url.standardizedFileURL.path else {
+            throw WorkbenchWallpaperError.unavailable
+        }
+        return url
+    }
+
+    /// The panel grants access to this one source. A serial decoder prepares an
+    /// owned sRGB preview; stale completions have no write or cleanup authority.
+    func importWallpaper(_ source: URL) async {
+        cancelWallpaperPreparation()
+        let ticket = wallpaperRequest
+        let initial = preferences
+        let stored = settings?.object(forKey: ChatDisplayPreferences.storageKey) as? Data
+        wallpaperPreparing = true; wallpaperIssue = false
+        let access = source.startAccessingSecurityScopedResource()
+        defer { if access { source.stopAccessingSecurityScopedResource() }
+            if wallpaperRequest == ticket { wallpaperPreparing = false } }
+        do {
+            let bytes = try await WorkbenchWallpaperDecoder.shared.prepare(source)
+            try Task.checkCancellation()
+            guard ticket == wallpaperRequest, preferences == initial,
+                  (settings?.object(forKey: ChatDisplayPreferences.storageKey) as? Data) == stored,
+                  !hasInvalidStoredRecord else { throw WorkbenchWallpaperError.changedOwner }
+            let name = UUID().uuidString + ".png"
+            let destination = try ownedWallpaperURL(name, createDirectory: true)
+            try WorkbenchWallpaperPublication.publish(bytes, to: destination)
+            var candidate = preferences
+            var appearance = candidate.resolvedAppearance
+            var local = appearance.local ?? WorkbenchLocalAppearance()
+            let previous = local.wallpaper
+            local.wallpaper = name; appearance.local = local; candidate.appearance = appearance
+            guard update(candidate) else {
+                try? FileManager.default.removeItem(at: destination)
+                throw WorkbenchWallpaperError.saveFailed
+            }
+            if let settings, !commitAppearance(settings) {
+                // Restore the previous choice in memory and preferences. If even
+                // rollback cannot flush, retain both copies for safe recovery.
+                if let stored { settings.set(stored, forKey: ChatDisplayPreferences.storageKey) }
+                else { settings.removeObject(forKey: ChatDisplayPreferences.storageKey) }
+                preferences = initial
+                if commitAppearance(settings) { try? FileManager.default.removeItem(at: destination) }
+                throw WorkbenchWallpaperError.saveFailed
+            }
+            removeRetiredWallpaper(previous)
+        } catch {
+            if ticket == wallpaperRequest { wallpaperIssue = true }
+        }
+    }
+
+    @discardableResult func restoreSolidCanvas() -> Bool {
+        cancelWallpaperPreparation()
+        let previous = preferences.appearance?.local?.wallpaper
+        let initial = preferences
+        let stored = settings?.data(forKey: ChatDisplayPreferences.storageKey)
+        var candidate = preferences
+        var appearance = candidate.resolvedAppearance
+        var local = appearance.local ?? WorkbenchLocalAppearance()
+        local.wallpaper = nil; appearance.local = local; candidate.appearance = appearance
+        guard update(candidate) else { return false }
+        // Keep the old copy if the preference flush is not confirmed.
+        if let settings, !commitAppearance(settings) {
+            if let stored { settings.set(stored, forKey: ChatDisplayPreferences.storageKey) }
+            else { settings.removeObject(forKey: ChatDisplayPreferences.storageKey) }
+            preferences = initial; _ = commitAppearance(settings)
+            wallpaperIssue = true; return false
+        }
+        wallpaperIssue = false; removeRetiredWallpaper(previous)
+        return true
+    }
+
+    private func removeRetiredWallpaper(_ name: String?) {
+        guard let name, name != preferences.appearance?.local?.wallpaper,
+              let url = try? ownedWallpaperURL(name, createDirectory: false) else { return }
+        // Exact prior owned file only. Never scan or delete unknown files.
+        try? FileManager.default.removeItem(at: url)
+    }
+
     func reset() {
+        cancelWallpaperPreparation()
         settings?.removeObject(forKey: ChatDisplayPreferences.storageKey)
         preferences = ChatDisplayPreferences()
         hasInvalidStoredRecord = false

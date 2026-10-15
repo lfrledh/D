@@ -10,7 +10,7 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
     var fallbackSize = CGSize(width: 240, height: 640)
 
     func makeNSView(context: Context) -> NSHostingView<RetainedContentRoot<Content>> {
-        let host = NSHostingView(rootView: RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle))
+        let host = NSHostingView(rootView: RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground))
         host.sizingOptions = []
         host.setAccessibilityIdentifier(identifier)
         host.isHidden = !visible
@@ -20,7 +20,7 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
         #if DEBUG
         WorkbenchCategoryUpdateProbe.retainedUpdate?()
         #endif
-        host.rootView = RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle)
+        host.rootView = RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground)
         // Only an actual close/open changes native visibility. Hiding can release
         // the first responder; a layout change must not transiently hide an editor.
         if host.isHidden != !visible { host.isHidden = !visible }
@@ -36,5 +36,9 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
 struct RetainedContentRoot<Content: View>: View {
     let content: Content
     let lifecycle: MetadataEditorLifecycle
-    var body: some View { content.environment(\.metadataEditorLifecycle, lifecycle) }
+    var background: WorkbenchBackgroundOwner? = nil
+    var body: some View {
+        content.environment(\.metadataEditorLifecycle, lifecycle)
+            .environment(\.workbenchBackground, background)
+    }
 }

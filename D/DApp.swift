@@ -48,7 +48,7 @@ struct DApp: App {
                             prepareQuickForTermination: bootstrap.prepareQuickForTermination, cancelTermination: bootstrap.cancelTermination))
                 } else if let model = bootstrap.model, let library = bootstrap.libraryModel, let tags = bootstrap.nodeTags {
                     VStack(spacing: 0) {
-                        if let issue = bootstrap.startupError { Text(issue).textSelection(.enabled).padding().background(.regularMaterial) }
+                        if let issue = bootstrap.startupError { Text(issue).textSelection(.enabled).padding().modifier(DOpaqueNoticePlate()) }
                         WorkbenchView(model: model, library: library, nodeTags: tags)
                     }.background(WorkbenchWindowConnection(delegate: applicationDelegate, model: model,
                         prepareLibraryForTermination: bootstrap.prepareLibraryForTermination,
@@ -70,7 +70,7 @@ struct DApp: App {
                     let issue = [bootstrap.audioEngineIssue, bootstrap.videoEngineIssue].compactMap { $0 }.joined(separator: "\n")
                     Text(issue).font(.caption).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading).padding(12)
-                        .background(.regularMaterial)
+                        .modifier(DOpaqueNoticePlate())
                 }
             }
             .environment(\.dLanguageStore, bootstrap.languageStore)
@@ -161,5 +161,15 @@ private struct WorkbenchCommands: Commands {
             .keyboardShortcut("m", modifiers: [.command, .shift])
             .disabled(bootstrap.isTerminating || bootstrap.libraryModel == nil)
         }
+    }
+}
+
+/// Startup/service notices outside the canvas use an explicit opaque fallback.
+/// System window chrome and standard buttons retain their normal OS appearance.
+private struct DOpaqueNoticePlate: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+    func body(content: Content) -> some View {
+        content.foregroundStyle(scheme == .dark ? Color(red: 0.91, green: 0.95, blue: 0.93) : Color(red: 0.09, green: 0.18, blue: 0.16))
+            .background(scheme == .dark ? Color(red: 0.11, green: 0.17, blue: 0.15) : Color(red: 0.98, green: 0.99, blue: 0.98))
     }
 }

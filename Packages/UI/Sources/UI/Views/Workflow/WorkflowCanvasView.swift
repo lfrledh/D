@@ -673,6 +673,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 Text(controller.destinationDescription)
             }.accessibilityIdentifier("canvas-more")
         }.buttonStyle(.borderless).padding(.horizontal, 18).padding(.vertical, 10)
+            .workbenchPanel(cornerRadius: 12).padding(.horizontal, 12).padding(.top, 6)
     }
 
     private var bodyBreadcrumb: String {
@@ -831,7 +832,8 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 guard !viewportInteractionLocked else { return }
                 zoom = 1; navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: nil)
             }.disabled(viewportInteractionLocked).accessibilityIdentifier("workflow-canvas-reset-view")
-        }.buttonStyle(.borderless).controlSize(.small).padding(.horizontal, 18)
+        }.buttonStyle(.borderless).controlSize(.small).padding(.horizontal, 18).padding(.vertical, 8)
+            .workbenchPanel(cornerRadius: 12).padding(.horizontal, 12)
     }
 
     @ViewBuilder
@@ -885,7 +887,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .frame(minHeight: 34)
-        .background(.thinMaterial)
+        .workbenchPanel(cornerRadius: 12)
     }
 
     private var viewContext: WorkflowCanvasViewContext {
@@ -1047,7 +1049,7 @@ private struct WorkflowNodeInspector: View {
                     .padding(.top, 36)
             }
         }
-        .background(.ultraThinMaterial)
+        .workbenchPanel(cornerRadius: 12)
         .accessibilityIdentifier("workflow-inspector")
         .sheet(item: $scopePresentation) { request in
             WorkflowScopePanel(controller: controller, graphID: request.graphID, revision: request.revision, nodeID: request.nodeID, initialMode: request.mode)
@@ -1833,7 +1835,7 @@ private struct WorkflowCanvasConnectionInspector: View {
                 WorkflowConnectionInspection(controller: controller, connection: connection)
             }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(.ultraThinMaterial)
+        .workbenchPanel(cornerRadius: 12)
         .accessibilityIdentifier("canvas-connection-inspector")
     }
 }

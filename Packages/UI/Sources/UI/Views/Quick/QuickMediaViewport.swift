@@ -71,6 +71,9 @@ struct QuickMediaViewport: View {
             }
         }
         .task(id: MediaLoadKey(store: ObjectIdentifier(store), reference: reference)) {
+            #if DEBUG
+            WorkbenchCategoryUpdateProbe.phase("media-prepare-start")
+            #endif
             player?.pause(); player = nil; image = nil; issue = nil; zoom = 1; offset = .zero
             do {
                 if reference.kind == .video || reference.kind == .audio {
@@ -83,6 +86,9 @@ struct QuickMediaViewport: View {
                     guard let decoded = NSImage(data: data) else { throw WorkflowIssue(refinementText("imageUnreadable", fallback: "图像不可读取；原素材仍保留。")) }
                     image = decoded
                 } else { issue = refinementText("viewInDetails", fallback: "该结果请从详情查看。") }
+                #if DEBUG
+                WorkbenchCategoryUpdateProbe.phase("media-prepared")
+                #endif
             } catch is CancellationError { }
             catch { if !Task.isCancelled { issue = error.localizedDescription } }
         }

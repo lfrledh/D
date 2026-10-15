@@ -44,7 +44,7 @@ struct WorkflowHostView: View {
                                 Button(languageStore?.text("workflow.recording.finish", fallback: "结束录音／取消许可等待") ?? "结束录音") {
                                     Task { await model.projectSession.finishWorkflowRecording() }
                                 }.accessibilityIdentifier("workflow-record-finish")
-                            }.padding().background(.regularMaterial)
+                            }.padding().workbenchPanel(cornerRadius: 12)
                         }
                     }
                     .sheet(isPresented: Binding(get: { controller.mediaPreviewReference != nil }, set: { if !$0 { controller.mediaPreviewReference = nil } })) {
@@ -163,7 +163,7 @@ struct WorkflowCaptureRecoveryView: View {
                 }
             }
             .disabled(audio.isBusy || model.isChangingProject)
-            .padding().frame(maxWidth: .infinity, alignment: .leading).background(.regularMaterial)
+            .padding().frame(maxWidth: .infinity, alignment: .leading).workbenchPanel(cornerRadius: 12)
         }
     }
 }

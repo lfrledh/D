@@ -1394,7 +1394,7 @@
     "refinement.appearance.backgroundBlendHint": "0% 为面板色，100% 为画布色。",
     "refinement.appearance.motion": "装饰性动态",
     "refinement.appearance.lightweight": "轻量外观",
-    "refinement.appearance.performanceNote": "面板与画布底色融合，不模糊下方内容，并遵循辅助功能设置。轻量模式使用面板原色并关闭装饰性动态。",
+    "refinement.appearance.performanceNote": "应用内玻璃只模糊 D 自己的画布；旧底色混合仍不透明。辅助功能和轻量模式使用实色面板。",
     "refinement.shell.workspace": "工作区",
     "refinement.shell.newConversation": "新会话",
     "refinement.shell.targetChanged": "设置目标已改变，请回到目标工作区后重新打开设置。",

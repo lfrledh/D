@@ -654,7 +654,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     }
 
     #if DEBUG
-    @Test func categoryPickerFramedPreviewDoesNotInvalidateWorkbench() async throws {
+    @Test(arguments:[false,true]) func categoryPickerFramedPreviewDoesNotInvalidateWorkbench(localGlass:Bool) async throws {
         let root = fixtureRoot.appendingPathComponent("category-drag-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let project = ProjectSession(sessionFactory: { _ in
@@ -671,6 +671,12 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let quick = try #require(project.projectQuick)
         let chat = try #require(project.chat)
         let model = WorkbenchModel(projectSession: project)
+        if localGlass {
+            let path = try #require(ProcessInfo.processInfo.environment["D_GLASS_EVIDENCE_DIR"])
+            model.chatDisplaySettings = ChatDisplayPreferencesState(appearanceDirectory:root.appendingPathComponent("Appearance"))
+            await model.chatDisplaySettings.importWallpaper(URL(fileURLWithPath:path).appendingPathComponent("background-A.png"))
+            try #require(model.chatDisplaySettings.wallpaperURL() != nil)
+        }
         let library = ModelLibraryModel(library: try await ModelLibrary(stateDirectory: root.appendingPathComponent("models")))
         let host = NSHostingView(rootView: DualWorkbenchView(model: model, quickModel: model,
             quick: quick, library: library, nodeTags: ModelNodeTagStore(), metadata: nil))
@@ -688,6 +694,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         var rootUpdates = 0, retainedUpdates = 0
         WorkbenchCategoryUpdateProbe.workbenchBody = { rootUpdates += 1 }
         WorkbenchCategoryUpdateProbe.retainedUpdate = { retainedUpdates += 1 }
+        let background = WorkbenchBackgroundCounters.snapshot
         let before = chat.state
         let selection = quick.category
         // Deliberate hosting measurement of the real receiver callback path.
@@ -702,12 +709,20 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         }
         #expect(Set(presentations.map { Int($0 * 100) }).count >= 20)
         #expect(rootUpdates == 0 && retainedUpdates == 0)
+        #expect(WorkbenchBackgroundCounters.snapshot.decodes == background.decodes)
+        #expect(WorkbenchBackgroundCounters.snapshot.blurs == background.blurs)
         #expect(quick.category == selection && chat.state == before)
-        print("CATEGORY_PREVIEW injections=36 root=\(rootUpdates) retained=\(retainedUpdates) intermediate=\(Set(presentations.map { Int($0 * 100) }).count)")
-        receiver.onPreview(nil); receiver.onCommit(1)
+        print("CATEGORY_PREVIEW localGlass=\(localGlass) decodes=0 blurs=0 injections=36 root=\(rootUpdates) retained=\(retainedUpdates) intermediate=\(Set(presentations.map { Int($0 * 100) }).count)")
+        let releaseStart = ProcessInfo.processInfo.systemUptime
+        var phases: [String] = []
+        WorkbenchCategoryUpdateProbe.phaseObserver = { phases.append($0) }
+        defer { WorkbenchCategoryUpdateProbe.phaseObserver = nil }
+        receiver.onPreview(nil); WorkbenchCategoryUpdateProbe.beginCommit(); receiver.onCommit(1)
         try await Task.sleep(for: .milliseconds(250))
         #expect(quick.category == QuickCategory.allCases[1])
         #expect(rootUpdates > 0)
+        #expect(phases.filter { $0 == "commit" }.count == 1 && phases.contains("category-changed"))
+        print("CATEGORY_RELEASE localGlass=\(localGlass) commit=1 root=\(rootUpdates) retained=\(retainedUpdates) observedAfterMs=\((ProcessInfo.processInfo.systemUptime-releaseStart)*1000) phases=\(phases) visibleFrame=NOT_MEASURED")
         #expect(chat.state == before)
         } catch { await project.closeProject(); throw error }
         await project.closeProject()

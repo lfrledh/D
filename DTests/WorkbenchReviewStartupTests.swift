@@ -65,7 +65,7 @@ struct WorkbenchReviewStartupTests {
         }
     }
 
-    @Test(arguments: ["denied", "wrong-folder", "missing-marker", "wrong-session", "wrong-task", "symlink-marker", "symlink-library"])
+    @Test(arguments: ["denied", "wrong-folder", "missing-marker", "wrong-session", "wrong-task", "symlink-marker", "symlink-library", "symlink-appearance", "symlink-appearance-seed"])
     func admissionFailureNeverReachesWriters(kind: String) async throws {
         let fixture = try ReviewAdmissionFixture()
         defer { fixture.remove() }
@@ -81,6 +81,16 @@ struct WorkbenchReviewStartupTests {
         if kind == "symlink-library" {
             try FileManager.default.createSymbolicLink(at: fixture.root.appendingPathComponent("ModelLibrary"),
                 withDestinationURL: fixture.parent)
+        }
+        if kind == "symlink-appearance" {
+            try FileManager.default.createSymbolicLink(at: fixture.root.appendingPathComponent("Appearance"),
+                withDestinationURL: fixture.parent)
+        }
+        if kind == "symlink-appearance-seed" {
+            let appearance = fixture.root.appendingPathComponent("Appearance")
+            try FileManager.default.createDirectory(at: appearance, withIntermediateDirectories: false)
+            try FileManager.default.createSymbolicLink(at: appearance.appendingPathComponent("initial-preferences.json"),
+                withDestinationURL: fixture.marker)
         }
         var writerStarts = 0
         await #expect(throws: (any Error).self) {

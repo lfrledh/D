@@ -75,6 +75,7 @@ struct QuickGenerationView: View {
                             }.padding(12)
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                    VStack(alignment: .leading, spacing: 8) {
                     if let definition, let draft = quick.draft {
                         VStack(alignment: .leading, spacing: 6) {
                             ForEach(definition.fields.filter { ["task", "promptText"].contains($0.id) }) { field in
@@ -87,6 +88,7 @@ struct QuickGenerationView: View {
                         Text(issue).font(.caption).foregroundStyle(.red).lineLimit(3).textSelection(.enabled)
                     }
                     generationBar
+                    }.padding(12).workbenchPanel(cornerRadius: 16)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.leading, WorkbenchSidebarLayout.occupiedWidth(leftShown, leading: true))
                     .padding(.trailing, WorkbenchSidebarLayout.occupiedWidth(rightShown, leading: false))
@@ -351,7 +353,7 @@ struct QuickGenerationView: View {
                 ContentUnavailableView(refinementText("preview", fallback: "预览"), systemImage: quick.category == .image ? "photo" : "video", description: Text(refinementText("previewHelp", fallback: "生成后在这里查看；素材与结果保留在右侧。")))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        }.accessibilityIdentifier("quick-fixed-preview")
+        }.padding(12).workbenchPanel(cornerRadius: 16).accessibilityIdentifier("quick-fixed-preview")
     }
     private var currentRuns: [QuickRunRecord] {
         guard let latest = quick.visibleRuns.first else { return [] }
@@ -403,7 +405,7 @@ struct QuickGenerationView: View {
                                     Text(String(data: (try? JSONEncoder().encode(run.draft)) ?? Data(), encoding: .utf8) ?? "")
                                         .font(.caption.monospaced()).textSelection(.enabled)
                                 }
-                            }.padding(16).background(.background, in: RoundedRectangle(cornerRadius: 14))
+                            }.padding(16).workbenchPanel(cornerRadius: 14)
     }
     private func statusTitle(_ status: QuickRunRecord.Status) -> String {
         let fallback: String = switch status {

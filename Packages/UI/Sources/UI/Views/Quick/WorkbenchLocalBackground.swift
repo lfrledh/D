@@ -1,0 +1,341 @@
+import AppKit
+import Darwin
+import Synchronization
+import CoreImage
+import ImageIO
+import SwiftUI
+import UniformTypeIdentifiers
+
+/// An optional application preference. Absence means the historical opaque blend.
+/// Neither this reference nor its pixels enter a project or inference request.
+struct WorkbenchLocalAppearance: Codable, Equatable, Sendable {
+    enum Material: String, Codable, Sendable { case glass, solid }
+    var version = 1
+    var material: Material = .glass
+    var strength = 0.55
+    var wallpaper: String?
+    var isValid: Bool {
+        version == 1 && strength.isFinite && (0...1).contains(strength)
+            && (wallpaper == nil || Self.isOwnedName(wallpaper!))
+    }
+    static func isOwnedName(_ name: String) -> Bool {
+        name.hasSuffix(".png") && UUID(uuidString: String(name.dropLast(4))) != nil
+            && !name.contains("/")
+    }
+}
+
+enum WorkbenchWallpaperError: Error { case unavailable, invalidImage, tooLarge, changedOwner, saveFailed }
+
+/// Exact ownership begins only after exclusive mkdir succeeds. A failed writer
+/// may leave partial bytes, but only inside this task's unpublished directory.
+enum WorkbenchWallpaperPublication {
+    static func publish(_ data: Data, to destination: URL,
+                        write: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) throws {
+        let stage = destination.deletingLastPathComponent().appendingPathComponent(".prepare-" + UUID().uuidString)
+        guard mkdir(stage.path, 0o700) == 0 else { throw WorkbenchWallpaperError.saveFailed }
+        defer { try? FileManager.default.removeItem(at: stage) }
+        let file = stage.appendingPathComponent("image.png")
+        try write(data, file)
+        // Same-volume rename refuses an existing destination; no replacement.
+        try FileManager.default.moveItem(at: file, to: destination)
+    }
+}
+
+#if DEBUG
+enum WorkbenchBackgroundCounters {
+    struct Snapshot: Sendable { var decodes = 0; var blurs = 0; var draws = 0 }
+    private static let value = Mutex(Snapshot())
+    static var snapshot: Snapshot { value.withLock { $0 } }
+    static func decode() { value.withLock { $0.decodes += 1 } }
+    static func blur() { value.withLock { $0.blurs += 1 } }
+    static func draw() { value.withLock { $0.draws += 1 } }
+}
+#endif
+
+/// Serial preparation bounds concurrent decoding to one. ImageIO downsamples before
+/// decoding; no full-resolution NSImage, network, asset store or window capture.
+actor WorkbenchWallpaperDecoder {
+    static let shared = WorkbenchWallpaperDecoder()
+    static let maximumDimension = 2048
+    func prepare(_ url: URL) throws -> Data { try Task.checkCancellation(); return try Self.prepareFile(url) }
+    func textures(_ url: URL, blur: Bool) throws -> (CGImage, CGImage?) {
+        try Task.checkCancellation()
+        let data = try Self.prepareFile(url)
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw WorkbenchWallpaperError.invalidImage }
+        try Task.checkCancellation()
+        return (image, blur ? WorkbenchLocalRenderer.blur(image) : nil)
+    }
+    nonisolated static func prepareFile(_ url: URL) throws -> Data {
+        let values = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
+        guard values.isRegularFile == true, values.isSymbolicLink != true,
+              let size = values.fileSize, size > 0, size <= 64 * 1024 * 1024 else { throw WorkbenchWallpaperError.tooLarge }
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let type = CGImageSourceGetType(source) as String?, [UTType.png.identifier, UTType.jpeg.identifier].contains(type),
+              CGImageSourceGetCount(source) == 1,
+              let info = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let w = info[kCGImagePropertyPixelWidth] as? Int, let h = info[kCGImagePropertyPixelHeight] as? Int,
+              w > 0, h > 0, w <= 65536, h <= 65536, Double(w) * Double(h) <= 120_000_000,
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: maximumDimension,
+                kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
+              let context = WorkbenchLocalRenderer.bitmap(width: image.width, height: image.height) else {
+            throw WorkbenchWallpaperError.invalidImage
+        }
+        #if DEBUG
+        WorkbenchBackgroundCounters.decode()
+        #endif
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        guard let converted = context.makeImage() else { throw WorkbenchWallpaperError.invalidImage }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else {
+            throw WorkbenchWallpaperError.invalidImage
+        }
+        CGImageDestinationAddImage(destination, converted, nil)
+        guard CGImageDestinationFinalize(destination) else { throw WorkbenchWallpaperError.invalidImage }
+        return data as Data
+    }
+}
+
+/// Production renderer also used by the offscreen pixel checks. Only a prepared
+/// D-owned CGImage is accepted. No backdrop APIs or content snapshots are used.
+enum WorkbenchLocalRenderer {
+    static func bitmap(width: Int, height: Int) -> CGContext? {
+        guard width > 0, height > 0, width <= 4096, height <= 4096 else { return nil }
+        return CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    }
+    static func color(_ hex: String) -> CGColor {
+        let n = UInt32(hex.dropFirst(), radix: 16) ?? 0
+        return CGColor(srgbRed: CGFloat((n >> 16) & 255) / 255,
+            green: CGFloat((n >> 8) & 255) / 255, blue: CGFloat(n & 255) / 255, alpha: 1)
+    }
+    static func mapping(image: CGSize, viewport: CGSize) -> CGRect {
+        guard image.width > 0, image.height > 0, viewport.width > 0, viewport.height > 0 else { return .zero }
+        let scale = max(viewport.width / image.width, viewport.height / image.height)
+        return CGRect(x: (viewport.width - image.width * scale) / 2,
+                      y: (viewport.height - image.height * scale) / 2,
+                      width: image.width * scale, height: image.height * scale)
+    }
+    static func blur(_ image: CGImage) -> CGImage? {
+        #if DEBUG
+        WorkbenchBackgroundCounters.blur()
+        #endif
+        let input = CIImage(cgImage: image)
+        // One bounded shared blur per source, not one texture per component. A CPU
+        // Core Image context also works without a visible desktop/Metal device.
+        let context = CIContext(options: [.useSoftwareRenderer: true, .cacheIntermediates: false,
+            .workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!])
+        return context.createCGImage(input.clampedToExtent().applyingFilter("CIGaussianBlur",
+            parameters: [kCIInputRadiusKey: 12]).cropped(to: input.extent), from: input.extent)
+    }
+    /// rect and viewport use top-left workspace points, independent of desktop
+    /// position and graph coordinates. Edges clamp via an opaque base + aspect fill.
+    static func draw(in c: CGContext, size: CGSize, rect: CGRect, viewport: CGSize,
+                     image: CGImage?, canvas: String, panel: String, strength: Double,
+                     glass: Bool, refraction: Bool = true) {
+        guard size.width > 0, size.height > 0, rect.width > 0, rect.height > 0 else { return }
+        let bounds = CGRect(origin: .zero, size: size)
+        c.saveGState(); defer { c.restoreGState() }
+        c.setFillColor(color(canvas)); c.fill(bounds)
+        if let image {
+            let mapped = mapping(image: CGSize(width: image.width, height: image.height), viewport: viewport)
+            let sx = size.width / rect.width, sy = size.height / rect.height
+            func sample(clip: CGRect, dx: CGFloat = 0, dy: CGFloat = 0) {
+                c.saveGState()
+                // Hard rectangular sample bands must not partially blend the
+                // canvas reset and the image separately at fractional boundaries.
+                // The outer rounded shell owns its normal edge antialiasing.
+                c.setAllowsAntialiasing(false); c.setShouldAntialias(false); c.clip(to: clip)
+                // Each displaced sample composites once over D's canvas. Reusing
+                // the previous sample would accumulate alpha at the rim/corners.
+                c.setFillColor(color(canvas)); c.fill(bounds)
+                let boundedX = dx > 0 ? min(dx, max(0, rect.minX + clip.minX / sx))
+                    : max(dx, min(0, rect.minX + clip.maxX / sx - viewport.width))
+                let boundedY = dy > 0 ? min(dy, max(0, rect.minY + clip.minY / sy))
+                    : max(dy, min(0, rect.minY + clip.maxY / sy - viewport.height))
+                let target = CGRect(x: (mapped.minX - rect.minX + boundedX) * sx,
+                    y: (mapped.minY - rect.minY + boundedY) * sy, width: mapped.width * sx, height: mapped.height * sy)
+                // CGContext image coordinates are bottom-up; the native view is flipped.
+                c.translateBy(x: target.minX, y: target.maxY); c.scaleBy(x: 1, y: -1)
+                c.draw(image, in: CGRect(origin: .zero, size: target.size)); c.restoreGState()
+            }
+            sample(clip: bounds)
+            if glass && refraction {
+                // A narrow lens rim displaces only background pixels. Eight bands
+                // approximate a smooth bounded refraction profile, with no extra image.
+                let rim = min(12, min(rect.width, rect.height) / 4)
+                for i in 0..<8 {
+                    let a = CGFloat(i) * rim / 8, b = rim / 8 + 0.25
+                    let shift = sin((CGFloat(i) + 0.5) / 8 * .pi) * 2.5 * strength
+                    sample(clip: CGRect(x: a*sx, y: 0, width: b*sx, height: size.height), dx: shift)
+                    sample(clip: CGRect(x: size.width-(a+b)*sx, y: 0, width: b*sx, height: size.height), dx: -shift)
+                    sample(clip: CGRect(x: 0, y: a*sy, width: size.width, height: b*sy), dy: shift)
+                    sample(clip: CGRect(x: 0, y: size.height-(a+b)*sy, width: size.width, height: b*sy), dy: -shift)
+                }
+            }
+        }
+        if glass {
+            // Keep an image-independent readability floor. Real spatial detail still
+            // contributes 10–16%; this is compositing, not a uniform opaque patch.
+            c.setFillColor(color(panel).copy(alpha: 0.90 - min(1,max(0,strength)) * 0.06)!)
+            c.fill(bounds)
+        }
+    }
+}
+
+/// Window-local resource owner. Position notifications never publish to SwiftUI
+/// or business state. At most two 2048px images are retained, independent of nodes.
+@MainActor final class WorkbenchBackgroundOwner {
+    weak var root: WorkbenchBackgroundNSView?
+    let surfaces = NSHashTable<WorkbenchBackgroundNSView>.weakObjects()
+    private(set) var image: CGImage?
+    private(set) var blurred: CGImage?
+    private(set) var decodeCount = 0
+    private(set) var blurCount = 0
+    private(set) var drawCount = 0
+    private(set) var key: URL?
+    private var preparesBlur = true
+    private var request = UUID()
+    private var preparation: Task<Void, Never>?
+    var failure: (() -> Void)?
+    func load(_ url: URL?, blur: Bool = true) {
+        guard key != url || preparesBlur != blur else { return }
+        preparation?.cancel(); preparation = nil
+        key = url; preparesBlur = blur; let ticket = UUID(); request = ticket
+        image = nil; blurred = nil; invalidate()
+        guard let url else { return }
+        preparation = Task { [weak self] in
+            do {
+                let (decoded, preparedBlur) = try await WorkbenchWallpaperDecoder.shared.textures(url, blur: blur)
+                guard let self, request == ticket, key == url, !Task.isCancelled else { return }
+                decodeCount += 1
+                image = decoded; blurred = preparedBlur
+                if preparedBlur != nil { blurCount += 1 }
+                invalidate()
+            } catch {
+                guard let self, request == ticket, !Task.isCancelled else { return }
+                failure?()
+            }
+        }
+    }
+    func invalidate() { for view in surfaces.allObjects { view.needsDisplay = true } }
+    func didDraw() { drawCount += 1 }
+    var retainedBytes: Int { [image, blurred].compactMap { $0 }.reduce(0) { $0 + $1.bytesPerRow * $1.height } }
+}
+
+private struct WorkbenchBackgroundKey: EnvironmentKey {
+    static let defaultValue: WorkbenchBackgroundOwner? = nil
+}
+extension EnvironmentValues {
+    var workbenchBackground: WorkbenchBackgroundOwner? {
+        get { self[WorkbenchBackgroundKey.self] }
+        set { self[WorkbenchBackgroundKey.self] = newValue }
+    }
+}
+
+@MainActor final class WorkbenchBackgroundNSView: NSView {
+    var owner: WorkbenchBackgroundOwner?
+    var isCanvas = false
+    var palette = WorkbenchPalette.defaultLight
+    var strength = 0.55
+    var drawsGlass = true
+    private var observers: [NSObjectProtocol] = []
+    override var isFlipped: Bool { true }
+    override var isOpaque: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func viewDidMoveToSuperview() { super.viewDidMoveToSuperview(); observeGeometry() }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); observeGeometry() }
+    private func observeGeometry() {
+        for observer in observers { NotificationCenter.default.removeObserver(observer) }
+        observers.removeAll()
+        var ancestor: NSView? = self
+        while let view = ancestor {
+            view.postsFrameChangedNotifications = true; view.postsBoundsChangedNotifications = true
+            for name in [NSView.frameDidChangeNotification, NSView.boundsDidChangeNotification] {
+                observers.append(NotificationCenter.default.addObserver(forName: name, object: view, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.needsDisplay = true; if self?.isCanvas == true { self?.owner?.invalidate() } }
+                })
+            }
+            ancestor = view.superview
+        }
+    }
+    isolated deinit { for observer in observers { NotificationCenter.default.removeObserver(observer) } }
+    override func layout() {
+        super.layout(); needsDisplay = true
+        #if DEBUG
+        WorkbenchCategoryUpdateProbe.phase("background-layout")
+        #endif
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let c = NSGraphicsContext.current?.cgContext else { return }
+        owner?.didDraw()
+        #if DEBUG
+        WorkbenchBackgroundCounters.draw()
+        if window?.isVisible == true && !isHiddenOrHasHiddenAncestor {
+            WorkbenchCategoryUpdateProbe.phase("visible-background-draw")
+        }
+        #endif
+        let root = owner?.root
+        let rect = root.map { convert(bounds, to: $0) } ?? bounds
+        WorkbenchLocalRenderer.draw(in: c, size: bounds.size, rect: rect, viewport: root?.bounds.size ?? bounds.size,
+            image: isCanvas ? owner?.image : (drawsGlass ? owner?.blurred : nil),
+            canvas: isCanvas || drawsGlass ? palette.canvas : palette.panel, panel: palette.panel,
+            strength: strength, glass: !isCanvas && drawsGlass)
+    }
+}
+
+struct WorkbenchLocalSurface: NSViewRepresentable {
+    let owner: WorkbenchBackgroundOwner?
+    let palette: WorkbenchPalette
+    var isCanvas = false
+    var strength = 0.55
+    var drawsGlass = true
+    func makeNSView(context: Context) -> WorkbenchBackgroundNSView {
+        let view = WorkbenchBackgroundNSView(); view.setAccessibilityElement(false)
+        return view
+    }
+    func updateNSView(_ view: WorkbenchBackgroundNSView, context: Context) {
+        view.owner = owner; view.palette = palette; view.isCanvas = isCanvas
+        view.strength = strength; view.drawsGlass = drawsGlass
+        owner?.surfaces.add(view)
+        if isCanvas, owner?.root !== view { owner?.root = view; owner?.invalidate() }
+        view.needsDisplay = true
+    }
+}
+
+struct WorkbenchCanvasModifier: ViewModifier {
+    let state: ChatDisplayPreferencesState
+    @State private var owner = WorkbenchBackgroundOwner()
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+    private var preparesBlur: Bool {
+        let appearance = state.preferences.resolvedAppearance
+        return appearance.local?.material == .glass && WorkbenchEffectsPolicy(appearance:appearance,
+            reduceMotion:false,reduceTransparency:reduceTransparency,increasedContrast:contrast == .increased).usesCanvasBlend
+    }
+    func body(content: Content) -> some View {
+        let appearance = state.preferences.resolvedAppearance
+        let palette = appearance.palette(for: state.preferences.preferredColorScheme ?? scheme)
+        content.environment(\.workbenchBackground, owner)
+            .background {
+                WorkbenchLocalSurface(owner: owner, palette: palette, isCanvas: true)
+                    .allowsHitTesting(false).accessibilityHidden(true)
+            }
+            .onAppear { refresh() }
+            .onChange(of: ObjectIdentifier(state)) { _, _ in refresh() }
+            .onChange(of: preparesBlur) { _, _ in refresh() }
+            .onChange(of: appearance.local?.wallpaper) { _, _ in refresh() }
+            .onDisappear { owner.load(nil) }
+    }
+    private func refresh() {
+        owner.failure = { [weak state] in state?.markWallpaperUnavailable() }
+        let url = state.wallpaperURL()
+        if state.preferences.appearance?.local?.wallpaper != nil && url == nil { state.markWallpaperUnavailable() }
+        owner.load(url, blur: preparesBlur)
+    }
+}

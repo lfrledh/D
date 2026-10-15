@@ -104,7 +104,15 @@ final class WorkbenchCategoryDragView: NSView {
         let accepts = enabled && owner == startOwner && selection == startSelection
             && bounds.insetBy(dx: -12, dy: -12).contains(point) && window?.isKeyWindow == true
         cancel()
-        if accepts && target != selection { onCommit(target) }
+        if accepts && target != selection {
+            #if DEBUG
+            WorkbenchCategoryUpdateProbe.beginCommit()
+            #endif
+            onCommit(target)
+            #if DEBUG
+            WorkbenchCategoryUpdateProbe.phase("owner-returned")
+            #endif
+        }
     }
     func cancel(notify: Bool = true) {
         #if DEBUG

@@ -5,6 +5,7 @@ import Observation
 import SwiftUI
 
 struct WorkflowGraphSurface: View {
+    @Environment(\.workbenchBackground) private var localBackground
     @Environment(\.chatDisplayPreferences) private var displayPreferences
     @Environment(\.colorScheme) private var colorScheme
     private static let emptyGraph = WorkflowGraph()
@@ -87,7 +88,7 @@ struct WorkflowGraphSurface: View {
                 let edge = layout.unscaledPadding
                 ScrollView([.horizontal, .vertical]) {
                     ZStack(alignment: .topLeading) {
-                        displayPreferences.resolvedAppearance.palette(for: colorScheme).canvasColor
+                        displayPreferences.resolvedAppearance.palette(for: colorScheme).canvasColor.opacity(localBackground == nil ? 1 : 0)
                             .contentShape(Rectangle())
                             .help(workflowText(
                                 languageStore,
@@ -247,7 +248,7 @@ struct WorkflowGraphSurface: View {
                     scrollTracking.offset = observation.contentOffset
                     if !scrollTracking.isPanning { onScrollObservation(viewContext, observation) }
                 }
-                .background(displayPreferences.resolvedAppearance.palette(for: displayPreferences.preferredColorScheme ?? colorScheme).canvasColor)
+
                 .onAppear {
                     if let navigationRequest {
                         scrollPosition.scrollTo(point: layout.centeredOffset(
@@ -376,13 +377,13 @@ struct WorkflowGraphSurface: View {
                         }
                         .font(.caption)
                         .padding(8)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .workbenchPanel(cornerRadius: 8)
                         .padding(10)
                     }
                     if let connectionIssue {
                         Text(connectionIssue.message(language: languageStore))
                             .font(.caption).foregroundStyle(.orange)
-                            .padding(8).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                            .padding(8).workbenchPanel(cornerRadius: 8)
                             .padding(.top, pendingConnection == nil ? 10 : 48).padding(.leading, 10)
                     }
                 }
@@ -1094,9 +1095,13 @@ private struct WorkflowNodeCard: View {
             }
             .background(WorkflowNodePlateReceiver())
             .background {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .fill(displayPreferences.resolvedAppearance.palette(for: colorScheme).panelColor)
-                    .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+                Group {
+                    if displayPreferences.resolvedAppearance.local == nil {
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .fill(displayPreferences.resolvedAppearance.palette(for: colorScheme).panelColor)
+                            .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+                    } else { Color.clear.workbenchPanel(cornerRadius: 13) }
+                }.allowsHitTesting(false).accessibilityHidden(true)
             }
         }
         .overlay {

@@ -89,6 +89,9 @@ public struct DualWorkbenchView: View {
     private func selectCategory(_ category: QuickCategory) {
         guard controlsEnabled, !quickOwnerIsChanging, quick.category != category else { return }
         captureChatReading(); quick.selectCategory(category)
+        #if DEBUG
+        WorkbenchCategoryUpdateProbe.phase("category-changed")
+        #endif
     }
     @State private var entry: Entry = .quick
     @State private var entryHistory: [Entry] = []
@@ -390,7 +393,7 @@ public struct DualWorkbenchView: View {
                             instanceID: nil, projects: projects) else { return false }
                         return canvasModel.projectSession.workflow?.projectInstanceID == instance &&
                             projects.contains(where: { $0.effectiveInstanceID == instance && $0.assets.contains(where: { $0.id == assetID }) })
-                    }).workbenchTheme().environment(\.dLanguageStore, language)
+                    }).workbenchTheme(paintsCanvas: false).environment(\.dLanguageStore, language)
                     .preferredColorScheme(automaticQuickModel.chatDisplaySettings.preferences.preferredColorScheme)
                     .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences),
                     visible: entry == .workflow, identifier: "workflow-retained-surface",
@@ -403,7 +406,8 @@ public struct DualWorkbenchView: View {
         .frame(minWidth: WorkbenchSidebarLayout.minimumWindowWidth, minHeight: 580)
         .environment(\.workbenchSidebars, sidebarState)
         .environment(\.openWorkbenchSettings, { section in presentSettings(section: section) })
-        .workbenchTheme()
+        .workbenchTheme(paintsCanvas: false)
+        .modifier(WorkbenchCanvasModifier(state: automaticQuickModel.chatDisplaySettings))
         .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences)
         .preferredColorScheme(automaticQuickModel.chatDisplaySettings.preferences.preferredColorScheme)
         .onAppear { consumeSettingsRequest() }

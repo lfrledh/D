@@ -248,7 +248,7 @@ final class WorkbenchBootstrap {
                 bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine, bundledACEEngine: aceAvailability.engine, modelLibrary: library)
             let borrowed = shared.borrowed(artifactStore: quickStore)
             let quickModel = WorkbenchModel(sessionFactory: { _ in borrowed }, settings: settings,
-                modelLibrary: library, audioEnabled: true, audioRecordingEnabled: true)
+                modelLibrary: library, appearanceDirectory: libraryDirectory.deletingLastPathComponent().appendingPathComponent("Appearance", isDirectory: true), audioEnabled: true, audioRecordingEnabled: true)
             try await quickModel.projectSession.activateInternalWorkspace(quickStore)
             quickModel.projectSession.refreshWorkflowModels()
             let quick = QuickGenerationController(store: quickStore, allowsSubmission: { [weak self, weak quickModel] in

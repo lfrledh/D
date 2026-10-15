@@ -128,7 +128,7 @@ enum WorkbenchReviewAdmission {
         // Known service roots only: do not let a valid outer folder redirect a writer.
         // This is deliberately not a filesystem scan or a change to Store semantics.
         for relative in ["ModelLibrary", "ModelLibrary/index.json", "Quick Creations.dproject",
-                         "shared-library.json", "LanguagePacks", "AudioProcessAccess", "VideoProcessAccess",
+                         "shared-library.json", "Appearance", "Appearance/initial-preferences.json", "LanguagePacks", "AudioProcessAccess", "VideoProcessAccess",
                          "Files", "review-runtime.json"] {
             let child = review.root.appendingPathComponent(relative)
             guard child.resolvingSymlinksInPath().standardizedFileURL == child.standardizedFileURL else {

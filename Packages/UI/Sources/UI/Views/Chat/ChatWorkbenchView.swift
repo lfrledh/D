@@ -1225,7 +1225,7 @@ struct ChatWorkbenchView: View {
                             .chatMeasured("bottom-button", probe: layoutProbe)
                     }
                 }
-              }
+              }.workbenchPanel(cornerRadius: 16).padding(.horizontal, 8)
             if session.archived || session.contextChoices?.deletedAt != nil {
                 closedComposer(session).chatMeasured("composer-readonly", probe: layoutProbe)
             } else {
