@@ -1,5 +1,24 @@
 # UI-PRESENTATION-REBUILD-01：公共外壳与真实聊天
 
+## 2026-10-15 D-UI-LOCAL-GLASS-01 有限实现
+
+从 `a57d8c735b721483cac725234c5e828f10678ccd` 到生产 `827d8328e18b8e41cf00270269297b9e5dbe22fc`；新分支 `codex/ui-local-glass-20261015`。以下是本轮实现与分层证据，旧 79cdf 桌面透色失败和 0d307 不透明保底及用户反馈原样保留，不将历史改写为成功。
+
+| 范围 | 真实消费者与处理 |
+|---|---|
+| G01 | `DualWorkbenchView` 的单一画布 modifier → native 背景 owner；`RetainedContentHost` 只读桥接；偏好 owner 由 Bootstrap 注入实例 Appearance 根。PNG/JPEG ImageIO 最大边2048、输入64MiB/120M像素限制、方向与sRGB预览、串行准备/完整URL与请求票据。独占暂存、原子不替换发布、偏好确认后退役旧自有文件；原件/未知文件保留。 |
+| G02 | `WorkbenchLocalBackground` 的真实生产 CPU 模糊与局部取样；native矩形转换到根视口、固定壁纸映射；半透明采样每次独立合成，防止边缘重复alpha。明确D调色板/不透明根，不读桌面、不使用自定义系统backdrop、不截取内容。每owner最多两张2048边图，共享给所有卡片。 |
+| G03 | `QuickGenerationView` 图像/视频成果四周留白与整壳、输入/生成整壳、文字/音频结果；`QuickMediaViewport` 原加载/播放器不替换；`ChatWorkbenchView` 单阅读面板和既有输入；共用Sidebar。没有按句玻璃、额外镜片或新媒体实现。 |
+| G04 | `WorkflowGraphSurface` 节点的新模式真正取样，legacy保留旧实色；主线、上层接收器/短端口线、A2/运行目标不改。`WorkflowCanvasView` 工具/运行/状态、`WorkflowHostView` 录制/恢复提示用相同背景；DApp画布外提示显式实色。 |
+| G05 | 既有外观页提供本地图像/恢复纯色、玻璃/实色和松手提交强度。可选version1，旧nil、损坏/未来保护；新实例/新评审默认玻璃。减少透明度/高对比/轻量跳过模糊，减弱动态沿原语义；标准系统按钮/弹窗/窗口chrome不声称改成受控玻璃。 |
+| G06 | 原receiver按住preview/mouseUp最多一次commit不变；分开记录input/preview与commit、分类改变、layout、media prepare/ready、visible background draw及root/retained/背景计数。阶段日志不是可见帧或FPS。 |
+
+最终79/101定向、6/28隔离、1/5启动器通过。新22/40覆盖双对照像素、半透明边缘、实际模糊/折射、同源矩形、方向/超大/无效、多帧、文件/偏好失败、迟到所有者、缓存回收、四类真实Quick宿主和Workflow跨宿主缩放。79/101包含旧输入/组字/Undo、侧栏和端口几何回归；未改A2/Store/Runtime/下载语义的既有证据只沿用。3个历史真实模型方法仍跳过。
+
+同机受控测量：640×400源两图2,048,000字节，500次同源刷新仍decode=1/blur=1，清空后0；100个局部消费者不各持一份整图。36次分类preview的legacy/local对照均root=0、retained=0、decode=0、blur=0；各释放commit=1，观察窗口约251–263ms，**该值是250ms等待后的取样时点，不是实际呈现延迟**。真实窗口RSS峰值/节点增长/播放与帧时间未测，不能据缓存数字宣称无卡顿或无泄漏。普通窗口/跨显示scale、外部颜色对照、选择器冷开及观感留集中队列。
+
+唯一完整回执、T01—T32分层表、命令/退出码、合成样本、正常签名构建对应与双起点差分在 `D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/delivery/README.md`。背景处理使用CPU实现，无本轮新GPU shader；旧分类标签shader的离屏回归不等于真实GPU/模型验收。只推送新分支，停止复审。
+
 ## 2026-10-15 D-UI-SEMANTICS-01 整轮整改
 
 本轮获用户独立授权，按10-15附件H01—H08、T01—T32推进。实际起点 `5945772ddcd033da387abfb8ef1708ed089834ae`，生产及正常签名构建点 `f51c949f6d74df098d2ecea4746d3d6006b6cce5`，隔离分支 `codex/ui-semantics-20261015`。Lead单写、代理只读初审与两轮内修正；源码通过不等于最终独立验收。
