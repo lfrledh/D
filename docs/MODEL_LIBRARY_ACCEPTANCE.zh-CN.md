@@ -1,5 +1,9 @@
 # 模型库与应用服务检查点
 
+## 2026-10-16 评审夹具标记修补
+
+用户启动在服务初始化前被拒，确认是交付marker漏fixtures字段；未改变模型/下载业务或普通数据。仅修对应隔离标记和启动器预检，沿用原签名App；新的唯一入口见 `D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-02-startup/delivery/README.md`。实际进入工作台仍待重新启动确认。
+
 ## 2026-10-16 设置首绘增量（业务保持）
 
 生产 `748cda3c21d7db31a14fde0ff6984a898abb344f` 只修改外观缓存/背景入口，模型与下载契约、身份、状态机、Runtime及Store没有差分。历史下载和模型证据仍按原版本沿用，无真实模型/GPU重验。唯一新入口 `D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/delivery/README.md`；下方保留历史状态。

@@ -8,6 +8,8 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import stat
+import uuid
 import subprocess
 import sys
 import time
@@ -24,6 +26,42 @@ def launch_exit_code(returncode, ready):
     if returncode != 0:
         return returncode if returncode > 0 else 128 - returncode
     return 0 if ready else 2
+
+
+# Keep these finite paths aligned with WorkbenchReviewAdmission.validateStorage.
+REVIEW_SERVICE_PATHS = (
+    'ModelLibrary', 'ModelLibrary/index.json', 'Quick Creations.dproject',
+    'shared-library.json', 'Appearance', 'Appearance/initial-preferences.json',
+    'LanguagePacks', 'AudioProcessAccess', 'VideoProcessAccess', 'Files', 'review-runtime.json',
+)
+
+
+def validate_review_storage(root, session):
+    """Read-only counterpart of the App gate, before any lock/log/server/App."""
+    if (not root.is_absolute() or root.resolve() != root or not str(root).startswith('/Volumes/')
+            or root.name != session or str(uuid.UUID(session)).upper() != session):
+        raise ValueError('评审目录与会话身份不一致。 / Review root/session mismatch.')
+    marker = root / 'download-review-fixture.json'
+    # Refuse links and special files before opening; recheck the opened descriptor.
+    if not stat.S_ISREG(marker.lstat().st_mode):
+        raise ValueError('评审标记必须是普通文件。 / Review marker must be a regular file.')
+    fd = os.open(marker, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 4096:
+            raise ValueError('评审标记无效或过大。 / Invalid or oversized review marker.')
+        data = stream.read(4097)
+    if len(data) > 4096:
+        raise ValueError('评审标记过大。 / Oversized review marker.')
+    fixture = json.loads(data)
+    required = {'task': 'D-DOWNLOAD-MANAGEMENT-01', 'session': session,
+                'fixtures': 'A/B/C 18 MiB each; no inference route'}
+    if not isinstance(fixture, dict) or any(fixture.get(key) != value for key, value in required.items()):
+        raise ValueError('评审夹具标记缺失或身份不一致，请使用修正后的评审入口。 / Missing or conflicting review fixture marker.')
+    for relative in REVIEW_SERVICE_PATHS:
+        child = root / relative
+        if child.is_symlink() or child.resolve() != child:
+            raise ValueError('评审服务路径含符号链接。 / Review service path contains a symbolic link: ' + relative)
 
 
 def main():
@@ -45,10 +83,11 @@ def main():
     subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
     signature = subprocess.run(['codesign', '-dvv', str(app)], capture_output=True, text=True, check=True).stderr
     assert 'Authority=Apple Development:' in signature and 'TeamIdentifier=' + receipt['team'] in signature
-    assert root.is_absolute() and root.resolve() == root and str(root).startswith('/Volumes/')
-    fixture = json.loads((root / 'download-review-fixture.json').read_text())
-    assert fixture['session'] == root.name == receipt['session']
-    assert fixture['task'] == 'D-DOWNLOAD-MANAGEMENT-01'
+    try:
+        validate_review_storage(root, receipt['session'])
+    except (OSError, ValueError) as error:
+        print('启动前检查失败，未启动 App 或网络服务：' + str(error), file=sys.stderr)
+        return 2
     assert hashlib.sha256(args.fixture_server.read_bytes()).hexdigest() == receipt['fixture_server_sha256']
     print('Verified dedicated review artifact:', receipt['source_sha'], flush=True)
     if not args.launch:
