@@ -156,6 +156,7 @@ private actor LocalGlassNoInference: InferenceEngine {
         parent.frame = CGRect(x: 0, y: 0, width: 800, height: 500)
         let parentWindow = NSWindow(contentRect: parent.frame, styleMask: [.titled], backing: .buffered, defer: false)
         parentWindow.isReleasedWhenClosed = false; parentWindow.contentView = parent
+        for _ in 0..<40 { parent.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
         let child = NSHostingView(rootView: RetainedContentHost(content:
             Text("Nested sheet").padding(20).workbenchPanel().workbenchPresentation(), visible: true, identifier: "nested")
                 .environment(\.workbenchAppearanceState, state))
@@ -163,7 +164,9 @@ private actor LocalGlassNoInference: InferenceEngine {
         let childWindow = NSWindow(contentRect: child.frame, styleMask: [.titled], backing: .buffered, defer: false)
         childWindow.isReleasedWhenClosed = false; childWindow.contentView = child
         defer { childWindow.contentView = nil; childWindow.close(); parentWindow.contentView = nil; parentWindow.close() }
-        for _ in 0..<40 { parent.layoutSubtreeIfNeeded(); child.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        // No await or run-loop turn: the sheet must already have pixels when
+        // its native canvas is first laid out, not after an appearance task.
+        child.layoutSubtreeIfNeeded()
         func views(_ v: NSView) -> [WorkbenchBackgroundNSView] {
             v.subviews.flatMap { ($0 as? WorkbenchBackgroundNSView).map { [$0] } ?? views($0) }
         }
@@ -174,7 +177,70 @@ private actor LocalGlassNoInference: InferenceEngine {
         #expect(parentCanvas.window !== childCanvas.window)
         #expect(parentOwner.key == childOwner.key && parentOwner.image != nil && childOwner.image != nil)
         #expect(views(child).allSatisfy { $0.owner === childOwner })
-        #expect(parentOwner.decodeCount == 1 && childOwner.decodeCount == 1)
+        #expect(parentOwner.decodeCount == 1 && childOwner.decodeCount == 0)
+        #expect(parentOwner.image === childOwner.image && parentOwner.blurred === childOwner.blurred)
+        let bitmap = try #require(childCanvas.bitmapImageRepForCachingDisplay(in: childCanvas.bounds))
+        childCanvas.cacheDisplay(in: childCanvas.bounds, to: bitmap)
+        #expect(childOwner.drawCount > 0 && childOwner.image != nil)
+        childOwner.load(nil) // closing one presentation must not discard the shared prepared pair
+        #expect(parentOwner.image != nil && state.backgroundTextures.entry != nil)
+        childOwner.load(state.wallpaperURL(), cache: state.backgroundTextures)
+        #expect(childOwner.image === parentOwner.image && childOwner.decodeCount == 0)
+    }
+
+    @Test func backgroundCacheSeparatesOwnersAndRejectsLatePreparation() async throws {
+        let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
+        let a = root.appendingPathComponent("a.png"), b = root.appendingPathComponent("b.png")
+        try png(pattern(), at: a); try png(pattern(1), at: b)
+        let first = WorkbenchBackgroundTextures(), second = WorkbenchBackgroundTextures()
+        let owner = WorkbenchBackgroundOwner(); owner.load(a, cache: first)
+        for _ in 0..<500 where owner.image == nil { try await Task.sleep(for: .milliseconds(10)) }
+        let prepared = try #require(owner.image)
+        owner.load(a, cache: second)
+        #expect(owner.image == nil, "A different appearance owner must not borrow the previous cache")
+        for _ in 0..<500 where owner.image == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(owner.image !== prepared && second.entry != nil && owner.decodeCount == 2)
+        owner.load(a, blur: false, cache: second)
+        #expect(owner.blurred == nil)
+        for _ in 0..<500 where owner.image == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(owner.image != nil && owner.blurred == nil && second.entry?.blur == false)
+        owner.load(b, cache: second)
+        #expect(owner.image == nil, "A different full resource URL must not show the old image")
+        second.clear() // Invalidate a pending read, even before a view updates its owner.
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(owner.image == nil && second.entry == nil)
+        owner.load(nil)
+        #expect(owner.retainedBytes == 0)
+    }
+
+    @Test func solidCanvasDefaultAndExplicitImageSurviveColdRead() async throws {
+        let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "D.LocalGlassTests." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite)); defer { settings.removePersistentDomain(forName: suite) }
+        let directory = root.appendingPathComponent("Appearance")
+        let state = ChatDisplayPreferencesState(settings: settings, appearanceDirectory: directory)
+        #expect(state.wallpaperURL() == nil && state.preferences.appearance?.local?.wallpaper == nil)
+        #expect(state.preferences.appearance?.local?.material == .glass && state.preferences.appearance?.local?.strength == 0.55)
+        try #require(state.update(state.preferences))
+        let plain = ChatDisplayPreferencesState(settings: settings, appearanceDirectory: directory)
+        #expect(plain.preferences == state.preferences && plain.wallpaperURL() == nil)
+        let source = root.appendingPathComponent("my-image.png"); try png(pattern(), at: source)
+        let original = try Data(contentsOf: source)
+        await state.importWallpaper(source)
+        var chosen = state.preferences; chosen.appearance?.local?.strength = 0.85
+        try #require(state.update(chosen))
+        let cold = ChatDisplayPreferencesState(settings: settings, appearanceDirectory: directory)
+        #expect(cold.preferences == chosen && cold.wallpaperURL() == state.wallpaperURL())
+        #expect(cold.wallpaperURL() != nil && cold.backgroundTextures.entry == nil)
+        let owner = WorkbenchBackgroundOwner(); owner.load(cold.wallpaperURL(), cache: cold.backgroundTextures)
+        for _ in 0..<500 where owner.image == nil { try await Task.sleep(for: .milliseconds(10)) }
+        try #require(owner.image != nil && cold.backgroundTextures.entry != nil)
+        try #require(cold.restoreSolidCanvas())
+        #expect(cold.backgroundTextures.entry == nil)
+        let restored = ChatDisplayPreferencesState(settings: settings, appearanceDirectory: directory)
+        #expect(restored.wallpaperURL() == nil && restored.preferences.appearance?.local?.material == .glass)
+        #expect(restored.preferences.appearance?.local?.strength == 0.85)
+        #expect(try Data(contentsOf: source) == original)
     }
 
     @Test(arguments: [false, true]) func externalIsExcludedButInternalPatternChanges(alpha: Bool) throws {
@@ -423,7 +489,7 @@ private actor LocalGlassNoInference: InferenceEngine {
             #expect(try FileManager.default.contentsOfDirectory(atPath:root.path).count == 1)
         }
     }
-    @Test func preferenceFlushFailureRestoresChoiceBeforeRetiringCopy() async throws {
+    @Test(arguments: [false, true]) func preferenceFlushFailureRestoresChoiceBeforeRetiringCopy(restore: Bool) async throws {
         let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
         let suite = "D.LocalGlassTests."+UUID().uuidString
         let settings = try #require(UserDefaults(suiteName:suite)); defer { settings.removePersistentDomain(forName:suite) }
@@ -434,7 +500,14 @@ private actor LocalGlassNoInference: InferenceEngine {
         var flushes = 0
         let failed = ChatDisplayPreferencesState(settings:settings,appearanceDirectory:initial.appearanceDirectory,
             commitAppearance: { _ in flushes += 1; return flushes != 1 })
-        await failed.importWallpaper(source)
+        let owner = WorkbenchBackgroundOwner(); owner.load(old, cache: failed.backgroundTextures)
+        for _ in 0..<500 where owner.image == nil { try await Task.sleep(for: .milliseconds(10)) }
+        let prepared = try #require(owner.image)
+        if restore { #expect(!failed.restoreSolidCanvas()) }
+        else { await failed.importWallpaper(source) }
+        owner.load(old, cache: failed.backgroundTextures)
+        #expect(owner.image === prepared && owner.decodeCount == 1,
+                "A failed save retains the warm original; opening settings must not flash a fallback")
         #expect(flushes == 2 && failed.wallpaperIssue)
         #expect(failed.wallpaperURL() == old)
         #expect(try Data(contentsOf:old) == oldBytes)

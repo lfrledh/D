@@ -199,6 +199,24 @@ enum WorkbenchLocalRenderer {
     }
 }
 
+/// One prepared immutable image pair per appearance preference owner. Windows
+/// reuse pixels, never coordinates or view ownership. No process-wide cache.
+@MainActor final class WorkbenchBackgroundTextures {
+    struct Entry {
+        let url: URL
+        let blur: Bool
+        let image: CGImage
+        let blurred: CGImage?
+    }
+    private(set) var entry: Entry?
+    private(set) var generation = UUID()
+    func clear() { entry = nil; generation = UUID() }
+    func store(_ value: Entry, generation: UUID) {
+        guard self.generation == generation else { return }
+        entry = value
+    }
+}
+
 /// Window-local resource owner. Position notifications never publish to SwiftUI
 /// or business state. At most two 2048px images are retained, independent of nodes.
 @MainActor final class WorkbenchBackgroundOwner {
@@ -211,25 +229,42 @@ enum WorkbenchLocalRenderer {
     private(set) var drawCount = 0
     private(set) var key: URL?
     private var preparesBlur = true
+    private var textures: WorkbenchBackgroundTextures?
+    private var textureGeneration: UUID?
     private var request = UUID()
     private var preparation: Task<Void, Never>?
     var failure: (() -> Void)?
-    func load(_ url: URL?, blur: Bool = true) {
-        guard key != url || preparesBlur != blur else { return }
+    func load(_ url: URL?, blur: Bool = true, cache: WorkbenchBackgroundTextures? = nil) {
+        guard key != url || preparesBlur != blur || textures !== cache
+                || textureGeneration != cache?.generation else { return }
         preparation?.cancel(); preparation = nil
+        textures = cache; textureGeneration = cache?.generation
         key = url; preparesBlur = blur; let ticket = UUID(); request = ticket
-        image = nil; blurred = nil; invalidate()
+        image = nil; blurred = nil
+        if let url, let ready = cache?.entry, ready.url == url, ready.blur == blur {
+            // Synchronous adoption during the NSView update, before its first
+            // display. Opening a sheet does not restart background preparation.
+            image = ready.image; blurred = ready.blurred
+            invalidate(); return
+        }
+        invalidate()
         guard let url else { return }
+        let generation = cache?.generation
         preparation = Task { [weak self] in
             do {
                 let (decoded, preparedBlur) = try await WorkbenchWallpaperDecoder.shared.textures(url, blur: blur)
-                guard let self, request == ticket, key == url, !Task.isCancelled else { return }
+                guard let self, request == ticket, key == url, !Task.isCancelled,
+                      cache?.generation == generation else { return }
                 decodeCount += 1
                 image = decoded; blurred = preparedBlur
                 if preparedBlur != nil { blurCount += 1 }
+                if let cache, let generation {
+                    cache.store(.init(url: url, blur: blur, image: decoded, blurred: preparedBlur), generation: generation)
+                }
                 invalidate()
             } catch {
-                guard let self, request == ticket, !Task.isCancelled else { return }
+                guard let self, request == ticket, !Task.isCancelled,
+                      cache?.generation == generation else { return }
                 failure?()
             }
         }
@@ -308,11 +343,13 @@ struct WorkbenchLocalSurface: NSViewRepresentable {
     var strength = 0.55
     var drawsGlass = true
     var contour: ((CGRect, CGFloat) -> CGPath)? = nil
+    var prepare: (() -> Void)? = nil
     func makeNSView(context: Context) -> WorkbenchBackgroundNSView {
         let view = WorkbenchBackgroundNSView(); view.setAccessibilityElement(false)
         return view
     }
     func updateNSView(_ view: WorkbenchBackgroundNSView, context: Context) {
+        prepare?()
         view.owner = owner; view.palette = palette; view.isCanvas = isCanvas
         view.strength = strength; view.drawsGlass = drawsGlass; view.contour = contour
         owner?.surfaces.add(view)
@@ -338,19 +375,19 @@ struct WorkbenchCanvasModifier: ViewModifier {
         content.environment(\.workbenchBackground, owner)
             .environment(\.workbenchAppearanceState, state)
             .background {
-                WorkbenchLocalSurface(owner: owner, palette: palette, isCanvas: true)
+                WorkbenchLocalSurface(owner: owner, palette: palette, isCanvas: true, prepare: prepare)
                     .allowsHitTesting(false).accessibilityHidden(true)
             }
-            .onAppear { refresh() }
-            .onChange(of: ObjectIdentifier(state)) { _, _ in refresh() }
-            .onChange(of: preparesBlur) { _, _ in refresh() }
-            .onChange(of: appearance.local?.wallpaper) { _, _ in refresh() }
+            .onAppear {
+                if state.preferences.appearance?.local?.wallpaper != nil && state.wallpaperURL() == nil {
+                    state.markWallpaperUnavailable()
+                }
+            }
             .onDisappear { owner.load(nil) }
     }
-    private func refresh() {
+    private func prepare() {
         owner.failure = { [weak state] in state?.markWallpaperUnavailable() }
-        let url = state.wallpaperURL()
-        if state.preferences.appearance?.local?.wallpaper != nil && url == nil { state.markWallpaperUnavailable() }
-        owner.load(url, blur: preparesBlur)
+        owner.load(state.wallpaperURL(), blur: preparesBlur, cache: state.backgroundTextures)
     }
+
 }

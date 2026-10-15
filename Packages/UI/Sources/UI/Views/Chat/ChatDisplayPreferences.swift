@@ -63,6 +63,7 @@ final class ChatDisplayPreferencesState {
     private static let seedConsumedKey = "D.Appearance.initialSeedConsumed"
     private let settings: UserDefaults?
     let appearanceDirectory: URL?
+    @ObservationIgnored let backgroundTextures = WorkbenchBackgroundTextures()
     @ObservationIgnored private let commitAppearance: (UserDefaults) -> Bool
     private var wallpaperRequest = UUID()
     private(set) var wallpaperPreparing = false
@@ -124,6 +125,9 @@ final class ChatDisplayPreferencesState {
         }
         guard let data = try? JSONEncoder().encode(candidate) else { return false }
         settings?.set(data, forKey: ChatDisplayPreferences.storageKey)
+        if preferences.appearance?.local?.wallpaper != candidate.appearance?.local?.wallpaper {
+            backgroundTextures.clear()
+        }
         preferences = candidate
         return true
     }
@@ -178,6 +182,7 @@ final class ChatDisplayPreferencesState {
             var local = appearance.local ?? WorkbenchLocalAppearance()
             let previous = local.wallpaper
             local.wallpaper = name; appearance.local = local; candidate.appearance = appearance
+            let prepared = backgroundTextures.entry
             guard update(candidate) else {
                 try? FileManager.default.removeItem(at: destination)
                 throw WorkbenchWallpaperError.saveFailed
@@ -188,6 +193,7 @@ final class ChatDisplayPreferencesState {
                 if let stored { settings.set(stored, forKey: ChatDisplayPreferences.storageKey) }
                 else { settings.removeObject(forKey: ChatDisplayPreferences.storageKey) }
                 preferences = initial
+                if let prepared { backgroundTextures.store(prepared, generation: backgroundTextures.generation) }
                 if commitAppearance(settings) { try? FileManager.default.removeItem(at: destination) }
                 throw WorkbenchWallpaperError.saveFailed
             }
@@ -206,12 +212,15 @@ final class ChatDisplayPreferencesState {
         var appearance = candidate.resolvedAppearance
         var local = appearance.local ?? WorkbenchLocalAppearance()
         local.wallpaper = nil; appearance.local = local; candidate.appearance = appearance
+        let prepared = backgroundTextures.entry
         guard update(candidate) else { return false }
         // Keep the old copy if the preference flush is not confirmed.
         if let settings, !commitAppearance(settings) {
             if let stored { settings.set(stored, forKey: ChatDisplayPreferences.storageKey) }
             else { settings.removeObject(forKey: ChatDisplayPreferences.storageKey) }
-            preferences = initial; _ = commitAppearance(settings)
+            preferences = initial
+            if let prepared { backgroundTextures.store(prepared, generation: backgroundTextures.generation) }
+            _ = commitAppearance(settings)
             wallpaperIssue = true; return false
         }
         wallpaperIssue = false; removeRetiredWallpaper(previous)
@@ -228,6 +237,7 @@ final class ChatDisplayPreferencesState {
     func reset() {
         cancelWallpaperPreparation()
         settings?.removeObject(forKey: ChatDisplayPreferences.storageKey)
+        backgroundTextures.clear()
         preferences = ChatDisplayPreferences()
         hasInvalidStoredRecord = false
     }

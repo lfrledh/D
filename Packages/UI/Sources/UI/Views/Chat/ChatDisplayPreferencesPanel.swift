@@ -186,8 +186,10 @@ struct ChatDisplayPreferencesPanel: View {
             LabeledContent(wording("Canvas background", "画布背景"),
                 value: state.preferences.appearance?.local?.wallpaper == nil
                     ? wording("Solid color", "纯色") : wording("Local image", "本地图像"))
+            Text(wording("The canvas defaults to a solid color. You can choose your own PNG or JPEG image.", "画布默认使用纯色，也可以选择自己的 PNG 或 JPEG 背景图片。"))
+                .font(.caption).foregroundStyle(.secondary)
             HStack {
-                Button(wording("Choose image…", "选择图像…"), action: chooseWallpaper)
+                Button(wording("Choose background image…", "选择背景图片…"), action: chooseWallpaper)
                     .disabled(choosingWallpaper || state.wallpaperPreparing || state.appearanceDirectory == nil)
                 Button(wording("Restore solid color", "恢复纯色")) { state.restoreSolidCanvas() }
             }
