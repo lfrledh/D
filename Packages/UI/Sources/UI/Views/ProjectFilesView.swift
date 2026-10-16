@@ -68,6 +68,7 @@ enum NativeAssetImportPanel {
 /// discards completion UI when the active project has changed.
 @MainActor
 struct ProjectFilesView: View {
+    @Environment(\.dLanguageStore) private var consistencyLanguage
     let store: ProjectStore
     let instanceID: UUID
     let isActive: @MainActor () -> Bool
@@ -132,10 +133,10 @@ struct ProjectFilesView: View {
             if let overview {
                 Text("\(word("external", "外部引用")) \(overview.externalCount) · \(word("collectBytes", "收纳需复制")) \(bytes(overview.bytesToCollect))")
                     .font(.headline)
-                Text("范围：本项目及已登记位置；不代表磁盘上所有副本。")
+                Text(consistencyText(consistencyLanguage, "remaining.5e684d0ea7f7"))
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(overview.libraryAvailability.filter { $0.offline + $0.needsAuthorization + $0.missing > 0 }) { library in
-                    Text("\(library.name)：离线 \(library.offline) · 需授权 \(library.needsAuthorization) · 缺失 \(library.missing)")
+                    Text(consistencyText(consistencyLanguage, "remaining.e623bd900e14", arguments: ["v0": String(describing: library.name), "v1": String(describing: library.offline), "v2": String(describing: library.needsAuthorization), "v3": String(describing: library.missing)]))
                         .font(.caption).foregroundStyle(.orange)
                 }
                 HStack(alignment: .top, spacing: 14) {
@@ -157,7 +158,7 @@ struct ProjectFilesView: View {
                     Button(word("restore", "恢复手动备份…")) { prepareRestore() }.disabled(busy)
                 }
             } else if isActive() { ProgressView(word("loading", "读取项目文件…")) }
-            else { Text("所属项目实例已关闭或切换；请从项目入口重新打开。") }
+            else { Text(consistencyText(consistencyLanguage, "remaining.de3479cae49b")) }
             if !models.isEmpty {
                 DisclosureGroup(word("models", "可选：包含模型资源（默认不选）")) {
                     ForEach(models, id: \.id) { record in
@@ -233,13 +234,13 @@ struct ProjectFilesView: View {
                     }
                     Spacer()
                     if let graphID = use.graphID, let nodeID = use.nodeID {
-                        Button("打开流程") {
-                            if !onOpenGraph(graphID, nodeID) { message = "该流程当前未打开；请从所属项目打开流程。" }
+                        Button(consistencyText(consistencyLanguage, "remaining.27af6ebe6592")) {
+                            if !onOpenGraph(graphID, nodeID) { message = consistencyText(consistencyLanguage, "remaining.2ce262102d83") }
                         }.disabled(busy)
                     } else if let assetID = use.assetID {
-                        Button("查看派生素材") { selectedAssetID = assetID }.disabled(busy)
+                        Button(consistencyText(consistencyLanguage, "remaining.d5ba98aa2f62")) { selectedAssetID = assetID }.disabled(busy)
                     } else {
-                        Text(use.kind == .run ? "运行证据：暂无直接导航" : "此关联暂无直接导航")
+                        Text(use.kind == .run ? consistencyText(consistencyLanguage, "remaining.ab5c4898f626") : consistencyText(consistencyLanguage, "remaining.978615eb3e7a"))
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                 }
@@ -258,9 +259,9 @@ struct ProjectFilesView: View {
                     Text(location.resolvedURL?.path ?? location.location.url?.path ?? word("unknown", "未知"))
                         .font(.caption).textSelection(.enabled)
                     if let reason = location.reason { Text(reason).font(.caption).foregroundStyle(.orange) }
-                    Text("\(word("registered", "登记")): \(item.asset.fileLocations == nil ? word("unknown", "未知") : date(location.location.registeredAt)) · \(word("verified", "上次核对")): \(date(location.location.lastVerifiedAt)) · \(location.location.role == .externalOriginal ? "原件创建" : "此副本创建"): \(date(location.location.contentCreatedAt))")
+                    Text("\(word("registered", "登记")): \(item.asset.fileLocations == nil ? word("unknown", "未知") : date(location.location.registeredAt)) · \(word("verified", "上次核对")): \(date(location.location.lastVerifiedAt)) · \(location.location.role == .externalOriginal ? consistencyText(consistencyLanguage, "remaining.19fb176689ad") : consistencyText(consistencyLanguage, "remaining.16bddd9faed3")): \(date(location.location.contentCreatedAt))")
                         .font(.caption).foregroundStyle(.secondary)
-                    Button("在访达中显示") { reveal(location) }
+                    Button(consistencyText(consistencyLanguage, "remaining.ded07da9efc6")) { reveal(location) }
                         .disabled(busy || !canReveal(location))
                     if location.id != item.selectedLocationID {
                         Button(word("useLocation", "核对并使用此位置")) { useLocation(item.asset.id, location.id) }.disabled(busy)

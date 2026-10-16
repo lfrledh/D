@@ -330,7 +330,7 @@ struct GenerationInspector: View {
                 .font(.caption).monospacedDigit().textSelection(.enabled)
             LabeledContent(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.88", fallback: "Generated"), value: job.createdAt.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption)
-            if let provenance = ImageReferenceSection.submittedReferenceText(job: job, manifest: model.manifest) {
+            if let provenance = ImageReferenceSection.submittedReferenceText(job: job, manifest: model.manifest, language: legacyLanguage) {
                 Text(provenance)
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

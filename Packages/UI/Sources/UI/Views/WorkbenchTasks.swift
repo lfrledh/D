@@ -3,6 +3,7 @@ import DWorkbench
 import SwiftUI
 
 struct WorkbenchTasks: View {
+    @Environment(\.dLanguageStore) private var consistencyLanguage
     @Bindable var model: WorkbenchModel
     @Binding var isExpanded: Bool
 
@@ -23,12 +24,12 @@ struct WorkbenchTasks: View {
             .accessibilityIdentifier("task-list")
         } label: {
             HStack(spacing: 8) {
-                Label("任务", systemImage: "list.bullet.rectangle")
+                Label(consistencyText(consistencyLanguage, "remaining.5253040db864"), systemImage: "list.bullet.rectangle")
                     .font(.callout.weight(.medium))
                 if activeCount > 0 {
-                    Text("\(activeCount) 项进行中").font(.caption).foregroundStyle(.secondary)
+                    Text(consistencyText(consistencyLanguage, "remaining.ffe9e45f850a", arguments: ["v0": String(describing: activeCount)])).font(.caption).foregroundStyle(.secondary)
                 } else {
-                    Text("\(jobs.count) 项记录").font(.caption).foregroundStyle(.secondary)
+                    Text(consistencyText(consistencyLanguage, "remaining.def1f85c66f0", arguments: ["v0": String(describing: jobs.count)])).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 if activeCount > 0 { ProgressView().controlSize(.small) }
@@ -66,7 +67,7 @@ struct WorkbenchTasks: View {
                             Text("Seed \(String(image.seed))").monospacedDigit()
                         }
                         if state == .cancelling || state == .releasing {
-                            Text("清理完成后继续下一项")
+                            Text(consistencyText(consistencyLanguage, "remaining.4db1b71be31b"))
                         }
                     }
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -74,7 +75,7 @@ struct WorkbenchTasks: View {
                 if model.activeJobIDs.contains(job.id), let progress = model.progress[job.id] {
                     ProgressView(value: min(max(progress, 0), 1))
                         .controlSize(.small)
-                        .accessibilityLabel("生成进度")
+                        .accessibilityLabel(consistencyText(consistencyLanguage, "remaining.65d984613714"))
                 }
             }
             if model.activeJobIDs.contains(job.id) {
@@ -86,8 +87,8 @@ struct WorkbenchTasks: View {
                 }
                 .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                 .disabled(!model.canCancel(job.id))
-                .help("取消这个任务")
-                .accessibilityLabel("取消任务")
+                .help(consistencyText(consistencyLanguage, "remaining.fb653466ebee"))
+                .accessibilityLabel(consistencyText(consistencyLanguage, "remaining.537d17f1c531"))
                 .accessibilityIdentifier("cancel-task-\(job.id.uuidString)")
             } else if let assetID = job.artifactIDs.first {
                 Button {
@@ -96,8 +97,8 @@ struct WorkbenchTasks: View {
                     Image(systemName: "arrow.up.right.square")
                 }
                 .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
-                .help("查看作品")
-                .accessibilityLabel("查看作品")
+                .help(consistencyText(consistencyLanguage, "remaining.cc40ce33895e"))
+                .accessibilityLabel(consistencyText(consistencyLanguage, "remaining.cc40ce33895e"))
             }
         }
         .padding(.vertical, 10)
@@ -111,8 +112,8 @@ struct WorkbenchTasks: View {
         case .text(let request): request.prompt
         case .audio(let request): request.prompt
         case .video(let request): request.prompt
-        case .pitch: "原声音高分析"
-        case .singing: "旋律与歌词歌声"
+        case .pitch: consistencyText(consistencyLanguage, "remaining.39f01774c448")
+        case .singing: consistencyText(consistencyLanguage, "remaining.25bc4d7a7980")
         }
     }
 

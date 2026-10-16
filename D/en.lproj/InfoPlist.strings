@@ -1,0 +1,3 @@
+"NSMicrophoneUsageDescription" = "D records humming or sound ideas after you choose Start Recording and saves them in the local project.";
+"NSSpeechRecognitionUsageDescription" = "Convert speech you explicitly select or record into a draft on this Mac. It is not automatically sent to chat.";
+"D 创作项目" = "D Creation Project";

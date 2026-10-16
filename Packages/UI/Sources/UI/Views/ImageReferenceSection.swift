@@ -5,6 +5,7 @@ import SwiftUI
 /// Renders the editable image-reference draft. The project session owns the reference ID;
 /// this view deliberately has no separate selection, task, or persistence state.
 struct ImageReferenceSection: View {
+    @Environment(\.dLanguageStore) private var consistencyLanguage
     @Bindable var model: WorkbenchModel
     let documentID: UUID?
     let navigationEpoch: UInt64
@@ -27,13 +28,13 @@ struct ImageReferenceSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("参考图片", systemImage: "photo.on.rectangle")
+            Label(consistencyText(consistencyLanguage, "remaining.0b04d17d6729"), systemImage: "photo.on.rectangle")
                 .font(.subheadline.weight(.semibold))
             Text(currentReferenceText)
                 .font(.callout.weight(.medium))
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("image-reference-current")
-            Text("根据参考图和描述生成新候选，原图会保留。模型可能同时改变其他区域，不能保证精确的局部修改。")
+            Text(consistencyText(consistencyLanguage, "remaining.bde89cc3e3ef"))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             ViewThatFits(in: .horizontal) {
@@ -59,7 +60,7 @@ struct ImageReferenceSection: View {
             guard let documentID else { return }
             Task { await model.chooseImageReference(documentID: documentID, navigationEpoch: navigationEpoch) }
         } label: {
-            Label("导入 PNG…", systemImage: "square.and.arrow.down")
+            Label(consistencyText(consistencyLanguage, "remaining.69da21e2ac2f"), systemImage: "square.and.arrow.down")
         }
         .disabled(model.isChangingProject || documentID == nil)
         .accessibilityIdentifier("image-reference-import")
@@ -69,7 +70,7 @@ struct ImageReferenceSection: View {
             guard let documentID else { return }
             Task { await model.useSelectedImageReference(documentID: documentID, navigationEpoch: navigationEpoch) }
         } label: {
-            Label("使用已选图片", systemImage: "photo.badge.plus")
+            Label(consistencyText(consistencyLanguage, "remaining.762cf05d29a5"), systemImage: "photo.badge.plus")
         }
         .disabled(!model.canUseSelectedImageReference || documentID == nil)
         .accessibilityIdentifier("image-reference-use-selected")
@@ -79,7 +80,7 @@ struct ImageReferenceSection: View {
             guard let documentID else { return }
             Task { await model.clearImageReference(documentID: documentID, navigationEpoch: navigationEpoch) }
         } label: {
-            Label("移除参考", systemImage: "xmark.circle")
+            Label(consistencyText(consistencyLanguage, "remaining.66f62c0a690e"), systemImage: "xmark.circle")
         }
         .disabled(model.isChangingProject || model.referenceImageAsset == nil || documentID == nil)
         .accessibilityIdentifier("image-reference-clear")
@@ -87,27 +88,27 @@ struct ImageReferenceSection: View {
     }
 
     private var currentReferenceText: String {
-        Self.currentReferenceText(asset: model.referenceImageAsset)
+        Self.currentReferenceText(asset: model.referenceImageAsset, language: consistencyLanguage)
     }
 
-    static func currentReferenceText(asset: ProjectAsset?) -> String {
-        guard let asset else { return "未选择参考图片。" }
+    static func currentReferenceText(asset: ProjectAsset?, language: UILanguageStore?) -> String {
+        guard let asset else { return consistencyText(language, "remaining.60d50cf29332") }
         let dimensions: String
         if let width = asset.metadata.width, let height = asset.metadata.height {
             dimensions = "（\(width) × \(height)）"
         } else {
-            dimensions = "（尺寸未知）"
+            dimensions = consistencyText(language, "remaining.a05de6cc421b")
         }
-        return "当前草稿：\(asset.name)\(dimensions)。"
+        return consistencyText(language, "remaining.a034c683bb82", arguments: ["v0": String(describing: asset.name), "v1": String(describing: dimensions)])
     }
 
-    static func submittedReferenceText(job: ProjectJob, manifest: ProjectManifest?) -> String? {
+    static func submittedReferenceText(job: ProjectJob, manifest: ProjectManifest?, language: UILanguageStore?) -> String? {
         guard case .image(let image) = job.request.input,
               let reference = image.referenceImage else { return nil }
         let name = job.imageReferenceAssetID.flatMap { id in
             manifest?.assets.first(where: { $0.id == id })?.name
-        } ?? "已提交参考图片"
-        return "本次提交的参考：\(name)；SHA-256 \(reference.sha256)，\(reference.width) × \(reference.height)，\(reference.encoding)。"
+        } ?? consistencyText(language, "remaining.8df8abc32ddd")
+        return consistencyText(language, "remaining.d41a00626f32", arguments: ["v0": String(describing: name), "v1": String(describing: reference.sha256), "v2": String(describing: reference.width), "v3": String(describing: reference.height), "v4": String(describing: reference.encoding)])
     }
 }
 

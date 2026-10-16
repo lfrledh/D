@@ -331,8 +331,8 @@ struct AudioWorkbenchAssemblyTests {
         #expect(!controller.hasUnsubmittedInput)
     }
 
-    @Test
-    func productionViewRoutesBindingsAndNeverRequestsDisabledMicrophone() async throws {
+    @Test(arguments: ["en", "zh-Hans"])
+    func productionViewRoutesBindingsAndNeverRequestsDisabledMicrophone(locale: String) async throws {
         let root = try root()
         defer { try? FileManager.default.removeItem(at: root) }
         let panels = AssemblyPanels()
@@ -344,7 +344,8 @@ struct AudioWorkbenchAssemblyTests {
         let audioView = AudioWorkbenchView(
             controller: controller, recordingEnabled: false, actions: actions
         )
-        let audioHost = NSHostingView(rootView: audioView)
+        let audioHost = NSHostingView(rootView: audioView
+            .environment(\.dLanguageStore, UILanguageStore(preferredLanguages: [locale])))
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 580),
             styleMask: [.borderless], backing: .buffered, defer: false
@@ -353,7 +354,7 @@ struct AudioWorkbenchAssemblyTests {
         defer { window.contentView = nil }
         settle(audioHost, width: 520)
         let noteField = try #require(descendants(audioHost).compactMap { $0 as? NSTextField }
-            .first { $0.placeholderString == "原始媒体注释" })
+            .first { $0.placeholderString == (locale == "en" ? "Original Media Notes" : "原始媒体注释") })
         let unicode = "生产输入 e\u{301} 👩‍💻"
         noteField.stringValue = unicode
         NotificationCenter.default.post(name: NSControl.textDidChangeNotification, object: noteField)

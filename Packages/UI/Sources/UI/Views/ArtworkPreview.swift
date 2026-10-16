@@ -33,6 +33,7 @@ actor ArtworkPreviewDecoder {
 }
 
 struct ArtworkThumbnail: View {
+    @Environment(\.dLanguageStore) private var consistencyLanguage
     let url: URL?
     @State private var image: CGImage?
 
@@ -65,6 +66,7 @@ enum ArtworkZoom: String, CaseIterable {
 }
 
 struct ArtworkCanvas: View {
+    @Environment(\.dLanguageStore) private var consistencyLanguage
     let url: URL
     let label: String
     @State private var image: CGImage?
@@ -82,10 +84,10 @@ struct ArtworkCanvas: View {
                     .accessibilityIdentifier("artwork-canvas")
                 zoomControls.padding(.bottom, 20)
             } else if loadFailed {
-                ContentUnavailableView("无法读取这张作品", systemImage: "photo.badge.exclamationmark",
-                    description: Text("请检查项目所在磁盘是否已连接，并尝试重新打开项目。"))
+                ContentUnavailableView(consistencyText(consistencyLanguage, "remaining.f64e7723b5e2"), systemImage: "photo.badge.exclamationmark",
+                    description: Text(consistencyText(consistencyLanguage, "remaining.a584ed36ac4e")))
             } else {
-                ProgressView("正在读取作品…")
+                ProgressView(consistencyText(consistencyLanguage, "remaining.5dfcd69c12fb"))
             }
         }
         .task(id: url) {
@@ -108,7 +110,7 @@ struct ArtworkCanvas: View {
                 Button {
                     zoom = value
                 } label: {
-                    Text(value.rawValue)
+                    Text(value == .fit ? consistencyText(consistencyLanguage, "remaining.ff6c8048b322") : value.rawValue)
                         .font(.callout.weight(zoom == value ? .semibold : .regular))
                         .padding(.horizontal, 12).padding(.vertical, 6)
                         .background(zoom == value ? Color.primary.opacity(0.10) : .clear,
@@ -118,7 +120,7 @@ struct ArtworkCanvas: View {
                 .keyboardShortcut(value == .fit ? KeyEquivalent("0") : KeyEquivalent("1"), modifiers: .command)
                 .accessibilityIdentifier(value == .fit ? "zoom-fit" : "zoom-actual")
                 .accessibilityAddTraits(zoom == value ? .isSelected : [])
-                .help(value == .actual ? "每个图片像素对应一个屏幕像素；拖动图片可平移（⌘ 1）" : "完整显示作品（⌘ 0）")
+                .help(value == .actual ? consistencyText(consistencyLanguage, "remaining.672b447ed394") : consistencyText(consistencyLanguage, "remaining.e4bb20946c4b"))
             }
         }
     }

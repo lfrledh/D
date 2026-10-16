@@ -26,9 +26,9 @@ struct ImageReferenceSectionTests {
         let job = ProjectJob(id: request.id, documentID: UUID(), request: request, imageReferenceAssetID: assetID)
         let manifest = ProjectManifest(name: "Reference", jobs: [job], assets: [current])
 
-        #expect(ImageReferenceSection.currentReferenceText(asset: nil) == "未选择参考图片。")
-        #expect(ImageReferenceSection.currentReferenceText(asset: current).contains("保留的原图（512 × 768）"))
-        let submitted = try #require(ImageReferenceSection.submittedReferenceText(job: job, manifest: manifest))
+        #expect(ImageReferenceSection.currentReferenceText(asset: nil, language: UILanguageStore(preferredLanguages: ["zh-Hans"])) == "未选择参考图片。")
+        #expect(ImageReferenceSection.currentReferenceText(asset: current, language: UILanguageStore(preferredLanguages: ["zh-Hans"])).contains("保留的原图（512 × 768）"))
+        let submitted = try #require(ImageReferenceSection.submittedReferenceText(job: job, manifest: manifest, language: UILanguageStore(preferredLanguages: ["zh-Hans"])))
         #expect(submitted.contains("本次提交的参考：保留的原图"))
         #expect(submitted.contains(reference.sha256))
         #expect(submitted.contains("512 × 768"))

@@ -64,6 +64,7 @@ enum AudioWorkbenchButtonHandler {
 }
 
 public struct AudioWorkbenchView: View {
+    @Environment(\.dLanguageStore) private var consistencyLanguage
     private let previewDocument: AudioDraftDocument?
     private let previewMetadata: AudioAssetMetadata?
     private let previewWaveform: [AudioPeak]
@@ -151,24 +152,24 @@ public struct AudioWorkbenchView: View {
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label(document == nil ? "尚未添加音频" : "原声暂时无法读取",
+            Label(document == nil ? consistencyText(consistencyLanguage, "remaining.63607e970c42") : consistencyText(consistencyLanguage, "remaining.7ae1d2e07764"),
                   systemImage: document == nil ? "waveform" : "waveform.badge.exclamationmark")
         } description: {
             Text(document == nil
-                 ? "导入一个原始 WAV/CAF PCM。原件会保留不变。"
-                 : "已登记的原声仍在项目中。请重新读取；失败时原件和输入都不会改变。")
+                 ? consistencyText(consistencyLanguage, "remaining.dc5e0177b179")
+                 : consistencyText(consistencyLanguage, "remaining.7a9cd97fa625"))
         } actions: {
             VStack(spacing: 8) {
                 if document == nil {
-                    Button("导入音频…", action: importOriginal)
+                    Button(consistencyText(consistencyLanguage, "remaining.bc41336ea29f"), action: importOriginal)
                         .accessibilityIdentifier("audio-import")
                 } else {
-                    Button("重新读取原声", action: refreshInspection)
+                    Button(consistencyText(consistencyLanguage, "remaining.ab7cc5e472e6"), action: refreshInspection)
                         .accessibilityIdentifier("audio-refresh")
                 }
                 recordingControl
                 if !recordingEnabled && !isRecordingOrRequesting {
-                    Text("麦克风录音尚未启用；录音保持关闭，也不会请求系统许可。")
+                    Text(consistencyText(consistencyLanguage, "remaining.575a8d87e5d4"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 captureRecovery
@@ -201,24 +202,24 @@ public struct AudioWorkbenchView: View {
     private func header(format: AudioFormatInfo) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("原始音频").font(.title2.weight(.semibold))
-                Text("原件保持不变；片段只记录起止位置。\(format.channelCount) 声道 · \(Int(format.sampleRate)) Hz")
+                Text(consistencyText(consistencyLanguage, "remaining.a61a015d1672")).font(.title2.weight(.semibold))
+                Text(consistencyText(consistencyLanguage, "remaining.308f72288b38", arguments: ["v0": String(describing: format.channelCount), "v1": String(describing: Int(format.sampleRate))]))
                     .font(.caption).foregroundStyle(.secondary)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 126, maximum: 210), spacing: 8)],
                       alignment: .leading, spacing: 8) {
-                Button("导出原件", systemImage: "square.and.arrow.up", action: exportOriginal)
+                Button(consistencyText(consistencyLanguage, "remaining.21ce92417dc8"), systemImage: "square.and.arrow.up", action: exportOriginal)
                     .buttonStyle(WorkbenchGlassButtonStyle())
                     .accessibilityIdentifier("audio-export-original")
                     .audioMeasured("audio-export-original", probe: layoutProbe)
                 recordingControl.buttonStyle(WorkbenchGlassButtonStyle())
             }
             if !recordingEnabled && !isRecordingOrRequesting {
-                Text("麦克风录音尚未启用；录音保持关闭，也不会请求系统许可。")
+                Text(consistencyText(consistencyLanguage, "remaining.575a8d87e5d4"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             if controller?.errorMessage != nil {
-                Button("重新读取原声", action: refreshInspection)
+                Button(consistencyText(consistencyLanguage, "remaining.ab7cc5e472e6"), action: refreshInspection)
                     .accessibilityIdentifier("audio-refresh")
             }
         }
@@ -227,12 +228,12 @@ public struct AudioWorkbenchView: View {
 
     @ViewBuilder private var recordingControl: some View {
         if isRecordingOrRequesting {
-            Button(transport.state == .recording ? "结束录音" : "取消等待",
+            Button(transport.state == .recording ? consistencyText(consistencyLanguage, "remaining.9e8b189ff9e7") : consistencyText(consistencyLanguage, "remaining.fdc423587f24"),
                    systemImage: "stop.fill", action: finishRecording)
                 .accessibilityIdentifier("audio-record-finish")
                 .audioMeasured("audio-record-finish", probe: layoutProbe)
         } else {
-            Button("开始录音", systemImage: "mic.fill", action: startRecording)
+            Button(consistencyText(consistencyLanguage, "remaining.ee9247035880"), systemImage: "mic.fill", action: startRecording)
                 .disabled(!recordingEnabled)
                 .accessibilityIdentifier("audio-record-start")
                 .audioMeasured("audio-record-start", probe: layoutProbe)
@@ -254,7 +255,7 @@ public struct AudioWorkbenchView: View {
             .accessibilityIdentifier("audio-waveform")
             .audioMeasured("audio-waveform", probe: layoutProbe)
             HStack {
-                Button(transport.state == .playing ? "暂停" : "播放",
+                Button(transport.state == .playing ? consistencyText(consistencyLanguage, "remaining.8d12fc0d4eb2") : consistencyText(consistencyLanguage, "remaining.c3396195e91c"),
                        systemImage: transport.state == .playing ? "pause.fill" : "play.fill") {
                     if transport.state == .playing {
                         transport.pause()
@@ -270,7 +271,7 @@ public struct AudioWorkbenchView: View {
                 statusLabel
             }
             if let preparedRange {
-                Text("已准备试听：\(time(preparedRange.startFrame, format: format)) – \(time(preparedRange.endFrame, format: format))")
+                Text(consistencyText(consistencyLanguage, "remaining.54b25dc3d556", arguments: ["v0": String(describing: time(preparedRange.startFrame, format: format)), "v1": String(describing: time(preparedRange.endFrame, format: format))]))
                     .font(.caption).foregroundStyle(.secondary)
                     .accessibilityIdentifier("audio-prepared-range")
                     .audioMeasured("audio-prepared-range", probe: layoutProbe)
@@ -282,40 +283,40 @@ public struct AudioWorkbenchView: View {
 
     private func details(document: AudioDraftDocument, format: AudioFormatInfo) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("注释与片段").font(.headline)
-            TextField("原始媒体注释", text: noteBinding(document), axis: .vertical)
+            Text(consistencyText(consistencyLanguage, "remaining.79513b4afed9")).font(.headline)
+            TextField(consistencyText(consistencyLanguage, "remaining.febb598fbcef"), text: noteBinding(document), axis: .vertical)
                 .lineLimit(3...6)
                 .textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .disabled(!canEdit)
                 .accessibilityIdentifier("audio-note")
                 .audioMeasured("audio-note", probe: layoutProbe)
-            Button(controller?.isSaving == true ? "正在保存…" : "保存注释") {
+            Button(controller?.isSaving == true ? consistencyText(consistencyLanguage, "remaining.6bdb4435095e") : consistencyText(consistencyLanguage, "remaining.2214441f8100")) {
                 saveNote(document)
             }
             .disabled(!canEdit || controller?.isSaving == true)
             .accessibilityIdentifier("audio-save-note")
             Divider()
             HStack {
-                TextField("片段名称", text: clipNameBinding(document))
+                TextField(consistencyText(consistencyLanguage, "remaining.5679e242347c"), text: clipNameBinding(document))
                     .disabled(!canEdit)
                     .accessibilityIdentifier("audio-clip-name")
-                Button("添加片段") { addClip(document, format: format) }
+                Button(consistencyText(consistencyLanguage, "remaining.780e77bb7d01")) { addClip(document, format: format) }
                     .disabled(!canEdit || document.clips.count >= AudioLimits.maximumClips)
                     .accessibilityIdentifier("audio-add-clip")
                     .audioMeasured("audio-add-clip", probe: layoutProbe)
             }
             rangeEditors(document: document, format: format)
             HStack {
-                Button("完整音频") {
+                Button(consistencyText(consistencyLanguage, "remaining.6b0ee08c94f5")) {
                     select(Optional<AudioClip>.none, document: document, format: format)
                 }
                     .disabled(!canEdit)
                     .accessibilityIdentifier("audio-select-full")
                     .accessibilityAddTraits(document.selectedClipID == nil ? .isSelected : [])
-                Button("试听当前范围") { auditionCurrentRange(document: document, format: format) }
+                Button(consistencyText(consistencyLanguage, "remaining.dff93287cdc5")) { auditionCurrentRange(document: document, format: format) }
                     .disabled(!canEdit)
                     .accessibilityIdentifier("audio-audition-range")
-                Button("导出编辑范围") { exportCurrentRange(format: format) }
+                Button(consistencyText(consistencyLanguage, "remaining.27ba660e37bb")) { exportCurrentRange(format: format) }
                     .disabled(controller != nil && controller?.clipRangeInput == nil)
                     .accessibilityIdentifier("audio-export-range")
             }
@@ -328,16 +329,16 @@ public struct AudioWorkbenchView: View {
                     Spacer()
                     Text("\(time(clip.range.startFrame, format: format)) – \(time(clip.range.endFrame, format: format))")
                         .font(.caption)
-                    Button("导出") { export(clip: clip) }
+                    Button(consistencyText(consistencyLanguage, "remaining.76420433f22d")) { export(clip: clip) }
                         .accessibilityIdentifier("audio-export-clip-\(clip.id.uuidString)")
                 }
                 .audioMeasured("audio-clip-row-\(clip.id.uuidString)", probe: layoutProbe)
             }
             if controller?.hasUnsubmittedInput == true {
                 HStack {
-                    Text("有尚未提交的原声输入。")
+                    Text(consistencyText(consistencyLanguage, "remaining.3770318e532e"))
                         .font(.caption).foregroundStyle(.secondary)
-                    Button("放弃输入", role: .destructive) { discardInput(document, format: format) }
+                    Button(consistencyText(consistencyLanguage, "remaining.cc26c3570bb5"), role: .destructive) { discardInput(document, format: format) }
                         .disabled(!canEdit)
                         .accessibilityIdentifier("audio-discard-input")
                 }
@@ -350,19 +351,19 @@ public struct AudioWorkbenchView: View {
         VStack(alignment: .leading, spacing: 8) {
             Stepper(value: startBinding(document: document, format: format),
                     in: Int64(0)...max(Int64(0), format.frameCount - 1), step: 1) {
-                Text("开始：\(startFrame) 帧（\(time(startFrame, format: format))）")
+                Text(consistencyText(consistencyLanguage, "remaining.20c88acfeb8b", arguments: ["v0": String(describing: startFrame), "v1": String(describing: time(startFrame, format: format))]))
                     .monospacedDigit()
             }
             .disabled(!canEdit)
             .accessibilityIdentifier("audio-range-start")
             Stepper(value: endBinding(document: document, format: format),
                     in: min(Int64(1), format.frameCount)...max(Int64(1), format.frameCount), step: 1) {
-                Text("结束：\(endFrame) 帧（\(time(endFrame, format: format))）")
+                Text(consistencyText(consistencyLanguage, "remaining.5d1fdfe74fe6", arguments: ["v0": String(describing: endFrame), "v1": String(describing: time(endFrame, format: format))]))
                     .monospacedDigit()
             }
             .disabled(!canEdit)
             .accessibilityIdentifier("audio-range-end")
-            Text("按原始帧调整，每次一步；范围包含开始帧，不包含结束帧。")
+            Text(consistencyText(consistencyLanguage, "remaining.e585b7e61afe"))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -370,20 +371,20 @@ public struct AudioWorkbenchView: View {
     @ViewBuilder private var captureRecovery: some View {
         if let controller, !controller.pendingCaptures.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Text("待恢复录音").font(.headline)
-                Text("录音保存尚未完成。可重试；也可保留文件供以后恢复。原件不会被删除。")
+                Text(consistencyText(consistencyLanguage, "remaining.3fb86fc50550")).font(.headline)
+                Text(consistencyText(consistencyLanguage, "remaining.5a1d184d0691"))
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(controller.pendingCaptures) { capture in
                     HStack {
                         Text(capture.name).lineLimit(1)
                         Spacer()
-                        Button("重试") {
+                        Button(consistencyText(consistencyLanguage, "remaining.b8784c8dd563")) {
                             productionActions?.retryCapture(
                                 capture.id, controller.contextID, editingDocumentID
                             )
                         }
                             .disabled(controller.isFinalizing || isRecordingOrRequesting)
-                        Button("保留待恢复") {
+                        Button(consistencyText(consistencyLanguage, "remaining.c6bca057fb85")) {
                             productionActions?.keepCapture(
                                 capture.id, controller.contextID, editingDocumentID
                             )
@@ -699,15 +700,21 @@ public struct AudioWorkbenchView: View {
     }
 
     private var statusText: String {
-        if let message = controller?.errorMessage ?? transport.errorMessage ?? actionStatus {
-            return message
+        if let message = controller?.errorMessage ?? transport.errorMessage { return message }
+        if let actionStatus {
+            switch actionStatus {
+            case "注释已保存。": return consistencyText(consistencyLanguage, "remaining.0af1064ff510")
+            case "片段已保存。": return consistencyText(consistencyLanguage, "remaining.666577412ccf")
+            case "未提交输入已放弃；原件和已保存内容未改变。": return consistencyText(consistencyLanguage, "remaining.0a680010906c")
+            default: return actionStatus
+            }
         }
         return switch transport.state {
-        case .requestingPermission: "等待录音许可"
-        case .recording: "正在录音"
-        case .recorded: "已准备"
-        case .playing: "正在播放"
-        case .paused: "已暂停"
+        case .requestingPermission: consistencyText(consistencyLanguage, "remaining.b6adc42adfe8")
+        case .recording: consistencyText(consistencyLanguage, "remaining.5254d30be60f")
+        case .recorded: consistencyText(consistencyLanguage, "remaining.8bef70b00989")
+        case .playing: consistencyText(consistencyLanguage, "remaining.e6666b2eb332")
+        case .paused: consistencyText(consistencyLanguage, "remaining.eb0c326b60ae")
         case .idle, .failed: ""
         }
     }
@@ -725,6 +732,7 @@ public struct AudioWorkbenchView: View {
 }
 
 private struct WaveformView: View {
+    @Environment(\.dLanguageStore) private var consistencyLanguage
     let peaks: [AudioPeak]
     let position: Int64
     let frameCount: Int64

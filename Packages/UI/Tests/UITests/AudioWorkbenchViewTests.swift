@@ -60,8 +60,8 @@ struct AudioWorkbenchViewTests {
         parent.subviews.flatMap { [$0] + descendants($0) }
     }
 
-    private func settle(
-        _ host: NSHostingView<AudioWorkbenchView>,
+    private func settle<Content: View>(
+        _ host: NSHostingView<Content>,
         width: CGFloat,
         height: CGFloat = 580,
         until condition: () -> Bool = { true }
@@ -284,8 +284,8 @@ struct AudioWorkbenchViewTests {
         #expect(suppliedRange == original)
     }
 
-    @Test
-    func hostedUnicodeEditorValuesReachSharedButtonHandlerWithoutClaimingGUIActivation() throws {
+    @Test(arguments: ["en", "zh-Hans"])
+    func hostedUnicodeEditorValuesReachSharedButtonHandlerWithoutClaimingGUIActivation(locale: String) throws {
         let document = AudioDraftDocument(
             id: UUID(),
             assetID: UUID(),
@@ -310,7 +310,7 @@ struct AudioWorkbenchViewTests {
             waveform: [],
             transport: AudioTransport(),
             actions: callbacks
-        ))
+        ).environment(\.dLanguageStore, UILanguageStore(preferredLanguages: [locale])))
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 700, height: 580),
             styleMask: [.borderless],
@@ -322,8 +322,8 @@ struct AudioWorkbenchViewTests {
         settle(host, width: 700)
 
         let fields = descendants(host).compactMap { $0 as? NSTextField }
-        let noteEditor = try #require(fields.first { $0.placeholderString == "原始媒体注释" })
-        let clipEditor = try #require(fields.first { $0.placeholderString == "片段名称" })
+        let noteEditor = try #require(fields.first { $0.placeholderString == (locale == "en" ? "Original Media Notes" : "原始媒体注释") })
+        let clipEditor = try #require(fields.first { $0.placeholderString == (locale == "en" ? "Clip Name" : "片段名称") })
         let clipUnicode = "片段 e\u{301} 🎵"
         clipEditor.stringValue = clipUnicode
         let range = AudioFrameRange(startFrame: 7, endFrame: 19)

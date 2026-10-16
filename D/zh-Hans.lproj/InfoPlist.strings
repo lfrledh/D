@@ -1,0 +1,3 @@
+"NSMicrophoneUsageDescription" = "D 会在你点击开始录音后录制哼唱或声音灵感，并保存在本地项目中。";
+"NSSpeechRecognitionUsageDescription" = "将您明确选择或录制的语音在本机转成待发送文字；不自动发送到聊天。";
+"D 创作项目" = "D 创作项目";

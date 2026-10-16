@@ -87,6 +87,7 @@ private extension PitchAnalysisViewResultState {
 }
 
 public struct PitchAnalysisView: View {
+    @Environment(\.dLanguageStore) private var consistencyLanguage
     private let result: PitchAnalysisResult?
     private let isBusy: Bool
     private let isStale: Bool
@@ -121,7 +122,7 @@ public struct PitchAnalysisView: View {
                 header
                 switch PitchAnalysisViewActionGate.resultState(result: result) {
                 case .absent:
-                    Text("尚无音高分析候选。选择已保存的单声部原声区间后开始分析。")
+                    Text(consistencyText(consistencyLanguage, "remaining.a7cbfa556a1d"))
                         .foregroundStyle(.secondary)
                 case .valid(let interpretation):
                     if let result {
@@ -143,8 +144,8 @@ public struct PitchAnalysisView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text("音高候选").font(.title3)
-            Text("连续音高是模型轨迹；近似音符是按等律半音解释的单声部候选，不是谱面或音符试听。")
+            Text(consistencyText(consistencyLanguage, "remaining.5d82c7269793")).font(.title3)
+            Text(consistencyText(consistencyLanguage, "remaining.8e57a953f0a3"))
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -152,50 +153,50 @@ public struct PitchAnalysisView: View {
     @ViewBuilder
     private func resultSummary(_ result: PitchAnalysisResult, interpretation: PitchInterpretation) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("分析时长 \(analysisSeconds(result).formatted(.number.precision(.fractionLength(3)))) 秒")
+            Text(consistencyText(consistencyLanguage, "remaining.f130cfb4c000", arguments: ["v0": String(describing: analysisSeconds(result).formatted(.number.precision(.fractionLength(3))))]))
                 .font(.caption).foregroundStyle(.secondary)
             if result.hasVoicedPitch {
-                Text("连续音高轨迹（前 \(min(result.frames.count, 12)) / \(result.frames.count) 帧）")
+                Text(consistencyText(consistencyLanguage, "remaining.5784955dce5e", arguments: ["v0": String(describing: min(result.frames.count, 12)), "v1": String(describing: result.frames.count)]))
                     .font(.headline)
                 ForEach(Array(result.frames.prefix(12).enumerated()), id: \.offset) { pair in
                     frameRow(index: pair.offset, frame: pair.element)
                 }
             } else {
-                Text("未检测到可靠单声音高").font(.headline)
-                Text("这是正常的未可靠识别结果，不表示系统错误。")
+                Text(consistencyText(consistencyLanguage, "remaining.8625fbb2f773")).font(.headline)
+                Text(consistencyText(consistencyLanguage, "remaining.eb5ae6c21d61"))
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Text("近似音符候选").font(.headline)
+            Text(consistencyText(consistencyLanguage, "remaining.435b0017dced")).font(.headline)
             if !interpretation.notes.isEmpty {
                 ForEach(Array(interpretation.notes.prefix(12).enumerated()), id: \.offset) { pair in
-                    Text("\(noteName(pair.element.midiNote))（MIDI \(pair.element.midiNote)）：\(pair.element.startSample)–\(pair.element.endSample) 样本（\(sampleSeconds(pair.element.startSample).formatted(.number.precision(.fractionLength(3))))–\(sampleSeconds(pair.element.endSample).formatted(.number.precision(.fractionLength(3)))) 秒），平均分数 \(pair.element.meanConfidence.formatted(.number.precision(.fractionLength(2))))")
+                    Text(consistencyText(consistencyLanguage, "remaining.de18c979ccc0", arguments: ["v0": String(describing: noteName(pair.element.midiNote)), "v1": String(describing: pair.element.midiNote), "v2": String(describing: pair.element.startSample), "v3": String(describing: pair.element.endSample), "v4": String(describing: sampleSeconds(pair.element.startSample).formatted(.number.precision(.fractionLength(3)))), "v5": String(describing: sampleSeconds(pair.element.endSample).formatted(.number.precision(.fractionLength(3)))), "v6": String(describing: pair.element.meanConfidence.formatted(.number.precision(.fractionLength(2))))]))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if interpretation.notes.count > 12 {
-                    Text("另有 \(interpretation.notes.count - 12) 个近似音符未在此列表展开。")
+                    Text(consistencyText(consistencyLanguage, "remaining.6d4f05767ac4", arguments: ["v0": String(describing: interpretation.notes.count - 12)]))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             } else {
-                Text("没有满足连续至少 5 帧条件的近似音符。")
+                Text(consistencyText(consistencyLanguage, "remaining.c91fa1bd3f7c"))
                     .foregroundStyle(.secondary)
             }
-            Text("仅覆盖完整的 256 样本分析块；最后不足一块的尾部未分析，未纳入音符覆盖。")
+            Text(consistencyText(consistencyLanguage, "remaining.31f38fb2bb50"))
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var invalidResultSummary: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("分析结果无效或不完整").font(.headline).foregroundStyle(.orange)
-            Text("不能保存或导出此候选。这不是“未检测到可靠单声音高”；可拒绝后重新分析。")
+            Text(consistencyText(consistencyLanguage, "remaining.0cad543f8abd")).font(.headline).foregroundStyle(.orange)
+            Text(consistencyText(consistencyLanguage, "remaining.838033c2d27f"))
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private func frameRow(index: Int, frame: PitchFrame) -> some View {
-        let pitch = frame.pitchHz.map { $0.formatted(.number.precision(.fractionLength(2))) + " Hz" } ?? "未可靠识别"
-        return Text("帧 \(index + 1)：\(pitch)，分数 \(frame.confidence.formatted(.number.precision(.fractionLength(2))))")
+        let pitch = frame.pitchHz.map { $0.formatted(.number.precision(.fractionLength(2))) + " Hz" } ?? consistencyText(consistencyLanguage, "remaining.cbe5b27aea89")
+        return Text(consistencyText(consistencyLanguage, "remaining.ebb08dd6131a", arguments: ["v0": String(describing: index + 1), "v1": String(describing: pitch), "v2": String(describing: frame.confidence.formatted(.number.precision(.fractionLength(2))))]))
             .font(.body.monospacedDigit()).fixedSize(horizontal: false, vertical: true)
     }
 
@@ -215,43 +216,43 @@ public struct PitchAnalysisView: View {
     private var actionRow: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Button("开始分析") {
+                Button(consistencyText(consistencyLanguage, "remaining.b2be5f83c949")) {
                     _ = PitchAnalysisViewActionGate.analyze(result: result, isBusy: isBusy, hasSaved: hasSaved,
                                                             canAnalyze: canAnalyze, action: onAnalyze)
                 }
                     .buttonStyle(WorkbenchGlassButtonStyle())
                     .disabled(!PitchAnalysisViewActionGate.canAnalyze(result: result, isBusy: isBusy, hasSaved: hasSaved, canAnalyze: canAnalyze))
                     .accessibilityIdentifier("pitch-analyze")
-                Button("取消", role: .destructive) {
+                Button(consistencyText(consistencyLanguage, "remaining.2cd0f3be8738"), role: .destructive) {
                     _ = PitchAnalysisViewActionGate.cancel(isBusy: isBusy, action: onCancel)
                 }
                     .disabled(!PitchAnalysisViewActionGate.canCancel(isBusy: isBusy))
                     .accessibilityIdentifier("pitch-cancel")
             }
             HStack {
-                Button("保存") {
+                Button(consistencyText(consistencyLanguage, "remaining.a3030bf8f16d")) {
                     _ = PitchAnalysisViewActionGate.save(result: result, isBusy: isBusy, isStale: isStale,
                                                          hasSaved: hasSaved, action: onSave)
                 }
                     .disabled(!PitchAnalysisViewActionGate.canSave(result: result, isBusy: isBusy, isStale: isStale, hasSaved: hasSaved))
                     .accessibilityIdentifier("pitch-save")
-                Button("拒绝", role: .destructive) {
+                Button(consistencyText(consistencyLanguage, "remaining.136de7a8c46f"), role: .destructive) {
                     _ = PitchAnalysisViewActionGate.reject(result: result, isBusy: isBusy, hasSaved: hasSaved,
                                                            action: onReject)
                 }
                     .disabled(!PitchAnalysisViewActionGate.canReject(result: result, isBusy: isBusy, hasSaved: hasSaved))
                     .accessibilityIdentifier("pitch-reject")
-                Button("导出 JSON") {
+                Button(consistencyText(consistencyLanguage, "remaining.fb48367b485c")) {
                     _ = PitchAnalysisViewActionGate.export(result: result, isBusy: isBusy, action: onExport)
                 }
                     .disabled(!PitchAnalysisViewActionGate.canExport(result: result, isBusy: isBusy))
                     .accessibilityIdentifier("pitch-export")
             }
             if isStale {
-                Text("此候选已过期，不能保存；可拒绝并重新分析。")
+                Text(consistencyText(consistencyLanguage, "remaining.b25d32c66e0f"))
                     .font(.caption).foregroundStyle(.orange)
             } else if hasSaved {
-                Text("此候选已保存；可导出或开始新的分析。")
+                Text(consistencyText(consistencyLanguage, "remaining.ce019a9c96e2"))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
