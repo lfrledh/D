@@ -145,6 +145,9 @@ struct WorkflowCanvasViewportHostingTests {
     }
 
     @Test func nativeWindowWheelAndMiddleClickStayInsideVisibleCanvas() async throws {
+        let app = NSApplication.shared, activationPolicy = NSApplication.shared.activationPolicy()
+        app.setActivationPolicy(.regular)
+        defer { app.setActivationPolicy(activationPolicy) }
         let temporaryRoot = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
         let root = URL(fileURLWithPath: temporaryRoot)
             .appendingPathComponent("canvas-viewport-" + UUID().uuidString)
@@ -177,8 +180,10 @@ struct WorkflowCanvasViewportHostingTests {
         var cardSizes: [UUID: CGSize] = [:]
         var portCenters: [WorkflowPortIdentity: CGPoint] = [:]
         var lockChanges: [Bool] = []
+        let overlays = WorkbenchSidebarState(leading: false, trailing: false)
         let view = WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
             onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in })
+            .testingOverlayState(overlays)
             .observingScroll { _, observation in observations.append(observation) }
             .observingNodeSizes { id, size in cardSizes[id] = size }
             .observingPortCenters { portCenters = $0 }
@@ -237,23 +242,27 @@ struct WorkflowCanvasViewportHostingTests {
             let picker = try #require(accessibilityElements(host).first {
                 $0.accessibilityIdentifier() == "workflow-canvas-tool"
             })
-            let buttons = (picker.accessibilityChildren() ?? []).compactMap {
-                $0 as? any NSAccessibilityProtocol
-            }.filter { $0.accessibilityRole() == .radioButton }
+            let buttons = accessibilityElements(try #require(picker as? NSObject))
+                .filter { $0.accessibilityRole() == .button }
             try #require(buttons.count == 2)
-            let button = buttons[hand ? 1 : 0]
+            try #require(Set(buttons.compactMap { $0.accessibilityLabel() }) == Set(["指针", "手形"]))
+            let button = try #require(buttons.first { $0.accessibilityLabel() == (hand ? "手形" : "指针") })
             try #require(HostingControlClick.send(to: button, in: host))
             for _ in 0..<20 {
                 host.layoutSubtreeIfNeeded()
-                if (button.accessibilityValue() as? NSNumber)?.boolValue == true { break }
+                if button.isAccessibilitySelected() { break }
                 try await Task.sleep(for: .milliseconds(10))
             }
-            try #require((button.accessibilityValue() as? NSNumber)?.boolValue == true)
+            try #require(button.isAccessibilitySelected())
         }
         try await selectTool(false)
-        #expect(viewport.width < scroll.bounds.width && viewport.height < scroll.bounds.height,
-                "Legacy scrollbars must consume real clip space in this fixture")
+        #expect(!scroll.hasHorizontalScroller && !scroll.hasVerticalScroller)
+        #expect(scroll.scrollerStyle == .overlay)
+        #expect(abs(viewport.width - scroll.bounds.width) < 1
+            && abs(viewport.height - scroll.bounds.height) < 1,
+                "The production canvas removes both legacy scrollbar gutters")
         #expect(observations.last?.containerSize == viewport)
+        try #require(abs((try #require(observations.last)).zoom - 1) < 0.0001)
         let initialLayout = WorkflowCanvasViewportGeometry(graphSize: graphGeometry.size,
             viewportSize: viewport, zoom: 1, translation: graphGeometry.translation)
         for _ in 0..<40 {
@@ -322,23 +331,32 @@ struct WorkflowCanvasViewportHostingTests {
         #expect(scroll.documentView?.frame.width != initialDocumentSize.width,
                 "A real window wheel event must change the rendered canvas zoom")
         let zoomedSize = try #require(scroll.documentView).frame.size
-        let zoomed = zoomedSize.width / initialDocumentSize.width
+        let zoomed = try #require(observations.last).zoom
         try #require(zoomed >= 0.5 && graphGeometry.size.width * zoomed >= viewport.width)
         let zoomedLayout = WorkflowCanvasViewportGeometry(graphSize: graphGeometry.size,
             viewportSize: viewport, zoom: zoomed, translation: graphGeometry.translation)
         let anchored = zoomedLayout.rawPoint(screenPoint: mouseInClip, offset: clip.bounds.origin)
         #expect(abs(anchored.x - originalRaw.x) < 3 && abs(anchored.y - originalRaw.y) < 3)
 
-        let outside = CGPoint(x: 20, y: mouseInWindow.y) // node library, outside the graph scroll view
         let beforeOutside = clip.bounds.origin
         let beforeOutsideSize = try #require(scroll.documentView).frame.size
-        try await dispatch(wheel(at: outside, in: window, delta: 32))
-        #expect(clip.bounds.origin == beforeOutside)
-        #expect(scroll.documentView?.frame.size == beforeOutsideSize)
-        try await dispatch(wheel(at: CGPoint(x: window.frame.width - 20, y: mouseInWindow.y),
-                                 in: window, delta: 32)) // inspector
-        #expect(clip.bounds.origin == beforeOutside)
-        #expect(scroll.documentView?.frame.size == beforeOutsideSize)
+        overlays.leading = true; overlays.trailing = true
+        for _ in 0..<40 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        #expect(clip.bounds.origin == beforeOutside && clip.bounds.size == viewport)
+        for identifier in ["canvas-inspector-host", "canvas-library-host"] {
+            let pane = try #require(descendants(host).first { $0.accessibilityIdentifier() == identifier })
+            try #require(!pane.isHiddenOrHasHiddenAncestor && pane.bounds.width > 0 && pane.bounds.height > 0)
+            let point = pane.convert(CGPoint(x: pane.bounds.midX, y: pane.bounds.midY), to: nil)
+            let hit = try #require(host.hitTest(host.superview?.convert(point, from: nil) ?? point))
+            try #require(hit === pane || hit.isDescendant(of: pane), "The actual floating pane owns this wheel location")
+            try #require(hit !== scroll && !hit.isDescendant(of: scroll))
+            try await dispatch(wheel(at: point, in: window, delta: 32))
+            #expect(clip.bounds.origin == beforeOutside)
+            #expect(scroll.documentView?.frame.size == beforeOutsideSize)
+        }
+        overlays.leading = false; overlays.trailing = false
+        for _ in 0..<40 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        #expect(clip.bounds.origin == beforeOutside && clip.bounds.size == viewport)
 
         let otherWindow = NSWindow(contentRect: window.frame, styleMask: [.titled],
             backing: .buffered, defer: false)
@@ -358,8 +376,8 @@ struct WorkflowCanvasViewportHostingTests {
         #expect(abs(recentered.y - zoomedLayout.centerRawPoint.y) < 3)
         #expect(scroll.documentView?.frame.size == zoomedSize, "Middle click keeps the zoom")
 
-        // A SwiftUI card button is a virtual control, so native NSControl tests alone cannot
-        // protect it. Position the card in the clip, then wheel over its top-right button area.
+        // A non-scrolling SwiftUI card surface uses the same ordinary-wheel zoom route
+        // as blank canvas. Genuine native editors and nested scroll views keep their owner.
         let cardNode = try #require(graph.nodes.first)
         let cardSize = try #require(cardSizes[cardNode.id])
         let cardRaw = graphGeometry.rawPosition(cardNode.id)
@@ -370,18 +388,50 @@ struct WorkflowCanvasViewportHostingTests {
         let cardCenter = CGPoint(
             x: (cardDisplay.x + zoomedLayout.unscaledPadding.width) * zoomed - clip.bounds.origin.x,
             y: (cardDisplay.y + zoomedLayout.unscaledPadding.height) * zoomed - clip.bounds.origin.y)
-        let cardButton = CGPoint(x: cardCenter.x + 80 * zoomed,
-                                 y: cardCenter.y - (cardSize.height / 2 - 25) * zoomed)
+        let cardElement = try #require(accessibilityElements(host).first {
+            $0.accessibilityIdentifier() == "workflow-node-" + cardNode.id.uuidString
+        })
+        let cardFrame = window.convertFromScreen(cardElement.accessibilityFrame())
+        try #require(cardFrame.contains(windowPoint(inClip: cardCenter)),
+                     "The geometric node center must belong to this actual rendered card")
+        let inspectElement = try #require(accessibilityElements(host).first {
+            $0.accessibilityIdentifier() == "workflow-node-inspect-" + cardNode.id.uuidString
+        })
+        let inspectFrame = window.convertFromScreen(inspectElement.accessibilityFrame())
+        try #require(inspectFrame.width > 0 && inspectFrame.height > 0)
+        let nativeButtonPoint = clip.convert(CGPoint(x: inspectFrame.midX, y: inspectFrame.midY), from: nil)
+        let cardButton = CGPoint(x: nativeButtonPoint.x - clip.bounds.minX,
+            y: clip.isFlipped ? nativeButtonPoint.y - clip.bounds.minY : clip.bounds.maxY - nativeButtonPoint.y)
         #expect(cardButton.x > 0 && cardButton.x < clip.bounds.width)
         #expect(cardButton.y > 0 && cardButton.y < clip.bounds.height)
         let cardOffset = clip.bounds.origin
-        try await dispatch(wheel(at: windowPoint(inClip: cardButton), in: window, delta: 24))
-        #expect(scroll.documentView?.frame.size == zoomedSize,
-                "Virtual node controls keep their own input instead of zooming the canvas")
-        #expect(clip.bounds.origin == cardOffset,
-                "A rejected node wheel must not fall through as native canvas scrolling")
-        try await dispatch(wheel(at: windowPoint(inClip: cardCenter), in: window, delta: -24))
-        #expect(clip.bounds.origin == cardOffset && scroll.documentView?.frame.size == zoomedSize)
+        for point in [cardButton, cardCenter] {
+            let eventLocation = windowPoint(inClip: point)
+            var hit: NSView? = try #require(host.hitTest(host.superview?.convert(eventLocation, from: nil) ?? eventLocation))
+            while let current = hit, current !== scroll {
+                try #require(!(current is NSScrollView) && !(current is NSTextView) && !(current is NSControl),
+                             "This node fixture must hit a non-scrolling surface, not an editor or native control")
+                hit = current.superview
+            }
+            try #require(hit === scroll, "The rendered node point belongs to the canvas")
+            let anchor = zoomedLayout.rawPoint(screenPoint: point, offset: clip.bounds.origin)
+            try await dispatch(wheel(at: windowPoint(inClip: point), in: window, delta: 1, units: .line))
+            let changedSize = try #require(scroll.documentView).frame.size
+            #expect(changedSize != zoomedSize, "Ordinary wheel on a non-scrolling node zooms the canvas")
+            let changedZoom = try #require(observations.last).zoom
+            let changedLayout = WorkflowCanvasViewportGeometry(graphSize: graphGeometry.size,
+                viewportSize: viewport, zoom: changedZoom,
+                translation: graphGeometry.translation)
+            let changedAnchor = changedLayout.rawPoint(screenPoint: point, offset: clip.bounds.origin)
+            #expect(abs(changedAnchor.x - anchor.x) < 3 && abs(changedAnchor.y - anchor.y) < 3,
+                    "Node wheel zoom preserves its anchor instead of adding native scrolling")
+            try await dispatch(wheel(at: windowPoint(inClip: point), in: window, delta: -1, units: .line))
+            let restoredSize = try #require(scroll.documentView).frame.size
+            try #require(abs((try #require(observations.last)).zoom - zoomed) < 0.0001,
+                         "The opposite wheel restores scale before reusing the card geometry")
+            try #require(abs(restoredSize.width - zoomedSize.width) < 1 && abs(restoredSize.height - zoomedSize.height) < 1)
+            #expect(abs(clip.bounds.origin.x - cardOffset.x) < 3 && abs(clip.bounds.origin.y - cardOffset.y) < 3)
+        }
 
         let cardBackdrop = windowPoint(inClip: CGPoint(x: cardCenter.x - 75 * zoomed,
             y: cardCenter.y - (cardSize.height / 2 - 28) * zoomed))
@@ -401,7 +451,7 @@ struct WorkflowCanvasViewportHostingTests {
 
         let output = try #require(portCenters.first { !$0.key.input })
         let portNode = try #require(graph.nodes.first { $0.id == output.key.nodeID })
-        let portZoom = (try #require(scroll.documentView).frame.width) / initialDocumentSize.width
+        let portZoom = try #require(observations.last).zoom
         let portLayout = WorkflowCanvasViewportGeometry(graphSize: graphGeometry.size,
             viewportSize: clip.bounds.size, zoom: portZoom, translation: graphGeometry.translation)
         clip.scroll(to: portLayout.centeredOffset(on: graphGeometry.rawPosition(portNode.id)))
@@ -479,7 +529,7 @@ struct WorkflowCanvasViewportHostingTests {
         visibility.quickVisible = false
         for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
         let beforeReverse = observations.last
-        let reverseZoom = (try #require(scroll.documentView).frame.width) / initialDocumentSize.width
+        let reverseZoom = try #require(observations.last).zoom
         try #require(clip.bounds.size == viewport && reverseZoom >= 0.5)
         let reverseLayout = WorkflowCanvasViewportGeometry(graphSize: graphGeometry.size,
             viewportSize: clip.bounds.size, zoom: reverseZoom, translation: graphGeometry.translation)
@@ -490,7 +540,7 @@ struct WorkflowCanvasViewportHostingTests {
                 "The visible canvas must resume wheel zoom in the same window")
         let afterReverse = WorkflowCanvasViewportGeometry(graphSize: graphGeometry.size,
             viewportSize: clip.bounds.size,
-            zoom: (try #require(scroll.documentView).frame.width) / initialDocumentSize.width,
+            zoom: (try #require(observations.last)).zoom,
             translation: graphGeometry.translation)
         let keptReverse = afterReverse.rawPoint(screenPoint: mouseInClip, offset: clip.bounds.origin)
         #expect(abs(keptReverse.x - reverseAnchor.x) < 3 && abs(keptReverse.y - reverseAnchor.y) < 3)
@@ -548,20 +598,23 @@ struct WorkflowCanvasViewportHostingTests {
         try await dispatch(graphlessMiddle)
         #expect(scroll.documentView?.frame.size == graphlessZoomedSize)
         let emptyGeometry = WorkflowGraphGeometry(graph: WorkflowGraph())
-        let emptyZoom = graphlessZoomedSize.width / graphlessSize.width
+        let emptyZoom = try #require(observations.last).zoom
         let emptyLayout = WorkflowCanvasViewportGeometry(graphSize: emptyGeometry.size,
             viewportSize: clip.bounds.size, zoom: emptyZoom, translation: emptyGeometry.translation)
         let emptyCenter = emptyLayout.visibleRawCenter(offset: clip.bounds.origin)
         #expect(abs(emptyCenter.x - emptyLayout.centerRawPoint.x) < 3)
         #expect(abs(emptyCenter.y - emptyLayout.centerRawPoint.y) < 3)
 
-        // The bottom-right visible button restores 100% without adding a graph or undo step.
-        let reset = windowPoint(inClip: CGPoint(x: clip.bounds.width - 82, y: clip.bounds.height - 27))
-        try await dispatch(left(.leftMouseDown, at: reset))
-        try await dispatch(left(.leftMouseUp, at: reset))
-        #expect(abs((scroll.documentView?.frame.width ?? 0) - graphlessSize.width) < 2)
+        // Locate the actual reset control; its toolbar position is not canvas space.
+        let reset = try #require(accessibilityElements(host).first {
+            $0.accessibilityIdentifier() == "workflow-canvas-reset-view"
+        })
+        try #require(HostingControlClick.send(to: reset, in: host))
+        for _ in 0..<15 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        try #require(observations.last?.zoom == 1)
         let resetLayout = WorkflowCanvasViewportGeometry(graphSize: emptyGeometry.size,
             viewportSize: clip.bounds.size, zoom: 1, translation: emptyGeometry.translation)
+        #expect(abs((scroll.documentView?.frame.width ?? 0) - resetLayout.contentSize.width) < 2)
         let resetCenter = resetLayout.visibleRawCenter(offset: clip.bounds.origin)
         #expect(abs(resetCenter.x - resetLayout.centerRawPoint.x) < 3)
         #expect(abs(resetCenter.y - resetLayout.centerRawPoint.y) < 3)

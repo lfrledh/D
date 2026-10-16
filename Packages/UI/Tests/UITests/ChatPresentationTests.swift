@@ -172,6 +172,9 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     }
 
     @Test func rowAdmissionRefreshesArchiveWhileAnotherGateAlreadyDisablesIt() async throws {
+        let app = NSApplication.shared, activationPolicy = NSApplication.shared.activationPolicy()
+        app.setActivationPolicy(.regular)
+        defer { app.setActivationPolicy(activationPolicy) }
         var session = ChatSession(title: "Admission")
         session.configuration = try node()
         let message = ChatMessage(parentID: nil, role: .user, text: "Question")
@@ -188,6 +191,14 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
         defer { window.close() }
+        window.makeKeyAndOrderFront(nil); app.activate()
+        for _ in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            if window.isVisible && window.isKeyWindow && host.window === window { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(window.isVisible && window.isKeyWindow && host.window === window,
+                     "Visible chat host must be ready before testing menu admission")
         func generateEnabled() async throws -> Bool {
             let rect = try #require(frames["message-menu-" + message.id.uuidString])
             let target = NSAccessibilityElement()

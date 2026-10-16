@@ -143,6 +143,46 @@ final class WorkflowCanvasWheelZoom {
     }
 }
 
+/// Keep the raw camera across same-canvas origin changes. Only a matching
+/// native layout may consume the correction, and a later navigation cancels it.
+final class WorkflowCanvasLayoutAnchor {
+    private struct Snapshot {
+        let identity: WorkflowCanvasScopeIdentity
+        let layout: WorkflowCanvasViewportGeometry
+        let offset: CGPoint
+    }
+    private var ready: Snapshot?
+    private var pending: Snapshot?
+    private var declared: WorkflowCanvasViewportGeometry?
+    func cancel() { ready = nil; pending = nil; declared = nil }
+    func reconcile(scope: WorkflowCanvasScope?, layout: WorkflowCanvasViewportGeometry?,
+                   contentSize: CGSize, viewport: CGSize, offset: CGPoint) -> CGPoint? {
+        guard let scope, let layout else { cancel(); return nil }
+        let previous = pending ?? ready
+        if let previous, previous.identity != scope.identity || previous.layout.zoom != layout.zoom
+            || previous.layout.viewportSize != layout.viewportSize { cancel() }
+        if declared != layout {
+            if let previous = pending ?? ready, previous.identity == scope.identity,
+               previous.layout.translation != layout.translation {
+                pending = Snapshot(identity: scope.identity, layout: layout,
+                    offset: layout.centeredOffset(on: previous.layout.visibleRawCenter(offset: previous.offset)))
+            } else if let pending {
+                self.pending = Snapshot(identity: pending.identity, layout: layout, offset: pending.offset)
+            }
+            declared = layout
+        }
+        guard layout.viewportSize == viewport,
+              abs(contentSize.width - layout.contentSize.width) <= 1,
+              abs(contentSize.height - layout.contentSize.height) <= 1 else { return nil }
+        if let pending {
+            self.pending = nil; ready = pending
+            return pending.offset
+        }
+        ready = Snapshot(identity: scope.identity, layout: layout, offset: offset)
+        return nil
+    }
+}
+
 /// The probe lives inside the graph's scroll content. The local monitor is active only while
 /// that native view is mounted, and accepts events whose native hit path reaches its scroll view.
 struct WorkflowCanvasViewportInput: NSViewRepresentable {
@@ -150,6 +190,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     var tool: WorkflowCanvasTool = .pointer
     var interactionScope: WorkflowCanvasScope? = nil
     var wheelZoom: WorkflowCanvasWheelZoom? = nil
+    var navigationID: UUID? = nil
     var wheelLayout: (CGSize) -> WorkflowCanvasViewportGeometry? = { _ in nil }
     var pointerTarget: (CGPoint, CGPoint, CGSize) -> WorkflowCanvasPointerTarget = { _, _, _ in .control }
     var onPointer: (WorkflowCanvasPointerUpdate) -> Void = { _ in }
@@ -168,6 +209,8 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
 
     func updateNSView(_ view: ProbeView, context: Context) {
         if view.interactionScope != interactionScope { view.cancelPointer() }
+        if view.navigationID != navigationID { view.layoutAnchor.cancel() }
+        view.navigationID = navigationID
         view.interactionScope = interactionScope
         view.wheelZoom = wheelZoom
         view.wheelLayout = wheelLayout
@@ -186,6 +229,8 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     final class ProbeView: NSView {
         var interactionScope: WorkflowCanvasScope? { didSet { if oldValue != interactionScope { wheelOwner = nil; wheelScrollOwner = nil } } }
         var wheelZoom: WorkflowCanvasWheelZoom?
+        var navigationID: UUID?
+        let layoutAnchor = WorkflowCanvasLayoutAnchor()
         var wheelLayout: (CGSize) -> WorkflowCanvasViewportGeometry? = { _ in nil }
         var pointerTarget: (CGPoint, CGPoint, CGSize) -> WorkflowCanvasPointerTarget = { _, _, _ in .control }
         var onPointer: (WorkflowCanvasPointerUpdate) -> Void = { _ in }
@@ -230,7 +275,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
 
         func setTool(_ next: WorkflowCanvasTool) {
             guard next != tool else { return }
-            cancelPointer(); resetHandCursor(); tool = next
+            cancelPointer(); layoutAnchor.cancel(); resetHandCursor(); tool = next
             window?.invalidateCursorRects(for: self)
         }
 
@@ -265,7 +310,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         private weak var observedDocument: NSView?
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
-        override func viewDidHide() { super.viewDidHide(); cancelPointer(); resetHandCursor() }
+        override func viewDidHide() { super.viewDidHide(); cancelPointer(); layoutAnchor.cancel(); resetHandCursor() }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
@@ -314,7 +359,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         @discardableResult
         func routePointer(_ event: NSEvent) -> Bool {
             if event.type == .leftMouseDown {
-                if canvasHit(event) != nil { wheelZoom?.cancel() }
+                if canvasHit(event) != nil { wheelZoom?.cancel(); layoutAnchor.cancel() }
                 guard window?.isKeyWindow == true, accepts(event), navigationAllowed(),
                       let clip = enclosingScrollView?.contentView else { return false }
                 let location = clip.convert(event.locationInWindow, from: nil)
@@ -388,6 +433,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         func dispatchWheel(_ delta: CGFloat, _ point: CGPoint, _ offset: CGPoint,
                            _ viewport: CGSize) -> Bool {
             guard navigationAllowed() else { return false }
+            layoutAnchor.cancel()
             onWheel(delta, point, offset, viewport)
             return true
         }
@@ -395,7 +441,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         @discardableResult
         func dispatchMiddleClick(_ viewport: CGSize) -> Bool {
             guard navigationAllowed() else { return false }
-            wheelZoom?.cancel()
+            wheelZoom?.cancel(); layoutAnchor.cancel()
             onMiddleClick(viewport)
             return true
         }
@@ -416,12 +462,13 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             if scroll.scrollerStyle != .overlay || scroll.hasHorizontalScroller || scroll.hasVerticalScroller {
                 scroll.scrollerStyle = .overlay
                 scroll.hasHorizontalScroller = false; scroll.hasVerticalScroller = false
+                scroll.tile() // Clear stale gutters once, never on each pan tick.
             }
-            scroll.tile() // Remove stale legacy gutters before publishing the viewport.
             scroll.horizontalScrollElasticity = .none; scroll.verticalScrollElasticity = .none
             let measured = WorkflowCanvasViewportMeasurement(clip: scroll.contentView.bounds.size,
                                                               surfaceWidth: scroll.frame.width)
-            if let reportedSize, reportedSize.clip != measured.clip { wheelZoom?.cancel() }
+            if let reportedSize, reportedSize.clip != measured.clip { wheelZoom?.cancel(); layoutAnchor.cancel() }
+            applyLayoutAnchor()
             applyWheelOffset()
             guard measured.clip.width > 0, measured.clip.height > 0,
                   reportedSize != measured else { return }
@@ -436,6 +483,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             let scroll = enclosingScrollView
             guard observedScroll !== scroll || observedDocument !== scroll?.documentView else { return }
             stopViewportObservation()
+            layoutAnchor.cancel()
             guard let scroll else { return }
             observedScroll = scroll
             observedDocument = scroll.documentView
@@ -553,7 +601,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                 // Preserve the existing precise trackpad horizontal route only.
                 // Discrete mouse wheels are consumed even at a zoom limit or zero Y.
                 if event.hasPreciseScrollingDeltas {
-                    wheelZoom?.cancel()
+                    wheelZoom?.cancel(); layoutAnchor.cancel()
                     scroll.scrollWheel(with: event) // Keep the initial canvas owner across regions.
                     return true
                 }
@@ -562,6 +610,17 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             _ = dispatchWheel(event.scrollingDeltaY, point, clip.bounds.origin, clip.bounds.size)
             applyWheelOffset()
             return true
+        }
+
+        private func applyLayoutAnchor() {
+            guard !isHiddenOrHasHiddenAncestor, let scroll = enclosingScrollView, let document = scroll.documentView else { layoutAnchor.cancel(); return }
+            let clip = scroll.contentView
+            guard let offset = layoutAnchor.reconcile(scope: interactionScope,
+                layout: wheelLayout(clip.bounds.size), contentSize: document.frame.size,
+                viewport: clip.bounds.size, offset: clip.bounds.origin) else { return }
+            var bounds = clip.bounds; bounds.origin = offset
+            clip.scroll(to: clip.constrainBoundsRect(bounds).origin)
+            scroll.reflectScrolledClipView(clip)
         }
 
         private func applyWheelOffset() {
@@ -578,6 +637,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         }
 
         func stopMonitoring() {
+            layoutAnchor.cancel()
             wheelOwner = nil; wheelScrollOwner = nil
             cancelPointer()
             resetHandCursor()

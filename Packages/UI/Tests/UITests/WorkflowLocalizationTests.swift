@@ -211,6 +211,9 @@ struct WorkflowLocalizationTests {
 
     @Test
     func hostedCanvasSwitchPreservesDraftSelectionParametersAndControllerIdentity() async throws {
+        let app = NSApplication.shared, activationPolicy = NSApplication.shared.activationPolicy()
+        app.setActivationPolicy(.regular)
+        defer { app.setActivationPolicy(activationPolicy) }
         let approvedRoot = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
         let root = URL(fileURLWithPath: approvedRoot, isDirectory: true)
             .appendingPathComponent("workflow-localization-\(UUID().uuidString)", isDirectory: true)
@@ -267,6 +270,14 @@ struct WorkflowLocalizationTests {
         window.isReleasedWhenClosed = false
         window.contentView = host
         defer { window.close() }
+        window.makeKeyAndOrderFront(nil); app.activate()
+        for _ in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            if window.isVisible && window.isKeyWindow && host.window === window { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(window.isVisible && window.isKeyWindow && host.window === window,
+                     "Visible localization host must be ready before the positive control probe")
 
         func descendants(_ root: NSView) -> [NSView] {
             root.subviews.flatMap { [$0] + descendants($0) }

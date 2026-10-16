@@ -153,7 +153,7 @@ struct WorkbenchFeatureGuide: View {
                 }
             }
         }.padding(20).frame(minWidth: 640, idealWidth: 780, minHeight: 440, idealHeight: 580)
-            .workbenchTheme(paintsCanvas: true)
+            .workbenchPresentation()
     }
     private var currentReason: String? {
         if store.isCurrent(presentation), let token = presentation.token { return store.contexts[token]?.unavailableReason }

@@ -241,3 +241,128 @@ extension WorkbenchAddendumTests {
         #expect(store.presentation == nil) // Reading the guide does not dispatch another presentation or command.
     }
 }
+
+@MainActor private final class AddendumTilingScroll: NSScrollView {
+    var tiles = 0
+    override func tile() { tiles += 1; super.tile() }
+}
+extension WorkbenchAddendumTests {
+    @Test func canvasPanDoesNotRetileForEveryOriginChange() throws {
+        let scroll = AddendumTilingScroll(frame: .init(x: 0, y: 0, width: 640, height: 480))
+        scroll.scrollerStyle = .legacy; scroll.hasHorizontalScroller = true; scroll.hasVerticalScroller = true
+        let document = AddendumDocument(frame: .init(x: 0, y: 0, width: 4000, height: 3000))
+        scroll.documentView = document
+        let probe = WorkflowCanvasViewportInput.ProbeView(frame: .init(x: 0, y: 0, width: 1, height: 1))
+        document.addSubview(probe); probe.reportViewportSize()
+        try #require(!scroll.hasHorizontalScroller && !scroll.hasVerticalScroller)
+        try #require(scroll.contentView.bounds.size == scroll.bounds.size)
+        var sizes = 0; probe.onViewportSize = { _ in sizes += 1 }
+        scroll.tiles = 0
+        for i in 1...36 { scroll.contentView.scroll(to: .init(x: 400 + i * 3, y: 300 + i * 2)); probe.reportViewportSize() }
+        #expect(scroll.tiles == 0); #expect(sizes == 0)
+        scroll.setFrameSize(.init(width: 700, height: 510)); scroll.layoutSubtreeIfNeeded(); probe.reportViewportSize()
+        #expect(sizes > 0 && scroll.contentView.bounds.size == scroll.bounds.size)
+        scroll.scrollerStyle = .legacy; scroll.hasVerticalScroller = true; probe.reportViewportSize()
+        #expect(!scroll.hasVerticalScroller && scroll.contentView.bounds.size == scroll.bounds.size)
+    }
+    @Test(arguments: ["left", "up", "inside", "shrink", "switch-shrink", "left-far"], [false, true])
+    func nodeDropKeepsTheCameraAndUndo(axis: String, zoomed: Bool) async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("drop.dproject"), name: "Drop fixture")
+        let engine = AddendumNoEngine()
+        let runtime = WorkbenchSession(engine: engine, backendID: "never", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let controller = WorkflowController(services: .init(store: store, session: runtime, resolveText: { throw WorkflowIssue("No model") }, resolveImage: { throw WorkflowIssue("No model") }))
+        await controller.load(); controller.addExample("template")
+        var nodes = try #require(controller.graph?.nodes); try #require(nodes.count == 4)
+        func configurePositions() {
+            for (i, node) in nodes.enumerated() {
+                controller.moveNode(id: node.id, x: Double(axis.contains("shrink") && i == 0 ? 2500 : i * 400), y: Double(axis == "up" && i == 0 ? 0 : 500))
+            }
+        }
+        configurePositions()
+        var before = try #require(controller.graph), moving = nodes[0].id
+        let host = NSHostingView(rootView: WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {}, onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in }).testingOverlayState(.init(leading: false, trailing: false)))
+        let window = NSWindow(contentRect: .init(x: 0,y: 0,width: 1200,height: 900),styleMask: [.titled],backing: .buffered,defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host; defer { window.close() }
+        try await settle(host)
+        let probe = try #require(views(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+        let scroll = try #require(probe.enclosingScrollView), clip = scroll.contentView
+        if axis == "switch-shrink" {
+            let size = scroll.documentView?.frame.size, oldID = before.id
+            controller.addExample("template"); nodes = try #require(controller.graph?.nodes); configurePositions()
+            before = try #require(controller.graph); moving = nodes[0].id
+            try await settle(host)
+            #expect(before.id != oldID && scroll.documentView?.frame.size == size)
+            #expect(views(host).contains { $0 === probe })
+        }
+        if zoomed { #expect(probe.dispatchWheel(-20, .init(x: 400,y: 350),clip.bounds.origin,clip.bounds.size)); try await settle(host) }
+        if axis.contains("shrink") || axis == "left-far" {
+            let size = try #require(scroll.documentView?.frame.size)
+            clip.scroll(to: .init(x: size.width-clip.bounds.width-10,y: size.height-clip.bounds.height-10))
+            scroll.reflectScrolledClipView(clip); try await settle(host)
+        }
+        let layout = try #require(probe.wheelLayout(clip.bounds.size))
+        let rawCenter = layout.visibleRawCenter(offset: clip.bounds.origin)
+        let plates = views(host).compactMap { $0 as? WorkflowNodePlateView }; try #require(plates.count == nodes.count)
+        let positions = plates.map { $0.convert($0.bounds,to: host) }
+        let delta = CGSize(width: (axis.hasPrefix("left") ? -80 : axis.contains("shrink") ? -2200 : axis == "inside" ? 40 : 0) * layout.zoom, height: (axis == "up" ? -80 : 0) * layout.zoom)
+        let session = UUID(), action = probe.onPointer, offset = clip.bounds.origin, viewport = clip.bounds.size
+        func pointer(_ phase: WorkflowCanvasPointerUpdate.Phase) -> WorkflowCanvasPointerUpdate {
+            .init(phase: phase,sessionID: session,target: .node(moving),startPoint: .zero,startOffset: offset,viewport: viewport,translation: delta,extendingSelection: false)
+        }
+        action(pointer(.began)); try await settle(host)
+        #expect(controller.graph == before) // Preview is not a project write.
+        let previewPositions = plates.map { $0.convert($0.bounds,to: host) }
+        action(pointer(.ended)); try await settle(host)
+        let after = try #require(controller.graph)
+        let oldRaw = WorkflowGraphGeometry(graph: before).rawPosition(moving), newRaw = WorkflowGraphGeometry(graph: after).rawPosition(moving)
+        #expect(abs(newRaw.x - oldRaw.x - delta.width / layout.zoom) < 0.01)
+        #expect(abs(newRaw.y - oldRaw.y - delta.height / layout.zoom) < 0.01)
+        let finalLayout = try #require(probe.wheelLayout(clip.bounds.size))
+        let finalCenter = finalLayout.visibleRawCenter(offset: clip.bounds.origin)
+        #expect(hypot(rawCenter.x - finalCenter.x,rawCenter.y - finalCenter.y) < 2)
+        for (view, frame) in zip(plates, previewPositions) {
+            let actual = view.convert(view.bounds,to: host)
+            #expect(abs(actual.minX-frame.minX)<2 && abs(actual.minY-frame.minY)<2)
+        }
+        controller.undo(); try await settle(host)
+        #expect(controller.graph?.layout == before.layout)
+        for (view, frame) in zip(plates,positions) {
+            let actual = view.convert(view.bounds,to: host)
+            #expect(abs(actual.minX-frame.minX)<2 && abs(actual.minY-frame.minY)<2)
+        }
+        let natural = WorkflowGraphGeometry(graph: try #require(controller.graph))
+        #expect(probe.dispatchMiddleClick(clip.bounds.size)); try await settle(host)
+        let centered = try #require(probe.wheelLayout(clip.bounds.size)).visibleRawCenter(offset: clip.bounds.origin)
+        #expect(abs(centered.x - (natural.size.width / 2 - natural.translation.width)) < 2)
+        #expect(abs(centered.y - (natural.size.height / 2 - natural.translation.height)) < 2)
+        #expect(controller.runs.isEmpty); #expect(await engine.calls == 0)
+        await controller.save(); await controller.load()
+        #expect(controller.graphs.first { $0.id == before.id }?.layout == before.layout)
+        try await controller.close(); try await store.close()
+    }
+}
+
+extension WorkbenchAddendumTests {
+    @Test(arguments: ["revision", "navigation", "instance", "root", "resize", "zoom"])
+    func cameraRebaseRejectsLateLayoutAndForeignIdentity(change: String) {
+        let anchor = WorkflowCanvasLayoutAnchor()
+        let scope = WorkflowCanvasScope(rootGraphID: UUID(),rootRevision: UUID(),graphID: UUID(),bodyPath: [],projectID: UUID(),instanceID: UUID())
+        let a = WorkflowCanvasViewportGeometry(graphSize: .init(width: 1400,height: 900),viewportSize: .init(width: 640,height: 480),zoom: 0.8,translation: .init(width: 150,height: 100))
+        let b = WorkflowCanvasViewportGeometry(graphSize: .init(width: 1480,height: 980),viewportSize: a.viewportSize,zoom: a.zoom,translation: .init(width: 230,height: 180))
+        let offset = CGPoint(x: 400,y: 300)
+        #expect(anchor.reconcile(scope: scope,layout: a,contentSize: a.contentSize,viewport: a.viewportSize,offset: offset) == nil)
+        #expect(anchor.reconcile(scope: scope,layout: b,contentSize: a.contentSize,viewport: a.viewportSize,offset: offset) == nil)
+        let nextScope = WorkflowCanvasScope(rootGraphID: change == "root" ? UUID() : scope.rootGraphID,rootRevision: UUID(),graphID: scope.graphID,bodyPath: [],projectID: scope.projectID,instanceID: change == "instance" ? UUID() : scope.instanceID)
+        let next = WorkflowCanvasViewportGeometry(graphSize: b.graphSize,viewportSize: change == "resize" ? .init(width: 700,height: 500) : b.viewportSize,zoom: change == "zoom" ? 1 : b.zoom,translation: b.translation)
+        if change == "navigation" { anchor.cancel() }
+        let received = anchor.reconcile(scope: nextScope,layout: next,contentSize: next.contentSize,viewport: next.viewportSize,offset: offset)
+        #expect(received == (change == "revision" ? .init(x: 464,y: 364) : nil))
+        #expect(anchor.reconcile(scope: nextScope,layout: next,contentSize: next.contentSize,viewport: next.viewportSize,offset: received ?? offset) == nil)
+        // A second update must never add the shift twice, including nested-body revision changes.
+        let extent = WorkflowCanvasRetainedExtent(identity: scope.identity,translation: a.translation,size: a.graphSize)
+        #expect(extent.size(for: scope.identity,translation: b.translation) == b.graphSize)
+        if change == "instance" || change == "root" { #expect(extent.size(for: nextScope.identity,translation: b.translation) == .zero) }
+    }
+}

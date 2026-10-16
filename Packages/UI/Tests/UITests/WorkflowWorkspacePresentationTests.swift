@@ -210,7 +210,8 @@ private struct MetadataHostProbe: NSViewRepresentable {
         controller.moveNode(id: top.id, x: 650, y: 450)
         let initial = try #require(controller.graph)
         let host = NSHostingView(rootView: WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
-            onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in }))
+            onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in })
+            .testingOverlayState(WorkbenchSidebarState(leading: false, trailing: false)))
         host.frame = CGRect(x: 0, y: 0, width: 1600, height: 900)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host; window.makeKeyAndOrderFront(nil)

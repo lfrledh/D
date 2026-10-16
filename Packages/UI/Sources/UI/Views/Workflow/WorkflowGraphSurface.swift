@@ -38,6 +38,7 @@ struct WorkflowGraphSurface: View {
     @GestureState private var gestureScale: CGFloat = 1
     @State private var nodeDrag = WorkflowCanvasNodeDragPresentation()
     @State private var stableOrigin: WorkflowCanvasStableOrigin?
+    @State private var retainedExtent: WorkflowCanvasRetainedExtent?
     @State private var pendingConnectionScope: WorkflowCanvasScope?
     @State private var connectionDrag = WorkflowConnectionDragPresentation()
     @State private var measuredPortCenters: [WorkflowPortIdentity: CGPoint] = [:]
@@ -78,7 +79,8 @@ struct WorkflowGraphSurface: View {
                     graph: graph,
                     tools: controller.tools,
                     registry: controller.registry,
-                    translation: origin
+                    translation: origin,
+                    minimumSize: retainedExtent?.size(for: scope.identity, translation: origin) ?? .zero
                 )
                 GeometryReader { viewport in
                 let viewportSize = clipViewportSize ?? viewport.size
@@ -254,11 +256,12 @@ struct WorkflowGraphSurface: View {
                 }
 
                 .onAppear {
+                    retainedExtent = .init(identity: scope.identity, translation: geometry.translation, size: geometry.size)
                     if let navigationRequest {
                         scrollPosition.scrollTo(point: layout.centeredOffset(
-                            on: navigationRequest.rawCenter ?? layout.centerRawPoint))
+                            on: navigationRequest.rawCenter ?? naturalCenter(of: geometry.graph)))
                     } else {
-                        scrollPosition.scrollTo(point: layout.centeredOffset(on: layout.centerRawPoint))
+                        scrollPosition.scrollTo(point: layout.centeredOffset(on: naturalCenter(of: geometry.graph)))
                     }
                 }
                 .onChange(of: navigationRequest) { _, request in
@@ -270,7 +273,7 @@ struct WorkflowGraphSurface: View {
                             viewportSize: clipViewportSize ?? viewport.size,
                             zoom: zoom, translation: geometry.translation)
                         scrollPosition.scrollTo(point: current.centeredOffset(
-                            on: request.rawCenter ?? current.centerRawPoint))
+                            on: request.rawCenter ?? naturalCenter(of: geometry.graph)))
                     }
                 }
                 .onChange(of: clipViewportSize) { old, new in
@@ -282,7 +285,7 @@ struct WorkflowGraphSurface: View {
                     let next = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                         viewportSize: new, zoom: effectiveZoom, translation: geometry.translation)
                     let raw = resizeAnchorRaw ?? (old == nil
-                        ? navigationRequest?.rawCenter ?? next.centerRawPoint
+                        ? navigationRequest?.rawCenter ?? naturalCenter(of: geometry.graph)
                         : previous.visibleRawCenter(offset: scrollTracking.offset))
                     resizeAnchorRaw = nil
                     scrollPosition.scrollTo(point: next.centeredOffset(on: raw))
@@ -332,6 +335,10 @@ struct WorkflowGraphSurface: View {
                         connectionDrag.point = nil
                         connectionIssue = nil
                     }
+                }
+                .onChange(of: WorkflowCanvasRetainedExtent(identity: scope.identity,
+                    translation: geometry.translation, size: geometry.size)) { _, value in
+                    retainedExtent = value
                 }
                 .onChange(of: graph.connections) { _, _ in connectionIssue = nil }
                 .onChange(of: naturalGeometry.translation) { _, natural in
@@ -454,6 +461,12 @@ struct WorkflowGraphSurface: View {
                            target: ends.input.nodeID, targetPort: ends.input.port)
     }
 
+    private func naturalCenter(of graph: WorkflowGraph) -> CGPoint {
+        let geometry = WorkflowGraphGeometry(graph: graph, tools: controller.tools, registry: controller.registry)
+        return CGPoint(x: geometry.size.width / 2 - geometry.translation.width,
+                       y: geometry.size.height / 2 - geometry.translation.height)
+    }
+
     private var effectiveZoom: CGFloat {
         viewportInteractionLocked ? zoom : WorkflowCanvasLayoutPolicy.clampedInteractiveZoom(
             zoom * gestureScale, current: zoom)
@@ -465,6 +478,7 @@ struct WorkflowGraphSurface: View {
             tool: tool,
             interactionScope: scope,
             wheelZoom: scrollTracking.wheelZoom,
+            navigationID: navigationRequest?.id,
             wheelLayout: { size in
                 WorkflowCanvasViewportGeometry(graphSize: geometry.size, viewportSize: size,
                     zoom: effectiveZoom, translation: geometry.translation)
@@ -604,7 +618,7 @@ struct WorkflowGraphSurface: View {
             onMiddleClick: { size in
                 let current = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                     viewportSize: size, zoom: zoom, translation: geometry.translation)
-                scrollPosition.scrollTo(point: current.centeredOffset(on: current.centerRawPoint))
+                scrollPosition.scrollTo(point: current.centeredOffset(on: naturalCenter(of: geometry.graph)))
             })
     }
 
@@ -1244,7 +1258,8 @@ struct WorkflowGraphGeometry {
         tools: [WorkflowToolDefinition] = [],
         registry: WorkflowRegistry = .standard,
         previewPositions: [UUID: CGPoint] = [:],
-        translation requestedTranslation: CGSize? = nil
+        translation requestedTranslation: CGSize? = nil,
+        minimumSize: CGSize = .zero
     ) {
         self.graph = graph
         self.previewPositions = previewPositions
@@ -1263,8 +1278,8 @@ struct WorkflowGraphGeometry {
         translation = requestedTranslation ?? naturalTranslation
         let maximumX = raw.map(\.x).max() ?? 0
         let maximumY = zip(raw, halfHeights).map { $0.0.y + $0.1 }.max() ?? 0
-        size = CGSize(width: max(1_400, maximumX + translation.width + 320),
-                      height: max(900, maximumY + translation.height + 24))
+        size = CGSize(width: max(minimumSize.width, max(1_400, maximumX + translation.width + 320)),
+                      height: max(minimumSize.height, max(900, maximumY + translation.height + 24)))
     }
 
     func rawPosition(_ nodeID: UUID) -> CGPoint {
@@ -1307,7 +1322,8 @@ struct WorkflowCanvasScope: Equatable {
     var instanceID: UUID? = nil
 
     var identity: WorkflowCanvasScopeIdentity {
-        WorkflowCanvasScopeIdentity(rootGraphID: rootGraphID, graphID: graphID, bodyPath: bodyPath)
+        WorkflowCanvasScopeIdentity(rootGraphID: rootGraphID, graphID: graphID, bodyPath: bodyPath,
+                                    projectID: projectID, instanceID: instanceID)
     }
 
     @MainActor
@@ -1340,6 +1356,21 @@ struct WorkflowCanvasScopeIdentity: Equatable {
     let rootGraphID: UUID
     let graphID: UUID
     let bodyPath: [WorkflowBodyLocation]
+    var projectID: UUID? = nil
+    var instanceID: UUID? = nil
+}
+
+/// Retain reachable raw space while this canvas is mounted. Shrinking a graph
+/// must not clamp the native camera; a rebase also moves the old far boundary.
+struct WorkflowCanvasRetainedExtent: Equatable {
+    let identity: WorkflowCanvasScopeIdentity
+    let translation: CGSize
+    let size: CGSize
+    func size(for identity: WorkflowCanvasScopeIdentity, translation next: CGSize) -> CGSize {
+        guard identity == self.identity else { return .zero }
+        return CGSize(width: max(0, size.width + next.width - translation.width),
+                      height: max(0, size.height + next.height - translation.height))
+    }
 }
 
 struct WorkflowCanvasStableOrigin: Equatable {

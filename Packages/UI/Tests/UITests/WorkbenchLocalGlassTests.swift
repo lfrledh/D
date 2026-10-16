@@ -986,3 +986,52 @@ private actor LocalGlassNoInference: InferenceEngine {
         #expect(root.background === owner)
     }
 }
+
+extension WorkbenchLocalGlassTests {
+    @Test(arguments: [ColorScheme.light, .dark])
+    func featureGuideOwnsItsWindowGlassAndPreservesSearch(scheme: ColorScheme) async throws {
+        let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
+        let state = ChatDisplayPreferencesState(appearanceDirectory: root.appendingPathComponent("Appearance"))
+        let source = root.appendingPathComponent("fixture.png"); try png(pattern(), at: source)
+        await state.importWallpaper(source)
+        let parent = NSHostingView(rootView: Text("Parent").frame(width: 700,height: 500).workbenchPresentation(state: state))
+        let main = NSWindow(contentRect: .init(x: 0,y: 0,width: 700,height: 500),styleMask: [.titled],backing: .buffered,defer: false)
+        main.isReleasedWhenClosed = false; main.contentView = parent
+        func descendants(_ v: NSView) -> [NSView] { [v] + v.subviews.flatMap(descendants) }
+        func settle(_ v: NSView) async throws { for _ in 0..<20 { v.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) } }
+        try await settle(parent)
+        let parentCanvas = try #require(descendants(parent).compactMap { $0 as? WorkbenchBackgroundNSView }.first { $0.isCanvas })
+        let parentOwner = try #require(parentCanvas.owner); try #require(parentOwner.image != nil)
+        let language = UILanguageStore(preferredLanguages: ["zh-Hans"]), help = WorkbenchHelpStore()
+        let presentation = WorkbenchHelpPresentation(featureID: nil, token: nil, context: nil)
+        func content() -> some View {
+            WorkbenchFeatureGuide(presentation: presentation, store: help)
+                .environment(\.workbenchAppearanceState, state).environment(\.workbenchBackground,parentOwner)
+                .environment(\.chatDisplayPreferences,state.preferences).environment(\.dLanguageStore,language)
+                .environment(\.colorScheme,scheme)
+        }
+        let host = NSHostingView(rootView: content())
+        let window = NSWindow(contentRect: .init(x: 0,y: 0,width: 800,height: 600),styleMask: [.titled],backing: .buffered,defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.contentView = nil; window.close(); main.contentView = nil; main.close() }
+        try await settle(host)
+        let surfaces = descendants(host).compactMap { $0 as? WorkbenchBackgroundNSView }
+        let canvas = try #require(surfaces.first { $0.isCanvas })
+        let owner = try #require(canvas.owner), image = try #require(owner.image)
+        #expect(owner !== parentOwner && owner.root === canvas && owner.root?.window === window)
+        #expect(image === parentOwner.image && owner.blurred === parentOwner.blurred)
+        #expect(surfaces.filter { !$0.isGeometryOnly }.allSatisfy { $0.owner === owner })
+        let input = try #require(descendants(host).compactMap { $0 as? NSTextField }.first { $0.isEditable })
+        input.stringValue = "用户说明 / Save"
+        for strength in [0.0, 0.55, 1.0] {
+            var value = state.preferences; value.appearance?.local?.strength = strength
+            try #require(state.update(value)); try language.select(strength == 0 ? "en" : "zh-Hans")
+            host.rootView = content(); try await settle(host)
+            let current = descendants(host).compactMap { $0 as? WorkbenchBackgroundNSView }
+            #expect(current.contains { $0 === canvas } && owner.image === image)
+            #expect(current.filter { !$0.isCanvas && !$0.isGeometryOnly }.allSatisfy { abs($0.strength - strength)<0.001 })
+            #expect(descendants(host).contains { $0 === input } && input.stringValue == "用户说明 / Save")
+        }
+        #expect(help.presentation == nil && owner.decodeCount == 0 && owner.blurCount == 0)
+    }
+}

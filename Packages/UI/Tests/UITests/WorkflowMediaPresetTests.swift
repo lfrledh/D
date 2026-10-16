@@ -65,6 +65,9 @@ struct WorkflowMediaPresetTests {
     }
 
     @Test func actualCanvasHostsMediaInspectorsWithoutRunning() async throws {
+        let app = NSApplication.shared, activationPolicy = NSApplication.shared.activationPolicy()
+        app.setActivationPolicy(.regular)
+        defer { app.setActivationPolicy(activationPolicy) }
         let root = URL(
             fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory(),
             isDirectory: true
@@ -131,6 +134,14 @@ struct WorkflowMediaPresetTests {
         window.isReleasedWhenClosed = false
         window.contentView = host
         defer { window.close() }
+        window.makeKeyAndOrderFront(nil); app.activate()
+        for _ in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            if window.isVisible && window.isKeyWindow && host.window === window { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(window.isVisible && window.isKeyWindow && host.window === window,
+                     "Visible media inspector host must be ready before testing its actual controls")
 
         var technicalOpened = false
         for _ in 0..<40 {
