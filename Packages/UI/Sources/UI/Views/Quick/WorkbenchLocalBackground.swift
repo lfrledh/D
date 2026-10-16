@@ -151,31 +151,58 @@ enum WorkbenchLocalRenderer {
     struct RefractionRing { let path: CGPath; let clips: [CGRect] }
     final class RefractionGeometry {
         private var size: CGSize = .zero
-        private var sourceSize: CGSize = .zero
+        private var insets: [CGFloat] = []
+        private var singleClip = false
+        private var contourDirty = true
+        private var outlines: [CGPath] = []
+        private var holes: [CGRect] = []
         private var rings: [RefractionRing] = []
+        private(set) var rebuildCount = 0
+        private(set) var subtractionCount = 0
+        func invalidateContour() { contourDirty = true }
         func resolve(size: CGSize, rect: CGRect, contour: ((CGRect, CGFloat) -> CGPath)?, count: Int = 12) -> [RefractionRing] {
-            if self.size == size && sourceSize == rect.size && rings.count == count { return rings }
-            self.size = size; sourceSize = rect.size
             let bounds = CGRect(origin: .zero, size: size)
             let scale = min(size.width / rect.width, size.height / rect.height)
             let rim = min(12, min(rect.width, rect.height) / 4)
+            let insets = (0...count).map { CGFloat($0) * rim / CGFloat(count) * scale }
+            let singleClip = max(rect.width, rect.height) <= 48
+            if self.size == size && self.insets == insets && self.singleClip == singleClip && !contourDirty { return rings }
             let outline = contour ?? { box, inset in CGPath(rect: box.insetBy(dx: inset, dy: inset), transform: nil) }
+            let paths = insets.map { outline(bounds, $0) }
+            contourDirty = false
+            self.insets = insets
+            if self.size == size && self.singleClip == singleClip && paths == outlines { return rings }
+            let previousHoles = self.size == size ? holes : []
+            self.size = size; self.singleClip = singleClip; outlines = paths
+            holes = Array(repeating: .null, count: count)
+            rebuildCount += 1
             rings = (0..<count).map { i in
-                let inner = outline(bounds, CGFloat(i + 1) * rim / CGFloat(count) * scale)
-                let path = CGMutablePath(); path.addPath(outline(bounds, CGFloat(i) * rim / CGFloat(count) * scale)); path.addPath(inner)
-                if max(rect.width, rect.height) <= 48 { return RefractionRing(path: path, clips: [bounds]) }
-                var low: CGFloat = 0, high = min(inner.boundingBoxOfPath.width, inner.boundingBoxOfPath.height) / 2
+                let inner = paths[i + 1]
+                let path = CGMutablePath(); path.addPath(paths[i]); path.addPath(inner)
+                if singleClip { return RefractionRing(path: path, clips: [bounds]) }
                 var hole = CGRect.null
-                for _ in 0..<9 {
-                    let inset = (low + high) / 2
-                    let candidate = inner.boundingBoxOfPath.insetBy(dx: inset, dy: inset)
-                    if CGPath(rect: candidate, transform: nil).subtracting(inner, using: .evenOdd).isEmpty {
-                        hole = candidate; high = inset
-                    } else { low = inset }
+                // Zoom changes the ring, but usually leaves its old conservative
+                // image exclusion rectangle valid. Prove that again, including a
+                // one-point margin for path boolean tolerance; never assume nested
+                // insets or a particular shape. The actual ring mask is unchanged.
+                if previousHoles.indices.contains(i), !previousHoles[i].isNull, !previousHoles[i].isEmpty {
+                    subtractionCount += 1
+                    if CGPath(rect: previousHoles[i].insetBy(dx: -1, dy: -1), transform: nil)
+                        .subtracting(inner, using: .evenOdd).isEmpty { hole = previousHoles[i] }
                 }
-                // Inset a little further to avoid the path boolean operation's
-                // curve tolerance at the boundary. The original ring mask stays.
-                hole = hole.insetBy(dx: 1, dy: 1).intersection(bounds)
+                if hole.isNull {
+                    var low: CGFloat = 0, high = min(inner.boundingBoxOfPath.width, inner.boundingBoxOfPath.height) / 2
+                    for _ in 0..<9 {
+                        let inset = (low + high) / 2
+                        let candidate = inner.boundingBoxOfPath.insetBy(dx: inset, dy: inset)
+                        subtractionCount += 1
+                        if CGPath(rect: candidate, transform: nil).subtracting(inner, using: .evenOdd).isEmpty {
+                            hole = candidate; high = inset
+                        } else { low = inset }
+                    }
+                    hole = hole.insetBy(dx: 1, dy: 1).intersection(bounds)
+                }
+                holes[i] = hole
                 guard !hole.isNull, !hole.isEmpty else { return RefractionRing(path: path, clips: [bounds]) }
                 let clips = [CGRect(x: 0, y: 0, width: bounds.width, height: hole.minY),
                     CGRect(x: 0, y: hole.maxY, width: bounds.width, height: bounds.maxY - hole.maxY),
@@ -392,7 +419,7 @@ extension EnvironmentValues {
     var readability = WorkbenchReadabilitySettings() {
         didSet { if oldValue != readability { owner?.readability.configure(self); needsDisplay = true } }
     }
-    var contour: ((CGRect, CGFloat) -> CGPath)? { didSet { refractionGeometry = .init() } }
+    var contour: ((CGRect, CGFloat) -> CGPath)? { didSet { refractionGeometry.invalidateContour() } }
     private var refractionGeometry = WorkbenchLocalRenderer.RefractionGeometry()
     var stylesWindowTitlebar = false
     var legacyTitlebarBlend: Double?

@@ -5,7 +5,7 @@ import SwiftUI
 import Testing
 @testable import UI
 
-private final class FixtureWheel: NSEvent {
+final class FixtureWheel: NSEvent {
  let base: NSEvent
  let owner: NSWindow
  let number: Int

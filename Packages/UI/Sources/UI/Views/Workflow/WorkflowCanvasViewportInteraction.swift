@@ -5,6 +5,18 @@ enum WorkflowCanvasTool: String, CaseIterable {
     case pointer, hand
 }
 
+enum WorkflowCanvasWheelResponse {
+    // AppKit reports discrete wheels in lines and precise wheels in points.
+    // Keep the established precise response; one discrete unit is a 10% step.
+    static func delta(_ event: NSEvent) -> CGFloat {
+        event.hasPreciseScrollingDeltas ? event.scrollingDeltaY
+            : event.scrollingDeltaY * CGFloat(log(1.1) / 0.015)
+    }
+    static func isHorizontalNavigation(_ event: NSEvent) -> Bool {
+        event.hasPreciseScrollingDeltas && event.scrollingDeltaY == 0 && event.scrollingDeltaX != 0
+    }
+}
+
 enum WorkflowCanvasViewportNavigationGate {
     static func allows(marqueeActive: Bool, interactionLocked: Bool,
                        nodeDragging: Bool, outputDragging: Bool) -> Bool {
@@ -578,14 +590,14 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             guard event.scrollingDeltaY != 0 else {
                 // Preserve the existing precise trackpad horizontal route only.
                 // Discrete mouse wheels are consumed even at a zoom limit or zero Y.
-                if event.hasPreciseScrollingDeltas {
+                if WorkflowCanvasWheelResponse.isHorizontalNavigation(event) {
                     wheelZoom?.cancel(); layoutAnchor.cancel()
                     scroll.scrollWheel(with: event) // Keep the initial canvas owner across regions.
                     return true
                 }
                 return true
             }
-            _ = dispatchWheel(event.scrollingDeltaY, point, clip.bounds.origin, clip.bounds.size)
+            _ = dispatchWheel(WorkflowCanvasWheelResponse.delta(event), point, clip.bounds.origin, clip.bounds.size)
             applyWheelOffset()
             return true
         }

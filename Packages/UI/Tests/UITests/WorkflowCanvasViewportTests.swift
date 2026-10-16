@@ -5,6 +5,57 @@ import Testing
 
 @Suite @MainActor
 struct WorkflowCanvasViewportTests {
+    @Test(arguments: [false, true])
+    func wheelDeviceUnitsKeepDirectionAndUseDistinctGain(precise: Bool) throws {
+        for amount: Int32 in [-3, -1, 0, 1, 3] {
+            let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: precise ? .pixel : .line,
+                wheelCount: 1, wheel1: amount, wheel2: 0, wheel3: 0))
+            let event = try #require(NSEvent(cgEvent: cg))
+            #expect(event.hasPreciseScrollingDeltas == precise)
+            let response = WorkflowCanvasWheelResponse.delta(event)
+            let actual = exp(Double(response) * 0.015)
+            let expected = precise ? exp(Double(event.scrollingDeltaY) * 0.015)
+                : pow(1.1, Double(event.scrollingDeltaY))
+            #expect(abs(actual - expected) < 1e-12)
+            #expect(response.sign == event.scrollingDeltaY.sign)
+        }
+    }
+
+    @Test(arguments: [Int32(0), Int32(12)])
+    func wheelZeroVerticalOnlyHandsOffRealHorizontalMotion(horizontal: Int32) throws {
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 600, height: 400),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let scroll = NSScrollView(frame: CGRect(x: 0, y: 0, width: 600, height: 400))
+        let document = NSView(frame: CGRect(x: 0, y: 0, width: 3000, height: 2400))
+        scroll.documentView = document; window.contentView = scroll
+        defer { window.contentView = nil; window.close() }
+        let probe = WorkflowCanvasViewportInput.ProbeView(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
+        document.addSubview(probe); scroll.layoutSubtreeIfNeeded()
+        let scope = WorkflowCanvasScope(rootGraphID: UUID(), rootRevision: UUID(), graphID: UUID(), bodyPath: [])
+        let wheel = WorkflowCanvasWheelZoom()
+        probe.interactionScope = scope; probe.wheelZoom = wheel; probe.navigationAllowed = { true }
+        let layout = WorkflowCanvasViewportGeometry(graphSize: CGSize(width: 1400, height: 900),
+            viewportSize: scroll.contentView.bounds.size, zoom: 1, translation: .zero)
+        let scale = wheel.request(delta: 8, mouse: CGPoint(x: 120, y: 100),
+            nativeOffset: layout.centeredOffset(on: layout.centerRawPoint), layout: layout, scope: scope)
+        let target = WorkflowCanvasViewportGeometry(graphSize: layout.graphSize,
+            viewportSize: layout.viewportSize, zoom: scale, translation: .zero)
+        let pending = try #require(wheel.offset(in: target, scope: scope))
+        let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
+            wheelCount: 2, wheel1: 0, wheel2: horizontal, wheel3: 0))
+        let location = scroll.contentView.convert(CGPoint(x: 120, y: 100), to: nil)
+        cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: Int64(CGScrollPhase.ended.rawValue))
+        // Reuse the native gesture fixture: a hidden component host has no event
+        // server window registration. Only ownership/location are injected.
+        let event = FixtureWheel(base: try #require(NSEvent(cgEvent: cg)), owner: window, point: location)
+        try #require(event.hasPreciseScrollingDeltas && event.scrollingDeltaY == 0 && event.phase.contains(.ended))
+        #expect(WorkflowCanvasWheelResponse.isHorizontalNavigation(event) == (horizontal != 0),
+            "A zero-delta end event must not cancel a previously submitted wheel anchor")
+        try #require(probe.routeWheel(event), "The real probe must own this terminal event")
+        #expect(wheel.offset(in: target, scope: scope) == (horizontal == 0 ? pending : nil))
+    }
+
     @Test(arguments: [CGFloat(8), CGFloat(-8)])
     func wheelBurstKeepsAnchorUntilMatchingNativeLayout(delta: CGFloat) throws {
         let scope = WorkflowCanvasScope(rootGraphID: UUID(), rootRevision: UUID(), graphID: UUID(), bodyPath: [])

@@ -223,6 +223,50 @@ private actor LocalGlassNoInference: InferenceEngine {
         #expect(!other.titlebarAppearsTransparent && !other.styleMask.contains(.fullSizeContentView))
     }
 
+    @Test(arguments: [CGFloat(22), CGFloat(48), CGFloat(320)])
+    func refractionCacheValidatesEveryInsetAndReusesSafeHoles(width: CGFloat) throws {
+        let size = CGSize(width: width, height: width == 320 ? 240 : width)
+        let geometry = WorkbenchLocalRenderer.RefractionGeometry()
+        let image = try pattern()
+        var variant = 0
+        let outline: (CGRect, CGFloat) -> CGPath = { rect, inset in
+            if variant == 1 { return Circle().inset(by: inset).path(in: rect).cgPath }
+            // Variants 0 and 2 deliberately have identical outer paths, with
+            // different interior inset behavior. Comparing only outline is unsafe.
+            return RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .inset(by: variant == 2 ? inset * 1.5 : inset).path(in: rect).cgPath
+        }
+        func draw(_ zoom: CGFloat, cached: Bool) throws -> [UInt8] {
+            let c = try #require(WorkbenchLocalRenderer.bitmap(width: Int(size.width * 2), height: Int(size.height * 2)))
+            c.scaleBy(x: 2, y: 2)
+            WorkbenchLocalRenderer.draw(in: c, size: size,
+                rect: CGRect(x: 30.25, y: 20.5, width: size.width * zoom, height: size.height * zoom),
+                viewport: CGSize(width: 640, height: 480), image: image,
+                canvas: "#111D1A", panel: "#1D2B25", strength: 0.55, glass: true,
+                contour: outline, geometry: cached ? geometry : nil)
+            return Array(UnsafeBufferPointer(start: try #require(c.data).assumingMemoryBound(to: UInt8.self), count: c.bytesPerRow * c.height))
+        }
+        let initial = try draw(1, cached: true)
+        let builds = geometry.rebuildCount, operations = geometry.subtractionCount
+        for _ in 0..<5 {
+            geometry.invalidateContour() // Equivalent closures assigned by representable update.
+            #expect(try draw(1, cached: true) == initial)
+        }
+        #expect(geometry.rebuildCount == builds && geometry.subtractionCount == operations)
+        for nextVariant in [0, 2, 1, 0] {
+            variant = nextVariant; geometry.invalidateContour()
+            for zoom: CGFloat in [1, 1.1, 1.3, 0.65, 0.67, 1.8, 0.98] {
+                #expect(try draw(zoom, cached: true) == draw(zoom, cached: false),
+                    "Cached arbitrary inset geometry must match the original complete sampling, including zoom and shape switches")
+            }
+        }
+        if width == 320 {
+            #expect(geometry.subtractionCount < geometry.rebuildCount * 108,
+                "Verified hole reuse must avoid the full 108 path operations at every scale")
+        }
+        print("REFRACTION_CACHE width=\(width) builds=\(geometry.rebuildCount) subtract=\(geometry.subtractionCount)")
+    }
+
     @Test(arguments: [false, true])
     func textInputShellsFollowSettingsAcrossNativeHosts(retained: Bool) async throws {
         let owner = WorkbenchBackgroundOwner()
@@ -880,6 +924,58 @@ private actor LocalGlassNoInference: InferenceEngine {
         try await store.close()
     }
 
+    @Test(arguments: [CGFloat(1), CGFloat(-1)])
+    func productionWheelBurstRetainsEveryStepBeforeNativeLayout(direction: CGFloat) async throws {
+        let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Wheel.dproject"), name: "Wheel fixture")
+        let runtime = WorkbenchSession(engine: LocalGlassNoInference(), backendID: "never",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let controller = WorkflowController(services: .init(store: store, session: runtime,
+            resolveText: { throw WorkflowIssue("No model") }, resolveImage: { throw WorkflowIssue("No model") }))
+        await controller.load(); controller.addExample("template")
+        let graph = try #require(controller.graph)
+        let undoBefore = controller.canUndo
+        func content() -> some View {
+            WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
+                onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in })
+        }
+        let host = NSHostingView(rootView: content()); host.frame = CGRect(x: 0, y: 0, width: 1100, height: 760)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        func descendants(_ v: NSView) -> [NSView] { v.subviews.flatMap { [$0] + descendants($0) } }
+        for _ in 0..<25 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        let probe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+        let scroll = try #require(probe.enclosingScrollView)
+        let scope = try #require(probe.interactionScope)
+        let wheel = try #require(probe.wheelZoom)
+        let size = scroll.contentView.bounds.size
+        let original = try #require(probe.wheelLayout(size))
+        let offset = scroll.contentView.bounds.origin, mouse = CGPoint(x: 310, y: 210)
+        let anchor = original.rawPoint(screenPoint: mouse, offset: offset)
+        let callback = probe.onWheel // Keep this exact production closure throughout the burst.
+        let delta = direction * CGFloat(log(1.1) / 0.015)
+        for _ in 0..<4 { callback(delta, mouse, offset, size) }
+        let zoom = (0..<4).reduce(original.zoom) { value, _ in value * CGFloat(exp(Double(delta) * 0.015)) }
+        #expect(abs(zoom - original.zoom * pow(1.1, direction * 4)) < 1e-10)
+        let target = WorkflowCanvasViewportGeometry(graphSize: original.graphSize,
+            viewportSize: size, zoom: zoom, translation: original.translation)
+        let pending = try #require(wheel.offset(in: target, scope: scope))
+        let actual = target.rawPoint(screenPoint: mouse, offset: pending)
+        #expect(abs(actual.x - anchor.x) < 1e-6 && abs(actual.y - anchor.y) < 1e-6)
+        #expect(wheel.takeReadyOffset(scope: scope, declaredLayout: original,
+            contentSize: original.contentSize, viewport: size) == nil)
+        // Let the real parent @State publish and the native document/clip catch up.
+        for _ in 0..<25 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        let ready = try #require(probe.wheelLayout(size))
+        #expect(abs(ready.zoom - zoom) < 1e-10)
+        let nativeAnchor = ready.rawPoint(screenPoint: mouse, offset: scroll.contentView.bounds.origin)
+        #expect(abs(nativeAnchor.x - anchor.x) < 1 && abs(nativeAnchor.y - anchor.y) < 1)
+        #expect(wheel.offset(in: target, scope: scope) == nil, "Only the matching final layout consumes the wheel offset")
+        #expect(controller.graph == graph && controller.canUndo == undoBefore)
+        try await store.close()
+    }
+
     @Test func realWorkflowNodesCrossRetainedHostAndKeepViewportMapping() async throws {
         let root = try temporary(); defer { try? FileManager.default.removeItem(at:root) }
         let store = try await ProjectStore.create(at:root.appendingPathComponent("Test.dproject"),name:"Synthetic nodes")
@@ -1029,6 +1125,29 @@ private actor LocalGlassNoInference: InferenceEngine {
         #expect(owner.image == nil)
         print("GEOMETRY_INVALIDATIONS wallpaper=\(wallpaper) visible=\(inside.geometryInvalidationCount-counts[0]) entered=\(outside.geometryInvalidationCount-counts[1]) root=\(root.geometryInvalidationCount-counts[2])")
 
+    }
+
+    @Test(arguments: [false, true])
+    func glassZoomAndRepeatedUpdatesProfile(zooming: Bool) throws {
+        let image = try pattern(width: 640, height: 480)
+        let size = CGSize(width: 320, height: 240)
+        let geometry = WorkbenchLocalRenderer.RefractionGeometry()
+        let contour: (CGRect, CGFloat) -> CGPath = { rect, inset in
+            RoundedRectangle(cornerRadius: 24, style: .continuous).inset(by: inset).path(in: rect).cgPath
+        }
+        let context = try #require(WorkbenchLocalRenderer.bitmap(width: 640, height: 480))
+        context.scaleBy(x: 2, y: 2)
+        let start = Date()
+        for tick in 0..<60 {
+            let zoom = zooming ? 0.65 + CGFloat(tick % 30) * 0.02 : 1
+            WorkbenchLocalRenderer.draw(in: context, size: size,
+                rect: CGRect(x: CGFloat(100 + tick), y: 60, width: size.width * zoom, height: size.height * zoom),
+                viewport: CGSize(width: 1100, height: 760), image: image,
+                canvas: "#111D1A", panel: "#1D2B25", strength: 0.55, glass: true,
+                contour: contour, geometry: geometry)
+        }
+        print("ZOOM_GLASS_PROFILE zooming=\(zooming) frames=60 seconds=\(Date().timeIntervalSince(start))")
+        #expect(context.makeImage() != nil)
     }
 
     @Test func canvasPanKeepsDisabledReadabilityIdle() async throws {
