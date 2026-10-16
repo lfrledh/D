@@ -520,15 +520,7 @@ extension EnvironmentValues {
         let field:WorkbenchGlassField
         if glassPath == path,glassParameters?.size == bounds.size,glassDensity == density,let previous=glassParameters?.field { field=previous }
         else {
-            let resolved:WorkbenchGlassField?
-            if glassParameters != nil {
-                // A live optical surface never drops to an un-refracted frame
-                // while zooming. Only its first cold preparation is asynchronous.
-                resolved=owner.glassFields.resolve(path:path,size:bounds.size,density:density)
-            } else {
-                resolved=owner.glassFields.request(path:path,size:bounds.size,density:density,subscriber:self,ready:{ [weak self] in self?.refreshGlass();self?.needsDisplay=true })
-            }
-            guard let resolved else { clearGlass();return }
+            guard let resolved=owner.glassFields.resolve(path:path,size:bounds.size,density:density) else { clearGlass();return }
             field=resolved
         }
         glassPath=path;glassDensity=density;glassContourDirty=false

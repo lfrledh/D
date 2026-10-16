@@ -1,31 +1,22 @@
 #include <metal_stdlib>
 using namespace metal;
 
-// Signed distance samples from D's actual contour, with a two-sample exterior.
-// This buffer contains geometry only, not foreground or desktop pixels.
-static float glassSample(uint2 p, device const void *bytes, uint2 n, float interior) {
-    device const uint *words = static_cast<device const uint *>(bytes);
-    uint first = words[1+p.y*2], count = words[2+p.y*2];
-    device const uint *spans = words + 1 + n.y*2;
-    uint lo=0, hi=count;
-    while (lo < hi) {
-        uint mid=(lo+hi)/2;
-        device const uint *span=spans+(first+mid)*3;
-        if (p.x < span[0]) hi=mid;
-        else if (p.x >= span[1]) lo=mid+1;
-        else {
-            device const half *values = reinterpret_cast<device const half *>(static_cast<device const uchar *>(bytes)+words[0]);
-            return float(values[span[2]+p.x-span[0]]);
-        }
-    }
-    return interior;
-}
+// Filled-boundary geometry only; no foreground or desktop pixels. Each cell
+// includes every segment within the full shoulder and derivative guard.
 static float glassDistance(float2 p, device const void *bytes, uint2 n, float interior) {
-    p = clamp(p, float2(0), float2(n - 1));
-    uint2 a = uint2(floor(p)), b = min(a + 1, n - 1);
-    float2 f = fract(p);
-    return mix(mix(glassSample(a,bytes,n,interior), glassSample(uint2(b.x,a.y),bytes,n,interior), f.x),
-               mix(glassSample(uint2(a.x,b.y),bytes,n,interior), glassSample(b,bytes,n,interior), f.x), f.y);
+    device const uint *w=static_cast<device const uint *>(bytes);
+    uint2 c=min(uint2(max(p,float2(0))/float(w[4])),uint2(w[2]-1,w[3]-1));
+    uint row=5+(c.y*w[2]+c.x)*2,first=w[row],count=w[row+1];
+    device const float4 *segments=reinterpret_cast<device const float4 *>(w+w[0]);
+    device const uint *indices=w+w[1];
+    float best=interior*interior;
+    for (uint i=0;i<count;i++) {
+        float4 segment=segments[indices[first+i]];
+        float2 v=segment.zw-segment.xy,q=p-segment.xy;
+        float t=clamp(dot(q,v)/max(dot(v,v),0.0000001),0.0,1.0);
+        float2 delta=q-v*t;best=min(best,dot(delta,delta));
+    }
+    return sqrt(best);
 }
 
 [[ stitchable ]]
@@ -35,8 +26,8 @@ half4 workbenchContinuousGlass(float2 p, texture2d<half> background,
     float2 q = surface.xy + p / max(localSize, float2(0.001)) * surface.zw;
     uint2 n = uint2(max(fieldSize, float2(0)));
     if (refracts > 0 && strength > 0 && n.x >= 5 && n.y >= 5 && n.x <= 8196 && n.y <= 8196
-        && fieldByteCount >= int((1 + n.y * 2) * sizeof(uint)) && all(surface.zw > 0)) {
-        float2 cell = p / max(localSize, float2(0.001)) * float2(n-4) + 1.5;
+        && fieldByteCount >= 7 * int(sizeof(uint)) && all(surface.zw > 0)) {
+        float2 cell = p / max(localSize, float2(0.001)) * float2(n-4) + 2.0;
         float pixel = min(surface.z / float(n.x-4), surface.w / float(n.y-4));
         float interior = 12.0 / max(pixel,0.001) + 4.0;
         float d = glassDistance(cell, fieldBytes, n, interior) * pixel;

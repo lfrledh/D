@@ -12,6 +12,14 @@ struct WorkflowViewerTarget {
     var call: WorkflowCallReference? = nil
 }
 
+struct WorkflowViewerCallIdentity:Hashable {
+    let controller:ObjectIdentifier
+    let project:UUID
+    let instance:UUID
+    let address:WorkflowExecutionAddress
+    let step:UUID
+}
+
 /// A window owns its request, player and fixed content. A new preview never
 /// cancels a workflow or replaces a different window's media session.
 @MainActor @Observable final class WorkflowViewerSession {
@@ -185,16 +193,21 @@ struct WorkflowViewerTarget {
             guard let self,let model,session.canRead else { return }
             do { try self.open(session.target,model:model,language:language,newWindow:true) }
             catch { model.errorMessage=error.localizedDescription }
-        }).environment(\.workflowViewerOpenAsset, { [weak self,weak model,weak session] ref in
-            guard let self,let model,let session,session.canRead,!session.suspended else { return }
+        }).environment(\.workflowViewerOpenAsset, { [weak self,weak session] ref in
+            guard let self,let session,session.canRead,!session.suspended else { return }
             let target=WorkflowViewerTarget(title:session.target.title,subtitle:session.target.subtitle,value:.asset(ref),call:session.target.call)
-            do { try self.open(target,model:model,language:language) } catch { model.errorMessage=error.localizedDescription }
+            self.navigate(target,in:session)
         }).environment(\.dLanguageStore,language).environment(\.workflowViewerModel,model)
             .workbenchPresentation(state:model.chatDisplaySettings)
         let window=Window(session:session,content:AnyView(content))
         windows[session.id]=window;if !newWindow { primary=session.id }
         window.didClose={ [weak self] in self?.windows[session.id]=nil;if self?.primary == session.id { self?.primary=nil } }
         session.load();window.window.makeKeyAndOrderFront(nil)
+    }
+    func navigate(_ target:WorkflowViewerTarget,in session:WorkflowViewerSession) {
+        guard session.canRead,!session.suspended else { return }
+        session.replace(target)
+        windows[session.id]?.window.title=target.title
     }
     func suspend() { for window in windows.values { window.session.suspend() } }
     func reconcile() { for window in windows.values { window.session.reconcile() } }
@@ -238,7 +251,7 @@ extension EnvironmentValues {
                                 onSubmit:{ value in Task { await controller.decideHuman(stepID:record.id,value:value,expectedTask:task) } },
                                 onReject:{ Task { await controller.decideHuman(stepID:record.id,value:nil,reject:true,expectedTask:task) } })
                         } else { WorkflowWaitingDecision(controller:controller,step:record.step,readOnly:controller.readOnlyReason != nil,preview:controller.preview) }
-                    }.frame(maxHeight:260).disabled(controller.isRunning || controller.readOnlyReason != nil)
+                    }.id(WorkflowViewerCallIdentity(controller:ObjectIdentifier(controller),project:session.projectID,instance:session.instanceID,address:record.address,step:record.id)).frame(maxHeight:260).disabled(controller.isRunning || controller.readOnlyReason != nil)
                 }
             }
             if showInfo {

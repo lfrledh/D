@@ -601,3 +601,82 @@ extension WorkflowWorkspacePresentationTests {
         for entry in flat { #expect(entries.first { $0.id == entry.id } == entry) }
     }
 }
+
+
+extension WorkflowWorkspacePresentationTests {
+    @Test(arguments:[false,true]) func viewerRejectsLateReadAfterSameProjectReopen(fail:Bool) async throws {
+        let f=try await RenderingWorkspaceFixture.make()
+        let asset=try await f.store.publishWorkflowAsset(data:Data("fixed original".utf8),mediaType:"text/plain",name:"same",operationID:"d.text.input")
+        var waiting:CheckedContinuation<Void,Never>?
+        let old=WorkflowViewerSession(owner:f.owner,store:f.store,projectID:f.manifest.id,instanceID:f.manifest.effectiveInstanceID,target:f.target(asset.record.reference),readText:{ ref in
+            let bytes=try await f.store.workflowText(ref)
+            await withCheckedContinuation { waiting=$0 }
+            if fail { throw WorkflowIssue("old reader failure") }
+            return bytes
+        })
+        let read=try #require(old.load())
+        for _ in 0..<100 where waiting == nil { try await Task.sleep(for:.milliseconds(5)) }
+        let release=try #require(waiting)
+        await f.owner.closeProject();await f.owner.openProject(at:f.root.appendingPathComponent("Fixture.dproject"));await f.owner.openWorkflow()
+        let store=try #require(f.owner.currentStore),controller=try #require(f.owner.workflow)
+        #expect(store !== f.store && controller !== f.controller)
+        #expect(f.owner.manifest?.id == f.manifest.id && f.owner.manifest?.effectiveInstanceID == f.manifest.effectiveInstanceID)
+        let fresh=WorkflowViewerSession(owner:f.owner,store:store,projectID:f.manifest.id,instanceID:f.manifest.effectiveInstanceID,target:f.target(asset.record.reference))
+        await fresh.load()?.value
+        release.resume();await read.value
+        #expect(!old.canRead && old.text == nil && old.metadata == nil && old.failure == nil)
+        #expect(fresh.text == "fixed original" && fresh.metadata?.record?.reference == asset.record.reference && fresh.failure == nil)
+        fresh.suspend();old.suspend();try await f.close()
+    }
+
+    @Test func viewerWaitingCallSwitchRecreatesDraftAndNestedNavigationKeepsOtherReader() async throws {
+        let f=try await RenderingWorkspaceFixture.make(),c=f.controller
+        c.addExample("template");let graph=try #require(c.graph),target=graph.nodes[3].id
+        await c.run(target:target,only:false)
+        let arun=try #require(c.runs.last)
+        let a=try #require(WorkflowWorkspacePanels.records(in:arun).first { $0.step.node.id == target })
+        c.editReviewText(stepID:a.id,text:"draft A")
+        await c.run(target:target,only:true)
+        let brun=try #require(c.runs.last)
+        let b=try #require(WorkflowWorkspacePanels.records(in:brun).first { $0.step.node.id == target })
+        c.editReviewText(stepID:b.id,text:"draft B")
+        let av=try #require(a.step.outputs.values.first),bv=try #require(b.step.outputs.values.first)
+        #expect(a.id != b.id && av == bv)
+        let viewer=f.viewer(.init(title:"A",subtitle:"",value:av,call:.init(address:a.address,stepID:a.id)))
+        await viewer.load()?.value
+        let host=NSHostingView(rootView:WorkflowViewerContent(session:viewer,reopen:{}));host.frame = .init(x:0,y:0,width:800,height:640)
+        func descendants(_ v:NSView)->[NSView] { [v]+v.subviews.flatMap(descendants) }
+        func editor()->NSTextView? { descendants(host).compactMap { $0 as? NSTextView }.first { $0.accessibilityIdentifier() == "workflow-review-text" } }
+        for _ in 0..<40 { host.layoutSubtreeIfNeeded();try await Task.sleep(for:.milliseconds(10)) }
+        let first=try #require(editor());#expect(first.string == "draft A")
+        let coordinator=WorkflowViewerCoordinator()
+        let second=f.viewer(.init(title:"independent",subtitle:"",value:av));await second.load()?.value
+        let secondGeneration=second.generation
+        coordinator.navigate(.init(title:"B",subtitle:"",value:bv,call:.init(address:b.address,stepID:b.id)),in:viewer)
+        for _ in 0..<40 { host.layoutSubtreeIfNeeded();try await Task.sleep(for:.milliseconds(10)) }
+        let next=try #require(editor());#expect(next !== first && next.string == "draft B")
+        #expect(viewer.exactRecord?.id == b.id && second.generation == secondGeneration && second.target.title == "independent")
+        #expect(c.runs.flatMap { WorkflowWorkspacePanels.records(in:$0) }.first { $0.id == a.id }?.step.reviewTextDraft == "draft A")
+        viewer.suspend();second.suspend();host.removeFromSuperview();try await f.close()
+    }
+}
+
+
+extension WorkflowWorkspacePresentationTests {
+    @Test func actualWorkspaceIntentChangeInvalidatesPlanWhileInspectingDoesNot() async throws {
+        let f=try await RenderingWorkspaceFixture.make(),c=f.controller;c.addExample("template")
+        let graph=try #require(c.graph),a=graph.nodes[2].id,b=graph.nodes[3].id
+        var controls:WorkflowCanvasUpdateProbe.Workspace?
+        WorkflowCanvasUpdateProbe.workspace={controls=$0}
+        defer { WorkflowCanvasUpdateProbe.workspace=nil }
+        let host=NSHostingView(rootView:WorkflowCanvasView(controller:c,onTextModel:{},onImageModel:{},onImport:{_ in},onDestination:{},onPublishText:{},onReturnText:{_ in}));host.frame=CGRect(x:0,y:0,width:1200,height:800)
+        func settle() async throws { for _ in 0..<8 { host.layoutSubtreeIfNeeded();try await Task.sleep(for:.milliseconds(10)) } }
+        try await settle();try #require(controls).open(a,0);try await settle()
+        #expect(controls?.draftTarget == a)
+        c.selectedNodeID=b;try await settle();#expect(controls?.draftTarget == a)
+        try #require(controls).target(b);try await settle();#expect(controls?.draftTarget == nil)
+        try #require(controls).open(a,0);try await settle();try #require(controls).range(1);try await settle()
+        #expect(controls?.draftTarget == nil && c.graph == graph && c.runs.isEmpty)
+        host.removeFromSuperview();try await f.close()
+    }
+}

@@ -8,7 +8,7 @@ import Testing
 /// does not measure desktop presentation or SwiftUI compositor frame pacing.
 @Suite("Continuous D background", .serialized) @MainActor
 struct WorkbenchContinuousGlassTests {
-    @Test(arguments: [CGFloat(1), 2], ["rectangle22", "circle22", "continuous22", "rectangle64", "circle64", "continuous64", "rectangle160", "circle160", "continuous160"])
+    @Test(arguments: [CGFloat(1), 2], ["rectangle22", "circle22", "continuous22", "rectangle64", "circle64", "continuous64", "rectangle160", "circle160", "continuous160", "overlap64", "neck64"])
     func productionShaderSamplesDBackgroundAtDisplayDensity(density: CGFloat, shape: String) throws {
         let device = try #require(MTLCreateSystemDefaultDevice(), "Metal device is required; CPU comparison is not GPU evidence")
         let libraryURL = try #require(WorkbenchContinuousGlassResources.bundle.url(forResource: "default", withExtension: "metallib"))
@@ -18,6 +18,10 @@ struct WorkbenchContinuousGlassTests {
         let size = CGSize(width:length,height:length*0.75), box = CGRect(origin: .zero, size: size)
         let path: CGPath
         switch shape {
+        case "overlap64":
+            let joined=CGMutablePath();joined.addRect(.init(x:0,y:0,width:size.width*0.65,height:size.height));joined.addRect(.init(x:size.width*0.35,y:0,width:size.width*0.65,height:size.height));path=joined
+        case "neck64":
+            let joined=CGMutablePath();joined.addRect(.init(x:0,y:0,width:size.width*0.4,height:size.height));joined.addRect(.init(x:size.width*0.6,y:0,width:size.width*0.4,height:size.height));joined.addRect(.init(x:0,y:size.height*0.45,width:size.width,height:size.height*0.1));path=joined
         case let s where s.hasPrefix("circle"): path = CGPath(ellipseIn: box, transform: nil)
         case let s where s.hasPrefix("continuous"): path = RoundedRectangle(cornerRadius: min(24,length/4), style: .continuous).path(in: box).cgPath
         default: path = CGPath(rect: box, transform: nil)
@@ -55,7 +59,9 @@ struct WorkbenchContinuousGlassTests {
         let output = try #require(device.makeTexture(descriptor: outDescriptor))
         let buffer = try #require(field.data.withUnsafeBytes { device.makeBuffer(bytes: $0.baseAddress!, length: $0.count) })
         let queue = try #require(device.makeCommandQueue())
+        var timings:[[String:Double]]=[]
         func render(origin: SIMD2<Float>, refracts: Float) throws -> [UInt8] {
+            let began=ProcessInfo.processInfo.systemUptime
             var args: [SIMD4<Float>] = [.init(Float(density),Float(field.data.count),Float(field.width),Float(field.height)),
                 .init(Float(size.width),Float(size.height),refracts,0), .init(origin.x,origin.y,Float(size.width),Float(size.height)), .init(0,0,256,256)]
             let command = try #require(queue.makeCommandBuffer()), encoder = try #require(command.makeComputeCommandEncoder())
@@ -63,7 +69,11 @@ struct WorkbenchContinuousGlassTests {
             encoder.setBuffer(buffer,offset:0,index:0)
             args.withUnsafeBytes { encoder.setBytes($0.baseAddress!,length:$0.count,index:1) }
             encoder.dispatchThreads(.init(width: output.width,height:output.height,depth:1), threadsPerThreadgroup:.init(width:8,height:8,depth:1)); encoder.endEncoding()
+            let encoded=ProcessInfo.processInfo.systemUptime
             command.commit(); command.waitUntilCompleted()
+            let completed=ProcessInfo.processInfo.systemUptime
+            timings.append(["cpu_encode_ms":(encoded-began)*1000,"submit_wait_ms":(completed-encoded)*1000,
+                "gpu_ms":max(0,command.gpuEndTime-command.gpuStartTime)*1000])
             try #require(command.status == .completed, Comment(rawValue: String(describing: command.error)))
             var values=[UInt8](repeating:0,count:output.width*output.height*4)
             values.withUnsafeMutableBytes { output.getBytes($0.baseAddress!, bytesPerRow: output.width*4, from: MTLRegionMake2D(0,0,output.width,output.height),mipmapLevel:0) }
@@ -84,6 +94,24 @@ struct WorkbenchContinuousGlassTests {
             let previous=Int(glass[(row*output.width+x-1)*4]), current=Int(glass[(row*output.width+x)*4])
             #expect(current >= previous && current-previous <= 2)
         }
+        if shape == "continuous160", density == 2,
+           let root=ProcessInfo.processInfo.environment["D_GLASS_EVIDENCE_DIR"] {
+            var groups:[String:Any]=[:]
+            for optical:Float in [0,1] {
+                timings=[]
+                for frame in 0..<40 { _=try render(origin:.init(20+Float(frame)/8,30),refracts:optical) }
+                let samples=Array(timings.dropFirst(4))
+                func percentiles(_ key:String)->[String:Double] {
+                    let values=samples.compactMap { $0[key] }.sorted()
+                    return ["p50":values[Int(Double(values.count-1)*0.5)],"p95":values[Int(Double(values.count-1)*0.95)],"p99":values[Int(Double(values.count-1)*0.99)]]
+                }
+                groups[optical == 0 ? "A1_background_only" : "A3_continuous"]=["samples":samples,"cpu_encode_ms":percentiles("cpu_encode_ms"),"gpu_ms":percentiles("gpu_ms"),"submit_wait_ms":percentiles("submit_wait_ms")]
+            }
+            let result:[String:Any]=["kind":"offscreen-production-source-Metal-kernel-not-SwiftUI-compositor-or-desktop-FPS",
+                "device":device.name,"sizePoints":[size.width,size.height],"density":density,"fieldBytes":field.data.count,
+                "modelLoad":"none","sampling":"four warmup plus thirty-six serialized commands; test-only waitUntilCompleted", "groups":groups]
+            try JSONSerialization.data(withJSONObject:result,options:[.prettyPrinted,.sortedKeys]).write(to:URL(fileURLWithPath:root).appendingPathComponent("continuous-gpu-timing.json"))
+        }
         print("CONTINUOUS_GPU shape=\(shape) density=\(density) fieldBytes=\(field.data.count) output=\(output.width)x\(output.height)")
     }
 
@@ -103,51 +131,57 @@ struct WorkbenchContinuousGlassTests {
 }
 
 extension WorkbenchContinuousGlassTests {
-    @Test func coldGeometryIsCoalescedOffUIAndClearRejectsLatePublication() async throws {
-        let cache=WorkbenchGlassFields(),subscriber=NSObject(),size=CGSize(width:800,height:600)
-        let path=RoundedRectangle(cornerRadius:24,style:.continuous).path(in:CGRect(origin:.zero,size:size)).cgPath
-        var callbacks=0
-        #expect(cache.request(path:path,size:size,density:2,subscriber:subscriber,ready:{callbacks += 1}) == nil)
-        #expect(cache.request(path:path,size:size,density:2,subscriber:subscriber,ready:{callbacks += 1}) == nil)
-        #expect(cache.pendingCount == 1 && cache.builds == 0)
-        cache.clear()
-        for _ in 0..<20 { await Task.yield() }
-        #expect(cache.pendingCount == 0 && cache.builds == 0 && callbacks == 0)
-        _=cache.request(path:path,size:size,density:2,subscriber:subscriber,ready:{callbacks += 1})
-        for _ in 0..<300 where cache.pendingCount>0 { try await Task.sleep(for:.milliseconds(10)) }
-        #expect(cache.pendingCount == 0 && cache.builds == 1 && callbacks == 1)
-        let field=try #require(cache.request(path:path,size:size,density:2,subscriber:subscriber,ready:{}))
-        #expect(field.width>=1604 && cache.builds == 1)
+    @Test func contourPreparationNeverAllocatesPanelAreaOrStarvesLaterSurfaces() throws {
+        let cache=WorkbenchGlassFields();var times:[Double]=[]
+        for index in 0..<192 {
+            let size=CGSize(width:800+index,height:600),path=RoundedRectangle(cornerRadius:24,style:.continuous).path(in:CGRect(origin:.zero,size:size)).cgPath
+            let start=ProcessInfo.processInfo.systemUptime
+            let field=try #require(cache.resolve(path:path,size:size,density:2))
+            times.append((ProcessInfo.processInfo.systemUptime-start)*1000)
+            #expect(field.width>=Int(size.width*2)+4 && field.data.count<128*1024)
+        }
+        #expect(cache.builds==192 && cache.bytes<=WorkbenchGlassFields.budget)
+        if let root=ProcessInfo.processInfo.environment["D_GLASS_EVIDENCE_DIR"] {
+            let sorted=times.sorted()
+            try JSONSerialization.data(withJSONObject:["kind":"synchronous-contour-only-CPU-not-frame-presentation","samples_ms":times,"p50_ms":sorted[95],"p95_ms":sorted[181],"p99_ms":sorted[189],"cacheBytes":cache.bytes],options:[.prettyPrinted,.sortedKeys]).write(to:URL(fileURLWithPath:root).appendingPathComponent("contour-resize-timing.json"))
+        }
     }
 }
 
 extension WorkbenchContinuousGlassTests {
-    @Test(arguments:[false,true]) func packedFieldMatchesExactRasterDistance(ellipse:Bool) throws {
-        let size=CGSize(width:12,height:8),box=CGRect(origin:.zero,size:size)
-        let path=ellipse ? CGPath(ellipseIn:box,transform:nil):CGPath(roundedRect:box,cornerWidth:2,cornerHeight:2,transform:nil)
-        let field=try #require(WorkbenchGlassField.make(path:path,size:size,density:1))
-        let w=field.width,h=field.height
-        var mask=[UInt8](repeating:0,count:w*h)
-        mask.withUnsafeMutableBytes { b in
-            let c=CGContext(data:b.baseAddress,width:w,height:h,bitsPerComponent:8,bytesPerRow:w,space:CGColorSpaceCreateDeviceGray(),bitmapInfo:0)!
-            c.translateBy(x:2,y:2);c.setFillColor(gray:1,alpha:1);c.addPath(path);c.fillPath()
-        }
-        func word(_ index:Int)->UInt32 { field.data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset:index*4,as:UInt32.self) } }
-        for y in 0..<h { for x in 0..<w {
-            let inside=mask[y*w+x]>=128
-            let seeds=(0..<w*h).filter { (mask[$0]>=128) != inside }
-            let exact=sqrt(Float(seeds.map { let dx=x-$0%w,dy=y-$0/w;return dx*dx+dy*dy }.min()!))-0.5
-            var stored:Float?
-            for span in Int(word(1+y*2))..<(Int(word(1+y*2))+Int(word(2+y*2))) {
-                let base=1+h*2+span*3,start=Int(word(base)),end=Int(word(base+1))
-                if x>=start && x<end {
-                    let offset=Int(word(0))+(Int(word(base+2))+x-start)*2
-                    stored=field.data.withUnsafeBytes { Float(Float16(bitPattern:$0.loadUnaligned(fromByteOffset:offset,as:UInt16.self))) }
-                }
+    @Test(arguments:[false,true]) func packedContourMatchesAnalyticBoundary(circle:Bool) throws {
+        let size=CGSize(width:12,height:circle ? 12:8),box=CGRect(origin:.zero,size:size)
+        let path=circle ? CGPath(ellipseIn:box,transform:nil):CGPath(rect:box,transform:nil)
+        let field=try #require(WorkbenchGlassField.make(path:path,size:size,density:2))
+        for y in stride(from:CGFloat(0.25),to:size.height,by:0.5) { for x in stride(from:CGFloat(0.25),to:size.width,by:0.5) {
+            let expected=circle ? abs(hypot(x-6,y-6)-6):min(x,size.width-x,y,size.height-y)
+            if expected<=min(size.width,size.height)/4+1 {
+                #expect(abs(contourDistance(field,.init(x:x*2+2,y:y*2+2))/2-Float(expected))<0.07)
             }
-            if let stored { #expect(abs(stored-(inside ? exact:-exact)) < 0.004) }
-            else { #expect(exact > Float(ceil(min(size.width,size.height)/4)+4)) }
         } }
+    }
+    @Test func normalizedFilledBoundaryRemovesInternalOverlapAndKeepsHole() throws {
+        let joined=CGMutablePath();joined.addRect(.init(x:0,y:0,width:12,height:20));joined.addRect(.init(x:8,y:0,width:12,height:20))
+        let union=try #require(WorkbenchGlassField.make(path:joined,size:.init(width:20,height:20),density:2))
+        #expect(abs(contourDistance(union,.init(x:8*2+2,y:4*2+2))/2-4)<0.001)
+        let hole=CGMutablePath();hole.addRect(.init(x:0,y:0,width:20,height:20))
+        hole.move(to:.init(x:8,y:8));hole.addLine(to:.init(x:8,y:12));hole.addLine(to:.init(x:12,y:12));hole.addLine(to:.init(x:12,y:8));hole.closeSubpath()
+        let ring=try #require(WorkbenchGlassField.make(path:hole,size:.init(width:20,height:20),density:2))
+        #expect(abs(contourDistance(ring,.init(x:7*2+2,y:10*2+2))/2-1)<0.001)
+    }
+    private func contourDistance(_ field:WorkbenchGlassField,_ point:CGPoint)->Float {
+        func word(_ i:Int)->UInt32 { field.data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset:i*4,as:UInt32.self) } }
+        let tile=Int(word(4)),cols=Int(word(2)),rows=Int(word(3))
+        let cell=min(rows-1,max(0,Int(point.y)/tile))*cols+min(cols-1,max(0,Int(point.x)/tile))
+        let first=Int(word(5+cell*2)),count=Int(word(6+cell*2));var best:Float=10000
+        for i in first..<first+count {
+            let j=Int(word(0))+Int(word(Int(word(1))+i))*4
+            let a=SIMD2<Float>(Float(bitPattern:word(j)),Float(bitPattern:word(j+1))),b=SIMD2<Float>(Float(bitPattern:word(j+2)),Float(bitPattern:word(j+3)))
+            let q=SIMD2<Float>(Float(point.x),Float(point.y))-a,v=b-a
+            let t=max(0,min(1,(q.x*v.x+q.y*v.y)/max(0.000001,v.x*v.x+v.y*v.y)))
+            let d=q-v*t;best=min(best,sqrt(d.x*d.x+d.y*d.y))
+        }
+        return best
     }
 }
 

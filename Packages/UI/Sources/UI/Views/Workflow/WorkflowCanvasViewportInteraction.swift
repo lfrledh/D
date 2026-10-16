@@ -738,6 +738,13 @@ struct WorkflowCanvasViewportGeometry: Equatable {
 #if DEBUG
 @MainActor
 enum WorkflowCanvasUpdateProbe {
+    struct Workspace {
+        let draftTarget:UUID?
+        let open:(UUID,Int)->Void
+        let target:(UUID)->Void
+        let range:(Int)->Void
+    }
+    static var workspace:((Workspace)->Void)?
     static var canvasBody: (() -> Void)?
     static var surfaceBody: (() -> Void)?
     static var nodeBody: ((UUID) -> Void)?

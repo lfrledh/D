@@ -208,6 +208,7 @@ public struct WorkflowCanvasView: View {
     public var body: some View {
         #if DEBUG
         let _ = WorkflowCanvasUpdateProbe.canvasBody?()
+        let _ = WorkflowCanvasUpdateProbe.workspace?(.init(draftTarget:workspaceDraft?.target,open:{id,mode in setRunTarget(id);runRange=mode;presentWorkspacePlan(id,mode:mode)},target:setRunTarget,range:setRunRange))
         #endif
         GeometryReader { viewport in
         VStack(spacing: 0) {
@@ -797,7 +798,10 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     private func setRunTarget(_ id: UUID) {
         guard controller.graph?.nodes.contains(where: { $0.id == id }) == true else { return }
         runTarget = WorkflowRunTarget(context: runContext, nodeID: id)
-        runPreview = nil
+        runPreview = nil;workspaceDraft=nil;planInputLabels=[:]
+    }
+    private func setRunRange(_ value:Int) {
+        runRange=value;runPreview=nil;workspaceDraft=nil;planInputLabels=[:]
     }
     private var recoveryRuns: [WorkflowRun] {
         controller.runs.reversed().filter { WorkflowCanvasPresentation.canResume($0.status) }
@@ -822,14 +826,14 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     Task { await controller.cancel() }
                 }.accessibilityIdentifier("workflow-cancel").workbenchHelp("RUN-STOP")
             } else {
-                WorkbenchPicker(text("workflow.run.range", "范围"), selection: $runRange) {
+                WorkbenchPicker(text("workflow.run.range", "范围"), selection: Binding(get:{runRange},set:setRunRange)) {
                     WorkbenchChoice(text("workflow.action.runToHere", "运行到此节点"), value:0)
                     WorkbenchChoice(text("workflow.action.rerunOnly", "只重跑此节点"), value:1)
                     WorkbenchChoice(text("workflow.scope.from", "从这里重新运行（含此节点）"), value:2)
                     WorkbenchChoice(text("workflow.scope.after", "从其输出继续（不重算此节点）"), value:3)
                 }.frame(maxWidth: 230).accessibilityIdentifier("workflow-run-range").workbenchHelp("RUN-RANGE")
                 WorkbenchPicker(text(["semantics.targetThrough", "semantics.targetOnly", "semantics.targetFrom", "semantics.targetAfter"][runRange], ["运行终点", "执行节点", "重新运行起点", "使用其输出的节点"][runRange]), selection: Binding(get: { validRunTarget?.id }, set: { id in
-                    if let id { setRunTarget(id) } else { runTarget = nil; runPreview = nil }
+                    if let id { setRunTarget(id) } else { runTarget = nil; runPreview = nil;workspaceDraft=nil;planInputLabels=[:] }
                 })) {
                     WorkbenchChoice(consistencyText(languageStore, "run.choose." + String(runRange)), value:UUID?.none)
                     WorkbenchChoiceForEach(controller.graph?.nodes ?? []) { node in WorkbenchChoice(WorkflowHumanPresentation.name(node, in: controller.graph?.nodes ?? [], language: languageStore), value:Optional(node.id)) }
@@ -920,6 +924,21 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 }.disabled(!controller.canEditCanvas || selectedNodes.isEmpty)
                     .accessibilityIdentifier("workflow-canvas-extract-selection")
             }
+            Button(workflowText(languageStore, "refinement.workflow.typeLegend", fallback: "类型图例"), systemImage: "paintpalette") { portLegendPresented.toggle() }
+                .popover(isPresented: $portLegendPresented) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(WorkflowPortStyle.legend.indices, id: \.self) { index in
+                            let entry = WorkflowPortStyle.legend[index]
+                            HStack(spacing: 8) {
+                                Circle().fill(WorkflowPortStyle.color(for: entry.port))
+                                    .frame(width: 10, height: 10)
+                                Text(workflowText(languageStore, "refinement.workflow.legend." + entry.key, fallback: entry.fallback))
+                            }
+                        }
+                    }
+                    .padding(14)
+                }
+                .accessibilityIdentifier("workflow-port-legend")
             Spacer(minLength: 4)
             Text("\(Int((zoom * 100).rounded()))%").font(.caption.monospacedDigit())
             Slider(value: $zoom, in: WorkflowCanvasLayoutPolicy.sliderZoomRange(current: zoom))
@@ -953,21 +972,6 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 Text(workflowRecoveryProgressText(controller.progressMessage, language: languageStore)).foregroundStyle(.secondary)
             }
             Spacer()
-            Button(workflowText(languageStore, "refinement.workflow.typeLegend", fallback: "类型图例"), systemImage: "paintpalette") { portLegendPresented.toggle() }
-                .popover(isPresented: $portLegendPresented) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(WorkflowPortStyle.legend.indices, id: \.self) { index in
-                            let entry = WorkflowPortStyle.legend[index]
-                            HStack(spacing: 8) {
-                                Circle().fill(WorkflowPortStyle.color(for: entry.port))
-                                    .frame(width: 10, height: 10)
-                                Text(workflowText(languageStore, "refinement.workflow.legend." + entry.key, fallback: entry.fallback))
-                            }
-                        }
-                    }
-                    .padding(14)
-                }
-                .accessibilityIdentifier("workflow-port-legend")
             if let rawError = controller.errorMessage {
                 let error = workflowRecoveryErrorText(rawError, runs: controller.runs, language: languageStore)
                 Label(error, systemImage: "exclamationmark.triangle.fill")
