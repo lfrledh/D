@@ -132,6 +132,7 @@ public struct DualWorkbenchView: View {
     private var graphModelIdentities: Set<String> {
         canvasModel.projectSession.openGraphModelIdentities
     }
+    @State private var featureHelp = WorkbenchHelpStore()
     public init(model: WorkbenchModel, quickModel: WorkbenchModel, quick: QuickGenerationController,
                 library: ModelLibraryModel, nodeTags: ModelNodeTagStore, metadata: SharedLibraryStore?, metadataIssue: String? = nil, settingsRequest: Binding<UUID?> = .constant(nil), windowHasSheet: Bool = false) {
         self._settingsRequest = settingsRequest
@@ -143,7 +144,7 @@ public struct DualWorkbenchView: View {
             fallback: language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? zh : en)
     }
     private var canPresentSettings: Bool {
-        !windowHasSheet && !settingsVisible && !libraryVisible && !projectsVisible && !compatibilityVisible && !languageVisible
+        featureHelp.presentation == nil && !windowHasSheet && !settingsVisible && !libraryVisible && !projectsVisible && !compatibilityVisible && !languageVisible
             && filesRoute == nil && previewAsset == nil && libraryInfo == nil
             && pendingLibraryDestination == nil && pendingFilesRoute == nil
             && !library.isPresented && !library.isChoosingLocation && !model.hasPendingEditor
@@ -278,38 +279,38 @@ public struct DualWorkbenchView: View {
             Text("D").font(.title2.bold())
             WorkbenchMenu(consistencyText(language, "APP-PROJECT")) {
                 WorkbenchMenuAction(t("projects", "Switch Project…", "切换项目…")) { projectsVisible = true }
-                WorkbenchMenuAction(consistencyText(language, "menu.file.new")) { Task { if await model.newProject() { navigate(to: .workflow) } } }
-                WorkbenchMenuAction(consistencyText(language, "menu.file.open")) { Task { if await model.openProject() { navigate(to: .workflow) } } }
+                WorkbenchMenuAction(consistencyText(language, "menu.file.new")) { Task { if await model.newProject() { navigate(to: .workflow) } } }.featureHelp("MENU-FILE-NEW", language: language)
+                WorkbenchMenuAction(consistencyText(language, "menu.file.open")) { Task { if await model.openProject() { navigate(to: .workflow) } } }.featureHelp("MENU-FILE-OPEN", language: language)
             } label: {
                 HStack(spacing: 4) {
                     Text((entry == .quick ? quickModel.manifest?.name : canvasModel.manifest?.name) ?? t("independentDraft", "Independent Draft", "独立草稿"))
                         .lineLimit(2)
                     Image(systemName: "chevron.down").font(.caption)
                 }
-            }.accessibilityIdentifier("app-project").frame(maxWidth: 260, alignment: .leading)
+            }.accessibilityIdentifier("app-project").workbenchHelp("APP-PROJECT").frame(maxWidth: 260, alignment: .leading)
             WorkbenchMenu(consistencyText(language, "APP-FILE")) {
-                WorkbenchMenuAction(consistencyText(language, "menu.file.new")) { Task { if await model.newProject() { navigate(to: .workflow) } } }.keyboardShortcut("n")
-                WorkbenchMenuAction(consistencyText(language, "menu.file.open")) { Task { if await model.openProject() { navigate(to: .workflow) } } }.keyboardShortcut("o")
+                WorkbenchMenuAction(consistencyText(language, "menu.file.new")) { Task { if await model.newProject() { navigate(to: .workflow) } } }.featureHelp("MENU-FILE-NEW", language: language).keyboardShortcut("n")
+                WorkbenchMenuAction(consistencyText(language, "menu.file.open")) { Task { if await model.openProject() { navigate(to: .workflow) } } }.featureHelp("MENU-FILE-OPEN", language: language).keyboardShortcut("o")
                 let command = saveCommand
-                WorkbenchMenuAction(command.title, action: command.action).disabled(!command.isEnabled).keyboardShortcut("s")
+                WorkbenchMenuAction(command.title, action: command.action).featureHelp("MENU-FILE-SAVE", language: language).disabled(!command.isEnabled).keyboardShortcut("s")
                 WorkbenchMenuDivider()
-                WorkbenchMenuAction(consistencyText(language, "menu.file.import")) { let forCanvas = entry == .workflow; Task { await importLibraryAsset(forCanvas: forCanvas) } }
+                WorkbenchMenuAction(consistencyText(language, "menu.file.import")) { let forCanvas = entry == .workflow; Task { await importLibraryAsset(forCanvas: forCanvas) } }.featureHelp("MENU-FILE-IMPORT", language: language)
                 if entry == .workflow, let controller = canvasModel.projectSession.workflow {
                     WorkbenchMenuAction(consistencyText(language, "menu.file.export")) {
                         Task { await WorkflowHostView.chooseDestination(controller, model: canvasModel, language: language) }
-                    }.disabled(controller.readOnlyReason != nil || canvasModel.isBusy || canvasModel.isChangingProject).help(controller.destinationDescription)
+                    }.featureHelp("MENU-FILE-EXPORT", language: language).disabled(controller.readOnlyReason != nil || canvasModel.isBusy || canvasModel.isChangingProject).help(controller.destinationDescription)
                 } else {
-                    WorkbenchMenuAction(consistencyText(language, "menu.file.export")) { compatibilityVisible = true }
+                    WorkbenchMenuAction(consistencyText(language, "menu.file.export")) { compatibilityVisible = true }.featureHelp("MENU-FILE-EXPORT", language: language)
                 }
                 if let manifest = (entry == .quick ? quickModel.manifest : canvasModel.manifest),
                    let store = (entry == .quick ? quickModel.projectSession.currentStore : canvasModel.projectSession.currentStore) {
-                    WorkbenchMenuAction(consistencyText(language, "menu.file.backups")) { filesRoute = .init(store: store, instanceID: manifest.effectiveInstanceID, assetID: nil) }
+                    WorkbenchMenuAction(consistencyText(language, "menu.file.backups")) { filesRoute = .init(store: store, instanceID: manifest.effectiveInstanceID, assetID: nil) }.featureHelp("MENU-FILE-BACKUPS", language: language)
                 }
-            }.accessibilityIdentifier("app-file")
+            }.accessibilityIdentifier("app-file").workbenchHelp("APP-FILE")
             WorkbenchMenu(consistencyText(language, "APP-RESOURCES")) {
-                WorkbenchMenuAction(consistencyText(language, "menu.resources.library")) { modelPickerCategory = nil; libraryVisible = true }
-                WorkbenchMenuAction(consistencyText(language, "menu.resources.models")) { library.presentManagement() }.keyboardShortcut("m", modifiers: [.command,.shift])
-            }.accessibilityIdentifier("app-resources")
+                WorkbenchMenuAction(consistencyText(language, "menu.resources.library")) { modelPickerCategory = nil; libraryVisible = true }.featureHelp("MENU-RESOURCES-LIBRARY", language: language)
+                WorkbenchMenuAction(consistencyText(language, "menu.resources.models")) { library.presentManagement() }.featureHelp("MENU-RESOURCES-MODELS", language: language).keyboardShortcut("m", modifiers: [.command,.shift])
+            }.accessibilityIdentifier("app-resources").workbenchHelp("APP-RESOURCES")
             if entry == .quick {
                 if model.projectSession.projectQuick != nil {
                     WorkbenchPicker(t("draftLocation", "Draft Location", "草稿位置"), selection: Binding(get: { useProjectQuick }, set: { captureChatReading(); useProjectQuick = $0 })) {
@@ -320,14 +321,17 @@ public struct DualWorkbenchView: View {
                     Button(t("enableProjectQuick", "Use Project Draft", "使用项目草稿")) { captureChatReading(); Task { await model.projectSession.enableProjectQuick(); useProjectQuick = true; navigate(to: .quick) } }
                 }
             }
+            Button { featureHelp.presentation = .init(featureID: nil, token: nil, context: nil) } label: { Image(systemName: "questionmark.circle") }
+                .help(consistencyText(language, "help.open")).accessibilityLabel(consistencyText(language, "help.title"))
+                .accessibilityIdentifier("workbench-feature-guide").disabled(!canPresentSettings)
             Spacer(minLength: 8)
             WorkbenchGlassSegments(title: t("workspaceMode", "Workspace", "工作区"), selection: Binding(get: { entry }, set: { navigate(to: $0) }), choices: [
                 (Entry.quick, consistencyText(language, "APP-MODE-QUICK")), (Entry.workflow, consistencyText(language, "APP-MODE-WORKFLOW"))])
-                .frame(width: 180).accessibilityIdentifier("workbench-entry")
+                .frame(width: 180).accessibilityIdentifier("workbench-entry").workbenchHelp("APP-MODE")
             Button { presentSettings() } label: { Image(systemName: "gearshape").frame(width: 30,height: 30) }
                 .buttonStyle(WorkbenchIconButtonStyle(diameter: 40,panel: true))
                 .help(t("settings", "Settings", "设置")).accessibilityLabel(t("settings", "Settings", "设置"))
-                .accessibilityIdentifier("workbench-settings").disabled(!canPresentSettings)
+                .accessibilityIdentifier("workbench-settings").workbenchHelp("APP-SETTINGS").disabled(!canPresentSettings)
         }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal,16).padding(.vertical,8)
     }
 
@@ -345,7 +349,7 @@ public struct DualWorkbenchView: View {
                     WorkbenchCategoryPicker(selection: quick.category, owner: ObjectIdentifier(quick), enabled: !quickOwnerIsChanging) { category in
                         guard entry == .quick, quick === dragOwner, quickModel.projectSession.currentStore === dragStore else { return }
                         selectCategory(category)
-                    }
+                    }.workbenchHelp("QUICK-MODALITY")
                 if entry == .quick, quick.category == .text {
                     WorkbenchMenu {
                         WorkbenchPickerOptions(workflowText(language, "chat.textSurface", fallback: "文字工作面"),
@@ -449,6 +453,11 @@ public struct DualWorkbenchView: View {
         }
         .frame(minWidth: WorkbenchSidebarLayout.minimumWindowWidth, minHeight: 580)
         .focusedSceneValue(\.workbenchSave, saveCommand)
+        .environment(\.workbenchHelpStore, featureHelp)
+        .sheet(item: $featureHelp.presentation) { presentation in
+            WorkbenchFeatureGuide(presentation: presentation, store: featureHelp)
+                .environment(\.dLanguageStore, language)
+        }
         .environment(\.workbenchSidebars, sidebarState)
         .environment(\.workbenchMenuContext, "workbench:\(entry.rawValue):\(ObjectIdentifier(quick)):\(canvasModel.manifest?.effectiveInstanceID.uuidString ?? "none")")
         .environment(\.openWorkbenchSettings, { section in presentSettings(section: section) })

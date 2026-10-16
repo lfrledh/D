@@ -1,0 +1,1484 @@
+[
+  {
+    "id": "APP-PROJECT",
+    "name_key": "consistency.help.APP-PROJECT.name",
+    "help_key": "consistency.help.APP-PROJECT.purpose",
+    "object_key": "consistency.help.APP-PROJECT.object",
+    "conditions_key": "consistency.help.APP-PROJECT.conditions",
+    "category": "project",
+    "aliases": [
+      "项目",
+      "Project"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "APP-FILE",
+    "name_key": "consistency.help.APP-FILE.name",
+    "help_key": "consistency.help.APP-FILE.purpose",
+    "object_key": "consistency.help.APP-FILE.object",
+    "conditions_key": "consistency.help.APP-FILE.conditions",
+    "category": "project",
+    "aliases": [
+      "文件",
+      "File"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "APP-RESOURCES",
+    "name_key": "consistency.help.APP-RESOURCES.name",
+    "help_key": "consistency.help.APP-RESOURCES.purpose",
+    "object_key": "consistency.help.APP-RESOURCES.object",
+    "conditions_key": "consistency.help.APP-RESOURCES.conditions",
+    "category": "models",
+    "aliases": [
+      "资源",
+      "Resources"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "APP-MODE",
+    "name_key": "consistency.help.APP-MODE.name",
+    "help_key": "consistency.help.APP-MODE.purpose",
+    "object_key": "consistency.help.APP-MODE.object",
+    "conditions_key": "consistency.help.APP-MODE.conditions",
+    "category": "view",
+    "aliases": [
+      "快速生成 / 工作流",
+      "Quick / Workflow"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "APP-SETTINGS",
+    "name_key": "consistency.help.APP-SETTINGS.name",
+    "help_key": "consistency.help.APP-SETTINGS.purpose",
+    "object_key": "consistency.help.APP-SETTINGS.object",
+    "conditions_key": "consistency.help.APP-SETTINGS.conditions",
+    "category": "view",
+    "aliases": [
+      "设置",
+      "Settings"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "FLOW-SELECT",
+    "name_key": "consistency.help.FLOW-SELECT.name",
+    "help_key": "consistency.help.FLOW-SELECT.purpose",
+    "object_key": "consistency.help.FLOW-SELECT.object",
+    "conditions_key": "consistency.help.FLOW-SELECT.conditions",
+    "category": "build",
+    "aliases": [
+      "流程",
+      "Workflow"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "FLOW-NEW",
+    "name_key": "consistency.help.FLOW-NEW.name",
+    "help_key": "consistency.help.FLOW-NEW.purpose",
+    "object_key": "consistency.help.FLOW-NEW.object",
+    "conditions_key": "consistency.help.FLOW-NEW.conditions",
+    "category": "build",
+    "aliases": [
+      "新建流程",
+      "New Workflow"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "FLOW-SAVE",
+    "name_key": "consistency.help.FLOW-SAVE.name",
+    "help_key": "consistency.help.FLOW-SAVE.purpose",
+    "object_key": "consistency.help.FLOW-SAVE.object",
+    "conditions_key": "consistency.help.FLOW-SAVE.conditions",
+    "category": "project",
+    "aliases": [
+      "保存流程更改",
+      "Save Workflow Changes"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "FLOW-MORE",
+    "name_key": "consistency.help.FLOW-MORE.name",
+    "help_key": "consistency.help.FLOW-MORE.purpose",
+    "object_key": "consistency.help.FLOW-MORE.object",
+    "conditions_key": "consistency.help.FLOW-MORE.conditions",
+    "category": "build",
+    "aliases": [
+      "流程设置",
+      "Workflow Settings"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "QUICK-MODALITY",
+    "name_key": "consistency.help.QUICK-MODALITY.name",
+    "help_key": "consistency.help.QUICK-MODALITY.purpose",
+    "object_key": "consistency.help.QUICK-MODALITY.object",
+    "conditions_key": "consistency.help.QUICK-MODALITY.conditions",
+    "category": "view",
+    "aliases": [
+      "文字 / 图像 / 视频 / 音频",
+      "Text / Image / Video / Audio"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "LEFT-TOGGLE",
+    "name_key": "consistency.help.LEFT-TOGGLE.name",
+    "help_key": "consistency.help.LEFT-TOGGLE.purpose",
+    "object_key": "consistency.help.LEFT-TOGGLE.object",
+    "conditions_key": "consistency.help.LEFT-TOGGLE.conditions",
+    "category": "view",
+    "aliases": [
+      "显示/隐藏左边栏",
+      "Show/Hide Left Sidebar"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RIGHT-TOGGLE",
+    "name_key": "consistency.help.RIGHT-TOGGLE.name",
+    "help_key": "consistency.help.RIGHT-TOGGLE.purpose",
+    "object_key": "consistency.help.RIGHT-TOGGLE.object",
+    "conditions_key": "consistency.help.RIGHT-TOGGLE.conditions",
+    "category": "view",
+    "aliases": [
+      "显示/隐藏右边栏",
+      "Show/Hide Right Sidebar"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "BAR-LEFT",
+    "name_key": "consistency.help.BAR-LEFT.name",
+    "help_key": "consistency.help.BAR-LEFT.purpose",
+    "object_key": "consistency.help.BAR-LEFT.object",
+    "conditions_key": "consistency.help.BAR-LEFT.conditions",
+    "category": "view",
+    "aliases": [
+      "工具标签",
+      "Tools"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "BAR-RIGHT",
+    "name_key": "consistency.help.BAR-RIGHT.name",
+    "help_key": "consistency.help.BAR-RIGHT.purpose",
+    "object_key": "consistency.help.BAR-RIGHT.object",
+    "conditions_key": "consistency.help.BAR-RIGHT.conditions",
+    "category": "inspect",
+    "aliases": [
+      "结果标签",
+      "Results"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MODEL-CARD",
+    "name_key": "consistency.help.MODEL-CARD.name",
+    "help_key": "consistency.help.MODEL-CARD.purpose",
+    "object_key": "consistency.help.MODEL-CARD.object",
+    "conditions_key": "consistency.help.MODEL-CARD.conditions",
+    "category": "models",
+    "aliases": [
+      "模型",
+      "Model"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MODEL-PURPOSE",
+    "name_key": "consistency.help.MODEL-PURPOSE.name",
+    "help_key": "consistency.help.MODEL-PURPOSE.purpose",
+    "object_key": "consistency.help.MODEL-PURPOSE.object",
+    "conditions_key": "consistency.help.MODEL-PURPOSE.conditions",
+    "category": "models",
+    "aliases": [
+      "用途",
+      "Purpose"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MODEL-IO",
+    "name_key": "consistency.help.MODEL-IO.name",
+    "help_key": "consistency.help.MODEL-IO.purpose",
+    "object_key": "consistency.help.MODEL-IO.object",
+    "conditions_key": "consistency.help.MODEL-IO.conditions",
+    "category": "models",
+    "aliases": [
+      "输入 → 输出",
+      "Input → Output"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MODEL-STATUS",
+    "name_key": "consistency.help.MODEL-STATUS.name",
+    "help_key": "consistency.help.MODEL-STATUS.purpose",
+    "object_key": "consistency.help.MODEL-STATUS.object",
+    "conditions_key": "consistency.help.MODEL-STATUS.conditions",
+    "category": "models",
+    "aliases": [
+      "状态",
+      "Status"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MODEL-CHANGE",
+    "name_key": "consistency.help.MODEL-CHANGE.name",
+    "help_key": "consistency.help.MODEL-CHANGE.purpose",
+    "object_key": "consistency.help.MODEL-CHANGE.object",
+    "conditions_key": "consistency.help.MODEL-CHANGE.conditions",
+    "category": "models",
+    "aliases": [
+      "更换模型…",
+      "Change Model…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MODEL-DETAILS",
+    "name_key": "consistency.help.MODEL-DETAILS.name",
+    "help_key": "consistency.help.MODEL-DETAILS.purpose",
+    "object_key": "consistency.help.MODEL-DETAILS.object",
+    "conditions_key": "consistency.help.MODEL-DETAILS.conditions",
+    "category": "models",
+    "aliases": [
+      "模型信息",
+      "Model Info"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MODEL-ADVANCED",
+    "name_key": "consistency.help.MODEL-ADVANCED.name",
+    "help_key": "consistency.help.MODEL-ADVANCED.purpose",
+    "object_key": "consistency.help.MODEL-ADVANCED.object",
+    "conditions_key": "consistency.help.MODEL-ADVANCED.conditions",
+    "category": "models",
+    "aliases": [
+      "高级设置",
+      "Advanced Settings"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "LIB-SEARCH",
+    "name_key": "consistency.help.LIB-SEARCH.name",
+    "help_key": "consistency.help.LIB-SEARCH.purpose",
+    "object_key": "consistency.help.LIB-SEARCH.object",
+    "conditions_key": "consistency.help.LIB-SEARCH.conditions",
+    "category": "organize",
+    "aliases": [
+      "搜索名称、说明或标签",
+      "Search Names, Notes or Tags"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "LIB-ADD",
+    "name_key": "consistency.help.LIB-ADD.name",
+    "help_key": "consistency.help.LIB-ADD.purpose",
+    "object_key": "consistency.help.LIB-ADD.object",
+    "conditions_key": "consistency.help.LIB-ADD.conditions",
+    "category": "project",
+    "aliases": [
+      "导入…",
+      "Import…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "LIB-TAGS",
+    "name_key": "consistency.help.LIB-TAGS.name",
+    "help_key": "consistency.help.LIB-TAGS.purpose",
+    "object_key": "consistency.help.LIB-TAGS.object",
+    "conditions_key": "consistency.help.LIB-TAGS.conditions",
+    "category": "organize",
+    "aliases": [
+      "标签",
+      "Tags"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "LIB-FILTER",
+    "name_key": "consistency.help.LIB-FILTER.name",
+    "help_key": "consistency.help.LIB-FILTER.purpose",
+    "object_key": "consistency.help.LIB-FILTER.object",
+    "conditions_key": "consistency.help.LIB-FILTER.conditions",
+    "category": "organize",
+    "aliases": [
+      "筛选",
+      "Filter"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "LIB-ENTRY-ADD",
+    "name_key": "consistency.help.LIB-ENTRY-ADD.name",
+    "help_key": "consistency.help.LIB-ENTRY-ADD.purpose",
+    "object_key": "consistency.help.LIB-ENTRY-ADD.object",
+    "conditions_key": "consistency.help.LIB-ENTRY-ADD.conditions",
+    "category": "build",
+    "aliases": [
+      "添加到画布",
+      "Add to Canvas"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "LIB-ENTRY-INFO",
+    "name_key": "consistency.help.LIB-ENTRY-INFO.name",
+    "help_key": "consistency.help.LIB-ENTRY-INFO.purpose",
+    "object_key": "consistency.help.LIB-ENTRY-INFO.object",
+    "conditions_key": "consistency.help.LIB-ENTRY-INFO.conditions",
+    "category": "inspect",
+    "aliases": [
+      "详情",
+      "Details"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "QUERY-SAVE",
+    "name_key": "consistency.help.QUERY-SAVE.name",
+    "help_key": "consistency.help.QUERY-SAVE.purpose",
+    "object_key": "consistency.help.QUERY-SAVE.object",
+    "conditions_key": "consistency.help.QUERY-SAVE.conditions",
+    "category": "organize",
+    "aliases": [
+      "保存搜索…",
+      "Save Search…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "QUERY-APPLY",
+    "name_key": "consistency.help.QUERY-APPLY.name",
+    "help_key": "consistency.help.QUERY-APPLY.purpose",
+    "object_key": "consistency.help.QUERY-APPLY.object",
+    "conditions_key": "consistency.help.QUERY-APPLY.conditions",
+    "category": "organize",
+    "aliases": [
+      "应用",
+      "Apply"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "QUERY-CANCEL",
+    "name_key": "consistency.help.QUERY-CANCEL.name",
+    "help_key": "consistency.help.QUERY-CANCEL.purpose",
+    "object_key": "consistency.help.QUERY-CANCEL.object",
+    "conditions_key": "consistency.help.QUERY-CANCEL.conditions",
+    "category": "organize",
+    "aliases": [
+      "取消",
+      "Cancel"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RESULT-RUN",
+    "name_key": "consistency.help.RESULT-RUN.name",
+    "help_key": "consistency.help.RESULT-RUN.purpose",
+    "object_key": "consistency.help.RESULT-RUN.object",
+    "conditions_key": "consistency.help.RESULT-RUN.conditions",
+    "category": "inspect",
+    "aliases": [
+      "运行记录",
+      "Run"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RESULT-PIN",
+    "name_key": "consistency.help.RESULT-PIN.name",
+    "help_key": "consistency.help.RESULT-PIN.purpose",
+    "object_key": "consistency.help.RESULT-PIN.object",
+    "conditions_key": "consistency.help.RESULT-PIN.conditions",
+    "category": "inspect",
+    "aliases": [
+      "固定结果",
+      "Pin Result"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RESULT-CALL",
+    "name_key": "consistency.help.RESULT-CALL.name",
+    "help_key": "consistency.help.RESULT-CALL.purpose",
+    "object_key": "consistency.help.RESULT-CALL.object",
+    "conditions_key": "consistency.help.RESULT-CALL.conditions",
+    "category": "inspect",
+    "aliases": [
+      "执行记录",
+      "Execution"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RESULT-INFO",
+    "name_key": "consistency.help.RESULT-INFO.name",
+    "help_key": "consistency.help.RESULT-INFO.purpose",
+    "object_key": "consistency.help.RESULT-INFO.object",
+    "conditions_key": "consistency.help.RESULT-INFO.conditions",
+    "category": "organize",
+    "aliases": [
+      "结果信息",
+      "Result Info"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RESULT-FILTER",
+    "name_key": "consistency.help.RESULT-FILTER.name",
+    "help_key": "consistency.help.RESULT-FILTER.purpose",
+    "object_key": "consistency.help.RESULT-FILTER.object",
+    "conditions_key": "consistency.help.RESULT-FILTER.conditions",
+    "category": "organize",
+    "aliases": [
+      "筛选结果",
+      "Filter Results"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "DECISION-REJECT",
+    "name_key": "consistency.help.DECISION-REJECT.name",
+    "help_key": "consistency.help.DECISION-REJECT.purpose",
+    "object_key": "consistency.help.DECISION-REJECT.object",
+    "conditions_key": "consistency.help.DECISION-REJECT.conditions",
+    "category": "inspect",
+    "aliases": [
+      "拒绝",
+      "Reject"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "DECISION-ACCEPT",
+    "name_key": "consistency.help.DECISION-ACCEPT.name",
+    "help_key": "consistency.help.DECISION-ACCEPT.purpose",
+    "object_key": "consistency.help.DECISION-ACCEPT.object",
+    "conditions_key": "consistency.help.DECISION-ACCEPT.conditions",
+    "category": "inspect",
+    "aliases": [
+      "采用此结果",
+      "Use This Result"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "DECISION-CONTINUE",
+    "name_key": "consistency.help.DECISION-CONTINUE.name",
+    "help_key": "consistency.help.DECISION-CONTINUE.purpose",
+    "object_key": "consistency.help.DECISION-CONTINUE.object",
+    "conditions_key": "consistency.help.DECISION-CONTINUE.conditions",
+    "category": "build",
+    "aliases": [
+      "继续运行",
+      "Continue Run"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "CANVAS-POINTER",
+    "name_key": "consistency.help.CANVAS-POINTER.name",
+    "help_key": "consistency.help.CANVAS-POINTER.purpose",
+    "object_key": "consistency.help.CANVAS-POINTER.object",
+    "conditions_key": "consistency.help.CANVAS-POINTER.conditions",
+    "category": "view",
+    "aliases": [
+      "选择",
+      "Select"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "CANVAS-HAND",
+    "name_key": "consistency.help.CANVAS-HAND.name",
+    "help_key": "consistency.help.CANVAS-HAND.purpose",
+    "object_key": "consistency.help.CANVAS-HAND.object",
+    "conditions_key": "consistency.help.CANVAS-HAND.conditions",
+    "category": "view",
+    "aliases": [
+      "平移",
+      "Pan"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "CANVAS-UNDO",
+    "name_key": "consistency.help.CANVAS-UNDO.name",
+    "help_key": "consistency.help.CANVAS-UNDO.purpose",
+    "object_key": "consistency.help.CANVAS-UNDO.object",
+    "conditions_key": "consistency.help.CANVAS-UNDO.conditions",
+    "category": "build",
+    "aliases": [
+      "撤销",
+      "Undo"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "CANVAS-REDO",
+    "name_key": "consistency.help.CANVAS-REDO.name",
+    "help_key": "consistency.help.CANVAS-REDO.purpose",
+    "object_key": "consistency.help.CANVAS-REDO.object",
+    "conditions_key": "consistency.help.CANVAS-REDO.conditions",
+    "category": "build",
+    "aliases": [
+      "重做",
+      "Redo"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "CANVAS-FIT",
+    "name_key": "consistency.help.CANVAS-FIT.name",
+    "help_key": "consistency.help.CANVAS-FIT.purpose",
+    "object_key": "consistency.help.CANVAS-FIT.object",
+    "conditions_key": "consistency.help.CANVAS-FIT.conditions",
+    "category": "view",
+    "aliases": [
+      "适合窗口",
+      "Fit to Window"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RUN-RANGE",
+    "name_key": "consistency.help.RUN-RANGE.name",
+    "help_key": "consistency.help.RUN-RANGE.purpose",
+    "object_key": "consistency.help.RUN-RANGE.object",
+    "conditions_key": "consistency.help.RUN-RANGE.conditions",
+    "category": "build",
+    "aliases": [
+      "运行范围",
+      "Run Range"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RUN-TARGET",
+    "name_key": "consistency.help.RUN-TARGET.name",
+    "help_key": "consistency.help.RUN-TARGET.purpose",
+    "object_key": "consistency.help.RUN-TARGET.object",
+    "conditions_key": "consistency.help.RUN-TARGET.conditions",
+    "category": "build",
+    "aliases": [
+      "作用节点",
+      "Target Node"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RUN-REVIEW",
+    "name_key": "consistency.help.RUN-REVIEW.name",
+    "help_key": "consistency.help.RUN-REVIEW.purpose",
+    "object_key": "consistency.help.RUN-REVIEW.object",
+    "conditions_key": "consistency.help.RUN-REVIEW.conditions",
+    "category": "build",
+    "aliases": [
+      "检查并运行…",
+      "Review and Run…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RUN-HISTORY",
+    "name_key": "consistency.help.RUN-HISTORY.name",
+    "help_key": "consistency.help.RUN-HISTORY.purpose",
+    "object_key": "consistency.help.RUN-HISTORY.object",
+    "conditions_key": "consistency.help.RUN-HISTORY.conditions",
+    "category": "inspect",
+    "aliases": [
+      "运行记录",
+      "Run History"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RUN-PAUSE",
+    "name_key": "consistency.help.RUN-PAUSE.name",
+    "help_key": "consistency.help.RUN-PAUSE.purpose",
+    "object_key": "consistency.help.RUN-PAUSE.object",
+    "conditions_key": "consistency.help.RUN-PAUSE.conditions",
+    "category": "build",
+    "aliases": [
+      "暂停",
+      "Pause"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RUN-STOP",
+    "name_key": "consistency.help.RUN-STOP.name",
+    "help_key": "consistency.help.RUN-STOP.purpose",
+    "object_key": "consistency.help.RUN-STOP.object",
+    "conditions_key": "consistency.help.RUN-STOP.conditions",
+    "category": "build",
+    "aliases": [
+      "停止",
+      "Stop"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "SETTINGS-THEME",
+    "name_key": "consistency.help.SETTINGS-THEME.name",
+    "help_key": "consistency.help.SETTINGS-THEME.purpose",
+    "object_key": "consistency.help.SETTINGS-THEME.object",
+    "conditions_key": "consistency.help.SETTINGS-THEME.conditions",
+    "category": "view",
+    "aliases": [
+      "主题",
+      "Theme"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "SETTINGS-WALLPAPER",
+    "name_key": "consistency.help.SETTINGS-WALLPAPER.name",
+    "help_key": "consistency.help.SETTINGS-WALLPAPER.purpose",
+    "object_key": "consistency.help.SETTINGS-WALLPAPER.object",
+    "conditions_key": "consistency.help.SETTINGS-WALLPAPER.conditions",
+    "category": "view",
+    "aliases": [
+      "选择背景图片…",
+      "Choose Background Image…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "SETTINGS-SOLID",
+    "name_key": "consistency.help.SETTINGS-SOLID.name",
+    "help_key": "consistency.help.SETTINGS-SOLID.purpose",
+    "object_key": "consistency.help.SETTINGS-SOLID.object",
+    "conditions_key": "consistency.help.SETTINGS-SOLID.conditions",
+    "category": "view",
+    "aliases": [
+      "恢复纯色",
+      "Use Solid Background"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "SETTINGS-MATERIAL",
+    "name_key": "consistency.help.SETTINGS-MATERIAL.name",
+    "help_key": "consistency.help.SETTINGS-MATERIAL.purpose",
+    "object_key": "consistency.help.SETTINGS-MATERIAL.object",
+    "conditions_key": "consistency.help.SETTINGS-MATERIAL.conditions",
+    "category": "view",
+    "aliases": [
+      "面板材质",
+      "Panel Material"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "SETTINGS-TRANSPARENCY",
+    "name_key": "consistency.help.SETTINGS-TRANSPARENCY.name",
+    "help_key": "consistency.help.SETTINGS-TRANSPARENCY.purpose",
+    "object_key": "consistency.help.SETTINGS-TRANSPARENCY.object",
+    "conditions_key": "consistency.help.SETTINGS-TRANSPARENCY.conditions",
+    "category": "view",
+    "aliases": [
+      "玻璃透明度",
+      "Glass Transparency"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "SETTINGS-READABILITY",
+    "name_key": "consistency.help.SETTINGS-READABILITY.name",
+    "help_key": "consistency.help.SETTINGS-READABILITY.purpose",
+    "object_key": "consistency.help.SETTINGS-READABILITY.object",
+    "conditions_key": "consistency.help.SETTINGS-READABILITY.conditions",
+    "category": "view",
+    "aliases": [
+      "自动增强可读性",
+      "Improve Readability Automatically"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "SETTINGS-AMOUNT",
+    "name_key": "consistency.help.SETTINGS-AMOUNT.name",
+    "help_key": "consistency.help.SETTINGS-AMOUNT.purpose",
+    "object_key": "consistency.help.SETTINGS-AMOUNT.object",
+    "conditions_key": "consistency.help.SETTINGS-AMOUNT.conditions",
+    "category": "view",
+    "aliases": [
+      "增强程度",
+      "Enhancement"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "SETTINGS-MOTION",
+    "name_key": "consistency.help.SETTINGS-MOTION.name",
+    "help_key": "consistency.help.SETTINGS-MOTION.purpose",
+    "object_key": "consistency.help.SETTINGS-MOTION.object",
+    "conditions_key": "consistency.help.SETTINGS-MOTION.conditions",
+    "category": "view",
+    "aliases": [
+      "动画效果",
+      "Animation"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "SETTINGS-LANGUAGE",
+    "name_key": "consistency.help.SETTINGS-LANGUAGE.name",
+    "help_key": "consistency.help.SETTINGS-LANGUAGE.purpose",
+    "object_key": "consistency.help.SETTINGS-LANGUAGE.object",
+    "conditions_key": "consistency.help.SETTINGS-LANGUAGE.conditions",
+    "category": "view",
+    "aliases": [
+      "界面语言",
+      "Interface Language"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "ANNOTATION-NAME",
+    "name_key": "consistency.help.ANNOTATION-NAME.name",
+    "help_key": "consistency.help.ANNOTATION-NAME.purpose",
+    "object_key": "consistency.help.ANNOTATION-NAME.object",
+    "conditions_key": "consistency.help.ANNOTATION-NAME.conditions",
+    "category": "organize",
+    "aliases": [
+      "结果名称",
+      "Result Name"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "ANNOTATION-NOTE",
+    "name_key": "consistency.help.ANNOTATION-NOTE.name",
+    "help_key": "consistency.help.ANNOTATION-NOTE.purpose",
+    "object_key": "consistency.help.ANNOTATION-NOTE.object",
+    "conditions_key": "consistency.help.ANNOTATION-NOTE.conditions",
+    "category": "organize",
+    "aliases": [
+      "结果说明",
+      "Result Notes"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "ANNOTATION-SAVE",
+    "name_key": "consistency.help.ANNOTATION-SAVE.name",
+    "help_key": "consistency.help.ANNOTATION-SAVE.purpose",
+    "object_key": "consistency.help.ANNOTATION-SAVE.object",
+    "conditions_key": "consistency.help.ANNOTATION-SAVE.conditions",
+    "category": "organize",
+    "aliases": [
+      "保存结果信息",
+      "Save Result Info"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "ANNOTATION-CANCEL",
+    "name_key": "consistency.help.ANNOTATION-CANCEL.name",
+    "help_key": "consistency.help.ANNOTATION-CANCEL.purpose",
+    "object_key": "consistency.help.ANNOTATION-CANCEL.object",
+    "conditions_key": "consistency.help.ANNOTATION-CANCEL.conditions",
+    "category": "organize",
+    "aliases": [
+      "取消",
+      "Cancel"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MODELS-DOWNLOAD",
+    "name_key": "consistency.help.MODELS-DOWNLOAD.name",
+    "help_key": "consistency.help.MODELS-DOWNLOAD.purpose",
+    "object_key": "consistency.help.MODELS-DOWNLOAD.object",
+    "conditions_key": "consistency.help.MODELS-DOWNLOAD.conditions",
+    "category": "models",
+    "aliases": [
+      "下载文件",
+      "Download Files"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MODELS-REGISTER",
+    "name_key": "consistency.help.MODELS-REGISTER.name",
+    "help_key": "consistency.help.MODELS-REGISTER.purpose",
+    "object_key": "consistency.help.MODELS-REGISTER.object",
+    "conditions_key": "consistency.help.MODELS-REGISTER.conditions",
+    "category": "models",
+    "aliases": [
+      "加入模型库",
+      "Add to Model Library"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MODELS-UNREGISTER",
+    "name_key": "consistency.help.MODELS-UNREGISTER.name",
+    "help_key": "consistency.help.MODELS-UNREGISTER.purpose",
+    "object_key": "consistency.help.MODELS-UNREGISTER.object",
+    "conditions_key": "consistency.help.MODELS-UNREGISTER.conditions",
+    "category": "models",
+    "aliases": [
+      "从模型库移除，保留文件",
+      "Remove from Library, Keep Files"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MODELS-HISTORY",
+    "name_key": "consistency.help.MODELS-HISTORY.name",
+    "help_key": "consistency.help.MODELS-HISTORY.purpose",
+    "object_key": "consistency.help.MODELS-HISTORY.object",
+    "conditions_key": "consistency.help.MODELS-HISTORY.conditions",
+    "category": "models",
+    "aliases": [
+      "清除下载历史，保留文件",
+      "Clear Download History, Keep Files"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MODELS-DELETE",
+    "name_key": "consistency.help.MODELS-DELETE.name",
+    "help_key": "consistency.help.MODELS-DELETE.purpose",
+    "object_key": "consistency.help.MODELS-DELETE.object",
+    "conditions_key": "consistency.help.MODELS-DELETE.conditions",
+    "category": "models",
+    "aliases": [
+      "删除此副本…",
+      "Delete This Copy…"
+    ],
+    "destructive": true
+  },
+  {
+    "id": "TAB-WORKFLOW-LEFT-NODES",
+    "name_key": "consistency.help.TAB-WORKFLOW-LEFT-NODES.name",
+    "help_key": "consistency.help.TAB-WORKFLOW-LEFT-NODES.purpose",
+    "object_key": "consistency.help.TAB-WORKFLOW-LEFT-NODES.object",
+    "conditions_key": "consistency.help.TAB-WORKFLOW-LEFT-NODES.conditions",
+    "category": "view",
+    "aliases": [
+      "节点",
+      "Nodes"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-WORKFLOW-LEFT-ASSETS",
+    "name_key": "consistency.help.TAB-WORKFLOW-LEFT-ASSETS.name",
+    "help_key": "consistency.help.TAB-WORKFLOW-LEFT-ASSETS.purpose",
+    "object_key": "consistency.help.TAB-WORKFLOW-LEFT-ASSETS.object",
+    "conditions_key": "consistency.help.TAB-WORKFLOW-LEFT-ASSETS.conditions",
+    "category": "view",
+    "aliases": [
+      "素材",
+      "Assets"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-WORKFLOW-LEFT-PROPERTIES",
+    "name_key": "consistency.help.TAB-WORKFLOW-LEFT-PROPERTIES.name",
+    "help_key": "consistency.help.TAB-WORKFLOW-LEFT-PROPERTIES.purpose",
+    "object_key": "consistency.help.TAB-WORKFLOW-LEFT-PROPERTIES.object",
+    "conditions_key": "consistency.help.TAB-WORKFLOW-LEFT-PROPERTIES.conditions",
+    "category": "view",
+    "aliases": [
+      "属性",
+      "Properties"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-WORKFLOW-RIGHT-NODE",
+    "name_key": "consistency.help.TAB-WORKFLOW-RIGHT-NODE.name",
+    "help_key": "consistency.help.TAB-WORKFLOW-RIGHT-NODE.purpose",
+    "object_key": "consistency.help.TAB-WORKFLOW-RIGHT-NODE.object",
+    "conditions_key": "consistency.help.TAB-WORKFLOW-RIGHT-NODE.conditions",
+    "category": "view",
+    "aliases": [
+      "节点结果",
+      "Node Results"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-WORKFLOW-RIGHT-OVERVIEW",
+    "name_key": "consistency.help.TAB-WORKFLOW-RIGHT-OVERVIEW.name",
+    "help_key": "consistency.help.TAB-WORKFLOW-RIGHT-OVERVIEW.purpose",
+    "object_key": "consistency.help.TAB-WORKFLOW-RIGHT-OVERVIEW.object",
+    "conditions_key": "consistency.help.TAB-WORKFLOW-RIGHT-OVERVIEW.conditions",
+    "category": "view",
+    "aliases": [
+      "运行总览",
+      "Run Overview"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-QUICK-LEFT-SETTINGS",
+    "name_key": "consistency.help.TAB-QUICK-LEFT-SETTINGS.name",
+    "help_key": "consistency.help.TAB-QUICK-LEFT-SETTINGS.purpose",
+    "object_key": "consistency.help.TAB-QUICK-LEFT-SETTINGS.object",
+    "conditions_key": "consistency.help.TAB-QUICK-LEFT-SETTINGS.conditions",
+    "category": "view",
+    "aliases": [
+      "设置",
+      "Settings"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-QUICK-LEFT-ASSETS",
+    "name_key": "consistency.help.TAB-QUICK-LEFT-ASSETS.name",
+    "help_key": "consistency.help.TAB-QUICK-LEFT-ASSETS.purpose",
+    "object_key": "consistency.help.TAB-QUICK-LEFT-ASSETS.object",
+    "conditions_key": "consistency.help.TAB-QUICK-LEFT-ASSETS.conditions",
+    "category": "view",
+    "aliases": [
+      "素材",
+      "Assets"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-QUICK-RIGHT-RESULTS",
+    "name_key": "consistency.help.TAB-QUICK-RIGHT-RESULTS.name",
+    "help_key": "consistency.help.TAB-QUICK-RIGHT-RESULTS.purpose",
+    "object_key": "consistency.help.TAB-QUICK-RIGHT-RESULTS.object",
+    "conditions_key": "consistency.help.TAB-QUICK-RIGHT-RESULTS.conditions",
+    "category": "view",
+    "aliases": [
+      "结果",
+      "Results"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-QUICK-RIGHT-HISTORY",
+    "name_key": "consistency.help.TAB-QUICK-RIGHT-HISTORY.name",
+    "help_key": "consistency.help.TAB-QUICK-RIGHT-HISTORY.purpose",
+    "object_key": "consistency.help.TAB-QUICK-RIGHT-HISTORY.object",
+    "conditions_key": "consistency.help.TAB-QUICK-RIGHT-HISTORY.conditions",
+    "category": "view",
+    "aliases": [
+      "历史",
+      "History"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-CHAT-LEFT-SETTINGS",
+    "name_key": "consistency.help.TAB-CHAT-LEFT-SETTINGS.name",
+    "help_key": "consistency.help.TAB-CHAT-LEFT-SETTINGS.purpose",
+    "object_key": "consistency.help.TAB-CHAT-LEFT-SETTINGS.object",
+    "conditions_key": "consistency.help.TAB-CHAT-LEFT-SETTINGS.conditions",
+    "category": "view",
+    "aliases": [
+      "设置",
+      "Settings"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-CHAT-LEFT-ASSETS",
+    "name_key": "consistency.help.TAB-CHAT-LEFT-ASSETS.name",
+    "help_key": "consistency.help.TAB-CHAT-LEFT-ASSETS.purpose",
+    "object_key": "consistency.help.TAB-CHAT-LEFT-ASSETS.object",
+    "conditions_key": "consistency.help.TAB-CHAT-LEFT-ASSETS.conditions",
+    "category": "view",
+    "aliases": [
+      "素材",
+      "Assets"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-CHAT-LEFT-CHATS",
+    "name_key": "consistency.help.TAB-CHAT-LEFT-CHATS.name",
+    "help_key": "consistency.help.TAB-CHAT-LEFT-CHATS.purpose",
+    "object_key": "consistency.help.TAB-CHAT-LEFT-CHATS.object",
+    "conditions_key": "consistency.help.TAB-CHAT-LEFT-CHATS.conditions",
+    "category": "view",
+    "aliases": [
+      "对话",
+      "Chats"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-CHAT-LEFT-TOOLS",
+    "name_key": "consistency.help.TAB-CHAT-LEFT-TOOLS.name",
+    "help_key": "consistency.help.TAB-CHAT-LEFT-TOOLS.purpose",
+    "object_key": "consistency.help.TAB-CHAT-LEFT-TOOLS.object",
+    "conditions_key": "consistency.help.TAB-CHAT-LEFT-TOOLS.conditions",
+    "category": "view",
+    "aliases": [
+      "工具",
+      "Tools"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-CHAT-RIGHT-RESULTS",
+    "name_key": "consistency.help.TAB-CHAT-RIGHT-RESULTS.name",
+    "help_key": "consistency.help.TAB-CHAT-RIGHT-RESULTS.purpose",
+    "object_key": "consistency.help.TAB-CHAT-RIGHT-RESULTS.object",
+    "conditions_key": "consistency.help.TAB-CHAT-RIGHT-RESULTS.conditions",
+    "category": "view",
+    "aliases": [
+      "结果",
+      "Results"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-CHAT-RIGHT-SOURCES",
+    "name_key": "consistency.help.TAB-CHAT-RIGHT-SOURCES.name",
+    "help_key": "consistency.help.TAB-CHAT-RIGHT-SOURCES.purpose",
+    "object_key": "consistency.help.TAB-CHAT-RIGHT-SOURCES.object",
+    "conditions_key": "consistency.help.TAB-CHAT-RIGHT-SOURCES.conditions",
+    "category": "view",
+    "aliases": [
+      "来源",
+      "Sources"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RECOVERY-SAVE-FAILURE",
+    "name_key": "consistency.help.RECOVERY-SAVE-FAILURE.name",
+    "help_key": "consistency.help.RECOVERY-SAVE-FAILURE.purpose",
+    "object_key": "consistency.help.RECOVERY-SAVE-FAILURE.object",
+    "conditions_key": "consistency.help.RECOVERY-SAVE-FAILURE.conditions",
+    "category": "inspect",
+    "aliases": [
+      "重试保存失败记录",
+      "Retry Saving Failure Record"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RECOVERY-RECOMPUTE",
+    "name_key": "consistency.help.RECOVERY-RECOMPUTE.name",
+    "help_key": "consistency.help.RECOVERY-RECOMPUTE.purpose",
+    "object_key": "consistency.help.RECOVERY-RECOMPUTE.object",
+    "conditions_key": "consistency.help.RECOVERY-RECOMPUTE.conditions",
+    "category": "inspect",
+    "aliases": [
+      "重试计算",
+      "Retry Computation"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "RECOVERY-SAVE-CONTINUE",
+    "name_key": "consistency.help.RECOVERY-SAVE-CONTINUE.name",
+    "help_key": "consistency.help.RECOVERY-SAVE-CONTINUE.purpose",
+    "object_key": "consistency.help.RECOVERY-SAVE-CONTINUE.object",
+    "conditions_key": "consistency.help.RECOVERY-SAVE-CONTINUE.conditions",
+    "category": "inspect",
+    "aliases": [
+      "恢复保存并继续流程",
+      "Resume Saving and Continue"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-FILE-NEW",
+    "name_key": "consistency.help.MENU-FILE-NEW.name",
+    "help_key": "consistency.help.MENU-FILE-NEW.purpose",
+    "object_key": "consistency.help.MENU-FILE-NEW.object",
+    "conditions_key": "consistency.help.MENU-FILE-NEW.conditions",
+    "category": "project",
+    "aliases": [
+      "新建项目…",
+      "New Project…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-FILE-OPEN",
+    "name_key": "consistency.help.MENU-FILE-OPEN.name",
+    "help_key": "consistency.help.MENU-FILE-OPEN.purpose",
+    "object_key": "consistency.help.MENU-FILE-OPEN.object",
+    "conditions_key": "consistency.help.MENU-FILE-OPEN.conditions",
+    "category": "project",
+    "aliases": [
+      "打开项目…",
+      "Open Project…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-FILE-SAVE",
+    "name_key": "consistency.help.MENU-FILE-SAVE.name",
+    "help_key": "consistency.help.MENU-FILE-SAVE.purpose",
+    "object_key": "consistency.help.MENU-FILE-SAVE.object",
+    "conditions_key": "consistency.help.MENU-FILE-SAVE.conditions",
+    "category": "project",
+    "aliases": [
+      "保存更改",
+      "Save Changes"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-FILE-IMPORT",
+    "name_key": "consistency.help.MENU-FILE-IMPORT.name",
+    "help_key": "consistency.help.MENU-FILE-IMPORT.purpose",
+    "object_key": "consistency.help.MENU-FILE-IMPORT.object",
+    "conditions_key": "consistency.help.MENU-FILE-IMPORT.conditions",
+    "category": "project",
+    "aliases": [
+      "导入素材…",
+      "Import Assets…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-FILE-EXPORT",
+    "name_key": "consistency.help.MENU-FILE-EXPORT.name",
+    "help_key": "consistency.help.MENU-FILE-EXPORT.purpose",
+    "object_key": "consistency.help.MENU-FILE-EXPORT.object",
+    "conditions_key": "consistency.help.MENU-FILE-EXPORT.conditions",
+    "category": "project",
+    "aliases": [
+      "导出…",
+      "Export…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-FILE-BACKUPS",
+    "name_key": "consistency.help.MENU-FILE-BACKUPS.name",
+    "help_key": "consistency.help.MENU-FILE-BACKUPS.purpose",
+    "object_key": "consistency.help.MENU-FILE-BACKUPS.object",
+    "conditions_key": "consistency.help.MENU-FILE-BACKUPS.conditions",
+    "category": "project",
+    "aliases": [
+      "项目文件与备份…",
+      "Project Files and Backups…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-RESOURCES-LIBRARY",
+    "name_key": "consistency.help.MENU-RESOURCES-LIBRARY.name",
+    "help_key": "consistency.help.MENU-RESOURCES-LIBRARY.purpose",
+    "object_key": "consistency.help.MENU-RESOURCES-LIBRARY.object",
+    "conditions_key": "consistency.help.MENU-RESOURCES-LIBRARY.conditions",
+    "category": "models",
+    "aliases": [
+      "资料库…",
+      "Library…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-RESOURCES-MODELS",
+    "name_key": "consistency.help.MENU-RESOURCES-MODELS.name",
+    "help_key": "consistency.help.MENU-RESOURCES-MODELS.purpose",
+    "object_key": "consistency.help.MENU-RESOURCES-MODELS.object",
+    "conditions_key": "consistency.help.MENU-RESOURCES-MODELS.conditions",
+    "category": "models",
+    "aliases": [
+      "模型与下载…",
+      "Models and Downloads…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-FLOW-BLANK",
+    "name_key": "consistency.help.MENU-FLOW-BLANK.name",
+    "help_key": "consistency.help.MENU-FLOW-BLANK.purpose",
+    "object_key": "consistency.help.MENU-FLOW-BLANK.object",
+    "conditions_key": "consistency.help.MENU-FLOW-BLANK.conditions",
+    "category": "build",
+    "aliases": [
+      "空白流程",
+      "Blank Workflow"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-FLOW-TEMPLATES",
+    "name_key": "consistency.help.MENU-FLOW-TEMPLATES.name",
+    "help_key": "consistency.help.MENU-FLOW-TEMPLATES.purpose",
+    "object_key": "consistency.help.MENU-FLOW-TEMPLATES.object",
+    "conditions_key": "consistency.help.MENU-FLOW-TEMPLATES.conditions",
+    "category": "build",
+    "aliases": [
+      "从模板新建",
+      "New from Template"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-FLOW-TEMPLATE-TEXT",
+    "name_key": "consistency.help.MENU-FLOW-TEMPLATE-TEXT.name",
+    "help_key": "consistency.help.MENU-FLOW-TEMPLATE-TEXT.purpose",
+    "object_key": "consistency.help.MENU-FLOW-TEMPLATE-TEXT.object",
+    "conditions_key": "consistency.help.MENU-FLOW-TEMPLATE-TEXT.conditions",
+    "category": "build",
+    "aliases": [
+      "文字模板",
+      "Text Template"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-FLOW-TEMPLATE-IMAGES",
+    "name_key": "consistency.help.MENU-FLOW-TEMPLATE-IMAGES.name",
+    "help_key": "consistency.help.MENU-FLOW-TEMPLATE-IMAGES.purpose",
+    "object_key": "consistency.help.MENU-FLOW-TEMPLATE-IMAGES.object",
+    "conditions_key": "consistency.help.MENU-FLOW-TEMPLATE-IMAGES.conditions",
+    "category": "build",
+    "aliases": [
+      "图像批处理",
+      "Image Batch"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-FLOW-TEMPLATE-EXISTING",
+    "name_key": "consistency.help.MENU-FLOW-TEMPLATE-EXISTING.name",
+    "help_key": "consistency.help.MENU-FLOW-TEMPLATE-EXISTING.purpose",
+    "object_key": "consistency.help.MENU-FLOW-TEMPLATE-EXISTING.object",
+    "conditions_key": "consistency.help.MENU-FLOW-TEMPLATE-EXISTING.conditions",
+    "category": "build",
+    "aliases": [
+      "更多现有模板…",
+      "More Existing Templates…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-FLOW-INTERFACE",
+    "name_key": "consistency.help.MENU-FLOW-INTERFACE.name",
+    "help_key": "consistency.help.MENU-FLOW-INTERFACE.purpose",
+    "object_key": "consistency.help.MENU-FLOW-INTERFACE.object",
+    "conditions_key": "consistency.help.MENU-FLOW-INTERFACE.conditions",
+    "category": "build",
+    "aliases": [
+      "流程输入与输出…",
+      "Workflow Inputs and Outputs…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-FLOW-CUSTOM",
+    "name_key": "consistency.help.MENU-FLOW-CUSTOM.name",
+    "help_key": "consistency.help.MENU-FLOW-CUSTOM.purpose",
+    "object_key": "consistency.help.MENU-FLOW-CUSTOM.object",
+    "conditions_key": "consistency.help.MENU-FLOW-CUSTOM.conditions",
+    "category": "build",
+    "aliases": [
+      "管理自定义节点…",
+      "Manage Custom Nodes…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-NODE-PROPERTIES",
+    "name_key": "consistency.help.MENU-NODE-PROPERTIES.name",
+    "help_key": "consistency.help.MENU-NODE-PROPERTIES.purpose",
+    "object_key": "consistency.help.MENU-NODE-PROPERTIES.object",
+    "conditions_key": "consistency.help.MENU-NODE-PROPERTIES.conditions",
+    "category": "build",
+    "aliases": [
+      "显示属性",
+      "Show Properties"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-NODE-RESULTS",
+    "name_key": "consistency.help.MENU-NODE-RESULTS.name",
+    "help_key": "consistency.help.MENU-NODE-RESULTS.purpose",
+    "object_key": "consistency.help.MENU-NODE-RESULTS.object",
+    "conditions_key": "consistency.help.MENU-NODE-RESULTS.conditions",
+    "category": "build",
+    "aliases": [
+      "查看结果",
+      "View Results"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-NODE-SCOPE",
+    "name_key": "consistency.help.MENU-NODE-SCOPE.name",
+    "help_key": "consistency.help.MENU-NODE-SCOPE.purpose",
+    "object_key": "consistency.help.MENU-NODE-SCOPE.object",
+    "conditions_key": "consistency.help.MENU-NODE-SCOPE.conditions",
+    "category": "build",
+    "aliases": [
+      "运行范围",
+      "Run Range"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-NODE-THROUGH",
+    "name_key": "consistency.help.MENU-NODE-THROUGH.name",
+    "help_key": "consistency.help.MENU-NODE-THROUGH.purpose",
+    "object_key": "consistency.help.MENU-NODE-THROUGH.object",
+    "conditions_key": "consistency.help.MENU-NODE-THROUGH.conditions",
+    "category": "build",
+    "aliases": [
+      "运行到此节点",
+      "Run Through This Node"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-NODE-ONLY",
+    "name_key": "consistency.help.MENU-NODE-ONLY.name",
+    "help_key": "consistency.help.MENU-NODE-ONLY.purpose",
+    "object_key": "consistency.help.MENU-NODE-ONLY.object",
+    "conditions_key": "consistency.help.MENU-NODE-ONLY.conditions",
+    "category": "build",
+    "aliases": [
+      "仅运行此节点",
+      "Run Only This Node"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-NODE-FROM",
+    "name_key": "consistency.help.MENU-NODE-FROM.name",
+    "help_key": "consistency.help.MENU-NODE-FROM.purpose",
+    "object_key": "consistency.help.MENU-NODE-FROM.object",
+    "conditions_key": "consistency.help.MENU-NODE-FROM.conditions",
+    "category": "build",
+    "aliases": [
+      "从此节点重新运行",
+      "Rerun from This Node"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-NODE-AFTER",
+    "name_key": "consistency.help.MENU-NODE-AFTER.name",
+    "help_key": "consistency.help.MENU-NODE-AFTER.purpose",
+    "object_key": "consistency.help.MENU-NODE-AFTER.object",
+    "conditions_key": "consistency.help.MENU-NODE-AFTER.conditions",
+    "category": "build",
+    "aliases": [
+      "用已有结果继续",
+      "Continue with Existing Results"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-NODE-DELETE",
+    "name_key": "consistency.help.MENU-NODE-DELETE.name",
+    "help_key": "consistency.help.MENU-NODE-DELETE.purpose",
+    "object_key": "consistency.help.MENU-NODE-DELETE.object",
+    "conditions_key": "consistency.help.MENU-NODE-DELETE.conditions",
+    "category": "build",
+    "aliases": [
+      "删除节点",
+      "Delete Node"
+    ],
+    "destructive": true
+  },
+  {
+    "id": "MENU-MODEL-LOCATE",
+    "name_key": "consistency.help.MENU-MODEL-LOCATE.name",
+    "help_key": "consistency.help.MENU-MODEL-LOCATE.purpose",
+    "object_key": "consistency.help.MENU-MODEL-LOCATE.object",
+    "conditions_key": "consistency.help.MENU-MODEL-LOCATE.conditions",
+    "category": "models",
+    "aliases": [
+      "在 Finder 中显示",
+      "Show in Finder"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-LIBRARY-SAVED",
+    "name_key": "consistency.help.MENU-LIBRARY-SAVED.name",
+    "help_key": "consistency.help.MENU-LIBRARY-SAVED.purpose",
+    "object_key": "consistency.help.MENU-LIBRARY-SAVED.object",
+    "conditions_key": "consistency.help.MENU-LIBRARY-SAVED.conditions",
+    "category": "organize",
+    "aliases": [
+      "已保存搜索",
+      "Saved Searches"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-LIBRARY-SAVED-DYNAMIC",
+    "name_key": "consistency.help.MENU-LIBRARY-SAVED-DYNAMIC.name",
+    "help_key": "consistency.help.MENU-LIBRARY-SAVED-DYNAMIC.purpose",
+    "object_key": "consistency.help.MENU-LIBRARY-SAVED-DYNAMIC.object",
+    "conditions_key": "consistency.help.MENU-LIBRARY-SAVED-DYNAMIC.conditions",
+    "category": "organize",
+    "aliases": [
+      "<用户名称>",
+      "<User Name>"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-LIBRARY-MANAGE",
+    "name_key": "consistency.help.MENU-LIBRARY-MANAGE.name",
+    "help_key": "consistency.help.MENU-LIBRARY-MANAGE.purpose",
+    "object_key": "consistency.help.MENU-LIBRARY-MANAGE.object",
+    "conditions_key": "consistency.help.MENU-LIBRARY-MANAGE.conditions",
+    "category": "organize",
+    "aliases": [
+      "管理标签与分类…",
+      "Manage Tags and Collections…"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-LIBRARY-UNDO",
+    "name_key": "consistency.help.MENU-LIBRARY-UNDO.name",
+    "help_key": "consistency.help.MENU-LIBRARY-UNDO.purpose",
+    "object_key": "consistency.help.MENU-LIBRARY-UNDO.object",
+    "conditions_key": "consistency.help.MENU-LIBRARY-UNDO.conditions",
+    "category": "organize",
+    "aliases": [
+      "撤销整理操作",
+      "Undo Organization Change"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "MENU-LIBRARY-REDO",
+    "name_key": "consistency.help.MENU-LIBRARY-REDO.name",
+    "help_key": "consistency.help.MENU-LIBRARY-REDO.purpose",
+    "object_key": "consistency.help.MENU-LIBRARY-REDO.object",
+    "conditions_key": "consistency.help.MENU-LIBRARY-REDO.conditions",
+    "category": "organize",
+    "aliases": [
+      "重做整理操作",
+      "Redo Organization Change"
+    ],
+    "destructive": false
+  }
+]

@@ -120,6 +120,21 @@ public final class UILanguageStore {
         return LanguagePackCodec.render(template, arguments: arguments)
     }
 
+    /// The supported Chinese source pack supplies the final readable fallback for
+    /// presentation helpers. This does not change text()'s selected-language chain.
+    func sourceFallback(_ key: String, fallback: String) -> String {
+        _ = contentRevision
+        return builtIns["zh-Hans"]?.strings[key] ?? fallback
+    }
+
+    #if DEBUG
+    /// Component fixture injection; never writes preferences or user packs.
+    func testingBuiltIn(_ pack: LanguagePack) {
+        builtIns[pack.locale] = pack
+        contentRevision &+= 1
+    }
+    #endif
+
     @discardableResult
     public func importPack(data: Data) throws -> String {
         let english = builtIns["en"]

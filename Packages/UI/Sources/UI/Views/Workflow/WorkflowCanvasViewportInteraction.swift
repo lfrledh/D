@@ -184,7 +184,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     }
 
     final class ProbeView: NSView {
-        var interactionScope: WorkflowCanvasScope?
+        var interactionScope: WorkflowCanvasScope? { didSet { if oldValue != interactionScope { wheelOwner = nil; wheelScrollOwner = nil } } }
         var wheelZoom: WorkflowCanvasWheelZoom?
         var wheelLayout: (CGSize) -> WorkflowCanvasViewportGeometry? = { _ in nil }
         var pointerTarget: (CGPoint, CGPoint, CGSize) -> WorkflowCanvasPointerTarget = { _, _, _ in .control }
@@ -212,6 +212,10 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             }
         }
         private var pointerSession: PointerSession?
+        private enum WheelOwner { case canvas, foreign }
+        private var wheelOwner: WheelOwner?
+        private weak var wheelScrollOwner: NSScrollView?
+
         var navigationAllowed: () -> Bool = { false }
         var allowsEvent: (CGPoint, CGPoint, CGSize) -> Bool = { _, _, _ in false }
         var onViewportSize: (WorkflowCanvasViewportMeasurement) -> Void = { _ in }
@@ -409,6 +413,12 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         func reportViewportSize() {
             updateViewportObservation()
             guard let scroll = enclosingScrollView else { return }
+            if scroll.scrollerStyle != .overlay || scroll.hasHorizontalScroller || scroll.hasVerticalScroller {
+                scroll.scrollerStyle = .overlay
+                scroll.hasHorizontalScroller = false; scroll.hasVerticalScroller = false
+            }
+            scroll.tile() // Remove stale legacy gutters before publishing the viewport.
+            scroll.horizontalScrollElasticity = .none; scroll.verticalScrollElasticity = .none
             let measured = WorkflowCanvasViewportMeasurement(clip: scroll.contentView.bounds.size,
                                                               surfaceWidth: scroll.frame.width)
             if let reportedSize, reportedSize.clip != measured.clip { wheelZoom?.cancel() }
@@ -466,11 +476,12 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         }
 
         private func canvasHit(_ event: NSEvent) -> NSView? {
-            guard let window,
-                  event.window === window || event.windowNumber == window.windowNumber,
-                  let scroll = visibleCanvasScroll(), let content = window.contentView else { return nil }
-            let point = content.superview?.convert(event.locationInWindow, from: nil)
-                ?? event.locationInWindow
+            guard let window, event.window === window || event.windowNumber == window.windowNumber else { return nil }
+            return canvasHit(at: event.locationInWindow)
+        }
+        private func canvasHit(at location: CGPoint) -> NSView? {
+            guard let window, let scroll = visibleCanvasScroll(), let content = window.contentView else { return nil }
+            let point = content.superview?.convert(location, from: nil) ?? location
             guard let hit = content.hitTest(point) else { return nil }
             var view: NSView? = hit
             while let current = view, current !== scroll { view = current.superview }
@@ -489,33 +500,68 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
 
         @discardableResult
         func routeWheel(_ event: NSEvent) -> Bool {
-            guard let hit = canvasHit(event), let scroll = enclosingScrollView else { return false }
-            var view: NSView? = hit
-            var control = false
-            while let current = view, current !== scroll {
-                if current is NSScroller || current is NSScrollView {
-                    wheelZoom?.cancel()
-                    return false // A real nested scroll view or scrollbar keeps its own input.
+            guard let scroll = visibleCanvasScroll(), let window,
+                  event.window === window || event.windowNumber == window.windowNumber else { return false }
+            return routeWheel(event, in: scroll, window: window, location: event.locationInWindow)
+        }
+
+        // Resolve the validated event once, then keep one owner for its gesture.
+        private func routeWheel(_ event: NSEvent, in scroll: NSScrollView, window: NSWindow, location: CGPoint) -> Bool {
+            guard self.window === window, visibleCanvasScroll() === scroll else { return false }
+            let phased = !event.phase.isEmpty || !event.momentumPhase.isEmpty
+            let begins = event.phase.contains(.began) || event.phase.contains(.mayBegin)
+            if begins || !phased { wheelOwner = nil; wheelScrollOwner = nil }
+            let hit = canvasHit(at: location)
+            if wheelOwner == nil {
+                var current: NSView? = hit ?? window.contentView?.hitTest(
+                    window.contentView?.superview?.convert(location, from: nil) ?? location)
+                var nested: NSScrollView?
+                var ownsControl = false
+                while let view = current, view !== scroll {
+                    if let inner = view as? NSScrollView { nested = inner; break }
+                    ownsControl = ownsControl || view is NSControl || view is NSTextView
+                    current = view.superview
                 }
-                control = control || current is NSControl || current is NSTextView
-                    || current is WorkflowNodePlateView || current is WorkflowPortDragView
-                    || current is WorkflowConnectionHitView
-                view = current.superview
+                if hit != nil && nested == nil && !ownsControl {
+                    wheelOwner = .canvas
+                } else {
+                    wheelOwner = .foreign; wheelScrollOwner = nested
+                }
+            }
+            defer {
+                if !phased || event.phase.contains(.cancelled) || event.momentumPhase.contains(.ended) {
+                    wheelOwner = nil; wheelScrollOwner = nil
+                }
+            }
+            if wheelOwner == .foreign {
+                wheelZoom?.cancel()
+                if let owner = wheelScrollOwner, owner !== scroll,
+                   owner.window === window, !owner.isHiddenOrHasHiddenAncestor {
+                    // Keep the same inner scroll owner through boundaries and inertia,
+                    // including when it reaches an edge. Never chain into the canvas.
+                    owner.scrollWheel(with: event)
+                    return true
+                }
+                return hit != nil // A control's unused wheel must not bubble to the canvas.
             }
             guard pointerSession == nil, navigationAllowed() else { return true }
-            if control { return true }
             let clip = scroll.contentView
-            let location = clip.convert(event.locationInWindow, from: nil)
+            let location = clip.convert(location, from: nil)
             let point = CGPoint(x: location.x - clip.bounds.minX,
                 y: clip.isFlipped ? location.y - clip.bounds.minY : clip.bounds.maxY - location.y)
-            guard allowsViewportEvent(point, clip.bounds.origin, clip.bounds.size) else { return true }
             guard event.scrollingDeltaY != 0 else {
-                wheelZoom?.cancel()
-                return false // Preserve native horizontal navigation when no zoom was requested.
+                // Preserve the existing precise trackpad horizontal route only.
+                // Discrete mouse wheels are consumed even at a zoom limit or zero Y.
+                if event.hasPreciseScrollingDeltas {
+                    wheelZoom?.cancel()
+                    scroll.scrollWheel(with: event) // Keep the initial canvas owner across regions.
+                    return true
+                }
+                return true
             }
-            let consumed = dispatchWheel(event.scrollingDeltaY, point, clip.bounds.origin, clip.bounds.size)
+            _ = dispatchWheel(event.scrollingDeltaY, point, clip.bounds.origin, clip.bounds.size)
             applyWheelOffset()
-            return consumed
+            return true
         }
 
         private func applyWheelOffset() {
@@ -532,6 +578,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         }
 
         func stopMonitoring() {
+            wheelOwner = nil; wheelScrollOwner = nil
             cancelPointer()
             resetHandCursor()
             if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }; resignObserver = nil

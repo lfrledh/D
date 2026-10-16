@@ -305,7 +305,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             host.frame.size = .init(width: width, height: 820)
             for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30)) }
             let shown = WorkbenchSidebarLayout.visible(available: width, leading: true, trailing: true)
-            let expected = width - 32 - WorkbenchSidebarLayout.occupiedWidth(shown.leading, leading: true, available: width)
+            let expected = kind == "workflow" ? width - 32 : width - 32 - WorkbenchSidebarLayout.occupiedWidth(shown.leading, leading: true, available: width)
                 - WorkbenchSidebarLayout.occupiedWidth(shown.trailing, leading: false, available: width)
             let measured = try #require(sizes[kind + "-center"])
             #expect(abs(measured.width - expected) < 1, "\(kind) width \(width): \(measured.width) vs \(expected)")

@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor @Observable final class WorkbenchSidebarState {
     var leading = true
     var trailing = false
+    init(leading: Bool = true, trailing: Bool = false) { self.leading = leading; self.trailing = trailing }
 }
 
 private struct WorkbenchSidebarsKey: EnvironmentKey {
@@ -64,6 +65,7 @@ struct WorkbenchSidebarTabs<Tab: Hashable>: View {
     let title: String
     @Binding var selection: Tab
     let choices: [(Tab, String)]
+    var helpPrefix: String? = nil
     @FocusState private var focused: Tab?
     var body: some View {
         HStack(spacing: 0) {
@@ -78,12 +80,17 @@ struct WorkbenchSidebarTabs<Tab: Hashable>: View {
                             if selection == item.0 { Rectangle().fill(Color.accentColor).frame(height: 2) }
                         }
                 }.buttonStyle(.plain).focused($focused, equals: item.0)
-                    .help(item.1).accessibilityLabel(item.1)
+                    .workbenchHelp(featureID(item.0)).accessibilityLabel(item.1)
                     .accessibilityAddTraits(selection == item.0 ? .isSelected : [])
                     .onKeyPress(.leftArrow) { move(-1); return .handled }
                     .onKeyPress(.rightArrow) { move(1); return .handled }
             }
-        }.frame(height: 36).workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge).accessibilityElement(children: .contain).accessibilityLabel(title)
+        }.frame(height: 36).workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge).accessibilityElement(children: .contain).accessibilityLabel(title).workbenchHelp(helpPrefix?.contains("RIGHT") == true ? "BAR-RIGHT" : "BAR-LEFT")
+    }
+    private func featureID(_ value: Tab) -> String {
+        let name = String(describing: value)
+        let suffix = ["configuration": "PROPERTIES", "node": "NODE", "conversations": "CHATS", "artifacts": "RESULTS" ][name] ?? name.uppercased()
+        return helpPrefix.map { $0 + suffix } ?? "BAR-LEFT"
     }
     private static func symbol(_ value: Tab) -> String {
         switch String(describing: value) {
@@ -193,6 +200,7 @@ struct WorkbenchSidebar<Content: View>: View {
                 }
                 .frame(width: width, height: geometry.size.height)
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .contentShape(.interaction, RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .allowsHitTesting(visible && isEnabled)
 
                 Button(action: toggle) {
@@ -207,7 +215,7 @@ struct WorkbenchSidebar<Content: View>: View {
                 .accessibilityValue(workflowText(language, expanded ? "sidebar.expanded" : "sidebar.collapsed",
                     fallback: language?.effectiveLanguageIdentifier.hasPrefix("zh") == true
                         ? (expanded ? "已展开" : "已收起") : (expanded ? "Expanded" : "Collapsed")))
-                .accessibilityIdentifier(identifier)
+                .accessibilityIdentifier(identifier).workbenchHelp(leading ? "LEFT-TOGGLE" : "RIGHT-TOGGLE")
 
             }
             .frame(width: width, height: geometry.size.height, alignment: alignment)

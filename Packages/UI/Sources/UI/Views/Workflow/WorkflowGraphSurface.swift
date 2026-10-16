@@ -239,6 +239,7 @@ struct WorkflowGraphSurface: View {
                            height: layout.contentSize.height,
                            alignment: .topLeading)
                 }
+                .scrollIndicators(.never)
                 .scrollPosition($scrollPosition)
                 .onScrollGeometryChange(for: WorkflowCanvasScrollObservation.self) { scroll in
                     let size = clipViewportSize ?? scroll.containerSize
@@ -1135,17 +1136,17 @@ private struct WorkflowNodeCard: View {
     @WorkbenchMenuBuilder private var nodeActions: WorkbenchMenuRows {
         WorkbenchMenuAction(consistencyText(languageStore, "menu.node.properties"), id: "node.properties") {
             if scope.isCurrent(in: controller) { onInspect(node.id) }
-        }
+        }.featureHelp("MENU-NODE-PROPERTIES", language: languageStore)
         WorkbenchMenuAction(consistencyText(languageStore, "menu.node.results"), id: "node.results") {
             if scope.isCurrent(in: controller) { onViewResults?(node.id) }
-        }.disabled(onViewResults == nil)
+        }.featureHelp("MENU-NODE-RESULTS", language: languageStore).disabled(onViewResults == nil)
         WorkbenchMenuDivider()
         WorkbenchSubmenu(consistencyText(languageStore, "menu.node.scope"), id: "node.scope") {
-            WorkbenchMenuAction(consistencyText(languageStore, "menu.node.through"), id: "node.through") { if scope.isCurrent(in: controller) { onPlan(node.id, false) } }.disabled(readOnly || definition == nil)
-            WorkbenchMenuAction(consistencyText(languageStore, "menu.node.only"), id: "node.only") { if scope.isCurrent(in: controller) { onPlan(node.id, true) } }.disabled(readOnly || definition == nil)
-            WorkbenchMenuAction(consistencyText(languageStore, "menu.node.from"), id: "node.from") { if scope.isCurrent(in: controller) { onPlanRange?(node.id, 2) } }.disabled(readOnly || definition == nil || onPlanRange == nil || !controller.bodyPath.isEmpty)
-            WorkbenchMenuAction(consistencyText(languageStore, "menu.node.after"), id: "node.after") { if scope.isCurrent(in: controller) { onPlanRange?(node.id, 3) } }.disabled(readOnly || definition == nil || onPlanRange == nil || !controller.bodyPath.isEmpty)
-        }
+            WorkbenchMenuAction(consistencyText(languageStore, "menu.node.through"), id: "node.through") { if scope.isCurrent(in: controller) { onPlan(node.id, false) } }.featureHelp("MENU-NODE-THROUGH", language: languageStore).disabled(readOnly || definition == nil)
+            WorkbenchMenuAction(consistencyText(languageStore, "menu.node.only"), id: "node.only") { if scope.isCurrent(in: controller) { onPlan(node.id, true) } }.featureHelp("MENU-NODE-ONLY", language: languageStore).disabled(readOnly || definition == nil)
+            WorkbenchMenuAction(consistencyText(languageStore, "menu.node.from"), id: "node.from") { if scope.isCurrent(in: controller) { onPlanRange?(node.id, 2) } }.featureHelp("MENU-NODE-FROM", language: languageStore).disabled(readOnly || definition == nil || onPlanRange == nil || !controller.bodyPath.isEmpty)
+            WorkbenchMenuAction(consistencyText(languageStore, "menu.node.after"), id: "node.after") { if scope.isCurrent(in: controller) { onPlanRange?(node.id, 3) } }.featureHelp("MENU-NODE-AFTER", language: languageStore).disabled(readOnly || definition == nil || onPlanRange == nil || !controller.bodyPath.isEmpty)
+        }.featureHelp("MENU-NODE-SCOPE", language: languageStore)
         WorkbenchMenuAction(workflowText(languageStore, "workflow.run.setTarget", fallback: "设为运行终点"), id: "node.target") {
             if scope.isCurrent(in: controller) { onSetRunTarget(node.id) }
         }.disabled(readOnly || definition == nil)
@@ -1159,7 +1160,7 @@ private struct WorkflowNodeCard: View {
         WorkbenchMenuAction(consistencyText(languageStore, "menu.node.delete"), role: .destructive, id: "node.delete") {
             guard scope.isCurrent(in: controller), let target = controller.canvasInsertionTarget() else { return }
             controller.deleteNode(id: node.id, target: target)
-        }.disabled(readOnly || !controller.canEditCanvas)
+        }.featureHelp("MENU-NODE-DELETE", language: languageStore).disabled(readOnly || !controller.canEditCanvas)
     }
 
     @ViewBuilder

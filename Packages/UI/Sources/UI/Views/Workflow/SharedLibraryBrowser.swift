@@ -301,6 +301,7 @@ public struct SharedLibraryBrowser: View {
 
     @Environment(\.dLanguageStore) private var language
     @State private var state: SharedLibraryBrowserState
+    @State private var featureHelp = WorkbenchHelpStore()
     @State private var showFilters = false
     @State private var saveQueryRequest: SharedLibrarySaveQueryRequest?
     @State private var showOrganizer = false
@@ -413,6 +414,8 @@ public struct SharedLibraryBrowser: View {
                 }
             }
         }
+        .environment(\.workbenchHelpStore, featureHelp)
+        .sheet(item: $featureHelp.presentation) { WorkbenchFeatureGuide(presentation: $0, store: featureHelp).environment(\.dLanguageStore, language) }
         .environment(\.workbenchMenuContext, "library:\(ObjectIdentifier(store)):\(ObjectIdentifier(state)):\(queryContext.projectID?.uuidString ?? "none"):\(queryContext.instanceID?.uuidString ?? "none")")
         .background { if !compact { Color.clear.workbenchPanel(cornerRadius: 12) } }
         .sheet(item: $saveQueryRequest) { request in SharedLibrarySaveQuerySheet(request: request, store: store) { saveQueryRequest = nil } }
@@ -461,11 +464,11 @@ public struct SharedLibraryBrowser: View {
             Button(action: onImport) { Image(systemName: "square.and.arrow.down") }
                 .help(word("import", "导入素材")).accessibilityLabel(word("import", "导入素材"))
             Button { showOrganizer = true } label: { Image(systemName: "square.stack.3d.up") }
-                .help(word("organize", "整理资料库")).accessibilityLabel(word("organize", "整理资料库"))
+                .help(word("organize", "整理资料库")).accessibilityLabel(word("organize", "整理资料库")).workbenchHelp("MENU-LIBRARY-MANAGE")
             Button { perform { try store.undo() } } label: { Image(systemName: "arrow.uturn.backward") }
-                .disabled(!store.canUndo).help(word("undo", "撤销")).accessibilityLabel(word("undo", "撤销"))
+                .disabled(!store.canUndo).help(word("undo", "撤销")).accessibilityLabel(word("undo", "撤销")).workbenchHelp("MENU-LIBRARY-UNDO")
             Button { perform { try store.redo() } } label: { Image(systemName: "arrow.uturn.forward") }
-                .disabled(!store.canRedo).help(word("redo", "重做")).accessibilityLabel(word("redo", "重做"))
+                .disabled(!store.canRedo).help(word("redo", "重做")).accessibilityLabel(word("redo", "重做")).workbenchHelp("MENU-LIBRARY-REDO")
         }.buttonStyle(WorkbenchGlassButtonStyle()).padding(10)
     }
 
@@ -506,9 +509,9 @@ public struct SharedLibraryBrowser: View {
                             return acceptDrop(keys) { try store.addMembers($0, to: folder.id) }
                         }
                 }
-                Text(word("savedQueries", "智能筛选")).font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 8)
+                Text(word("savedQueries", "智能筛选")).workbenchHelp("MENU-LIBRARY-SAVED").font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 8)
                 ForEach(saved) { item in
-                    scopeButton(item.name, icon: "line.3.horizontal.decrease.circle", value: .saved(item.id))
+                    scopeButton(item.name, icon: "line.3.horizontal.decrease.circle", value: .saved(item.id)).workbenchHelp("MENU-LIBRARY-SAVED-DYNAMIC", target: item.id.uuidString)
                 }
             }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -564,7 +567,7 @@ public struct SharedLibraryBrowser: View {
     private var searchControls: some View {
         VStack(alignment: .leading, spacing: 6) {
             TextField(word("search", "搜索名称、说明或我的标签"), text: searchTextBinding)
-                .textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("shared-library-search")
+                .textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("shared-library-search").workbenchHelp("LIB-SEARCH")
 
             HStack {
                 WorkbenchMenu(scopeTitle) {
@@ -588,15 +591,15 @@ public struct SharedLibraryBrowser: View {
             }
             HStack {
                 if allowsImport {
-                    Button(consistencyText(language, "LIB-ADD"), action: onImport)
+                    Button(consistencyText(language, "LIB-ADD"), action: onImport).workbenchHelp("LIB-ADD")
                 }
                 WorkbenchMenu(consistencyText(language, "LIB-TAGS")) {
                     WorkbenchMenuForEach(tags) { tag in
                         WorkbenchMenuToggle(tag.name + " (\(countAddingTag(tag.id)))", isOn: setBinding(\.allTagIDs, tag.id))
                     }
                     if tags.isEmpty { WorkbenchMenuText(word("noTags", "尚无我的标签")) }
-                }
-                Button(word("filters", "筛选"), systemImage: "line.3.horizontal.decrease.circle") { showFilters.toggle() }
+                }.workbenchHelp("LIB-TAGS")
+                Button(word("filters", "筛选"), systemImage: "line.3.horizontal.decrease.circle") { showFilters.toggle() }.workbenchHelp("LIB-FILTER")
                     .popover(isPresented: $showFilters, arrowEdge: .bottom) { filterPopover }
             }.font(.caption)
             SharedLibraryPropertySummary(query: Binding(get: { query }, set: { query = $0 }), items: entries.map(\.item), context: queryContext, store: store, fixedScopeDescription: scopeTitle)
@@ -628,7 +631,8 @@ public struct SharedLibraryBrowser: View {
                     Text("\(visible.count)/\(entries.count) " + word("locations", "结果位置")).font(.caption2).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
-                Button(word("saveQuery", "保存检索")) { openSaveQuery() }.font(.caption)
+                WorkbenchFeatureGuideButton(store: featureHelp)
+                Button(word("saveQuery", "保存检索")) { openSaveQuery() }.workbenchHelp("QUERY-SAVE").font(.caption)
             }
     }
     private var hasSearchTokens: Bool {
@@ -771,11 +775,11 @@ public struct SharedLibraryBrowser: View {
             }
             if canAdd(entry) {
                 Button(word("addCanvas", "添加画布")) { dispatch(.add, key: entry.id) }
-                    .accessibilityIdentifier("shared-library-add")
+                    .accessibilityIdentifier("shared-library-add").workbenchHelp("LIB-ENTRY-ADD", target: "entry:\(entry.id):\(entry.selection):\(entry.metadataSnapshot?.instanceID)")
             }
             if canPreview(entry) {
                 Button(word("preview", "预览")) { dispatch(.preview, key: entry.id) }
-                    .accessibilityIdentifier("shared-library-preview")
+                    .accessibilityIdentifier("shared-library-preview").workbenchHelp("LIB-ENTRY-INFO", target: "entry:\(entry.id):\(entry.selection):\(entry.metadataSnapshot?.instanceID)")
             }
             if SharedLibraryBrowserLogic.allows(.location, entry: entry) {
                 Button(word("location", "查看文件位置…")) { dispatch(.location, key: entry.id) }

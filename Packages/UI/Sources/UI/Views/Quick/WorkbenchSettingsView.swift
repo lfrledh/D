@@ -15,6 +15,7 @@ public struct WorkbenchSettingsView: View {
     let onSearchSettings: (() -> Void)?
     let chat: ChatController?
     let isChatContextValid: @MainActor () -> Bool
+    @State private var featureHelp = WorkbenchHelpStore()
     @State private var selected: Section = .appearance
     @State private var visited: Set<Section> = [.appearance]
     @Environment(\.colorScheme) private var colorScheme
@@ -56,7 +57,7 @@ public struct WorkbenchSettingsView: View {
                     case .appearance:
                         ScrollView { ChatDisplayPreferencesPanel(state: model.chatDisplaySettings).padding(16) }
                             .accessibilityIdentifier("settings-appearance-scroll")
-                    case .language: LanguageSettingsView(store: language)
+                    case .language: LanguageSettingsView(store: language).workbenchHelp("SETTINGS-LANGUAGE")
                     case .files:
                         Form {
                             LabeledContent(text("modelLibrary", "Model library", "模型库"),
@@ -147,6 +148,7 @@ public struct WorkbenchSettingsView: View {
             HStack {
                 Text(text("title", "Settings", "设置")).font(.title2.bold())
                 Spacer()
+                WorkbenchFeatureGuideButton(store: featureHelp)
                 Button(text("done", "Done", "完成")) { dismiss() }.keyboardShortcut(.cancelAction)
             }.padding(20)
             if chat != nil && !isChatContextValid() {
@@ -184,6 +186,8 @@ public struct WorkbenchSettingsView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }.frame(minWidth: 700, idealWidth: 840, minHeight: 520, idealHeight: 660)
+            .environment(\.workbenchHelpStore, featureHelp)
+            .sheet(item: $featureHelp.presentation) { WorkbenchFeatureGuide(presentation: $0, store: featureHelp).environment(\.dLanguageStore, language) }
             .workbenchTheme(paintsCanvas: false)
             .environment(\.dLanguageStore, language)
             .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)

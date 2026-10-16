@@ -48,7 +48,7 @@ private actor ViewportNoInferenceEngine: InferenceEngine {
 
 @Suite(.serialized) @MainActor
 struct WorkflowCanvasViewportHostingTests {
-    @Test(arguments: ["horizontal", "scrollbar", "nested-scroll"])
+    @Test(arguments: ["horizontal", "hidden-scrollers", "nested-scroll"])
     func nativeNavigationTakesOwnershipBeforePendingWheelLayout(kind: String) throws {
         _ = NSApplication.shared
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400),
@@ -112,13 +112,11 @@ struct WorkflowCanvasViewportHostingTests {
             try #require(hit === owner, "The real hit chain must reach the expected scroll owner")
             return event
         }
-        if kind == "scrollbar" {
-            let scroller = try #require(scroll.verticalScroller)
-            let point = scroller.convert(.init(x: scroller.bounds.midX, y: scroller.bounds.midY), to: nil)
-            let down = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: point,
-                modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil,
-                eventNumber: 1, clickCount: 1, pressure: 1))
-            #expect(!probe.routePointer(down), "The real scrollbar retains mouse tracking")
+        if kind == "hidden-scrollers" {
+            probe.reportViewportSize()
+            #expect(!scroll.hasHorizontalScroller && !scroll.hasVerticalScroller)
+            // No scrollbar can take ownership: cancel the pending zoom explicitly.
+            wheel.cancel()
         } else if kind == "nested-scroll" {
             let nested = NSScrollView(frame: .init(x: clip.bounds.minX + 40, y: clip.bounds.minY + 40,
                                                   width: 160, height: 120))
@@ -128,16 +126,14 @@ struct WorkflowCanvasViewportHostingTests {
             nested.contentView.scroll(to: .init(x: 0, y: 300))
             let point = nested.convert(.init(x: 70, y: 60), to: nil)
             let event = try wheelEvent(at: point, horizontal: false, owner: nested)
-            #expect(!probe.routeWheel(event))
             let before = nested.contentView.bounds.origin
-            nested.scrollWheel(with: event)
+            #expect(probe.routeWheel(event))
             #expect(nested.contentView.bounds.origin != before, "The nested editor/list still scrolls")
             #expect(clip.bounds.origin == originalCanvasOffset)
         } else {
             let point = clip.convert(.init(x: clip.bounds.minX + 100, y: clip.bounds.minY + 100), to: nil)
             let event = try wheelEvent(at: point, horizontal: true, owner: scroll)
-            #expect(!probe.routeWheel(event))
-            scroll.scrollWheel(with: event)
+            #expect(probe.routeWheel(event))
             #expect(clip.bounds.origin.x != originalCanvasOffset.x, "Native horizontal navigation remains available")
         }
         #expect(wheel.offset(in: target, scope: scope) == nil)

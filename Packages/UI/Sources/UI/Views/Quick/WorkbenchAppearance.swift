@@ -364,6 +364,7 @@ struct WorkbenchGlassSegments<Value: Hashable>: View {
     let title: String
     @Binding var selection: Value
     let choices: [(Value, String)]
+    var featureIDs: [String]? = nil
     @Environment(\.isEnabled) private var enabled
     @FocusState private var focus: Value?
     var body: some View {
@@ -378,6 +379,7 @@ struct WorkbenchGlassSegments<Value: Hashable>: View {
                         .contentShape(Capsule())
                 }.buttonStyle(.plain).focused($focus, equals: value)
                     .accessibilityAddTraits(selection == value ? .isSelected : [])
+                    .workbenchHelp(featureIDs.flatMap { ids in choices.firstIndex(where: { $0.0 == value }).flatMap { ids.indices.contains($0) ? ids[$0] : nil } })
             }
         }.padding(3).workbenchPanel(in: Capsule())
             .accessibilityElement(children: .contain).accessibilityLabel(title)

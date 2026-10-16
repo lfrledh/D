@@ -242,9 +242,9 @@ struct ChatDisplayPreferencesPanel: View {
             Text(wording("The canvas defaults to a solid color. You can choose your own PNG or JPEG image.", "画布默认使用纯色，也可以选择自己的 PNG 或 JPEG 背景图片。"))
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
-                Button(wording("Choose background image…", "选择背景图片…"), action: chooseWallpaper)
+                Button(wording("Choose background image…", "选择背景图片…"), action: chooseWallpaper).workbenchHelp("SETTINGS-WALLPAPER")
                     .disabled(choosingWallpaper || state.wallpaperPreparing || state.appearanceDirectory == nil)
-                Button(wording("Restore solid color", "恢复纯色")) { state.restoreSolidCanvas() }
+                Button(wording("Restore solid color", "恢复纯色")) { state.restoreSolidCanvas() }.workbenchHelp("SETTINGS-SOLID")
             }
             if state.wallpaperPreparing { ProgressView().controlSize(.small) }
             if state.wallpaperIssue {
@@ -256,7 +256,7 @@ struct ChatDisplayPreferencesPanel: View {
                 set: { value in changeLocal { $0.material = value } })) {
                     WorkbenchChoice(wording("App-local glass", "应用内玻璃"), value:WorkbenchLocalAppearance.Material.glass)
                     WorkbenchChoice(wording("Solid", "实色"), value:WorkbenchLocalAppearance.Material.solid)
-                }
+                }.workbenchHelp("SETTINGS-MATERIAL")
             if state.preferences.appearance?.local == nil {
                 Text(wording("Your previous canvas color blend is preserved until you choose a new material.", "选择新材质前，保留原来的画布底色混合效果。"))
                     .font(.caption).foregroundStyle(.secondary)
@@ -264,7 +264,7 @@ struct ChatDisplayPreferencesPanel: View {
             Text(consistencyText(language, "SETTINGS-TRANSPARENCY"))
             WorkbenchValueSlider(value: state.preferences.resolvedAppearance.local?.strength ?? 0.55,
                 label: consistencyText(language, "SETTINGS-TRANSPARENCY"), preview: { glassStrength = $0 },
-                commit: { value in changeLocal { $0.strength = value } }).frame(height: 24)
+                commit: { value in changeLocal { $0.strength = value } }).workbenchHelp("SETTINGS-TRANSPARENCY").frame(height: 24)
                 .disabled(state.preferences.appearance?.local?.material != .glass)
             Button(wording("Reset transparency", "恢复默认透明度")) { glassStrength = nil; changeLocal { $0.strength = 0.55 } }
             Toggle(consistencyText(language, "SETTINGS-READABILITY"), isOn: Binding(
@@ -273,7 +273,7 @@ struct ChatDisplayPreferencesPanel: View {
                     var appearance = candidate.resolvedAppearance
                     var settings = appearance.resolvedReadability; settings.enabled = enabled
                     appearance.readability = settings; candidate.appearance = appearance
-                } }))
+                } })).workbenchHelp("SETTINGS-READABILITY")
             Text(consistencyText(language, "copy.readabilityHelp")).font(.caption).foregroundStyle(.secondary)
             Text(consistencyText(language, "SETTINGS-AMOUNT"))
             WorkbenchValueSlider(value: state.preferences.resolvedAppearance.resolvedReadability.amount,
@@ -282,7 +282,7 @@ struct ChatDisplayPreferencesPanel: View {
                     var appearance = candidate.resolvedAppearance
                     var settings = appearance.resolvedReadability; settings.amount = value
                     appearance.readability = settings; candidate.appearance = appearance
-                } }).frame(height: 24)
+                } }).workbenchHelp("SETTINGS-AMOUNT").frame(height: 24)
                 .disabled(!state.preferences.resolvedAppearance.resolvedReadability.enabled)
             appearancePreview.environment(\.chatDisplayPreferences, previewPreferences)
             Text(wording("Panels sample only D’s canvas, never your desktop. Images are bounded sRGB appearance copies; original artwork and previews are unchanged.", "面板只映出 D 的画布，不透出系统桌面。背景使用有界 sRGB 外观副本，原作品和预览保持不变。"))
@@ -308,7 +308,7 @@ struct ChatDisplayPreferencesPanel: View {
                     WorkbenchChoice(label("light", "Light", "浅色"), value:ChatDisplayPreferences.Theme.light)
                     WorkbenchChoice(label("dark", "Dark", "深色"), value:ChatDisplayPreferences.Theme.dark)
                 }
-                .accessibilityIdentifier("chat-display-theme")
+                .accessibilityIdentifier("chat-display-theme").workbenchHelp("SETTINGS-THEME")
 
             }.disabled(state.hasInvalidStoredRecord)
 
@@ -338,7 +338,7 @@ struct ChatDisplayPreferencesPanel: View {
                         } }).frame(height: 24)
                         .accessibilityLabel(label("motion", "Decorative motion", "装饰性动态"))
                         .accessibilityValue("\(Int(state.preferences.resolvedAppearance.motion * 100))%")
-                        .accessibilityIdentifier("workbench-motion")
+                        .accessibilityIdentifier("workbench-motion").workbenchHelp("SETTINGS-MOTION")
                 }
                 Toggle(label("lightweight", "Lightweight appearance", "轻量外观"), isOn: Binding(
                     get: { state.preferences.resolvedAppearance.lightweight },

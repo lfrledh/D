@@ -821,7 +821,7 @@ struct ChatWorkbenchView: View {
                 (.settings, consistencyText(language, "TAB-CHAT-LEFT-SETTINGS")),
                 (.assets, consistencyText(language, "TAB-CHAT-LEFT-ASSETS")),
                 (.conversations, consistencyText(language, "TAB-CHAT-LEFT-CHATS")),
-                (.tools, consistencyText(language, "TAB-CHAT-LEFT-TOOLS"))])
+                (.tools, consistencyText(language, "TAB-CHAT-LEFT-TOOLS"))], helpPrefix: "TAB-CHAT-LEFT-")
             WorkbenchSidebarPages(selection: preparationTab, choices: ChatPreparationTab.allCases, identifier: "chat-left") { tab in
                 switch tab {
                 case .settings: configurationContent
@@ -842,7 +842,8 @@ ScrollViewReader { proxy in
                            let definition = WorkflowRegistry.standard.operation(node.operationID)?.definition {
                             WorkbenchModelCard(definition: definition, modelID: node.parameters["modelID"]?.string,
                                 choices: model.projectSession.explicitModelChoices, status: readiness(node.parameters["modelID"]?.string ?? ""),
-                                change: onChooseModel, canChange: chat.isLoaded && session.contextChoices?.deletedAt == nil)
+                                change: onChooseModel, canChange: chat.isLoaded && session.contextChoices?.deletedAt == nil,
+                                changeUnavailableReason: consistencyText(language, !chat.isLoaded ? "help.reason.loading" : "help.reason.deleted"))
                                 .accessibilityIdentifier("chat-model-picker").chatMeasured("change-model", probe: layoutProbe)
                         } else { Button(label("changeModel", "更换模型"), action: onChooseModel).disabled(!chat.isLoaded || session?.contextChoices?.deletedAt != nil) }
                         if let session {
@@ -1494,7 +1495,7 @@ ScrollViewReader { proxy in
         VStack(spacing: 0) {
             WorkbenchSidebarTabs(title: consistencyText(language, "BAR-RIGHT"), selection: $inspectorTab, choices: [
                 (.artifacts, consistencyText(language, "TAB-CHAT-RIGHT-RESULTS")),
-                (.sources, consistencyText(language, "TAB-CHAT-RIGHT-SOURCES"))])
+                (.sources, consistencyText(language, "TAB-CHAT-RIGHT-SOURCES"))], helpPrefix: "TAB-CHAT-RIGHT-")
             WorkbenchSidebarPages(selection: inspectorTab, choices: ChatInspectorTab.allCases, identifier: "chat-right") { tab in
                 if tab == .artifacts { artifactsContent(session) }
                 else { sourcesContent(session) }

@@ -11,7 +11,7 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
     var fallbackSize = CGSize(width: 240, height: 640)
 
     func makeNSView(context: Context) -> NSHostingView<RetainedContentRoot<Content>> {
-        let host = NSHostingView(rootView: RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness))
+        let host = NSHostingView(rootView: RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, featureHelp: context.environment.workbenchHelpStore))
         host.sizingOptions = []
         host.setAccessibilityIdentifier(identifier)
         host.isHidden = !visible
@@ -21,7 +21,7 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
         #if DEBUG
         WorkbenchCategoryUpdateProbe.retainedUpdate?()
         #endif
-        host.rootView = RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness)
+        host.rootView = RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, featureHelp: context.environment.workbenchHelpStore)
         // Only an actual close/open changes native visibility. Hiding can release
         // the first responder; a layout change must not transiently hide an editor.
         if host.isHidden != !visible { host.isHidden = !visible }
@@ -44,6 +44,7 @@ struct RetainedContentRoot<Content: View>: View {
     var surfaceGroup: String? = nil
     var menuContext = "window"
     var modelReadiness: [String: SharedLibraryReadiness] = [:]
+    var featureHelp: WorkbenchHelpStore? = nil
     var body: some View {
         content.environment(\.metadataEditorLifecycle, lifecycle)
             .environment(\.workbenchBackground, background)
@@ -54,6 +55,7 @@ struct RetainedContentRoot<Content: View>: View {
             .environment(\.workbenchSurfaceGroup, surfaceGroup)
             .environment(\.workbenchMenuContext, menuContext)
             .environment(\.workbenchModelReadiness, modelReadiness)
+            .environment(\.workbenchHelpStore, featureHelp)
             .buttonStyle(WorkbenchGlassButtonStyle())
             .menuStyle(WorkbenchGlassMenuStyle())
             .textFieldStyle(WorkbenchGlassTextFieldStyle())

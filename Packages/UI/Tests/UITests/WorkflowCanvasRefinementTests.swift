@@ -209,9 +209,9 @@ struct WorkflowCanvasRefinementTests {
     }
     @Test func narrowPanelsDoNotOverrideTheUsersWidePreferences() {
         let narrow = WorkflowCanvasLayoutPolicy.visiblePanels(width: 860, library: true, inspector: true, preferLibrary: false)
-        #expect(!narrow.library && narrow.inspector)
+        #expect(narrow.library && narrow.inspector)
         let chooseLibrary = WorkflowCanvasLayoutPolicy.visiblePanels(width: 860, library: true, inspector: true, preferLibrary: true)
-        #expect(chooseLibrary.library && !chooseLibrary.inspector)
+        #expect(chooseLibrary.library && chooseLibrary.inspector)
         let wide = WorkflowCanvasLayoutPolicy.visiblePanels(width: 1280, library: true, inspector: true, preferLibrary: true)
         #expect(wide.library && wide.inspector)
         let closed = WorkflowCanvasLayoutPolicy.visiblePanels(width: 1280, library: false, inspector: false, preferLibrary: false)

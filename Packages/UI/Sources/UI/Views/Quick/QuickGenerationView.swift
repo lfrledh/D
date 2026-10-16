@@ -109,7 +109,7 @@ struct QuickGenerationView: View {
                     toggle: { sidebars.leading.toggle() }) {
                         VStack(spacing: 0) {
                             WorkbenchSidebarTabs(title: consistencyText(language, "tabs.tools"), selection: $leftTab, choices: [
-                                (.settings, consistencyText(language, "tabs.settings")), (.assets, consistencyText(language, "tabs.assets"))])
+                                (.settings, consistencyText(language, "tabs.settings")), (.assets, consistencyText(language, "tabs.assets"))], helpPrefix: "TAB-QUICK-LEFT-")
                             WorkbenchSidebarPages(selection: leftTab, choices: LeftTab.allCases, identifier: "quick-left") { tab in
                                 if tab == .settings { VStack(spacing: 0) { modelHeader; parameterPanel(assets: false) } }
                                 else { VStack(spacing: 0) {
@@ -132,7 +132,7 @@ struct QuickGenerationView: View {
                     toggle: { sidebars.trailing.toggle() }) {
                         VStack(spacing: 0) {
                             WorkbenchSidebarTabs(title: consistencyText(language, "tabs.output"), selection: $rightTab, choices: [
-                                (.results, consistencyText(language, "tabs.results")), (.history, consistencyText(language, "tabs.history"))])
+                                (.results, consistencyText(language, "tabs.results")), (.history, consistencyText(language, "tabs.history"))], helpPrefix: "TAB-QUICK-RIGHT-")
                             WorkbenchSidebarPages(selection: rightTab, choices: RightTab.allCases, identifier: "quick-right") { tab in
                                 if tab == .results {
                         WorkbenchScrollView {

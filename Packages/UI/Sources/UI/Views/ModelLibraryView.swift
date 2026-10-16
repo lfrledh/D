@@ -9,6 +9,7 @@ public struct ModelLibraryView: View {
     private let onSelect: @MainActor (ModelID) async -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dLanguageStore) private var language
+    @State private var featureHelp = WorkbenchHelpStore()
     @State private var acquireVisible = false
     @State private var importVisible = false
     @State private var importCatalogID = ""
@@ -66,9 +67,10 @@ public struct ModelLibraryView: View {
             HStack {
                 Text(text("title", "模型与下载")).font(.title2.bold())
                 Spacer()
-                Button(text("acquire", "获取模型…")) { acquireVisible = true }.accessibilityIdentifier("model-manager-acquire")
-                Button(text("import", "登记已有…")) { importVisible = true }.accessibilityIdentifier("model-manager-import")
+                Button(text("acquire", "获取模型…")) { acquireVisible = true }.accessibilityIdentifier("model-manager-acquire").workbenchHelp("MODELS-DOWNLOAD")
+                Button(text("import", "登记已有…")) { importVisible = true }.accessibilityIdentifier("model-manager-import").workbenchHelp("MODELS-REGISTER")
                 Button(text("settings", "存储与访问…")) { settingsVisible = true }
+                WorkbenchFeatureGuideButton(store: featureHelp)
                 Button(text("close", "完成")) { dismiss() }.keyboardShortcut(.cancelAction)
             }.padding(20)
             Picker(text("workspace", "工作面"), selection: Binding(get: { model.workspace }, set: { model.workspace = $0; narrowDetail = false })) {
@@ -117,6 +119,8 @@ public struct ModelLibraryView: View {
         .frame(minWidth: 760, idealWidth: 1080, maxWidth: .infinity,
                minHeight: 560, idealHeight: 740, maxHeight: .infinity)
         .accessibilityIdentifier("model-manager")
+        .environment(\.workbenchHelpStore, featureHelp)
+        .sheet(item: $featureHelp.presentation) { WorkbenchFeatureGuide(presentation: $0, store: featureHelp).environment(\.dLanguageStore, language) }
         .environment(\.workbenchMenuContext, "models:\(ObjectIdentifier(model)):\(ObjectIdentifier(model.library)):\(model.rootURL?.standardizedFileURL.path ?? "none"):\(model.workspace)")
         .task { model.loadInventory(); await model.refresh() }
         .onDisappear { model.clearSelectionContext() }
@@ -245,7 +249,7 @@ public struct ModelLibraryView: View {
                     Button(text("getSame", "获取同版本文件…")) { downloadSelection = [record.catalogID]; acquireVisible = true }
                 }
                 if record.registrationState != .registered {
-                    Button(text("register", "登记此资源")) { Task { await model.registerResource(resource) } }
+                    Button(text("register", "登记此资源")) { Task { await model.registerResource(resource) } }.workbenchHelp("MODELS-REGISTER", unavailableReason: model.globalOperation != nil ? consistencyText(language, "help.reason.modelOperation") : resource.control.fileState != .verified ? consistencyText(language, "help.reason.unverified") : record.state == .preparationRequired ? consistencyText(language, "help.reason.prepare") : nil, target: "resource:\(resource.id):\(record.revision)")
                         .disabled(resource.control.fileState != .verified || record.state == .preparationRequired || model.globalOperation != nil)
                 }
                 if record.state == .preparationRequired {
@@ -269,17 +273,17 @@ public struct ModelLibraryView: View {
                         .disabled(record.id == (model.selectionID ?? selectedModelID) || (model.selectionAction != nil && model.currentSelectionTitle == nil))
                 }
                 WorkbenchMenu(consistencyText(language, "copy.more"), systemImage: "ellipsis.circle") {
-                    WorkbenchMenuAction(consistencyText(language, "menu.model.locate")) { model.reveal(resource) }.disabled(record.directory == nil || record.availability != .available)
+                    WorkbenchMenuAction(consistencyText(language, "menu.model.locate")) { model.reveal(resource) }.featureHelp("MENU-MODEL-LOCATE", language: language).disabled(record.directory == nil || record.availability != .available)
                     WorkbenchMenuDivider()
                     if record.registrationState == .registered {
-                        WorkbenchMenuAction(consistencyText(language, "menu.model.unregister")) { confirmation = .unregister(resource) }.disabled(record.activeLeaseCount > 0)
+                        WorkbenchMenuAction(consistencyText(language, "menu.model.unregister")) { confirmation = .unregister(resource) }.featureHelp("MODELS-UNREGISTER", language: language, unavailableReason: record.activeLeaseCount > 0 ? consistencyText(language, "help.reason.leased") : nil).disabled(record.activeLeaseCount > 0)
                     }
                     WorkbenchMenuForEach(model.snapshot?.downloads.filter { $0.resourceID == resource.id && $0.state.isTerminal } ?? []) { task in
-                        WorkbenchMenuAction(consistencyText(language, "menu.model.clearHistory") + " · " + (task.createdAt?.formatted() ?? text("unknown", "未知"))) { confirmation = .clear(task) }
+                        WorkbenchMenuAction(consistencyText(language, "menu.model.clearHistory") + " · " + (task.createdAt?.formatted() ?? text("unknown", "未知"))) { confirmation = .clear(task) }.featureHelp("MODELS-HISTORY", language: language)
                     }
                     WorkbenchMenuDivider()
                     if record.storage == .managed, resource.control.fileState != .deleted {
-                        WorkbenchMenuAction(consistencyText(language, "menu.model.delete"), role: .destructive) { confirmation = .delete(resource) }.disabled(record.activeLeaseCount > 0 || model.hasActiveWork)
+                        WorkbenchMenuAction(consistencyText(language, "menu.model.delete"), role: .destructive) { confirmation = .delete(resource) }.featureHelp("MODELS-DELETE", language: language, unavailableReason: record.activeLeaseCount > 0 ? consistencyText(language, "help.reason.leased") : model.hasActiveWork ? consistencyText(language, "help.reason.modelOperation") : nil).disabled(record.activeLeaseCount > 0 || model.hasActiveWork)
                     }
                 }.environment(\.workbenchMenuContext, "resource:\(ObjectIdentifier(model)):\(resource.id)")
             }.buttonStyle(WorkbenchGlassButtonStyle())

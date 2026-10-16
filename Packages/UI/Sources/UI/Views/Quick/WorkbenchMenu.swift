@@ -15,6 +15,9 @@ import SwiftUI
         return items.flatMap { leaves($0, enabled: true, valid: { true }) }
     }
     func disabled(_ disabled: Bool) -> Self { var copy = self; copy.items = items.map { var item = $0; item.enabled = item.enabled && !disabled; return item }; return copy }
+    func featureHelp(_ id: String, language: UILanguageStore?, unavailableReason: String? = nil) -> Self {
+        help(WorkbenchFeatures.purpose(id, language: language) + (unavailableReason.map { "\n" + $0 } ?? ""))
+    }
     func help(_ help: String) -> Self { var copy = self; copy.items = items.map { var item = $0; item.help = help; return item }; return copy }
     func font(_ font: Font?) -> Self { self }
     func foregroundStyle<S: ShapeStyle>(_ style: S) -> Self { self }

@@ -10,9 +10,11 @@ struct WorkbenchModelCard: View {
     let status: String
     var change: (() -> Void)? = nil
     var canChange = true
+    var changeUnavailableReason: String? = nil
     var usingDefault = false
     @Environment(\.dLanguageStore) private var language
     @State private var details = false
+    @Environment(\.workbenchMenuContext) private var helpOwner
     private var choice: WorkflowModelChoice? { choices.first { $0.id == modelID && $0.kind == definition.modelKind } }
     private var descriptor: ModelNodeDescriptor? { choice.flatMap(SharedLibraryProjection.descriptor(for:)).map { ModelNodeUILocalization.display($0, language: language) } }
     private var name: String {
@@ -21,11 +23,11 @@ struct WorkbenchModelCard: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(name).font(.system(size: 15, weight: .semibold)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            Text(name).workbenchHelp("MODEL-CARD").font(.system(size: 15, weight: .semibold)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             if let precision = descriptor?.precision, !precision.isEmpty {
                 Text(precision).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
             }
-            Text(WorkflowCanvasPresentation.operationDetail(definition, language: language))
+            Text(WorkflowCanvasPresentation.operationDetail(definition, language: language)).workbenchHelp("MODEL-PURPOSE")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(definition.inputs) { port in
@@ -35,14 +37,15 @@ struct WorkbenchModelCard: View {
                 ForEach(definition.outputs) { port in
                     Text(consistencyText(language, "copy.output") + " · " + WorkflowCanvasPresentation.portTitle(operationID: definition.id, port: port, input: false, language: language))
                 }
-            }.font(.caption).fixedSize(horizontal: false, vertical: true)
+            }.workbenchHelp("MODEL-IO").font(.caption).fixedSize(horizontal: false, vertical: true)
             if usingDefault && definition.modelKind != nil { Text(consistencyText(language, "copy.usingDefault")).font(.caption) }
-            if definition.modelKind != nil { Text(status).font(.callout).foregroundStyle(.secondary) }
+            if definition.modelKind != nil { Text(status).workbenchHelp("MODEL-STATUS").font(.callout).foregroundStyle(.secondary) }
             HStack {
-                if let change { Button(consistencyText(language, "MODEL-CHANGE"), action: change).disabled(!canChange) }
-                Button(consistencyText(language, "MODEL-DETAILS")) { details = true }
+                if let change { Button(consistencyText(language, "MODEL-CHANGE"), action: change).workbenchHelp("MODEL-CHANGE", unavailableReason: canChange ? nil : changeUnavailableReason).disabled(!canChange) }
+                Button(consistencyText(language, "MODEL-DETAILS")) { details = true }.workbenchHelp("MODEL-DETAILS")
             }
-        }.sheet(isPresented: $details) {
+        }.environment(\.workbenchMenuContext, "\(helpOwner):model:\(definition.id):\(modelID ?? "none")")
+        .sheet(isPresented: $details) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack { Text(consistencyText(language, "MODEL-DETAILS")).font(.headline); Spacer(); Button(workflowText(language, "common.done", fallback: "Done")) { details = false }.keyboardShortcut(.cancelAction) }

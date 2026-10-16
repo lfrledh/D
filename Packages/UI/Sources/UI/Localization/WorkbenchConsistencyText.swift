@@ -1,7 +1,9 @@
 import SwiftUI
 
 @MainActor func consistencyText(_ language: UILanguageStore?, _ key: String, arguments: [String: String] = [:]) -> String {
-    (language ?? ConsistencyLanguageDefaults.english).text("consistency." + key, fallback: key, arguments: arguments)
+    let store = language ?? ConsistencyLanguageDefaults.english
+    let fullKey = "consistency." + key
+    return store.text(fullKey, fallback: store.sourceFallback(fullKey, fallback: key), arguments: arguments)
 }
 
 @MainActor func workbenchIntegerEditingError(_ raw: String, field: String, language: UILanguageStore?) -> String? {
