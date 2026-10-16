@@ -1,6 +1,12 @@
 # UI-PRESENTATION-REBUILD-01：公共外壳与真实聊天
 
-## 2026-10-16 D-UI-CONSISTENCY-01 增补后的当前候选
+## 2026-10-16 当前：一致性现场反馈有限修补
+
+从3ff03d09隔离到 `codex/ui-consistency-native-20261016`，生产点 `f8cb6fd62cb63dd5509ee6a08a7e365f1731e2d7`。7d1b2054现场已确认帮助玻璃及松手视野正常，但拒收平移手感及标题栏；继续保留这份反证。追加玻璃环带中心预裁剪/关闭增强索引空闲、真实contentView标题带与统一采样坐标；不改模型/Runtime/下载/Store/项目格式。94方法176情景完整通过，相对起点新增8/36；72组原算法像素逐字节一致，同参数组件渲染7.306→1.662秒不等于FPS。构建、签名、最终SHA、推送读回、差分及唯一App入口统一见 `D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/delivery/README.md`。
+
+11方法15原生宿主情景前置仍未完成；context-menu提前退出的raw exit0不当通过。新平移/标题观感待同包现场确认，集中队列分开工程、工具环境与人类事项。普通保护摘要与源scheme保持，合成项目位置/背景/透明度保留；Quick/模型索引缺完整前态范围维持unknown，不猜测回滚。不合并、不部署或替换普通D；下文是历史。
+
+## 2026-10-16 D-UI-CONSISTENCY-01 增补后历史候选
 
 从同一工作树、同一分支的已交付 `e5853763a1e2f50b8e34750cadb2f461dbafb6f3` 继续；未重开任务、重建分支或回退成果。最终完整 SHA、开发签名构建对应、远端读回、相对该增补起点及原任务起点的完整差分统一在 `D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-02-addendum/delivery/README.md`。下节 `run-20261016-01` 是增补前的历史收据，原样保留。
 
