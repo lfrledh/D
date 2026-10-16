@@ -4,6 +4,12 @@
 
 实际起点 `3fa866fe3e5e5d3f41d66b0929a56fbbadec99eb`；旧受测生产 `fbbd6b116bd7568d42a60af4e159bd0f25274d3a`。已核对本地/远端候选、索引、源树个人 scheme 与普通服务保护摘要，在新隔离树 `D-Worktrees/D-RENDERING-WORKSPACE-20261017` / `codex/rendering-workspace-20261017` 由 Lead 单写。原候选、源树、普通 D、B9FC 评审会话保留，不合并、不部署。完整生产/最终 SHA、差分、原始命令退出码、分级计数及唯一 `review.py` 入口统一见 `D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/delivery/README.md`；不在文档中循环补自身 SHA。
 
+本轮最终生产 `76fc67c255b16c7bf7b463129f8e598eb64405fc` 定向回归 **201 方法/373 展开情景，exit0**（UI 177/337 + DWorkbench 24/36）；相对起点新增 **18/55**，不累计重复运行。真实 Metal 离屏为其中 2 方法/24 情景，其余连续轮廓、真实 Controller/Store/Viewer、A2/DHA、输入与迁移保护按组件分级。两轮固定 SHA 非实现者复核的七项发现均有界修正，原失败/宿主阻塞日志保留。正常 Apple Development 构建 exit0，deep/strict、Team、Sandbox、签名前 review-only 标记及包内 shader 函数核验通过；本轮未启动 App。最终文档提交与生产源码无差分，完整 SHA/推送读回以外部回执为准。
+
+组件轮廓准备 192 次尺寸变化 p50/p95/p99 为 0.472/0.564/0.613 ms；160×120 点、2× 的连续 shader 离屏 GPU 为 0.0807/0.0841/0.0854 ms。两者都不是桌面 FPS，旧 CG 层对照与新 GPU 不可相减宣称提速。滚轮卡顿、放大文字与分层观感继续 OPEN_DEFECT/NATIVE_BLOCKED；真正人类验收与 Agent 原生测量分开。
+
+保护复核：普通/旧 C5BC 八项、源树 scheme/索引/dirty 状态、旧 App 摘要一致。B9FC 继承快照早于上轮最后人工评审，八项当前差异的 mtime 均早于本轮开工；本轮没有完整会话起始字节快照，故不声称这八项字节完全不变，不猜测原因、不回滚，摘要只留外盘私有证据。
+
 本轮授权覆盖 RP01–04 与 IA01–07。连续光学只读取 D 自有背景，采用实际填充边界的亚像素轮廓、空间索引和原生 Metal Shader；原生文字/控件/图片/视频留在前景。节点改为按屏幕倍率布局字体与控件，世界坐标、精确端口和可见连线保持；普通滚轮速度独立设置 0.25–4×，不改精确点/普通行事件归属。左操作库/属性、右模态素材、独立固定内容 Viewer、统一底部控制台及活动、拓扑运行计划均接入既有真实命令，模型、Runtime、下载业务与项目格式冻结。
 
 旧卡顿、放大模糊和分段玻璃报告作为反例保留。源码/组件/实际 Metal 离屏证据不能关闭桌面流畅度和清晰度问题；本轮前置 ScreenCapture=false、AX=false，未启动普通 App 或按名称另开评审实例。当前状态及唯一剩余队列见 [集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#d-rendering-workspace-01-当前集中队列)，用户只集中评价观感、手感与语义理解。
