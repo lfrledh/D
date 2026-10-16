@@ -135,6 +135,30 @@ import Testing
         for i in 1...20 { let back=surface(owner,in:root,rect:.init(x:20,y:20,width:300,height:220),group:"back\(i)"); root.addSubview(back,positioned:.below,relativeTo:front);owner.readability.update(back) }
         #expect(try pixels(front) == one)
     }
+    @Test func disabledPlatesStillContributeWhenAnotherConsumerEnablesEnhancement() throws {
+        let w = window(); defer { w.close() }
+        let owner = WorkbenchBackgroundOwner(), root = WorkbenchBackgroundNSView(frame: .init(x: 0, y: 0, width: 800, height: 600))
+        root.isCanvas = true; root.owner = owner; owner.root = root; w.contentView = root
+        let back = surface(owner, in: root, rect: .init(x: 20, y: 20, width: 300, height: 220), group: "back")
+        let front = surface(owner, in: root, rect: .init(x: 40, y: 40, width: 180, height: 120), group: "front")
+        front.readability.enabled = false; back.readability.enabled = false
+        let off = try pixels(front), before = owner.readability.geometryUpdates
+        back.setFrameOrigin(.init(x: 30, y: 30))
+        #expect(owner.readability.geometryUpdates == before)
+        front.readability.enabled = true
+        #expect(!owner.readability.effect(for: front).patches.isEmpty)
+        #expect(!(try pixels(front)).elementsEqual(off))
+        back.isHidden = true
+        #expect(owner.readability.effect(for: front).patches.isEmpty)
+        back.isHidden = false; owner.readability.update(back)
+        #expect(!owner.readability.effect(for: front).patches.isEmpty)
+        front.readability.enabled = false
+        #expect(try pixels(front) == off)
+        front.readability.enabled = true
+        owner.readability.remove(back); back.owner = nil; back.removeFromSuperview()
+        #expect(owner.readability.effect(for: front).patches.isEmpty)
+    }
+
     @Test func distantSurfacesDoNotMakeEveryQueryAnAllPairsScan() {
         let w=window(.init(width:12000,height:1000));defer{w.close()};let owner=WorkbenchBackgroundOwner(),root=WorkbenchBackgroundNSView(frame:.init(x:0,y:0,width:12000,height:1000));root.isCanvas=true;owner.root=root;root.owner=owner;w.contentView=root
         var all:[WorkbenchBackgroundNSView]=[]

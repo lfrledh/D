@@ -100,6 +100,21 @@ struct WorkbenchBackgroundSummary {
         var patches: [Patch] = []
         static var none: Effect { Effect() }
     }
+    private let members = NSHashTable<WorkbenchBackgroundNSView>.weakObjects()
+    private let consumers = NSHashTable<WorkbenchBackgroundNSView>.weakObjects()
+    func configure(_ view: WorkbenchBackgroundNSView) {
+        let wasActive = !consumers.allObjects.isEmpty
+        members.add(view)
+        if view.readability.enabled && view.readability.amount > 0 && view.drawsGlass && !view.isCanvas && !view.isGeometryOnly { consumers.add(view) }
+        else { consumers.remove(view) }
+        if consumers.allObjects.isEmpty {
+            records.removeAll(); cells.removeAll(); memberships.removeAll(); exposure.removeAll()
+        } else if !wasActive {
+            // Disabled plates and geometry-only scroll bodies still contribute
+            // to an enabled consumer. Rebuild when the first consumer appears.
+            for member in members.allObjects { update(member) }
+        }
+    }
     private var records: [ObjectIdentifier: Record] = [:]
     private var cells: [Cell: Set<ObjectIdentifier>] = [:]
     private var memberships: [ObjectIdentifier: Set<Cell>] = [:]
@@ -118,7 +133,10 @@ struct WorkbenchBackgroundSummary {
         guard x1 - x0 < 256, y1 - y0 < 256 else { return [] }
         return Set((x0...x1).flatMap { x in (y0...y1).map { Cell(x: x, y: $0) } })
     }
-    func remove(_ view: WorkbenchBackgroundNSView) { remove(ObjectIdentifier(view)) }
+    func remove(_ view: WorkbenchBackgroundNSView) {
+        members.remove(view); consumers.remove(view); remove(ObjectIdentifier(view))
+        if consumers.allObjects.isEmpty { records.removeAll(); cells.removeAll(); memberships.removeAll(); exposure.removeAll() }
+    }
     private func remove(_ id: ObjectIdentifier) {
         for cell in memberships.removeValue(forKey: id) ?? [] {
             cells[cell]?.remove(id); if cells[cell]?.isEmpty == true { cells.removeValue(forKey: cell) }
@@ -126,6 +144,7 @@ struct WorkbenchBackgroundSummary {
         records.removeValue(forKey: id); exposure.removeValue(forKey: id)
     }
     func update(_ view: WorkbenchBackgroundNSView) {
+        guard !consumers.allObjects.isEmpty else { return }
         let id = ObjectIdentifier(view)
         guard !view.isCanvas, !view.isHiddenOrHasHiddenAncestor, let window = view.window,
               let root = view.owner?.root, root.window === window else { remove(id); return }
@@ -195,7 +214,8 @@ struct WorkbenchBackgroundSummary {
             summaryImage = source; summary = source.flatMap { WorkbenchBackgroundSummary(image: $0) }
             if source != nil { summaryBuilds += 1 }
         }
-        let complexity = source.map { summary?.complexity(rect: own.rect, viewport: root.bounds.size, image: CGSize(width: $0.width, height: $0.height)) ?? 0 } ?? 0
+        let coordinates = view.owner?.coordinates(for: view) ?? (rect: own.rect, viewport: root.bounds.size)
+        let complexity = source.map { summary?.complexity(rect: coordinates.rect, viewport: coordinates.viewport, image: CGSize(width: $0.width, height: $0.height)) ?? 0 } ?? 0
         let measured = (complexity * 8).rounded() / 8
         let previous = exposure[id] ?? measured
         let smooth = abs(measured - previous) < 0.125 ? previous : measured

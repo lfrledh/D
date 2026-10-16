@@ -13,12 +13,16 @@ import SwiftUI
     private var appliedBackground: NSColor?
     private var geometry: NSKeyValueObservation?
     private var restored = false
+    private var updating = false
+    let surface = WorkbenchTitlebarSurface()
+    private let invalidate: @MainActor () -> Void
 
     init?(window: NSWindow, invalidate: @escaping @MainActor () -> Void) {
         // Sheets keep their system-owned attachment chrome; their D content
         // already uses the local material. No ordinary system panel is touched.
         guard window.styleMask.contains(.titled), window.sheetParent == nil else { return nil }
         self.window = window
+        self.invalidate = invalidate
         fullSize = window.styleMask.contains(.fullSizeContentView)
         transparent = window.titlebarAppearsTransparent
         separator = window.titlebarSeparatorStyle
@@ -28,18 +32,41 @@ import SwiftUI
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
         window.isOpaque = true
-        geometry = window.observe(\.contentLayoutRect, options: [.new]) { _, _ in
-            MainActor.assumeIsolated { invalidate() }
+        geometry = window.observe(\.contentLayoutRect, options: [.new]) { [weak self] _, _ in
+            MainActor.assumeIsolated { self?.refreshGeometry(); invalidate() }
         }
     }
 
-    func update(palette: WorkbenchPalette) {
+    func update(palette: WorkbenchPalette, canvas: WorkbenchBackgroundNSView) {
         guard let window, !restored else { return }
         let color = NSColor(palette.canvasColor)
         if window.backgroundColor != color { window.backgroundColor = color }
         appliedBackground = color
+        surface.canvas = canvas
+        refreshGeometry()
+        surface.needsDisplay = true
         // SwiftUI owns preferred/system appearance. Do not pin the native window
         // to today's resolved scheme, which would stop following system changes.
+    }
+
+    private func refreshGeometry() {
+        guard let window, !restored, !updating else { return }
+        updating = true; defer { updating = false }
+        // SwiftUI may reapply chrome after creating the Window. Maintain only
+        // the properties this owner already owns; leave native controls intact.
+        if !window.styleMask.contains(.fullSizeContentView) { window.styleMask.insert(.fullSizeContentView) }
+        if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
+        if window.titlebarSeparatorStyle != .none { window.titlebarSeparatorStyle = .none }
+        if !window.isOpaque { window.isOpaque = true }
+        guard let content = window.contentView else { return }
+        if surface.superview !== content {
+            surface.removeFromSuperview()
+            content.addSubview(surface, positioned: .above, relativeTo: nil)
+        }
+        let band = frame(in: content)
+        surface.isHidden = band.isEmpty || band.isNull
+        if !surface.isHidden && surface.frame != band { surface.frame = band }
+        surface.needsDisplay = true
     }
 
     /// Window coordinates, including toolbars/full screen, are supplied by AppKit.
@@ -56,6 +83,7 @@ import SwiftUI
     func restore() {
         guard !restored else { return }; restored = true
         geometry?.invalidate(); geometry = nil
+        surface.canvas = nil; surface.removeFromSuperview()
         guard let window else { return }
         if window.backgroundColor == appliedBackground { window.backgroundColor = background }
         if window.isOpaque { window.isOpaque = opaque }
@@ -64,4 +92,37 @@ import SwiftUI
         if !fullSize { window.styleMask.remove(.fullSizeContentView) }
     }
     isolated deinit { restore() }
+}
+
+/// A noninteractive plate attached to the real content host, not a deep SwiftUI
+/// background that can be clipped below the titlebar. The system still owns the
+/// title, traffic lights, drag region and close/termination delegate.
+@MainActor final class WorkbenchTitlebarSurface: NSView {
+    weak var canvas: WorkbenchBackgroundNSView?
+    private let geometry = WorkbenchLocalRenderer.RefractionGeometry()
+    #if DEBUG
+    private var recordedDraw = false
+    #endif
+    override var isFlipped: Bool { true }
+    override var isOpaque: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let canvas, canvas.window === window, let c = NSGraphicsContext.current?.cgContext else { return }
+        if let blend = canvas.legacyTitlebarBlend {
+            c.setFillColor(NSColor(canvas.palette.panelFill(canvasBlend: blend)).cgColor); c.fill(bounds)
+        } else {
+            let coordinates = canvas.owner?.coordinates(for: self) ?? (rect: bounds, viewport: bounds.size)
+            WorkbenchLocalRenderer.draw(in: c, size: bounds.size, rect: coordinates.rect,
+                viewport: coordinates.viewport, image: canvas.drawsGlass ? canvas.owner?.blurred : nil,
+                canvas: canvas.drawsGlass ? canvas.palette.canvas : canvas.palette.panel, panel: canvas.palette.panel,
+                strength: canvas.strength, glass: canvas.drawsGlass, geometry: geometry)
+        }
+        #if DEBUG
+        if !recordedDraw, window?.isVisible == true,
+           UUID(uuidString: ProcessInfo.processInfo.environment["D_UI_TEST_SESSION"] ?? "") != nil {
+            recordedDraw = true
+            print("D_TITLEBAR_SURFACE pid=\(ProcessInfo.processInfo.processIdentifier) frame=\(frame) visible=\(visibleRect) transparent=\(window?.titlebarAppearsTransparent == true) opaque=\(window?.isOpaque == true)")
+        }
+        #endif
+    }
 }

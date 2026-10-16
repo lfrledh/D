@@ -132,12 +132,55 @@ enum WorkbenchLocalRenderer {
         return context.createCGImage(input.clampedToExtent().applyingFilter("CIGaussianBlur",
             parameters: [kCIInputRadiusKey: 0.65]).cropped(to: input.extent), from: input.extent)
     }
+    /// Geometry only: no pixels or content snapshots. A rectangular hole known
+    /// to be inside the inner contour lets Core Graphics skip that image area
+    /// before applying the curved ring mask. Otherwise it samples the entire
+    /// plate for every thin ring, including the masked-out centre.
+    struct RefractionRing { let path: CGPath; let clips: [CGRect] }
+    final class RefractionGeometry {
+        private var size: CGSize = .zero
+        private var sourceSize: CGSize = .zero
+        private var rings: [RefractionRing] = []
+        func resolve(size: CGSize, rect: CGRect, contour: ((CGRect, CGFloat) -> CGPath)?) -> [RefractionRing] {
+            if self.size == size && sourceSize == rect.size && !rings.isEmpty { return rings }
+            self.size = size; sourceSize = rect.size
+            let bounds = CGRect(origin: .zero, size: size)
+            let scale = min(size.width / rect.width, size.height / rect.height)
+            let rim = min(12, min(rect.width, rect.height) / 4)
+            let outline = contour ?? { box, inset in CGPath(rect: box.insetBy(dx: inset, dy: inset), transform: nil) }
+            rings = (0..<12).map { i in
+                let inner = outline(bounds, CGFloat(i + 1) * rim / 12 * scale)
+                let path = CGMutablePath(); path.addPath(outline(bounds, CGFloat(i) * rim / 12 * scale)); path.addPath(inner)
+                var low: CGFloat = 0, high = min(inner.boundingBoxOfPath.width, inner.boundingBoxOfPath.height) / 2
+                var hole = CGRect.null
+                for _ in 0..<9 {
+                    let inset = (low + high) / 2
+                    let candidate = inner.boundingBoxOfPath.insetBy(dx: inset, dy: inset)
+                    if CGPath(rect: candidate, transform: nil).subtracting(inner, using: .evenOdd).isEmpty {
+                        hole = candidate; high = inset
+                    } else { low = inset }
+                }
+                // Inset a little further to avoid the path boolean operation's
+                // curve tolerance at the boundary. The original ring mask stays.
+                hole = hole.insetBy(dx: 1, dy: 1).intersection(bounds)
+                guard !hole.isNull, !hole.isEmpty else { return RefractionRing(path: path, clips: [bounds]) }
+                let clips = [CGRect(x: 0, y: 0, width: bounds.width, height: hole.minY),
+                    CGRect(x: 0, y: hole.maxY, width: bounds.width, height: bounds.maxY - hole.maxY),
+                    CGRect(x: 0, y: hole.minY, width: hole.minX, height: hole.height),
+                    CGRect(x: hole.maxX, y: hole.minY, width: bounds.maxX - hole.maxX, height: hole.height)]
+                return RefractionRing(path: path, clips: clips.filter { !$0.isEmpty })
+            }
+            return rings
+        }
+    }
+
     /// rect and viewport use top-left workspace points, independent of desktop
     /// position and graph coordinates. Edges clamp via an opaque base + aspect fill.
     static func draw(in c: CGContext, size: CGSize, rect: CGRect, viewport: CGSize,
                      image: CGImage?, canvas: String, panel: String, strength: Double,
                      glass: Bool, refraction: Bool = true,
-                     contour: ((CGRect, CGFloat) -> CGPath)? = nil) {
+                     contour: ((CGRect, CGFloat) -> CGPath)? = nil,
+                     geometry: RefractionGeometry? = nil) {
         guard size.width > 0, size.height > 0, rect.width > 0, rect.height > 0 else { return }
         let bounds = CGRect(origin: .zero, size: size)
         c.saveGState(); defer { c.restoreGState() }
@@ -171,21 +214,22 @@ enum WorkbenchLocalRenderer {
                 // Follow the actual Capsule/Circle/rounded panel outline. Each
                 // ring resets its own sample, so translucent wallpaper cannot
                 // accumulate. Twelve shared-source samples, no per-control texture.
+                let rings = geometry?.resolve(size: size, rect: rect, contour: contour)
                 let rim = min(12, min(rect.width, rect.height) / 4)
-                let outline = contour ?? { box, inset in
-                    CGPath(rect: box.insetBy(dx: inset, dy: inset), transform: nil)
-                }
+                let outline = contour ?? { box, inset in CGPath(rect: box.insetBy(dx: inset, dy: inset), transform: nil) }
                 for i in 0..<12 {
-                    let start = CGFloat(i) * rim / 12
-                    let end = CGFloat(i + 1) * rim / 12
-                    let ring = CGMutablePath()
-                    ring.addPath(outline(bounds, start * min(sx, sy)))
-                    ring.addPath(outline(bounds, end * min(sx, sy)))
+                    let ring: CGPath
+                    if let rings { ring = rings[i].path }
+                    else {
+                        let path = CGMutablePath()
+                        path.addPath(outline(bounds, CGFloat(i) * rim / 12 * min(sx, sy)))
+                        path.addPath(outline(bounds, CGFloat(i + 1) * rim / 12 * min(sx, sy)))
+                        ring = path
+                    }
                     let shoulder = sin((CGFloat(i) + 0.5) / 12 * .pi)
                     let shift = shoulder * 5.5 * min(1, max(0, strength))
-                    // Cap the displacement at 5.5 workspace points on any size.
                     let magnification = 1 + shift / max(1, max(rect.width, rect.height) / 2)
-                    sample(clip: bounds, lens: ring, magnification: magnification)
+                    for clip in rings?[i].clips ?? [bounds] { sample(clip: clip, lens: ring, magnification: magnification) }
                 }
             }
         }
@@ -270,7 +314,19 @@ enum WorkbenchLocalRenderer {
             }
         }
     }
-    func invalidate() { for view in surfaces.allObjects { view.needsDisplay = true } }
+    func invalidate() { for view in surfaces.allObjects { view.needsDisplay = true; view.titlebar?.surface.needsDisplay = true } }
+    func coordinateRoot(in window: NSWindow?) -> NSView? {
+        guard let root, root.window === window else { return window?.contentView }
+        return root.stylesWindowTitlebar ? window?.contentView : root
+    }
+    func coordinates(for view: NSView) -> (rect: CGRect, viewport: CGSize) {
+        guard let root = coordinateRoot(in: view.window) else { return (view.bounds, view.bounds.size) }
+        let converted = view.convert(view.bounds, to: root)
+        let rect = CGRect(x: converted.minX - root.bounds.minX,
+            y: root.isFlipped ? converted.minY - root.bounds.minY : root.bounds.maxY - converted.maxY,
+            width: converted.width, height: converted.height)
+        return (rect, root.bounds.size)
+    }
     func didDraw() { drawCount += 1 }
     var retainedBytes: Int { [image, blurred].compactMap { $0 }.reduce(0) { $0 + $1.bytesPerRow * $1.height } }
 }
@@ -286,16 +342,23 @@ extension EnvironmentValues {
 }
 
 @MainActor final class WorkbenchBackgroundNSView: NSView {
-    var owner: WorkbenchBackgroundOwner?
+    var owner: WorkbenchBackgroundOwner? {
+        didSet {
+            if oldValue !== owner { oldValue?.readability.remove(self); owner?.readability.configure(self) }
+        }
+    }
     var isCanvas = false
     var isGeometryOnly = false
     var palette = WorkbenchPalette.defaultLight
     var strength = 0.55
-    var drawsGlass = true
+    var drawsGlass = true { didSet { if oldValue != drawsGlass { owner?.readability.configure(self) } } }
     var surfaceGroup: String? = nil
     var surfaceRole = WorkbenchSurfaceRole.panel
-    var readability = WorkbenchReadabilitySettings()
-    var contour: ((CGRect, CGFloat) -> CGPath)?
+    var readability = WorkbenchReadabilitySettings() {
+        didSet { if oldValue != readability { owner?.readability.configure(self); needsDisplay = true } }
+    }
+    var contour: ((CGRect, CGFloat) -> CGPath)? { didSet { refractionGeometry = .init() } }
+    private var refractionGeometry = WorkbenchLocalRenderer.RefractionGeometry()
     var stylesWindowTitlebar = false
     var legacyTitlebarBlend: Double?
     private(set) var titlebar: WorkbenchWindowTitlebar?
@@ -315,7 +378,7 @@ extension EnvironmentValues {
         if titlebar == nil {
             titlebar = WorkbenchWindowTitlebar(window: window) { [weak self] in self?.needsDisplay = true }
         }
-        titlebar?.update(palette: palette)
+        titlebar?.update(palette: palette, canvas: self)
     }
     func releaseTitlebar() {
         let previous = titlebar; titlebar = nil; stylesWindowTitlebar = false; previous?.restore()
@@ -351,32 +414,14 @@ extension EnvironmentValues {
             WorkbenchCategoryUpdateProbe.phase("visible-background-draw")
         }
         #endif
-        let root: NSView? = owner?.root.flatMap { $0.window === window ? $0 : nil } ?? window?.contentView
-        let rect = root.map { convert(bounds, to: $0) } ?? bounds
+        let coordinates = owner?.coordinates(for: self) ?? (rect: bounds, viewport: bounds.size)
         let enhancement = owner?.readability.effect(for: self) ?? .none
-        WorkbenchLocalRenderer.draw(in: c, size: bounds.size, rect: rect, viewport: root?.bounds.size ?? bounds.size,
+        WorkbenchLocalRenderer.draw(in: c, size: bounds.size, rect: coordinates.rect, viewport: coordinates.viewport,
             image: isCanvas ? owner?.image : (drawsGlass ? owner?.blurred : nil),
             canvas: isCanvas || drawsGlass ? palette.canvas : palette.panel, panel: palette.panel,
-            strength: strength, glass: !isCanvas && drawsGlass, refraction: !enhancement.contained, contour: contour)
+            strength: strength, glass: !isCanvas && drawsGlass, refraction: !enhancement.contained, contour: contour, geometry: refractionGeometry)
         WorkbenchReadabilityRegistry.paint(enhancement, in: c, view: self)
-        if isCanvas, let band = titlebar?.frame(in: self), !band.isEmpty, !band.isNull {
-            // Render the same local glass as the other controls, with the same
-            // window-space mapping. Never sample the native title, buttons or desktop.
-            c.saveGState(); c.clip(to: band); c.translateBy(x: band.minX, y: band.minY)
-            if let legacyTitlebarBlend {
-                // Valid older settings keep the same opaque color blend as panels.
-                c.setFillColor(NSColor(palette.panelFill(canvasBlend: legacyTitlebarBlend)).cgColor)
-                c.fill(CGRect(origin: .zero, size: band.size))
-            } else {
-                let mapped = root.map { convert(band, to: $0) } ?? band
-                WorkbenchLocalRenderer.draw(in: c, size: band.size, rect: mapped,
-                    viewport: root?.bounds.size ?? bounds.size,
-                    image: drawsGlass ? owner?.blurred : nil,
-                    canvas: drawsGlass ? palette.canvas : palette.panel, panel: palette.panel,
-                    strength: strength, glass: drawsGlass)
-            }
-            c.restoreGState()
-        }
+
     }
 }
 

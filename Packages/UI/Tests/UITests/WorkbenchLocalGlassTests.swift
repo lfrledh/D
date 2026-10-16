@@ -49,19 +49,17 @@ private actor LocalGlassNoInference: InferenceEngine {
         return Array(UnsafeBufferPointer(start: ptr, count: c.bytesPerRow * c.height))
     }
     private func titlebarPixel(_ canvas: WorkbenchBackgroundNSView, external: CGColor) throws -> [UInt8] {
-        let band = try #require(canvas.titlebar?.frame(in: canvas))
-        try #require(!band.isEmpty && !band.isNull)
-        let c = try #require(WorkbenchLocalRenderer.bitmap(width: Int(canvas.bounds.width), height: Int(canvas.bounds.height)))
-        c.setFillColor(external); c.fill(canvas.bounds)
-        // A flipped NSView's draw context uses top-left points. Bitmap contexts
-        // start bottom-left; the flipped flag alone does not transform the CTM.
+        let surface = try #require(canvas.titlebar?.surface)
+        try #require(surface.superview === canvas.window?.contentView && !surface.isHidden)
+        let c = try #require(WorkbenchLocalRenderer.bitmap(width: Int(surface.bounds.width), height: Int(surface.bounds.height)))
+        c.setFillColor(external); c.fill(surface.bounds)
         c.translateBy(x: 0, y: CGFloat(c.height)); c.scaleBy(x: 1, y: -1)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: c, flipped: true)
-        canvas.draw(canvas.bounds)
+        surface.draw(surface.bounds)
         NSGraphicsContext.restoreGraphicsState()
         let data = try #require(c.data).assumingMemoryBound(to: UInt8.self)
-        let offset = Int(band.midY) * c.bytesPerRow + Int(band.midX) * 4
+        let offset = Int(surface.bounds.midY) * c.bytesPerRow + Int(surface.bounds.midX) * 4
         return Array(UnsafeBufferPointer(start: data + offset, count: 4))
     }
 
@@ -168,6 +166,35 @@ private actor LocalGlassNoInference: InferenceEngine {
         canvas.releaseTitlebar()
         #expect(!window.titlebarAppearsTransparent && !window.styleMask.contains(.fullSizeContentView))
         #expect(window.contentView === host && window.firstResponder === responder)
+    }
+
+    @Test func titlebarEscapesClippedCanvasAndMaintainsOwnedChrome() throws {
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 640, height: 400),
+            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.contentView = nil; window.close() }
+        let host = NSView(frame: CGRect(x: 0, y: 0, width: 640, height: 400)); window.contentView = host
+        let clip = NSView(frame: CGRect(x: 0, y: 0, width: 640, height: 350)); clip.clipsToBounds = true; host.addSubview(clip)
+        let canvas = WorkbenchBackgroundNSView(frame: clip.bounds); canvas.isCanvas = true; canvas.stylesWindowTitlebar = true
+        let owner = WorkbenchBackgroundOwner(); canvas.owner = owner; owner.root = canvas; clip.addSubview(canvas)
+        canvas.synchronizeTitlebar()
+        let chrome = try #require(canvas.titlebar)
+        #expect(chrome.frame(in: canvas).isEmpty || chrome.frame(in: canvas).isNull)
+        #expect(chrome.surface.superview === host && chrome.surface.frame.height > 0 && !chrome.surface.isHidden)
+        #expect(chrome.surface.convert(chrome.surface.bounds, to: nil).minY == window.contentLayoutRect.maxY)
+        #expect(chrome.surface.hitTest(.zero) == nil && owner.coordinateRoot(in: window) === host)
+        #expect(!host.isFlipped)
+        #expect(owner.coordinates(for: chrome.surface).rect.minY == 0)
+        #expect(owner.coordinates(for: canvas).rect.minY == host.bounds.maxY - canvas.convert(canvas.bounds, to: host).maxY)
+        let button = window.standardWindowButton(.closeButton)
+        window.titlebarAppearsTransparent = false
+        window.styleMask.remove(.fullSizeContentView)
+        canvas.synchronizeTitlebar()
+        #expect(window.titlebarAppearsTransparent && window.styleMask.contains(.fullSizeContentView))
+        #expect(window.standardWindowButton(.closeButton) === button && window.contentView === host)
+        let pixel = try titlebarPixel(canvas, external: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        #expect(pixel[3] == 255)
+        canvas.releaseTitlebar(); #expect(chrome.surface.superview == nil)
     }
 
     @Test func titlebarOwnershipIsLocalAndRestoresOnlyChrome() {
@@ -900,6 +927,74 @@ private actor LocalGlassNoInference: InferenceEngine {
         #expect(controller.graph == graph)
         #expect(owner.decodeCount == 1 && owner.blurCount == 1 && owner.retainedBytes == bytes)
         try await store.close()
+    }
+
+    @Test(arguments: ["rounded", "capsule", "circle", "rectangle"], [0.0, 0.55, 1.0])
+    func boundedRefractionMatchesOriginalPixels(shape: String, strength: Double) throws {
+        let image = try pattern(alpha: true)
+        let geometry = WorkbenchLocalRenderer.RefractionGeometry()
+        let contour: (CGRect, CGFloat) -> CGPath = { rect, inset in
+            let box = rect.insetBy(dx: inset, dy: inset)
+            switch shape {
+            case "rectangle": return CGPath(rect: box, transform: nil)
+            case "circle": return CGPath(ellipseIn: box, transform: nil)
+            case "capsule": return CGPath(roundedRect: box, cornerWidth: box.height / 2, cornerHeight: box.height / 2, transform: nil)
+            default: return CGPath(roundedRect: box, cornerWidth: 16, cornerHeight: 16, transform: nil)
+            }
+        }
+        for zoom: CGFloat in [0.5, 1, 2] {
+            for origin in [CGPoint(x: 20.25, y: 10.75), CGPoint(x: -12.5, y: 52.25)] {
+                let size = CGSize(width: 100, height: 80)
+                let rect = CGRect(origin: origin, size: CGSize(width: size.width * zoom, height: size.height * zoom))
+                func render(_ optimized: Bool) throws -> [UInt8] {
+                    let c = try #require(WorkbenchLocalRenderer.bitmap(width: 200, height: 160)); c.scaleBy(x: 2, y: 2)
+                    WorkbenchLocalRenderer.draw(in: c, size: size, rect: rect, viewport: CGSize(width: 260, height: 180), image: image,
+                        canvas: "#111D1A", panel: "#1D2B25", strength: strength, glass: true, contour: contour,
+                        geometry: optimized ? geometry : nil)
+                    return Array(UnsafeBufferPointer(start: try #require(c.data).assumingMemoryBound(to: UInt8.self), count: c.bytesPerRow * c.height))
+                }
+                let old = try render(false), new = try render(true)
+                #expect(new.elementsEqual(old), "Optimizing the excluded centre must preserve every output byte: shape=\(shape), strength=\(strength), zoom=\(zoom), origin=\(origin)")
+            }
+        }
+    }
+
+    @Test func canvasPanKeepsDisabledReadabilityIdle() async throws {
+        let directory = try temporary(); defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("pan.png"); try png(pattern(width: 1024, height: 768), at: file)
+        let owner = WorkbenchBackgroundOwner()
+        let root = WorkbenchBackgroundNSView(frame: CGRect(x: 0, y: 0, width: 1100, height: 760))
+        root.isCanvas = true; root.owner = owner; owner.root = root
+        let window = NSWindow(contentRect: root.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = root
+        defer { window.contentView = nil; window.close() }
+        let scroll = NSScrollView(frame: root.bounds); root.addSubview(scroll)
+        let document = NSView(frame: CGRect(x: 0, y: 0, width: 2200, height: 1400)); scroll.documentView = document
+        var plates: [WorkbenchBackgroundNSView] = []
+        for row in 0..<2 { for column in 0..<2 {
+            let plate = WorkbenchBackgroundNSView(frame: CGRect(x: 100 + column * 400, y: 100 + row * 280, width: 320, height: 240))
+            plate.owner = owner; plate.contour = { rect, inset in CGPath(roundedRect: rect.insetBy(dx: inset, dy: inset), cornerWidth: 16, cornerHeight: 16, transform: nil) }
+            document.addSubview(plate); owner.surfaces.add(plate); plates.append(plate)
+        } }
+        owner.load(file)
+        for _ in 0..<100 where owner.blurred == nil { try await Task.sleep(for: .milliseconds(10)) }
+        try #require(owner.blurred != nil)
+        window.contentView?.layoutSubtreeIfNeeded()
+        let before = owner.readability.geometryUpdates, decode = owner.decodeCount, blur = owner.blurCount
+        let context = try #require(WorkbenchLocalRenderer.bitmap(width: 640, height: 480))
+        NSGraphicsContext.saveGraphicsState(); defer { NSGraphicsContext.restoreGraphicsState() }
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+        context.scaleBy(x: 2, y: 2)
+        let start = Date()
+        print("PAN_PROFILE_START pid=\(ProcessInfo.processInfo.processIdentifier)")
+        for tick in 1...120 {
+            scroll.contentView.scroll(to: CGPoint(x: tick % 60, y: tick % 30))
+            for plate in plates { plate.draw(plate.bounds) }
+        }
+        print("PAN_PROFILE seconds=\(Date().timeIntervalSince(start)) geometry=\(owner.readability.geometryUpdates - before) draws=\(owner.drawCount)")
+        #expect(owner.readability.geometryUpdates == before, "Disabled enhancement must not maintain the overlap spatial index while panning")
+        #expect(owner.decodeCount == decode && owner.blurCount == blur)
+        #expect(plates.allSatisfy { $0.owner === owner && !$0.readability.enabled })
     }
 
     @Test func changingAppearanceOwnerWithSameFilenameRefreshesOnlyBackground() async throws {
