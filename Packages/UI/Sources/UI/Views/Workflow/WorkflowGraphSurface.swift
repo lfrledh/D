@@ -1030,8 +1030,8 @@ private struct WorkflowNodeCard: View {
                 Spacer(minLength: 6)
                 WorkbenchMenu { nodeActions } label: {
                     Image(systemName: "ellipsis").frame(width: 22, height: 22)
-                }.menuStyle(.borderlessButton).fixedSize()
-                    .background { Color.clear.workbenchPanel(in: Circle()) }.workflowNodeControl(node.id)
+                }.buttonStyle(WorkbenchIconButtonStyle(diameter: 22)).fixedSize()
+                    .workflowNodeControl(node.id)
                     .accessibilityIdentifier("workflow-node-menu-" + node.id.uuidString)
                 Button { onInspect(node.id) } label: {
                     Image(systemName: "slider.horizontal.3")

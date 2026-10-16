@@ -887,10 +887,10 @@ private actor LocalGlassNoInference: InferenceEngine {
             status:{ .init(activeRunID:nil,phase:nil,queuedRunIDs:[]) },shutdown:{},cleanup:{},validateModel:{ _ in })
         let controller = WorkflowController(services:.init(store:store,session:runtime,
             resolveText:{ throw WorkflowIssue("No model") },resolveImage:{ throw WorkflowIssue("No model") }))
-        await controller.load(); controller.addExample("text")
+        await controller.load(); controller.addExample("template")
         let graph = try #require(controller.graph)
         let state = ChatDisplayPreferencesState(appearanceDirectory:root.appendingPathComponent("Appearance"))
-        let wallpaper = root.appendingPathComponent("source.png"); try png(pattern(),at:wallpaper)
+        let wallpaper = root.appendingPathComponent("source.png"); try png(pattern(width: 1024, height: 768),at:wallpaper)
         await state.importWallpaper(wallpaper)
         func content(_ zoom:CGFloat) -> some View {
             RetainedContentHost(content:WorkflowGraphSurface(controller:controller,graph:controller.graph,
@@ -912,6 +912,24 @@ private actor LocalGlassNoInference: InferenceEngine {
         let node = try #require(surfaces.first { !$0.isCanvas })
         try #require(owner.image != nil && surfaces.count >= graph.nodes.count + 1)
         #expect(surfaces.allSatisfy { $0.owner === owner })
+        let scroll = try #require(descendants(host).compactMap { $0 as? NSScrollView }.max {
+            ($0.documentView?.bounds.width ?? 0) < ($1.documentView?.bounds.width ?? 0)
+        })
+        let plates = surfaces.filter { !$0.isCanvas && !$0.isGeometryOnly && $0.bounds.width > 0 && $0.bounds.height > 0 }
+        let bitmaps = try plates.map { try #require(WorkbenchLocalRenderer.bitmap(width: Int(ceil($0.bounds.width * 2)), height: Int(ceil($0.bounds.height * 2)))) }
+        let started = Date()
+        NSGraphicsContext.saveGraphicsState()
+        for tick in 0..<60 {
+            scroll.contentView.scroll(to: CGPoint(x: tick % 30,y: tick % 20))
+            for (plate, bitmap) in zip(plates, bitmaps) {
+                bitmap.saveGState(); bitmap.scaleBy(x: 2,y: 2)
+                NSGraphicsContext.current = NSGraphicsContext(cgContext: bitmap, flipped: true)
+                plate.draw(plate.bounds); bitmap.restoreGState()
+            }
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        print("REAL_NODE_PAN nodes=\(graph.nodes.count) plates=\(plates.count) ticks=60 seconds=\(Date().timeIntervalSince(started))")
+        #expect(graph.nodes.count == 4 && controller.graph == graph)
         let bytes = owner.retainedBytes
         for zoom:CGFloat in [0.5,1,2] {
             host.rootView = content(zoom); try await settle()
@@ -931,7 +949,8 @@ private actor LocalGlassNoInference: InferenceEngine {
 
     @Test(arguments: ["rounded", "capsule", "circle", "rectangle"], [0.0, 0.55, 1.0])
     func boundedRefractionMatchesOriginalPixels(shape: String, strength: Double) throws {
-        let image = try pattern(alpha: true)
+        let raw = try pattern(alpha: true)
+        let prepared = try #require(WorkbenchLocalRenderer.opaqueSource(raw, canvas: "#111D1A"))
         let geometry = WorkbenchLocalRenderer.RefractionGeometry()
         let contour: (CGRect, CGFloat) -> CGPath = { rect, inset in
             let box = rect.insetBy(dx: inset, dy: inset)
@@ -942,20 +961,23 @@ private actor LocalGlassNoInference: InferenceEngine {
             default: return CGPath(roundedRect: box, cornerWidth: 16, cornerHeight: 16, transform: nil)
             }
         }
+        for size in [CGSize(width: 22, height: 22), CGSize(width: 42, height: 22), CGSize(width: 100, height: 80)] {
+        for image in [raw, prepared] {
         for zoom: CGFloat in [0.5, 1, 2] {
             for origin in [CGPoint(x: 20.25, y: 10.75), CGPoint(x: -12.5, y: 52.25)] {
-                let size = CGSize(width: 100, height: 80)
                 let rect = CGRect(origin: origin, size: CGSize(width: size.width * zoom, height: size.height * zoom))
                 func render(_ optimized: Bool) throws -> [UInt8] {
                     let c = try #require(WorkbenchLocalRenderer.bitmap(width: 200, height: 160)); c.scaleBy(x: 2, y: 2)
                     WorkbenchLocalRenderer.draw(in: c, size: size, rect: rect, viewport: CGSize(width: 260, height: 180), image: image,
                         canvas: "#111D1A", panel: "#1D2B25", strength: strength, glass: true, contour: contour,
-                        geometry: optimized ? geometry : nil)
+                        geometry: optimized ? geometry : nil, opaqueSource: image === prepared)
                     return Array(UnsafeBufferPointer(start: try #require(c.data).assumingMemoryBound(to: UInt8.self), count: c.bytesPerRow * c.height))
                 }
                 let old = try render(false), new = try render(true)
                 #expect(new.elementsEqual(old), "Optimizing the excluded centre must preserve every output byte: shape=\(shape), strength=\(strength), zoom=\(zoom), origin=\(origin)")
             }
+        }
+        }
         }
     }
 
@@ -1129,4 +1151,172 @@ extension WorkbenchLocalGlassTests {
         }
         #expect(help.presentation == nil && owner.decodeCount == 0 && owner.blurCount == 0)
     }
+
+    // Recording/replay is deliberate: an AA preference in the source context
+    // cannot be the correctness condition for fractional coverage at a lens edge.
+    @Test(arguments: ["circle", "capsule", "rounded"], [0.0, 0.5, 1.0])
+    func recordedSmallGlassHasNoRepeatedDarkArcs(shape: String, alpha: Double) async throws {
+        let directory = try temporary(); defer { try? FileManager.default.removeItem(at: directory) }
+        let source = try #require(WorkbenchLocalRenderer.bitmap(width: 160, height: 100))
+        source.setFillColor(CGColor(srgbRed: 0.8, green: 0.8, blue: 0.8, alpha: alpha))
+        source.fill(CGRect(x: 0, y: 0, width: 160, height: 100))
+        let file = directory.appendingPathComponent("uniform.png"); try png(#require(source.makeImage()), at: file)
+        let owner = WorkbenchBackgroundOwner()
+        let root = WorkbenchBackgroundNSView(frame: CGRect(x: 0,y: 0,width: 160,height: 100))
+        root.isCanvas = true; root.owner = owner; owner.root = root
+        let plate = WorkbenchBackgroundNSView(frame: CGRect(x: 40,y: 40,width: shape == "capsule" ? 42 : 22,height: 22))
+        plate.owner = owner; plate.strength = 1; plate.palette = .defaultDark; root.addSubview(plate)
+        plate.contour = { rect, inset in
+            switch shape {
+            case "circle": return Circle().inset(by: inset).path(in: rect).cgPath
+            case "capsule": return Capsule().inset(by: inset).path(in: rect).cgPath
+            default: return RoundedRectangle(cornerRadius: 5,style: .continuous).inset(by: inset).path(in: rect).cgPath
+            }
+        }
+        owner.load(file)
+        for _ in 0..<100 where owner.blurred == nil { try await Task.sleep(for: .milliseconds(10)) }
+        try #require(owner.blurred != nil)
+        for zoom: CGFloat in [0.5, 0.81, 1.13] {
+            let bytes = NSMutableData(); var page = CGRect(x: 0,y: 0,width: 128,height: 96)
+            let consumer = try #require(CGDataConsumer(data: bytes))
+            let recording = try #require(CGContext(consumer: consumer, mediaBox: &page, nil))
+            recording.beginPDFPage(nil)
+            recording.translateBy(x: 12.375,y: 12.125); recording.scaleBy(x: 2 * zoom,y: 2 * zoom)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(cgContext: recording, flipped: true)
+            plate.draw(plate.bounds)
+            NSGraphicsContext.restoreGraphicsState()
+            recording.endPDFPage(); recording.closePDF()
+            let replay = try #require(WorkbenchLocalRenderer.bitmap(width: 128,height: 96))
+            let provider = try #require(CGDataProvider(data: bytes))
+            let document = try #require(CGPDFDocument(provider))
+            replay.drawPDFPage(try #require(document.page(at: 1)))
+            let pixels = try #require(replay.data).assumingMemoryBound(to: UInt8.self)
+            let centerX = Int(12.375 + plate.bounds.midX * 2 * zoom)
+            let centerY = 95 - Int(12.125 + plate.bounds.midY * 2 * zoom)
+            let center = (centerY * 128 + centerX) * 4
+            var largestDifference = 0
+            for y in 0..<96 { for x in 0..<128 {
+                let point = CGPoint(x: (CGFloat(x) + 0.5 - 12.375) / (2 * zoom),
+                                    y: (95.5 - CGFloat(y) - 12.125) / (2 * zoom))
+                guard plate.contour!(plate.bounds, 1.5).contains(point) else { continue }
+                let offset = (y * 128 + x) * 4
+                for channel in 0..<3 { largestDifference = max(largestDifference, abs(Int(pixels[offset + channel]) - Int(pixels[center + channel]))) }
+                #expect(pixels[offset + 3] == 255)
+            } }
+            #expect(largestDifference <= 2, "Uniform glass must stay uniform through recorded curved clips: \(shape), alpha=\(alpha), zoom=\(zoom), deviation=\(largestDifference)")
+            if let evidence = ProcessInfo.processInfo.environment["D_GLASS_EVIDENCE_DIR"] {
+                try png(#require(replay.makeImage()), at: URL(fileURLWithPath: evidence).appendingPathComponent("recorded-\(shape)-\(alpha)-\(zoom).png"))
+            }
+        }
+    }
+
+    @Test func preparedGlassCacheIsBoundedAndFollowsSourceAndCanvas() async throws {
+        let directory = try temporary(); defer { try? FileManager.default.removeItem(at: directory) }
+        let a = directory.appendingPathComponent("a.png"), b = directory.appendingPathComponent("b.png")
+        try png(pattern(alpha: true), at: a); try png(pattern(1), at: b)
+        let owner = WorkbenchBackgroundOwner(); owner.load(a)
+        for _ in 0..<100 where owner.blurred == nil { try await Task.sleep(for: .milliseconds(10)) }
+        let raw = try #require(owner.image), blurred = try #require(owner.blurred)
+        let originalBytes = owner.retainedBytes
+        let prepared = try #require(owner.glassImage(canvas: "#111D1A"))
+        #expect(prepared.alphaInfo == .noneSkipLast)
+        let boundedBytes = originalBytes + prepared.bytesPerRow * prepared.height
+        for _ in 0..<100 {
+            owner.invalidate()
+            #expect(owner.glassImage(canvas: "#111D1A") === prepared)
+        }
+        #expect(owner.glassPreparationCount == 1 && owner.retainedBytes == boundedBytes)
+        let light = try #require(owner.glassImage(canvas: "#EEEEEE"))
+        #expect(light !== prepared && owner.glassPreparationCount == 2 && owner.retainedBytes == boundedBytes)
+        #expect(owner.image === raw && owner.blurred === blurred, "Canvas and titlebar retain their original sources")
+        owner.load(b)
+        #expect(owner.retainedBytes == 0 && owner.glassImage(canvas: "#EEEEEE") == nil)
+        for _ in 0..<100 where owner.blurred == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(owner.glassImage(canvas: "#EEEEEE") !== light && owner.glassPreparationCount == 3)
+        owner.load(b, blur: false)
+        #expect(owner.glassImage(canvas: "#EEEEEE") == nil && owner.retainedBytes == 0)
+        for _ in 0..<100 where owner.image == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(owner.blurred == nil && owner.glassImage(canvas: "#EEEEEE") == nil)
+        owner.load(directory.appendingPathComponent("missing.png"))
+        for _ in 0..<10 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(owner.retainedBytes == 0 && owner.glassImage(canvas: "#EEEEEE") == nil)
+        owner.load(nil); #expect(owner.retainedBytes == 0)
+    }
+
+    @Test(arguments: ["left", "right", "top", "bottom"], [0.0, 0.5, 1.0])
+    func recordedViewportEdgesMatchSingleUnclippedSample(side: String, alpha: Double) throws {
+        let canvas = "#0D0D0D", bounds = CGRect(x: 0, y: 0, width: 40, height: 40)
+        let source = try #require(WorkbenchLocalRenderer.bitmap(width: 100, height: 100))
+        source.setFillColor(CGColor(srgbRed: 0.8, green: 0.8, blue: 0.8, alpha: alpha))
+        source.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+        let raw = try #require(source.makeImage())
+        let image = try #require(WorkbenchLocalRenderer.opaqueSource(raw, canvas: canvas))
+        let rect: CGRect
+        switch side {
+        case "left": rect = bounds.offsetBy(dx: -30, dy: 20)
+        case "right": rect = bounds.offsetBy(dx: 90, dy: 20)
+        case "top": rect = bounds.offsetBy(dx: 20, dy: -30)
+        default: rect = bounds.offsetBy(dx: 20, dy: 90)
+        }
+        func target(_ m: CGFloat) -> CGRect {
+            CGRect(x: 20 + (-rect.minX - 20) * m, y: 20 + (-rect.minY - 20) * m,
+                   width: 100 * m, height: 100 * m)
+        }
+        let outline: (CGRect, CGFloat) -> CGPath = { r, inset in
+            RoundedRectangle(cornerRadius: 8).inset(by: inset).path(in: r).cgPath
+        }
+        func recorded(singleSample: CGFloat?) throws -> [UInt8] {
+            let data = NSMutableData(); var box = CGRect(x: 0, y: 0, width: 192, height: 192)
+            let consumer = try #require(CGDataConsumer(data: data))
+            let c = try #require(CGContext(consumer: consumer, mediaBox: &box, nil))
+            c.beginPDFPage(nil); c.translateBy(x: 4.375, y: 4.125); c.scaleBy(x: 4, y: 4)
+            if let m = singleSample {
+                // Independent reference: one source image over one canvas,
+                // without refraction rings, reused pixels or transparency groups.
+                c.setFillColor(WorkbenchLocalRenderer.color(canvas)); c.fill(bounds)
+                let box = target(m)
+                c.saveGState(); c.translateBy(x: box.minX, y: box.maxY); c.scaleBy(x: 1, y: -1)
+                c.draw(image, in: CGRect(origin: .zero, size: box.size)); c.restoreGState()
+                c.setFillColor(WorkbenchLocalRenderer.color(canvas).copy(alpha: 0.18)!); c.fill(bounds)
+            } else {
+                WorkbenchLocalRenderer.draw(in: c, size: bounds.size, rect: rect, viewport: CGSize(width: 100, height: 100),
+                    image: image, canvas: canvas, panel: canvas, strength: 1, glass: true,
+                    contour: outline, geometry: .init(), opaqueSource: true)
+            }
+            c.endPDFPage(); c.closePDF()
+            let provider = try #require(CGDataProvider(data: data)), pdf = try #require(CGPDFDocument(provider))
+            let replay = try #require(WorkbenchLocalRenderer.bitmap(width: 192, height: 192))
+            replay.drawPDFPage(try #require(pdf.page(at: 1)))
+            let p = try #require(replay.data).assumingMemoryBound(to: UInt8.self)
+            return Array(UnsafeBufferPointer(start: p, count: replay.bytesPerRow * replay.height))
+        }
+        let actual = try recorded(singleSample: nil)
+        var deviation = 0, compared = 0, sourceEdgePixels = 0
+        for i in 0..<12 {
+            let m = 1 + sin((CGFloat(i) + 0.5) / 12 * .pi) * 5.5 / 20
+            let expected = try recorded(singleSample: m), box = target(m)
+            let outer = outline(bounds, CGFloat(i) * 10 / 12)
+            let inner = outline(bounds, CGFloat(i + 1) * 10 / 12)
+            for y in 0..<192 { for x in 0..<192 {
+                let point = CGPoint(x: (CGFloat(x) + 0.5 - 4.375) / 4, y: (191.5 - CGFloat(y) - 4.125) / 4)
+                let corners = [-0.126, 0.126].flatMap { dx in [-0.126, 0.126].map { dy in
+                    CGPoint(x: point.x + dx, y: point.y + dy)
+                } }
+                // Whole device pixels inside one ring must equal that one
+                // unclipped sample, including the source image's own edge.
+                // Curved fractional ring coverage is tested by uniform replay.
+                guard corners.allSatisfy({ outer.contains($0) && !inner.contains($0) }) else { continue }
+                compared += 1
+                if [abs(point.x - box.minX), abs(point.x - box.maxX),
+                    abs(point.y - box.minY), abs(point.y - box.maxY)].min()! <= 0.25 { sourceEdgePixels += 1 }
+                for channel in 0..<4 { let offset = (y * 192 + x) * 4 + channel
+                    deviation = max(deviation, abs(Int(actual[offset]) - Int(expected[offset])))
+                }
+            } }
+        }
+        #expect(compared > 1000 && sourceEdgePixels > 0, "Reference must include image boundaries, not skip them")
+        #expect(deviation <= 2, "Every fully covered ring pixel must equal one sample: \(side), alpha=\(alpha), deviation=\(deviation)")
+    }
+
 }

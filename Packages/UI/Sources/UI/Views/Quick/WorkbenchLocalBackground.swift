@@ -108,6 +108,18 @@ enum WorkbenchLocalRenderer {
             bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
     }
+    /// Composite source alpha once, outside the per-control curved clips. Using
+    /// an opaque image also permits Core Graphics' single-source copy fast path.
+    static func opaqueSource(_ image: CGImage, canvas: String) -> CGImage? {
+        guard let c = CGContext(data: nil, width: image.width, height: image.height,
+            bitsPerComponent: 8, bytesPerRow: image.width * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        c.setFillColor(color(canvas)); c.fill(bounds)
+        c.draw(image, in: bounds)
+        return c.makeImage()
+    }
     static func color(_ hex: String) -> CGColor {
         let n = UInt32(hex.dropFirst(), radix: 16) ?? 0
         return CGColor(srgbRed: CGFloat((n >> 16) & 255) / 255,
@@ -141,16 +153,17 @@ enum WorkbenchLocalRenderer {
         private var size: CGSize = .zero
         private var sourceSize: CGSize = .zero
         private var rings: [RefractionRing] = []
-        func resolve(size: CGSize, rect: CGRect, contour: ((CGRect, CGFloat) -> CGPath)?) -> [RefractionRing] {
-            if self.size == size && sourceSize == rect.size && !rings.isEmpty { return rings }
+        func resolve(size: CGSize, rect: CGRect, contour: ((CGRect, CGFloat) -> CGPath)?, count: Int = 12) -> [RefractionRing] {
+            if self.size == size && sourceSize == rect.size && rings.count == count { return rings }
             self.size = size; sourceSize = rect.size
             let bounds = CGRect(origin: .zero, size: size)
             let scale = min(size.width / rect.width, size.height / rect.height)
             let rim = min(12, min(rect.width, rect.height) / 4)
             let outline = contour ?? { box, inset in CGPath(rect: box.insetBy(dx: inset, dy: inset), transform: nil) }
-            rings = (0..<12).map { i in
-                let inner = outline(bounds, CGFloat(i + 1) * rim / 12 * scale)
-                let path = CGMutablePath(); path.addPath(outline(bounds, CGFloat(i) * rim / 12 * scale)); path.addPath(inner)
+            rings = (0..<count).map { i in
+                let inner = outline(bounds, CGFloat(i + 1) * rim / CGFloat(count) * scale)
+                let path = CGMutablePath(); path.addPath(outline(bounds, CGFloat(i) * rim / CGFloat(count) * scale)); path.addPath(inner)
+                if max(rect.width, rect.height) <= 48 { return RefractionRing(path: path, clips: [bounds]) }
                 var low: CGFloat = 0, high = min(inner.boundingBoxOfPath.width, inner.boundingBoxOfPath.height) / 2
                 var hole = CGRect.null
                 for _ in 0..<9 {
@@ -180,7 +193,7 @@ enum WorkbenchLocalRenderer {
                      image: CGImage?, canvas: String, panel: String, strength: Double,
                      glass: Bool, refraction: Bool = true,
                      contour: ((CGRect, CGFloat) -> CGPath)? = nil,
-                     geometry: RefractionGeometry? = nil) {
+                     geometry: RefractionGeometry? = nil, opaqueSource: Bool = false) {
         guard size.width > 0, size.height > 0, rect.width > 0, rect.height > 0 else { return }
         let bounds = CGRect(origin: .zero, size: size)
         c.saveGState(); defer { c.restoreGState() }
@@ -190,14 +203,11 @@ enum WorkbenchLocalRenderer {
             let sx = size.width / rect.width, sy = size.height / rect.height
             func sample(clip: CGRect, lens: CGPath? = nil, magnification: CGFloat = 1) {
                 c.saveGState()
-                // Ring samples must not blend the canvas reset and translucent
-                // wallpaper separately at fractional boundaries.
-                // The outer rounded shell owns its normal edge antialiasing.
+                // The outer rounded shell owns normal edge antialiasing. A
+                // prepared opaque source remains correct if a recording context
+                // later replays these clips with fractional pixel coverage.
                 c.setAllowsAntialiasing(false); c.setShouldAntialias(false); c.clip(to: clip)
                 if let lens { c.addPath(lens); c.clip(using: .evenOdd) }
-                // Each displaced sample composites once over D's canvas. Reusing
-                // the previous sample would accumulate alpha at the rim/corners.
-                c.setFillColor(color(canvas)); c.fill(bounds)
                 var target = CGRect(x: (mapped.minX - rect.minX) * sx,
                     y: (mapped.minY - rect.minY) * sy, width: mapped.width * sx, height: mapped.height * sy)
                 // A shallow convex lens enlarges only the D background near its
@@ -205,28 +215,42 @@ enum WorkbenchLocalRenderer {
                 target = CGRect(x: size.width / 2 + (target.minX - size.width / 2) * magnification,
                     y: size.height / 2 + (target.minY - size.height / 2) * magnification,
                     width: target.width * magnification, height: target.height * magnification)
+                let prepared = opaqueSource && [.none, .noneSkipFirst, .noneSkipLast].contains(image.alphaInfo)
+                // At a viewport boundary, combine the image and uncovered
+                // canvas before applying the curved clip once. This uncommon
+                // bounded layer avoids both stale edge pixels and double AA.
+                let crossesSourceEdge = prepared && !target.contains(bounds)
+                if crossesSourceEdge { c.beginTransparencyLayer(auxiliaryInfo: nil) }
+                if !prepared || crossesSourceEdge {
+                    c.setFillColor(color(canvas)); c.fill(bounds)
+                }
                 // CGContext image coordinates are bottom-up; the native view is flipped.
+                c.saveGState()
                 c.translateBy(x: target.minX, y: target.maxY); c.scaleBy(x: 1, y: -1)
-                c.draw(image, in: CGRect(origin: .zero, size: target.size)); c.restoreGState()
+                c.draw(image, in: CGRect(origin: .zero, size: target.size))
+                c.restoreGState()
+                if crossesSourceEdge { c.endTransparencyLayer() }
+                c.restoreGState()
             }
             sample(clip: bounds)
-            if glass && refraction {
-                // Follow the actual Capsule/Circle/rounded panel outline. Each
-                // ring resets its own sample, so translucent wallpaper cannot
-                // accumulate. Twelve shared-source samples, no per-control texture.
-                let rings = geometry?.resolve(size: size, rect: rect, contour: contour)
+            if glass && refraction && strength > 0 {
+                // Keep the original twelve-sample lens and clear centre. Small
+                // controls avoid four separate draw calls per ring; large plates
+                // still exclude their expensive central area before sampling.
                 let rim = min(12, min(rect.width, rect.height) / 4)
+                let count = 12
+                let rings = geometry?.resolve(size: size, rect: rect, contour: contour, count: count)
                 let outline = contour ?? { box, inset in CGPath(rect: box.insetBy(dx: inset, dy: inset), transform: nil) }
-                for i in 0..<12 {
+                for i in 0..<count {
                     let ring: CGPath
                     if let rings { ring = rings[i].path }
                     else {
                         let path = CGMutablePath()
-                        path.addPath(outline(bounds, CGFloat(i) * rim / 12 * min(sx, sy)))
-                        path.addPath(outline(bounds, CGFloat(i + 1) * rim / 12 * min(sx, sy)))
+                        path.addPath(outline(bounds, CGFloat(i) * rim / CGFloat(count) * min(sx, sy)))
+                        path.addPath(outline(bounds, CGFloat(i + 1) * rim / CGFloat(count) * min(sx, sy)))
                         ring = path
                     }
-                    let shoulder = sin((CGFloat(i) + 0.5) / 12 * .pi)
+                    let shoulder = sin((CGFloat(i) + 0.5) / CGFloat(count) * .pi)
                     let shift = shoulder * 5.5 * min(1, max(0, strength))
                     let magnification = 1 + shift / max(1, max(rect.width, rect.height) / 2)
                     for clip in rings?[i].clips ?? [bounds] { sample(clip: clip, lens: ring, magnification: magnification) }
@@ -262,7 +286,8 @@ enum WorkbenchLocalRenderer {
 }
 
 /// Window-local resource owner. Position notifications never publish to SwiftUI
-/// or business state. At most two 2048px images are retained, independent of nodes.
+/// or business state. At most three bounded 2048px images are retained: source,
+/// blur and one lazily prepared opaque glass source, independent of node count.
 @MainActor final class WorkbenchBackgroundOwner {
     weak var root: WorkbenchBackgroundNSView?
     let surfaces = NSHashTable<WorkbenchBackgroundNSView>.weakObjects()
@@ -273,6 +298,16 @@ enum WorkbenchLocalRenderer {
     private(set) var blurCount = 0
     private(set) var drawCount = 0
     private(set) var key: URL?
+    private var opaqueGlass: (source: CGImage, canvas: String, image: CGImage)?
+    private(set) var glassPreparationCount = 0
+    func glassImage(canvas: String) -> CGImage? {
+        guard let blurred else { return nil }
+        if let ready = opaqueGlass, ready.source === blurred, ready.canvas == canvas { return ready.image }
+        opaqueGlass = nil
+        guard let prepared = WorkbenchLocalRenderer.opaqueSource(blurred, canvas: canvas) else { return blurred }
+        opaqueGlass = (blurred, canvas, prepared); glassPreparationCount += 1
+        return prepared
+    }
     private var preparesBlur = true
     private var textures: WorkbenchBackgroundTextures?
     private var textureGeneration: UUID?
@@ -285,7 +320,7 @@ enum WorkbenchLocalRenderer {
         preparation?.cancel(); preparation = nil
         textures = cache; textureGeneration = cache?.generation
         key = url; preparesBlur = blur; let ticket = UUID(); request = ticket
-        image = nil; blurred = nil
+        image = nil; blurred = nil; opaqueGlass = nil
         if let url, let ready = cache?.entry, ready.url == url, ready.blur == blur {
             // Synchronous adoption during the NSView update, before its first
             // display. Opening a sheet does not restart background preparation.
@@ -328,7 +363,7 @@ enum WorkbenchLocalRenderer {
         return (rect, root.bounds.size)
     }
     func didDraw() { drawCount += 1 }
-    var retainedBytes: Int { [image, blurred].compactMap { $0 }.reduce(0) { $0 + $1.bytesPerRow * $1.height } }
+    var retainedBytes: Int { [image, blurred, opaqueGlass?.image].compactMap { $0 }.reduce(0) { $0 + $1.bytesPerRow * $1.height } }
 }
 
 private struct WorkbenchBackgroundKey: EnvironmentKey {
@@ -417,9 +452,10 @@ extension EnvironmentValues {
         let coordinates = owner?.coordinates(for: self) ?? (rect: bounds, viewport: bounds.size)
         let enhancement = owner?.readability.effect(for: self) ?? .none
         WorkbenchLocalRenderer.draw(in: c, size: bounds.size, rect: coordinates.rect, viewport: coordinates.viewport,
-            image: isCanvas ? owner?.image : (drawsGlass ? owner?.blurred : nil),
+            image: isCanvas ? owner?.image : (drawsGlass ? owner?.glassImage(canvas: palette.canvas) : nil),
             canvas: isCanvas || drawsGlass ? palette.canvas : palette.panel, panel: palette.panel,
-            strength: strength, glass: !isCanvas && drawsGlass, refraction: !enhancement.contained, contour: contour, geometry: refractionGeometry)
+            strength: strength, glass: !isCanvas && drawsGlass, refraction: !enhancement.contained, contour: contour, geometry: refractionGeometry,
+            opaqueSource: !isCanvas && drawsGlass)
         WorkbenchReadabilityRegistry.paint(enhancement, in: c, view: self)
 
     }
