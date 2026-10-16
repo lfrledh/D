@@ -606,12 +606,13 @@ struct WorkflowControlEditor: View {
     }
 
     private var toolMenu: some View {
-        Menu(text("workflow.language.control.chooseTool", "Choose a fixed tool version")) {
+        WorkbenchMenu(text("workflow.language.control.chooseTool", "Choose a fixed tool version")) {
             if tools.isEmpty {
-                Text(text("workflow.language.control.noTools", "No tools available"))
+                WorkbenchMenuText(text("workflow.language.control.noTools", "No tools available"))
             } else {
-                ForEach(Array(tools.enumerated()), id: \.offset) { _, tool in
-                    Button(tool.name + " v\(tool.version)") { select(tool) }
+                WorkbenchMenuForEach(tools.map { (key: $0.id.uuidString + ":" + String($0.version), value: $0) }, id: \.key) { entry in
+                    let tool = entry.value
+                    WorkbenchMenuAction(tool.name + " v\(tool.version)") { select(tool) }
                 }
             }
         }
@@ -715,7 +716,7 @@ private struct WorkflowControlRuleEditor: View {
                 }
             }
             Button(text("workflow.language.control.addPath", "Add path component")) { rule.path.append("") }
-            Picker(text("workflow.language.control.comparison", "Comparison"), selection: Binding(
+            WorkbenchPicker(text("workflow.language.control.comparison", "Comparison"), selection: Binding(
                 get: { rule.comparison.rawValue },
                 set: {
                     guard let next = WorkflowComparison(rawValue: $0) else { return }
@@ -723,11 +724,11 @@ private struct WorkflowControlRuleEditor: View {
                     if next == .exists { rule.value = nil }
                 }
             )) {
-                ForEach(WorkflowComparison.allCases, id: \.rawValue) { comparison in
-                    Text(text(
+                WorkbenchChoiceForEach(WorkflowComparison.allCases, id: \.rawValue) { comparison in
+                    WorkbenchChoice(text(
                         "workflow.language.control.comparison.\(comparison.rawValue)",
                         comparison.rawValue
-                    )).tag(comparison.rawValue)
+                    ), value:comparison.rawValue)
                 }
             }
             if rule.comparison != .exists {
@@ -760,20 +761,20 @@ private struct WorkflowControlSchemaSampleEditor: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(schema.map(schemaName) ?? text("workflow.language.control.noSchema", "No schema selected"))
                 .font(.caption.monospaced())
-            Menu(text("workflow.language.control.chooseSchema", "Choose schema from sample")) {
-                Button(text("workflow.language.control.type.text", "Text")) { choose(.text("")) }
-                Button(text("workflow.language.control.type.number", "Number")) { choose(.number(0, unit: nil)) }
-                Button(text("workflow.language.control.type.boolean", "Bool")) { choose(.boolean(false)) }
-                Button(text("workflow.language.control.type.enumeration", "Enum")) {
+            WorkbenchMenu(text("workflow.language.control.chooseSchema", "Choose schema from sample")) {
+                WorkbenchMenuAction(text("workflow.language.control.type.text", "Text")) { choose(.text("")) }
+                WorkbenchMenuAction(text("workflow.language.control.type.number", "Number")) { choose(.number(0, unit: nil)) }
+                WorkbenchMenuAction(text("workflow.language.control.type.boolean", "Bool")) { choose(.boolean(false)) }
+                WorkbenchMenuAction(text("workflow.language.control.type.enumeration", "Enum")) {
                     choose(.enumeration("value", choices: ["value"]))
                 }
-                Button(text("workflow.language.control.type.record", "Record")) {
+                WorkbenchMenuAction(text("workflow.language.control.type.record", "Record")) {
                     choose(.record(schema: [], fields: [:]))
                 }
-                Button(text("workflow.language.control.type.list", "List")) {
+                WorkbenchMenuAction(text("workflow.language.control.type.list", "List")) {
                     choose(.list(element: .text, items: []))
                 }
-                Button(text("workflow.language.control.type.optional", "Optional")) { choose(.none(.text)) }
+                WorkbenchMenuAction(text("workflow.language.control.type.optional", "Optional")) { choose(.none(.text)) }
             }
             WorkflowDatumEditor(value: Binding(
                 get: { sample },
@@ -935,12 +936,12 @@ struct WorkflowGraphInterfaceEditor: View {
                     draft.outputs.removeAll { $0.id == row.wrappedValue.id }
                 } label: { Image(systemName: "minus.circle") }
             }
-            Menu(outputSelectionTitle(row.wrappedValue)) {
+            WorkbenchMenu(outputSelectionTitle(row.wrappedValue)) {
                 if choices.isEmpty {
-                    Text(text("workflow.language.control.noPorts", "No output ports available"))
+                    WorkbenchMenuText(text("workflow.language.control.noPorts", "No output ports available"))
                 } else {
-                    ForEach(choices) { choice in
-                        Button(choice.nodeTitle + " · " + choice.port) {
+                    WorkbenchMenuForEach(choices) { choice in
+                        WorkbenchMenuAction(choice.nodeTitle + " · " + choice.port) {
                             row.wrappedValue.nodeID = choice.nodeID
                             row.wrappedValue.port = choice.port
                         }

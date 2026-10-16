@@ -9,6 +9,9 @@ struct SharedLibraryPropertyControls: View {
     var allowsScopeEditing = true
     var onApply: () -> Void = {}
     var onCancel: () -> Void = {}
+    var showsActions = true
+    var applyRequest = 0
+    var onValidationFailure: (String) -> Void = { _ in }
     @State private var widthMin = ""
     @State private var widthMax = ""
     @State private var heightMin = ""
@@ -24,40 +27,14 @@ struct SharedLibraryPropertyControls: View {
         get { query.properties ?? .init() }
         nonmutating set { query.properties = newValue.isEmpty ? nil : newValue }
     }
-    private var projectItems: [SharedLibraryItem] {
-        var seen = Set<UUID>()
-        return items.filter { $0.assetFacts.map { seen.insert($0.instanceID).inserted } ?? false }
-    }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(t("typed", "素材属性与范围", "Asset properties & scope")).font(.subheadline.weight(.semibold))
-            if allowsScopeEditing { Menu(t("scope", "检索作用域", "Query scope")) {
-                Button(t("registeredScope", "全部已登记条目", "All registered entries")) { query.scope = nil }
-                Button(t("dynamicScope", "使用时的当前项目实例", "Current project instance when used")) { query.scope = .init(mode: .currentProject) }.disabled(context.projectID == nil)
-                ForEach(projectItems) { item in
-                    if let facts = item.assetFacts {
-                        Button(item.detail + " · " + t("recordedInstance", "已登记实例", "Recorded instance") + " \((projectItems.map { $0.assetFacts!.instanceID }.sorted { $0.uuidString < $1.uuidString }.firstIndex(of: facts.instanceID) ?? 0) + 1)") {
-                            query.scope = .init(mode: .project, projectID: facts.projectID, instanceID: facts.instanceID)
-                        }
-                    }
-                }
-                Menu(t("runScope", "绑定已登记运行或节点", "Bind a recorded run or node")) {
-                    ForEach(runScopes, id: \.key) { value in
-                        Menu(value.title + " \((runScopes.firstIndex { $0.key == value.key } ?? 0) + 1)") {
-                            Button(t("wholeRun", "此运行的全部结果", "All results of this run")) { query.scope = value.scope }
-                            ForEach(value.nodes, id: \.self) { node in
-                                Button(t("recordedNode", "已登记节点", "Recorded node") + " \((value.nodes.sorted { $0.uuidString < $1.uuidString }.firstIndex(of: node) ?? 0) + 1)") { var scope = value.scope; scope.nodeID = node; query.scope = scope }
-                            }
-                        }
-                    }
-                    if runScopes.isEmpty { Text(t("noRun", "当前索引无运行记录", "No runs in the current index")) }
-                }
-            }
-            }
-            Menu(t("favorite", "收藏", "Favorite")) {
-                Button(t("unrestricted", "不限", "Any")) { properties.favorite = nil }
-                Button(t("onlyFavorite", "仅收藏", "Favorites only")) { properties.favorite = true }
-                Button(t("notFavorite", "未收藏", "Not favorited")) { properties.favorite = false }
+            if allowsScopeEditing { SharedLibraryScopeControls(query: $query, items: items, context: context) }
+            WorkbenchMenu(t("favorite", "收藏", "Favorite")) {
+                WorkbenchMenuAction(t("unrestricted", "不限", "Any")) { properties.favorite = nil }
+                WorkbenchMenuAction(t("onlyFavorite", "仅收藏", "Favorites only")) { properties.favorite = true }
+                WorkbenchMenuAction(t("notFavorite", "未收藏", "Not favorited")) { properties.favorite = false }
             }
             Text(t("pixelRange", "像素范围（留空为不限）", "Pixel range (blank means unbounded)"))
             HStack { Text(t("width", "宽度", "Width")); TextField("min", text: $widthMin); Text("–"); TextField("max", text: $widthMax) }
@@ -67,18 +44,14 @@ struct SharedLibraryPropertyControls: View {
             if hasStart { DatePicker(t("dateAfter", "起始时间", "From"), selection: $dateStart).labelsHidden() }
             Toggle(t("dateBefore", "结束时间", "Until"), isOn: $hasEnd)
             if hasEnd { DatePicker(t("dateBefore", "结束时间", "Until"), selection: $dateEnd).labelsHidden() }
-            Button(t("applyAllFilters", "应用全部条件", "Apply all conditions")) {
-                do {
-                    var next = properties
-                    next.width = try range(widthMin, widthMax); next.height = try range(heightMin, heightMax)
-                    next.registeredAt = hasStart || hasEnd ? .init(start: hasStart ? dateStart : nil, end: hasEnd ? dateEnd : nil) : nil
-                    try next.validate(); try query.scope?.validate(); properties = next; failure = nil; onApply()
-                } catch { failure = t("invalidRange", "请输入正整数范围，结束值不能早于起始值。条件尚未应用。", "Use positive integer ranges and an end after the start. Conditions have not been applied.") }
+            if showsActions {
+                Button(t("applyAllFilters", "应用全部条件", "Apply all conditions"), action: applyChanges)
+                Button(t("cancel", "取消", "Cancel"), action: onCancel).keyboardShortcut(.cancelAction)
             }
-            Button(t("cancel", "取消", "Cancel"), action: onCancel).keyboardShortcut(.cancelAction)
             if let failure { Text(failure).foregroundStyle(.red) }
             Text(t("sourceFilterHint", "模型和直接来源可从对象的“生成与来源”加入条件。保存检索会保存这些条件和明确范围，不修改对象。", "Add model and direct-source conditions from an item's provenance. Saving a query retains all conditions and its explicit scope, without editing items.")).foregroundStyle(.secondary)
         }.font(.caption).textFieldStyle(WorkbenchGlassTextFieldStyle())
+        .onChange(of: applyRequest) { _, _ in applyChanges() }
         .onAppear {
             widthMin = properties.width?.minimum.map(String.init) ?? ""; widthMax = properties.width?.maximum.map(String.init) ?? ""
             heightMin = properties.height?.minimum.map(String.init) ?? ""; heightMax = properties.height?.maximum.map(String.init) ?? ""
@@ -86,30 +59,21 @@ struct SharedLibraryPropertyControls: View {
             dateStart = properties.registeredAt?.start ?? Date(); dateEnd = properties.registeredAt?.end ?? Date()
         }
     }
+    private func applyChanges() {
+                do {
+                    var next = properties
+                    next.width = try range(widthMin, widthMax); next.height = try range(heightMin, heightMax)
+                    next.registeredAt = hasStart || hasEnd ? .init(start: hasStart ? dateStart : nil, end: hasEnd ? dateEnd : nil) : nil
+                    try next.validate(); try query.scope?.validate(); properties = next; failure = nil; onApply()
+                } catch { failure = t("invalidRange", "请输入正整数范围，结束值不能早于起始值。条件尚未应用。", "Use positive integer ranges and an end after the start. Conditions have not been applied."); onValidationFailure(failure!) }
+    }
     private func range(_ minimum: String, _ maximum: String) throws -> SharedLibraryNumberRange? {
         let low = minimum.trimmingCharacters(in: .whitespaces), high = maximum.trimmingCharacters(in: .whitespaces)
         if low.isEmpty && high.isEmpty { return nil }
         guard (low.isEmpty || Int(low) != nil), (high.isEmpty || Int(high) != nil) else { throw SharedLibraryError.invalidProperty }
         let range = SharedLibraryNumberRange(minimum: Int(low), maximum: Int(high)); try range.validate(); return range
     }
-    private struct RunScope {
-        let key: String, title: String
-        let scope: SharedLibraryQueryScope
-        var nodes: [UUID]
-    }
-    private var runScopes: [RunScope] {
-        var values: [String: RunScope] = [:]
-        for item in items {
-            guard let facts = item.assetFacts else { continue }
-            for occurrence in facts.occurrences ?? [] {
-                let key = facts.instanceID.uuidString + occurrence.runID.uuidString
-                if values[key] == nil { values[key] = .init(key: key, title: item.detail + " · " + t("recordedRun", "已登记运行", "Recorded run"),
-                    scope: .init(mode: .run, projectID: facts.projectID, instanceID: facts.instanceID, runID: occurrence.runID), nodes: []) }
-                if values[key]?.nodes.contains(occurrence.nodeID) == false { values[key]?.nodes.append(occurrence.nodeID) }
-            }
-        }
-        return values.values.sorted { $0.key < $1.key }
-    }
+
 }
 
 struct SharedLibraryPropertySummary: View {
@@ -187,5 +151,64 @@ enum SharedLibraryScopeSummary {
         if let id = scope.nodeID { parts.append(text("scopeNode", "节点", "Node") + " " + id.uuidString) }
         if let id = scope.stepID { parts.append(text("scopeCall", "具体调用", "Call") + " " + id.uuidString) }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// Shared scope selector remains visible above the filter's advanced properties.
+struct SharedLibraryScopeControls: View {
+    @Binding var query: SharedLibraryQuery
+    let items: [SharedLibraryItem]
+    let context: SharedLibraryQueryContext
+    @Environment(\.dLanguageStore) private var language
+    private func t(_ key: String, _ zh: String, _ en: String) -> String { metadataText(language, key, zh, en) }
+    private var projectItems: [SharedLibraryItem] {
+        var seen = Set<UUID>()
+        return items.filter { $0.assetFacts.map { seen.insert($0.instanceID).inserted } ?? false }
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            WorkbenchMenu(t("scope", "检索作用域", "Query scope")) {
+                WorkbenchMenuAction(t("registeredScope", "全部已登记条目", "All registered entries")) { query.scope = nil }
+                WorkbenchMenuAction(t("dynamicScope", "使用时的当前项目实例", "Current project instance when used")) { query.scope = .init(mode: .currentProject) }.disabled(context.projectID == nil)
+                WorkbenchMenuForEach(projectItems) { item in
+                    if let facts = item.assetFacts {
+                        WorkbenchMenuAction(item.detail + " · " + t("recordedInstance", "已登记实例", "Recorded instance") + " \((projectItems.map { $0.assetFacts!.instanceID }.sorted { $0.uuidString < $1.uuidString }.firstIndex(of: facts.instanceID) ?? 0) + 1)") {
+                            query.scope = .init(mode: .project, projectID: facts.projectID, instanceID: facts.instanceID)
+                        }
+                    }
+                }
+                WorkbenchSubmenu(t("runScope", "绑定已登记运行或节点", "Bind a recorded run or node")) {
+                    WorkbenchMenuForEach(runScopes, id: \.key) { value in
+                        WorkbenchSubmenu(value.title + " \((runScopes.firstIndex { $0.key == value.key } ?? 0) + 1)") {
+                            WorkbenchMenuAction(t("wholeRun", "此运行的全部结果", "All results of this run")) { query.scope = value.scope }
+                            WorkbenchMenuForEach(value.nodes, id: \.self) { node in
+                                WorkbenchMenuAction(t("recordedNode", "已登记节点", "Recorded node") + " \((value.nodes.sorted { $0.uuidString < $1.uuidString }.firstIndex(of: node) ?? 0) + 1)") { var scope = value.scope; scope.nodeID = node; query.scope = scope }
+                            }
+                        }
+                    }
+                    if runScopes.isEmpty { WorkbenchMenuText(t("noRun", "当前索引无运行记录", "No runs in the current index")) }
+                }
+            }
+            Text(query.scope.map { SharedLibraryScopeSummary.readable($0, text: t) } ?? t("registeredScope", "全部已登记条目", "All registered entries"))
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+    private struct RunScope {
+        let key: String, title: String
+        let scope: SharedLibraryQueryScope
+        var nodes: [UUID]
+    }
+    private var runScopes: [RunScope] {
+        var values: [String: RunScope] = [:]
+        for item in items {
+            guard let facts = item.assetFacts else { continue }
+            for occurrence in facts.occurrences ?? [] {
+                let key = facts.instanceID.uuidString + occurrence.runID.uuidString
+                if values[key] == nil { values[key] = .init(key: key, title: item.detail + " · " + t("recordedRun", "已登记运行", "Recorded run"),
+                    scope: .init(mode: .run, projectID: facts.projectID, instanceID: facts.instanceID, runID: occurrence.runID), nodes: []) }
+                if values[key]?.nodes.contains(occurrence.nodeID) == false { values[key]?.nodes.append(occurrence.nodeID) }
+            }
+        }
+        return values.values.sorted { $0.key < $1.key }
     }
 }

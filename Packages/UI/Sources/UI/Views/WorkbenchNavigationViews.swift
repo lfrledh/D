@@ -5,6 +5,8 @@ import SwiftUI
 /// A project entry point backed only by summaries supplied by the application.
 @MainActor
 public struct ProjectChooserView: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     private let recentProjects: [RecentProjectSummary]
     private let isBusy: Bool
     private let onNew: () -> Void
@@ -45,9 +47,9 @@ public struct ProjectChooserView: View {
                         .font(.system(size: 46, weight: .light))
                         .foregroundStyle(.tint)
                         .accessibilityHidden(true)
-                    Text("选择一个项目")
+                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.222", fallback: "Choose a Project"))
                         .font(.largeTitle.weight(.semibold))
-                    Text("从已有项目继续，或在你的 Mac 上开始新的创作。")
+                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.223", fallback: "Continue an existing project or start creating on your Mac."))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -55,7 +57,7 @@ public struct ProjectChooserView: View {
                 chooserActions
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("最近项目")
+                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.224", fallback: "Recent Projects"))
                         .font(.headline)
                         .accessibilityAddTraits(.isHeader)
                     if recentProjects.isEmpty {
@@ -63,9 +65,9 @@ public struct ProjectChooserView: View {
                             Image(systemName: "clock")
                                 .font(.title2)
                                 .foregroundStyle(.secondary)
-                            Text("还没有最近项目")
+                            Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.225", fallback: "No Recent Projects"))
                                 .font(.headline)
-                            Text("打开或新建的项目会显示在这里。")
+                            Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.226", fallback: "Projects you open or create will appear here."))
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         }
@@ -122,7 +124,7 @@ public struct ProjectChooserView: View {
         .disabled(isBusy)
         .overlay(alignment: .topTrailing) {
             if isBusy {
-                ProgressView("正在整理项目…")
+                ProgressView(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.1", fallback: "Preparing project…"))
                     .controlSize(.small)
                     .padding(16)
                     .accessibilityIdentifier("project-chooser-progress")
@@ -135,21 +137,21 @@ public struct ProjectChooserView: View {
     private var chooserActions: some View {
         let buttons = HStack(spacing: 14) {
             Button(action: onNew) {
-                Label("新建项目…", systemImage: "plus")
+                Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.227", fallback: "New Project…"), systemImage: "plus")
                     .padding(.horizontal, 6)
             }
             .accessibilityIdentifier("new-project")
             .navigationMeasured("new-project", probe: layoutProbe)
 
             Button(action: onOpen) {
-                Label("打开项目…", systemImage: "folder")
+                Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.228", fallback: "Open Project…"), systemImage: "folder")
                     .padding(.horizontal, 6)
             }
             .accessibilityIdentifier("open-project")
             .navigationMeasured("open-project", probe: layoutProbe)
 
             Button(action: onModels) {
-                Label("模型库", systemImage: "cube.transparent")
+                Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.229", fallback: "Model Library"), systemImage: "cube.transparent")
                     .padding(.horizontal, 6)
             }
             .accessibilityIdentifier("open-model-library")
@@ -170,6 +172,8 @@ public struct ProjectChooserView: View {
 /// Project-level navigation around modality-specific content supplied by the application.
 @MainActor
 public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View>: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     private let projectName: String
     private let mode: CreatorMode
     private let availableModes: [CreatorMode]
@@ -253,7 +257,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
         navigationSurface {
             HStack(spacing: 8) {
                 shellButton(
-                    title: "返回项目",
+                    title: workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.230", fallback: "Back to Projects"),
                     symbol: "chevron.left",
                     compact: presentation.compactToolbar,
                     action: onBack
@@ -266,7 +270,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityLabel("项目：\(projectName)")
+                    .accessibilityLabel(consistencyText(legacyLanguage, "copy.WorkbenchNavigationViews.0", arguments: ["v0": String(describing: projectName)]))
                     .navigationMeasured("project-name", probe: layoutProbe)
 
                 sidebarToggle(presentation: presentation)
@@ -276,7 +280,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
                 }
 
                 shellButton(
-                    title: taskCount > 0 ? "项目任务 \(taskCount)" : "项目任务",
+                    title: taskCount > 0 ? "项目任务 \(taskCount)" : workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.5", fallback: "Project Tasks"),
                     symbol: "list.bullet.rectangle",
                     compact: presentation.compactToolbar,
                     badge: taskCount > 0 ? taskCount : nil,
@@ -286,7 +290,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
                 .navigationMeasured("open-project-tasks", probe: layoutProbe)
 
                 shellButton(
-                    title: "模型库",
+                    title: workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.229", fallback: "Model Library"),
                     symbol: "cube.transparent",
                     compact: presentation.compactToolbar,
                     action: onModels
@@ -369,7 +373,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
         } label: {
             Image(systemName: "sidebar.left")
         }
-        .accessibilityLabel(presentation.sidebarUsesPopover ? "打开创作列表" : "显示或隐藏创作列表")
+        .accessibilityLabel(presentation.sidebarUsesPopover ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.231", fallback: "Open Creation List") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.232", fallback: "Show or Hide Creation List"))
         .accessibilityIdentifier("toggle-creations")
         .accessibilityAddTraits((showsSidebarColumn && !presentation.sidebarUsesPopover) || showsSidebarPopover
                                 ? .isSelected : [])
@@ -393,7 +397,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
         } label: {
             Image(systemName: "sidebar.right")
         }
-        .accessibilityLabel(presentation.inspectorUsesPopover ? "打开创作参数" : "显示或隐藏创作参数")
+        .accessibilityLabel(presentation.inspectorUsesPopover ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.233", fallback: "Open Creation Settings") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.234", fallback: "Show or Hide Creation Settings"))
         .accessibilityIdentifier("toggle-inspector")
         .accessibilityAddTraits((showsInspectorColumn && !presentation.inspectorUsesPopover) || showsInspectorPopover
                                 ? .isSelected : [])
@@ -467,6 +471,8 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
 /// A modality-scoped list. Filtering this value view has no project or session side effects.
 @MainActor
 public struct ModalityDocumentList: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     private let documents: [ProjectDocument]
     private let mode: CreatorMode
     private let selectedDocumentID: UUID?
@@ -497,7 +503,7 @@ public struct ModalityDocumentList: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("\(mode.title)创作")
+            Text(consistencyText(legacyLanguage, "copy.WorkbenchNavigationViews.1", arguments: ["v0": String(describing: consistencyText(legacyLanguage, "mode." + mode.rawValue))]))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
@@ -508,9 +514,9 @@ public struct ModalityDocumentList: View {
                     Image(systemName: mode.symbol)
                         .font(.title2)
                         .foregroundStyle(.secondary)
-                    Text("还没有\(mode.title)创作")
+                    Text(consistencyText(legacyLanguage, "copy.WorkbenchNavigationViews.2", arguments: ["v0": String(describing: consistencyText(legacyLanguage, "mode." + mode.rawValue))]))
                         .font(.callout.weight(.medium))
-                    Text("切换模态不会自动创建内容。")
+                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.235", fallback: "Switching modes does not create content automatically."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -547,7 +553,7 @@ public struct ModalityDocumentList: View {
             }
 
             Button(action: onCreate) {
-                Label(mode.newDocumentTitle, systemImage: "plus")
+                Label(consistencyText(legacyLanguage, "newCreation." + mode.rawValue), systemImage: "plus")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)

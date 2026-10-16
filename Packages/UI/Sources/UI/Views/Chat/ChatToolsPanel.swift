@@ -36,14 +36,14 @@ struct ChatToolsPanel: View {
     var body: some View {
         Group {
             VStack(alignment: .leading, spacing: 8) {
-                Picker(wording("Task", "要做什么"), selection: $tool) {
-                    Text(wording("Web search", "联网搜索")).tag("web")
-                    Text(wording("Calculator", "计算器")).tag("calculator")
-                    Text(wording("Units", "单位换算")).tag("units")
-                    Text(wording("Time zones", "时区换算")).tag("time")
-                    Text(wording("CSV statistics", "CSV统计")).tag("csv")
-                    Text(wording("Python analysis", "Python 分析")).tag("python")
-                    Text(wording("External tools (MCP)", "外部工具连接（MCP）")).tag("mcp")
+                WorkbenchPicker(wording("Task", "要做什么"), selection: $tool) {
+                    WorkbenchChoice(wording("Web search", "联网搜索"), value:"web")
+                    WorkbenchChoice(wording("Calculator", "计算器"), value:"calculator")
+                    WorkbenchChoice(wording("Units", "单位换算"), value:"units")
+                    WorkbenchChoice(wording("Time zones", "时区换算"), value:"time")
+                    WorkbenchChoice(wording("CSV statistics", "CSV统计"), value:"csv")
+                    WorkbenchChoice(wording("Python analysis", "Python 分析"), value:"python")
+                    WorkbenchChoice(wording("External tools (MCP)", "外部工具连接（MCP）"), value:"mcp")
                 }.pickerStyle(.menu).accessibilityIdentifier("chat-tool-kind")
                 if tool != "mcp" { toolInput }
                 RetainedContentHost(content: ScrollView {
@@ -189,12 +189,12 @@ struct ChatToolsPanel: View {
                 run(.python(code: pythonCode, inputs: selectedPythonInputs.map(\.reference)))
             }.disabled(chat.isToolRunning).accessibilityIdentifier("chat-python-run")
         case "web":
-            Picker(wording("Search service", "搜索服务"), selection: Binding(get: { session.webOptions?.provider }, set: { value in
+            WorkbenchPicker(wording("Search service", "搜索服务"), selection: Binding(get: { session.webOptions?.provider }, set: { value in
                 updateWeb { $0.provider = value; $0.allowed = false; $0.automaticSearch = false }
             })) {
-                Text(wording("Choose a service", "选择服务")).tag(nil as ChatSearchProvider?)
-                Text("Brave Search").tag(Optional(ChatSearchProvider.brave))
-                Text(wording("Bocha Web Search", "博查 Web Search")).tag(Optional(ChatSearchProvider.bocha))
+                WorkbenchChoice(wording("Choose a service", "选择服务"), value:nil as ChatSearchProvider?)
+                WorkbenchChoice("Brave Search", value:Optional(ChatSearchProvider.brave))
+                WorkbenchChoice(wording("Bocha Web Search", "博查 Web Search"), value:Optional(ChatSearchProvider.bocha))
             }
             if let provider = session.webOptions?.provider {
                 Text(chat.configuredSearchProviders.contains(provider)
@@ -217,11 +217,11 @@ struct ChatToolsPanel: View {
         case "calculator":
             HStack {
                 TextField(wording("Left number", "左数"), text: $left)
-                Picker(wording("Operation", "运算"), selection: $arithmetic) {
-                    Text("+").tag(ChatDeterministicTools.ArithmeticOperator.add)
-                    Text("−").tag(ChatDeterministicTools.ArithmeticOperator.subtract)
-                    Text("×").tag(ChatDeterministicTools.ArithmeticOperator.multiply)
-                    Text("÷").tag(ChatDeterministicTools.ArithmeticOperator.divide)
+                WorkbenchPicker(wording("Operation", "运算"), selection: $arithmetic) {
+                    WorkbenchChoice("+", value:ChatDeterministicTools.ArithmeticOperator.add)
+                    WorkbenchChoice("−", value:ChatDeterministicTools.ArithmeticOperator.subtract)
+                    WorkbenchChoice("×", value:ChatDeterministicTools.ArithmeticOperator.multiply)
+                    WorkbenchChoice("÷", value:ChatDeterministicTools.ArithmeticOperator.divide)
                 }
                 TextField(wording("Right number", "右数"), text: $right)
             }
@@ -230,8 +230,8 @@ struct ChatToolsPanel: View {
         case "units":
             TextField(wording("Value", "数值"), text: $left)
             HStack {
-                Picker(wording("From", "从"), selection: $from) { ForEach(units, id: \.rawValue) { Text($0.rawValue).tag($0) } }
-                Picker(wording("To", "到"), selection: $to) { ForEach(units.filter { $0.family == from.family }, id: \.rawValue) { Text($0.rawValue).tag($0) } }
+                WorkbenchPicker(wording("From", "从"), selection: $from) { WorkbenchChoiceForEach(units, id: \.rawValue) { WorkbenchChoice($0.rawValue, value:$0) } }
+                WorkbenchPicker(wording("To", "到"), selection: $to) { WorkbenchChoiceForEach(units.filter { $0.family == from.family }, id: \.rawValue) { WorkbenchChoice($0.rawValue, value:$0) } }
             }
             Button(wording("Convert", "换算")) {
                 guard let number = Double(left) else { issue = wording("Enter a number.", "请输入数值。"); return }
@@ -242,9 +242,9 @@ struct ChatToolsPanel: View {
             TextField("IANA · Asia/Tokyo", text: $zone)
             Button(wording("Convert from UTC", "从UTC换算")) { run(.time(.init(instant: instant, sourceTimeZone: "UTC", targetTimeZone: zone))) }.disabled(chat.isToolRunning)
         default:
-            Picker(wording("Selected text attachment (CSV)", "选择文字附件（CSV）"), selection: $csvID) {
-                Text(wording("Select", "请选择")).tag(nil as UUID?)
-                ForEach(session.attachments.filter { $0.reference.kind == .text }) { Text($0.name).tag(Optional($0.id)) }
+            WorkbenchPicker(wording("Selected text attachment (CSV)", "选择文字附件（CSV）"), selection: $csvID) {
+                WorkbenchChoice(wording("Select", "请选择"), value:nil as UUID?)
+                WorkbenchChoiceForEach(session.attachments.filter { $0.reference.kind == .text }) { WorkbenchChoice($0.name, value:Optional($0.id)) }
             }
             TextField(wording("Numeric columns, comma separated", "数值列名，用逗号分隔"), text: $columns)
             Button(wording("Analyze full CSV", "统计完整CSV")) {

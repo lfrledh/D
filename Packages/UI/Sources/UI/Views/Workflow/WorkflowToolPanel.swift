@@ -118,10 +118,10 @@ private struct WorkflowBoundarySchemaPicker: View {
     }
     var body: some View {
         VStack(alignment: .leading) {
-            Menu(language?.text("workflow.language.tools.type", fallback: "类型 / 媒体引用") ?? "类型 / 媒体引用") {
-                Button(language?.text("workflow.language.form.type.text", fallback: "文字") ?? "文字") { schema = .text; sample = .text("") }
-                ForEach([WorkflowDataKind.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch], id: \.self) { kind in
-                    Button(assetTitle(kind)) { schema = .asset(kind); sample = nil }
+            WorkbenchMenu(language?.text("workflow.language.tools.type", fallback: "类型 / 媒体引用") ?? "类型 / 媒体引用") {
+                WorkbenchMenuAction(language?.text("workflow.language.form.type.text", fallback: "文字") ?? "文字") { schema = .text; sample = .text("") }
+                WorkbenchMenuForEach([WorkflowDataKind.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch], id: \.self) { kind in
+                    WorkbenchMenuAction(assetTitle(kind)) { schema = .asset(kind); sample = nil }
                 }
             }
             if case .asset(let kind) = schema { Text(assetTitle(kind)).font(.caption) }

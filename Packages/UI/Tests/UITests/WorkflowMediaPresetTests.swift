@@ -122,7 +122,7 @@ struct WorkflowMediaPresetTests {
             onPublishText: { callbacks += 1 },
             onReturnText: { _ in callbacks += 1 },
             onAdditionalModel: { _ in callbacks += 1 }
-        ).environment(\.dLanguageStore, language)
+        ).startingPanels(WorkflowWorkspacePanels(preparation: .configuration)).environment(\.dLanguageStore, language)
         let host = NSHostingView(rootView: view)
         host.frame = CGRect(x: 0, y: 0, width: 1_420, height: 1_000)
         let window = NSWindow(

@@ -54,6 +54,7 @@ struct WorkflowHostView: View {
                     }
             } else { ProgressView((languageStore?.text("workflow.host.loading", fallback: "正在读取项目流程…") ?? "正在读取项目流程…")) }
         }
+        .environment(\.workbenchModelReadiness, model.projectSession.explicitModelReadiness)
         .task(id: model.manifest?.effectiveInstanceID) { await model.projectSession.openWorkflow() }
     }
     private func chooseModel(controller: WorkflowController, kind: WorkflowModelKind) {
@@ -129,10 +130,13 @@ struct WorkflowHostView: View {
         await controller.importLibraryFile(url, mode: mode)
     }
     private func destination(_ controller: WorkflowController) async {
-        guard !model.isBusy, !model.isChangingProject else { return }
+        await Self.chooseDestination(controller, model: model, language: languageStore)
+    }
+    static func chooseDestination(_ controller: WorkflowController, model: WorkbenchModel, language languageStore: UILanguageStore?) async {
+        guard model.projectSession.workflow === controller, controller.readOnlyReason == nil, !model.isBusy, !model.isChangingProject else { return }
         let panel = NSOpenPanel(); panel.title = (languageStore?.text("workflow.host.destination", fallback: "选择导出目录（新建包含媒体、配方和回执的导出包）") ?? "选择导出目录（新建包含媒体、配方和回执的导出包）")
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
-        guard await panel.begin() == .OK, let url = panel.url, model.projectSession.workflow === controller else { return }
+        guard await panel.begin() == .OK, let url = panel.url, model.projectSession.workflow === controller, controller.readOnlyReason == nil, !model.isBusy, !model.isChangingProject else { return }
         await model.projectSession.selectWorkflowDestination(at: url)
     }
 }

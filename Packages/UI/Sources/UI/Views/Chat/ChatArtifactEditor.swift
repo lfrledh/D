@@ -237,10 +237,10 @@ struct ChatArtifactEditor: View {
             TextField(wording("Title", "标题"), text: Binding(
                 get: { state.draft.title }, set: { state.updateTitle($0) }))
                 .accessibilityIdentifier("chat-artifact-title")
-            Picker(wording("Format", "格式"), selection: Binding(
+            WorkbenchPicker(wording("Format", "格式"), selection: Binding(
                 get: { state.draft.kind }, set: { state.updateKind($0) })) {
-                ForEach(ChatArtifactContent.Kind.allCases, id: \.self) { kind in
-                    Text(kindName(kind)).tag(kind)
+                WorkbenchChoiceForEach(ChatArtifactContent.Kind.allCases, id: \.self) { kind in
+                    WorkbenchChoice(kindName(kind), value:kind)
                 }
             }.accessibilityIdentifier("chat-artifact-kind")
             HStack {

@@ -53,13 +53,13 @@ struct ChatKnowledgePanel: View {
                                 try chat.setKnowledgeScope(scope, sessionID: session.id)
                             }
                         }))
-                        Menu {
-                            Button(wording("Quote a selection…", "选择片段引用…")) { quote(document.id) }
-                            Button(wording("View original", "查看原件")) { preview(document.material.reference) }
+                        WorkbenchMenu {
+                            WorkbenchMenuAction(wording("Quote a selection…", "选择片段引用…")) { quote(document.id) }
+                            WorkbenchMenuAction(wording("View original", "查看原件")) { preview(document.material.reference) }
                             if !chat.ownsPersonalMemory && !chat.isTemporary {
-                                Button(wording("Copy to personal collection", "复制到个人资料库")) { copy(document.id, toPersonal: true) }
+                                WorkbenchMenuAction(wording("Copy to personal collection", "复制到个人资料库")) { copy(document.id, toPersonal: true) }
                             }
-                            Button(wording("Remove from search collection", "移出检索集合")) {
+                            WorkbenchMenuAction(wording("Remove from search collection", "移出检索集合")) {
                                 change { try chat.removeKnowledgeDocument(document.id) }
                             }
                         } label: { Image(systemName: "ellipsis") }

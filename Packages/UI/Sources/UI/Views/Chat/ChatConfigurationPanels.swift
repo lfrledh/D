@@ -155,13 +155,13 @@ struct ChatPresetsPanel: View {
                     }
                     .disabled(session == nil || session?.archived == true || session?.contextChoices?.deletedAt != nil || !chat.isLoaded || chat.saveIssue != nil)
                     .accessibilityIdentifier("chat-preset-apply-\(preset.id.uuidString)")
-                    Menu {
-                        Button(text("edit", "Edit…", "编辑…")) { load(preset) }
-                        Button(text("duplicate", "Duplicate", "复制")) {
+                    WorkbenchMenu {
+                        WorkbenchMenuAction(text("edit", "Edit…", "编辑…")) { load(preset) }
+                        WorkbenchMenuAction(text("duplicate", "Duplicate", "复制")) {
                             perform { _ = try chat.copyPreset(preset.id,
                                 name: preset.name + text("copySuffix", " Copy", " 副本")) }
                         }
-                        Button(text("delete", "Delete", "删除"), role: .destructive) {
+                        WorkbenchMenuAction(text("delete", "Delete", "删除"), role: .destructive) {
                             perform { try chat.removePreset(preset.id) }
                             if editingID == preset.id && issue == nil { editorOpen = false }
                         }
@@ -178,7 +178,7 @@ struct ChatPresetsPanel: View {
                     .disabled(chat.state.presets.isEmpty)
             }
             if editorOpen { editor }
-            if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+            if let issue { WorkbenchIssueText(raw: issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -343,7 +343,7 @@ struct ChatComparisonPanel: View {
                 Text(text("missing", "The source answer is no longer in this conversation.", "原回答已不在此对话中。"))
                     .foregroundStyle(.secondary)
             }
-            if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+            if let issue { WorkbenchIssueText(raw: issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -377,7 +377,7 @@ struct ChatComparisonPanel: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }.frame(minHeight: 120, maxHeight: 260)
             if let issue = attempt.issue {
-                Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                WorkbenchIssueText(raw: issue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             Button(text("choose", "Choose this answer", "选择此回答")) {
                 perform { try ChatConfigurationActions.choose(attempt, sessionID: sessionID, chat: chat) }

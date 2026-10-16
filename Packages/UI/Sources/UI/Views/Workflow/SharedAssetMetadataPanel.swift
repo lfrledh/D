@@ -90,9 +90,9 @@ struct SharedAssetMetadataPanel: View {
                         row(t("revision", "模型版本", "Model revision"), model.revision == nil ? unknown : t("exactRecordedVersion", "精确已记录版本（见技术详情）", "Exact recorded revision (see technical details)"))
                         WorkflowTechnicalDetails(value: model.value + "\n" + (model.revision ?? unknown))
                         if let onQuery {
-                            Menu(t("filterModel", "按此模型筛选", "Filter by this model")) {
-                                if model.revision != nil { Button(t("exactVersion", "精确模型及版本", "Exact model & revision")) { onQuery(.init(model: model)) } }
-                                Button(t("allVersions", "此模型的所有已记录版本", "All recorded revisions of this model")) { var source = model; source.revision = nil; onQuery(.init(model: source)) }
+                            WorkbenchMenu(t("filterModel", "按此模型筛选", "Filter by this model")) {
+                                if model.revision != nil { WorkbenchMenuAction(t("exactVersion", "精确模型及版本", "Exact model & revision")) { onQuery(.init(model: model)) } }
+                                WorkbenchMenuAction(t("allVersions", "此模型的所有已记录版本", "All recorded revisions of this model")) { var source = model; source.revision = nil; onQuery(.init(model: source)) }
                             }
                         }
                     } else { row(t("model", "实际记录模型", "Recorded model"), unknown) }

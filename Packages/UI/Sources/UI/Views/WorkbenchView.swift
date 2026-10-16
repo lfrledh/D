@@ -4,6 +4,8 @@ import SwiftUI
 
 /// The workbench presents saved project values and application actions, never model objects.
 public struct WorkbenchView: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     @Bindable private var model: WorkbenchModel
     private let library: ModelLibraryModel?
     private let nodeTags: ModelNodeTagStore
@@ -107,23 +109,27 @@ public struct WorkbenchView: View {
         }
         .environment(\.metadataEditorLifecycle, MetadataEditorLifecycle(begin: model.beginEditing, end: model.endEditing))
         .focusedSceneValue(\.workbenchGeneration, visibleGenerationCommand)
+        .focusedSceneValue(\.workbenchSave, WorkbenchGenerationCommand(
+            title: language?.text("command.text.save", fallback: "保存文稿") ?? "Save Document",
+            isEnabled: model.creatorMode == .text && model.projectSession.text != nil && !model.isChangingProject,
+            action: { let owner = model.projectSession; Task { guard model.projectSession === owner else { return }; await owner.saveText() } }))
         .disabled(model.isChangingProject)
         .overlay {
             if model.isChangingProject {
                 VStack(spacing: 12) {
                     ProgressView()
-                    Text("正在整理项目…").font(.callout)
+                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.1", fallback: "Preparing project…")).font(.callout)
                 }
                 .padding(24)
                 .background(.background, in: RoundedRectangle(cornerRadius: 18))
                 .shadow(color: .black.opacity(0.10), radius: 20, y: 8)
             }
         }
-        .alert("操作未完成", isPresented: Binding(
+        .alert(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.2", fallback: "Operation Not Completed"), isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.clearError() } }
         )) {
-            Button("好", role: .cancel) { model.clearError() }
+            Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.3", fallback: "OK"), role: .cancel) { model.clearError() }
         } message: {
             Text(model.errorMessage ?? "")
         }
@@ -149,7 +155,7 @@ public struct WorkbenchView: View {
 
     private var visibleGenerationCommand: WorkbenchGenerationCommand {
         if workflowVisible {
-            WorkbenchGenerationCommand(title: "请在画布中选择运行目标", isEnabled: false, action: {})
+            WorkbenchGenerationCommand(title: workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.4", fallback: "Choose a Run Target on the Canvas"), isEnabled: false, action: {})
         } else {
             nodePresentation.generationCommand(model: model, enabled: { visibleGenerationEnabled })
         }
@@ -177,10 +183,10 @@ public struct WorkbenchView: View {
         .observingLayout { layoutProbe?($0, $1) }
         .popover(isPresented: $showTasks) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("项目任务").font(.headline)
-                if model.manifest?.jobs.isEmpty == true { Text("还没有生成任务。").foregroundStyle(.secondary) }
+                Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.5", fallback: "Project Tasks")).font(.headline)
+                if model.manifest?.jobs.isEmpty == true { Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.6", fallback: "No generation tasks yet.")).foregroundStyle(.secondary) }
                 WorkbenchTasks(model: model, isExpanded: $expandTasks)
-                Button("检查可恢复作品") { Task { await model.recoverArtifacts() } }.disabled(model.isBusy)
+                Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.7", fallback: "Check for Recoverable Work")) { Task { await model.recoverArtifacts() } }.disabled(model.isBusy)
             }.padding(16).frame(width: 600)
         }
         .sheet(item: $namingContext, onDismiss: { model.endEditing() }) { context in
@@ -211,7 +217,7 @@ public struct WorkbenchView: View {
                     selectedDocumentID: model.presentedDocument?.id,
                     onSelect: { id in Task { await model.switchDocument(to: id) } }, onCreate: createDocument)
                 if let document = model.presentedDocument {
-                    Button("重命名当前创作…") {
+                    Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.8", fallback: "Rename Current Creation…")) {
                         model.beginEditing()
                         namingContext = DocumentNameContext(documentID: document.id, name: document.name)
                     }
@@ -242,22 +248,22 @@ public struct WorkbenchView: View {
             if let node = visibleNodes.first(where: { $0.id == selectedNodeID }) {
                 let legacy = SharedLibraryTagTarget.legacy(nodeTags.readState(for: node.id))
                 ModelNodeDetail(node: node, tagState: nodeTags.readState(for: node.id),
-                    onTagsChange: { _ in "Use shared organization tags / 请使用共享组织标签" },
+                    onTagsChange: { _ in workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.9", fallback: "Use the shared organization tags.") },
                     organizationTags: AnyView(SharedLibraryTagSection(store: metadata,
                         target: .init(key: node.id, title: node.title, legacy: legacy.names, legacyFailure: legacy.failure),
                         validateTarget: nodePresentation.tagValidation(node: node, model: model))))
                 .id(node.id)
             } else {
-                ContentUnavailableView("查看模型节点", systemImage: "square.stack.3d.up",
-                    description: Text("从左侧选择一个\(model.creatorMode.title)模型，查看输入、输出、参数与执行来源。此原型不运行推理或下载模型。"))
+                ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.10", fallback: "Explore Model Nodes"), systemImage: "square.stack.3d.up",
+                    description: Text(consistencyText(legacyLanguage, "copy.WorkbenchView.0", arguments: ["v0": String(describing: consistencyText(legacyLanguage, "mode." + model.creatorMode.rawValue))])))
             }
         } else if model.presentedDocument == nil {
             ContentUnavailableView {
-                Label("开始\(model.creatorMode.title)创作", systemImage: model.creatorMode.symbol)
+                Label(consistencyText(legacyLanguage, "copy.WorkbenchView.1", arguments: ["v0": String(describing: consistencyText(legacyLanguage, "mode." + model.creatorMode.rawValue))]), systemImage: model.creatorMode.symbol)
             } description: {
-                Text("这个项目还没有此类创作。切换模态不会自动创建文档。")
+                Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.11", fallback: "This project has no creations of this type yet. Switching modes does not create a document."))
             } actions: {
-                Button(model.creatorMode.newDocumentTitle, action: createDocument).buttonStyle(WorkbenchPrimaryButtonStyle())
+                Button(consistencyText(legacyLanguage, "newCreation." + model.creatorMode.rawValue), action: createDocument).buttonStyle(WorkbenchPrimaryButtonStyle())
             }
         } else {
             VStack(spacing: 0) {
@@ -270,12 +276,12 @@ public struct WorkbenchView: View {
                             guard let job = model.selectedJob else { return }
                             Task { await model.copySettings(from: job.id) }
                         } label: { Image(systemName: "arrow.branch") }
-                        .disabled(model.selectedJob == nil).help("基于条件新建创作")
-                        .accessibilityLabel("基于条件新建创作").accessibilityIdentifier("copy-settings")
+                        .disabled(model.selectedJob == nil).help(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.12", fallback: "Create from These Settings"))
+                        .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.12", fallback: "Create from These Settings")).accessibilityIdentifier("copy-settings")
                         .audioMeasured("copy-settings", probe: layoutProbe)
                         Button { Task { await model.exportSelected() } } label: { Image(systemName: "square.and.arrow.up") }
-                            .disabled(model.selectedAsset == nil).help("导出原始 PNG")
-                            .accessibilityLabel("导出作品").accessibilityIdentifier("export-artwork")
+                            .disabled(model.selectedAsset == nil).help(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.13", fallback: "Export Original PNG"))
+                            .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.14", fallback: "Export Work")).accessibilityIdentifier("export-artwork")
                             .audioMeasured("export-artwork", probe: layoutProbe)
                     }
                 }.padding(12)
@@ -300,7 +306,7 @@ public struct WorkbenchView: View {
             VStack(spacing: 0) {
                 if let assetID = model.activeDocument?.audioDraft?.assetID {
                     HStack {
-                        Button("基于原声创建 AI 候选", systemImage: "waveform.badge.plus") {
+                        Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.15", fallback: "Create an AI Candidate from Original Audio"), systemImage: "waveform.badge.plus") {
                             Task { await model.createAudioCreation(sourceAssetID: assetID) }
                         }
                         .disabled(model.isBusy)
@@ -309,19 +315,19 @@ public struct WorkbenchView: View {
                     }.padding(.horizontal, 20).padding(.top, 12)
                 }
                 if model.projectSession.hasPitchEngine || model.presentedDocument?.pitchAnalysis != nil {
-                    Picker("原声工作方式", selection: $showingPitchAnalysis) {
-                        Text("原声与片段").tag(false)
-                        Text("音高识别").tag(true)
+                    Picker(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.16", fallback: "Original Audio Mode"), selection: $showingPitchAnalysis) {
+                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.17", fallback: "Original Audio and Clips")).tag(false)
+                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.18", fallback: "Pitch Detection")).tag(true)
                     }.pickerStyle(.segmented).padding(.horizontal, 20)
                         .accessibilityIdentifier("audio-analysis-mode")
                 }
                 if showingPitchAnalysis && (model.projectSession.hasPitchEngine || model.presentedDocument?.pitchAnalysis != nil) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(audio.document?.selectedClipID == nil ? "识别范围：完整原声" : "识别范围：当前已保存片段")
+                        Text(audio.document?.selectedClipID == nil ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.19", fallback: "Detection Range: Full Original Audio") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.20", fallback: "Detection Range: Current Saved Clip"))
                             .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20)
                         if model.projectSession.pitchResult == nil, model.projectSession.pitchResultAssetID != nil,
                            !model.projectSession.pitchHasSaved {
-                            Button("拒绝不可读取的候选") { Task { await model.projectSession.decidePitchAnalysis(accept: false) } }
+                            Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.21", fallback: "Reject Unreadable Candidate")) { Task { await model.projectSession.decidePitchAnalysis(accept: false) } }
                                 .disabled(model.projectSession.pitchIsBusy).padding(.horizontal, 20)
                                 .accessibilityIdentifier("pitch-reject-unreadable")
                         }
@@ -355,17 +361,17 @@ public struct WorkbenchView: View {
         } else if model.isComparing {
             ArtworkComparison(model: model)
         } else if let asset = model.selectedAsset, let url = model.assetURLs[asset.id] {
-            ArtworkCanvas(url: url, label: "已保存的作品")
+            ArtworkCanvas(url: url, label: workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.22", fallback: "Saved Work"))
         } else if model.selectedAsset != nil {
-            ContentUnavailableView("作品暂时无法访问", systemImage: "externaldrive.badge.exclamationmark",
-                description: Text("请连接项目所在的磁盘，然后重新打开项目。已保存的作品不会被移除。"))
+            ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.23", fallback: "Work Is Currently Unavailable"), systemImage: "externaldrive.badge.exclamationmark",
+                description: Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.24", fallback: "Connect the disk containing this project, then reopen the project. Your saved work will be kept.")))
         } else {
             ZStack {
                 Color(nsColor: .underPageBackgroundColor)
                 ContentUnavailableView {
-                    Label("从一个想法开始", systemImage: "photo.on.rectangle.angled")
+                    Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.25", fallback: "Start with an Idea"), systemImage: "photo.on.rectangle.angled")
                 } description: {
-                    Text("在右侧描述你想创作的画面。\n作品会自动保存在这个项目中。")
+                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.26", fallback: "Describe the image you want to create on the right.\nYour work will be saved automatically in this project."))
                 }
             }
         }
@@ -423,20 +429,20 @@ public struct WorkbenchView: View {
             let epoch = project.navigationEpoch
             VStack(spacing: 0) {
                 if project.textSourcesEnabled && presentation != .parameters {
-                    Picker("文字工作", selection: $model.showingTextSources) {
-                        Text("选段改写").tag(false)
-                        Text("资料问答").tag(true)
+                    Picker(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.27", fallback: "Text Task"), selection: $model.showingTextSources) {
+                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.28", fallback: "Rewrite Selection")).tag(false)
+                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.29", fallback: "Questions About Sources")).tag(true)
                     }.pickerStyle(.segmented).padding(8)
                 }
                 if model.showingTextSources && presentation != .parameters, let sources = project.textSources {
                     HStack {
                         Text(project.textModelStatus).font(.caption)
                         Spacer()
-                        Button("选择文字模型") { Task { await model.chooseTextModel() } }.buttonStyle(WorkbenchGlassButtonStyle())
+                        Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.30", fallback: "Choose Text Model")) { Task { await model.chooseTextModel() } }.buttonStyle(WorkbenchGlassButtonStyle())
                             .disabled(project.isBusy || project.isRegisteringTextModel)
                     }.padding(8)
                     if let pending = sources.unsavedCompletedRecord {
-                        Text("完整回答尚未保存：请移除当前不需要的资料以腾出归档空间，再重试保存。\n" + pending.answer)
+                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.31", fallback: "The complete answer has not been saved. Remove sources you no longer need to free archive space, then retry saving.\n") + pending.answer)
                             .font(.caption).textSelection(.enabled).lineLimit(6).padding(8)
                     }
                     TextSourcesView(notebook: sources.notebook, partialAnswer: sources.partialAnswer,
@@ -460,8 +466,8 @@ public struct WorkbenchView: View {
                 if !model.showingTextSources && project.isTextWorking && !text.editor.isRunning {
                     HStack {
                         ProgressView().controlSize(.small)
-                        Text("正在校验本地文字模型…")
-                        Button("取消") { Task { await project.cancelTextRewrite() } }
+                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.32", fallback: "Verifying local text model…"))
+                        Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.33", fallback: "Cancel")) { Task { await project.cancelTextRewrite() } }
                     }.padding(8)
                 }
                 TextWorkbenchView(session: text.editor, selection: text.selection,
@@ -579,15 +585,17 @@ public struct WorkbenchView: View {
 }
 
 private struct AudioCaptureEntry: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     @Bindable var model: WorkbenchModel
     let audio: ProjectAudioController
     var body: some View { ScrollView { VStack(alignment: .leading, spacing: 8) { entries }.padding(10) } }
     @ViewBuilder private var entries: some View {
         let contextID = audio.contextID
         let renderDocumentID = model.activeDocumentID
-        Text("原声素材").font(.caption.weight(.semibold))
+        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.34", fallback: "Original Audio")).font(.caption.weight(.semibold))
         Button(action: model.audioImportAction(contextID: contextID, documentID: renderDocumentID)) {
-            Label("导入原声…", systemImage: "waveform.badge.plus")
+            Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.35", fallback: "Import Original Audio…"), systemImage: "waveform.badge.plus")
                 .frame(maxWidth: .infinity, alignment: .leading).padding(8)
         }
         .disabled(model.isChangingProject || audio.isBusy)
@@ -596,7 +604,7 @@ private struct AudioCaptureEntry: View {
             Button {
                 Task { await model.finishAudioRecording() }
             } label: {
-                Label(audio.transport.state == .recording ? "结束录音" : "取消等待",
+                Label(audio.transport.state == .recording ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.36", fallback: "Finish Recording") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.37", fallback: "Cancel Waiting"),
                       systemImage: "stop.fill")
                     .frame(maxWidth: .infinity, alignment: .leading).padding(8)
             }
@@ -605,22 +613,22 @@ private struct AudioCaptureEntry: View {
             Button {
                 Task { await model.startAudioRecording() }
             } label: {
-                Label(model.audioRecordingEnabled ? "开始录音" : "录音尚未启用",
+                Label(model.audioRecordingEnabled ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.38", fallback: "Start Recording") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.39", fallback: "Recording Is Not Enabled"),
                       systemImage: model.audioRecordingEnabled ? "mic.fill" : "mic.slash")
                     .frame(maxWidth: .infinity, alignment: .leading).padding(8)
             }
             .disabled(!model.audioRecordingEnabled)
             .accessibilityIdentifier("sidebar-audio-record-start")
             Text(model.audioRecordingEnabled
-                 ? "点击开始录音后请求麦克风许可；结束后保存在本地项目。"
-                 : "麦克风录音暂未启用；不会申请系统许可。")
+                 ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.40", fallback: "Starting a recording requests microphone access. The recording is saved in the local project when finished.")
+                 : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.41", fallback: "Microphone recording is not enabled. No system permission will be requested."))
                 .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8)
         }
         ForEach(audio.pendingCaptures) { capture in
             VStack(alignment: .leading, spacing: 4) {
-                Text("待恢复：\(capture.name)").font(.caption).lineLimit(1)
+                Text(consistencyText(legacyLanguage, "copy.WorkbenchView.2", arguments: ["v0": String(describing: capture.name)])).font(.caption).lineLimit(1)
                 HStack {
-                    Button("重试") {
+                    Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.42", fallback: "Retry")) {
                         Task {
                             await model.retryPendingAudioCapture(
                                 id: capture.id, contextID: contextID,
@@ -628,7 +636,7 @@ private struct AudioCaptureEntry: View {
                             )
                         }
                     }
-                    Button("保留") {
+                    Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.43", fallback: "Keep")) {
                         model.keepPendingAudioCaptureForRecovery(
                             id: capture.id, contextID: contextID,
                             renderDocumentID: renderDocumentID
@@ -644,13 +652,15 @@ private struct AudioCaptureEntry: View {
 }
 
 private struct ImageCandidateTray: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     @Bindable var model: WorkbenchModel
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("当前创作的候选").font(.caption.weight(.semibold))
+                Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.44", fallback: "Candidates for This Creation")).font(.caption.weight(.semibold))
                 Spacer()
-                Button("比较已选 \(model.comparisonSelection.count)/2") { model.beginComparison() }
+                Button(consistencyText(legacyLanguage, "copy.WorkbenchView.3", arguments: ["v0": String(describing: model.comparisonSelection.count)])) { model.beginComparison() }
                     .disabled(model.comparisonSelection.count != 2)
                     .accessibilityIdentifier("compare-artworks")
             }
@@ -670,9 +680,9 @@ private struct ImageCandidateTray: View {
                         Text(asset.name).font(.callout.weight(model.selectedAssetID == asset.id ? .semibold : .regular))
                             .lineLimit(2)
                         HStack(spacing: 4) {
-                            if asset.isFavorite { Image(systemName: "star.fill").accessibilityLabel("已收藏") }
+                            if asset.isFavorite { Image(systemName: "star.fill").accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.45", fallback: "Favorite")) }
                             if model.documents.contains(where: { $0.adoptedAssetID == asset.id }) {
-                                Label("已采用", systemImage: "checkmark.seal.fill")
+                                Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.46", fallback: "In Use"), systemImage: "checkmark.seal.fill")
                             }
                         }.font(.caption).foregroundStyle(.secondary)
                     }
@@ -689,9 +699,9 @@ private struct ImageCandidateTray: View {
                 Image(systemName: model.comparisonSelection.contains(asset.id) ? "checkmark.circle.fill" : "circle")
             }
             .disabled(!model.comparisonSelection.contains(asset.id) && model.comparisonSelection.count == 2)
-            .help("选择两张作品进行比较")
-            .accessibilityLabel("比较 \(asset.name)")
-            .accessibilityValue(model.comparisonSelection.contains(asset.id) ? "已选择" : "未选择")
+            .help(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.47", fallback: "Select Two Images to Compare"))
+            .accessibilityLabel(consistencyText(legacyLanguage, "copy.WorkbenchView.4", arguments: ["v0": String(describing: asset.name)]))
+            .accessibilityValue(model.comparisonSelection.contains(asset.id) ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.48", fallback: "Selected") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.49", fallback: "Not Selected"))
             .accessibilityIdentifier("compare-select-\(asset.id.uuidString)")
         }
         .padding(8)
@@ -711,6 +721,8 @@ private struct DocumentNameContext: Identifiable {
 }
 
 private struct DocumentNameEditor: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     @Bindable var model: WorkbenchModel
     let context: DocumentNameContext
     @State private var name: String
@@ -730,18 +742,18 @@ private struct DocumentNameEditor: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(context.title)
                 .accessibilityIdentifier("document-name-title")
-            TextField("创作名称", text: $name)
+            TextField(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.52", fallback: "Creation Name"), text: $name)
                 .textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .accessibilityIdentifier("document-name")
             if let saveError { Text(saveError).font(.caption).foregroundStyle(.red) }
             if model.editorCloseAttempted {
-                Text("请先保存或取消编辑，再关闭项目或退出 D。")
+                Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.53", fallback: "Save or cancel your edits before closing the project or quitting D."))
                     .font(.caption).accessibilityIdentifier("pending-editor-close")
             }
             HStack {
                 Spacer()
-                Button("取消", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("保存") {
+                Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.33", fallback: "Cancel"), role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.54", fallback: "Save")) {
                     let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
                     let previousCount = model.documents.count
                     saving = true
@@ -754,7 +766,7 @@ private struct DocumentNameEditor: View {
                         } ?? (model.documents.count > previousCount && model.activeDocument?.name == value)
                         if saved { dismiss() }
                         else {
-                            saveError = model.errorMessage ?? "未能保存，名称仍然保留。"
+                            saveError = model.errorMessage ?? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.55", fallback: "Could not save. Your entered name has been kept.")
                             model.clearError()
                         }
                     }

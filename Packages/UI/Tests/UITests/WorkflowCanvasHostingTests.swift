@@ -243,18 +243,18 @@ struct WorkflowCanvasHostingTests {
         let view = WorkflowCanvasView(controller: controller, onTextModel: { commands += 1 }, onImageModel: { commands += 1 },
             onImport: { _ in commands += 1 }, onDestination: { commands += 1 }, onPublishText: { commands += 1 },
             onReturnText: { _ in commands += 1 }).environment(\.dLanguageStore, language)
-        let host = NSHostingView(rootView: view)
+        let layoutHost = NSHostingView(rootView: view)
         for width: CGFloat in [1320, 820, 1320] {
-            host.frame = CGRect(x: 0, y: 0, width: width, height: 850)
-            host.layoutSubtreeIfNeeded()
+            layoutHost.frame = CGRect(x: 0, y: 0, width: width, height: 850)
+            layoutHost.layoutSubtreeIfNeeded()
             try await Task.sleep(for: .milliseconds(50))
-            #expect(host.fittingSize.width <= width)
+            #expect(layoutHost.fittingSize.width <= width)
             #expect(controller.graphs == before); #expect(controller.runs.isEmpty)
             #expect(commands == 0); #expect(await engine.calls == 0)
         }
         if let directory = ProcessInfo.processInfo.environment["D_M0_RENDER_DIR"] {
-            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let bitmap = try #require(layoutHost.bitmapImageRepForCachingDisplay(in: layoutHost.bounds))
+            layoutHost.cacheDisplay(in: layoutHost.bounds, to: bitmap)
             let png = try #require(bitmap.representation(using: .png, properties: [:]))
             try png.write(to: URL(fileURLWithPath: directory).appendingPathComponent("M0-offscreen-hosting.png"), options: .withoutOverwriting)
         }
@@ -263,12 +263,19 @@ struct WorkflowCanvasHostingTests {
         let target = try #require(controller.graph?.nodes.last?.id)
         await controller.run(target: target, only: false)
         controller.selectedNodeID = target
+        let host = NSHostingView(rootView: WorkflowCanvasView(controller: controller,
+            onTextModel: { commands += 1 }, onImageModel: { commands += 1 }, onImport: { _ in commands += 1 },
+            onDestination: { commands += 1 }, onPublishText: { commands += 1 }, onReturnText: { _ in commands += 1 })
+            .startingPanels(WorkflowWorkspacePanels(output: .node, runID: controller.runs.last?.id, nodeID: target))
+            .environment(\.dLanguageStore, language))
+        host.frame = .init(x: 0, y: 0, width: 1320, height: 850)
         for _ in 0..<30 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(20)) }
         func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
         let editor = try #require(descendants(host).compactMap { $0 as? NSTextView }.first { $0.isEditable })
         let draft = "尚未接受的修改 👩🏽‍🎨 e\u{301}"
         editor.string = draft; editor.didChangeText()
         editor.setSelectedRange(NSRange(location: 0, length: 2))
+        #expect(editor.selectedRange() == NSRange(location: 0, length: 2))
         for (width, locale): (CGFloat, String) in [(820, "en"), (1320, "zh-Hans"), (820, "en")] {
             try language.select(locale)
             host.frame.size.width = width; host.layoutSubtreeIfNeeded()

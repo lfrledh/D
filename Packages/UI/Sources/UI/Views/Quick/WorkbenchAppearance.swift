@@ -68,6 +68,8 @@ struct WorkbenchAppearance: Codable, Equatable {
     var motion = 0.5
     var lightweight = false
     var local: WorkbenchLocalAppearance? = nil
+    var readability: WorkbenchReadabilitySettings? = nil
+    var resolvedReadability: WorkbenchReadabilitySettings { readability ?? .init() }
 
     func palette(for colorScheme: ColorScheme) -> WorkbenchPalette {
         colorScheme == .dark ? dark : light
@@ -80,7 +82,7 @@ struct WorkbenchAppearance: Codable, Equatable {
 
     var isValid: Bool {
         light.isValid && dark.isValid && backgroundTransparency.isFinite && motion.isFinite
-            && (0...1).contains(backgroundTransparency) && (0...1).contains(motion) && (local?.isValid ?? true)
+            && (0...1).contains(backgroundTransparency) && (0...1).contains(motion) && (local?.isValid ?? true) && (readability?.isValid ?? true)
     }
 }
 
@@ -216,6 +218,9 @@ private extension Color {
 
 private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
     let shape: S
+    @State private var group = UUID().uuidString
+    @Environment(\.workbenchSurfaceGroup) private var inheritedGroup
+    @Environment(\.workbenchSurfaceRole) private var role
     @Environment(\.workbenchBackground) private var background
     @Environment(\.chatDisplayPreferences) private var preferences
     @Environment(\.colorScheme) private var colorScheme
@@ -230,12 +235,15 @@ private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
             appearance: appearance, reduceMotion: reduceMotion,
             reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased)
         content
+            .environment(\.workbenchSurfaceGroup, inheritedGroup ?? group)
             .foregroundStyle(palette.foregroundColor)
             .background {
                 Group {
                     if let local = appearance.local {
                         WorkbenchLocalSurface(owner: background, palette: palette, strength: local.strength,
                             drawsGlass: effects.usesCanvasBlend && local.material == .glass,
+                            surfaceGroup: inheritedGroup ?? group, surfaceRole: role,
+                            readability: effects.usesCanvasBlend ? appearance.resolvedReadability : .init(),
                             contour: { rect, inset in shape.inset(by: inset).path(in: rect).cgPath })
                             .clipShape(shape)
                     } else {

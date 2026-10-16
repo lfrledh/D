@@ -222,6 +222,7 @@ enum WorkbenchLocalRenderer {
 @MainActor final class WorkbenchBackgroundOwner {
     weak var root: WorkbenchBackgroundNSView?
     let surfaces = NSHashTable<WorkbenchBackgroundNSView>.weakObjects()
+    let readability = WorkbenchReadabilityRegistry()
     private(set) var image: CGImage?
     private(set) var blurred: CGImage?
     private(set) var decodeCount = 0
@@ -287,16 +288,20 @@ extension EnvironmentValues {
 @MainActor final class WorkbenchBackgroundNSView: NSView {
     var owner: WorkbenchBackgroundOwner?
     var isCanvas = false
+    var isGeometryOnly = false
     var palette = WorkbenchPalette.defaultLight
     var strength = 0.55
     var drawsGlass = true
+    var surfaceGroup: String? = nil
+    var surfaceRole = WorkbenchSurfaceRole.panel
+    var readability = WorkbenchReadabilitySettings()
     var contour: ((CGRect, CGFloat) -> CGPath)?
     var stylesWindowTitlebar = false
     var legacyTitlebarBlend: Double?
     private(set) var titlebar: WorkbenchWindowTitlebar?
     private var observers: [NSObjectProtocol] = []
     override var isFlipped: Bool { true }
-    override var isOpaque: Bool { true }
+    override var isOpaque: Bool { !isGeometryOnly }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func viewDidMoveToSuperview() { super.viewDidMoveToSuperview(); observeGeometry() }
     override func viewDidMoveToWindow() {
@@ -323,7 +328,7 @@ extension EnvironmentValues {
             view.postsFrameChangedNotifications = true; view.postsBoundsChangedNotifications = true
             for name in [NSView.frameDidChangeNotification, NSView.boundsDidChangeNotification] {
                 observers.append(NotificationCenter.default.addObserver(forName: name, object: view, queue: .main) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.needsDisplay = true; if self?.isCanvas == true { self?.owner?.invalidate() } }
+                    MainActor.assumeIsolated { self?.needsDisplay = true; if let self { self.owner?.readability.update(self) }; if self?.isCanvas == true { self?.owner?.invalidate() } }
                 })
             }
             ancestor = view.superview
@@ -331,12 +336,13 @@ extension EnvironmentValues {
     }
     isolated deinit { for observer in observers { NotificationCenter.default.removeObserver(observer) } }
     override func layout() {
-        super.layout(); needsDisplay = true
+        super.layout(); needsDisplay = true; owner?.readability.update(self)
         #if DEBUG
         WorkbenchCategoryUpdateProbe.phase("background-layout")
         #endif
     }
     override func draw(_ dirtyRect: NSRect) {
+        guard !isGeometryOnly else { return }
         guard let c = NSGraphicsContext.current?.cgContext else { return }
         owner?.didDraw()
         #if DEBUG
@@ -347,10 +353,12 @@ extension EnvironmentValues {
         #endif
         let root: NSView? = owner?.root.flatMap { $0.window === window ? $0 : nil } ?? window?.contentView
         let rect = root.map { convert(bounds, to: $0) } ?? bounds
+        let enhancement = owner?.readability.effect(for: self) ?? .none
         WorkbenchLocalRenderer.draw(in: c, size: bounds.size, rect: rect, viewport: root?.bounds.size ?? bounds.size,
             image: isCanvas ? owner?.image : (drawsGlass ? owner?.blurred : nil),
             canvas: isCanvas || drawsGlass ? palette.canvas : palette.panel, panel: palette.panel,
-            strength: strength, glass: !isCanvas && drawsGlass, contour: contour)
+            strength: strength, glass: !isCanvas && drawsGlass, refraction: !enhancement.contained, contour: contour)
+        WorkbenchReadabilityRegistry.paint(enhancement, in: c, view: self)
         if isCanvas, let band = titlebar?.frame(in: self), !band.isEmpty, !band.isNull {
             // Render the same local glass as the other controls, with the same
             // window-space mapping. Never sample the native title, buttons or desktop.
@@ -378,6 +386,9 @@ struct WorkbenchLocalSurface: NSViewRepresentable {
     var isCanvas = false
     var strength = 0.55
     var drawsGlass = true
+    var surfaceGroup: String? = nil
+    var surfaceRole = WorkbenchSurfaceRole.panel
+    var readability = WorkbenchReadabilitySettings()
     var contour: ((CGRect, CGFloat) -> CGPath)? = nil
     var prepare: (() -> Void)? = nil
     var stylesWindowTitlebar = false
@@ -388,16 +399,18 @@ struct WorkbenchLocalSurface: NSViewRepresentable {
     }
     func updateNSView(_ view: WorkbenchBackgroundNSView, context: Context) {
         prepare?()
+        if view.owner !== owner { view.owner?.readability.remove(view) }
         view.owner = owner; view.palette = palette; view.isCanvas = isCanvas
         view.strength = strength; view.drawsGlass = drawsGlass; view.contour = contour
+        view.surfaceGroup = surfaceGroup; view.surfaceRole = surfaceRole; view.readability = readability
         view.stylesWindowTitlebar = stylesWindowTitlebar; view.legacyTitlebarBlend = legacyTitlebarBlend
         view.synchronizeTitlebar()
         owner?.surfaces.add(view)
         if isCanvas, owner?.root !== view { owner?.root = view; owner?.invalidate() }
-        view.needsDisplay = true
+        view.needsDisplay = true; owner?.readability.update(view)
     }
     static func dismantleNSView(_ view: WorkbenchBackgroundNSView, coordinator: ()) {
-        view.releaseTitlebar()
+        view.releaseTitlebar(); view.owner?.readability.remove(view)
     }
 }
 

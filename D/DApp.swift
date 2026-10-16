@@ -105,6 +105,7 @@ private struct WorkbenchCommands: Commands {
     let settingsBlocked: Bool
     let requestSettings: () -> Void
     @FocusedValue(\.workbenchGeneration) private var generationCommand
+    @FocusedValue(\.workbenchSave) private var saveCommand
     @Environment(\.openWindow) private var openWindow
     private var modalResourceOperation: Bool {
         bootstrap.libraryModel?.isPresented == true || bootstrap.libraryModel?.isChoosingLocation == true
@@ -138,6 +139,11 @@ private struct WorkbenchCommands: Commands {
             .keyboardShortcut("o")
             .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model == nil || bootstrap.model?.isChangingProject == true)
         }
+        CommandGroup(replacing: .saveItem) {
+            Button(saveCommand?.title ?? label("consistency.menu.file.save", "保存更改")) { saveCommand?.action() }
+                .keyboardShortcut("s")
+                .disabled(modalResourceOperation || bootstrap.isTerminating || saveCommand?.isEnabled != true)
+        }
         CommandGroup(after: .importExport) {
             Button(label("command.asset.export", "导出所选作品…")) { Task { await bootstrap.model?.exportSelected() } }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
@@ -149,9 +155,7 @@ private struct WorkbenchCommands: Commands {
             }
             .keyboardShortcut(.return, modifiers: [.command])
             .disabled(modalResourceOperation || bootstrap.isTerminating || generationCommand?.isEnabled != true)
-            Button(label("command.text.save", "保存文稿")) { Task { await bootstrap.model?.projectSession.saveText() } }
-                .keyboardShortcut("s")
-                .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.projectSession.text == nil || bootstrap.model?.creatorMode != .text)
+
         }
         CommandMenu(label("command.resources", "资源")) {
             Button(label("command.models", "模型与下载…")) {

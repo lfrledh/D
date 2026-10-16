@@ -40,17 +40,17 @@ struct ExecutionSettingsViewTests {
             capability: scalable) == scalable.profile)
     }
 
-    @Test
-    func audioSummaryStatesOnlyDeclaredProfileAndOperations() {
+    @Test(arguments: ["zh-Hans", "en"])
+    func audioSummaryStatesOnlyDeclaredProfileAndOperations(locale: String) {
         let capability = AudioExecutionCapability(
             profile: .init(identifier: "sa3-small", revision: 1),
             contract: .init(operationID: "audio.generate", inputRoles: [.prompt], outputRole: .audio,
                             controlFidelity: .approximate),
             maximumDurationSeconds: 16, sampleRate: 44_100, channelCount: 2,
             operations: [.generate, .variation, .inpaint], noteControlFidelity: .approximate)
-        let summary = AudioCreationView.capabilitySummaryText(capability)
-        #expect(summary.contains("已部署配置（sa3-small）"))
-        #expect(summary.contains("生成、参考变体、局部重绘"))
+        let summary = AudioCreationView.capabilitySummaryText(capability, language: UILanguageStore(preferredLanguages: [locale]))
+        #expect(summary.contains(locale == "en" ? "Deployed profile (sa3-small)" : "已部署配置（sa3-small）"))
+        #expect(summary.contains(locale == "en" ? "Generate, Reference Variation, Inpaint Audio" : "生成、参考变体、局部重绘"))
         #expect(!summary.contains("Stable Audio Medium"))
     }
 

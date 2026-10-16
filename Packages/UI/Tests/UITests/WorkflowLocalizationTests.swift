@@ -255,7 +255,7 @@ struct WorkflowLocalizationTests {
             onDestination: { commands += 1 },
             onPublishText: { commands += 1 },
             onReturnText: { _ in commands += 1 }
-        ).environment(\.dLanguageStore, language)
+        ).startingPanels(WorkflowWorkspacePanels(preparation: .configuration)).environment(\.dLanguageStore, language)
         var positivePresses = 0
         let host = NSHostingView(rootView: VStack {
             Button("Hosting action probe") { positivePresses += 1 }

@@ -38,9 +38,9 @@ struct ChatMCPPanel: View {
                 }
                 if ownsConnection {
                     Text(String(describing: chat.mcpStatus)).font(.caption).textSelection(.enabled)
-                    Picker(wording("Tool", "工具"), selection: $tool) {
-                        Text(wording("Select a tool", "选择工具")).tag("")
-                        ForEach(chat.mcpTools, id: \.name) { Text($0.title ?? $0.name).tag($0.name) }
+                    WorkbenchPicker(wording("Tool", "工具"), selection: $tool) {
+                        WorkbenchChoice(wording("Select a tool", "选择工具"), value:"")
+                        WorkbenchChoiceForEach(chat.mcpTools, id: \.name) { WorkbenchChoice($0.title ?? $0.name, value:$0.name) }
                     }
                     if let selected = chat.mcpTools.first(where: { $0.name == tool }) {
                         if let description = selected.description { Text(description).font(.caption).textSelection(.enabled) }

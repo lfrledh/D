@@ -54,11 +54,11 @@ struct WorkflowScopePresentation: Identifiable {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(text("title", "选择运行范围与历史输入")).font(.headline)
-            Picker(text("range", "运行范围"), selection: $mode) {
-                Text(text("through", "运行到这里")).tag(0)
-                Text(text("only", "仅重新运行此节点")).tag(1)
-                Text(text("from", "从这里重新运行（含此节点）")).tag(2)
-                Text(text("after", "从其输出继续（不重算此节点）")).tag(3)
+            WorkbenchPicker(text("range", "运行范围"), selection: $mode) {
+                WorkbenchChoice(text("through", "运行到这里"), value:0)
+                WorkbenchChoice(text("only", "仅重新运行此节点"), value:1)
+                WorkbenchChoice(text("from", "从这里重新运行（含此节点）"), value:2)
+                WorkbenchChoice(text("after", "从其输出继续（不重算此节点）"), value:3)
             }.onChange(of: mode) { _, _ in choices = [:] }
             Text(text("explanation", "边界输入必须选择一个明确的已保存结果；不会自动取最新版本。重新运行产生新记录，旧记录不变。"))
                 .font(.callout).foregroundStyle(.secondary)
@@ -74,12 +74,11 @@ struct WorkflowScopePresentation: Identifiable {
                             let records = controller.historicalCalls(for: boundary)
                             VStack(alignment: .leading) {
                                 Text((controller.rootGraph?.nodes.first { $0.id == boundary.destinationNodeID }?.title ?? "") + " · " + boundary.destinationPort)
-                                Picker(text("version", "历史输出版本"), selection: Binding<UUID?>(
+                                WorkbenchPicker(text("version", "历史输出版本"), selection: Binding<UUID?>(
                                     get: { choices[key(boundary)] }, set: { choices[key(boundary)] = $0 })) {
-                                    Text(text("choose", "请选择一个结果")).tag(Optional<UUID>.none)
-                                    ForEach(records) { call in
-                                        Text(call.step.node.title + " · " + (controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0, in: controller.runs, language: language) } ?? text("unavailableRun", "历史运行不可访问")) + " · " + WorkflowHumanPresentation.call(call, in: records, language: language))
-                                            .tag(Optional(call.id))
+                                    WorkbenchChoice(text("choose", "请选择一个结果"), value:Optional<UUID>.none)
+                                    WorkbenchChoiceForEach(records) { call in
+                                        WorkbenchChoice(call.step.node.title + " · " + (controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0, in: controller.runs, language: language) } ?? text("unavailableRun", "历史运行不可访问")) + " · " + WorkflowHumanPresentation.call(call, in: records, language: language), value:Optional(call.id))
                                     }
                                 }
                                 if let call = records.first(where: { $0.id == choices[key(boundary)] }) {

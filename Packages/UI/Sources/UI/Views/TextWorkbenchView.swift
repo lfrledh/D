@@ -8,6 +8,8 @@ public enum TextWorkbenchPresentation: Sendable { case complete, editor, paramet
 /// Presentation for a text draft. Business operations remain owned by the caller.
 @MainActor
 public struct TextWorkbenchView: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     private var presentation: TextWorkbenchPresentation = .complete
     private var isQuestionParameters = false
     @Bindable private var session: TextDraftSession
@@ -97,9 +99,9 @@ public struct TextWorkbenchView: View {
         ScrollViewReader { reader in
          ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(isQuestionParameters ? "问答参数" : "改写参数").font(.headline)
+                Text(isQuestionParameters ? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.101", fallback: "Question and Answer Settings") : workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.102", fallback: "Rewrite Settings")).font(.headline)
                 Text(modelStatus).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("text-model-status")
-                Button("选择文字模型…", action: onChooseModel).accessibilityIdentifier("text-model-select")
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.103", fallback: "Choose Text Model…"), action: onChooseModel).accessibilityIdentifier("text-model-select")
                 if isQuestionParameters { generationSettingsControls }
                 else { rewriteControls }
             }.padding(16)
@@ -143,7 +145,7 @@ public struct TextWorkbenchView: View {
             : AnyLayout(HStackLayout(spacing: 10))
         return arrangement {
             VStack(alignment: .leading, spacing: 2) {
-                Text("文字草稿").font(.headline)
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.104", fallback: "Text Draft")).font(.headline)
                 if presentation == .complete {
                     Text(modelStatus).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                         .accessibilityIdentifier("text-model-status")
@@ -152,12 +154,12 @@ public struct TextWorkbenchView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 10) {
                 if presentation == .complete {
-                    Button(action: onChooseModel) { Label("选择模型", systemImage: "cube.transparent") }
+                    Button(action: onChooseModel) { Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.105", fallback: "Choose Model"), systemImage: "cube.transparent") }
                         .buttonStyle(WorkbenchGlassButtonStyle()).accessibilityIdentifier("text-model-select")
                 }
-                Button(action: onUndo) { Label("撤销", systemImage: "arrow.uturn.backward") }
+                Button(action: onUndo) { Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.106", fallback: "Undo"), systemImage: "arrow.uturn.backward") }
                     .disabled(!canUndo).accessibilityIdentifier("text-undo")
-                Button(action: onSave) { Label(isSaving ? "正在保存" : "保存", systemImage: "square.and.arrow.down") }
+                Button(action: onSave) { Label(isSaving ? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.107", fallback: "Saving") : workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.54", fallback: "Save"), systemImage: "square.and.arrow.down") }
                     .disabled(isSaving).accessibilityIdentifier("text-save")
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -168,7 +170,7 @@ public struct TextWorkbenchView: View {
 
     private var editorPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("原稿").font(.headline)
+            Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.108", fallback: "Original")).font(.headline)
             TextSelectionEditor(document: session.document, selection: selection, onEdit: onEdit, onSelection: onSelection)
                 .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                 .accessibilityIdentifier("text-draft-editor")
@@ -183,16 +185,16 @@ public struct TextWorkbenchView: View {
     private var rewriteControls: some View {
         VStack(alignment: .leading, spacing: 12) {
             generationSettingsControls
-            Text("选中文字后描述修改意图").font(.caption).foregroundStyle(.secondary)
-            TextField("修改要求", text: $instruction, axis: .vertical)
+            Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.109", fallback: "Select text, then describe the changes you want")).font(.caption).foregroundStyle(.secondary)
+            TextField(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.110", fallback: "Rewrite Instructions"), text: $instruction, axis: .vertical)
                 .lineLimit(2...5).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .accessibilityIdentifier("text-instruction")
             HStack {
-                Button(action: generate) { Label("改写", systemImage: "sparkles") }
+                Button(action: generate) { Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.111", fallback: "Rewrite"), systemImage: "sparkles") }
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(!canGenerate || session.isRunning)
                     .accessibilityIdentifier("text-rewrite")
-                Button(action: onCancel) { Label("取消", systemImage: "xmark") }
+                Button(action: onCancel) { Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.33", fallback: "Cancel"), systemImage: "xmark") }
                     .disabled(!session.isRunning || session.isCancelling)
                     .accessibilityIdentifier("text-cancel")
                 Spacer()
@@ -205,34 +207,34 @@ public struct TextWorkbenchView: View {
     @ViewBuilder private var generationSettingsControls: some View {
         if let capability = generationCapability {
             VStack(alignment: .leading, spacing: 8) {
-                Text("生成额度").font(.subheadline.weight(.semibold))
-                Text("输入 token 上限").font(.caption).foregroundStyle(.secondary)
-                TextField("输入 token 上限", text: promptTokenLimit)
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.112", fallback: "Generation Limits")).font(.subheadline.weight(.semibold))
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.113", fallback: "Input Token Limit")).font(.caption).foregroundStyle(.secondary)
+                TextField(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.113", fallback: "Input Token Limit"), text: promptTokenLimit)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle())
-                    .accessibilityLabel("输入 token 上限")
+                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.113", fallback: "Input Token Limit"))
                     .accessibilityIdentifier("text-input-limit")
                     .textParameterMeasured("text-input-limit", probe: parameterLayoutProbe)
-                Text("输出 token 上限").font(.caption).foregroundStyle(.secondary)
-                TextField("输出 token 上限", text: outputTokenLimit)
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.114", fallback: "Output Token Limit")).font(.caption).foregroundStyle(.secondary)
+                TextField(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.114", fallback: "Output Token Limit"), text: outputTokenLimit)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle())
-                    .accessibilityLabel("输出 token 上限")
+                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.114", fallback: "Output Token Limit"))
                     .accessibilityIdentifier("text-output-limit")
                     .textParameterMeasured("text-output-limit", probe: parameterLayoutProbe)
                     .id("text-output-scroll-target")
                 Text(isQuestionParameters
-                    ? "Token 不是字数；输入包括问题、全部所选片段和模板。真实超限会报错，资料不会被截断。"
-                    : "Token 不是字数；输入包括改写包装和模板。真实超限会报错，原文不会被截断。")
+                    ? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.115", fallback: "Tokens are not characters or words. Input includes the question, all selected excerpts and the template. Exceeding the limit produces an error; sources are not truncated.")
+                    : workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.116", fallback: "Tokens are not characters or words. Input includes rewrite instructions and the template. Exceeding the limit produces an error; the original text is not truncated."))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("当前能力支持：输入最多 \(capability.maximumPromptTokens) token，输出最多 \(capability.maximumOutputTokens) token。")
+                Text(consistencyText(legacyLanguage, "copy.TextWorkbenchView.0", arguments: ["v0": String(describing: capability.maximumPromptTokens), "v1": String(describing: capability.maximumOutputTokens)]))
                     .font(.caption).foregroundStyle(.secondary)
                 if let recommendation = generationRecommendation {
-                    Text("这是依据当前内存的未实测起始建议：输入 \(recommendation.maximumPromptTokens)，输出 \(recommendation.maximumOutputTokens)；不代表已验证能力或保证当前准入，也不会改变当前设置。")
+                    Text(consistencyText(legacyLanguage, "copy.TextWorkbenchView.1", arguments: ["v0": String(describing: recommendation.maximumPromptTokens), "v1": String(describing: recommendation.maximumOutputTokens)]))
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if capability.maximumPromptTokens >= 2048, capability.maximumOutputTokens >= 256 {
-                    Button("重设为短文本预设（2048 / 256）") {
+                    Button(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.117", fallback: "Reset to Short Text Preset (2048 / 256)")) {
                         applyShortTextPreset(capability)
                     }
                     .controlSize(.small)
@@ -277,8 +279,8 @@ public struct TextWorkbenchView: View {
         let current = session.document.generationSettings
         let promptText = rawPromptTokenLimit ?? String(current.maximumPromptTokens)
         let outputText = rawOutputTokenLimit ?? String(current.maximumOutputTokens)
-        if let error = Self.numericEditingError(promptText, label: "输入 token 上限")
-            ?? Self.numericEditingError(outputText, label: "输出 token 上限") {
+        if let error = Self.numericEditingError(promptText, label: workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.113", fallback: "Input Token Limit"), language: legacyLanguage)
+            ?? Self.numericEditingError(outputText, label: workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.114", fallback: "Output Token Limit"), language: legacyLanguage) {
             Self.reportEditingError(error, to: onGenerationEditingError)
             return
         }
@@ -307,10 +309,8 @@ public struct TextWorkbenchView: View {
         onChange?(settings)
     }
 
-    static func numericEditingError(_ raw: String, label: String) -> String? {
-        if raw.isEmpty { return "\(label)必须填写整数。" }
-        if Int(raw) == nil { return "\(label)必须是可表示的整数。" }
-        return nil
+    static func numericEditingError(_ raw: String, label: String, language: UILanguageStore? = nil) -> String? {
+        workbenchIntegerEditingError(raw, field: label, language: language)
     }
 
     static func reportEditingError(_ error: String?, to callback: ((String?) -> Void)?) {
@@ -319,13 +319,13 @@ public struct TextWorkbenchView: View {
 
     private var comparisonPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("选段与候选").font(.headline)
+            Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.118", fallback: "Selection and Candidate")).font(.headline)
             GroupBox(comparisonSourceLabel) {
                 ScrollView {
                     Text(comparisonSourceText).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
                 }.frame(minHeight: 44, maxHeight: 90)
             }
-            GroupBox("替换候选") {
+            GroupBox(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.119", fallback: "Replacement Candidate")) {
                 ScrollView {
                     candidateContent.frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
                 }
@@ -334,12 +334,12 @@ public struct TextWorkbenchView: View {
             }
             .layoutPriority(1)
             if session.candidate != nil && !canAccept {
-                Label("原稿或选区已改变，不能接受此候选。", systemImage: "exclamationmark.triangle")
+                Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.120", fallback: "The original text or selection has changed. This candidate cannot be accepted."), systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
             }
             HStack {
-                Button("接受", action: onAccept).disabled(!canAccept).accessibilityIdentifier("text-accept")
-                Button("拒绝", action: onReject).disabled(session.candidate == nil).accessibilityIdentifier("text-reject")
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.121", fallback: "Accept"), action: onAccept).disabled(!canAccept).accessibilityIdentifier("text-accept")
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.122", fallback: "Reject"), action: onReject).disabled(session.candidate == nil).accessibilityIdentifier("text-reject")
             }
         }
         .padding(16)
@@ -349,19 +349,19 @@ public struct TextWorkbenchView: View {
     private var currentSelectedText: String {
         guard (try? TextRewriteSelection(document: session.document, range: selection)) != nil,
               let range = Range(selection, in: session.document.text) else {
-            return "请在原稿中选择要改写的文字。"
+            return workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.123", fallback: "Select the text you want to rewrite in the original.")
         }
         return String(session.document.text[range])
     }
 
     private var comparisonSourceText: String {
         if let candidate = session.candidate { return candidate.selection.selectedText }
-        return session.isRunning ? (session.runningSelection?.selectedText ?? "生成中的原选段已固定。") : currentSelectedText
+        return session.isRunning ? (session.runningSelection?.selectedText ?? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.124", fallback: "The original selection is fixed while generation is in progress.")) : currentSelectedText
     }
 
     private var comparisonSourceLabel: String {
-        if session.candidate != nil { return "候选的原选段" }
-        return session.isRunning ? "生成中的原选段" : "原选段"
+        if session.candidate != nil { return workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.125", fallback: "Original Selection for This Candidate") }
+        return session.isRunning ? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.126", fallback: "Original Selection Being Rewritten") : workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.127", fallback: "Original Selection")
     }
 
     private func generate() {
@@ -371,11 +371,11 @@ public struct TextWorkbenchView: View {
     @ViewBuilder private var candidateContent: some View {
         if session.isRunning {
             if session.partialText.isEmpty {
-                Label("正在生成候选…", systemImage: "ellipsis")
+                Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.128", fallback: "Generating candidate…"), systemImage: "ellipsis")
                     .foregroundStyle(.secondary)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("正在生成候选…", systemImage: "ellipsis")
+                    Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.128", fallback: "Generating candidate…"), systemImage: "ellipsis")
                         .font(.caption).foregroundStyle(.secondary)
                     Text(session.partialText)
                 }
@@ -383,7 +383,7 @@ public struct TextWorkbenchView: View {
         } else if let candidate = session.candidate {
             Text(candidate.replacement)
         } else {
-            Text("尚无候选。改写结果会在此处显示，原稿不会被自动替换。")
+            Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.129", fallback: "No candidate yet. The rewrite will appear here. The original is not replaced automatically."))
                 .foregroundStyle(.secondary)
         }
     }

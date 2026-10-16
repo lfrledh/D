@@ -4,6 +4,8 @@ import SwiftUI
 /// A modality-scoped, descriptive catalog. Selecting a row only reports its stable ID.
 @MainActor
 public struct ModelNodeList: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     private let entries: [ModelNodeDescriptor]
     private let selectedID: String?
     private let onSelect: (String) -> Void
@@ -26,9 +28,9 @@ public struct ModelNodeList: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 8) {
                 if entries.isEmpty {
-                    ContentUnavailableView("这个模态还没有可说明的模型节点",
+                    ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.147", fallback: "No Model Nodes Are Listed for This Mode Yet"),
                                            systemImage: "cube.transparent",
-                                           description: Text("查看模型节点不会下载、安装或创建任务。"))
+                                           description: Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.148", fallback: "Viewing a model node does not download, install or create a task.")))
                         .accessibilityIdentifier("model-node-list-empty")
                         .padding(.vertical, 28)
                 } else {
@@ -38,7 +40,7 @@ public struct ModelNodeList: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("model-node-list-\(entry.id)")
-                        .accessibilityLabel("\(entry.title)，\(entry.availability.title)")
+                        .accessibilityLabel(ModelNodeUILocalization.display(entry, language: legacyLanguage).title + ", " + ModelNodeUILocalization.availability(entry.availability, language: legacyLanguage))
                         .accessibilityAddTraits(entry.id == selectedID ? .isSelected : [])
                         .modelNodeMeasured("model-node-list-\(entry.id)", probe: layoutProbe)
                     }
@@ -54,7 +56,10 @@ public struct ModelNodeList: View {
 
 @MainActor
 public struct ModelNodeDetail: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     public let node: ModelNodeDescriptor
+    private var displayNode: ModelNodeDescriptor { ModelNodeUILocalization.display(node, language: legacyLanguage) }
     private let tagState: ModelNodeTagReadState
     private let onTagsChange: ([String]) -> String?
     private let organizationTags: AnyView?
@@ -104,36 +109,36 @@ public struct ModelNodeDetail: View {
     }
 
     private var identityAndExecution: some View {
-        ModelNodeSection("身份与执行", identifier: "identity") {
-            Text(node.title).font(.title2.weight(.semibold))
-            Text(node.summary).foregroundStyle(.secondary)
-            ModelNodeMetadataRow("模型 ID", value: node.modelIdentity)
-            ModelNodeMetadataRow("版本", value: node.revision)
-            ModelNodeMetadataRow("引擎", value: node.engine)
-            ModelNodeMetadataRow("设备", value: node.device)
-            ModelNodeMetadataRow("精度", value: node.precision)
-            ModelNodeMetadataRow("可用范围", value: node.availability.title)
-            ModelNodeMetadataRow("部署与验证边界", value: node.deploymentNote)
-            if !node.notes.isEmpty {
-                ModelNodeMetadataRow("限制与说明", value: node.notes.joined(separator: "\n"))
+        ModelNodeSection(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.149", fallback: "Identity and Execution"), identifier: "identity") {
+            Text(displayNode.title).font(.title2.weight(.semibold))
+            Text(displayNode.summary).foregroundStyle(.secondary)
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.150", fallback: "Model ID"), value: node.modelIdentity)
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.151", fallback: "Version"), value: node.revision)
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.152", fallback: "Engine"), value: displayNode.engine)
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.153", fallback: "Device"), value: displayNode.device)
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.154", fallback: "Precision"), value: displayNode.precision)
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.155", fallback: "Availability"), value: ModelNodeUILocalization.availability(node.availability, language: legacyLanguage))
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.156", fallback: "Deployment and Verification"), value: displayNode.deploymentNote)
+            if !displayNode.notes.isEmpty {
+                ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.157", fallback: "Limits and Notes"), value: displayNode.notes.joined(separator: "\n"))
             }
             if !node.evidencePaths.isEmpty {
-                ModelNodeMetadataRow("证据", value: node.evidencePaths.joined(separator: "\n"))
+                ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.158", fallback: "Evidence"), value: node.evidencePaths.joined(separator: "\n"))
             }
         }
     }
 
     private var tagsSection: some View {
-        ModelNodeSection("用户标签", identifier: "tags") {
-            Text("标签只保存在本机，用于整理；不会改变模型能力、许可或生成设置。")
+        ModelNodeSection(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.159", fallback: "Your Tags"), identifier: "tags") {
+            Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.160", fallback: "Tags are stored locally for organization. They do not change model capabilities, licensing or generation settings."))
                 .font(.caption).foregroundStyle(.secondary)
             if !tagEditor.isEditable {
-                Text("标签记录无法读取，已保留原数据，暂时不能编辑")
+                Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.161", fallback: "The tag record could not be read. Existing data has been kept, and editing is temporarily unavailable."))
                     .font(.caption).foregroundStyle(.red)
                     .accessibilityIdentifier("model-node-tags-corrupt-\(node.id)")
                     .modelNodeMeasured("model-node-tags-corrupt-\(node.id)", probe: layoutProbe)
             } else if tagEditor.tags.isEmpty {
-                Text("尚无标签").foregroundStyle(.secondary)
+                Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.162", fallback: "No Tags Yet")).foregroundStyle(.secondary)
                     .accessibilityIdentifier("model-node-tags-empty")
                     .modelNodeMeasured("model-node-tags-empty-\(node.id)", probe: layoutProbe)
             } else {
@@ -142,7 +147,7 @@ public struct ModelNodeDetail: View {
                         HStack(spacing: 8) {
                             Text(tag).fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 4)
-                            Button("移除 \(tag)", systemImage: "xmark") { remove(tag) }
+                            Button(workflowText(legacyLanguage, "consistency.copy.removeNamed", fallback: "Remove {name}", arguments: ["name": tag]), systemImage: "xmark") { remove(tag) }
                                 .labelStyle(.iconOnly)
                                 .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                                 .accessibilityIdentifier("model-node-tag-remove-\(node.id)-\(tag)")
@@ -155,41 +160,41 @@ public struct ModelNodeDetail: View {
                 .accessibilityIdentifier("model-node-tags")
             }
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                TextField("添加标签", text: $tagEditor.draft)
+                TextField(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.163", fallback: "Add Tag"), text: $tagEditor.draft)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .disabled(!tagEditor.isEditable)
                     .accessibilityIdentifier("model-node-tag-draft-\(node.id)")
                     .onSubmit(addDraft)
                     .modelNodeMeasured("model-node-tag-draft-\(node.id)", probe: layoutProbe)
-                Button("添加", action: addDraft)
+                Button(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.164", fallback: "Add"), action: addDraft)
                     .buttonStyle(WorkbenchGlassButtonStyle())
                     .disabled(!tagEditor.isEditable)
                     .accessibilityIdentifier("model-node-tag-add-\(node.id)")
                     .modelNodeMeasured("model-node-tag-add-\(node.id)", probe: layoutProbe)
             }
             if let error = tagEditor.errorMessage {
-                Text(error).font(.caption).foregroundStyle(.red)
+                WorkbenchIssueText(raw: error).font(.caption).foregroundStyle(.red)
                     .accessibilityIdentifier("model-node-tag-error-\(node.id)")
             }
         }
     }
 
     private var operationsSection: some View {
-        ModelNodeSection("操作与端口", identifier: "operations") {
-            if node.operations.isEmpty {
-                Text("没有记录操作说明。").foregroundStyle(.secondary)
+        ModelNodeSection(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.165", fallback: "Operations and Ports"), identifier: "operations") {
+            if displayNode.operations.isEmpty {
+                Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.166", fallback: "No operation information was recorded.")).foregroundStyle(.secondary)
             }
-            ForEach(node.operations) { operation in
+            ForEach(displayNode.operations) { operation in
                 VStack(alignment: .leading, spacing: 10) {
                     Text(operation.title).font(.headline)
                     Text(operation.summary).foregroundStyle(.secondary)
-                    ModelNodePortGroup(title: "输入", direction: "输入", ports: operation.inputs,
-                                       emptyText: "此操作没有输入端口。")
+                    ModelNodePortGroup(title: consistencyText(legacyLanguage, "copy.input"), isInput: true, ports: operation.inputs,
+                                       emptyText: workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.167", fallback: "This operation has no input ports."))
                         .modelNodeMeasured("model-node-ports-\(node.id)-\(operation.id)-inputs", probe: layoutProbe)
-                    ModelNodePortGroup(title: "输出", direction: "输出", ports: operation.outputs,
-                                       emptyText: "此操作没有输出端口。")
+                    ModelNodePortGroup(title: consistencyText(legacyLanguage, "copy.output"), isInput: false, ports: operation.outputs,
+                                       emptyText: workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.168", fallback: "This operation has no output ports."))
                         .modelNodeMeasured("model-node-ports-\(node.id)-\(operation.id)-outputs", probe: layoutProbe)
-                    Text("输出描述的是成功执行后必有或可能产生的结果，不是可勾选的输入。")
+                    Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.169", fallback: "Outputs describe results that a successful operation always or may produce. They are not selectable inputs."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .padding(14)
@@ -200,14 +205,14 @@ public struct ModelNodeDetail: View {
     }
 
     private var parametersSection: some View {
-        ModelNodeSection("参数", identifier: "parameters") {
-            Text("参数是可检查的后端规格，不是可执行的生成设置。")
+        ModelNodeSection(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.170", fallback: "Parameters"), identifier: "parameters") {
+            Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.171", fallback: "These parameters describe backend specifications for inspection. They are not controls for a generation request."))
                 .font(.caption).foregroundStyle(.secondary)
-            let parameters = node.operations.flatMap(\.parameters)
+            let parameters = displayNode.operations.flatMap(\.parameters)
             if parameters.isEmpty {
-                Text("没有记录参数说明。").foregroundStyle(.secondary)
+                Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.172", fallback: "No parameter information was recorded.")).foregroundStyle(.secondary)
             }
-            ForEach(node.operations) { operation in
+            ForEach(displayNode.operations) { operation in
                 if !operation.parameters.isEmpty {
                     Text(operation.title).font(.headline).padding(.top, 4)
                     ForEach(operation.parameters) { parameter in
@@ -215,12 +220,12 @@ public struct ModelNodeDetail: View {
                             HStack(alignment: .firstTextBaseline) {
                                 Text(parameter.title).font(.callout.weight(.semibold))
                                 Spacer(minLength: 8)
-                                Text(parameter.isAdjustable ? "后端可调" : "固定")
+                                Text(ModelNodeUILocalization.usesRegistry(node) ? ModelNodeUILocalization.owned("请求参数", language: legacyLanguage) : parameter.isAdjustable ? workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.173", fallback: "Adjustable by Backend") : workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.174", fallback: "Fixed"))
                                     .font(.caption).foregroundStyle(.secondary)
                             }
-                            ModelNodeMetadataRow("默认", value: parameter.defaultValue)
-                            ModelNodeMetadataRow("可接受值／约束", value: parameter.acceptedValues)
-                            ModelNodeMetadataRow("说明", value: parameter.detail)
+                            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.175", fallback: "Default"), value: parameter.defaultValue)
+                            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.176", fallback: "Allowed Values and Constraints"), value: parameter.acceptedValues)
+                            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.177", fallback: "Description"), value: parameter.detail)
                         }
                         .padding(12)
                         .background(.background, in: RoundedRectangle(cornerRadius: 10))
@@ -319,14 +324,17 @@ struct ModelNodeTagEditorState: Equatable {
 }
 
 private struct ModelNodeListRow: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     let node: ModelNodeDescriptor
+    private var displayNode: ModelNodeDescriptor { ModelNodeUILocalization.display(node, language: legacyLanguage) }
     let isSelected: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(node.title).font(.callout.weight(.semibold)).lineLimit(2)
-            Text(node.summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-            Text(node.availability.title).font(.caption2.weight(.medium)).foregroundStyle(.secondary)
+            Text(displayNode.title).font(.callout.weight(.semibold)).lineLimit(2)
+            Text(displayNode.summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            Text(ModelNodeUILocalization.availability(node.availability, language: legacyLanguage)).font(.caption2.weight(.medium)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -338,6 +346,8 @@ private struct ModelNodeListRow: View {
 }
 
 private struct ModelNodeSection<Content: View>: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     let title: String
     let identifier: String
     @ViewBuilder let content: Content
@@ -361,6 +371,8 @@ private struct ModelNodeSection<Content: View>: View {
 }
 
 private struct ModelNodeMetadataRow: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     let title: String
     let value: String
 
@@ -376,14 +388,17 @@ private struct ModelNodeMetadataRow: View {
 }
 
 private struct ModelNodePortGroup: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     let title: String
-    let direction: String
+    let isInput: Bool
+    private var direction: String { consistencyText(legacyLanguage, isInput ? "copy.input" : "copy.output") }
     let ports: [ModelNodePort]
     let emptyText: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Label(title, systemImage: direction == "输入" ? "arrow.down.circle" : "arrow.up.circle")
+            Label(title, systemImage: isInput ? "arrow.down.circle" : "arrow.up.circle")
                 .font(.subheadline.weight(.semibold))
             if ports.isEmpty {
                 Text(emptyText).font(.caption).foregroundStyle(.secondary)
@@ -399,7 +414,7 @@ private struct ModelNodePortGroup: View {
                         }
                     }
                     Spacer(minLength: 8)
-                    Text(port.requirement.title).font(.caption2.weight(.semibold))
+                    Text(ModelNodeUILocalization.requirement(port.requirement, language: legacyLanguage)).font(.caption2.weight(.semibold))
                         .padding(.horizontal, 7).padding(.vertical, 4)
                         .background(requirementColor(port.requirement).opacity(0.14), in: Capsule())
                         .foregroundStyle(requirementColor(port.requirement))

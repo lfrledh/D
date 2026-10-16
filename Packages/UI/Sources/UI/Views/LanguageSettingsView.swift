@@ -15,9 +15,9 @@ public struct LanguageSettingsView: View {
     public var body: some View {
         Form {
             Section {
-                Picker(store.text("language.selection", fallback: "显示语言"), selection: selectionBinding) {
-                    ForEach(store.availableLanguages) { language in
-                        Text(language.displayName).tag(language.id)
+                WorkbenchPicker(store.text("language.selection", fallback: "显示语言"), selection: selectionBinding) {
+                    WorkbenchChoiceForEach(store.availableLanguages) { language in
+                        WorkbenchChoice(language.displayName, value:language.id)
                     }
                 }
                 .accessibilityIdentifier("language-selection")

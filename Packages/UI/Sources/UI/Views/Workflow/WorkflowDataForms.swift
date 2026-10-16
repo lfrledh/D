@@ -386,9 +386,9 @@ struct WorkflowDatumEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if allowsTypeSelection {
-                Menu(workflowFormText(languageStore, "workflow.language.form.type", fallback: "Type")) {
-                    ForEach(WorkflowDatumSeedKind.allCases) { kind in
-                        Button(typeTitle(kind)) { select(kind) }
+                WorkbenchMenu(workflowFormText(languageStore, "workflow.language.form.type", fallback: "Type")) {
+                    WorkbenchMenuForEach(WorkflowDatumSeedKind.allCases) { kind in
+                        WorkbenchMenuAction(typeTitle(kind)) { select(kind) }
                     }
                 }
                 .accessibilityIdentifier("workflow-language-form-type")
@@ -987,7 +987,7 @@ private struct WorkflowSchemaEditor: View {
                 Text(workflowFormText(languageStore, "workflow.language.form.depthLimit", fallback: "Nested data at depth 8 or greater is preserved read-only."))
                     .font(.caption).foregroundStyle(.secondary)
             } else {
-                Menu(draftSchema.map { workflowFormSchemaName($0, language: languageStore) } ?? workflowFormText(
+                WorkbenchMenu(draftSchema.map { workflowFormSchemaName($0, language: languageStore) } ?? workflowFormText(
                     languageStore, "workflow.language.form.chooseSchema", fallback: "Choose schema"
                 )) {
                     schemaButtons
@@ -997,21 +997,21 @@ private struct WorkflowSchemaEditor: View {
         }
     }
 
-    @ViewBuilder private var schemaButtons: some View {
-        Button(workflowFormSchemaName(.text, language: languageStore)) { setDraft(.text) }
-        Button(workflowFormSchemaName(.number(unit: nil), language: languageStore)) { setDraft(.number(unit: nil)) }
-        Button(workflowFormSchemaName(.boolean, language: languageStore)) { setDraft(.boolean) }
-        Button(workflowFormSchemaName(.enumeration([]), language: languageStore)) { setDraft(.enumeration([])) }
-        Button(workflowFormSchemaName(.record([]), language: languageStore)) {
+    @WorkbenchMenuBuilder private var schemaButtons: WorkbenchMenuRows {
+        WorkbenchMenuAction(workflowFormSchemaName(.text, language: languageStore)) { setDraft(.text) }
+        WorkbenchMenuAction(workflowFormSchemaName(.number(unit: nil), language: languageStore)) { setDraft(.number(unit: nil)) }
+        WorkbenchMenuAction(workflowFormSchemaName(.boolean, language: languageStore)) { setDraft(.boolean) }
+        WorkbenchMenuAction(workflowFormSchemaName(.enumeration([]), language: languageStore)) { setDraft(.enumeration([])) }
+        WorkbenchMenuAction(workflowFormSchemaName(.record([]), language: languageStore)) {
             recordRows = WorkflowStableNamedRows(names: [])
             setDraft(.record([]))
         }
-        Button(workflowFormSchemaName(.list(.text), language: languageStore)) { setDraft(.list(.text)) }
-        Button(workflowFormSchemaName(.optional(.text), language: languageStore)) { setDraft(.optional(.text)) }
-        Button(workflowFormSchemaName(.result(.text), language: languageStore)) { setDraft(.result(.text)) }
-        Menu(workflowFormText(languageStore, "workflow.language.form.type.asset", fallback: "Asset ({kind})", arguments: ["kind": "…"])) {
-            ForEach([WorkflowDataKind.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch], id: \.rawValue) { kind in
-                Button(workflowFormText(
+        WorkbenchMenuAction(workflowFormSchemaName(.list(.text), language: languageStore)) { setDraft(.list(.text)) }
+        WorkbenchMenuAction(workflowFormSchemaName(.optional(.text), language: languageStore)) { setDraft(.optional(.text)) }
+        WorkbenchMenuAction(workflowFormSchemaName(.result(.text), language: languageStore)) { setDraft(.result(.text)) }
+        WorkbenchSubmenu(workflowFormText(languageStore, "workflow.language.form.type.asset", fallback: "Asset ({kind})", arguments: ["kind": "…"])) {
+            WorkbenchMenuForEach([WorkflowDataKind.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch], id: \.rawValue) { kind in
+                WorkbenchMenuAction(workflowFormText(
                     languageStore,
                     "workflow.language.form.assetKind.\(kind.rawValue)",
                     fallback: kind.rawValue.capitalized
@@ -1201,7 +1201,7 @@ struct WorkflowNodeDataEditor: View {
             case "d.music.chords":
                 WorkflowDatumEditor(value: configurationValue)
             case "d.value.validate":
-                Picker(workflowFormText(languageStore, "workflow.language.form.validationInput", fallback: "Input interpretation"), selection: Binding(
+                WorkbenchPicker(workflowFormText(languageStore, "workflow.language.form.validationInput", fallback: "Input interpretation"), selection: Binding(
                     get: { node.dataConfiguration?.validationInputFormat ?? .typed },
                     set: { format in
                         var next = node.dataConfiguration ?? .init()
@@ -1209,8 +1209,8 @@ struct WorkflowNodeDataEditor: View {
                         var updated = node; updated.dataConfiguration = next; node = updated
                     }
                 )) {
-                    Text(workflowFormText(languageStore, "workflow.language.form.validationTyped", fallback: "Typed value")).tag(WorkflowValidationInputFormat.typed)
-                    Text(workflowFormText(languageStore, "workflow.language.form.validationJSON", fallback: "Parse complete JSON text")).tag(WorkflowValidationInputFormat.jsonText)
+                    WorkbenchChoice(workflowFormText(languageStore, "workflow.language.form.validationTyped", fallback: "Typed value"), value:WorkflowValidationInputFormat.typed)
+                    WorkbenchChoice(workflowFormText(languageStore, "workflow.language.form.validationJSON", fallback: "Parse complete JSON text"), value:WorkflowValidationInputFormat.jsonText)
                 }
                 WorkflowSchemaEditor(schema: configurationSchema, depth: 0)
             case "d.model.language", WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38, "d.control.human":
@@ -1533,9 +1533,9 @@ private struct WorkflowPathEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !availableRecordSchema.isEmpty {
-                Menu(workflowFormText(languageStore, "workflow.language.form.choosePath", fallback: "Choose schema path")) {
-                    ForEach(WorkflowFormSupport.recordPaths(in: availableRecordSchema), id: \.self) { option in
-                        Button(option.joined(separator: " › ")) { path = option; error = nil }
+                WorkbenchMenu(workflowFormText(languageStore, "workflow.language.form.choosePath", fallback: "Choose schema path")) {
+                    WorkbenchMenuForEach(WorkflowFormSupport.recordPaths(in: availableRecordSchema), id: \.self) { option in
+                        WorkbenchMenuAction(option.joined(separator: " › ")) { path = option; error = nil }
                     }
                 }
             }
@@ -1761,16 +1761,16 @@ private struct WorkflowRuleEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             WorkflowPathEditor(path: $rule.path, availableRecordSchema: recordSchema, pathRequired: false)
-            Picker(workflowFormText(languageStore, "workflow.language.form.comparison", fallback: "Comparison"), selection: Binding(
+            WorkbenchPicker(workflowFormText(languageStore, "workflow.language.form.comparison", fallback: "Comparison"), selection: Binding(
                 get: { rule.comparison.rawValue },
                 set: { if let next = WorkflowComparison(rawValue: $0) { rule.comparison = next } }
             )) {
-                ForEach(WorkflowComparison.allCases, id: \.rawValue) { comparison in
-                    Text(workflowFormText(
+                WorkbenchChoiceForEach(WorkflowComparison.allCases, id: \.rawValue) { comparison in
+                    WorkbenchChoice(workflowFormText(
                         languageStore,
                         "workflow.language.form.comparison.\(comparison.rawValue)",
                         fallback: comparison.rawValue
-                    )).tag(comparison.rawValue)
+                    ), value:comparison.rawValue)
                 }
             }
             if rule.comparison != .exists, let expected = expectedSchema {

@@ -63,7 +63,7 @@ import Foundation
                 detail: WorkflowCanvasPresentation.operationTitle(definition, language: language), kind: .model, role: "primary-model",
                 inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: readiness[choice.id] ?? .unknown),
                 selection: .operation(id: definition.id, modelID: choice.id),
-                facts: [choice.id, descriptor?.precision ?? "", descriptor?.engine ?? "", "执行前重新核验模型与请求"].filter { !$0.isEmpty }))
+                facts: [choice.id, descriptor?.precision ?? "", descriptor?.engine ?? "", consistencyText(language, "copy.verifyBeforeRun")].filter { !$0.isEmpty }))
         }
         for descriptor in ModelNodeCatalog.entries {
             guard !result.contains(where: { $0.item.key == descriptor.id }) else { continue }
@@ -77,10 +77,10 @@ import Foundation
                 // Reviewed legacy adapters remain discoverable without claiming a new executable node route.
                 let legacyAudio = ["sm-music", "sm-sfx", "medium"].contains(descriptor.id)
                 let singing = descriptor.id == "audio.singing.qixuan"
-                result.append(.init(item: .init(key: descriptor.id, title: descriptor.title, detail: descriptor.deploymentNote,
+                result.append(.init(item: .init(key: descriptor.id, title: descriptor.title, detail: consistencyText(language, "copy.separateAdapter"),
                     kind: .model, role: "separate-entry", inputs: legacyAudio ? [.text, .audio] : (singing ? [.record] : []),
                     outputs: legacyAudio || singing ? [.audio] : [], readiness: .unsupported),
-                    selection: .unavailable("此适配尚未提供快速/通用节点操作；原有编辑器与CLI责任保留。"),
+                    selection: .unavailable(consistencyText(language, "copy.separateAdapter")),
                     facts: [descriptor.modelIdentity, descriptor.revision, descriptor.engine]))
             }
         }
@@ -99,7 +99,7 @@ import Foundation
                 title: tool.name, detail: "v\(tool.version)", kind: .tool, role: "workflow-tool",
                 inputs: Set(tool.graph.interface?.inputs.flatMap { $0.type.portKinds } ?? []),
                 outputs: Set(tool.graph.interface?.outputs.flatMap { $0.schema.portKinds } ?? []), readiness: .available), selection: .tool(ref),
-                facts: ["端口来自此版本公开接口", digest]))
+                facts: [consistencyText(language, "copy.portsFromVersion"), digest]))
         }
         for project in projects {
             for asset in project.assets {
@@ -111,7 +111,7 @@ import Foundation
                     title: asset.name, detail: project.name, kind: .asset, role: asset.role.rawValue,
                     contentKind: kind, readiness: .unknown, assetFacts: snapshot.facts), selection: .assetInstance(projectID: project.id,
                         instanceID: project.effectiveInstanceID, assetID: asset.id),
-                    facts: [asset.mediaType, "访问时核验所属项目、文件与摘要；不改变原件"],
+                    facts: [asset.mediaType, consistencyText(language, "copy.verifyAssetAccess")],
                     activityID: activityID, legacyTags: asset.tags, metadataSnapshot: snapshot))
             }
         }

@@ -27,6 +27,10 @@ struct QuickGenerationView: View {
     @Environment(\.workbenchSidebars) private var sharedSidebars
     @State private var localSidebars = WorkbenchSidebarState()
     private var sidebars: WorkbenchSidebarState { sharedSidebars ?? localSidebars }
+    private enum LeftTab: String, CaseIterable { case settings, assets }
+    private enum RightTab: String, CaseIterable { case results, history }
+    @State private var leftTab: LeftTab = .settings
+    @State private var rightTab: RightTab = .results
     @State private var detailRun: QuickRunRecord?
     @State private var pendingPreview: WorkflowAssetReference?
     @State private var advanced = false
@@ -52,8 +56,9 @@ struct QuickGenerationView: View {
     }
     var body: some View {
         GeometryReader { geometry in
-            let leftShown = sidebars.leading
-            let rightShown = sidebars.trailing
+            let shown = WorkbenchSidebarLayout.visible(available: geometry.size.width, leading: sidebars.leading, trailing: sidebars.trailing)
+            let leftShown = shown.leading
+            let rightShown = shown.trailing
             ZStack(alignment: .topLeading) {
                 VStack(spacing: 10) {
                     HStack {
@@ -66,7 +71,7 @@ struct QuickGenerationView: View {
                     if quick.category == .image || quick.category == .video {
                         mediaStage
                     } else {
-                        ScrollView {
+                        WorkbenchScrollView {
                             LazyVStack(alignment: .leading, spacing: 16) {
                                 if !quick.visibleStreamingText.isEmpty { Text(quick.visibleStreamingText).textSelection(.enabled) }
                                 ForEach(currentRuns) { run in runCard(run) }
@@ -89,33 +94,49 @@ struct QuickGenerationView: View {
                     }
                     generationBar
                     }.padding(12).workbenchPanel(cornerRadius: 16)
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.leading, WorkbenchSidebarLayout.occupiedWidth(leftShown, leading: true))
-                    .padding(.trailing, WorkbenchSidebarLayout.occupiedWidth(rightShown, leading: false))
+                }.frame(width: max(0, geometry.size.width - 32
+                    - WorkbenchSidebarLayout.occupiedWidth(leftShown, leading: true, available: geometry.size.width)
+                    - WorkbenchSidebarLayout.occupiedWidth(rightShown, leading: false, available: geometry.size.width)))
+                    .workbenchMeasureLayout("quick-center")
+                .transaction { $0.animation = nil }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
+                    .padding(.leading, WorkbenchSidebarLayout.occupiedWidth(leftShown, leading: true, available: geometry.size.width))
+                    .padding(.trailing, WorkbenchSidebarLayout.occupiedWidth(rightShown, leading: false, available: geometry.size.width))
                     .workbenchMorph(value: leftShown).workbenchMorph(value: rightShown)
                 WorkbenchSidebar(leading: true, expanded: leftShown,
-                    title: refinementText("settings", fallback: "生成设置"),
+                    title: consistencyText(language, "tabs." + leftTab.rawValue),
                     identifier: "quick-settings-toggle", hostIdentifier: "quick-settings-host",
                     toggle: { sidebars.leading.toggle() }) {
-                        VStack(spacing: 0) { modelHeader; Divider(); parameterPanel }
+                        VStack(spacing: 0) {
+                            WorkbenchSidebarTabs(title: consistencyText(language, "tabs.tools"), selection: $leftTab, choices: [
+                                (.settings, consistencyText(language, "tabs.settings")), (.assets, consistencyText(language, "tabs.assets"))])
+                            WorkbenchSidebarPages(selection: leftTab, choices: LeftTab.allCases, identifier: "quick-left") { tab in
+                                if tab == .settings { VStack(spacing: 0) { modelHeader; parameterPanel(assets: false) } }
+                                else { VStack(spacing: 0) {
+                                    Button(refinementText("openLibrary", fallback: "全部资料库…"), action: onOpenLibrary).padding(10)
+                                    if !inputReferences.isEmpty {
+                                        ScrollView(.horizontal) { HStack {
+                                            ForEach(inputReferences, id: \.self) { reference in
+                                                Button { preview = reference } label: { QuickInputAssetName(store: quick.store, reference: reference) }
+                                            }
+                                        }.padding(10) }.frame(maxHeight: 56)
+                                    }
+                                    parameterPanel(assets: true)
+                                } }
+                            }
+                        }
                     }
                 WorkbenchSidebar(leading: false, expanded: rightShown,
-                    title: refinementText("assetsAndResults", fallback: "素材与结果"),
+                    title: consistencyText(language, "tabs." + rightTab.rawValue),
                     identifier: "quick-assets-toggle", hostIdentifier: "quick-assets-host",
                     toggle: { sidebars.trailing.toggle() }) {
-                        ScrollView {
+                        VStack(spacing: 0) {
+                            WorkbenchSidebarTabs(title: consistencyText(language, "tabs.output"), selection: $rightTab, choices: [
+                                (.results, consistencyText(language, "tabs.results")), (.history, consistencyText(language, "tabs.history"))])
+                            WorkbenchSidebarPages(selection: rightTab, choices: RightTab.allCases, identifier: "quick-right") { tab in
+                                if tab == .results {
+                        WorkbenchScrollView {
                             LazyVStack(alignment: .leading, spacing: 10) {
-                                Button(refinementText("openLibrary", fallback: "全部资料库…"), action: onOpenLibrary)
-                                if !inputReferences.isEmpty {
-                                    Text(refinementText("currentInputs", fallback: "当前输入")).font(.caption.bold())
-                                    ForEach(inputReferences, id: \.self) { reference in
-                                        Button { preview = reference } label: {
-                                            QuickInputAssetName(store: quick.store, reference: reference)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                        }.buttonStyle(WorkbenchGlassButtonStyle())
-                                    }
-                                    Divider()
-                                }
                                 Text(refinementText("resultsAndCandidates", fallback: "结果与候选")).font(.caption.bold())
                                 ForEach(mediaReferences, id: \.self) { reference in
                                     Button { selectedResults[quick.category] = reference } label: {
@@ -128,19 +149,30 @@ struct QuickGenerationView: View {
                                             .contentShape(.interaction, RoundedRectangle(cornerRadius: 10))
                                     }.buttonStyle(.plain)
                                 }
-                                if mediaReferences.isEmpty { Text(refinementText("noResults", fallback: "尚无结果")).foregroundStyle(.secondary).padding() }
-                                ForEach(quick.visibleRuns) { run in
-                                    Button { detailRun = run } label: { HStack { Text(run.createdAt, style: .time); Text(statusTitle(run.status)); Spacer(); Image(systemName: "info.circle") } }
+                                if mediaReferences.isEmpty {
+                                    ForEach(quick.visibleRuns) { run in runCard(run) }
+                                    if quick.visibleRuns.isEmpty { Text(refinementText("noResults", fallback: "尚无结果")).foregroundStyle(.secondary).padding() }
                                 }
                             }.padding(10)
                         }
+                                } else {
+                                    WorkbenchScrollView { LazyVStack(alignment: .leading, spacing: 10) {
+                                ForEach(quick.visibleRuns) { run in
+                                    Button { detailRun = run } label: { HStack { Text(run.createdAt, style: .time); Text(statusTitle(run.status)); Spacer(); Image(systemName: "info.circle") } }
+                                }
+                                    }.padding(10) }
+                                }
+                            }
+                        }
                     }.frame(maxWidth: .infinity, alignment: .trailing)
             }.padding(.horizontal, 16).padding(.bottom, 16)
+                .environment(\.workbenchPanelWidths, WorkbenchSidebarLayout.widths(available: geometry.size.width))
         }
+        .environment(\.workbenchMenuContext, "quick:\(ObjectIdentifier(quick)):\(quick.draft?.id ?? "none")")
         .sheet(item: $detailRun, onDismiss: {
             if let pendingPreview { preview = pendingPreview; self.pendingPreview = nil }
         }) { run in
-            VStack { HStack { Text(refinementText("resultDetails", fallback: "结果详情")).font(.headline); Spacer(); Button(refinementText("done", fallback: "完成")) { detailRun = nil }.keyboardShortcut(.cancelAction) }; ScrollView { runCard(run) } }
+            VStack { HStack { Text(refinementText("resultDetails", fallback: "结果详情")).font(.headline); Spacer(); Button(refinementText("done", fallback: "完成")) { detailRun = nil }.keyboardShortcut(.cancelAction) }; WorkbenchScrollView { runCard(run) } }
                 .padding(20).frame(minWidth: 580, minHeight: 420)
         }
         .sheet(isPresented: Binding(get: { preview != nil }, set: { if !$0 { preview = nil } })) {
@@ -161,26 +193,22 @@ struct QuickGenerationView: View {
     }
     private var modelHeader: some View {
             VStack(alignment: .leading, spacing: 10) {
-                Image(systemName: "sparkles.rectangle.stack").font(.title2)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.title3.bold())
-                    Text(definition.map { WorkflowCanvasPresentation.operationTitle($0, language: language) } ?? "从资料库选择已适配模型").font(.caption).foregroundStyle(.secondary)
-                    if let id = quick.draft?.node.parameters["modelID"]?.string, !id.isEmpty {
-                        Text((ModelNodeCatalog.entries.first { descriptor in WorkflowModelKind.allCases.contains { id == $0.rawValue + ":" + descriptor.revision } }?.precision ?? "") + " · " + readinessTitle(id))
-                            .font(.caption).foregroundStyle(.secondary).help(id)
-                    }
-                }
-                Button(baselineText(language, "label.48ff0f9d0b4d", fallback: "更换模型"), action: onChooseModel)
+                if let definition {
+                    WorkbenchModelCard(definition: definition, modelID: quick.draft?.node.parameters["modelID"]?.string,
+                        choices: model.projectSession.explicitModelChoices,
+                        status: readinessTitle(quick.draft?.node.parameters["modelID"]?.string ?? ""), change: onChooseModel)
+                } else { Button(consistencyText(language, "MODEL-CHANGE"), action: onChooseModel) }
                 if let draft = quick.draft {
                     Button(baselineText(language, "label.7d9795fa3684", fallback: "带设置到工作流")) { onSettingsToCanvas(draft) }
                 }
             }.padding(20)
     }
-    private var parameterPanel: some View {
-                ScrollView {
+    private func parameterPanel(assets: Bool) -> some View {
+                WorkbenchScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        Text(baselineText(language, "label.39a07dc80743", fallback: "创作输入")).font(.headline)
+
                         if let definition, let draft = quick.draft {
+                            if assets {
                             if definition.inputs.contains(where: { $0.id == "content" && $0.assetListKind == nil && $0.kinds.contains(.text) }) {
                                 Text(baselineText(language, "label.bf8881ad5d3a", fallback: "参考正文（可选）")).font(.subheadline)
                                 TextEditor(text: Binding(get: { draft.inputs["content"]?.datum?.text ?? "" },
@@ -260,6 +288,7 @@ struct QuickGenerationView: View {
                                     }.font(.caption).foregroundStyle(.secondary).disabled(inputAction != nil)
                                 }
                             }
+                            } else {
                             DisclosureGroup(baselineText(language, "label.44455611b910", fallback: "高级设置"), isExpanded: $advanced) {
                                 VStack(alignment: .leading, spacing: 14) {
                                     ForEach(definition.fields.filter { !["modelID", "task", "promptText", "count"].contains($0.id) }) { field in
@@ -279,6 +308,7 @@ struct QuickGenerationView: View {
                                 set: { quick.setAttempts($0, draftID: draft.id) }), in: 1...8)
                             Text(baselineText(language, "label.3238f75ca285", fallback: "每次单独排队、保存；有种子的模型按次递增，不与模型内部批量相乘。"))
                                 .font(.caption).foregroundStyle(.secondary)
+                            }
                             if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
                             if let inputNotice { Text(inputNotice).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                         } else {
@@ -538,7 +568,7 @@ struct QuickParameterField: View {
                 }
                 else { TextField(title, text: stringBinding).textFieldStyle(WorkbenchGlassTextFieldStyle()) }
             case .choice(let options):
-                Picker(title, selection: stringBinding) { ForEach(options, id: \.self) { Text(WorkflowCanvasPresentation.choiceTitle(fieldID: field.id, value: $0, language: language)).tag($0) } }.labelsHidden()
+                WorkbenchPicker(title, selection: stringBinding) { WorkbenchChoiceForEach(options, id: \.self) { WorkbenchChoice(WorkflowCanvasPresentation.choiceTitle(fieldID: field.id, value: $0, language: language), value:$0) } }.labelsHidden()
             case .flag: Toggle(title, isOn: Binding(get: { if case .flag(let b) = value { b } else { false } }, set: { onChange(.flag($0)) })).labelsHidden()
             case .integer, .decimal:
                 TextField(title, text: Binding(get: { raw ?? numberString }, set: { onRaw($0) })).textFieldStyle(WorkbenchGlassTextFieldStyle())

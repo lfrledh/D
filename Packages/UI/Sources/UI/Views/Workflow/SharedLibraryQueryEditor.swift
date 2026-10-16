@@ -14,31 +14,39 @@ struct SharedLibraryQueryDraft {
 }
 
 struct SharedLibraryFilterEditor: View {
+    @State private var tagSearch = ""
+    @State private var advanced = false
+    @State private var applyRequest = 0
     @State private var draft: SharedLibraryQueryDraft
     let store: SharedLibraryStore
     let items: [SharedLibraryItem]
     let context: SharedLibraryQueryContext
     let allowsScopeEditing: Bool
+    let scopeTitle: String
     let current: () -> (SharedLibraryQuery, String)
     let apply: (SharedLibraryQuery) -> Void
     let close: () -> Void
     @State private var failure: String?
     @Environment(\.dLanguageStore) private var language
     init(query: SharedLibraryQuery, token: String, store: SharedLibraryStore, items: [SharedLibraryItem],
-         context: SharedLibraryQueryContext, allowsScopeEditing: Bool = true,
+         context: SharedLibraryQueryContext, allowsScopeEditing: Bool = true, scopeTitle: String = "",
          current: @escaping () -> (SharedLibraryQuery, String), apply: @escaping (SharedLibraryQuery) -> Void, close: @escaping () -> Void) {
         _draft = State(initialValue: .init(query: query, context: token)); self.store = store; self.items = items
-        self.context = context; self.allowsScopeEditing = allowsScopeEditing; self.current = current; self.apply = apply; self.close = close
+        self.context = context; self.allowsScopeEditing = allowsScopeEditing; self.scopeTitle = scopeTitle; self.current = current; self.apply = apply; self.close = close
     }
     private func t(_ key: String, _ zh: String, _ en: String) -> String { metadataText(language, key, zh, en) }
     var body: some View {
-        ScrollView {
+        VStack(spacing: 0) {
+        WorkbenchScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text(t("filters", "筛选条件", "Filter conditions")).font(.headline)
                 Text(t("draftFilters", "全部条件在点应用后一起生效；取消不改当前检索。", "All conditions apply together. Cancel leaves the current query unchanged.")).font(.caption)
+                if !scopeTitle.isEmpty { Text(scopeTitle).font(.subheadline) }
+                if allowsScopeEditing { SharedLibraryScopeControls(query: $draft.query, items: items, context: context) }
                 TextField(t("searchResults", "搜索名称、说明和标签", "Search names, notes & tags"), text: $draft.query.text)
-                group(t("allTags", "同时包含标签", "Contains all tags"), Array(store.metadata.tags.keys).sorted { $0.uuidString < $1.uuidString }, \.allTagIDs) { store.metadata.tags[$0]?.name ?? "—" }
-                group(t("anyTags", "至少包含一个标签", "Contains any tag"), Array(store.metadata.tags.keys).sorted { $0.uuidString < $1.uuidString }, \.anyTagIDs) { store.metadata.tags[$0]?.name ?? "—" }
+                TextField(t("tagSearch", "搜索标签", "Search tags"), text: $tagSearch)
+                tagsGroup(t("allTags", "全部符合", "Match All"), \.allTagIDs)
+                tagsGroup(t("anyTags", "任一符合", "Match Any"), \.anyTagIDs)
                 group(t("kind", "类别", "Category"), SharedLibraryItemKind.allCases, \.kinds) { t("kind." + $0.rawValue, ["model":"模型", "component":"组件", "program":"程序", "asset":"素材", "tool":"工具"][$0.rawValue] ?? $0.rawValue, $0.rawValue.capitalized) }
                 group(t("roles", "用途", "Role"), Array(Set(items.map(\.role).filter { !$0.isEmpty })).sorted(), \.roles) { $0 }
                 group(t("inputs", "输入类型", "Input type"), WorkflowDataKind.allCases, \.inputs) { WorkflowCanvasPresentation.kind($0, language: language) }
@@ -46,16 +54,40 @@ struct SharedLibraryFilterEditor: View {
                 group(t("content", "内容类型", "Content type"), WorkflowDataKind.allCases, \.contentKinds) { WorkflowCanvasPresentation.kind($0, language: language) }
                 group(t("readiness", "准备状态", "Readiness"), SharedLibraryReadiness.allCases, \.readiness) { workflowText(language, "baseline02.library.ready." + $0.rawValue, fallback: $0.rawValue) }
                 group(t("compatibility", "兼容性", "Compatibility"), SharedLibraryCompatibility.allCases, \.compatibility) { workflowText(language, "baseline02.library.compat." + $0.rawValue, fallback: $0.rawValue) }
-                SharedLibraryPropertyControls(query: $draft.query, items: items, context: context, allowsScopeEditing: allowsScopeEditing, onApply: {
+                Button { advanced.toggle() } label: { Label(t("advancedPropertiesOnly", "高级属性", "Advanced Properties"), systemImage: advanced ? "chevron.down" : "chevron.right") }
+                SharedLibraryPropertyControls(query: $draft.query, items: items, context: context, allowsScopeEditing: false, onApply: {
                     do { let live = current(); let value = try draft.validated(current: live.0, context: live.1); apply(value); close() }
                     catch { failure = t("filterContextChanged", "条件或所在范围已改变，或条件无效。未应用；请取消后重新打开。", "The query or context changed, or a condition is invalid. Nothing was applied; cancel and reopen.") }
-                }, onCancel: close)
+                }, onCancel: close, showsActions: false, applyRequest: applyRequest, onValidationFailure: { failure = $0; advanced = true })
+                .frame(height: advanced ? nil : 0).clipped().allowsHitTesting(advanced).accessibilityHidden(!advanced)
                 if let failure { Text(failure).foregroundStyle(.red) }
             }.padding(16)
-        }.frame(width: 380, height: 580)
+        }
+        HStack {
+            Button(t("cancel", "取消", "Cancel"), action: close).keyboardShortcut(.cancelAction)
+            Spacer()
+            Button(t("applyAllFilters", "应用全部条件", "Apply all conditions")) { applyRequest += 1 }.keyboardShortcut(.defaultAction)
+        }.padding(16).workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge)
+        }.frame(width: 400, height: 580)
+        .environment(\.workbenchMenuContext, "filter:\(ObjectIdentifier(store)):\(draft.context)")
+    }
+    private func tagsGroup(_ title: String, _ path: WritableKeyPath<SharedLibraryQuery, Set<UUID>>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.subheadline.weight(.semibold))
+            ForEach(draft.query[keyPath: path].sorted { $0.uuidString < $1.uuidString }, id: \.self) { id in
+                Button { draft.query[keyPath: path].remove(id) } label: {
+                    Label(store.metadata.tags[id]?.name ?? t("deletedTagCondition", "已删除的标签", "Deleted tag"), systemImage: "xmark.circle")
+                }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
+            }
+            ForEach(store.metadata.tags.values.filter { tagSearch.isEmpty || $0.name.localizedStandardContains(tagSearch) }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { tag in
+                Toggle(tag.name, isOn: Binding(get: { draft.query[keyPath: path].contains(tag.id) }, set: { included in
+                    if included { draft.query[keyPath: path].insert(tag.id) } else { draft.query[keyPath: path].remove(tag.id) }
+                }))
+            }
+        }
     }
     private func group<T: Hashable>(_ title: String, _ values: [T], _ path: WritableKeyPath<SharedLibraryQuery, Set<T>>, label: @escaping (T) -> String) -> some View {
-        Menu(title + " (\(draft.query[keyPath: path].count))") {
+        DisclosureGroup(title + " (\(draft.query[keyPath: path].count))") {
             ForEach(values, id: \.self) { value in
                 Toggle(label(value), isOn: Binding(get: { draft.query[keyPath: path].contains(value) }, set: { included in
                     if included { draft.query[keyPath: path].insert(value) } else { draft.query[keyPath: path].remove(value) }

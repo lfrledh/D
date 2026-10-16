@@ -293,6 +293,7 @@ public struct SharedLibraryBrowser: View {
     private let onLocation: (SharedLibraryBrowserEntry) -> Void
     private let onPrepare: (SharedLibraryBrowserEntry) -> Void
     private let onImport: () -> Void
+    private let allowsImport: Bool
     private let onClose: () -> Void
     private let queryContext: SharedLibraryQueryContext
     private let annotationSave: (SharedLibraryBrowserEntry) -> SharedLibraryAnnotationSave?
@@ -322,7 +323,7 @@ public struct SharedLibraryBrowser: View {
     @State private var parentID: UUID?
 
     public init(
-        entries: [SharedLibraryBrowserEntry], store: SharedLibraryStore, compact: Bool = false,
+        entries: [SharedLibraryBrowserEntry], store: SharedLibraryStore, compact: Bool = false, allowsImport: Bool = true,
         state: SharedLibraryBrowserState? = nil,
         onUse: @escaping (SharedLibraryBrowserEntry) -> Void,
         onAdd: @escaping (SharedLibraryBrowserEntry) -> Void,
@@ -334,7 +335,7 @@ public struct SharedLibraryBrowser: View {
         queryContext: SharedLibraryQueryContext = .init(), annotationSave: @escaping (SharedLibraryBrowserEntry) -> SharedLibraryAnnotationSave? = { _ in nil }
     ) {
         self._state = State(initialValue: state ?? SharedLibraryBrowserState())
-        self.entries = entries; self.store = store; self.compact = compact
+        self.entries = entries; self.store = store; self.compact = compact; self.allowsImport = allowsImport
         self.onUse = onUse; self.onAdd = onAdd; self.onPreview = onPreview; self.onLocation = onLocation
         self.onPrepare = onPrepare; self.onImport = onImport; self.onClose = onClose
         self.tagValidation = tagValidation; self.queryContext = queryContext; self.annotationSave = annotationSave
@@ -412,6 +413,7 @@ public struct SharedLibraryBrowser: View {
                 }
             }
         }
+        .environment(\.workbenchMenuContext, "library:\(ObjectIdentifier(store)):\(ObjectIdentifier(state)):\(queryContext.projectID?.uuidString ?? "none"):\(queryContext.instanceID?.uuidString ?? "none")")
         .background { if !compact { Color.clear.workbenchPanel(cornerRadius: 12) } }
         .sheet(item: $saveQueryRequest) { request in SharedLibrarySaveQuerySheet(request: request, store: store) { saveQueryRequest = nil } }
         .sheet(isPresented: $showOrganizer) { organizer }
@@ -432,7 +434,7 @@ public struct SharedLibraryBrowser: View {
                         Text(word("detail", "详情")).font(.headline)
                         Spacer()
                     }
-                    ScrollView { details(entry) }
+                    WorkbenchScrollView { details(entry) }
                 }.padding(16).frame(minWidth: 300, minHeight: 320)
             }
         }
@@ -471,16 +473,17 @@ public struct SharedLibraryBrowser: View {
         VStack(alignment: .leading, spacing: 7) {
             searchControls
             if !validSelection.isEmpty { bulkControls }
-            ScrollView {
+            WorkbenchScrollView {
                 LazyVStack(spacing: 6) {
                     ForEach(visible) { entry in entryRow(entry, compact: true) }
                 }.padding(.horizontal, 6)
             }
+            searchFooter
         }.padding(7).frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var sidebar: some View {
-        ScrollView {
+        WorkbenchScrollView {
             VStack(alignment: .leading, spacing: 5) {
                 scopeButton(word("all", "全部"), icon: "square.grid.2x2", value: .all)
                 Text(word("kind", "类别")).font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 8)
@@ -535,6 +538,7 @@ public struct SharedLibraryBrowser: View {
                     ForEach(visible) { entry in entryRow(entry, compact: false).tag(entry.id) }
                 }.listStyle(.plain).accessibilityIdentifier("shared-library-results")
             }
+            searchFooter
         }.padding(8)
     }
 
@@ -559,35 +563,38 @@ public struct SharedLibraryBrowser: View {
     }
     private var searchControls: some View {
         VStack(alignment: .leading, spacing: 6) {
+            TextField(word("search", "搜索名称、说明或我的标签"), text: searchTextBinding)
+                .textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("shared-library-search")
+
             HStack {
-                Menu(scopeTitle) {
-                    Button(word("all", "全部")) { selectScope(.all) }
-                    ForEach(SharedLibraryItemKind.allCases, id: \.self) { kind in Button(kindName(kind)) { selectScope(.kind(kind)) } }
-                    ForEach(folders) { folder in Button(folder.name) { selectScope(.folder(folder.id)) } }
-                    ForEach(saved) { saved in Button(saved.name) { selectScope(.saved(saved.id)) } }
+                WorkbenchMenu(scopeTitle) {
+                    WorkbenchMenuAction(word("all", "全部")) { selectScope(.all) }
+                    WorkbenchMenuForEach(SharedLibraryItemKind.allCases, id: \.self) { kind in WorkbenchMenuAction(kindName(kind)) { selectScope(.kind(kind)) } }
+                    WorkbenchMenuForEach(folders) { folder in WorkbenchMenuAction(folder.name) { selectScope(.folder(folder.id)) } }
+                    WorkbenchMenuForEach(saved) { saved in WorkbenchMenuAction(saved.name) { selectScope(.saved(saved.id)) } }
                 }.font(.caption)
                 if compact {
                     Spacer(minLength: 0)
-                    Menu {
-                        Button(word("import", "导入素材"), action: onImport)
-                        Button(word("saveQuery", "保存检索")) { openSaveQuery() }
-                        Button(word("organize", "整理资料库")) { showOrganizer = true }
-                        Divider()
-                        Button(word("undo", "撤销")) { perform { try store.undo() } }.disabled(!store.canUndo)
-                        Button(word("redo", "重做")) { perform { try store.redo() } }.disabled(!store.canRedo)
+                    WorkbenchMenu {
+                        WorkbenchSubmenu(consistencyText(language, "menu.library.saved")) { WorkbenchMenuForEach(saved) { item in WorkbenchMenuAction(item.name) { selectScope(.saved(item.id)) } } }
+                        WorkbenchMenuAction(consistencyText(language, "menu.library.manage")) { showOrganizer = true }
+                        WorkbenchMenuDivider()
+                        WorkbenchMenuAction(word("undo", "撤销")) { perform { try store.undo() } }.disabled(!store.canUndo)
+                        WorkbenchMenuAction(word("redo", "重做")) { perform { try store.redo() } }.disabled(!store.canRedo)
                     } label: { Image(systemName: "ellipsis.circle") }
                         .accessibilityLabel(word("more", "更多"))
                         .accessibilityIdentifier("shared-library-more")
                 }
             }
-            TextField(word("search", "搜索名称、说明或我的标签"), text: searchTextBinding)
-                .textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("shared-library-search")
             HStack {
-                Menu(word("allTags", "同时包含这些标签")) {
-                    ForEach(tags) { tag in
-                        Toggle(tag.name + " (\(countAddingTag(tag.id)))", isOn: setBinding(\.allTagIDs, tag.id))
+                if allowsImport {
+                    Button(consistencyText(language, "LIB-ADD"), action: onImport)
+                }
+                WorkbenchMenu(consistencyText(language, "LIB-TAGS")) {
+                    WorkbenchMenuForEach(tags) { tag in
+                        WorkbenchMenuToggle(tag.name + " (\(countAddingTag(tag.id)))", isOn: setBinding(\.allTagIDs, tag.id))
                     }
-                    if tags.isEmpty { Text(word("noTags", "尚无我的标签")) }
+                    if tags.isEmpty { WorkbenchMenuText(word("noTags", "尚无我的标签")) }
                 }
                 Button(word("filters", "筛选"), systemImage: "line.3.horizontal.decrease.circle") { showFilters.toggle() }
                     .popover(isPresented: $showFilters, arrowEdge: .bottom) { filterPopover }
@@ -611,6 +618,9 @@ public struct SharedLibraryBrowser: View {
             if !query.allTagIDs.union(query.anyTagIDs).filter({ store.metadata.tags[$0] == nil }).isEmpty {
                 WorkflowTechnicalDetails(value: query.allTagIDs.union(query.anyTagIDs).filter { store.metadata.tags[$0] == nil }.sorted { $0.uuidString < $1.uuidString }.map { state.tagPresentation.title($0, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag")) + ": " + $0.uuidString }.joined(separator: "\n"))
             }
+        }.workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge)
+    }
+    private var searchFooter: some View {
             HStack {
                 if case .failure = visibleResult {
                     Text(metadataText(language, "countUnavailable", "当前范围数量不可用", "Count unavailable for this scope")).font(.caption2)
@@ -620,7 +630,6 @@ public struct SharedLibraryBrowser: View {
                 Spacer(minLength: 0)
                 Button(word("saveQuery", "保存检索")) { openSaveQuery() }.font(.caption)
             }
-        }
     }
     private var hasSearchTokens: Bool {
         scope != .all || !query.text.isEmpty || !query.allTagIDs.isEmpty || !query.anyTagIDs.isEmpty
@@ -640,35 +649,37 @@ public struct SharedLibraryBrowser: View {
     }
 
     private var bulkControls: some View {
-        HStack(spacing: 6) {
+        let capturedSelection = validSelection
+        let capturedKeys = selectedMetadataKeys
+        return HStack(spacing: 6) {
             Text(word("selected", "已选") + " \(validSelection.count)").font(.caption).foregroundStyle(.secondary)
             Spacer()
-            Menu {
-                Button(word("editTags", "编辑所选对象标签…")) { openTagEditor(activityIDs: validSelection) }
-                ForEach(tags) { tag in
-                    Button(word("addTag", "添加标签") + " · " + tag.name) {
-                        openTagEditor(activityIDs: validSelection, add: [tag.id])
+            WorkbenchMenu {
+                WorkbenchMenuAction(word("editTags", "编辑所选对象标签…")) { openTagEditor(activityIDs: capturedSelection) }
+                WorkbenchMenuForEach(tags) { tag in
+                    WorkbenchMenuAction(word("addTag", "添加标签") + " · " + tag.name) {
+                        openTagEditor(activityIDs: capturedSelection, add: [tag.id])
                     }
-                    Button(word("removeTag", "移除标签") + " · " + tag.name) {
-                        openTagEditor(activityIDs: validSelection, remove: [tag.id])
+                    WorkbenchMenuAction(word("removeTag", "移除标签") + " · " + tag.name) {
+                        openTagEditor(activityIDs: capturedSelection, remove: [tag.id])
                     }
                 }
-                if tags.isEmpty { Text(word("noTags", "尚无我的标签")) }
+                if tags.isEmpty { WorkbenchMenuText(word("noTags", "尚无我的标签")) }
             } label: { Label(word("bulkTags", "批量标签"), systemImage: "tag") }
                 .disabled(validSelection.isEmpty)
-            Menu {
-                ForEach(folders) { folder in
-                    Button(word("addToFolder", "加入分类") + " · " + folder.name) {
-                        perform { try store.addMembers(selectedMetadataKeys, to: folder.id) }
+            WorkbenchMenu {
+                WorkbenchMenuForEach(folders) { folder in
+                    WorkbenchMenuAction(word("addToFolder", "加入分类") + " · " + folder.name) {
+                        perform { try store.addMembers(capturedKeys, to: folder.id) }
                     }
-                    Button(word("removeFromFolder", "移出分类") + " · " + folder.name) {
-                        perform { try store.removeMembers(selectedMetadataKeys, from: folder.id) }
+                    WorkbenchMenuAction(word("removeFromFolder", "移出分类") + " · " + folder.name) {
+                        perform { try store.removeMembers(capturedKeys, from: folder.id) }
                     }
                 }
-                if folders.isEmpty { Text(word("noFolders", "尚无分类")) }
+                if folders.isEmpty { WorkbenchMenuText(word("noFolders", "尚无分类")) }
             } label: { Label(word("bulkFolders", "批量分类"), systemImage: "folder") }
                 .disabled(validSelection.isEmpty)
-        }.font(.caption)
+        }.font(.caption).environment(\.workbenchMenuContext, "bulk:\(ObjectIdentifier(store)):\(ObjectIdentifier(state)):\(capturedSelection.sorted()):\(capturedKeys.sorted())")
     }
 
     @ViewBuilder private func entryRow(_ entry: SharedLibraryBrowserEntry, compact: Bool) -> some View {
@@ -677,6 +688,16 @@ public struct SharedLibraryBrowser: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.item.title).font(.callout.weight(.medium)).lineLimit(2)
                 Text(entry.item.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                if entry.item.kind == .model {
+                    if let descriptor = ModelNodeCatalog.entries.first(where: { $0.id == entry.item.key }) {
+                        Text(descriptor.precision).font(.system(size: 13)).lineLimit(2)
+                    }
+                    if case .operation(let id, _) = entry.selection, let definition = WorkflowRegistry.standard.operation(id)?.definition {
+                        Text(WorkflowCanvasPresentation.operationDetail(definition, language: language)).font(.caption).lineLimit(2)
+                    }
+                    Text(entry.item.inputs.map(dataName).sorted().joined(separator: "/") + " → " + entry.item.outputs.map(dataName).sorted().joined(separator: "/"))
+                        .font(.caption).lineLimit(2)
+                }
                 if !(store.metadata.tagAssignments[entry.item.key] ?? []).isEmpty {
                     Text(assignedTagNames(entry.item.key)).font(.caption2).lineLimit(2)
                 }
@@ -725,7 +746,7 @@ public struct SharedLibraryBrowser: View {
     }
 
     private var detailPane: some View {
-        ScrollView {
+        WorkbenchScrollView {
             if let entry = selectedEntry { details(entry).padding(12) }
             else { Text(word("choose", "选择条目以查看详情")).foregroundStyle(.secondary).padding(12) }
         }
@@ -813,7 +834,7 @@ public struct SharedLibraryBrowser: View {
             + String(describing: queryContext.projectID) + String(describing: queryContext.instanceID)
     }
     private var filterPopover: some View {
-        SharedLibraryFilterEditor(query: query, token: filterToken, store: store, items: entries.map(\.item), context: queryContext,
+        SharedLibraryFilterEditor(query: query, token: filterToken, store: store, items: entries.map(\.item), context: queryContext, scopeTitle: scopeTitle,
             current: { (query, filterToken) }, apply: { query = $0 }, close: { showFilters = false })
     }
     private func openSaveQuery() {
@@ -828,9 +849,9 @@ public struct SharedLibraryBrowser: View {
         keyPath: WritableKeyPath<SharedLibraryQuery, Set<Value>>,
         label: @escaping (Value) -> String
     ) -> some View {
-        Menu(title + " (\(query[keyPath: keyPath].count))") {
-            ForEach(values, id: \.self) { value in
-                Toggle(label(value), isOn: setBinding(keyPath, value))
+        WorkbenchMenu(title + " (\(query[keyPath: keyPath].count))") {
+            WorkbenchMenuForEach(values, id: \.self) { value in
+                WorkbenchMenuToggle(label(value), isOn: setBinding(keyPath, value))
             }
         }
     }
@@ -975,9 +996,9 @@ public struct SharedLibraryBrowser: View {
                 }.disabled(selectedFolderID == nil)
             }
             HStack {
-                Picker(word("parent", "上级分类"), selection: $parentID) {
-                    Text(word("root", "顶层")).tag(UUID?.none)
-                    ForEach(folders) { folder in Text(folder.name).tag(Optional(folder.id)) }
+                WorkbenchPicker(word("parent", "上级分类"), selection: $parentID) {
+                    WorkbenchChoice(word("root", "顶层"), value:UUID?.none)
+                    WorkbenchChoiceForEach(folders) { folder in WorkbenchChoice(folder.name, value:Optional(folder.id)) }
                 }
                 Button(word("move", "移动分类")) {
                     guard let id = selectedFolderID else { return }

@@ -3,6 +3,8 @@ import DWorkbench
 import SwiftUI
 
 struct GenerationInspector: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     @Bindable var model: WorkbenchModel
     var library: ModelLibraryModel? = nil
     private let parameterDocumentID: UUID?
@@ -27,9 +29,9 @@ struct GenerationInspector: View {
         guard let library else { return model.modelStatus }
         if let record = selectedLibraryRecord { return library.status(for: record) }
         if model.selectedModelID != nil, library.snapshot != nil {
-            return "这份模型已不在库中，请重新选择。作品和生成记录会保留。"
+            return workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.56", fallback: "This model is no longer in the library. Choose it again. Your work and generation history will be kept.")
         }
-        return "从模型库中选择已完成校验的模型。"
+        return workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.57", fallback: "Choose a verified model from the model library.")
     }
 
     private var hasAvailableSelection: Bool {
@@ -42,8 +44,8 @@ struct GenerationInspector: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(model.activeDocument?.name ?? "创作").font(.title2.weight(.semibold))
-                    Text("让你的想法成形")
+                    Text(model.activeDocument?.name ?? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.58", fallback: "Creation")).font(.title2.weight(.semibold))
+                    Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.59", fallback: "Bring Your Idea to Life"))
                         .font(.callout).foregroundStyle(.secondary)
                 }
 
@@ -91,11 +93,11 @@ struct GenerationInspector: View {
 
     private var modelSection: some View {
         VStack(alignment: .leading, spacing: 9) {
-            sectionTitle("模型", systemImage: "cube.transparent")
+            sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.60", fallback: "Model"), systemImage: "cube.transparent")
             if let name = model.modelName {
                 Text(name).font(.callout.weight(.medium)).textSelection(.enabled)
             } else {
-                Text("选择已安装的模型").font(.callout.weight(.medium))
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.61", fallback: "Choose an Installed Model")).font(.callout.weight(.medium))
             }
             Text(displayedModelStatus).font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -113,17 +115,17 @@ struct GenerationInspector: View {
                 }
                 else { Task { await model.registerModel() } }
             } label: {
-                Label(library != nil ? "从模型库选择…" : (model.modelName == nil ? "选择模型文件夹…" : "更换或重新授权…"),
+                Label(library != nil ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.62", fallback: "Choose from Model Library…") : (model.modelName == nil ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.63", fallback: "Choose Model Folder…") : workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.64", fallback: "Change or Grant Access Again…")),
                       systemImage: library != nil ? "cube.transparent" : "folder.badge.plus")
             }
             .accessibilityIdentifier(library != nil ? "choose-project-model" : "register-model")
             .disabled(library == nil && model.isBusy)
-            .help(library != nil ? "安装、登记并选择当前项目使用的模型" : "选择本地 FLUX.2 Klein 4B q8 模型文件夹")
+            .help(library != nil ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.65", fallback: "Install, add and select a model for the current project") : workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.66", fallback: "Choose the local FLUX.2 Klein 4B q8 model folder"))
             if let library, library.hasActiveWork {
-                Label("模型库中有 \(library.activityCount) 项安装操作进行中", systemImage: "arrow.down.circle")
+                Label(consistencyText(legacyLanguage, "copy.GenerationInspector.0", arguments: ["v0": String(describing: library.activityCount)]), systemImage: "arrow.down.circle")
                     .font(.caption).foregroundStyle(.secondary)
             } else if let library, library.failedCount > 0 {
-                Label("模型库中有未完成的操作，请打开检查。", systemImage: "exclamationmark.circle")
+                Label(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.67", fallback: "The model library has unfinished operations. Open it to review them."), systemImage: "exclamationmark.circle")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -131,7 +133,7 @@ struct GenerationInspector: View {
 
     private var promptSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("画面描述", systemImage: "text.alignleft")
+            sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.68", fallback: "Image Description"), systemImage: "text.alignleft")
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $model.prompt)
                     .font(.body)
@@ -139,10 +141,10 @@ struct GenerationInspector: View {
                     .padding(5)
                     .frame(minHeight: 145)
                     .focused($promptFocused)
-                    .accessibilityLabel("画面描述")
+                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.68", fallback: "Image Description"))
                     .accessibilityIdentifier("prompt-editor")
                 if model.prompt.isEmpty {
-                    Text("描述主体、环境、光线与风格…")
+                    Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.69", fallback: "Describe the subject, setting, lighting and style…"))
                         .font(.body).foregroundStyle(.tertiary)
                         .padding(.horizontal, 10).padding(.top, 13)
                         .allowsHitTesting(false)
@@ -152,7 +154,7 @@ struct GenerationInspector: View {
             .workbenchInputSurface()
             .overlay(RoundedRectangle(cornerRadius: 10)
                 .stroke(promptFocused ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: 1))
-            Text("编辑草稿不会改变已经排队的任务。")
+            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.70", fallback: "Editing the draft does not change tasks already in the queue."))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -160,22 +162,22 @@ struct GenerationInspector: View {
     private var seedSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                sectionTitle("随机种子", systemImage: "dice")
+                sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.71", fallback: "Random Seed"), systemImage: "dice")
                 Spacer()
-                Toggle("随机", isOn: $model.randomSeed)
+                Toggle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.72", fallback: "Random"), isOn: $model.randomSeed)
                     .toggleStyle(.checkbox)
                     .accessibilityIdentifier("random-seed")
             }
             if model.randomSeed {
-                Text("每次生成使用新的 seed，并随作品保存。")
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.73", fallback: "Each generation uses a new seed, which is saved with the work."))
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 TextField("0", text: $model.seedText)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .monospacedDigit()
-                    .accessibilityLabel("固定 seed")
+                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.74", fallback: "Fixed Seed"))
                     .accessibilityIdentifier("seed-field")
-                Text("使用相同 seed 和生成条件可以再次生成。0 也是有效值。")
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.75", fallback: "Use the same seed and generation settings to generate again. Zero is also a valid seed."))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -183,28 +185,28 @@ struct GenerationInspector: View {
 
     private var generationSettings: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("生成规格", systemImage: "slider.horizontal.3")
+            sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.76", fallback: "Generation Settings"), systemImage: "slider.horizontal.3")
             VStack(alignment: .leading, spacing: 8) {
-                Text("宽度（像素）").font(.caption).foregroundStyle(.secondary)
-                TextField("宽度（像素）", text: imageWidth)
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.77", fallback: "Width (Pixels)")).font(.caption).foregroundStyle(.secondary)
+                TextField(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.77", fallback: "Width (Pixels)"), text: imageWidth)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle())
-                    .accessibilityLabel("宽度（像素）")
+                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.77", fallback: "Width (Pixels)"))
                     .accessibilityIdentifier("image-width")
-                Text("高度（像素）").font(.caption).foregroundStyle(.secondary)
-                TextField("高度（像素）", text: imageHeight)
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.78", fallback: "Height (Pixels)")).font(.caption).foregroundStyle(.secondary)
+                TextField(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.78", fallback: "Height (Pixels)"), text: imageHeight)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle())
-                    .accessibilityLabel("高度（像素）")
+                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.78", fallback: "Height (Pixels)"))
                     .accessibilityIdentifier("image-height")
             }
             HStack(spacing: 18) {
-                settingValue("步数", value: "\(model.imageCapability.steps)")
+                settingValue(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.79", fallback: "Steps"), value: "\(model.imageCapability.steps)")
                 settingValue("Guidance", value: model.imageCapability.guidanceScale.formatted())
             }
-            Text("支持宽度 \(model.imageCapability.minimumWidth)–\(model.imageCapability.maximumWidth)，高度 \(model.imageCapability.minimumHeight)–\(model.imageCapability.maximumHeight)，均为 \(model.imageCapability.dimensionMultiple) 的倍数。")
+            Text(consistencyText(legacyLanguage, "copy.GenerationInspector.1", arguments: ["v0": String(describing: model.imageCapability.minimumWidth), "v1": String(describing: model.imageCapability.maximumWidth), "v2": String(describing: model.imageCapability.minimumHeight), "v3": String(describing: model.imageCapability.maximumHeight), "v4": String(describing: model.imageCapability.dimensionMultiple)]))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if let recommendation = model.executionRecommendations {
-                Text("这是依据当前内存的未实测起始建议：\(recommendation.imageDimension) × \(recommendation.imageDimension)；不代表已验证能力或保证当前准入，也不会改变当前设置。")
+                Text(consistencyText(legacyLanguage, "copy.GenerationInspector.2", arguments: ["v0": String(describing: recommendation.imageDimension), "v1": String(describing: recommendation.imageDimension)]))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -236,13 +238,13 @@ struct GenerationInspector: View {
     @ViewBuilder private var presetButtons: some View {
         let sizes = [512, 768, 1024].filter { accepts(width: $0, height: $0) }
         if !sizes.isEmpty {
-            Menu("尺寸预设") {
-                ForEach(sizes, id: \.self) { size in
-                    Button("\(size) × \(size)") { applyImagePreset(width: size, height: size) }
+            WorkbenchMenu(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.80", fallback: "Size Presets")) {
+                WorkbenchMenuForEach(sizes, id: \.self) { size in
+                    WorkbenchMenuAction("\(size) × \(size)") { applyImagePreset(width: size, height: size) }
                 }
             }
             .controlSize(.small)
-            Text("选择预设会采用当前支持的生成配置。")
+            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.81", fallback: "Selecting a preset applies a currently supported generation configuration."))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -256,8 +258,8 @@ struct GenerationInspector: View {
     private func publishImageEditIfComplete() {
         let widthText = rawImageWidth ?? String(model.imageSettings.width)
         let heightText = rawImageHeight ?? String(model.imageSettings.height)
-        if let error = numericEditingError(widthText, label: "宽度")
-            ?? numericEditingError(heightText, label: "高度") {
+        if let error = numericEditingError(widthText, label: workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.82", fallback: "Width"))
+            ?? numericEditingError(heightText, label: workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.83", fallback: "Height")) {
             setImageEditingError(error)
             return
         }
@@ -288,9 +290,7 @@ struct GenerationInspector: View {
     }
 
     private func numericEditingError(_ raw: String, label: String) -> String? {
-        if raw.isEmpty { return "\(label)必须填写整数。" }
-        if Int(raw) == nil { return "\(label)必须是可表示的整数。" }
-        return nil
+        workbenchIntegerEditingError(raw, field: label, language: legacyLanguage)
     }
 
     static func profileForManualDimensionEdit(_ current: ExecutionProfileReference,
@@ -310,7 +310,7 @@ struct GenerationInspector: View {
         Button {
             Task { await model.generate() }
         } label: {
-            Label(model.isBusy ? "加入生成队列" : "生成图片", systemImage: "sparkles")
+            Label(model.isBusy ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.84", fallback: "Add to Generation Queue") : workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.85", fallback: "Generate Image"), systemImage: "sparkles")
                 .font(.body.weight(.semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 5)
@@ -319,16 +319,16 @@ struct GenerationInspector: View {
         .disabled(!model.canGenerate || !hasAvailableSelection)
         .keyboardShortcut(.return, modifiers: .command)
         .accessibilityIdentifier("generate")
-        .help("生成并自动保存作品（⌘ Return）")
+        .help(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.86", fallback: "Generate and automatically save the work (⌘ Return)"))
     }
 
     private func savedConditions(job: ProjectJob, image: ImageRequest) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("所选作品", systemImage: "info.circle")
+            sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.87", fallback: "Selected Work"), systemImage: "info.circle")
             Text(image.prompt).font(.caption).lineLimit(5).textSelection(.enabled)
             LabeledContent("Seed", value: String(image.seed))
                 .font(.caption).monospacedDigit().textSelection(.enabled)
-            LabeledContent("生成时间", value: job.createdAt.formatted(date: .abbreviated, time: .shortened))
+            LabeledContent(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.88", fallback: "Generated"), value: job.createdAt.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption)
             if let provenance = ImageReferenceSection.submittedReferenceText(job: job, manifest: model.manifest) {
                 Text(provenance)
@@ -336,7 +336,7 @@ struct GenerationInspector: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("submitted-image-reference")
             } else {
-                Text("此任务未提交参考图；当前草稿的参考设置不会回写到它。")
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.89", fallback: "No reference image was submitted with this task. The current draft's reference settings do not change this record."))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("submitted-image-reference-none")
@@ -344,10 +344,10 @@ struct GenerationInspector: View {
             Button {
                 Task { await model.copySettings(from: job.id) }
             } label: {
-                Label("基于条件新建创作", systemImage: "arrow.branch")
+                Label(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.12", fallback: "Create from These Settings"), systemImage: "arrow.branch")
             }
             .accessibilityIdentifier("copy-settings-inspector")
-            Text("复制实际提示词与 seed；本次提交有参考图时会保留原参考，不会把所查看图片自动作为输入。")
+            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.90", fallback: "Copies the submitted prompt and seed, preserving reference images used in that request. The image being viewed is not automatically used as input."))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -367,37 +367,39 @@ struct GenerationInspector: View {
 }
 
 private struct CandidateDetails: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     @Bindable var model: WorkbenchModel
     let asset: ProjectAsset
     let edit: () -> Void
     private var ownerID: UUID? { model.manifest?.jobs.first(where: { $0.id == asset.jobID })?.documentID }
     private var ownerName: String {
-        model.documents.first(where: { $0.id == ownerID })?.name ?? "来源创作"
+        model.documents.first(where: { $0.id == ownerID })?.name ?? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.91", fallback: "Source Creation")
     }
     private var adoptionActionTitle: String {
         if model.documents.contains(where: { $0.adoptedAssetID == asset.id }) {
-            return ownerID == model.activeDocumentID ? "取消采用" : "取消「\(ownerName)」的采用"
+            return ownerID == model.activeDocumentID ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.92", fallback: "Stop Using This Result") : "取消「\(ownerName)」的采用"
         }
         return "采用为「\(ownerName)」的方案"
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("候选整理").font(.subheadline.weight(.semibold))
+            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.93", fallback: "Organize Candidates")).font(.subheadline.weight(.semibold))
             Text(asset.name).font(.callout.weight(.medium))
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(asset.name)
                 .accessibilityIdentifier("candidate-saved-name")
             if !asset.note.isEmpty { Text(asset.note).font(.caption).textSelection(.enabled) }
-            Toggle("收藏", isOn: Binding(get: { asset.isFavorite }, set: { value in
+            Toggle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.94", fallback: "Favorite"), isOn: Binding(get: { asset.isFavorite }, set: { value in
                 guard let owner = model.projectSession.currentStore, let project = model.manifest else { return }
                 let baseline = ProjectAssetEditBaseline(project: project, asset: asset)
                 Task {
                     do { try await model.projectSession.saveAssetAnnotations(owner: owner, expected: baseline, isFavorite: value) }
-                    catch { if model.projectSession.currentStore === owner { model.errorMessage = "收藏未能保存：" + error.localizedDescription } }
+                    catch { if model.projectSession.currentStore === owner { model.errorMessage = workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.95", fallback: "Could not save favorite: ") + error.localizedDescription } }
                 }
             })).accessibilityIdentifier("candidate-favorite")
-            Button("编辑名称与备注…", action: edit)
+            Button(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.96", fallback: "Edit Name and Notes…"), action: edit)
                 .accessibilityIdentifier("edit-candidate")
             Button {
                 Task {
@@ -409,13 +411,15 @@ private struct CandidateDetails: View {
                 Label(adoptionActionTitle, systemImage: "checkmark.seal")
             }
             .accessibilityIdentifier("adopt-candidate")
-            Text("每个创作保留一个采用方案；其他候选仍会保存。")
+            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.97", fallback: "Each creation has one chosen result. Other candidates are kept."))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
 }
 
 private struct CandidateMetadataEditor: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     @Bindable var model: WorkbenchModel
     let asset: ProjectAsset
     @Binding var isPresented: Bool
@@ -442,20 +446,20 @@ private struct CandidateMetadataEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("编辑候选作品").font(.headline)
-            TextField("作品名称", text: $name).textFieldStyle(WorkbenchGlassTextFieldStyle())
+            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.98", fallback: "Edit Candidate Info")).font(.headline)
+            TextField(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.99", fallback: "Work Name"), text: $name).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .accessibilityIdentifier("candidate-name")
-            TextField("备注", text: $note, axis: .vertical).lineLimit(4...8)
+            TextField(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.100", fallback: "Notes"), text: $note, axis: .vertical).lineLimit(4...8)
                 .textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("candidate-note")
-            if let saveError { Text(saveError).font(.caption).foregroundStyle(.red) }
+            if let saveError { WorkbenchIssueText(raw: saveError).font(.caption).foregroundStyle(.red) }
             if model.editorCloseAttempted {
-                Text("请先保存或取消编辑，再关闭项目或退出 D。")
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.53", fallback: "Save or cancel your edits before closing the project or quitting D."))
                     .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("pending-editor-close")
             }
             HStack {
                 Spacer()
-                Button("取消", role: .cancel) { isPresented = false }.keyboardShortcut(.cancelAction)
-                Button("保存") {
+                Button(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.33", fallback: "Cancel"), role: .cancel) { isPresented = false }.keyboardShortcut(.cancelAction)
+                Button(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.54", fallback: "Save")) {
                     saving = true
                     Task {
                         defer { saving = false }

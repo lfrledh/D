@@ -62,10 +62,10 @@ struct ChatAssistancePanel: View {
                 Toggle(wording("Follow-up suggestions", "建议追问"), isOn: $followUps)
                 }
                 if section == .memory {
-                Picker(wording("Memory extraction", "记忆提取"), selection: $memoryMode) {
-                    Text(wording("Off", "关闭")).tag(ChatAssistanceMemoryMode.off)
-                    Text(wording("Review suggestions", "审核建议")).tag(ChatAssistanceMemoryMode.suggest)
-                    Text(wording("Record automatically", "自动记录")).tag(ChatAssistanceMemoryMode.automatic)
+                WorkbenchPicker(wording("Memory extraction", "记忆提取"), selection: $memoryMode) {
+                    WorkbenchChoice(wording("Off", "关闭"), value:ChatAssistanceMemoryMode.off)
+                    WorkbenchChoice(wording("Review suggestions", "审核建议"), value:ChatAssistanceMemoryMode.suggest)
+                    WorkbenchChoice(wording("Record automatically", "自动记录"), value:ChatAssistanceMemoryMode.automatic)
                 }
                 if memoryMode != .off {
                     Toggle(wording("Personal memory (otherwise this project)", "个人记忆（关闭则为本项目）"), isOn: $personal)
@@ -105,11 +105,11 @@ struct ChatAssistancePanel: View {
                     }
                 }
                 if !chat.assistancePhase.isEmpty { Text(chat.assistancePhase).font(.caption).textSelection(.enabled) }
-                if let error { Text(ChatErrorText.display(error, language: language)).foregroundStyle(.red).textSelection(.enabled) }
+                if let error { WorkbenchIssueText(raw: error).foregroundStyle(.red).textSelection(.enabled) }
                 ForEach((session.assistanceExecutions ?? []).filter { section.kinds.contains($0.record.kind) }.reversed()) { execution in
                     DisclosureGroup(label(execution.record.kind) + " · " + execution.record.status.rawValue) {
                         Text(wording("Output budget: ", "输出预算：") + String(execution.record.maximumOutputTokens))
-                        if let issue = execution.record.issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red) }
+                        if let issue = execution.record.issue { WorkbenchIssueText(raw: issue).foregroundStyle(.red) }
                         if let result = execution.record.result {
                             switch result {
                             case .summary(let text), .title(let text): Text(text).textSelection(.enabled)

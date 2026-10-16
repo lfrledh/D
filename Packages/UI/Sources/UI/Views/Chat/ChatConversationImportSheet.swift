@@ -27,9 +27,9 @@ struct ChatConversationImportSheet: View {
                       "Open WebUI 历史（D 映射 v1），或 D role/content 封装 v1。创建新会话，不运行模型或工具。含未完成消息的历史树会被拒绝；原文件保持不变。"))
                 .font(.caption).foregroundStyle(.secondary)
             if choices.count > 1 {
-                Picker(text("Conversation", "选择会话"), selection: $selectedIndex) {
-                    Text(text("Choose a conversation…", "请选择会话…")).tag(-1)
-                    ForEach(choices, id: \.index) { item in Text(item.title).tag(item.index) }
+                WorkbenchPicker(text("Conversation", "选择会话"), selection: $selectedIndex) {
+                    WorkbenchChoice(text("Choose a conversation…", "请选择会话…"), value:-1)
+                    WorkbenchChoiceForEach(choices, id: \.index) { item in WorkbenchChoice(item.title, value:item.index) }
                 }.disabled(saving).accessibilityIdentifier("chat-import-conversation-choice")
             }
             if let preview {

@@ -23,6 +23,10 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     var placeholder: String? = nil
     // An explicit click in the composer's surrounding whitespace, never a redraw.
     var focusRequest: UUID? = nil
+    // A retained host can deliver an earlier value snapshot during a synchronous
+    // controller update. This opt-in reads the same live SwiftUI draft at the
+    // native update boundary; it introduces no second input or persistence owner.
+    var liveValue: Binding<String>? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -55,7 +59,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
         scroll.autohidesScrollers = true
         scroll.documentView = editor
         (scroll as? ComposerTextScrollView)?.acceptsWhitespaceInput = context.environment.isEnabled && isEditable
-        context.coordinator.update(editor, value: value, isEditable: isEditable, onEdit: onEdit,
+        context.coordinator.update(editor, value: liveValue?.wrappedValue ?? value, isEditable: isEditable, onEdit: onEdit,
             pointSize: pointSize, sendsOnReturn: sendsOnReturn, onSubmit: onSubmit)
         applyAppearance(scroll, editor: editor)
         return scroll
@@ -95,7 +99,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
         (scroll as? ComposerTextScrollView)?.acceptsWhitespaceInput = context.environment.isEnabled && isEditable
         (editor as? FileDropTextView)?.onFileDrop = onFileDrop
         if editor.accessibilityLabel() != accessibilityLabel { editor.setAccessibilityLabel(accessibilityLabel) }
-        context.coordinator.update(editor, value: value, isEditable: isEditable, onEdit: onEdit,
+        context.coordinator.update(editor, value: liveValue?.wrappedValue ?? value, isEditable: isEditable, onEdit: onEdit,
             pointSize: pointSize, sendsOnReturn: sendsOnReturn, onSubmit: onSubmit)
         context.coordinator.focus(editor, request: focusRequest, enabled: context.environment.isEnabled && isEditable)
     }

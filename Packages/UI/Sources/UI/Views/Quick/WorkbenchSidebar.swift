@@ -18,15 +18,112 @@ extension EnvironmentValues {
 }
 
 enum WorkbenchSidebarLayout {
-    static let leadingWidth: CGFloat = 260
-    static let trailingWidth: CGFloat = 288
+    static let leadingWidth: CGFloat = 288
+    static let trailingWidth: CGFloat = 320
     static let buttonDiameter: CGFloat = 40
     static let buttonInset: CGFloat = 8
-    static let gap: CGFloat = 16
+    static let gap: CGFloat = 12
     // Two panes, two gaps, outer insets and at least 468pt for the working area.
     static let minimumWindowWidth: CGFloat = 1080
-    static func occupiedWidth(_ expanded: Bool, leading: Bool) -> CGFloat {
-        (expanded ? (leading ? leadingWidth : trailingWidth) : buttonDiameter + buttonInset) + gap
+    static func widths(available: CGFloat) -> WorkbenchPanelWidths {
+        available < 1180 ? .init(leading: 256, trailing: 272) : .init(leading: 288, trailing: 320)
+    }
+    static func visible(available: CGFloat, leading: Bool, trailing: Bool, preferTrailing: Bool = false) -> (leading: Bool, trailing: Bool) {
+        guard available < minimumWindowWidth else { return (leading, trailing) }
+        let widths = widths(available: available)
+        let budget = available - 32 - 2 * gap - 360
+        let first = preferTrailing ? widths.trailing : widths.leading
+        let firstRequested = preferTrailing ? trailing : leading
+        let firstShown = firstRequested && budget >= first + 48
+        let second = preferTrailing ? widths.leading : widths.trailing
+        let secondRequested = preferTrailing ? leading : trailing
+        let secondShown = secondRequested && budget >= (firstShown ? first : 48) + second
+        return preferTrailing ? (secondShown, firstShown) : (firstShown, secondShown)
+    }
+    static func occupiedWidth(_ expanded: Bool, leading: Bool, available: CGFloat = 1280) -> CGFloat {
+        let widths = widths(available: available)
+        return (expanded ? (leading ? widths.leading : widths.trailing) : buttonDiameter + buttonInset) + gap
+    }
+}
+
+struct WorkbenchPanelWidths: Equatable {
+    var leading: CGFloat = 288
+    var trailing: CGFloat = 320
+}
+private struct WorkbenchPanelWidthsKey: EnvironmentKey { static let defaultValue = WorkbenchPanelWidths() }
+extension EnvironmentValues {
+    var workbenchPanelWidths: WorkbenchPanelWidths {
+        get { self[WorkbenchPanelWidthsKey.self] }
+        set { self[WorkbenchPanelWidthsKey.self] = newValue }
+    }
+}
+
+/// A fixed tool strip, not a second row of glass plates. Selection never owns
+/// drafts, results, controller commands or the canvas run target.
+struct WorkbenchSidebarTabs<Tab: Hashable>: View {
+    let title: String
+    @Binding var selection: Tab
+    let choices: [(Tab, String)]
+    @FocusState private var focused: Tab?
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(choices, id: \.0) { item in
+                Button { selection = item.0 } label: {
+                    ViewThatFits(in: .horizontal) {
+                        Label(item.1, systemImage: Self.symbol(item.0)).fixedSize()
+                        Image(systemName: Self.symbol(item.0))
+                    }.font(.system(size: 12, weight: selection == item.0 ? .semibold : .regular))
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                        .overlay(alignment: .bottom) {
+                            if selection == item.0 { Rectangle().fill(Color.accentColor).frame(height: 2) }
+                        }
+                }.buttonStyle(.plain).focused($focused, equals: item.0)
+                    .help(item.1).accessibilityLabel(item.1)
+                    .accessibilityAddTraits(selection == item.0 ? .isSelected : [])
+                    .onKeyPress(.leftArrow) { move(-1); return .handled }
+                    .onKeyPress(.rightArrow) { move(1); return .handled }
+            }
+        }.frame(height: 36).workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge).accessibilityElement(children: .contain).accessibilityLabel(title)
+    }
+    private static func symbol(_ value: Tab) -> String {
+        switch String(describing: value) {
+        case "settings", "configuration": "slider.horizontal.3"
+        case "assets": "photo.on.rectangle"
+        case "conversations": "bubble.left.and.bubble.right"
+        case "tools": "wrench.and.screwdriver"
+        case "nodes": "square.3.layers.3d"
+        case "history": "clock"
+        case "sources": "text.book.closed"
+        case "overview": "list.bullet.rectangle"
+        default: "doc.richtext"
+        }
+    }
+    private func move(_ delta: Int) {
+        guard let index = choices.firstIndex(where: { $0.0 == (focused ?? selection) }), !choices.isEmpty else { return }
+        let next = choices[(index + delta + choices.count) % choices.count].0
+        selection = next; focused = next
+    }
+}
+
+/// Mount only visited pages; retain their native editor and reading identity.
+struct WorkbenchSidebarPages<Tab: Hashable, Content: View>: View {
+    let selection: Tab
+    let choices: [Tab]
+    let identifier: String
+    @ViewBuilder var content: (Tab) -> Content
+    @State private var visited: Set<Tab> = []
+    @Environment(\.dLanguageStore) private var language
+    @Environment(\.chatDisplayPreferences) private var preferences
+    var body: some View {
+        ZStack {
+            ForEach(choices.filter { visited.contains($0) || selection == $0 }, id: \.self) { tab in
+                RetainedContentHost(content: content(tab)
+                    .environment(\.dLanguageStore, language)
+                    .environment(\.chatDisplayPreferences, preferences).disabled(selection != tab),
+                    visible: selection == tab, identifier: identifier + "-" + String(describing: tab))
+                    .allowsHitTesting(selection == tab).accessibilityHidden(selection != tab)
+            }
+        }.onAppear { visited.insert(selection) }.onChange(of: selection) { _, value in visited.insert(value) }
     }
 }
 
@@ -40,11 +137,13 @@ struct WorkbenchSidebar<Content: View>: View {
     let hostIdentifier: String
     let toggle: () -> Void
     @ViewBuilder let content: () -> Content
+    @State private var surfaceGroup = UUID().uuidString
     @State private var revealed: Bool
     @Environment(\.chatDisplayPreferences) private var preferences
     @Environment(\.dLanguageStore) private var language
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.workbenchPanelWidths) private var widths
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var revealDuration: Double? {
@@ -62,7 +161,7 @@ struct WorkbenchSidebar<Content: View>: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let width = leading ? WorkbenchSidebarLayout.leadingWidth : WorkbenchSidebarLayout.trailingWidth
+            let width = leading ? widths.leading : widths.trailing
             let alignment: Alignment = leading ? .topLeading : .topTrailing
             let visible = expanded && revealed
             let palette = preferences.resolvedAppearance.palette(for: scheme)
@@ -72,12 +171,12 @@ struct WorkbenchSidebar<Content: View>: View {
                     .workbenchMorph(value: expanded)
                     .allowsHitTesting(false)
 
-                VStack(spacing: 8) {
+                VStack(spacing: 0) {
                     Text(title).font(.headline).lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: leading ? .trailing : .leading)
                         .padding(.leading, leading ? 60 : 12)
                         .padding(.trailing, leading ? 12 : 60)
-                        .frame(height: 56)
+                        .frame(height: 52)
                         .opacity(visible ? 1 : 0)
                         .transaction { $0.animation = nil }
                         .accessibilityHidden(!visible)
@@ -109,14 +208,15 @@ struct WorkbenchSidebar<Content: View>: View {
                     fallback: language?.effectiveLanguageIdentifier.hasPrefix("zh") == true
                         ? (expanded ? "已展开" : "已收起") : (expanded ? "Expanded" : "Collapsed")))
                 .accessibilityIdentifier(identifier)
-                .keyboardShortcut(!leading && expanded ? .cancelAction : nil)
+
             }
             .frame(width: width, height: geometry.size.height, alignment: alignment)
         }
-        .frame(width: leading ? WorkbenchSidebarLayout.leadingWidth : WorkbenchSidebarLayout.trailingWidth)
+        .frame(width: leading ? widths.leading : widths.trailing)
         .onChange(of: expanded) { _, open in if !open { revealed = false } }
-        .task(id: expanded ? (revealDuration ?? 0) : -1) {
-            guard expanded else { revealed = false; return }
+        .environment(\.workbenchSurfaceGroup, "sidebar:" + surfaceGroup)
+        .task(id: "\(identifier):\(expanded):\(isEnabled):\(revealDuration ?? 0)") {
+            guard expanded && isEnabled else { revealed = false; return }
             guard !revealed else { return }
             if let revealDuration {
                 // Same clock as the finite plate transition; no second fade or
@@ -248,4 +348,27 @@ private struct WorkbenchCategoryInk: View {
             .opacity(isEnabled && pressed ? 0.65 : 1)
             .workbenchMotion(value: hovered).workbenchMotion(value: pressed)
     }
+}
+
+// Optional geometry observation used by the real-host regression. No observer is
+// installed in the application and no view/controller identity depends on it.
+private struct WorkbenchLayoutObservationKey: EnvironmentKey {
+    static let defaultValue: (@MainActor @Sendable (String, CGSize) -> Void)? = nil
+}
+extension EnvironmentValues {
+    var workbenchLayoutObservation: (@MainActor @Sendable (String, CGSize) -> Void)? {
+        get { self[WorkbenchLayoutObservationKey.self] }
+        set { self[WorkbenchLayoutObservationKey.self] = newValue }
+    }
+}
+private struct WorkbenchMeasureLayout: ViewModifier {
+    let id: String
+    @Environment(\.workbenchLayoutObservation) private var observe
+    @ViewBuilder func body(content: Content) -> some View {
+        if let observe { content.onGeometryChange(for: CGSize.self) { $0.size } action: { observe(id, $0) } }
+        else { content }
+    }
+}
+extension View {
+    func workbenchMeasureLayout(_ id: String) -> some View { modifier(WorkbenchMeasureLayout(id: id)) }
 }

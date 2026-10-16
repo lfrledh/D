@@ -72,10 +72,8 @@ struct ChatComposerShape: InsettableShape {
     }
 }
 
-private enum ChatInspectorTab: String, CaseIterable, Identifiable {
-    case data, artifacts, tools
-    var id: Self { self }
-}
+private enum ChatInspectorTab: String, CaseIterable { case artifacts, sources }
+private enum ChatPreparationTab: String, CaseIterable { case settings, assets, conversations, tools }
 
 enum ChatNarrowPanel: String, Identifiable {
     case sessions, inspector
@@ -534,13 +532,14 @@ struct ChatWorkbenchView: View {
         get { sidebars.leading }
         nonmutating set { sidebars.leading = newValue }
     }
-    @State private var showsSessionList = false
+    @State private var preparationTab: ChatPreparationTab = .settings
+    @State private var sourceSelections: [UUID: ChatSourceSelection] = [:]
     private var showInspector: Bool {
         get { sidebars.trailing }
         nonmutating set { sidebars.trailing = newValue }
     }
     @State private var sidebarWasPresented = false
-    @State private var inspectorTab: ChatInspectorTab = .data
+    @State private var inspectorTab: ChatInspectorTab = .artifacts
     @State private var sheets = ChatSheetQueue<ChatDetail>()
     @State private var followsBottom = true
     @State private var hasNewContent = false
@@ -573,6 +572,7 @@ struct ChatWorkbenchView: View {
          onAssetsChanged: @escaping () -> Void,
          onSavedValue: ((WorkflowDatum, UUID) async throws -> Void)? = nil,
          onResolveSharedAsset: ((UUID, UUID?, UUID) async throws -> (ProjectStore, WorkflowAssetReference, String))? = nil,
+         initialPreparationTab: String = "settings",
          initialInspectorVisible: Bool = false,
          initialSettingsVisible: Bool = false,
          initialContextPreviewVisible: Bool = false,
@@ -588,9 +588,9 @@ struct ChatWorkbenchView: View {
         let initialSidebars = WorkbenchSidebarState()
         initialSidebars.trailing = initialInspectorVisible
         _localSidebars = State(initialValue: initialSidebars)
-        _inspectorTab = State(initialValue: .data)
+        _inspectorTab = State(initialValue: initialInspectedAttemptID == nil ? .artifacts : .sources)
         // Compatibility for callers requesting the system-prompt editor: it now lives on the left.
-        _showsSessionList = State(initialValue: false)
+        _preparationTab = State(initialValue: ChatPreparationTab(rawValue: initialPreparationTab) ?? .settings)
         _showContextPreview = State(initialValue: initialContextPreviewVisible)
         _inspectedAttemptID = State(initialValue: initialInspectedAttemptID)
         let saved = chat.selectedSession.flatMap { scrollStates.state(for: $0, owner: chat) }
@@ -634,8 +634,9 @@ struct ChatWorkbenchView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let sidebarShown = showSidebar
-            let inspectorShown = showInspector
+            let shown = WorkbenchSidebarLayout.visible(available: geometry.size.width + 32, leading: showSidebar, trailing: showInspector)
+            let sidebarShown = shown.leading
+            let inspectorShown = shown.trailing
             ZStack(alignment: .topLeading) {
                 Group {
                     if !chat.isLoaded {
@@ -647,20 +648,25 @@ struct ChatWorkbenchView: View {
                         emptyConversation(width: geometry.size.width, sidebarShown: sidebarShown)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.leading, WorkbenchSidebarLayout.occupiedWidth(sidebarShown, leading: true))
-                .padding(.trailing, WorkbenchSidebarLayout.occupiedWidth(inspectorShown, leading: false))
+                .frame(width: max(0, geometry.size.width
+                    - WorkbenchSidebarLayout.occupiedWidth(sidebarShown, leading: true, available: geometry.size.width + 32)
+                    - WorkbenchSidebarLayout.occupiedWidth(inspectorShown, leading: false, available: geometry.size.width + 32)))
+                .workbenchMeasureLayout("chat-center")
+                .transaction { $0.animation = nil }
+                .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
+                .padding(.leading, WorkbenchSidebarLayout.occupiedWidth(sidebarShown, leading: true, available: geometry.size.width + 32))
+                .padding(.trailing, WorkbenchSidebarLayout.occupiedWidth(inspectorShown, leading: false, available: geometry.size.width + 32))
                 .chatMeasured("conversation", probe: layoutProbe)
                 .workbenchMorph(value: sidebarShown).workbenchMorph(value: inspectorShown)
 
                 WorkbenchSidebar(leading: true, expanded: sidebarShown,
-                    title: newLabel("currentConversation", english: "Current conversation", chinese: "当前会话"),
+                    title: consistencyText(language, "tabs." + preparationTab.rawValue),
                     identifier: "chat-sessions-toggle", hostIdentifier: "chat-sessions-host",
                     toggle: { showSidebar.toggle(); sidebarWasPresented = showSidebar }) {
                         configurationPane
                     }.chatMeasured("sessions-pane", probe: layoutProbe)
                 WorkbenchSidebar(leading: false, expanded: inspectorShown,
-                    title: newLabel("resources", english: "Resources", chinese: "资料与工具"),
+                    title: consistencyText(language, inspectorTab == .artifacts ? "tabs.results" : "tabs.sources"),
                     identifier: "chat-inspector-toggle", hostIdentifier: "chat-inspector-host",
                     toggle: { showInspector.toggle() }) {
                         if let session { inspector(session) }
@@ -670,20 +676,23 @@ struct ChatWorkbenchView: View {
             }
             // Pane content owns its clipping. The layout container must leave
             // room for each floating plate's outer shadow.
-            .coordinateSpace(name: ChatLayoutSpace.name)
+            .environment(\.workbenchPanelWidths, WorkbenchSidebarLayout.widths(available: geometry.size.width + 32))
             .onAppear { sidebarWasPresented = sidebarShown; lastBodyWidth = geometry.size.width }
             .onChange(of: geometry.size.width) { _, width in lastBodyWidth = width }
 
         }
         .padding(.horizontal, 16).padding(.bottom, 16)
+        .coordinateSpace(name: ChatLayoutSpace.name)
+        .environment(\.workbenchMenuContext, "chat:\(ObjectIdentifier(chat)):\(ObjectIdentifier(chat.store)):\(chat.state.selectedSessionID?.uuidString ?? "none")")
         .task(id: openToolsRequest) {
             if let openToolsRequest {
                 guard openToolsRequest.matches(chat) else { onToolsOpened(openToolsRequest.id); return }
-                showInspector = true; inspectorTab = .tools
+                showSidebar = true; preparationTab = .tools
                 onToolsOpened(openToolsRequest.id)
             }
         }
         .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
+        .onChange(of: ObjectIdentifier(chat)) { _, _ in sourceSelections = [:] }
         .onChange(of: chat.state.selectedSessionID) { _, _ in composerFocusRequest = nil }
         .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
         .task {
@@ -703,7 +712,7 @@ struct ChatWorkbenchView: View {
                         Spacer()
                         Button(newLabel("done", english: "Done", chinese: "完成")) { sheets.detail = nil }.keyboardShortcut(.cancelAction)
                     }.padding()
-                    ScrollView { requestInspectionPanel(attempt).padding(20) }
+                    WorkbenchScrollView { requestInspectionPanel(attempt).padding(20) }
                 }.frame(minWidth: 650, idealWidth: 760, minHeight: 460, idealHeight: 640)
 
             case .projectAttachments(let owner):
@@ -752,7 +761,7 @@ struct ChatWorkbenchView: View {
                         }
                     }, onClose: { sheets.detail = nil })
             case .comparison(let sessionID, let attemptID):
-                ScrollView {
+                WorkbenchScrollView {
                     ChatComparisonPanel(chat: chat, sessionID: sessionID, sourceAttemptID: attemptID,
                         onClose: { sheets.detail = nil })
                 }.frame(minWidth: 700, idealWidth: 900, minHeight: 420)
@@ -761,7 +770,7 @@ struct ChatWorkbenchView: View {
                     Text(newLabel("importPresetsTitle", english: "Import preset copies", chinese: "导入预设副本")).font(.headline)
                     Text(newLabel("importPresetsNote", english: "This creates new presets. It does not change any conversation or run a model.",
                         chinese: "将创建新预设，不改变现有会话，也不会运行模型。"))
-                    ScrollView {
+                    WorkbenchScrollView {
                         ForEach(presets) { item in
                             VStack(alignment: .leading) {
                                 Text(item.name).font(.headline)
@@ -808,28 +817,34 @@ struct ChatWorkbenchView: View {
     /// conversation browser a directly reachable alternate (never a fifth pane).
     private var configurationPane: some View {
         VStack(spacing: 0) {
-            Picker(newLabel("leftPane", english: "Conversation pane", chinese: "会话工作区"), selection: $showsSessionList) {
-                Text(newLabel("sessionSettings", english: "Settings", chinese: "本会话设置")).tag(false)
-                Text(label("history", "对话")).tag(true)
-            }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("chat-left-section").padding(12)
-            Divider()
-            ZStack {
-                retainedPane(showsSessionList, id: "chat-history-page") { sidebar }
-                retainedPane(!showsSessionList, id: "chat-configuration-page") {
-                ScrollViewReader { proxy in
-                ScrollView {
+            WorkbenchSidebarTabs(title: consistencyText(language, "BAR-LEFT"), selection: $preparationTab, choices: [
+                (.settings, consistencyText(language, "TAB-CHAT-LEFT-SETTINGS")),
+                (.assets, consistencyText(language, "TAB-CHAT-LEFT-ASSETS")),
+                (.conversations, consistencyText(language, "TAB-CHAT-LEFT-CHATS")),
+                (.tools, consistencyText(language, "TAB-CHAT-LEFT-TOOLS"))])
+            WorkbenchSidebarPages(selection: preparationTab, choices: ChatPreparationTab.allCases, identifier: "chat-left") { tab in
+                switch tab {
+                case .settings: configurationContent
+                case .conversations: sidebar
+                case .assets:
+                    if let session { materialsContent(session) }
+                case .tools:
+                    if let session { toolsContent(session) }
+                }
+            }
+        }
+    }
+    private var configurationContent: some View {
+ScrollViewReader { proxy in
+                WorkbenchScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(refinement("localModel", "Local model", "本机模型")).font(.caption).foregroundStyle(.secondary)
-                        if let session, let node = session.configuration {
-                            let identity = node.parameters["modelID"]?.string ?? ""
-                            Text(model.projectSession.explicitModelChoices.first(where: { $0.id == identity })?.displayName ?? identity)
-                                .font(.headline).textSelection(.enabled)
-                            Text(readiness(identity)).font(.caption).foregroundStyle(.secondary)
-                        } else { Text(label("noModel", "尚未选择模型")).font(.headline) }
-                        Button(label("changeModel", "更换模型"), action: onChooseModel)
-                            .disabled(!chat.isLoaded || session?.contextChoices?.deletedAt != nil)
-                            .accessibilityIdentifier("chat-model-picker")
-                            .chatMeasured("change-model", probe: layoutProbe)
+                        if let session, let node = session.configuration,
+                           let definition = WorkflowRegistry.standard.operation(node.operationID)?.definition {
+                            WorkbenchModelCard(definition: definition, modelID: node.parameters["modelID"]?.string,
+                                choices: model.projectSession.explicitModelChoices, status: readiness(node.parameters["modelID"]?.string ?? ""),
+                                change: onChooseModel, canChange: chat.isLoaded && session.contextChoices?.deletedAt == nil)
+                                .accessibilityIdentifier("chat-model-picker").chatMeasured("change-model", probe: layoutProbe)
+                        } else { Button(label("changeModel", "更换模型"), action: onChooseModel).disabled(!chat.isLoaded || session?.contextChoices?.deletedAt != nil) }
                         if let session {
                             DisclosureGroup(newLabel("commonPresets", english: "Common presets", chinese: "常用预设")) {
                                 VStack(alignment: .leading, spacing: 8) {
@@ -849,9 +864,39 @@ struct ChatWorkbenchView: View {
                     }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
                 }.onChange(of: organizationRequest) { _, _ in proxy.scrollTo("conversation-organization", anchor: .top) }
                 }
-                }
-            }
-        }
+    }
+    private func materialsContent(_ session: ChatSession) -> some View {
+
+                    WorkbenchScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            attachmentButtons(session)
+                            ForEach(session.attachments) { item in attachmentRow(item, removable: true, sessionID: session.id) }
+                            DisclosureGroup(newLabel("importOptions", english: "Import options", chinese: "导入选项")) {
+                                Toggle(newLabel("importOCR", english: "Use local OCR for scanned PDFs on import", chinese: "导入扫描 PDF 时使用本地 OCR"), isOn: $ocrImport).font(.caption)
+                            }
+                            ChatKnowledgePanel(chat: chat, session: session, quote: { id in
+                            perform(sessionID: session.id) { present(.quote(session.id, try chat.quoteSource(kind: .document, id: id, sessionID: session.id))) }
+                        },
+                                importDocuments: { Task { await chooseAttachments(for: session.id, knowledge: true) } },
+                                importDirectory: { Task { await chooseKnowledgeDirectory(for: session.id) } },
+                                preview: { present(.preview($0)) },
+                                wording: { english, chinese in
+                                    language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
+                                }).id(session.id.uuidString + ":knowledge")
+                        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+    }
+    private func toolsContent(_ session: ChatSession) -> some View {
+
+                    WorkbenchScrollView {
+                        ChatToolsPanel(chat: chat, session: session,
+                            chooseSearchCredential: { _ in openSettings?("network") },
+                            openArtifact: { present(.artifact($0)) },
+                            wording: { en, zh in newLabel(en, english: en, chinese: zh) })
+                            .id(session.id.uuidString + ":tools").padding(16)
+                    }
+
     }
 
     private var sidebar: some View {
@@ -886,12 +931,12 @@ struct ChatWorkbenchView: View {
             }.controlSize(.small)
             HStack {
                 Toggle(newLabel("favoritesOnly", english: "Favorites", chinese: "收藏"), isOn: $favoritesOnly)
-                Picker(newLabel("tagFilter", english: "Tag", chinese: "标签"), selection: $selectedTag) {
-                    Text(newLabel("allTags", english: "All tags", chinese: "全部标签")).tag("")
-                    ForEach(allTags(sessions), id: \.self) { tag in Text(tag).tag(tag) }
+                WorkbenchPicker(newLabel("tagFilter", english: "Tag", chinese: "标签"), selection: $selectedTag) {
+                    WorkbenchChoice(newLabel("allTags", english: "All tags", chinese: "全部标签"), value:"")
+                    WorkbenchChoiceForEach(allTags(sessions), id: \.self) { tag in WorkbenchChoice(tag, value:tag) }
                 }.labelsHidden().accessibilityLabel(newLabel("tagFilter", english: "Filter by tag", chinese: "按标签筛选"))
-            }.controlSize(.small)
-            ScrollView {
+            }.controlSize(.small).workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge)
+            WorkbenchScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     if !search.isEmpty && !showDeleted {
                         Text(newLabel("lexicalResults", english: "Lexical matches in stored messages", chinese: "已保存消息的词法命中"))
@@ -944,7 +989,7 @@ struct ChatWorkbenchView: View {
                                 .accessibilityIdentifier("chat-session-select-\(item.id.uuidString)")
                             ChatActionMenu(title: newLabel("sessionActionsShort", english: "Actions", chinese: "操作"),
                                 accessibilityIdentifier: "chat-session-actions-" + item.id.uuidString,
-                                items: sessionMenuItems(item)).fixedSize()
+                                items: sessionMenuItems(item), contextID: "session:\(item.id):\(item.selectedLeafID?.uuidString ?? "none"):\(item.archived):\(String(describing:item.contextChoices))").fixedSize()
                         }
                     } }
                 }
@@ -965,7 +1010,7 @@ struct ChatWorkbenchView: View {
         return VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 12) {
                 Button {
-                    showsSessionList = true; showSidebar = true
+                    preparationTab = .conversations; showSidebar = true
                 } label: { Image(systemName: "clock.arrow.circlepath").frame(width: 26, height: 28) }
                     .buttonStyle(WorkbenchIconButtonStyle()).help(label("history", "对话"))
                     .accessibilityLabel(label("history", "对话")).accessibilityIdentifier("chat-history-open")
@@ -998,7 +1043,7 @@ struct ChatWorkbenchView: View {
                             .init(id: leaf.id.uuidString, title: branchSummary(leaf), selected: leaf.id == session.selectedLeafID) {
                                 perform(sessionID: session.id) { try chat.selectLeaf(leaf.id, sessionID: session.id) }
                             }
-                        }).fixedSize().chatMeasured("paths", probe: layoutProbe)
+                        } , contextID: "path:\(session.id):\(session.selectedLeafID?.uuidString ?? "none")").fixedSize().chatMeasured("paths", probe: layoutProbe)
                 }
                 Button { createSession() } label: { Image(systemName: "plus").frame(width: 28, height: 28) }
                     .buttonStyle(WorkbenchIconButtonStyle()).help(label("new", "新建"))
@@ -1065,6 +1110,7 @@ struct ChatWorkbenchView: View {
                             Color.clear.frame(height: 1).id("chat-transcript-bottom")
                         }
                     }.scrollTargetLayout()
+                        .background(WorkbenchScrollGeometry().allowsHitTesting(false))
                         .frame(maxWidth: CGFloat(model.chatDisplaySettings.preferences.transcriptWidth))
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 16).padding(.vertical, 20)
@@ -1345,7 +1391,7 @@ struct ChatWorkbenchView: View {
             present(.request(attempt)); return
         }
         showContextPreview = preview
-        showsSessionList = false
+        preparationTab = .settings
         showSidebar = true
     }
 
@@ -1370,35 +1416,94 @@ struct ChatWorkbenchView: View {
         }
     }
 
-    private func inspector(_ session: ChatSession) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Picker(newLabel("resources", english: "Resources", chinese: "资料与工具"), selection: $inspectorTab) {
-                Text(newLabel("inspectorData", english: "Materials", chinese: "资料")).tag(ChatInspectorTab.data)
-                Text(newLabel("inspectorArtifacts", english: "Results", chinese: "成果")).tag(ChatInspectorTab.artifacts)
-                Text(newLabel("inspectorTools", english: "Tools", chinese: "工具")).tag(ChatInspectorTab.tools)
-            }.pickerStyle(.segmented).labelsHidden().padding(.horizontal, 12).accessibilityIdentifier("chat-right-section")
-            Divider().padding(.top, 12)
-            ZStack {
-                retainedPane(inspectorTab == .data, id: "chat-materials-page") {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            DisclosureGroup(newLabel("importOptions", english: "Import options", chinese: "导入选项")) {
-                                Toggle(newLabel("importOCR", english: "Use local OCR for scanned PDFs on import", chinese: "导入扫描 PDF 时使用本地 OCR"), isOn: $ocrImport).font(.caption)
+    private struct ChatSourceSelection: Equatable {
+        let owner: ObjectIdentifier
+        let sessionID: UUID
+        let messageID: UUID
+        let attemptID: UUID?
+    }
+    private struct ChatSourceProjection {
+        let message: ChatMessage
+        let attempt: ChatAttempt?
+        let question: ChatMessage?
+    }
+    private func sourceSelection(for session: ChatSession) -> ChatSourceSelection? {
+        if let explicit = sourceSelections[session.id] { return explicit }
+        let selected = inspectedAttemptID.flatMap { id in session.attempts.first { $0.id == id } }
+        let message = selected.flatMap { attempt in session.messages.first { $0.id == attempt.assistantMessageID } }
+            ?? (try? session.path(to: session.selectedLeafID))?.last(where: { $0.role == .assistant })
+        guard let message else { return nil }
+        return .init(owner: ObjectIdentifier(chat), sessionID: session.id, messageID: message.id, attemptID: message.attemptID)
+    }
+    private func sourceProjection(_ selection: ChatSourceSelection, in session: ChatSession) -> ChatSourceProjection? {
+        guard selection.owner == ObjectIdentifier(chat), selection.sessionID == session.id,
+              let message = session.messages.first(where: { $0.id == selection.messageID && $0.role == .assistant }),
+              message.attemptID == selection.attemptID else { return nil }
+        guard let attemptID = selection.attemptID else { return .init(message: message, attempt: nil, question: nil) }
+        guard let attempt = session.attempts.first(where: { $0.id == attemptID && $0.sessionID == session.id && $0.assistantMessageID == message.id }),
+              let question = session.messages.first(where: { $0.id == attempt.userMessageID && $0.role == .user }) else { return nil }
+        return .init(message: message, attempt: attempt, question: question)
+    }
+    private func openSources(messageID: UUID, sessionID: UUID, attemptID: UUID?) {
+        guard chat.state.selectedSessionID == sessionID, let current = chat.selectedSession else { return }
+        let selection = ChatSourceSelection(owner: ObjectIdentifier(chat), sessionID: sessionID, messageID: messageID, attemptID: attemptID)
+        guard sourceProjection(selection, in: current) != nil else { return }
+        sourceSelections[sessionID] = selection; inspectorTab = .sources; showInspector = true
+    }
+    @ViewBuilder private func sourcesContent(_ session: ChatSession) -> some View {
+        if let selection = sourceSelection(for: session), let value = sourceProjection(selection, in: session) {
+            WorkbenchScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(newLabel("answerSources", english: "Sources for this answer", chinese: "这条回答的来源")).font(.headline)
+                    if let attempt = value.attempt, let question = value.question {
+                        Text(attempt.createdAt, style: .date).font(.caption).foregroundStyle(.secondary)
+                        Text(newLabel("questionMaterials", english: "Materials supplied with this question", chinese: "本次问题提供的材料")).font(.subheadline)
+                        ForEach(question.attachments.filter { $0.sourceOnly != true }) { item in attachmentRow(item, removable: false, sessionID: session.id) }
+                        if question.attachments.contains(where: { $0.sourceOnly == true }) {
+                            Text(newLabel("recordedOriginals", english: "Recorded quotations and originals", chinese: "已记录引用与原稿")).font(.subheadline)
+                            Text(newLabel("originalsNote", english: "Recorded when added; later edits may change how the text uses them.", chinese: "这些是添加时保留的来源；后续编辑可能改变正文对它们的使用。")).font(.caption).foregroundStyle(.secondary)
+                            ForEach(question.attachments.filter { $0.sourceOnly == true }) { item in attachmentRow(item, removable: false, sessionID: session.id) }
+                        }
+                        ForEach(question.knowledgeExcerpts ?? []) { excerpt in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(excerpt.name).font(.subheadline)
+                                Text(excerpt.text).textSelection(.enabled)
+                                Button(newLabel("sourceOriginal", english: "View original", chinese: "查看原件")) { present(.preview(excerpt.source)) }
                             }
-                            ChatKnowledgePanel(chat: chat, session: session, quote: { id in
-                            perform(sessionID: session.id) { present(.quote(session.id, try chat.quoteSource(kind: .document, id: id, sessionID: session.id))) }
-                        },
-                                importDocuments: { Task { await chooseAttachments(for: session.id, knowledge: true) } },
-                                importDirectory: { Task { await chooseKnowledgeDirectory(for: session.id) } },
-                                preview: { present(.preview($0)) },
-                                wording: { english, chinese in
-                                    language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
-                                }).id(session.id.uuidString + ":knowledge")
-                        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        if question.attachments.isEmpty, (question.knowledgeExcerpts ?? []).isEmpty {
+                            Text(newLabel("noQuestionMaterials", english: "No materials recorded for this question.", chinese: "这次问题没有已记录的材料。")).foregroundStyle(.secondary)
+                        }
+                        Text(newLabel("sourceHistoryNote", english: "Earlier context and recorded memory sources are available in the frozen request.", chinese: "更早的上下文与已记录的记忆来源可在冻结请求中查看。")).font(.caption).foregroundStyle(.secondary)
+                        Button(newLabel("inspectRequest", english: "Inspect frozen request", chinese: "检查冻结请求")) {
+                            guard let current = chat.selectedSession, let recorded = sourceProjection(selection, in: current)?.attempt else { return }
+                            present(.request(recorded))
+                        }
+                    } else {
+                        Text(newLabel("importedSourcesUnavailable", english: "No local execution sources were recorded for this imported answer.", chinese: "这条导入回答没有本机执行来源记录。")).foregroundStyle(.secondary)
                     }
-                }
-                retainedPane(inspectorTab == .artifacts, id: "chat-results-page") {
-                    ScrollView {
+                }.padding(16)
+            }
+        } else {
+            ContentUnavailableView(newLabel("noSourceSelection", english: "No answer selected", chinese: "尚未选择回答"), systemImage: "text.book.closed",
+                description: Text(newLabel("chooseAnswerSources", english: "Choose Sources from an answer's actions.", chinese: "请在回答操作中选择“查看来源”。")))
+        }
+    }
+
+    private func inspector(_ session: ChatSession) -> some View {
+        VStack(spacing: 0) {
+            WorkbenchSidebarTabs(title: consistencyText(language, "BAR-RIGHT"), selection: $inspectorTab, choices: [
+                (.artifacts, consistencyText(language, "TAB-CHAT-RIGHT-RESULTS")),
+                (.sources, consistencyText(language, "TAB-CHAT-RIGHT-SOURCES"))])
+            WorkbenchSidebarPages(selection: inspectorTab, choices: ChatInspectorTab.allCases, identifier: "chat-right") { tab in
+                if tab == .artifacts { artifactsContent(session) }
+                else { sourcesContent(session) }
+            }.id(session.id.uuidString + ":inspector-pages")
+        }.accessibilityIdentifier("chat-inspector")
+    }
+    private func artifactsContent(_ session: ChatSession) -> some View {
+
+                    WorkbenchScrollView {
                         VStack(alignment: .leading, spacing: 12) {
                             Text(newLabel("savedAnswers", english: "Saved answers", chinese: "回答成果")).font(.headline)
                             Button(newLabel("newArtifact", english: "New editable artifact", chinese: "新建可编辑成果")) {
@@ -1425,18 +1530,7 @@ struct ChatWorkbenchView: View {
                             }
                         }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
                     }
-                }
-                retainedPane(inspectorTab == .tools, id: "chat-tools-page") {
-                    ScrollView {
-                        ChatToolsPanel(chat: chat, session: session,
-                            chooseSearchCredential: { _ in openSettings?("network") },
-                            openArtifact: { present(.artifact($0)) },
-                            wording: { en, zh in newLabel(en, english: en, chinese: zh) })
-                            .padding(16)
-                    }
-                }
-            }.id(session.id.uuidString + ":inspector-pages")
-        }.accessibilityIdentifier("chat-inspector")
+
     }
 
     @ViewBuilder private func contextPreviewPanel(_ session: ChatSession) -> some View {
@@ -1474,7 +1568,7 @@ struct ChatWorkbenchView: View {
                      newLabel("contextVideos", english: " · Videos: ", chinese: " · 视频：") + String(plan.videos.count))
                     .font(.caption)
             case .failure(let error):
-                Text(ChatErrorText.display(error.localizedDescription, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                WorkbenchIssueText(raw: error.localizedDescription).font(.caption).foregroundStyle(.red).textSelection(.enabled)
                     .accessibilityIdentifier("chat-context-preview-error")
             }
         }.accessibilityIdentifier("chat-context-preview")
@@ -1583,7 +1677,7 @@ struct ChatWorkbenchView: View {
                 searchJump = nil
                 try chat.selectSession(item.id)
                 organizationExpanded = true; organizationRequest += 1
-                showsSessionList = false; showSidebar = true
+                preparationTab = .settings; showSidebar = true
             }
         })
         return ChatActionMenuItem.grouped(result, ids: [["new", "rename", "pin", "tags"], ["organization"], ["copy", "markdown", "text", "html", "sessionPackage"], ["archive", "delete"]])
@@ -1636,6 +1730,9 @@ struct ChatWorkbenchView: View {
             }
         }
         if message.role == .assistant {
+            result.append(.init(id: "sources", title: newLabel("viewSources", english: "View sources", chinese: "查看来源")) {
+                openSources(messageID: message.id, sessionID: session.id, attemptID: message.attemptID)
+            })
             result += [
                 .init(id: "speak", title: newLabel("readAnswer", english: "Read aloud with system voice", chinese: "使用系统声音朗读"), enabled: chat.speechPlaybackState == .idle) {
                     perform(sessionID: session.id) { try chat.speech.speak(answerText) }
@@ -1697,7 +1794,7 @@ struct ChatWorkbenchView: View {
             ["favorite", "quote", "fork", "context"],
             ["generate", "new-candidate", "compare", "adopt", "adopt-partial", "versions", "reproduce"],
             ["artifact", "save", "workflow", "fields"],
-            ["speak", "pause-reading", "resume-reading", "stop-reading"], ["inspect"]])
+            ["speak", "pause-reading", "resume-reading", "stop-reading"], ["sources", "inspect"]])
     }
 
     private func quickMessageActions(_ message: ChatMessage, session: ChatSession, attempt: ChatAttempt?, menu: [ChatActionMenuItem]) -> [ChatMessageQuickActions.Item] {
@@ -1734,13 +1831,13 @@ struct ChatWorkbenchView: View {
                             .init(id: sibling.id.uuidString, title: "\(index + 1) · " + branchSummary(sibling), selected: sibling.id == message.id) {
                                 perform(sessionID: session.id) { try chat.selectLeaf(sibling.id, sessionID: session.id) }
                             }
-                        }).fixedSize().chatMeasured("branch-menu-\(message.id.uuidString)", probe: layoutProbe)
+                        } , contextID: "branch:\(session.id):\(message.id):\(message.parentID?.uuidString ?? "none"):\(session.selectedLeafID?.uuidString ?? "none")").fixedSize().chatMeasured("branch-menu-\(message.id.uuidString)", probe: layoutProbe)
                 }
                 Spacer()
                 ChatMessageQuickActions(items: quickMessageActions(message, session: session, attempt: attempt, menu: menu))
                 ChatActionMenu(title: newLabel("messageActionsShort", english: "Actions", chinese: "操作"),
                     accessibilityIdentifier: "chat-message-actions-" + message.id.uuidString,
-                    items: menu).fixedSize()
+                    items: menu, contextID: "message:\(session.id):\(message.id):\(attempt?.id.uuidString ?? "none"):\(attempt?.status.rawValue ?? "none"):\(String(describing: selectedAnswer))").fixedSize().chatMeasured("message-menu-\(message.id.uuidString)", probe: layoutProbe)
             }.font(.caption)
             ChatMessageContent(message: message, attempt: attempt,
                 selectedAnswer: selectedAnswer, onPreview: { present(.preview($0)) })
@@ -1750,7 +1847,7 @@ struct ChatWorkbenchView: View {
                 DisclosureGroup(newLabel("usedSources", english: "Source excerpts sent with this question", chinese: "本次问题使用的资料片段")) {
                     ForEach(excerpts) { excerpt in
                         VStack(alignment: .leading) {
-                            Text(excerpt.name + " · " + excerpt.source.assetID.uuidString.prefix(8)).font(.caption.bold())
+                            Text(excerpt.name).font(.caption.bold())
                             Text(excerpt.text).font(.caption).textSelection(.enabled)
                             Button(newLabel("sourceOriginal", english: "View original", chinese: "查看原件")) { present(.preview(excerpt.source)) }
                         }
@@ -1768,7 +1865,7 @@ struct ChatWorkbenchView: View {
                     Spacer()
                 }
                 if let issue = attempt.issue {
-                    Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                    WorkbenchIssueText(raw: issue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
                         .chatMeasured("attempt-issue-\(attempt.id.uuidString)", probe: layoutProbe)
                 }
             }
@@ -1879,7 +1976,7 @@ struct ChatWorkbenchView: View {
                 }
             }
             if let issue = issues[session.id] {
-                Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red)
+                WorkbenchIssueText(raw: issue).font(.caption).foregroundStyle(.red)
             }
             if let issue = chat.saveIssue {
                 Text(label("projectSaveIssue", "项目聊天保存失败：") + issue).font(.caption).foregroundStyle(.red)
@@ -1911,14 +2008,12 @@ struct ChatWorkbenchView: View {
                 }
             }
             if !session.attachments.isEmpty {
-                ScrollView(.horizontal) {
-                    HStack {
-                        ForEach(session.attachments) { item in attachmentRow(item, removable: true, sessionID: session.id).transition(.identity) }
-                    }
-                }.padding(10).workbenchPanel(cornerRadius: 16).transition(.identity)
+                Button(newLabel("openInputMaterials", english: "Review input materials", chinese: "查看输入素材") + " (\(session.attachments.count))") {
+                    preparationTab = .assets; showSidebar = true
+                }
             }
             RetainedContentHost(content:
-                ScrollView {
+                WorkbenchScrollView {
                     ChatSpeechPanel(chat: chat, project: model.projectSession, sessionID: session.id,
                         onImportAudio: { locale in Task { await chooseTranscriptionFile(sessionID: session.id, locale: locale) } },
                         onOpenSettings: openSettings.map { open in { open("voice") } })
@@ -1994,14 +2089,14 @@ struct ChatWorkbenchView: View {
             }
             .padding(.horizontal, 16)
             if let issue = issues[session.id] {
-                Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                WorkbenchIssueText(raw: issue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             if let saveIssue = chat.saveIssue, saveIssue != issues[session.id] {
                 Text(label("projectSaveIssue", "项目聊天保存失败：") + saveIssue)
                     .font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             if let globalIssue {
-                Text(globalIssue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                WorkbenchIssueText(raw: globalIssue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             if chat.selectedPath.last?.role == .user {
                 Text(label("awaitingReply", "所选路径止于用户消息；请点“生成回复”，或选已完成路径。"))
@@ -2556,7 +2651,7 @@ private struct ChatEditForm: View {
             TextSourcesQuestionEditor(value: text, editEpoch: 0, isEditable: true,
                 accessibilityIdentifier: "chat-edit-\(edit.sessionID.uuidString)", accessibilityLabel: title, onEdit: { text = $0 })
                 .id(edit.id).frame(height: edit.kind == .rename ? 70 : 220).workbenchInputSurface()
-            if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+            if let issue { WorkbenchIssueText(raw: issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
                 Spacer()
                 Button(label("cancel", "取消"), action: onCancel)

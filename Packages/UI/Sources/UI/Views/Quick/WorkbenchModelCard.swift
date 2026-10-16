@@ -1,0 +1,85 @@
+import DWorkbench
+import SwiftUI
+
+/// Facts from the exact selected configuration and registered operation. Merely
+/// reading this card cannot prepare a model, acquire a lease or start a request.
+struct WorkbenchModelCard: View {
+    let definition: WorkflowOperationDefinition
+    let modelID: String?
+    let choices: [WorkflowModelChoice]
+    let status: String
+    var change: (() -> Void)? = nil
+    var canChange = true
+    var usingDefault = false
+    @Environment(\.dLanguageStore) private var language
+    @State private var details = false
+    private var choice: WorkflowModelChoice? { choices.first { $0.id == modelID && $0.kind == definition.modelKind } }
+    private var descriptor: ModelNodeDescriptor? { choice.flatMap(SharedLibraryProjection.descriptor(for:)).map { ModelNodeUILocalization.display($0, language: language) } }
+    private var name: String {
+        guard definition.modelKind != nil else { return consistencyText(language, "copy.noModelNeeded") }
+        return descriptor?.title ?? choice?.displayName ?? consistencyText(language, modelID?.isEmpty == false ? "copy.boundModelUnavailable" : "copy.noModel")
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(name).font(.system(size: 15, weight: .semibold)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            if let precision = descriptor?.precision, !precision.isEmpty {
+                Text(precision).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+            }
+            Text(WorkflowCanvasPresentation.operationDetail(definition, language: language))
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(definition.inputs) { port in
+                    Text(consistencyText(language, "copy.input") + " · " + WorkflowCanvasPresentation.portTitle(operationID: definition.id, port: port, input: true, language: language)
+                        + (port.required ? baselineText(language, "required", fallback: " · 必选") : baselineText(language, "optional", fallback: " · 可选")))
+                }
+                ForEach(definition.outputs) { port in
+                    Text(consistencyText(language, "copy.output") + " · " + WorkflowCanvasPresentation.portTitle(operationID: definition.id, port: port, input: false, language: language))
+                }
+            }.font(.caption).fixedSize(horizontal: false, vertical: true)
+            if usingDefault && definition.modelKind != nil { Text(consistencyText(language, "copy.usingDefault")).font(.caption) }
+            if definition.modelKind != nil { Text(status).font(.callout).foregroundStyle(.secondary) }
+            HStack {
+                if let change { Button(consistencyText(language, "MODEL-CHANGE"), action: change).disabled(!canChange) }
+                Button(consistencyText(language, "MODEL-DETAILS")) { details = true }
+            }
+        }.sheet(isPresented: $details) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack { Text(consistencyText(language, "MODEL-DETAILS")).font(.headline); Spacer(); Button(workflowText(language, "common.done", fallback: "Done")) { details = false }.keyboardShortcut(.cancelAction) }
+                    Text(name).font(.title3).textSelection(.enabled)
+                    Text(WorkflowCanvasPresentation.operationDetail(definition, language: language)).textSelection(.enabled)
+                    if let descriptor {
+                        Text(descriptor.engine).textSelection(.enabled)
+                        Text(descriptor.precision).textSelection(.enabled)
+                    }
+                    DisclosureGroup(consistencyText(language, "copy.technical")) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let modelID { Text(modelID).textSelection(.enabled) }
+                            if let descriptor { Text(descriptor.modelIdentity).textSelection(.enabled); Text(descriptor.revision).textSelection(.enabled) }
+                            Text(definition.id).textSelection(.enabled)
+                        }.font(.caption.monospaced())
+                    }
+                }.padding(20)
+            }.frame(minWidth: 480, idealWidth: 580, minHeight: 360).workbenchPresentation()
+        }
+    }
+}
+
+private struct WorkbenchModelReadinessKey: EnvironmentKey {
+    static let defaultValue: [String: SharedLibraryReadiness] = [:]
+}
+extension EnvironmentValues {
+    var workbenchModelReadiness: [String: SharedLibraryReadiness] {
+        get { self[WorkbenchModelReadinessKey.self] }
+        set { self[WorkbenchModelReadinessKey.self] = newValue }
+    }
+}
+@MainActor func workbenchModelReadinessText(_ readiness: SharedLibraryReadiness, language: UILanguageStore?) -> String {
+    switch readiness {
+    case .available: baselineText(language, "readiness.ready", fallback: "文件已核验 · 运行时检查参数")
+    case .unprepared: baselineText(language, "readiness.unprepared", fallback: "需要准备模型文件")
+    case .unavailable: baselineText(language, "readiness.unavailable", fallback: "文件或授权暂不可用")
+    case .unsupported: baselineText(language, "readiness.unsupported", fallback: "当前入口未适配")
+    case .unknown: baselineText(language, "readiness.unknown", fallback: "准备状态待核验")
+    }
+}

@@ -20,9 +20,9 @@ struct ChatAnswerFieldSheet: View {
             }
             Text(wording("Saves the selected answer version and typed field. Workflow receives a record with value, source, and path; nothing runs automatically. Use Extract field → value for the value alone.", "保存所采用的回答版本和字段类型。工作流收到 value（值）、source（来源）及 path（路径）记录，不自动运行；需要纯值时用“提取字段 → value”。"))
                 .font(.caption).foregroundStyle(.secondary)
-            Picker(wording("Field", "字段"), selection: $selected) {
-                ForEach(choices.indices, id: \.self) { index in
-                    Text(choices[index].path.isEmpty ? wording("Entire structure", "整个结构") : pathLabel(choices[index].path)).tag(index)
+            WorkbenchPicker(wording("Field", "字段"), selection: $selected) {
+                WorkbenchChoiceForEach(choices.indices, id: \.self) { index in
+                    WorkbenchChoice(choices[index].path.isEmpty ? wording("Entire structure", "整个结构") : pathLabel(choices[index].path), value:index)
                 }
             }.onChange(of: selected) { _, _ in publication = UUID(); issue = nil }
             if choices.indices.contains(selected) {

@@ -161,7 +161,7 @@ public final class UILanguageStore {
             }
             do {
                 let english = resource == "en" ? nil : builtIns["en"]
-                let pack = try LanguagePackCodec.decode(data, english: english)
+                let pack = try LanguagePackCodec.decodeBuiltIn(data, english: english)
                 if let english, Set(pack.strings.keys) != Set(english.strings.keys) {
                     diagnostics.append("Built-in language resource has incomplete keys: \(resource).")
                     continue

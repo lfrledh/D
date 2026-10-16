@@ -77,7 +77,7 @@ struct WorkflowLibraryEntry: Identifiable {
             WorkflowLibraryFilters(tags: Array(Set(entries.flatMap { $0.systemTags + tags($0) })).sorted(), selected: $filters)
             Text(text("dragHint", "拖到画布，或点 ＋ 添加。双击节点编辑。"))
                 .font(.caption).foregroundStyle(.secondary)
-            ScrollView {
+            WorkbenchScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
                     ForEach(entries.filter { LibrarySearch.matches(query: query, selectedTags: filters, title: $0.title,
                         detail: $0.detail, systemTags: $0.systemTags, userTags: tags($0)) }) { entry in
@@ -118,9 +118,9 @@ struct WorkflowLibraryFilters: View {
     @Environment(\.dLanguageStore) private var language
     var body: some View {
         HStack {
-            Menu {
-                ForEach(tags, id: \.self) { tag in
-                    Toggle(tag, isOn: Binding(get: { selected.contains(tag) }, set: { if $0 { selected.insert(tag) } else { selected.remove(tag) } }))
+            WorkbenchMenu {
+                WorkbenchMenuForEach(tags, id: \.self) { tag in
+                    WorkbenchMenuToggle(tag, isOn: Binding(get: { selected.contains(tag) }, set: { if $0 { selected.insert(tag) } else { selected.remove(tag) } }))
                 }
             } label: { Label(workflowText(language, "canvas.library.filter", fallback: "筛选标签") + (selected.isEmpty ? "" : " (\(selected.count))"), systemImage: "line.3.horizontal.decrease") }
             if !selected.isEmpty {
@@ -151,7 +151,7 @@ struct WorkflowLibraryFilters: View {
             if corrupt {
                 Text(workflowText(language, "canvas.tags.corrupt", fallback: "原标签记录损坏，已保留并暂停编辑。")) .foregroundStyle(.orange)
             }
-            ScrollView {
+            WorkbenchScrollView {
                 VStack(alignment: .leading) {
                     ForEach(values, id: \.self) { tag in
                         HStack {
@@ -214,7 +214,7 @@ struct WorkflowLibraryFilters: View {
             TextField(text("search", "搜索素材或标签"), text: $query).textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("canvas-asset-search")
             WorkflowLibraryFilters(tags: Array(Set(controller.availableAssets.flatMap { systemTags($0) + tags($0) })).sorted(), selected: $filters)
             Text(text("hint", "拖到画布创建输入，或拖到已有素材节点。")) .font(.caption).foregroundStyle(.secondary)
-            ScrollView {
+            WorkbenchScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
                     ForEach(controller.availableAssets.filter { LibrarySearch.matches(query: query, selectedTags: filters,
                         title: $0.name, detail: $0.note, systemTags: systemTags($0), userTags: tags($0)) }) { asset in

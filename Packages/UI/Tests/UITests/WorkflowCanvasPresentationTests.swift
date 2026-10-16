@@ -17,8 +17,9 @@ struct WorkflowCanvasPresentationTests {
         for width: CGFloat in [760, 860, 1_100, 1_420] {
             #expect(!WorkflowCanvasLayoutPolicy.usesHorizontalPanelScroll(width: width))
         }
-        #expect(WorkflowCanvasLayoutPolicy.libraryWidth * 2
-                + WorkflowCanvasLayoutPolicy.canvasMinimumWidth + 2 <= WorkflowCanvasLayoutPolicy.minimumVisibleWidth)
+        let widths = WorkbenchSidebarLayout.widths(available: WorkbenchSidebarLayout.minimumWindowWidth)
+        #expect(widths.leading + widths.trailing + WorkflowCanvasLayoutPolicy.canvasMinimumWidth + 56 <= WorkbenchSidebarLayout.minimumWindowWidth)
+        #expect(WorkflowCanvasLayoutPolicy.visiblePanels(width: 1080, library: true, inspector: true, preferLibrary: false) == (true, true))
     }
 
     @Test

@@ -5,7 +5,7 @@ import SwiftUI
 /// Application preferences have one owner; project actions use the captured
 /// destination shown here and are dispatched only after this sheet dismisses.
 public struct WorkbenchSettingsView: View {
-    private enum Section: String, CaseIterable { case appearance, assistance, defaults, voice, files, network, language }
+    private enum Section: String, CaseIterable { case appearance, language, assistance, defaults, voice, files, network }
     let model: WorkbenchModel
     let library: ModelLibraryModel
     let language: UILanguageStore
@@ -41,11 +41,11 @@ public struct WorkbenchSettingsView: View {
         switch section {
         case .appearance: text("appearance", "Appearance", "外观")
         case .files: text("filesAndModels", "Files and models", "文件与模型")
-        case .network: text("networkCredentials", "Network and credentials", "网络与凭据")
-        case .defaults: text("chatDefaults", "Chat defaults", "聊天默认")
+        case .network: text("networkCredentials", "Network and access", "网络与访问")
+        case .defaults: text("chatDefaults", "Chat", "聊天")
         case .voice: text("voice", "Sound", "声音")
         case .language: text("language", "Language", "语言")
-        case .assistance: text("operation", "Operation", "操作")
+        case .assistance: text("operation", "Keyboard and Mouse", "键盘与鼠标")
         }
     }
     private var unavailableChat: some View {
@@ -128,11 +128,11 @@ public struct WorkbenchSettingsView: View {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 16) {
                                 Text(title(.assistance)).font(.headline)
-                                Picker(text("sendShortcut", "Send shortcut", "发送快捷键"), selection: Binding(
+                                WorkbenchPicker(text("sendShortcut", "Send shortcut", "发送快捷键"), selection: Binding(
                                     get: { model.chatDisplaySettings.preferences.sendShortcut },
                                     set: { value in var next = model.chatDisplaySettings.preferences; next.sendShortcut = value; model.chatDisplaySettings.update(next) })) {
-                                        Text("Command–Return").tag(ChatDisplayPreferences.SendShortcut.commandReturn)
-                                        Text(text("return", "Return", "回车")).tag(ChatDisplayPreferences.SendShortcut.return)
+                                        WorkbenchChoice("Command–Return", value:ChatDisplayPreferences.SendShortcut.commandReturn)
+                                        WorkbenchChoice(text("return", "Return", "回车"), value:ChatDisplayPreferences.SendShortcut.return)
                                     }.accessibilityIdentifier("chat-display-send-shortcut")
                                     .disabled(model.chatDisplaySettings.hasInvalidStoredRecord)
                                 Text(text("inputHelp2", "System composition, selection and Undo remain available. Shift–Return inserts a newline.", "保留系统组字、选区及撤销。Shift–回车换行。"))

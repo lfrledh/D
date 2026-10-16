@@ -49,3 +49,11 @@ struct ChatToolsNavigationRequest: Equatable {
             && sessionID == chat.state.selectedSessionID
     }
 }
+
+private struct WorkbenchSaveKey: FocusedValueKey { typealias Value = WorkbenchGenerationCommand }
+public extension FocusedValues {
+    var workbenchSave: WorkbenchGenerationCommand? {
+        get { self[WorkbenchSaveKey.self] }
+        set { self[WorkbenchSaveKey.self] = newValue }
+    }
+}

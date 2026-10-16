@@ -120,12 +120,12 @@ struct ChatSpeechSettingsPanel: View {
             Text(t("voice.title", "Read-aloud voice · current chat workspace", "朗读声音 · 当前聊天工作区")).font(.headline)
             Text(t("voice.scope", "Uses the existing system speech service. Voice and rate last for this opening; they do not change recognition language or the chat model.", "沿用当前系统朗读服务。声音和语速仅本次打开有效，不改变识别语言或聊天模型。"))
                 .font(.caption).foregroundStyle(.secondary)
-            Picker(t("voice.choice", "System voice", "系统声音"), selection: Binding(get: { voice }, set: { value in
+            WorkbenchPicker(t("voice.choice", "System voice", "系统声音"), selection: Binding(get: { voice }, set: { value in
                 do { if value.isEmpty { try chat.speech.selectSystemDefaultVoice() } else { try chat.speech.selectVoice(id: value) }; voice = chat.speech.voiceID ?? ""; issue = nil }
                 catch { issue = error.localizedDescription }
             })) {
-                Text(t("voice.systemDefault", "System default", "系统默认")).tag("")
-                ForEach(voices) { Text($0.name + " · " + $0.language).tag($0.id) }
+                WorkbenchChoice(t("voice.systemDefault", "System default", "系统默认"), value:"")
+                WorkbenchChoiceForEach(voices) { WorkbenchChoice($0.name + " · " + $0.language, value:$0.id) }
             }
             Text(t("voice.rate", "Reading speed", "朗读速度"))
             Slider(value: Binding(get: { rate }, set: { value in

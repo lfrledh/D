@@ -39,9 +39,9 @@ struct ChatOutputFormatPanel: View {
     var body: some View {
         DisclosureGroup(wording("Response format", "回答格式")) {
             VStack(alignment: .leading, spacing: 8) {
-                Picker(wording("Format", "格式"), selection: $kind) {
-                    ForEach([ChatOutputFormat.Kind.automatic, .plainText, .markdown, .json, .schema], id: \.self) { value in
-                        Text(name(value)).tag(value)
+                WorkbenchPicker(wording("Format", "格式"), selection: $kind) {
+                    WorkbenchChoiceForEach([ChatOutputFormat.Kind.automatic, .plainText, .markdown, .json, .schema], id: \.self) { value in
+                        WorkbenchChoice(name(value), value:value)
                     }
                 }.accessibilityIdentifier("chat-output-format-kind")
                 if kind == .schema {

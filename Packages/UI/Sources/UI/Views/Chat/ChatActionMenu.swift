@@ -44,7 +44,7 @@ struct ChatActionMenuItem: Identifiable {
 /// AppKit owns the visible menu while it tracks; SwiftUI updates only replace a
 /// pending snapshot until native tracking has fully ended.
 @MainActor
-struct ChatActionMenu: NSViewRepresentable {
+struct ChatLegacyActionMenu: NSViewRepresentable {
     let title: String
     let accessibilityIdentifier: String
     let items: [ChatActionMenuItem]
@@ -336,5 +336,23 @@ struct ChatActionMenu: NSViewRepresentable {
         }
 
         deinit { NotificationCenter.default.removeObserver(self) }
+    }
+}
+
+@MainActor struct ChatActionMenu: View {
+    typealias Coordinator = ChatLegacyActionMenu.Coordinator
+    let title: String
+    let accessibilityIdentifier: String
+    let items: [ChatActionMenuItem]
+    var contextID: String = ""
+    @Environment(\.workbenchMenuContext) private var inherited
+    var body: some View {
+        WorkbenchMenu(title) { WorkbenchMenuRows(items: items.map(Self.convert)) }
+            .accessibilityIdentifier(accessibilityIdentifier)
+            .environment(\.workbenchMenuContext, inherited + ":" + contextID)
+    }
+    private static func convert(_ item: ChatActionMenuItem) -> WorkbenchPopupItem {
+        .init(id: item.id, title: item.title, enabled: item.enabled, checked: item.selected,
+            separator: item.isSeparator, children: (item.children ?? []).map(convert), action: item.action)
     }
 }

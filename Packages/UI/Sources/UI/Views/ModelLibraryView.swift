@@ -117,6 +117,7 @@ public struct ModelLibraryView: View {
         .frame(minWidth: 760, idealWidth: 1080, maxWidth: .infinity,
                minHeight: 560, idealHeight: 740, maxHeight: .infinity)
         .accessibilityIdentifier("model-manager")
+        .environment(\.workbenchMenuContext, "models:\(ObjectIdentifier(model)):\(ObjectIdentifier(model.library)):\(model.rootURL?.standardizedFileURL.path ?? "none"):\(model.workspace)")
         .task { model.loadInventory(); await model.refresh() }
         .onDisappear { model.clearSelectionContext() }
         .sheet(isPresented: $acquireVisible) { acquisition }
@@ -132,15 +133,15 @@ public struct ModelLibraryView: View {
             if model.workspace == "resources" {
                 TextField(text("searchResources", "搜索名称、版本或位置"), text: $model.resourceSearch)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("model-manager-resource-search")
-                Picker(text("filter", "筛选"), selection: $model.resourceFilter) {
-                    Text(text("all", "全部")).tag("all"); Text(text("registered", "已登记")).tag("registered"); Text(text("unregistered", "未登记／待处理")).tag("unregistered")
-                    Text(text("attention", "需要处理")).tag("attention"); Text(text("unavailable", "暂不可访问")).tag("unavailable")
+                WorkbenchPicker(text("filter", "筛选"), selection: $model.resourceFilter) {
+                    WorkbenchChoice(text("all", "全部"), value:"all"); WorkbenchChoice(text("registered", "已登记"), value:"registered"); WorkbenchChoice(text("unregistered", "未登记／待处理"), value:"unregistered")
+                    WorkbenchChoice(text("attention", "需要处理"), value:"attention"); WorkbenchChoice(text("unavailable", "暂不可访问"), value:"unavailable")
                 }.frame(width: 190)
             } else {
                 TextField(text("searchDownloads", "搜索下载任务"), text: $model.taskSearch).textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .accessibilityIdentifier("model-manager-task-search")
-                Picker(text("filter", "筛选"), selection: $model.taskFilter) {
-                    Text(text("all", "全部")).tag("all"); Text(text("pending", "待处理")).tag("active"); Text(text("history", "历史")).tag("history")
+                WorkbenchPicker(text("filter", "筛选"), selection: $model.taskFilter) {
+                    WorkbenchChoice(text("all", "全部"), value:"all"); WorkbenchChoice(text("pending", "待处理"), value:"active"); WorkbenchChoice(text("history", "历史"), value:"history")
                 }.frame(width: 150)
                 Text(text("queue." + (model.snapshot?.queueState.rawValue ?? "waitingForResume"), "等待你恢复")).font(.caption)
                 if model.snapshot?.queueState == .running {
@@ -237,9 +238,6 @@ public struct ModelLibraryView: View {
             if record.activeLeaseCount > 0 { Text(text("inUse", "正在运行、排队、准备或备份中，文件受到保护。")) }
             if let error = record.error { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
             VStack(alignment: .leading, spacing: 10) {
-                if let _ = record.directory {
-                    Button(text("finder", "在 Finder 中显示")) { model.reveal(resource) }.disabled(record.availability != .available)
-                }
                 if resource.control.fileState == .verified || resource.control.fileState == .invalid {
                     Button(text("reverify", "重新校验文件")) { Task { await model.reverify(resource) } }.disabled(record.activeLeaseCount > 0 || model.hasActiveWork || model.globalOperation != nil)
                 }
@@ -249,8 +247,6 @@ public struct ModelLibraryView: View {
                 if record.registrationState != .registered {
                     Button(text("register", "登记此资源")) { Task { await model.registerResource(resource) } }
                         .disabled(resource.control.fileState != .verified || record.state == .preparationRequired || model.globalOperation != nil)
-                } else {
-                    Button(text("unregister", "解除登记…")) { confirmation = .unregister(resource) }.disabled(record.activeLeaseCount > 0)
                 }
                 if record.state == .preparationRequired {
                     Button(text("prepare", "准备独立执行包…")) { Task { await model.prepareResource(record.id) } }.disabled(!model.canChooseRoot)
@@ -267,14 +263,25 @@ public struct ModelLibraryView: View {
                 } else if record.availability != .available {
                     Button(text("relink", "重新定位或授权…")) { Task { await model.chooseRoot() } }.disabled(!model.canChooseRoot)
                 }
-                if record.storage == .managed, resource.control.fileState != .deleted {
-                    Button(text("delete", "删除这份受管理文件…"), role: .destructive) { confirmation = .delete(resource) }.disabled(record.activeLeaseCount > 0 || model.hasActiveWork)
-                }
                 if (canSelect || model.selectionAction != nil), record.registrationState == .registered, record.state == .installed,
                    record.availability == .available {
                     Button(model.selectionAction == nil ? text("selectResource", "选择此资源") : text("useTarget", "用于：") + (model.currentSelectionTitle ?? text("targetUnavailable", "目标已改变，请重新选择"))) { Task { if let action = model.selectionAction { await action(record.id) } else { await onSelect(record.id) } } }
                         .disabled(record.id == (model.selectionID ?? selectedModelID) || (model.selectionAction != nil && model.currentSelectionTitle == nil))
                 }
+                WorkbenchMenu(consistencyText(language, "copy.more"), systemImage: "ellipsis.circle") {
+                    WorkbenchMenuAction(consistencyText(language, "menu.model.locate")) { model.reveal(resource) }.disabled(record.directory == nil || record.availability != .available)
+                    WorkbenchMenuDivider()
+                    if record.registrationState == .registered {
+                        WorkbenchMenuAction(consistencyText(language, "menu.model.unregister")) { confirmation = .unregister(resource) }.disabled(record.activeLeaseCount > 0)
+                    }
+                    WorkbenchMenuForEach(model.snapshot?.downloads.filter { $0.resourceID == resource.id && $0.state.isTerminal } ?? []) { task in
+                        WorkbenchMenuAction(consistencyText(language, "menu.model.clearHistory") + " · " + (task.createdAt?.formatted() ?? text("unknown", "未知"))) { confirmation = .clear(task) }
+                    }
+                    WorkbenchMenuDivider()
+                    if record.storage == .managed, resource.control.fileState != .deleted {
+                        WorkbenchMenuAction(consistencyText(language, "menu.model.delete"), role: .destructive) { confirmation = .delete(resource) }.disabled(record.activeLeaseCount > 0 || model.hasActiveWork)
+                    }
+                }.environment(\.workbenchMenuContext, "resource:\(ObjectIdentifier(model)):\(resource.id)")
             }.buttonStyle(WorkbenchGlassButtonStyle())
             if record.registrationState != .registered { Text(text("registrationHelp", "文件完整不等于已接入执行；登记不会改变当前节点或运行模型。")).font(.caption).foregroundStyle(.secondary) }
             DisclosureGroup(text("technical", "身份与来源详情")) {
@@ -374,13 +381,13 @@ public struct ModelLibraryView: View {
     private var localImport: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack { Text(text("import", "登记已有…")).font(.title2.bold()); Spacer(); Button(text("close", "完成")) { importVisible = false } }
-            Picker(text("configuration", "配置"), selection: $importCatalogID) {
-                Text(text("existingRoute", "已有引擎支持的精确配置")).tag("")
-                ForEach(model.catalog) { Text($0.title).tag($0.id) }
+            WorkbenchPicker(text("configuration", "配置"), selection: $importCatalogID) {
+                WorkbenchChoice(text("existingRoute", "已有引擎支持的精确配置"), value:"")
+                WorkbenchChoiceForEach(model.catalog) { WorkbenchChoice($0.title, value:$0.id) }
             }
             if importCatalogID.isEmpty {
-                Picker(text("kind", "用途"), selection: $importKind) {
-                    ForEach([WorkflowModelKind.text, .image, .music, .video], id: \.rawValue) { kind in Text(text("kind." + kind.rawValue, kind.rawValue)).tag(kind) }
+                WorkbenchPicker(text("kind", "用途"), selection: $importKind) {
+                    WorkbenchChoiceForEach([WorkflowModelKind.text, .image, .music, .video], id: \.rawValue) { kind in WorkbenchChoice(text("kind." + kind.rawValue, kind.rawValue), value:kind) }
                 }
                 Text(text("importExactHelp", "沿用现有引擎的精确校验。保留原位置，不自动选用，不创建下载任务。")).font(.callout)
                 Button(text("chooseFolder", "选择准确文件夹…")) { Task { await model.importConfiguration(kind: importKind) } }.disabled(model.explicitRegistration == nil || model.globalOperation != nil)

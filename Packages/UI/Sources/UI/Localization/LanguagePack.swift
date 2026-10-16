@@ -158,7 +158,15 @@ enum LanguagePackFileReader {
 
 enum LanguagePackCodec {
     static func decode(_ data: Data, english: LanguagePack? = nil) throws -> LanguagePack {
-        guard data.count <= LanguagePackLimits.maximumBytes else {
+        try decode(data, english: english, maximumBytes: LanguagePackLimits.maximumBytes, maximumEntries: LanguagePackLimits.maximumEntries)
+    }
+    // Only packaged, signed resources use this finite bound. External imports
+    // and stored external packs retain their original 512 KiB / 2,000 limits.
+    static func decodeBuiltIn(_ data: Data, english: LanguagePack? = nil) throws -> LanguagePack {
+        try decode(data, english: english, maximumBytes: 2 * 1_024 * 1_024, maximumEntries: 10_000)
+    }
+    private static func decode(_ data: Data, english: LanguagePack?, maximumBytes: Int, maximumEntries: Int) throws -> LanguagePack {
+        guard data.count <= maximumBytes else {
             throw LanguagePackValidationError.tooLarge
         }
         guard let source = String(data: data, encoding: .utf8) else {
@@ -170,7 +178,7 @@ enum LanguagePackCodec {
         } catch {
             throw LanguagePackValidationError.invalidJSON
         }
-        try validate(pack, english: english)
+        try validate(pack, english: english, maximumEntries: maximumEntries)
         return LanguagePack(
             schemaVersion: pack.schemaVersion,
             locale: try normalizedLocale(pack.locale),
@@ -180,6 +188,9 @@ enum LanguagePackCodec {
     }
 
     static func validate(_ pack: LanguagePack, english: LanguagePack? = nil) throws {
+        try validate(pack, english: english, maximumEntries: LanguagePackLimits.maximumEntries)
+    }
+    private static func validate(_ pack: LanguagePack, english: LanguagePack?, maximumEntries: Int) throws {
         guard pack.schemaVersion == 1 else {
             throw LanguagePackValidationError.unsupportedVersion(pack.schemaVersion)
         }
@@ -189,7 +200,7 @@ enum LanguagePackCodec {
               !pack.displayName.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
             throw LanguagePackValidationError.invalidDisplayName
         }
-        guard pack.strings.count <= LanguagePackLimits.maximumEntries else {
+        guard pack.strings.count <= maximumEntries else {
             throw LanguagePackValidationError.tooManyEntries
         }
         for (key, value) in pack.strings {

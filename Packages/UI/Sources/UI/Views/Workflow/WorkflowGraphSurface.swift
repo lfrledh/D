@@ -24,6 +24,8 @@ struct WorkflowGraphSurface: View {
     var runTargetNodeID: UUID? = nil
     let onPlan: (UUID, Bool) -> Void
     var onSetRunTarget: (UUID) -> Void = { _ in }
+    var onPlanRange: ((UUID, Int) -> Void)? = nil
+    var onViewResults: ((UUID) -> Void)? = nil
     var nodeSizeObserver: ((UUID, CGSize) -> Void)?
     var viewportSizeObserver: ((WorkflowCanvasViewportMeasurement) -> Void)?
     var portCenterObserver: (([WorkflowPortIdentity: CGPoint]) -> Void)?
@@ -113,6 +115,7 @@ struct WorkflowGraphSurface: View {
                                 runTarget: runTargetNodeID == node.id,
                                 onPlan: onPlan,
                                 onSetRunTarget: onSetRunTarget,
+                                onPlanRange: onPlanRange, onViewResults: onViewResults,
                                 onBindAsset: onBindAsset,
                                 onInspect: onInspect,
                                 portVisible: { port, delta in
@@ -976,6 +979,8 @@ private struct WorkflowNodeCard: View {
     let runTarget: Bool
     let onPlan: (UUID, Bool) -> Void
     let onSetRunTarget: (UUID) -> Void
+    let onPlanRange: ((UUID, Int) -> Void)?
+    let onViewResults: ((UUID) -> Void)?
     let onBindAsset: (UUID, UUID?, UUID, UUID) -> Bool
     let onInspect: (UUID) -> Void
     let portVisible: (WorkflowPortIdentity, CGPoint) -> Bool
@@ -1008,7 +1013,7 @@ private struct WorkflowNodeCard: View {
                 }
                 .allowsHitTesting(false)
                 Spacer(minLength: 6)
-                Menu { nodeActions } label: {
+                WorkbenchMenu { nodeActions } label: {
                     Image(systemName: "ellipsis").frame(width: 22, height: 22)
                 }.menuStyle(.borderlessButton).fixedSize()
                     .background { Color.clear.workbenchPanel(in: Circle()) }.workflowNodeControl(node.id)
@@ -1116,26 +1121,45 @@ private struct WorkflowNodeCard: View {
         .dropDestination(for: WorkflowCanvasTransfer.self) { (items: [WorkflowCanvasTransfer], _: CGPoint) -> Bool in
             acceptAsset(items)
         }
-        .contextMenu { nodeActions }
-        .accessibilityActions { nodeActions }
+        .workbenchContextMenu { nodeActions }
+        .environment(\.workbenchMenuContext, "node:\(scope.projectID):\(scope.instanceID):\(scope.rootGraphID):\(scope.rootRevision):\(scope.bodyPath):\(scope.graphID):\(node.id)")
+        .workbenchSurface(.node, group: "node:\(node.id)")
+        .accessibilityActions {
+            ForEach(nodeActions.accessibleLeaves, id: \.id) { item in
+                Button(item.title) { if item.enabled && item.isCurrent() { item.action?() } }.disabled(!item.enabled)
+            }
+        }
         .accessibilityIdentifier("workflow-node-\(node.id.uuidString)")
     }
 
-    @ViewBuilder private var nodeActions: some View {
-        Button(workflowText(languageStore, controller.selectedNodeIDs.contains(node.id)
-            ? "workflow.selection.remove" : "workflow.language.selection",
-            fallback: controller.selectedNodeIDs.contains(node.id) ? "移出当前选择" : "加入当前选择")) {
+    @WorkbenchMenuBuilder private var nodeActions: WorkbenchMenuRows {
+        WorkbenchMenuAction(consistencyText(languageStore, "menu.node.properties"), id: "node.properties") {
+            if scope.isCurrent(in: controller) { onInspect(node.id) }
+        }
+        WorkbenchMenuAction(consistencyText(languageStore, "menu.node.results"), id: "node.results") {
+            if scope.isCurrent(in: controller) { onViewResults?(node.id) }
+        }.disabled(onViewResults == nil)
+        WorkbenchMenuDivider()
+        WorkbenchSubmenu(consistencyText(languageStore, "menu.node.scope"), id: "node.scope") {
+            WorkbenchMenuAction(consistencyText(languageStore, "menu.node.through"), id: "node.through") { if scope.isCurrent(in: controller) { onPlan(node.id, false) } }.disabled(readOnly || definition == nil)
+            WorkbenchMenuAction(consistencyText(languageStore, "menu.node.only"), id: "node.only") { if scope.isCurrent(in: controller) { onPlan(node.id, true) } }.disabled(readOnly || definition == nil)
+            WorkbenchMenuAction(consistencyText(languageStore, "menu.node.from"), id: "node.from") { if scope.isCurrent(in: controller) { onPlanRange?(node.id, 2) } }.disabled(readOnly || definition == nil || onPlanRange == nil || !controller.bodyPath.isEmpty)
+            WorkbenchMenuAction(consistencyText(languageStore, "menu.node.after"), id: "node.after") { if scope.isCurrent(in: controller) { onPlanRange?(node.id, 3) } }.disabled(readOnly || definition == nil || onPlanRange == nil || !controller.bodyPath.isEmpty)
+        }
+        WorkbenchMenuAction(workflowText(languageStore, "workflow.run.setTarget", fallback: "设为运行终点"), id: "node.target") {
+            if scope.isCurrent(in: controller) { onSetRunTarget(node.id) }
+        }.disabled(readOnly || definition == nil)
+        WorkbenchMenuAction(workflowText(languageStore, controller.selectedNodeIDs.contains(node.id) ? "workflow.selection.remove" : "workflow.language.selection", fallback: controller.selectedNodeIDs.contains(node.id) ? "移出当前选择" : "加入当前选择"), id: "node.select") {
             guard scope.isCurrent(in: controller) else { return }
             if controller.selectedNodeIDs.contains(node.id) { controller.selectedNodeIDs.remove(node.id) }
             else { controller.selectedNodeIDs.insert(node.id) }
             controller.selectedNodeID = controller.selectedNodeIDs.count == 1 ? controller.selectedNodeIDs.first : nil
         }
-        Button(workflowText(languageStore, "workflow.run.setTarget", fallback: "设为运行终点")) { if scope.isCurrent(in: controller) { onSetRunTarget(node.id) } }
-            .disabled(readOnly || definition == nil)
-        Button(workflowText(languageStore, "workflow.action.runToHere", fallback: "运行到此节点")) { if scope.isCurrent(in: controller) { onPlan(node.id, false) } }
-            .disabled(readOnly || definition == nil)
-        Button(workflowText(languageStore, "workflow.action.rerunOnly", fallback: "只重跑此节点")) { if scope.isCurrent(in: controller) { onPlan(node.id, true) } }
-            .disabled(readOnly || definition == nil)
+        WorkbenchMenuDivider()
+        WorkbenchMenuAction(consistencyText(languageStore, "menu.node.delete"), role: .destructive, id: "node.delete") {
+            guard scope.isCurrent(in: controller), let target = controller.canvasInsertionTarget() else { return }
+            controller.deleteNode(id: node.id, target: target)
+        }.disabled(readOnly || !controller.canEditCanvas)
     }
 
     @ViewBuilder

@@ -208,6 +208,8 @@ private struct TextSourcesReadOnlyTextView: NSViewRepresentable {
 /// Independent read-only source and answer panel for the existing text workbench.
 @MainActor
 public struct TextSourcesView: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     private let notebook: TextSourcesNotebook
     private let partialAnswer: String
     private let isRunning: Bool
@@ -275,14 +277,14 @@ public struct TextSourcesView: View {
         let layout = compact ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 10))
         return layout {
             VStack(alignment: .leading, spacing: 2) {
-                Text("资料问答").font(.headline)
-                Text("引用标记仅核对本次提交的资料位置，不验证事实。")
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.29", fallback: "Questions About Sources")).font(.headline)
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.130", fallback: "Citation markers check locations in sources submitted with this request. They do not verify facts."))
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }.frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 10) {
-                Button(action: actions.undo) { Label("撤销", systemImage: "arrow.uturn.backward") }
+                Button(action: actions.undo) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.106", fallback: "Undo"), systemImage: "arrow.uturn.backward") }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(!canUndo || isSaving).accessibilityIdentifier("text-sources-undo")
-                Button(action: actions.save) { Label(isSaving ? "正在保存" : "保存", systemImage: "square.and.arrow.down") }
+                Button(action: actions.save) { Label(isSaving ? workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.107", fallback: "Saving") : workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.54", fallback: "Save"), systemImage: "square.and.arrow.down") }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving).accessibilityIdentifier("text-sources-save")
             }.fixedSize(horizontal: true, vertical: false)
         }
@@ -299,17 +301,17 @@ public struct TextSourcesView: View {
     private func sourcesContent(compactActions: Bool) -> some View {
         VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("资料").font(.headline)
+                    Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.131", fallback: "Sources")).font(.headline)
                     Spacer()
-                    Button(action: actions.importSource) { Label("导入资料", systemImage: "plus") }
+                    Button(action: actions.importSource) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.132", fallback: "Import Source"), systemImage: "plus") }
                         .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving).accessibilityIdentifier("text-sources-import")
                 }
                 if notebook.sources.isEmpty {
-                    ContentUnavailableView("尚无资料", systemImage: "doc.text", description: Text("导入本地文字资料后可以提问。"))
+                    ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.133", fallback: "No Sources Yet"), systemImage: "doc.text", description: Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.134", fallback: "Import a local text source to ask questions about it.")))
                 } else {
-                    Picker("当前资料", selection: $selectedSourceID) {
-                        Text("选择资料").tag(Optional<UUID>.none)
-                        ForEach(notebook.sources) { source in Text(source.displayName).tag(Optional(source.id)) }
+                    WorkbenchPicker(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.135", fallback: "Current Source"), selection: $selectedSourceID) {
+                        WorkbenchChoice(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.136", fallback: "Choose Source"), value:Optional<UUID>.none)
+                        WorkbenchChoiceForEach(notebook.sources) { source in WorkbenchChoice(source.displayName, value:Optional(source.id)) }
                     }
                     .onChange(of: selectedSourceID) { _, id in selection.select(notebook.sources.first { $0.id == id }) }
                     if let source = selectedSource {
@@ -322,7 +324,7 @@ public struct TextSourcesView: View {
     @ViewBuilder private func sourceDetail(_ source: TextSourceSnapshot, compactActions: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(source.displayName).font(.subheadline.weight(.semibold))
-            Text("原始资料只读；可选择一段文字作为本次提交的资料。")
+            Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.137", fallback: "The original source is read-only. You can select an excerpt for this request."))
                 .font(.caption).foregroundStyle(.secondary)
             TextSourcesReadOnlyTextView(source: source, selection: selection.excerptRange(for: source)) { range in
                 selection.record(range, for: source)
@@ -332,14 +334,14 @@ public struct TextSourcesView: View {
             .accessibilityIdentifier("text-sources-source-text")
             let actionsLayout = compactActions ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
             actionsLayout {
-                Button("使用全文") { actions.useExcerpt(source.id, nil) }
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.138", fallback: "Use Full Text")) { actions.useExcerpt(source.id, nil) }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving)
                     .accessibilityIdentifier("text-sources-use-full")
-                Button("使用选中片段") { actions.useExcerpt(source.id, selection.excerptRange(for: source)) }
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.139", fallback: "Use Selected Excerpt")) { actions.useExcerpt(source.id, selection.excerptRange(for: source)) }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving || selection.excerptRange(for: source) == nil)
                     .accessibilityIdentifier("text-sources-use-selection")
                 if !compactActions { Spacer() }
-                Button(role: .destructive, action: { actions.removeSource(source.id) }) { Label("移除资料", systemImage: "trash") }
+                Button(role: .destructive, action: { actions.removeSource(source.id) }) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.140", fallback: "Remove Source"), systemImage: "trash") }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving).accessibilityIdentifier("text-sources-remove")
             }
         }
@@ -358,7 +360,7 @@ public struct TextSourcesView: View {
 
     private var answersContent: some View {
         VStack(alignment: .leading, spacing: 14) {
-                Text("问题与回答").font(.headline)
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.141", fallback: "Questions and Answers")).font(.headline)
                 TextSourcesQuestionEditor(value: notebook.question, editEpoch: questionEditEpoch,
                     isEditable: !isSaving) { value in
                     actions.changeQuestion(value)
@@ -369,10 +371,10 @@ public struct TextSourcesView: View {
                 .frame(minHeight: 90).workbenchInputSurface()
                 .accessibilityIdentifier("text-sources-question")
                 HStack {
-                    Button(action: actions.ask) { Label("生成", systemImage: "sparkles") }
+                    Button(action: actions.ask) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.142", fallback: "Generate"), systemImage: "sparkles") }
                         .buttonStyle(WorkbenchGlassButtonStyle()).disabled(!canAsk || isRunning || isSaving)
                         .accessibilityIdentifier("text-sources-ask")
-                    Button(action: actions.cancel) { Label("取消", systemImage: "xmark") }
+                    Button(action: actions.cancel) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.33", fallback: "Cancel"), systemImage: "xmark") }
                         .buttonStyle(WorkbenchGlassButtonStyle()).disabled(!isRunning || isCancelling)
                         .accessibilityIdentifier("text-sources-cancel")
                     Spacer()
@@ -382,7 +384,7 @@ public struct TextSourcesView: View {
                         .accessibilityIdentifier("text-sources-error")
                 }
                 if isRunning && !partialAnswer.isEmpty {
-                    answerBlock(title: "正在生成", answer: partialAnswer, summary: "结果尚未完成，不能采用。")
+                    answerBlock(title: workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.143", fallback: "Generating"), answer: partialAnswer, summary: workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.144", fallback: "The answer is not complete and cannot be accepted yet."))
                 }
                 ForEach(notebook.records) { record in recordBlock(record) }
         }.padding(16)
@@ -401,15 +403,15 @@ public struct TextSourcesView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(TextSourcesHistoryPresentation.disposition(record.disposition))
                 .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            Text("问题：\(record.submission.question)").font(.caption).fixedSize(horizontal: false, vertical: true)
+            Text(consistencyText(legacyLanguage, "copy.TextSourcesView.0", arguments: ["v0": String(describing: record.submission.question)])).font(.caption).fixedSize(horizontal: false, vertical: true)
             Text(record.answer).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             Text(citationSummary(record)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             submittedExcerpts(record.submission.sources, excerpts: record.submission.excerpts)
             HStack {
-                Button("采用") { actions.accept(record.id) }
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.145", fallback: "Accept")) { actions.accept(record.id) }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(!canAccept(record) || isRunning || isSaving)
                     .accessibilityIdentifier("text-sources-accept-\(record.id.uuidString)")
-                Button("拒绝") { actions.reject(record.id) }
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.122", fallback: "Reject")) { actions.reject(record.id) }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(record.disposition != .pending || isRunning || isSaving)
                     .accessibilityIdentifier("text-sources-reject-\(record.id.uuidString)")
             }
@@ -421,11 +423,11 @@ public struct TextSourcesView: View {
         let rows = TextSourcesHistoryPresentation.excerptRows(sources: sources, excerpts: excerpts)
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
-                Text("本次提交的资料片段").font(.caption.weight(.semibold))
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.146", fallback: "Source Excerpts Submitted with This Request")).font(.caption.weight(.semibold))
                 ForEach(rows) { row in
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(row.label) \(row.sourceName)").font(.caption.weight(.semibold))
-                        Text("修订：\(row.sourceRevision.uuidString)  摘要：\(row.sourceDigest)")
+                        Text(consistencyText(legacyLanguage, "copy.TextSourcesView.1", arguments: ["v0": String(describing: row.sourceRevision.uuidString), "v1": String(describing: row.sourceDigest)]))
                             .font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
                         Text(row.text).font(.caption).textSelection(.enabled)
                     }

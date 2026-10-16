@@ -14,12 +14,30 @@ struct WorkflowConnectionReceiver: NSViewRepresentable {
     let onSelect: () -> Void
     let onDisconnect: () -> Void
 
+    @Environment(\.workbenchMenuContext) private var menuContext
+    @Environment(\.workbenchBackground) private var background
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+    private var popupStyle: WorkbenchPopupStyle {
+        let appearance = preferences.resolvedAppearance, palette = appearance.palette(for: scheme)
+        let effects = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: reduceMotion,
+            reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased)
+        return .init(owner: background, palette: palette, strength: appearance.local?.strength ?? 0,
+            drawsGlass: effects.usesCanvasBlend && appearance.local?.material == .glass,
+            legacyFill: appearance.local == nil ? NSColor(palette.panelFill(canvasBlend: effects.usesCanvasBlend ? appearance.backgroundTransparency : 0)) : nil,
+            readability: effects.usesCanvasBlend ? appearance.resolvedReadability : .init())
+    }
+    static func dismantleNSView(_ view: WorkflowConnectionHitView, coordinator: ()) { view.closePopup() }
     func makeNSView(context: Context) -> WorkflowConnectionHitView { WorkflowConnectionHitView() }
     func updateNSView(_ view: WorkflowConnectionHitView, context: Context) {
         view.updateGeometry(path: path, midpoint: midpoint, cutAvailable: cutAvailable)
         view.canDisconnect = canDisconnect
         view.onSelect = onSelect; view.onDisconnect = onDisconnect
         view.disconnectTitle = disconnectTitle
+        view.updatePopup(context: menuContext + ":" + identifier, style: popupStyle)
         view.setAccessibilityElement(true); view.setAccessibilityRole(.button)
         view.setAccessibilityLabel(label); view.setAccessibilityIdentifier(identifier)
         view.setAccessibilityCustomActions(canDisconnect ? [NSAccessibilityCustomAction(name: disconnectTitle) {
@@ -39,7 +57,21 @@ final class WorkflowConnectionHitView: NSView {
     private(set) var hovering = false
     private(set) var hoveringCut = false
     private var pressedAction: (cut: Bool, action: () -> Void)?
-    private var menuAction: (() -> Void)?
+    private var popupContext = ""
+    private var popupStyle: WorkbenchPopupStyle?
+    private var popupAnchor: NSView?
+    private weak var popup: WorkbenchPopupOverlay?
+    func updatePopup(context: String, style: WorkbenchPopupStyle) {
+        if popupContext != context || popupStyle?.owner !== style.owner { closePopup() }
+        popupContext = context; popupStyle = style
+        popup?.update(contextID: context, title: disconnectTitle, items: popupItems(context), style: style)
+    }
+    private func popupItems(_ context: String) -> [WorkbenchPopupItem] {
+        [.init(id: "disconnect", title: disconnectTitle, symbol: "scissors", enabled: canDisconnect,
+            isCurrent: { [weak self] in self?.popupContext == context && self?.canDisconnect == true }, action: onDisconnect)]
+    }
+    func closePopup() { popup?.cancel(restoreFocus: false); popupAnchor?.removeFromSuperview(); popupAnchor = nil }
+
     private var escapeMonitor: Any?
     private var resignObserver: NSObjectProtocol?
     private var tracking: NSTrackingArea?
@@ -71,7 +103,7 @@ final class WorkflowConnectionHitView: NSView {
     override func mouseMoved(with event: NSEvent) { updateHover(at: convert(event.locationInWindow, from: nil)) }
     override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
     override func mouseExited(with event: NSEvent) { clearHover() }
-    override func viewDidHide() { super.viewDidHide(); clearHover(); cancelPress() }
+    override func viewDidHide() { super.viewDidHide(); clearHover(); cancelPress(); closePopup() }
     func updateHover(at point: CGPoint) {
         let cut = containsCut(point)
         let next = cut || wirePath.contains(point)
@@ -100,6 +132,7 @@ final class WorkflowConnectionHitView: NSView {
     }
     override func mouseDown(with event: NSEvent) {
         guard window?.isKeyWindow == true else { return }
+        if event.modifierFlags.contains(.control) { rightMouseDown(with: event); return }
         cancelPress()
         let cut = containsCut(convert(event.locationInWindow, from: nil))
         pressedAction = (cut, cut ? onDisconnect : onSelect)
@@ -129,20 +162,23 @@ final class WorkflowConnectionHitView: NSView {
         setNeedsDisplay(cutRect.insetBy(dx: -2, dy: -2))
     }
     override func viewWillMove(toWindow newWindow: NSWindow?) {
-        if newWindow !== window { cancelPress(); clearHover() }
+        if newWindow !== window { cancelPress(); clearHover(); closePopup() }
         super.viewWillMove(toWindow: newWindow)
     }
     override func rightMouseDown(with event: NSEvent) {
         guard !isHiddenOrHasHiddenAncestor, wirePath.contains(convert(event.locationInWindow, from: nil)) else { return }
-        let menu = NSMenu(); menu.autoenablesItems = false
-        let item = NSMenuItem(title: disconnectTitle, action: #selector(disconnectWire), keyEquivalent: "")
-        item.target = self; item.isEnabled = canDisconnect
-        item.image = NSImage(systemSymbolName: "scissors", accessibilityDescription: nil)
-        menu.addItem(item)
-        menuAction = onDisconnect // Preserve the scope at menu opening, even across view updates.
-        defer { menuAction = nil }
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
+        guard let style = popupStyle else { return }
+        closePopup()
+        let point = convert(event.locationInWindow, from: nil)
+        let anchor = NSView(frame: .init(x: point.x, y: point.y, width: 1, height: 1)); anchor.setAccessibilityElement(false)
+        addSubview(anchor); popupAnchor = anchor
+        let context = popupContext
+        popup = WorkbenchPopupOverlay.present(from: anchor, contextID: context, title: disconnectTitle,
+            items: popupItems(context), style: style, validContext: { [weak self] in
+                guard let self else { return false }
+                return self.window != nil && !self.isHiddenOrHasHiddenAncestor && self.popupContext == context
+            }, didClose: { [weak self] in self?.popupAnchor?.removeFromSuperview(); self?.popupAnchor = nil; self?.popup = nil })
+        if popup == nil { anchor.removeFromSuperview(); popupAnchor = nil }
     }
-    @objc private func disconnectWire() { if canDisconnect { menuAction?() } }
     override func accessibilityPerformPress() -> Bool { onSelect(); return true }
 }

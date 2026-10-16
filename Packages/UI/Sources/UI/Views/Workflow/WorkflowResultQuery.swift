@@ -148,7 +148,7 @@ struct WorkflowResultQueryControls: View {
         .onChange(of: store.metadata) { _, _ in rememberTags() }
         .onChange(of: state.query) { _, _ in rememberTags() }
         .popover(isPresented: $filters) {
-            SharedLibraryFilterEditor(query: state.query, token: token, store: store, items: Array(state.items.values), context: .init(), allowsScopeEditing: false,
+            SharedLibraryFilterEditor(query: state.query, token: token, store: store, items: Array(state.items.values), context: .init(), allowsScopeEditing: false, scopeTitle: scopeTitle,
                 current: { (state.query, token) }, apply: { query.wrappedValue = $0 }, close: { filters = false })
         }
         .sheet(item: $saveRequest) { request in SharedLibrarySaveQuerySheet(request: request, store: store) { saveRequest = nil } }

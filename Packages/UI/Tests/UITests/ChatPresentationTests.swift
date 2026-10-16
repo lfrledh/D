@@ -143,17 +143,19 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
         let (chat, model, store, root) = try await fixture(state)
         var browserUpdates = 0
+        var materializedRows = Set<UUID>()
+        ChatRowUpdateProbe.body = { materializedRows.insert($0) }
         ChatRowUpdateProbe.browserBody = { browserUpdates += 1 }
         defer { ChatRowUpdateProbe.body = nil; ChatRowUpdateProbe.browserBody = nil }
         let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model,
-            onChooseModel: {}, onSavedAsset: { _ in }, onAssetsChanged: {}))
+            onChooseModel: {}, onSavedAsset: { _ in }, onAssetsChanged: {}, initialPreparationTab: "conversations"))
         host.frame = .init(x: 0, y: 0, width: 1100, height: 800)
         for _ in 0..<15 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(20)) }
         func allViews(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + allViews($0) } }
-        #expect(allViews(host).contains { ($0.accessibilityIdentifier() ?? "").hasPrefix("chat-message-actions-") })
+        #expect(session.messages.contains { materializedRows.contains($0.id) })
         // Materialize the retained history host for this offscreen dependency
         // measurement. This is not an assertion of native tab/AX interaction.
-        let browser = try #require(allViews(host).first { $0.accessibilityIdentifier() == "chat-history-page" })
+        let browser = try #require(allViews(host).first { $0.accessibilityIdentifier() == "chat-left-conversations" })
         browser.isHidden = false; browser.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(100))
         try #require(browserUpdates > 0)
@@ -177,23 +179,33 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
         let (chat, model, store, root) = try await fixture(state)
         chat.invalidParameterFields = [session.id.uuidString + ":temperature"]
+        var frames: [String: CGRect] = [:]
         let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model,
-            onChooseModel: {}, onSavedAsset: { _ in }, onAssetsChanged: {}))
+            onChooseModel: {}, onSavedAsset: { _ in }, onAssetsChanged: {}).observingLayout { frames[$0] = $1 })
         host.frame = .init(x: 0, y: 0, width: 1100, height: 800)
         func settle() async throws { for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) } }
         func views(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + views($0) } }
-        func generate() throws -> NSMenuItem {
-            let button = try #require(views(host).compactMap { $0 as? NSPopUpButton }.first {
-                $0.accessibilityIdentifier() == "chat-message-actions-" + message.id.uuidString
-            })
-            return try #require(button.menu?.items.first { $0.representedObject as? String == "generate" })
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
+        defer { window.close() }
+        func generateEnabled() async throws -> Bool {
+            let rect = try #require(frames["message-menu-" + message.id.uuidString])
+            let target = NSAccessibilityElement()
+            target.setAccessibilityIdentifier("chat-message-actions-" + message.id.uuidString)
+            target.setAccessibilityFrame(window.convertToScreen(host.convert(rect, to: nil)))
+            try #require(HostingControlClick.send(to: target, in: host), "Hosted action trigger delivery unavailable")
+            try await settle()
+            let popup = try #require(views(host).compactMap { $0 as? WorkbenchPopupOverlay }.first)
+            defer { popup.cancel(restoreFocus: false) }
+            let button = try #require(views(popup).compactMap { $0 as? NSButton }.first { $0.accessibilityIdentifier() == "generate" })
+            return button.isEnabled
         }
-        try await settle(); #expect(try !generate().isEnabled)
+        try await settle(); #expect(try await !generateEnabled())
         try chat.setArchived(true, sessionID: session.id); try await settle()
         chat.invalidParameterFields = []; try await settle()
-        #expect(try !generate().isEnabled)
+        #expect(try await !generateEnabled())
         try chat.setArchived(false, sessionID: session.id); try await settle()
-        #expect(try generate().isEnabled)
+        #expect(try await generateEnabled())
         try await chat.flush(); try await close(store, root: root)
     }
 
@@ -258,13 +270,49 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             let right = try #require(descendants(host).first { $0.accessibilityIdentifier() == "quick-assets-host" })
             #expect(!left.isHiddenOrHasHiddenAncestor && !right.isHiddenOrHasHiddenAncestor)
             let leftFrame = left.convert(left.bounds, to: host), rightFrame = right.convert(right.bounds, to: host)
-            #expect(leftFrame.width == 260 && rightFrame.width == 288)
+            #expect(leftFrame.width == 256 && rightFrame.width == 272)
             #expect(rightFrame.minX - leftFrame.maxX >= 432)
             if let previousLeft, let previousRight { #expect(left === previousLeft && right === previousRight) }
             previousLeft = left; previousRight = right
         }
         #expect(quick.state.runs.isEmpty)
         try await quick.flush(); try await close(store, root: root)
+    }
+
+    @Test(arguments: ["quick", "chat", "workflow"])
+    func actualHostsShareResponsiveCenterWidthsWithoutChangingOwners(kind: String) async throws {
+        var state = ChatState(); let session = ChatSession(title: "Layout owner")
+        state.sessions = [session]; state.selectedSessionID = session.id
+        let (chat, model, store, root) = try await fixture(state, withWorkflowOwner: true)
+        let quick = QuickGenerationController(store: store) { throw WorkflowIssue("Layout must not infer") }
+        await quick.load()
+        let controller = try #require(model.projectSession.workflow)
+        let graphs = controller.graphs
+        let sidebars = WorkbenchSidebarState(); sidebars.trailing = true
+        var sizes: [String: CGSize] = [:]
+        let content: AnyView
+        switch kind {
+        case "quick": content = AnyView(QuickGenerationView(quick: quick, model: model, selectedResults: .constant([:]), onChooseModel: {}, onSettingsToCanvas: { _ in }, onResultToCanvas: { _ in }, onValueToCanvas: { _ in }))
+        case "chat": content = AnyView(ChatWorkbenchView(chat: chat, model: model, onChooseModel: {}, onSavedAsset: { _ in }, onAssetsChanged: {}))
+        default: content = AnyView(WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {}, onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in }))
+        }
+        let host = NSHostingView(rootView: content.environment(\.workbenchSidebars, sidebars)
+            .environment(\.workbenchLayoutObservation, { sizes[$0] = $1 }))
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 1440, height: 820), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.close() }
+        for width: CGFloat in [1440, 1080, 900, 1280, 1080] {
+            host.frame.size = .init(width: width, height: 820)
+            for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30)) }
+            let shown = WorkbenchSidebarLayout.visible(available: width, leading: true, trailing: true)
+            let expected = width - 32 - WorkbenchSidebarLayout.occupiedWidth(shown.leading, leading: true, available: width)
+                - WorkbenchSidebarLayout.occupiedWidth(shown.trailing, leading: false, available: width)
+            let measured = try #require(sizes[kind + "-center"])
+            #expect(abs(measured.width - expected) < 1, "\(kind) width \(width): \(measured.width) vs \(expected)")
+            print("D_HOST_LAYOUT", kind, width, measured.width, expected)
+        }
+        #expect(controller.graphs == graphs && controller.runs.isEmpty && quick.state.runs.isEmpty && chat.selectedSession?.id == session.id)
+        try await quick.flush(); _ = await model.projectSession.requestClose(); try await close(store, root: root)
     }
 
     @Test func sharedSidebarsCoexistAndRetainInputWhenCollapsed() async throws {
@@ -599,11 +647,11 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory(), isDirectory: true)
 
     private func renderFixture(_ chat: ChatController, model: WorkbenchModel, width: CGFloat,
-                               inspector: Bool = false, scrolledUp: Bool = false,
+                               inspector: Bool = false, scrolledUp: Bool = false, preparation: String = "settings",
                                inspect: (NSView) -> Void = { _ in }) -> [String: CGRect] {
         var rectangles: [String: CGRect] = [:]
         let view = ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
-            onSavedAsset: { _ in }, onAssetsChanged: {}, initialInspectorVisible: inspector,
+            onSavedAsset: { _ in }, onAssetsChanged: {}, initialPreparationTab: preparation, initialInspectorVisible: inspector,
             initiallyFollowsBottom: !scrolledUp, initiallyHasNewContent: scrolledUp)
             .observingLayout { rectangles[$0] = $1 }
         let host = NSHostingView(rootView: view)
@@ -921,9 +969,9 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             return state
         })
         #expect(chat.selectedSession?.attachments.count == 1)
-        let layout = renderFixture(chat, model: model, width: 1_300, inspector: true)
+        let layout = renderFixture(chat, model: model, width: 1_300, inspector: true, preparation: "assets")
         #expect(horizontallyInside(layout["inspector-pane"], width: 1_300))
-        #expect(layout["inspector-pane"]?.width == ChatPresentationLayout.inspectorWidth)
+        #expect(layout["inspector-pane"]?.width == 320)
         #expect(horizontallyInside(layout["composer"], width: 1_300))
         if let attachmentID = chat.selectedSession?.attachments.first?.id {
             #expect(layout["attachment-\(attachmentID.uuidString)"] != nil)
@@ -1517,6 +1565,12 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
                 && abs(frame.width - viewportBefore.width) < 4 && abs(frame.height - viewportBefore.height) < 4
                 && !$0.isHiddenOrHasHiddenAncestor
         }
+        if scrollCandidates.count != 1 {
+            print("D_SCROLL_MATCH viewport", viewportBefore, "host", host.bounds)
+            for candidate in Self.descendants(host).compactMap({ $0 as? NSScrollView }) {
+                print("D_SCROLL_MATCH candidate", host.convert(candidate.bounds, from: candidate), "hidden", candidate.isHiddenOrHasHiddenAncestor)
+            }
+        }
         let scroll = try XCTUnwrap(scrollCandidates.count == 1 ? scrollCandidates.first : nil,
             "Transcript scroll view must be unique, found \(scrollCandidates.count)")
         if replay {
@@ -1642,5 +1696,45 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             }
             .onChange(of: chat.selectedSession?.configuration?.parameters["modelID"]?.string) { _, _ in }
         } else { content }
+    }
+}
+
+extension ChatPresentationTests {
+    @Test func answerSourcesRenderFrozenAttachmentsIncludingRecordedOriginals() async throws {
+        let ownerID=UUID(),oldUserID=UUID(),oldAnswerID=UUID(),oldAttemptID=UUID(),newUserID=UUID(),newAnswerID=UUID(),newAttemptID=UUID()
+        let oldMaterialID=UUID(),originalID=UUID(),latestMaterialID=UUID(),draftMaterialID=UUID()
+        let configuration=try node(),engine=ChatPresentationGatedStreamEngine()
+        let (chat,model,store,root)=try await fixture(ChatState(),engine:engine,prepare:{ store in
+            func material(_ id:UUID,_ name:String,original:Bool=false) async throws -> ChatAttachment {
+                let saved=try await store.publishWorkflowAsset(data:Data(name.utf8),mediaType:"text/plain",name:name,operationID:"d.asset.import")
+                return .init(id:id,name:name,reference:saved.record.reference,textSnapshot:name,sourceOnly:original ? true:nil)
+            }
+            let oldMaterial=try await material(oldMaterialID,"Old material"), original=try await material(originalID,"Recorded quotation",original:true)
+            let latest=try await material(latestMaterialID,"Latest material"),draft=try await material(draftMaterialID,"Unsent material")
+            let oldUser=ChatMessage(id:oldUserID,parentID:nil,role:.user,text:"Old question",attachments:[oldMaterial,original])
+            let oldAnswer=ChatMessage(id:oldAnswerID,parentID:oldUserID,role:.assistant,text:"",attemptID:oldAttemptID)
+            let newUser=ChatMessage(id:newUserID,parentID:oldAnswerID,role:.user,text:"New question",attachments:[latest])
+            let newAnswer=ChatMessage(id:newAnswerID,parentID:newUserID,role:.assistant,text:"",attemptID:newAttemptID)
+            var session=ChatSession(id:ownerID,title:"Frozen sources");session.configuration=configuration
+            session.messages=[oldUser,oldAnswer,newUser,newAnswer]
+            session.attempts=[attempt(sessionID:ownerID,user:oldUser,assistant:oldAnswer,status:.completed,raw:"Old answer",node:configuration),attempt(sessionID:ownerID,user:newUser,assistant:newAnswer,status:.completed,raw:"New answer",node:configuration)]
+            session.selectedLeafID=newAnswerID;session.draft="Unsent draft";session.attachments=[draft]
+            var state=ChatState();state.sessions=[session];state.selectedSessionID=ownerID;return state
+        })
+        func sourceRows() async throws -> Set<String> {
+            var measured=Set<String>()
+            let host=NSHostingView(rootView:ChatWorkbenchView(chat:chat,model:model,onChooseModel:{},onSavedAsset:{_ in},onAssetsChanged:{},initialInspectorVisible:true,initialInspectedAttemptID:oldAttemptID).observingLayout { id,rect in
+                if id.hasPrefix("attachment-"),rect.width>0,rect.height>0 {measured.insert(id)}
+            });host.frame = .init(x:0,y:0,width:1300,height:800)
+            for _ in 0..<25 {host.layoutSubtreeIfNeeded();try await Task.sleep(for:.milliseconds(10))}
+            return measured
+        }
+        let expected=Set([oldMaterialID,originalID].map{"attachment-"+$0.uuidString})
+        #expect(try await sourceRows()==expected)
+        let messages=chat.selectedSession?.messages,attempts=chat.selectedSession?.attempts
+        try chat.updateDraft("Changed unsent draft",sessionID:ownerID);try chat.removeAttachment(draftMaterialID,sessionID:ownerID);try chat.selectLeaf(newUserID,sessionID:ownerID)
+        #expect(try await sourceRows()==expected)
+        #expect(chat.selectedSession?.messages==messages && chat.selectedSession?.attempts==attempts)
+        #expect(await engine.submissions==0);try await chat.flush();try await close(store,root:root)
     }
 }

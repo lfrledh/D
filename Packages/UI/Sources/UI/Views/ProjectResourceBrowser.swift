@@ -14,6 +14,8 @@ struct ProjectResourceBrowserTestingActions {
 
 @MainActor
 public struct ProjectResourceBrowser: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     private let manifest: ProjectManifest
     private let mode: CreatorMode
     private let availableModes: [CreatorMode]
@@ -89,7 +91,7 @@ public struct ProjectResourceBrowser: View {
 
     private var resourceList: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Toggle("也显示其他模态", isOn: $includesOtherModes)
+            Toggle(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.178", fallback: "Include Other Modes"), isOn: $includesOtherModes)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("assets-filter-other")
                 .resourceMeasured("assets-filter-other", probe: layoutProbe)
@@ -152,6 +154,8 @@ public struct ProjectResourceBrowser: View {
 }
 
 private struct ResourceRow: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     let item: ProjectResourceItem
 
     var body: some View {
@@ -172,6 +176,8 @@ private struct ResourceRow: View {
 }
 
 private struct ResourcePreview: View {
+    @Environment(\.dLanguageStore) private var legacyLanguage
+
     let item: ProjectResourceItem?
     let asset: ProjectAsset?
     let assetURL: (UUID) -> URL?
@@ -185,7 +191,7 @@ private struct ResourcePreview: View {
             if let item {
                 preview(item)
             } else {
-                ContentUnavailableView("选择一项资产", systemImage: "square.stack.3d.up")
+                ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.179", fallback: "Select an Asset"), systemImage: "square.stack.3d.up")
             }
         }
     }
@@ -195,8 +201,8 @@ private struct ResourcePreview: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(item.title).font(.title2.weight(.semibold))
                 Text(text.prefix(8_192)).textSelection(.enabled)
-                if text.count > 8_192 { Text("仅显示正文前 8,192 个字符。").font(.caption).foregroundStyle(.secondary) }
-                Button("打开文稿") { onOpen(item) }
+                if text.count > 8_192 { Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.180", fallback: "Only the first 8,192 characters are shown.")).font(.caption).foregroundStyle(.secondary) }
+                Button(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.181", fallback: "Open Document")) { onOpen(item) }
                     .accessibilityIdentifier("resource-open-document-\(documentID.uuidString)")
             }
         } else if let asset {
@@ -204,7 +210,7 @@ private struct ResourcePreview: View {
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 Text(item.title).font(.title2.weight(.semibold))
-                Text("这是项目中的创作文稿引用；此处不生成路径或摘要。")
+                Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.182", fallback: "This is a reference to a creation document in the project. No file path or digest is generated here."))
                     .foregroundStyle(.secondary)
             }
         }
@@ -213,32 +219,32 @@ private struct ResourcePreview: View {
     @ViewBuilder private func assetPreview(item: ProjectResourceItem, asset: ProjectAsset) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(item.title).font(.title2.weight(.semibold))
-            Text("记录的 MIME：\(asset.mediaType)").font(.callout).foregroundStyle(.secondary)
+            Text(consistencyText(legacyLanguage, "copy.ProjectResourceBrowser.0", arguments: ["v0": String(describing: asset.mediaType)])).font(.callout).foregroundStyle(.secondary)
             if isCommonImage(asset.mediaType) {
                 if let image {
                     Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: 500)
                 } else if imageUnavailable {
-                    ContentUnavailableView("图片不可用", systemImage: "photo.badge.exclamationmark",
-                                           description: Text("没有可读取的授权本地文件，或文件超过预览预算。"))
+                    ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.183", fallback: "Image Unavailable"), systemImage: "photo.badge.exclamationmark",
+                                           description: Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.184", fallback: "No authorized local file can be read, or the file exceeds the preview limit.")))
                 } else {
-                    ProgressView("正在读取本地预览…")
+                    ProgressView(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.185", fallback: "Loading local preview…"))
                 }
             } else if asset.mediaType == "video/mp4", let video = asset.metadata.video {
-                Text("\(video.width) × \(video.height) · \(video.frameCount) 帧 · \(video.frameRate.numerator)/\(video.frameRate.denominator) fps · 无音轨")
+                Text(consistencyText(legacyLanguage, "copy.ProjectResourceBrowser.1", arguments: ["v0": String(describing: video.width), "v1": String(describing: video.height), "v2": String(describing: video.frameCount), "v3": String(describing: video.frameRate.numerator), "v4": String(describing: video.frameRate.denominator)]))
                     .foregroundStyle(.secondary)
-                Text("打开来源创作后可检查、预览和导出视频；资产浏览器不自动播放。")
+                Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.186", fallback: "Open the source creation to inspect, preview or export this video. Videos do not play automatically in the asset browser."))
                     .font(.caption).foregroundStyle(.secondary)
             } else if isKnownAudio(asset.mediaType) {
                 Text(recordedAudioDescription(asset.metadata.audio))
                     .foregroundStyle(.secondary)
-                Text("音频不会在资产浏览器中自动播放。")
+                Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.187", fallback: "Audio does not play automatically in the asset browser."))
                     .font(.caption).foregroundStyle(.secondary)
             } else {
-                ContentUnavailableView("不能预览此格式", systemImage: "doc.questionmark",
-                                       description: Text("只保留记录的 MIME；未知格式不会按扩展名猜测，也不会读取 URL。"))
+                ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.188", fallback: "Preview Unavailable for This Format"), systemImage: "doc.questionmark",
+                                       description: Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.189", fallback: "Only the recorded MIME type is used. Unknown formats are not inferred from file extensions, and URLs are not loaded.")))
             }
             if let origin = item.originDocumentID, originIsAvailable(origin) {
-                Button("打开来源创作") { onOpen(item) }
+                Button(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.190", fallback: "Open Source Creation")) { onOpen(item) }
                     .accessibilityIdentifier("asset-open-origin-\(origin.uuidString)")
             }
         }
