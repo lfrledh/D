@@ -680,3 +680,36 @@ extension WorkflowWorkspacePresentationTests {
         host.removeFromSuperview();try await f.close()
     }
 }
+
+extension WorkflowWorkspacePresentationTests {
+    @Test(arguments:["image","video","audio"]) func realViewerMediaReadersKeepIndependentContentAndPlayers(kind:String) async throws {
+        let f=try await RenderingWorkspaceFixture.make()
+        let published:WorkflowPublishedAsset
+        if kind == "image" {
+            let bitmap=try #require(WorkbenchLocalRenderer.bitmap(width:4,height:3));bitmap.setFillColor(CGColor(gray:0.7,alpha:1));bitmap.fill(.init(x:0,y:0,width:4,height:3))
+            let image=try #require(bitmap.makeImage())
+            let png=try #require(NSBitmapImageRep(cgImage:image).representation(using:.png,properties:[:]))
+            published=try await f.store.importWorkflowPNG(png,name:"fixture")
+        } else {
+            let root=try #require(ProcessInfo.processInfo.environment["D_GLASS_EVIDENCE_DIR"])
+            published=try await f.store.importWorkflowMediaFile(at:URL(fileURLWithPath:root).appendingPathComponent(kind == "video" ? "synthetic.mp4":"synthetic.wav"))
+        }
+        let before=await f.store.snapshot(),target=f.target(published.record.reference)
+        let one=f.viewer(target),two=f.viewer(target)
+        await one.load()?.value;await two.load()?.value
+        #expect(one.failure == nil && two.failure == nil)
+        #expect(one.metadata?.record?.reference == published.record.reference && two.metadata?.record?.reference == published.record.reference)
+        if kind == "image" { #expect(one.image?.width == 4 && two.image?.height == 3) }
+        if kind == "video" {
+            one.video.replace(url:one.mediaURL,identity:one.generation);two.video.replace(url:two.mediaURL,identity:two.generation)
+            #expect(one.video.player !== two.video.player && two.video.player.currentItem != nil)
+        }
+        if kind == "audio" { #expect(one.audioFormat != nil && two.audioFormat != nil && one.audio.state == .recorded && two.audio.state == .recorded) }
+        one.stop()
+        #expect(two.canRead && two.metadata?.record?.reference == published.record.reference)
+        if kind == "video" { #expect(one.video.player.currentItem == nil && two.video.player.currentItem != nil && two.video.player.rate == 0) }
+        if kind == "audio" { two.audioAction { try two.audio.seek(toFrame:1) };#expect(two.audio.positionFrame == 1 && two.failure == nil) }
+        #expect((await f.store.snapshot()).revision == before.revision)
+        two.suspend();try await f.close()
+    }
+}

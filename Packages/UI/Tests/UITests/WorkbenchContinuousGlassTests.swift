@@ -62,7 +62,7 @@ struct WorkbenchContinuousGlassTests {
         var timings:[[String:Double]]=[]
         func render(origin: SIMD2<Float>, refracts: Float) throws -> [UInt8] {
             let began=ProcessInfo.processInfo.systemUptime
-            var args: [SIMD4<Float>] = [.init(Float(density),Float(field.data.count),Float(field.width),Float(field.height)),
+            var args: [SIMD4<Float>] = [.init(Float(density),Float(field.data.count),Float(field.samplingSize.width),Float(field.samplingSize.height)),
                 .init(Float(size.width),Float(size.height),refracts,0), .init(origin.x,origin.y,Float(size.width),Float(size.height)), .init(0,0,256,256)]
             let command = try #require(queue.makeCommandBuffer()), encoder = try #require(command.makeComputeCommandEncoder())
             encoder.setComputePipelineState(pipeline); encoder.setTexture(output,index:0); encoder.setTexture(input,index:1)
@@ -189,12 +189,23 @@ extension WorkbenchContinuousGlassTests {
 /// see the desktop, and does not claim the mixed AppKit compositor presented it.
 @MainActor enum ContinuousGlassPixelProbe {
     static func pixel(_ p:WorkbenchGlassParameters) throws -> [UInt8] {
+        try render(p,width:1,height:1,start:.init(x:p.size.width/2,y:p.size.height/2),step:.zero)
+    }
+    static func image(_ p:WorkbenchGlassParameters,density:CGFloat) throws -> CGImage {
+        let w=max(1,Int(ceil(p.size.width*density))),h=max(1,Int(ceil(p.size.height*density)))
+        let step=CGSize(width:p.size.width/CGFloat(w),height:p.size.height/CGFloat(h))
+        let data=Data(try render(p,width:w,height:h,start:.init(x:step.width/2,y:step.height/2),step:step))
+        let provider=try #require(CGDataProvider(data:data as CFData))
+        return try #require(CGImage(width:w,height:h,bitsPerComponent:8,bitsPerPixel:32,bytesPerRow:w*4,space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGBitmapInfo(rawValue:CGImageAlphaInfo.premultipliedLast.rawValue),provider:provider,decode:nil,shouldInterpolate:false,intent:.defaultIntent))
+    }
+    private static func render(_ p:WorkbenchGlassParameters,width:Int,height:Int,start:CGPoint,step:CGSize) throws -> [UInt8] {
         let device=try #require(MTLCreateSystemDefaultDevice())
         let url=URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources/UI/Resources/Shaders/WorkbenchContinuousGlass.metal")
         let source=try String(contentsOf:url,encoding:.utf8)+"""
         kernel void probe(texture2d<half,access::write> out [[texture(0)]], texture2d<half> input [[texture(1)]],
         device const void *field [[buffer(0)]],constant float4 *a [[buffer(1)]],uint2 gid [[thread_position_in_grid]]) {
-          out.write(workbenchContinuousGlass(a[5].zw,input,field,int(a[6].x),a[0].xy,a[0].zw,a[1],a[2],half4(a[3]),half4(a[4]),a[5].x,a[5].y),gid);
+          if (gid.x>=out.get_width() || gid.y>=out.get_height()) return;
+          out.write(workbenchContinuousGlass(a[5].zw+float2(gid)*a[6].yz,input,field,int(a[6].x),a[0].xy,a[0].zw,a[1],a[2],half4(a[3]),half4(a[4]),a[5].x,a[5].y),gid);
         }
         """
         let library=try device.makeLibrary(source:source,options:nil),desc=MTLComputePipelineDescriptor()
@@ -207,7 +218,7 @@ extension WorkbenchContinuousGlassTests {
         td.usage=[.shaderRead];td.storageMode = .shared
         let input=try #require(device.makeTexture(descriptor:td))
         input.replace(region:MTLRegionMake2D(0,0,td.width,td.height),mipmapLevel:0,withBytes:try #require(context.data),bytesPerRow:context.bytesPerRow)
-        let od=MTLTextureDescriptor.texture2DDescriptor(pixelFormat:.rgba8Unorm,width:1,height:1,mipmapped:false);od.usage=[.shaderWrite];od.storageMode = .shared
+        let od=MTLTextureDescriptor.texture2DDescriptor(pixelFormat:.rgba8Unorm,width:width,height:height,mipmapped:false);od.usage=[.shaderWrite];od.storageMode = .shared
         let out=try #require(device.makeTexture(descriptor:od))
         let buffer=try #require(p.field.data.withUnsafeBytes { device.makeBuffer(bytes:$0.baseAddress!,length:$0.count) })
         func color(_ value:String) throws -> SIMD4<Float> {
@@ -215,14 +226,47 @@ extension WorkbenchContinuousGlassTests {
             return .init(Float(c.redComponent),Float(c.greenComponent),Float(c.blueComponent),Float(c.alphaComponent))
         }
         let map=WorkbenchLocalRenderer.mapping(image:.init(width:p.image.width,height:p.image.height),viewport:p.viewport)
-        let args:[SIMD4<Float>]=[.init(Float(p.field.width),Float(p.field.height),Float(p.size.width),Float(p.size.height)),.init(Float(p.rect.minX),Float(p.rect.minY),Float(p.rect.width),Float(p.rect.height)),.init(Float(map.minX),Float(map.minY),Float(map.width),Float(map.height)),try color(p.canvas),try color(p.panel),.init(Float(p.strength),p.refraction ? 1:0,Float(p.size.width/2),Float(p.size.height/2)),.init(Float(p.field.data.count),0,0,0)]
+        let args:[SIMD4<Float>]=[.init(Float(p.field.samplingSize.width),Float(p.field.samplingSize.height),Float(p.size.width),Float(p.size.height)),.init(Float(p.rect.minX),Float(p.rect.minY),Float(p.rect.width),Float(p.rect.height)),.init(Float(map.minX),Float(map.minY),Float(map.width),Float(map.height)),try color(p.canvas),try color(p.panel),.init(Float(p.strength),p.refraction ? 1:0,Float(start.x),Float(start.y)),.init(Float(p.field.data.count),Float(step.width),Float(step.height),0)]
         let queue=try #require(device.makeCommandQueue()),command=try #require(queue.makeCommandBuffer()),encoder=try #require(command.makeComputeCommandEncoder())
         encoder.setComputePipelineState(pipeline);encoder.setTexture(out,index:0);encoder.setTexture(input,index:1);encoder.setBuffer(buffer,offset:0,index:0)
         args.withUnsafeBytes { encoder.setBytes($0.baseAddress!,length:$0.count,index:1) }
+        encoder.dispatchThreads(.init(width:width,height:height,depth:1),threadsPerThreadgroup:.init(width:8,height:8,depth:1));encoder.endEncoding();command.commit();command.waitUntilCompleted()
+        try #require(command.status == .completed)
+        var bytes=[UInt8](repeating:0,count:width*height*4)
+        bytes.withUnsafeMutableBytes { out.getBytes($0.baseAddress!,bytesPerRow:width*4,from:MTLRegionMake2D(0,0,width,height),mipmapLevel:0) }
+        return bytes
+    }
+}
+
+extension WorkbenchContinuousGlassTests {
+    @Test(arguments:[CGFloat(1),2]) func fractionalPanelUsesExactContourExtentOnGPU(density:CGFloat) throws {
+        let size=CGSize(width:801,height:600),cache=WorkbenchGlassFields()
+        let field=try #require(cache.resolve(path:CGPath(rect:CGRect(origin:.zero,size:size),transform:nil),size:size,density:density))
+        let device=try #require(MTLCreateSystemDefaultDevice())
+        let url=URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources/UI/Resources/Shaders/WorkbenchContinuousGlass.metal")
+        let source=try String(contentsOf:url,encoding:.utf8)+"""
+        kernel void extentProbe(texture2d<float,access::write> out [[texture(0)]],device const void *field [[buffer(0)]],constant float4 *a [[buffer(1)]],uint2 gid [[thread_position_in_grid]]) {
+          float2 p=float2(a[0].x/2,a[0].y-0.25);
+          float scale=min(a[0].x/(a[0].z-4),a[0].y/(a[0].w-4));
+          float exact=glassDistance(glassContourPosition(p,a[0].xy,a[0].zw),field,uint2(ceil(a[0].zw)),1000)*scale;
+          float wrong=glassDistance(glassContourPosition(p,a[0].xy,ceil(a[0].zw)),field,uint2(ceil(a[0].zw)),1000)*scale;
+          out.write(float4(exact,wrong,0,1),gid);
+        }
+        """
+        let library=try device.makeLibrary(source:source,options:nil)
+        let pipeline=try device.makeComputePipelineState(function:try #require(library.makeFunction(name:"extentProbe")))
+        let descriptor=MTLTextureDescriptor.texture2DDescriptor(pixelFormat:.rgba32Float,width:1,height:1,mipmapped:false);descriptor.storageMode = .shared;descriptor.usage=[.shaderWrite]
+        let output=try #require(device.makeTexture(descriptor:descriptor)),queue=try #require(device.makeCommandQueue())
+        let command=try #require(queue.makeCommandBuffer()),encoder=try #require(command.makeComputeCommandEncoder())
+        let buffer=try #require(field.data.withUnsafeBytes { device.makeBuffer(bytes:$0.baseAddress!,length:$0.count) })
+        var args=SIMD4<Float>(Float(size.width),Float(size.height),Float(field.samplingSize.width),Float(field.samplingSize.height))
+        encoder.setComputePipelineState(pipeline);encoder.setTexture(output,index:0);encoder.setBuffer(buffer,offset:0,index:0)
+        withUnsafeBytes(of:&args) { encoder.setBytes($0.baseAddress!,length:$0.count,index:1) }
         encoder.dispatchThreads(.init(width:1,height:1,depth:1),threadsPerThreadgroup:.init(width:1,height:1,depth:1));encoder.endEncoding();command.commit();command.waitUntilCompleted()
         try #require(command.status == .completed)
-        var bytes=[UInt8](repeating:0,count:4)
-        bytes.withUnsafeMutableBytes { out.getBytes($0.baseAddress!,bytesPerRow:4,from:MTLRegionMake2D(0,0,1,1),mipmapLevel:0) }
-        return bytes
+        var result=[Float](repeating:0,count:4)
+        result.withUnsafeMutableBytes { output.getBytes($0.baseAddress!,bytesPerRow:16,from:MTLRegionMake2D(0,0,1,1),mipmapLevel:0) }
+        #expect(abs(result[0]-0.25)<0.001)
+        #expect(abs(result[1]-0.25)>0.01,"Rounded integer extents are a real negative control")
     }
 }

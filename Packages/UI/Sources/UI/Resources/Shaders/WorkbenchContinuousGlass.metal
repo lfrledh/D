@@ -19,16 +19,20 @@ static float glassDistance(float2 p, device const void *bytes, uint2 n, float in
     return sqrt(best);
 }
 
+static float2 glassContourPosition(float2 p,float2 localSize,float2 fieldSize) {
+    return p / max(localSize,float2(0.001)) * (fieldSize-4.0) + 2.0;
+}
+
 [[ stitchable ]]
 half4 workbenchContinuousGlass(float2 p, texture2d<half> background,
     device const void *fieldBytes, int fieldByteCount, float2 fieldSize, float2 localSize,
     float4 surface, float4 imageRect, half4 canvas, half4 panel, float strength, float refracts) {
     float2 q = surface.xy + p / max(localSize, float2(0.001)) * surface.zw;
-    uint2 n = uint2(max(fieldSize, float2(0)));
+    uint2 n = uint2(ceil(max(fieldSize, float2(0))));
     if (refracts > 0 && strength > 0 && n.x >= 5 && n.y >= 5 && n.x <= 8196 && n.y <= 8196
         && fieldByteCount >= 7 * int(sizeof(uint)) && all(surface.zw > 0)) {
-        float2 cell = p / max(localSize, float2(0.001)) * float2(n-4) + 2.0;
-        float pixel = min(surface.z / float(n.x-4), surface.w / float(n.y-4));
+        float2 cell = glassContourPosition(p,localSize,fieldSize);
+        float pixel = min(surface.z / (fieldSize.x-4), surface.w / (fieldSize.y-4));
         float interior = 12.0 / max(pixel,0.001) + 4.0;
         float d = glassDistance(cell, fieldBytes, n, interior) * pixel;
         float rim = min(12.0, min(surface.z, surface.w) * 0.25);

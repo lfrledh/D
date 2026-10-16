@@ -1450,7 +1450,13 @@ extension WorkbenchLocalGlassTests {
             recording.translateBy(x: 12.375,y: 12.125); recording.scaleBy(x: 2 * zoom,y: 2 * zoom)
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(cgContext: recording, flipped: true)
-            plate.draw(plate.bounds)
+            plate.refreshGlass()
+            let parameters=try #require(plate.continuousGlassParameters)
+            let optical=try ContinuousGlassPixelProbe.image(parameters,density:2*zoom)
+            // Record the actual Metal pixels once under the original exact clip.
+            // A direct NSView.draw cannot record its separate Shader child.
+            recording.addPath(plate.contour!(plate.bounds,0));recording.clip()
+            recording.draw(optical,in:plate.bounds)
             NSGraphicsContext.restoreGraphicsState()
             recording.endPDFPage(); recording.closePDF()
             let replay = try #require(WorkbenchLocalRenderer.bitmap(width: 128,height: 96))

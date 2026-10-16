@@ -16,6 +16,7 @@ final class WorkbenchGlassField {
     let referenceSize: CGSize
     static let padding = 2
     let density: CGFloat
+    var samplingSize:CGSize { .init(width:referenceSize.width*density+4,height:referenceSize.height*density+4) }
     init(width: Int, height: Int, data: Data, path: CGPath, referenceSize: CGSize, density: CGFloat) {
         self.width = width; self.height = height; self.data = data; self.path = path
         self.referenceSize = referenceSize; self.density = density
@@ -175,7 +176,7 @@ struct WorkbenchGlassParameters {
         let mapping = WorkbenchLocalRenderer.mapping(image: .init(width: image.width, height: image.height), viewport: viewport)
         return ShaderLibrary.bundle(.module).workbenchContinuousGlass(
             .image(Image(decorative: image, scale: 1)), .data(field.data),
-            .float2(Float(field.width), Float(field.height)), .float2(size.width, size.height),
+            .float2(field.samplingSize.width, field.samplingSize.height), .float2(size.width, size.height),
             .float4(rect.minX, rect.minY, rect.width, rect.height),
             .float4(mapping.minX, mapping.minY, mapping.width, mapping.height),
             .color(Color(cgColor: WorkbenchLocalRenderer.color(canvas))),
