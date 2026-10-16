@@ -319,6 +319,7 @@ enum WorkbenchLocalRenderer {
     weak var root: WorkbenchBackgroundNSView?
     let surfaces = NSHashTable<WorkbenchBackgroundNSView>.weakObjects()
     let readability = WorkbenchReadabilityRegistry()
+    let glassFields = WorkbenchGlassFields()
     private(set) var image: CGImage?
     private(set) var blurred: CGImage?
     private(set) var decodeCount = 0
@@ -347,7 +348,7 @@ enum WorkbenchLocalRenderer {
         preparation?.cancel(); preparation = nil
         textures = cache; textureGeneration = cache?.generation
         key = url; preparesBlur = blur; let ticket = UUID(); request = ticket
-        image = nil; blurred = nil; opaqueGlass = nil
+        image = nil; blurred = nil; opaqueGlass = nil; glassFields.clear()
         if let url, let ready = cache?.entry, ready.url == url, ready.blur == blur {
             // Synchronous adoption during the NSView update, before its first
             // display. Opening a sheet does not restart background preparation.
@@ -376,7 +377,7 @@ enum WorkbenchLocalRenderer {
             }
         }
     }
-    func invalidate() { for view in surfaces.allObjects { view.needsDisplay = true; view.titlebar?.surface.needsDisplay = true } }
+    func invalidate() { for view in surfaces.allObjects { view.refreshGlass(); view.needsDisplay = true; view.titlebar?.surface.synchronizeGlass(); view.titlebar?.surface.needsDisplay = true } }
     func coordinateRoot(in window: NSWindow?) -> NSView? {
         guard let root, root.window === window else { return window?.contentView }
         return root.stylesWindowTitlebar ? window?.contentView : root
@@ -419,8 +420,16 @@ extension EnvironmentValues {
     var readability = WorkbenchReadabilitySettings() {
         didSet { if oldValue != readability { owner?.readability.configure(self); needsDisplay = true } }
     }
-    var contour: ((CGRect, CGFloat) -> CGPath)? { didSet { refractionGeometry.invalidateContour() } }
+    var contour: ((CGRect, CGFloat) -> CGPath)? { didSet { refractionGeometry.invalidateContour();glassContourDirty=true } }
     private var refractionGeometry = WorkbenchLocalRenderer.RefractionGeometry()
+    private var glassHost: WorkbenchGlassHost?
+    var usesContinuousGlass: Bool { glassHost != nil }
+    var continuousGlassParameters:WorkbenchGlassParameters? { glassParameters }
+    private var glassParameters: WorkbenchGlassParameters?
+    private var glassContourDirty=true
+    private var glassPath:CGPath?
+    private var glassDensity:CGFloat=0
+    private let glassProtection = WorkbenchGlassProtection()
     var stylesWindowTitlebar = false
     var legacyTitlebarBlend: Double?
     private(set) var titlebar: WorkbenchWindowTitlebar?
@@ -439,6 +448,9 @@ extension EnvironmentValues {
     override func viewDidMoveToSuperview() { super.viewDidMoveToSuperview(); observeGeometry() }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow(); synchronizeTitlebar(); observeGeometry()
+    }
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties();refreshGlass()
     }
     func synchronizeTitlebar() {
         if titlebar?.window !== window || !stylesWindowTitlebar || !isCanvas {
@@ -477,6 +489,7 @@ extension EnvironmentValues {
             visible: visible, rootFrame: isCanvas ? convert(bounds, to: nil) : nil)
         guard current != observedGeometry else { return }
         observedGeometry = current
+        refreshGlass()
         // Leaving view must still remove an overlap record. Returning to view
         // resamples the latest source; no node/editor/port view is unmounted.
         owner?.readability.update(self)
@@ -487,9 +500,58 @@ extension EnvironmentValues {
             geometryInvalidationCount += 1; needsDisplay = true
         }
     }
+    private func clearGlass() {
+        glassHost?.removeFromSuperview(); glassHost = nil; glassParameters = nil;glassPath=nil
+        glassProtection.removeFromSuperview()
+    }
+    /// Event-driven background update. Equal inputs never rebuild the shader host.
+    func refreshGlass() {
+        guard !isCanvas, !isGeometryOnly, drawsGlass, strength > 0,
+              !isHiddenOrHasHiddenAncestor, !visibleRect.isEmpty,
+              bounds.width > 0, bounds.height > 0, let owner,
+              let image = owner.glassImage(canvas: palette.canvas) else {
+            clearGlass(); return
+        }
+        let coordinates = owner.coordinates(for:self)
+        let density=(window?.backingScaleFactor ?? 2) * max(coordinates.rect.width/bounds.width,coordinates.rect.height/bounds.height)
+        let path:CGPath
+        if !glassContourDirty,glassParameters?.size == bounds.size,let previous=glassPath { path=previous }
+        else { path=contour?(bounds,0) ?? CGPath(rect:bounds,transform:nil) }
+        let field:WorkbenchGlassField
+        if glassPath == path,glassParameters?.size == bounds.size,glassDensity == density,let previous=glassParameters?.field { field=previous }
+        else {
+            let resolved:WorkbenchGlassField?
+            if glassParameters != nil {
+                // A live optical surface never drops to an un-refracted frame
+                // while zooming. Only its first cold preparation is asynchronous.
+                resolved=owner.glassFields.resolve(path:path,size:bounds.size,density:density)
+            } else {
+                resolved=owner.glassFields.request(path:path,size:bounds.size,density:density,subscriber:self,ready:{ [weak self] in self?.refreshGlass();self?.needsDisplay=true })
+            }
+            guard let resolved else { clearGlass();return }
+            field=resolved
+        }
+        glassPath=path;glassDensity=density;glassContourDirty=false
+        let effect = owner.readability.effect(for: self)
+        let next = WorkbenchGlassParameters(image: image, field: field, size: bounds.size,
+            rect: coordinates.rect, viewport: coordinates.viewport, canvas: palette.canvas, panel: palette.panel,
+            strength: strength, refraction: !effect.contained)
+        if glassHost == nil {
+            let host = WorkbenchGlassHost(rootView: WorkbenchGlassDrawing(parameters: next))
+            host.sizingOptions = []; host.setAccessibilityElement(false); host.autoresizingMask = [.width, .height]
+            host.frame = bounds; glassHost = host; addSubview(host)
+            glassProtection.source = self; glassProtection.autoresizingMask = [.width, .height]
+            glassProtection.frame = bounds; addSubview(glassProtection)
+        } else if glassParameters?.matches(next) != true {
+            glassHost?.rootView = WorkbenchGlassDrawing(parameters: next)
+            if glassHost?.frame != bounds { glassHost?.frame = bounds; glassProtection.frame = bounds }
+        }
+        glassParameters = next
+        glassProtection.effect = effect
+    }
     isolated deinit { for observer in observers { NotificationCenter.default.removeObserver(observer) } }
     override func layout() {
-        super.layout(); needsDisplay = true; owner?.readability.update(self)
+        super.layout(); geometryDidChange(); refreshGlass()
         #if DEBUG
         WorkbenchCategoryUpdateProbe.phase("background-layout")
         #endif
@@ -497,6 +559,8 @@ extension EnvironmentValues {
     override func draw(_ dirtyRect: NSRect) {
         guard !isGeometryOnly else { return }
         guard let c = NSGraphicsContext.current?.cgContext else { return }
+        refreshGlass()
+        guard glassHost == nil else { return } // Shader owns the entire optical background.
         owner?.didDraw()
         #if DEBUG
         WorkbenchBackgroundCounters.draw()
@@ -509,9 +573,9 @@ extension EnvironmentValues {
         WorkbenchLocalRenderer.draw(in: c, size: bounds.size, rect: coordinates.rect, viewport: coordinates.viewport,
             image: isCanvas ? owner?.image : (drawsGlass ? owner?.glassImage(canvas: palette.canvas) : nil),
             canvas: isCanvas || drawsGlass ? palette.canvas : palette.panel, panel: palette.panel,
-            strength: strength, glass: !isCanvas && drawsGlass, refraction: !enhancement.contained, contour: contour, geometry: refractionGeometry,
+            strength: strength, glass: !isCanvas && drawsGlass, refraction: false, contour: contour, geometry: refractionGeometry,
             opaqueSource: !isCanvas && drawsGlass)
-        WorkbenchReadabilityRegistry.paint(enhancement, in: c, view: self)
+        if glassHost == nil { WorkbenchReadabilityRegistry.paint(enhancement, in: c, view: self) }
 
     }
 }
@@ -543,10 +607,10 @@ struct WorkbenchLocalSurface: NSViewRepresentable {
         view.synchronizeTitlebar()
         owner?.surfaces.add(view)
         if isCanvas, owner?.root !== view { owner?.root = view; owner?.invalidate() }
-        view.needsDisplay = true; owner?.readability.update(view)
+        view.refreshGlass(); view.needsDisplay = true; owner?.readability.update(view)
     }
     static func dismantleNSView(_ view: WorkbenchBackgroundNSView, coordinator: ()) {
-        view.releaseTitlebar(); view.owner?.readability.remove(view)
+        view.releaseTitlebar(); view.owner?.readability.remove(view); view.owner = nil; view.refreshGlass()
     }
 }
 

@@ -1,6 +1,28 @@
 # UI-PRESENTATION-REBUILD-01：公共外壳与真实聊天
 
-## 2026-10-17 D-UI-CONSISTENCY-01 普通滚轮响应与玻璃几何复用（当前）
+## 2026-10-17 D-RENDERING-WORKSPACE-01 当前设计与接线
+
+实际起点 `3fa866fe3e5e5d3f41d66b0929a56fbbadec99eb`；旧受测生产 `fbbd6b116bd7568d42a60af4e159bd0f25274d3a`。已核对本地/远端候选、索引、源树个人 scheme 与普通服务保护摘要，在新隔离树 `D-Worktrees/D-RENDERING-WORKSPACE-20261017` / `codex/rendering-workspace-20261017` 由 Lead 单写。原候选、源树、普通 D、B9FC 评审会话保留，不合并、不部署。完整生产/最终 SHA、差分、原始命令退出码、分级计数及唯一 `review.py` 入口统一见 `D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/delivery/README.md`；不在文档中循环补自身 SHA。
+
+当前用户指令覆盖旧 v0.2 的“重置/回中心”建议：只保留显示全部节点；侧栏、底部活动与运行计划均覆盖固定画布，不能重置相机或调整世界坐标。普通已保存素材单击只选择，双击/空格/预览打开非模态固定内容；显式“新窗口查看”才另建（最多 4 个）。项目切换/关闭先停止各自播放器和读取，不能把新项目同名素材当旧来源。历史运行、当前节点、明确运行目标、素材选择与 Viewer 各自保留身份。
+
+|范围|真实接线与原入口迁移|保护/验证边界|
+|---|---|---|
+|RP01|`WorkbenchContinuousGlass` + `.metal` → `WorkbenchBackgroundNSView`；标题栏、大面、菜单和节点共用背景路径|实际 inset 轮廓、连续位移、原图预合成、前景不滤镜；不以旧 12 环像素等价作为新算法目标。|
+|RP02|`WorkflowGraphSurface` / NodeCard / PortDragReceiver 按当前 zoom 排版；线层保留可见区绘制|没有整图离屏位图；原生控件身份不按 zoom 重建。1×/2×设备与真实呈现清晰度仍分层记录。|
+|RP03|字段缓存、精确 EDT 缓冲复用、初次冷准备串行异步、平移复用字段、相同参数不更新 shader host|活跃内存与冷缓存分开计数；默认光学不在拖动时关闭，密度跨档仍可能需要准备，真实尾延迟未验。|
+|RP04|设置→辅助→画布→滚轮缩放速度；普通 line 与 precise point 分开|0.25–4×、非法偏好保护、冷读；指针锚点和完整 delta 保持，无回中心按钮。|
+|IA01 / W1|左侧模型节点→模态/族/模型/变体/实际功能；程序节点按行为分类；属性复用原 Inspector|`SharedLibraryProjection → WorkflowOperationTree → 原 add/use handler`；模型用途/I/O/状态直接可见，搜索直达功能叶。|
+|IA02 / W2|右侧全部/文字/图像/视频/音频/数据，分别保留查询/阅读宿主；导入、分类、保存检索、详情/文件位置仍可达|运行内数据由 `WorkflowLibraryValue` 只读投影，禁止标签/分类隐式落盘。关联节点是显式临时过滤，不改原查询；保存前需移除临时条件。|
+|IA03 / W3|`WorkflowViewerCoordinator/Session/Content`：真实 Store 精确内容、独立文本查找/图像 fit与1:1/音视频 session/结构数据|每窗 full ref + owner + generation；迟到成功/失败/元数据均不得覆盖新内容。未固定历史版本的旧资产需明确登记后查看，不在浏览时写入。|
+|IA04 / W4|统一底部外壳：指针/手形/Undo/Redo/比例/全部节点；范围/目标/检查运行；活动与真实录音结束/未保存恢复|原 `canvasTools`、`executionBar`、`recoveryActions` 与 Host `captureControls` 汇入同一控制台；图例、组合、自定义与导出原命令不变。|
+|IA05|原右侧运行总览/具体节点调用迁至底部活动；输出用 Viewer 链接，保留历史筛选和完整 call|历史重跑仍 `rerunCall`；继续原运行仍 `resume`；不使用查看历史来切换运行目标或移动图。|
+|IA06 / W5|`WorkflowWorkspaceRunDraft/RunPlan` 接真实 ScopePlanner，四范围/依赖前沿/边界历史输入/人工标识与图高亮；Viewer 接真实人工决定|through/only走原 `run`；下游范围走 `runScoped` 和精确 pins。采用≠继续，保存失败记录≠重新计算，旧 DHA 诊断与恢复业务保持。|
+|IA07|原语言/帮助/玻璃/标签与输入管线扩充；Quick 原入口保留|已确认的标题栏、黑弧、帮助、松手视野和 A2 原图保护做受影响回归；完整ID留可复制详情，用户内容/正式模型名不翻译。|
+
+当前工程、实际测量、沿用与未验数字见单一外部回执；旧 126 方法/242 情景只属于旧生产，旧 11 方法/15 原生宿主及 3 个真实模型方法未验继续保留。开发签名不等于公证、发行或脱离工作树的独立 App 交付。
+
+## 2026-10-17 D-UI-CONSISTENCY-01 普通滚轮响应与玻璃几何复用（历史）
 
 沿用独立树 `D-Worktrees/D-UI-CANVAS-REDRAW-20261016` / `codex/ui-canvas-redraw-20261016`，固定续修起点为本地/远端一致、索引和工作树干净的 `52112647c7946bd596f0c45f5e0f28d2019f53cd`。生产与测试点 `fbbd6b116bd7568d42a60af4e159bd0f25274d3a`；最终完整SHA、完整差分、构建对应和唯一新启动入口见 `D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261017-07-wheel-zoom/delivery/README.md`。Lead单写、两轮非实现者只读复核；旧包及普通D保持，不合并、不部署。
 

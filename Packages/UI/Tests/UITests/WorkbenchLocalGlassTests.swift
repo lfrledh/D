@@ -3,6 +3,7 @@ import AVKit
 import DInference
 @testable import DWorkbench
 import ImageIO
+import Metal
 import SwiftUI
 import Testing
 import UniformTypeIdentifiers
@@ -51,12 +52,21 @@ private actor LocalGlassNoInference: InferenceEngine {
     private func titlebarPixel(_ canvas: WorkbenchBackgroundNSView, external: CGColor) throws -> [UInt8] {
         let surface = try #require(canvas.titlebar?.surface)
         try #require(surface.superview === canvas.window?.contentView && !surface.isHidden)
+        let child=surface.subviews.compactMap { $0 as? WorkbenchBackgroundNSView }.first
+        if let child,canvas.strength>0,canvas.drawsGlass,canvas.owner?.image != nil {
+            let parameters=try #require(child.continuousGlassParameters, "The titlebar must actually mount the continuous shader")
+            #expect(parameters.image === canvas.owner?.glassImage(canvas:canvas.palette.canvas))
+            #expect(parameters.strength == canvas.strength)
+            // A parent's CGContext cannot record its Metal child. Execute that
+            // child's actual parameters offscreen instead; this is not a desktop screenshot.
+            return try ContinuousGlassPixelProbe.pixel(parameters)
+        }
         let c = try #require(WorkbenchLocalRenderer.bitmap(width: Int(surface.bounds.width), height: Int(surface.bounds.height)))
         c.setFillColor(external); c.fill(surface.bounds)
         c.translateBy(x: 0, y: CGFloat(c.height)); c.scaleBy(x: 1, y: -1)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: c, flipped: true)
-        surface.draw(surface.bounds)
+        if let child { child.draw(child.bounds) } else { surface.draw(surface.bounds) }
         NSGraphicsContext.restoreGraphicsState()
         let data = try #require(c.data).assumingMemoryBound(to: UInt8.self)
         let offset = Int(surface.bounds.midY) * c.bytesPerRow + Int(surface.bounds.midX) * 4
@@ -976,6 +986,87 @@ private actor LocalGlassNoInference: InferenceEngine {
         try await store.close()
     }
 
+    /// Fixed production content; timing is CPU submission/layout, never screen FPS.
+    @Test(arguments: [4, 20, 100])
+    func renderingWorkspaceLayerBaseline(nodeCount: Int) async throws {
+        let directory = try temporary(); defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try await ProjectStore.create(at: directory.appendingPathComponent("Baseline.dproject"), name: "Rendering fixture")
+        let runtime = WorkbenchSession(engine: LocalGlassNoInference(), backendID: "never",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let controller = WorkflowController(services: .init(store: store, session: runtime,
+            resolveText: { throw WorkflowIssue("No model") }, resolveImage: { throw WorkflowIssue("No model") }))
+        await controller.load(); controller.addExample("template")
+        for i in 4..<nodeCount { controller.addNode(operationID: "d.text.input", x: 20_000 + Double(i % 10) * 300, y: 20_000 + Double(i / 10) * 240) }
+        let graph = try #require(controller.graph), beforeUndo = controller.canUndo
+        let state = ChatDisplayPreferencesState(appearanceDirectory: directory.appendingPathComponent("Appearance"))
+        let wallpaper = directory.appendingPathComponent("pattern.png"); try png(pattern(width: 1024, height: 768), at: wallpaper)
+        await state.importWallpaper(wallpaper)
+        func content(_ zoom: CGFloat) -> some View {
+            WorkflowGraphSurface(controller: controller, graph: controller.graph,
+                zoom: .constant(zoom), tool: .constant(.pointer), navigationRequest: .constant(nil),
+                viewportInteractionLocked: .constant(false), viewContext: .init(projectID: controller.projectID, rootGraphID: graph.id, bodyPath: []),
+                pendingConnection: .constant(nil), selectedConnectionID: .constant(nil), readOnly: false, onPlan: { _, _ in })
+                .modifier(WorkbenchCanvasModifier(state: state)).environment(\.chatDisplayPreferences, state.preferences)
+        }
+        let host = NSHostingView(rootView: content(1)); host.frame = .init(x: 0, y: 0, width: 1100, height: 760)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        func descendants(_ v: NSView) -> [NSView] { v.subviews.flatMap { [$0] + descendants($0) } }
+        for _ in 0..<30 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        let surfaces = descendants(host).compactMap { $0 as? WorkbenchBackgroundNSView }
+        let canvas = try #require(surfaces.first { $0.isCanvas }), owner = try #require(canvas.owner)
+        let probe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+        let scroll = try #require(probe.enclosingScrollView)
+        let layout = try #require(probe.wheelLayout(scroll.contentView.bounds.size))
+        scroll.contentView.scroll(to: layout.centeredOffset(on: CGPoint(x: 550, y: 350)))
+        host.layoutSubtreeIfNeeded()
+        let visible = surfaces.filter { !$0.isCanvas && !$0.isGeometryOnly && !$0.visibleRect.isEmpty && $0.bounds.width > 0 && $0.bounds.height > 0 }
+        try #require(!visible.isEmpty)
+        let contexts = try visible.map { try #require(WorkbenchLocalRenderer.bitmap(width: Int(ceil($0.bounds.width * 2)), height: Int(ceil($0.bounds.height * 2)))) }
+        let image = try #require(owner.glassImage(canvas: "#111D1A"))
+        let geometries = visible.map { _ in WorkbenchLocalRenderer.RefractionGeometry() }
+        var rows: [[String: Any]] = []
+        for mode in ["A0-solid", "A1-background", "A2-refraction", "A4-readability"] {
+            for v in visible { v.readability = .init(enabled: mode == "A4-readability", amount: 0.35) }
+            for movement in ["pan", "zoom", "single-surface"] {
+                var samples: [Double] = []
+                for repeatID in 0..<3 { for tick in 0..<12 {
+                    let start = ProcessInfo.processInfo.systemUptime
+                    for (index, pair) in zip(visible, contexts).enumerated() {
+                        if movement == "single-surface" && index != 0 { continue }
+                        let (plate, c) = pair, coordinates = owner.coordinates(for: plate)
+                        var rect = coordinates.rect
+                        if movement == "zoom" { rect.size.width *= 1 + CGFloat(tick) / 12; rect.size.height *= 1 + CGFloat(tick) / 12 }
+                        else { rect.origin.x += CGFloat(tick * 4); rect.origin.y += CGFloat(tick * 2) }
+                        c.saveGState(); c.scaleBy(x: 2, y: 2)
+                        WorkbenchLocalRenderer.draw(in: c, size: plate.bounds.size, rect: rect, viewport: .init(width: 1100, height: 760),
+                            image: mode == "A0-solid" ? nil : image, canvas: "#111D1A", panel: "#1D2B25", strength: 0.55,
+                            glass: mode != "A0-solid", refraction: mode != "A1-background", contour: plate.contour, geometry: geometries[index], opaqueSource: true)
+                        if mode == "A4-readability" { WorkbenchReadabilityRegistry.paint(owner.readability.effect(for: plate), in: c, view: plate) }
+                        c.restoreGState()
+                    }
+                    samples.append((ProcessInfo.processInfo.systemUptime - start) * 1000)
+                    _ = repeatID
+                } }
+                let ordered = samples.sorted()
+                rows.append(["mode": mode, "movement": movement, "nodes": nodeCount, "visiblePlates": visible.count,
+                    "samples_ms": samples, "p50_ms": ordered[ordered.count/2], "p95_ms": ordered[Int(Double(ordered.count-1)*0.95)],
+                    "p99_ms": ordered.last!, "kind": "Legacy CG manual background draws, not current GPU or FPS", "sourceBytes": owner.retainedBytes])
+            }
+        }
+        if let destination = ProcessInfo.processInfo.environment["D_GLASS_EVIDENCE_DIR"] {
+            let url = URL(fileURLWithPath: destination); try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            try JSONSerialization.data(withJSONObject: rows, options: [.prettyPrinted, .sortedKeys]).write(to: url.appendingPathComponent("layers-\(nodeCount).json"))
+            let layers = descendants(host).map { view in ["type": String(describing: type(of: view)), "bounds": NSStringFromRect(view.bounds),
+                "frame": NSStringFromRect(view.frame), "contentsScale": String(describing: view.layer?.contentsScale),
+                "rasterized": String(describing: view.layer?.shouldRasterize), "rasterScale": String(describing: view.layer?.rasterizationScale)] }
+            try JSONSerialization.data(withJSONObject: layers, options: [.prettyPrinted, .sortedKeys]).write(to: url.appendingPathComponent("layers-host-\(nodeCount).json"))
+        }
+        #expect(controller.graph == graph && controller.canUndo == beforeUndo && owner.decodeCount == 1)
+        try await store.close()
+    }
+
     @Test func realWorkflowNodesCrossRetainedHostAndKeepViewportMapping() async throws {
         let root = try temporary(); defer { try? FileManager.default.removeItem(at:root) }
         let store = try await ProjectStore.create(at:root.appendingPathComponent("Test.dproject"),name:"Synthetic nodes")
@@ -1027,7 +1118,7 @@ private actor LocalGlassNoInference: InferenceEngine {
         print("REAL_NODE_PAN nodes=\(graph.nodes.count) plates=\(plates.count) ticks=60 seconds=\(Date().timeIntervalSince(started))")
         #expect(graph.nodes.count == 4 && controller.graph == graph)
         let bytes = owner.retainedBytes
-        for zoom:CGFloat in [0.5,1,2] {
+        for zoom:CGFloat in [0.5,1,1.5,2,4] {
             host.rootView = content(zoom); try await settle()
             let current = descendants(host).compactMap { $0 as? WorkbenchBackgroundNSView }
             #expect(current.contains { $0 === node })
@@ -1041,7 +1132,13 @@ private actor LocalGlassNoInference: InferenceEngine {
             let rect = node.convert(node.bounds,to:canvas)
             #expect(rect.width > 0 && rect.height > 0)
             let effective = WorkflowCanvasLayoutPolicy.clampedInteractiveZoom(zoom,current:zoom)
-            #expect(abs(rect.width / node.bounds.width - effective) < 0.02)
+            #expect(abs(rect.width / node.bounds.width - 1) < 0.02, "Native content must not be stretched by an ancestor raster transform")
+            let plates = descendants(host).compactMap { $0 as? WorkflowNodePlateView }
+            #expect(plates.count == graph.nodes.count)
+            for plate in plates {
+                #expect(abs(plate.bounds.width - 240 * effective) < 0.5)
+                #expect(abs(plate.convert(plate.bounds, to: canvas).width / plate.bounds.width - 1) < 0.02)
+            }
             window.setFrameOrigin(CGPoint(x:100+zoom*10,y:100))
             #expect(node.convert(node.bounds,to:canvas) == rect)
         }

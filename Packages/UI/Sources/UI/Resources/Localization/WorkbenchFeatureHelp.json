@@ -1480,5 +1480,174 @@
       "Redo Organization Change"
     ],
     "destructive": false
+  },
+  {
+    "id": "TAB-WORKFLOW-LEFT-MODELS",
+    "name_key": "consistency.help.TAB-WORKFLOW-LEFT-MODELS.name",
+    "help_key": "consistency.help.TAB-WORKFLOW-LEFT-MODELS.purpose",
+    "object_key": "consistency.help.TAB-WORKFLOW-LEFT-MODELS.object",
+    "conditions_key": "consistency.help.TAB-WORKFLOW-LEFT-MODELS.conditions",
+    "category": "models",
+    "aliases": [
+      "模型节点",
+      "Model nodes"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "TAB-WORKFLOW-LEFT-PROGRAMS",
+    "name_key": "consistency.help.TAB-WORKFLOW-LEFT-PROGRAMS.name",
+    "help_key": "consistency.help.TAB-WORKFLOW-LEFT-PROGRAMS.purpose",
+    "object_key": "consistency.help.TAB-WORKFLOW-LEFT-PROGRAMS.object",
+    "conditions_key": "consistency.help.TAB-WORKFLOW-LEFT-PROGRAMS.conditions",
+    "category": "build",
+    "aliases": [
+      "程序节点",
+      "Program nodes"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "WORKSPACE-RESOURCES",
+    "name_key": "consistency.help.WORKSPACE-RESOURCES.name",
+    "help_key": "consistency.help.WORKSPACE-RESOURCES.purpose",
+    "object_key": "consistency.help.WORKSPACE-RESOURCES.object",
+    "conditions_key": "consistency.help.WORKSPACE-RESOURCES.conditions",
+    "category": "organize",
+    "aliases": [
+      "素材库",
+      "Resources"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "WORKSPACE-ACTIVITY",
+    "name_key": "consistency.help.WORKSPACE-ACTIVITY.name",
+    "help_key": "consistency.help.WORKSPACE-ACTIVITY.purpose",
+    "object_key": "consistency.help.WORKSPACE-ACTIVITY.object",
+    "conditions_key": "consistency.help.WORKSPACE-ACTIVITY.conditions",
+    "category": "inspect",
+    "aliases": [
+      "活动与运行历史",
+      "Activity & run history"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "WORKSPACE-VIEWER-INFO",
+    "name_key": "consistency.help.WORKSPACE-VIEWER-INFO.name",
+    "help_key": "consistency.help.WORKSPACE-VIEWER-INFO.purpose",
+    "object_key": "consistency.help.WORKSPACE-VIEWER-INFO.object",
+    "conditions_key": "consistency.help.WORKSPACE-VIEWER-INFO.conditions",
+    "category": "inspect",
+    "aliases": [
+      "查看器信息",
+      "Viewer information"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "WORKSPACE-VIEWER-NEW",
+    "name_key": "consistency.help.WORKSPACE-VIEWER-NEW.name",
+    "help_key": "consistency.help.WORKSPACE-VIEWER-NEW.purpose",
+    "object_key": "consistency.help.WORKSPACE-VIEWER-NEW.object",
+    "conditions_key": "consistency.help.WORKSPACE-VIEWER-NEW.conditions",
+    "category": "view",
+    "aliases": [
+      "新窗口查看",
+      "Open another viewer"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "WORKSPACE-ZOOM-SPEED",
+    "name_key": "consistency.help.WORKSPACE-ZOOM-SPEED.name",
+    "help_key": "consistency.help.WORKSPACE-ZOOM-SPEED.purpose",
+    "object_key": "consistency.help.WORKSPACE-ZOOM-SPEED.object",
+    "conditions_key": "consistency.help.WORKSPACE-ZOOM-SPEED.conditions",
+    "category": "view",
+    "aliases": [
+      "滚轮缩放速度",
+      "Wheel zoom speed"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "WORKSPACE-RESOURCE-ALL",
+    "name_key": "consistency.help.WORKSPACE-RESOURCE-ALL.name",
+    "help_key": "consistency.help.WORKSPACE-RESOURCE-ALL.purpose",
+    "object_key": "consistency.help.WORKSPACE-RESOURCE-ALL.object",
+    "conditions_key": "consistency.help.WORKSPACE-RESOURCE-ALL.conditions",
+    "category": "organize",
+    "aliases": [
+      "全部素材",
+      "All resources"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "WORKSPACE-RESOURCE-TEXT",
+    "name_key": "consistency.help.WORKSPACE-RESOURCE-TEXT.name",
+    "help_key": "consistency.help.WORKSPACE-RESOURCE-TEXT.purpose",
+    "object_key": "consistency.help.WORKSPACE-RESOURCE-TEXT.object",
+    "conditions_key": "consistency.help.WORKSPACE-RESOURCE-TEXT.conditions",
+    "category": "organize",
+    "aliases": [
+      "文字素材",
+      "Text resources"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "WORKSPACE-RESOURCE-IMAGE",
+    "name_key": "consistency.help.WORKSPACE-RESOURCE-IMAGE.name",
+    "help_key": "consistency.help.WORKSPACE-RESOURCE-IMAGE.purpose",
+    "object_key": "consistency.help.WORKSPACE-RESOURCE-IMAGE.object",
+    "conditions_key": "consistency.help.WORKSPACE-RESOURCE-IMAGE.conditions",
+    "category": "organize",
+    "aliases": [
+      "图像素材",
+      "Images resources"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "WORKSPACE-RESOURCE-VIDEO",
+    "name_key": "consistency.help.WORKSPACE-RESOURCE-VIDEO.name",
+    "help_key": "consistency.help.WORKSPACE-RESOURCE-VIDEO.purpose",
+    "object_key": "consistency.help.WORKSPACE-RESOURCE-VIDEO.object",
+    "conditions_key": "consistency.help.WORKSPACE-RESOURCE-VIDEO.conditions",
+    "category": "organize",
+    "aliases": [
+      "视频素材",
+      "Video resources"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "WORKSPACE-RESOURCE-AUDIO",
+    "name_key": "consistency.help.WORKSPACE-RESOURCE-AUDIO.name",
+    "help_key": "consistency.help.WORKSPACE-RESOURCE-AUDIO.purpose",
+    "object_key": "consistency.help.WORKSPACE-RESOURCE-AUDIO.object",
+    "conditions_key": "consistency.help.WORKSPACE-RESOURCE-AUDIO.conditions",
+    "category": "organize",
+    "aliases": [
+      "音频素材",
+      "Audio resources"
+    ],
+    "destructive": false
+  },
+  {
+    "id": "WORKSPACE-RESOURCE-DATA",
+    "name_key": "consistency.help.WORKSPACE-RESOURCE-DATA.name",
+    "help_key": "consistency.help.WORKSPACE-RESOURCE-DATA.purpose",
+    "object_key": "consistency.help.WORKSPACE-RESOURCE-DATA.object",
+    "conditions_key": "consistency.help.WORKSPACE-RESOURCE-DATA.conditions",
+    "category": "organize",
+    "aliases": [
+      "数据素材",
+      "Data resources"
+    ],
+    "destructive": false
   }
 ]

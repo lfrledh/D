@@ -105,14 +105,16 @@ final class WorkflowPortDragView: NSView {
 /// Opaque cards must also occlude native event receivers in lower cards. The
 /// viewport owns node gestures; this transparent receiver only establishes z-order.
 struct WorkflowNodePlateReceiver: NSViewRepresentable {
+    var scale: CGFloat = 1
     func makeNSView(context: Context) -> WorkflowNodePlateView { WorkflowNodePlateView() }
-    func updateNSView(_ view: WorkflowNodePlateView, context: Context) {}
+    func updateNSView(_ view: WorkflowNodePlateView, context: Context) { view.scale = scale }
 }
 final class WorkflowNodePlateView: NSView {
+    var scale: CGFloat = 1
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { false }
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard !isHiddenOrHasHiddenAncestor else { return nil }
-        return WorkflowConnectionGeometry.nodePlate(bounds).cgPath.contains(convert(point, from: superview)) ? self : nil
+        return RoundedRectangle(cornerRadius: 13 * scale, style: .continuous).path(in: bounds).cgPath.contains(convert(point, from: superview)) ? self : nil
     }
 }

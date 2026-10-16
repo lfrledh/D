@@ -85,7 +85,7 @@ struct WorkbenchSidebarTabs<Tab: Hashable>: View {
                     .onKeyPress(.leftArrow) { move(-1); return .handled }
                     .onKeyPress(.rightArrow) { move(1); return .handled }
             }
-        }.frame(height: 36).workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge).accessibilityElement(children: .contain).accessibilityLabel(title).workbenchHelp(helpPrefix?.contains("RIGHT") == true ? "BAR-RIGHT" : "BAR-LEFT")
+        }.frame(height: 36).workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge).accessibilityElement(children: .contain).accessibilityLabel(title).workbenchHelp(helpPrefix?.contains("RESOURCE") == true ? "WORKSPACE-RESOURCES" : helpPrefix?.contains("RIGHT") == true ? "WORKSPACE-ACTIVITY" : "BAR-LEFT")
     }
     private func featureID(_ value: Tab) -> String {
         let name = String(describing: value)
@@ -95,7 +95,14 @@ struct WorkbenchSidebarTabs<Tab: Hashable>: View {
     private static func symbol(_ value: Tab) -> String {
         switch String(describing: value) {
         case "settings", "configuration": "slider.horizontal.3"
-        case "assets": "photo.on.rectangle"
+        case "assets", "all": "photo.on.rectangle"
+        case "models": "cpu"
+        case "programs": "flowchart"
+        case "text": "text.alignleft"
+        case "image": "photo"
+        case "video": "film"
+        case "audio": "waveform"
+        case "data": "tablecells"
         case "conversations": "bubble.left.and.bubble.right"
         case "tools": "wrench.and.screwdriver"
         case "nodes": "square.3.layers.3d"

@@ -22,6 +22,7 @@ struct WorkflowGraphSurface: View {
     let readOnly: Bool
     var inspectedNodeID: UUID? = nil
     var runTargetNodeID: UUID? = nil
+    var planMarks:[UUID:WorkflowPlanMark]=[:]
     let onPlan: (UUID, Bool) -> Void
     var onSetRunTarget: (UUID) -> Void = { _ in }
     var onPlanRange: ((UUID, Int) -> Void)? = nil
@@ -88,6 +89,7 @@ struct WorkflowGraphSurface: View {
                     graphSize: geometry.size, viewportSize: viewportSize,
                     zoom: effectiveZoom, translation: geometry.translation
                 )
+                let renderZoom = effectiveZoom
                 let contentSize = layout.unscaledGraphSize
                 let edge = layout.unscaledPadding
                 ScrollView([.horizontal, .vertical]) {
@@ -104,6 +106,7 @@ struct WorkflowGraphSurface: View {
                         ForEach(graph.nodes) { node in
                             WorkflowNodeCard(
                                 controller: controller,
+                                scale: effectiveZoom,
                                 graph: graph,
                                 scope: scope,
                                 node: node,
@@ -123,7 +126,7 @@ struct WorkflowGraphSurface: View {
                                 portVisible: { port, delta in
                                     guard let center = measuredPortCenters[port],
                                           let index = graph.nodes.firstIndex(where: { $0.id == node.id }) else { return false }
-                                    let point = CGPoint(x: center.x + delta.x, y: center.y + delta.y)
+                                    let point = CGPoint(x: center.x + delta.x / renderZoom, y: center.y + delta.y / renderZoom)
                                     let frames = WorkflowConnectionGeometry.nodeFrames(geometry: geometry, sizes: cardSizes)
                                     return !graph.nodes.dropFirst(index + 1).contains { other in
                                         frames[other.id].map { WorkflowConnectionGeometry.nodePlate($0).cgPath.contains(point) } ?? false
@@ -135,19 +138,20 @@ struct WorkflowGraphSurface: View {
                                     let pending = WorkflowPendingConnection(nodeID: port.nodeID, port: port.port, input: port.input)
                                     if pendingConnection != pending { pendingConnection = pending }
                                     if pendingConnectionScope != scope { pendingConnectionScope = scope }
-                                    connectionDrag.point = CGPoint(x: center.x + delta.width, y: center.y + delta.height)
+                                    connectionDrag.point = CGPoint(x: center.x + delta.width / renderZoom, y: center.y + delta.height / renderZoom)
                                     if !viewportInteractionLocked { viewportInteractionLocked = true }
                                     if connectionIssue != nil { connectionIssue = nil }
                                 },
                                 onPortDragEnd: { target in finishConnection(to: target, scope: scope) }
                             )
-                            .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                            .overlay { if let mark=planMarks[node.id] { WorkflowPlanBadge(mark:mark,scale:renderZoom) } }
+                            .onGeometryChange(for: CGSize.self) { CGSize(width: $0.size.width / renderZoom, height: $0.size.height / renderZoom) } action: { size in
                                 cardSizes[node.id] = size
                                 nodeSizeObserver?(node.id, size)
                             }
-                            .position(geometry.displayPosition(node.id))
+                            .position(x: geometry.displayPosition(node.id).x * effectiveZoom, y: geometry.displayPosition(node.id).y * effectiveZoom)
                             .modifier(WorkflowNodeDragOffset(presentation: nodeDrag,
-                                moving: nodeDrag.movingNodeIDs.contains(node.id)))
+                                moving: nodeDrag.movingNodeIDs.contains(node.id), scale: effectiveZoom))
                         }
                         if self.graph == nil {
                             ContentUnavailableView(
@@ -161,12 +165,12 @@ struct WorkflowGraphSurface: View {
                             .allowsHitTesting(false)
                         }
                         }
-                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .frame(width: geometry.size.width * effectiveZoom, height: geometry.size.height * effectiveZoom)
                         // Main wires and their event receivers belong behind opaque node plates.
                         // Each card owns its short port leads in the same node z-order.
                         .backgroundPreferenceValue(WorkflowPortAnchorPreferenceKey.self) { anchors in
                         GeometryReader { proxy in
-                            let centers = anchors.mapValues { proxy[$0] }
+                            let centers = anchors.mapValues { CGPoint(x: proxy[$0].x / effectiveZoom, y: proxy[$0].y / effectiveZoom) }
                             WorkflowConnectionLayer(
                                 graph: graph,
                                 registry: controller.registry,
@@ -192,15 +196,16 @@ struct WorkflowGraphSurface: View {
                                     if selectedConnectionID == connection.id { selectedConnectionID = nil }
                                 }
                             )
+                            .scaleEffect(effectiveZoom, anchor: .topLeading)
                             .onAppear { updatePortCenters(centers) }
                             .onChange(of: centers) { _, updated in updatePortCenters(updated) }
                         }
                     }
                     .overlayPreferenceValue(WorkflowNodeControlPreferenceKey.self) { anchors in
                         GeometryReader { proxy in
-                            let frames = anchors.map { proxy[$0.anchor] }
+                            let frames = anchors.map { proxy[$0.anchor].applying(CGAffineTransform(scaleX: 1/effectiveZoom, y: 1/effectiveZoom)) }
                             let owned = Dictionary(grouping: anchors.filter { $0.nodeID != nil }, by: { $0.nodeID! })
-                                .mapValues { $0.map { proxy[$0.anchor] } }
+                                .mapValues { $0.map { proxy[$0.anchor].applying(CGAffineTransform(scaleX: 1/effectiveZoom, y: 1/effectiveZoom)) } }
                             Color.clear.allowsHitTesting(false)
                                 .onAppear { updateControlBounds(frames); nodeControlBounds = owned; nodeDrag.latestOwnedControlBounds = owned }
                                 .onChange(of: frames) { _, next in
@@ -214,7 +219,7 @@ struct WorkflowGraphSurface: View {
                                 }
                         }.allowsHitTesting(false)
                     }
-                    .offset(x: edge.width, y: edge.height)
+                    .offset(x: edge.width * effectiveZoom, y: edge.height * effectiveZoom)
                     if let marquee, marquee.scope == scope {
                         Rectangle()
                             .fill(Color.accentColor.opacity(0.13))
@@ -222,21 +227,20 @@ struct WorkflowGraphSurface: View {
                                 Rectangle().stroke(Color.accentColor,
                                     style: StrokeStyle(lineWidth: 1, dash: [5, 3]))
                             }
-                            .frame(width: marquee.rect.width, height: marquee.rect.height)
-                            .position(x: marquee.rect.midX, y: marquee.rect.midY)
+                            .frame(width: marquee.rect.width * effectiveZoom, height: marquee.rect.height * effectiveZoom)
+                            .position(x: marquee.rect.midX * effectiveZoom, y: marquee.rect.midY * effectiveZoom)
                             .allowsHitTesting(false)
                             .accessibilityHidden(true)
                     }
                     }
-                    .frame(width: contentSize.width + edge.width * 2,
-                           height: contentSize.height + edge.height * 2)
+                    .frame(width: (contentSize.width + edge.width * 2) * effectiveZoom,
+                           height: (contentSize.height + edge.height * 2) * effectiveZoom)
                     .coordinateSpace(name: WorkflowCanvasCoordinateSpace.name)
                     .contentShape(Rectangle())
                     .dropDestination(for: WorkflowCanvasTransfer.self, action: { items, location in
                         return acceptSurfaceDrop(items, at: geometry.rawPoint(forDisplayPoint: CGPoint(
-                            x: location.x - edge.width, y: location.y - edge.height)), scope: scope)
+                            x: location.x / effectiveZoom - edge.width, y: location.y / effectiveZoom - edge.height)), scope: scope)
                     })
-                    .scaleEffect(effectiveZoom, anchor: .topLeading)
                     .frame(width: layout.contentSize.width,
                            height: layout.contentSize.height,
                            alignment: .topLeading)
@@ -612,7 +616,7 @@ struct WorkflowGraphSurface: View {
             onWheel: { delta, point, offset, size in
                 let old = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                     viewportSize: size, zoom: zoom, translation: geometry.translation)
-                zoom = scrollTracking.wheelZoom.request(delta: delta, mouse: point,
+                zoom = scrollTracking.wheelZoom.request(delta: delta * (displayPreferences.canvasNavigation?.resolvedSpeed ?? 1), mouse: point,
                     nativeOffset: offset, layout: old, scope: scope)
             })
     }
@@ -950,26 +954,28 @@ private struct WorkflowConnectionInteraction: View {
 
 private struct WorkflowNodeInspectButtonStyle: ButtonStyle {
     let inspecting: Bool
+    var scale: CGFloat = 1
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .frame(width: 22, height: 22)
+            .frame(width: 22 * scale, height: 22 * scale)
             .foregroundStyle(inspecting || configuration.isPressed ? Color.accentColor : Color.primary)
             .background {
-                RoundedRectangle(cornerRadius: 5)
+                RoundedRectangle(cornerRadius: 5 * scale)
                     .fill(Color.accentColor.opacity(configuration.isPressed ? 0.32 : inspecting ? 0.16 : 0))
             }
-            .background { Color.clear.workbenchPanel(cornerRadius: 5) }
+            .background { Color.clear.workbenchPanel(cornerRadius: 5 * scale) }
             .overlay {
-                RoundedRectangle(cornerRadius: 5)
+                RoundedRectangle(cornerRadius: 5 * scale)
                     .strokeBorder(Color.accentColor.opacity(inspecting || configuration.isPressed ? 0.7 : 0))
             }
-            .contentShape(RoundedRectangle(cornerRadius: 5))
+            .contentShape(RoundedRectangle(cornerRadius: 5 * scale))
     }
 }
 
 private struct WorkflowNodeCard: View {
     let controller: WorkflowController
+    var scale: CGFloat = 1
     let graph: WorkflowGraph
     let scope: WorkflowCanvasScope
     let node: WorkflowNode
@@ -1000,32 +1006,32 @@ private struct WorkflowNodeCard: View {
         #if DEBUG
         let _ = WorkflowCanvasUpdateProbe.nodeBody?(node.id)
         #endif
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 9 * scale) {
+            HStack(alignment: .center, spacing: 8 * scale) {
+                VStack(alignment: .leading, spacing: 2 * scale) {
                     let identity = WorkflowNodeIdentity.resolve(node: node, definition: definition,
                         modelChoices: controller.modelChoices, assets: controller.availableAssets,
                         tools: controller.tools, language: languageStore)
-                    Text(WorkflowHumanPresentation.name(node, in: controller.graph?.nodes ?? [node], language: languageStore)).font(.headline).lineLimit(2)
-                    if runTarget { Label(workflowText(languageStore, "semantics.nextRunTarget", fallback: "下次运行目标"), systemImage: "flag.fill").font(.caption2).foregroundStyle(.tint) }
+                    Text(WorkflowHumanPresentation.name(node, in: controller.graph?.nodes ?? [node], language: languageStore)).font(.system(size: 13 * scale, weight: .bold)).lineLimit(2)
+                    if runTarget { Label(workflowText(languageStore, "semantics.nextRunTarget", fallback: "下次运行目标"), systemImage: "flag.fill").font(.system(size: 10 * scale)).foregroundStyle(.tint) }
                     if let detail = identity.detail {
-                        Text(detail).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                        Text(detail).font(.system(size: 10 * scale, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
                     }
                     if let annotation = identity.annotation, annotation != identity.title {
-                        Text(annotation).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        Text(annotation).font(.system(size: 11 * scale)).foregroundStyle(.secondary).lineLimit(2)
                     }
                 }
                 .allowsHitTesting(false)
-                Spacer(minLength: 6)
+                Spacer(minLength: 6 * scale)
                 WorkbenchMenu { nodeActions } label: {
-                    Image(systemName: "ellipsis").frame(width: 22, height: 22)
-                }.buttonStyle(WorkbenchIconButtonStyle(diameter: 22)).fixedSize()
+                    Image(systemName: "ellipsis").frame(width: 22 * scale, height: 22 * scale)
+                }.buttonStyle(WorkbenchIconButtonStyle(diameter: 22 * scale)).fixedSize()
                     .workflowNodeControl(node.id)
                     .accessibilityIdentifier("workflow-node-menu-" + node.id.uuidString)
                 Button { onInspect(node.id) } label: {
                     Image(systemName: "slider.horizontal.3")
                 }
-                .buttonStyle(WorkflowNodeInspectButtonStyle(inspecting: inspecting))
+                .buttonStyle(WorkflowNodeInspectButtonStyle(inspecting: inspecting, scale: scale))
                 .workflowNodeControl(node.id)
                 .help(workflowText(languageStore, "workflow.node.edit", fallback: "编辑节点"))
                 .accessibilityLabel(workflowText(languageStore, "workflow.node.edit", fallback: "编辑节点"))
@@ -1034,7 +1040,7 @@ private struct WorkflowNodeCard: View {
                 Button { controller.toggleCollapsed(node.id) } label: {
                     Image(systemName: collapsed ? "chevron.down" : "chevron.up")
                 }
-                .buttonStyle(WorkbenchIconButtonStyle(diameter: 22))
+                .buttonStyle(WorkbenchIconButtonStyle(diameter: 22 * scale))
                 .workflowNodeControl(node.id)
                 .help(collapsed
                       ? workflowText(languageStore, "workflow.node.expand", fallback: "展开节点")
@@ -1044,14 +1050,14 @@ private struct WorkflowNodeCard: View {
                     guard scope.isCurrent(in: controller), let target = controller.canvasInsertionTarget() else { return }
                     controller.deleteNode(id: node.id, target: target)
                 } label: { Image(systemName: "trash") }
-                .buttonStyle(WorkbenchIconButtonStyle(diameter: 22))
+                .buttonStyle(WorkbenchIconButtonStyle(diameter: 22 * scale))
                 .workflowNodeControl(node.id)
                 .help(workflowText(languageStore, "workflow.node.delete", fallback: "删除节点"))
                 .accessibilityLabel(workflowText(languageStore, "workflow.node.delete", fallback: "删除节点"))
                 .accessibilityIdentifier("workflow-node-delete-\(node.id.uuidString)")
                 .disabled(readOnly || !controller.canEditCanvas)
                 if let status = controller.presentationStatus(for: node.id) {
-                    WorkflowStatusBadge(status: status.status, stale: status.stale)
+                    WorkflowStatusBadge(status: status.status, stale: status.stale, scale: scale)
                         .allowsHitTesting(false)
                 }
             }
@@ -1060,11 +1066,11 @@ private struct WorkflowNodeCard: View {
                     languageStore,
                     "workflow.node.collapsedDescription",
                     fallback: "端口与参数保留；展开后连接"
-                )).font(.caption).foregroundStyle(.secondary)
+                )).font(.system(size: 11 * scale)).foregroundStyle(.secondary)
                     .allowsHitTesting(false)
             } else if let definition {
                 portRows(definition.inputs, input: true)
-                Divider().allowsHitTesting(false)
+                Rectangle().fill(.separator).frame(height: 1 * scale).allowsHitTesting(false)
                 portRows(definition.outputs, input: false)
             } else {
                 Label(workflowText(
@@ -1072,14 +1078,15 @@ private struct WorkflowNodeCard: View {
                     "workflow.node.unknownOperation",
                     fallback: "未知操作或版本；流程保持只读"
                 ), systemImage: "questionmark.diamond")
-                    .font(.caption).foregroundStyle(.orange)
+                    .font(.system(size: 11 * scale)).foregroundStyle(.orange)
                     .allowsHitTesting(false)
             }
 
 
         }
-        .padding(12)
-        .frame(width: WorkflowCanvasLayoutPolicy.nodeWidth, alignment: .leading)
+        .font(.system(size: 11 * scale))
+        .padding(12 * scale)
+        .frame(width: WorkflowCanvasLayoutPolicy.nodeWidth * scale, alignment: .leading)
         .backgroundPreferenceValue(WorkflowPortAnchorPreferenceKey.self) { anchors in
             GeometryReader { proxy in
                 Canvas { context, _ in
@@ -1100,28 +1107,28 @@ private struct WorkflowNodeCard: View {
                             }
                         }
                         var lead = Path(); lead.move(to: dot); lead.addLine(to: edge)
-                        context.stroke(lead, with: .color(WorkflowPortStyle.color(for: sourceDefinition ?? ownDefinition)), lineWidth: 2.5)
+                        context.stroke(lead, with: .color(WorkflowPortStyle.color(for: sourceDefinition ?? ownDefinition)), lineWidth: 2.5 * scale)
                     }
                 }.allowsHitTesting(false)
             }
-            .background(WorkflowNodePlateReceiver())
+            .background(WorkflowNodePlateReceiver(scale: scale))
             .background {
                 Group {
                     if displayPreferences.resolvedAppearance.local == nil {
-                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        RoundedRectangle(cornerRadius: 13 * scale, style: .continuous)
                             .fill(displayPreferences.resolvedAppearance.palette(for: colorScheme).panelColor)
-                            .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
-                    } else { Color.clear.workbenchPanel(cornerRadius: 13) }
+                            .shadow(color: .black.opacity(0.12), radius: 8 * scale, y: 3 * scale)
+                    } else { Color.clear.workbenchPanel(cornerRadius: 13 * scale) }
                 }.allowsHitTesting(false).accessibilityHidden(true)
             }
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
+            RoundedRectangle(cornerRadius: 13 * scale, style: .continuous)
                 .stroke(selected ? Color.accentColor : Color.secondary.opacity(0.25),
-                        lineWidth: selected ? 3 : 1)
+                        lineWidth: (selected ? 3 : 1) * scale)
                 .allowsHitTesting(false)
         }
-        .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 13 * scale, style: .continuous))
         .dropDestination(for: WorkflowCanvasTransfer.self) { (items: [WorkflowCanvasTransfer], _: CGPoint) -> Bool in
             acceptAsset(items)
         }
@@ -1172,7 +1179,7 @@ private struct WorkflowNodeCard: View {
             Text(input
                  ? workflowText(languageStore, "workflow.port.noInputs", fallback: "无输入")
                  : workflowText(languageStore, "workflow.port.noOutputs", fallback: "无输出"))
-                .font(.caption).foregroundStyle(.tertiary)
+                .font(.system(size: 11 * scale)).foregroundStyle(.tertiary)
                 .allowsHitTesting(false)
         } else {
             ForEach(ports) { port in
@@ -1182,14 +1189,14 @@ private struct WorkflowNodeCard: View {
     }
 
     private func portRow(_ port: WorkflowPortDefinition, input: Bool) -> some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 3 * scale) {
             if input { portButton(port, input: true) }
-            VStack(alignment: input ? .leading : .trailing, spacing: 1) {
+            VStack(alignment: input ? .leading : .trailing, spacing: 1 * scale) {
                 Text(WorkflowCanvasPresentation.portTitle(
                     operationID: node.operationID, port: port, input: input, language: languageStore
-                )).font(.caption.weight(.medium)).lineLimit(1)
+                )).font(.system(size: 11 * scale, weight: .medium)).lineLimit(1)
                 Text(WorkflowCanvasPresentation.portDetail(port, language: languageStore))
-                    .font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                    .font(.system(size: 10 * scale)).foregroundStyle(.secondary).lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: input ? .leading : .trailing)
             .allowsHitTesting(false)
@@ -1200,9 +1207,9 @@ private struct WorkflowNodeCard: View {
     private func portButton(_ port: WorkflowPortDefinition, input: Bool) -> some View {
         let identity = WorkflowPortIdentity(nodeID: node.id, port: port.id, input: input)
         return Button { onSelectPort(identity) } label: {
-            Circle().fill(WorkflowPortStyle.color(for: port)).frame(width: 9, height: 9)
+            Circle().fill(WorkflowPortStyle.color(for: port)).frame(width: 9 * scale, height: 9 * scale)
                 .anchorPreference(key: WorkflowPortAnchorPreferenceKey.self, value: .center) { [identity: $0] }
-                .frame(width: 22, height: 22).contentShape(Circle())
+                .frame(width: 22 * scale, height: 22 * scale).contentShape(Circle())
         }
         .buttonStyle(.plain)
         .disabled(readOnly || tool == .hand || !controller.canEditCanvas)
@@ -1536,8 +1543,9 @@ final class WorkflowCanvasNodeDragPresentation {
 private struct WorkflowNodeDragOffset: ViewModifier {
     let presentation: WorkflowCanvasNodeDragPresentation
     let moving: Bool
+    var scale: CGFloat = 1
     func body(content: Content) -> some View {
-        content.offset(moving ? presentation.offset : .zero)
+        content.offset(moving ? CGSize(width: presentation.offset.width * scale, height: presentation.offset.height * scale) : .zero)
     }
 }
 

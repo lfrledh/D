@@ -27,7 +27,7 @@ struct WorkflowCanvasPresentationTests {
         #expect(WorkflowCanvasLayoutPolicy.clampedZoom(0.1) == 0.1)
         #expect(WorkflowCanvasLayoutPolicy.clampedZoom(0) == 0.05)
         #expect(WorkflowCanvasLayoutPolicy.clampedZoom(1.25) == 1.25)
-        #expect(WorkflowCanvasLayoutPolicy.clampedZoom(4) == 1.8)
+        #expect(WorkflowCanvasLayoutPolicy.clampedZoom(4) == 4)
 
         #expect(WorkflowCanvasLayoutPolicy.fallbackPosition(index: 0) == CGPoint(x: 170, y: 130))
         #expect(WorkflowCanvasLayoutPolicy.fallbackPosition(index: 3) == CGPoint(x: 1_070, y: 130))

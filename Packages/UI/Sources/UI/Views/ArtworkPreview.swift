@@ -63,6 +63,8 @@ struct ArtworkThumbnail: View {
 enum ArtworkZoom: String, CaseIterable {
     case fit = "适合窗口"
     case actual = "100%"
+    case double = "200%"
+    case quadruple = "400%"
 }
 
 struct ArtworkCanvas: View {
@@ -174,7 +176,7 @@ final class CanvasScrollView: NSScrollView {
 
     func setNormalizedPan(_ point: CGPoint) {
         normalizedPan = point
-        guard zoom == .actual, let document = documentView as? CanvasDocumentView else { return }
+        guard zoom != .fit, let document = documentView as? CanvasDocumentView else { return }
         arranging = true
         defer { arranging = false }
         var proposed = contentView.bounds
@@ -186,7 +188,7 @@ final class CanvasScrollView: NSScrollView {
 
     override func reflectScrolledClipView(_ clipView: NSClipView) {
         super.reflectScrolledClipView(clipView)
-        guard !arranging, zoom == .actual, let document = documentView as? CanvasDocumentView,
+        guard !arranging, zoom != .fit, let document = documentView as? CanvasDocumentView,
               document.imageRect.width > 0, document.imageRect.height > 0 else { return }
         normalizedPan = CGPoint(x: min(1, max(0, (clipView.bounds.midX - document.imageRect.minX) / document.imageRect.width)),
                                 y: min(1, max(0, (clipView.bounds.midY - document.imageRect.minY) / document.imageRect.height)))
@@ -221,8 +223,8 @@ final class CanvasScrollView: NSScrollView {
         let available = contentView.bounds.size
         guard available.width > 0, available.height > 0 else { return }
         let scale: CGFloat
-        if zoom == .actual {
-            scale = 1 / (window?.backingScaleFactor ?? 1)
+        if zoom != .fit {
+            scale = (zoom == .double ? 2 : zoom == .quadruple ? 4 : 1) / (window?.backingScaleFactor ?? 1)
         } else {
             scale = min(max(available.width - 64, 1) / CGFloat(pixels.width),
                         max(available.height - 96, 1) / CGFloat(pixels.height))

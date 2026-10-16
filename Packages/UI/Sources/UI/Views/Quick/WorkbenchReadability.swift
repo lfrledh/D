@@ -94,8 +94,8 @@ struct WorkbenchBackgroundSummary {
         let order: [Int]
         let scroll: Double
     }
-    struct Patch { let rect: CGRect; let alpha: Double; var contour: CGPath? = nil }
-    struct Effect {
+    struct Patch: Equatable { let rect: CGRect; let alpha: Double; var contour: CGPath? = nil }
+    struct Effect: Equatable {
         var contained = false
         var patches: [Patch] = []
         static var none: Effect { Effect() }

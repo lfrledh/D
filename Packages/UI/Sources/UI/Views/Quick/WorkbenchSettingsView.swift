@@ -137,6 +137,30 @@ public struct WorkbenchSettingsView: View {
                                     }.accessibilityIdentifier("chat-display-send-shortcut")
                                     .disabled(model.chatDisplaySettings.hasInvalidStoredRecord)
                                 Text(text("inputHelp2", "System composition, selection and Undo remain available. Shift–Return inserts a newline.", "保留系统组字、选区及撤销。Shift–回车换行。"))
+                                Divider()
+                                Text(text("canvas", "Canvas", "画布")).font(.headline)
+                                HStack {
+                                    Text(text("wheelSpeed", "Wheel zoom speed", "滚轮缩放速度")).workbenchHelp("WORKSPACE-ZOOM-SPEED")
+                                    Spacer()
+                                    Text(String(format: "%.2f×", model.chatDisplaySettings.preferences.canvasNavigation?.wheelSpeed ?? 1))
+                                        .monospacedDigit()
+                                }
+                                HStack {
+                                    Text(text("slow", "Slow", "慢"))
+                                    Slider(value: Binding(get: { model.chatDisplaySettings.preferences.canvasNavigation?.wheelSpeed ?? 1 },
+                                        set: { value in
+                                            var next = model.chatDisplaySettings.preferences
+                                            next.canvasNavigation = .init(wheelSpeed: value)
+                                            model.chatDisplaySettings.update(next)
+                                        }), in: WorkflowCanvasNavigationPreferences.speedRange)
+                                        .accessibilityIdentifier("canvas-wheel-speed")
+                                        .accessibilityLabel(text("wheelSpeed", "Wheel zoom speed", "滚轮缩放速度"))
+                                    Text(text("fast", "Fast", "快"))
+                                    Button(text("resetWheelSpeed", "Reset Default", "恢复默认")) {
+                                        var next = model.chatDisplaySettings.preferences; next.canvasNavigation = .init()
+                                        model.chatDisplaySettings.update(next)
+                                    }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
+                                }.disabled(model.chatDisplaySettings.hasInvalidStoredRecord)
                                 Text(text("canvasHelp", "Canvas: pointer selects and connects; hand pans; wheel zooms. Show All Nodes changes the viewport, not node positions.",
                                           "画布：指针选择和连接；手形平移；滚轮缩放。“显示全部节点”只移动视野，不重排节点。"))
                             }.padding(24).frame(maxWidth: .infinity, alignment: .leading)

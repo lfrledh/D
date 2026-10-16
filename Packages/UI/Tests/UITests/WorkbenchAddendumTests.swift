@@ -59,8 +59,8 @@ struct WorkbenchAddendumTests {
     @Test(arguments: ["zh-Hans", "en"])
     func featureCatalogueKeepsNamesPurposeAndObjectReadable(locale: String) throws {
         let language = UILanguageStore(preferredLanguages: [locale])
-        #expect(WorkbenchFeatures.all.count == 114)
-        #expect(Set(WorkbenchFeatures.all.map(\.id)).count == 114)
+        #expect(WorkbenchFeatures.all.count == 127)
+        #expect(Set(WorkbenchFeatures.all.map(\.id)).count == 127)
         for feature in WorkbenchFeatures.all {
             for key in [feature.name_key, feature.help_key, feature.object_key, feature.conditions_key] {
                 let value = WorkbenchFeatures.text(key, language: language)

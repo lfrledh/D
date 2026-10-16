@@ -23,11 +23,12 @@ struct ChatDisplayPreferences: Codable, Equatable {
     var wrapsCode = false
     var sendShortcut: SendShortcut = .commandReturn
     var appearance: WorkbenchAppearance? = nil
+    var canvasNavigation: WorkflowCanvasNavigationPreferences? = nil
 
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case endSound, theme, textPointSize, transcriptWidth, wrapsCode, sendShortcut, appearance
+        case endSound, theme, textPointSize, transcriptWidth, wrapsCode, sendShortcut, appearance, canvasNavigation
     }
 
     init(from decoder: Decoder) throws {
@@ -38,6 +39,7 @@ struct ChatDisplayPreferences: Codable, Equatable {
         transcriptWidth = try values.decode(Int.self, forKey: .transcriptWidth)
         wrapsCode = try values.decode(Bool.self, forKey: .wrapsCode)
         sendShortcut = try values.decode(SendShortcut.self, forKey: .sendShortcut)
+        canvasNavigation = try values.decodeIfPresent(WorkflowCanvasNavigationPreferences.self, forKey: .canvasNavigation)
         appearance = try values.decodeIfPresent(WorkbenchAppearance.self, forKey: .appearance)
     }
 
@@ -53,7 +55,7 @@ struct ChatDisplayPreferences: Codable, Equatable {
 
     var isValid: Bool {
         (12...28).contains(textPointSize) && (480...1100).contains(transcriptWidth)
-            && (appearance?.isValid ?? true)
+            && (appearance?.isValid ?? true) && (canvasNavigation?.isValid ?? true)
     }
 }
 

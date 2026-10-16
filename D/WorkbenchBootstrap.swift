@@ -359,6 +359,7 @@ final class WorkbenchBootstrap {
             }
             try await quick?.prepareForTermination()
             guard quick?.pendingSaveRunID == nil else { throw WorkflowIssue("快速生成仍有待保存结果，请恢复保存后退出。") }
+            quickModel?.suspendContentViewers()
             guard await quickModel?.projectSession.prepareInternalForTermination() != false else { isTerminating = false; return false }
             return true
         } catch {

@@ -26,6 +26,7 @@ public struct SharedLibraryBrowserEntry: Identifiable, Equatable {
     public var legacyTags: [String]
     public var legacyFailure: String?
     public var metadataSnapshot: ProjectAssetMetadataSnapshot?
+    var runtimeValue: WorkflowLibraryValue? = nil
 
     public init(item: SharedLibraryItem, selection: SharedLibraryBrowserSelection, facts: [String] = [], activityID: String? = nil, legacyTags: [String] = [], legacyFailure: String? = nil, metadataSnapshot: ProjectAssetMetadataSnapshot? = nil) {
         self.item = item
@@ -196,18 +197,20 @@ struct SharedLibraryBrowserRenameDrafts {
     }
 
     static func tagEditEntries(_ ids: Set<String>, in entries: [SharedLibraryBrowserEntry]) -> [SharedLibraryBrowserEntry] {
-        entries.filter { ids.contains($0.id) }
+        entries.filter { ids.contains($0.id) && $0.runtimeValue == nil }
     }
 
     static func validatedDropKeys(_ candidates: [String], entries: [SharedLibraryBrowserEntry]) -> Set<String>? {
         guard !candidates.isEmpty, candidates.count <= 128 else { return nil }
         let known = Set(entries.map(\.id))
         let keys = Set(candidates)
+        guard !entries.contains(where: { keys.contains($0.id) && $0.runtimeValue != nil }) else { return nil }
         guard keys.count == candidates.count, keys.allSatisfy({ known.contains($0) }) else { return nil }
         return keys
     }
 
     static func allows(_ action: SharedLibraryBrowserAction, entry: SharedLibraryBrowserEntry) -> Bool {
+        if entry.runtimeValue != nil { return action == .preview }
         if action == .location {
             switch entry.selection { case .asset, .assetInstance: return true; default: return false }
         }
@@ -294,12 +297,14 @@ public struct SharedLibraryBrowser: View {
     private let onPrepare: (SharedLibraryBrowserEntry) -> Void
     private let onImport: () -> Void
     private let allowsImport: Bool
+    private let canvasMode: WorkflowCanvasLibraryMode?
     private let onClose: () -> Void
     private let queryContext: SharedLibraryQueryContext
     private let annotationSave: (SharedLibraryBrowserEntry) -> SharedLibraryAnnotationSave?
     private let tagValidation: (SharedLibraryBrowserEntry) -> (() throws -> Void)
 
     @Environment(\.dLanguageStore) private var language
+    @Environment(\.workflowLibraryContext) private var workflowContext
     @State private var state: SharedLibraryBrowserState
     @State private var featureHelp = WorkbenchHelpStore()
     @State private var showFilters = false
@@ -324,7 +329,7 @@ public struct SharedLibraryBrowser: View {
     @State private var parentID: UUID?
 
     public init(
-        entries: [SharedLibraryBrowserEntry], store: SharedLibraryStore, compact: Bool = false, allowsImport: Bool = true,
+        entries: [SharedLibraryBrowserEntry], store: SharedLibraryStore, compact: Bool = false, allowsImport: Bool = true, canvasMode: WorkflowCanvasLibraryMode? = nil,
         state: SharedLibraryBrowserState? = nil,
         onUse: @escaping (SharedLibraryBrowserEntry) -> Void,
         onAdd: @escaping (SharedLibraryBrowserEntry) -> Void,
@@ -336,7 +341,7 @@ public struct SharedLibraryBrowser: View {
         queryContext: SharedLibraryQueryContext = .init(), annotationSave: @escaping (SharedLibraryBrowserEntry) -> SharedLibraryAnnotationSave? = { _ in nil }
     ) {
         self._state = State(initialValue: state ?? SharedLibraryBrowserState())
-        self.entries = entries; self.store = store; self.compact = compact; self.allowsImport = allowsImport
+        self.canvasMode = canvasMode; self.entries = entries; self.store = store; self.compact = compact; self.allowsImport = allowsImport
         self.onUse = onUse; self.onAdd = onAdd; self.onPreview = onPreview; self.onLocation = onLocation
         self.onPrepare = onPrepare; self.onImport = onImport; self.onClose = onClose
         self.tagValidation = tagValidation; self.queryContext = queryContext; self.annotationSave = annotationSave
@@ -374,12 +379,12 @@ public struct SharedLibraryBrowser: View {
     }
     private var saved: [SharedLibrarySavedQuery] { store.metadata.savedQueries.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } }
     private var validSelection: Set<String> { selectedKeys.intersection(Set(entries.map(\.id))) }
-    private var selectedMetadataKeys: Set<String> { Set(entries.filter { validSelection.contains($0.id) }.map { $0.item.key }) }
+    private var selectedMetadataKeys: Set<String> { Set(entries.filter { validSelection.contains($0.id) && $0.runtimeValue == nil }.map { $0.item.key }) }
     private var selectedEntry: SharedLibraryBrowserEntry? {
         entries.first { $0.id == focusedKey } ?? entries.first { validSelection.contains($0.id) }
     }
     private var visibleResult: Result<[SharedLibraryBrowserEntry], Error> {
-        Result { try SharedLibraryBrowserLogic.visibleEntries(entries, store: store, query: query, scope: scope, context: queryContext) }
+        Result { try SharedLibraryBrowserLogic.visibleEntries(entries.filter { workflowContext?.includes($0) ?? true }, store: store, query: query, scope: scope, context: queryContext) }
     }
     private var visible: [SharedLibraryBrowserEntry] { (try? visibleResult.get()) ?? [] }
 
@@ -478,7 +483,12 @@ public struct SharedLibraryBrowser: View {
             if !validSelection.isEmpty { bulkControls }
             WorkbenchScrollView {
                 LazyVStack(spacing: 6) {
-                    ForEach(visible) { entry in entryRow(entry, compact: true) }
+                    if (canvasMode == .nodes || canvasMode == .programs), query.text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
+                        OutlineGroup(WorkflowOperationTree.make(visible,models:canvasMode == .nodes,language:language),children:\.children) { node in
+                            if let entry=node.entry { entryRow(entry,compact:true) }
+                            else { Text(node.title).font(.callout.weight(.medium)).lineLimit(2) }
+                        }
+                    } else { ForEach(visible) { entry in entryRow(entry, compact: true) } }
                 }.padding(.horizontal, 6)
             }
             searchFooter
@@ -670,7 +680,7 @@ public struct SharedLibraryBrowser: View {
                 }
                 if tags.isEmpty { WorkbenchMenuText(word("noTags", "尚无我的标签")) }
             } label: { Label(word("bulkTags", "批量标签"), systemImage: "tag") }
-                .disabled(validSelection.isEmpty)
+                .disabled(selectedMetadataKeys.isEmpty)
             WorkbenchMenu {
                 WorkbenchMenuForEach(folders) { folder in
                     WorkbenchMenuAction(word("addToFolder", "加入分类") + " · " + folder.name) {
@@ -682,7 +692,7 @@ public struct SharedLibraryBrowser: View {
                 }
                 if folders.isEmpty { WorkbenchMenuText(word("noFolders", "尚无分类")) }
             } label: { Label(word("bulkFolders", "批量分类"), systemImage: "folder") }
-                .disabled(validSelection.isEmpty)
+                .disabled(selectedMetadataKeys.isEmpty)
         }.font(.caption).environment(\.workbenchMenuContext, "bulk:\(ObjectIdentifier(store)):\(ObjectIdentifier(state)):\(capturedSelection.sorted()):\(capturedKeys.sorted())")
     }
 
@@ -712,6 +722,11 @@ public struct SharedLibraryBrowser: View {
                     .font(.caption2).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading)
             if compact {
+                if canPreview(entry), canvasMode?.resourceCategory != nil {
+                    Button { dispatch(.preview,key:entry.id) } label: { Image(systemName:"arrow.up.right.square") }
+                        .buttonStyle(WorkbenchGlassButtonStyle(compact:true))
+                        .accessibilityLabel(word("preview","预览"))
+                }
                 Button {
                     if selectedKeys.contains(entry.id) { selectedKeys.remove(entry.id) }
                     else { selectedKeys.insert(entry.id) }
@@ -722,22 +737,27 @@ public struct SharedLibraryBrowser: View {
                 .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                 .accessibilityLabel(selectedKeys.contains(entry.id)
                     ? word("deselect", "取消选择") : word("select", "选择"))
-                Button {
-                    if canAdd(entry) { dispatch(.add, key: entry.id) }
-                    else { compactDetailKey = entry.id }
-                } label: { Image(systemName: canAdd(entry) ? "plus.circle" : "info.circle") }
-                    .buttonStyle(WorkbenchGlassButtonStyle()).controlSize(.small)
-                    .accessibilityLabel(canAdd(entry) ? word("addCanvas", "添加画布") : word("detail", "详情"))
+                if canAdd(entry) {
+                    Button { dispatch(.add,key:entry.id) } label: { Image(systemName:"plus.circle") }
+                        .buttonStyle(WorkbenchGlassButtonStyle(compact:true))
+                        .accessibilityLabel(word("addCanvas","添加画布"))
+                }
+                Button { compactDetailKey=entry.id } label: { Image(systemName:"info.circle") }
+                    .buttonStyle(WorkbenchGlassButtonStyle(compact:true))
+                    .accessibilityLabel(word("detail","详情"))
             }
         }
         .padding(6).contentShape(Rectangle())
         .onTapGesture {
             focusedKey = entry.id
-            if compact { selectedKeys = [entry.id]; compactDetailKey = entry.id }
+            if compact { selectedKeys = [entry.id]; if canvasMode?.resourceCategory == nil { compactDetailKey = entry.id } }
         }
         .accessibilityIdentifier("shared-library-entry-" + entry.id)
         VStack(alignment: .leading, spacing: 4) {
             row.onDrag { dragProvider(for: entry.id) }
+                .onTapGesture(count:2) { if canvasMode?.resourceCategory != nil,canPreview(entry) { dispatch(.preview,key:entry.id) } }
+                .focusable(canvasMode?.resourceCategory != nil)
+                .onKeyPress(.space) { guard canvasMode?.resourceCategory != nil,canPreview(entry) else { return .ignored }; dispatch(.preview,key:entry.id);return .handled }
             if let ids = store.metadata.tagAssignments[entry.item.key], !ids.isEmpty {
                 HStack {
                     ForEach(tags.filter { ids.contains($0.id) }) { tag in
@@ -811,7 +831,7 @@ public struct SharedLibraryBrowser: View {
                             focusedKey = target.id; compactDetailKey = compact ? target.id : nil
                         } else { errorMessage = metadataText(language, "sourceMissing", "此精确来源不在当前已登记范围，或存在多个实例。", "This exact source is outside the registered scope, or has multiple instances.") }
                     })
-            } else {
+            } else if entry.runtimeValue == nil {
                 SharedLibraryTagSection(store: store, target: tagTarget(entry), validateTarget: tagValidation(entry))
             }
             if case .unavailable(let reason) = entry.selection {
@@ -842,6 +862,10 @@ public struct SharedLibraryBrowser: View {
             current: { (query, filterToken) }, apply: { query = $0 }, close: { showFilters = false })
     }
     private func openSaveQuery() {
+        guard workflowContext == nil else {
+            errorMessage=workspaceText(language,"relatedSaveScope","关联节点是临时条件；请先移除它再保存检索。原检索已保留。","Related-node filtering is temporary. Remove it before saving a query. Your existing query is retained.")
+            return
+        }
         do {
             let captured = try SharedLibraryBrowserLogic.queryForSaving(query, scope: scope, store: store)
             saveQueryRequest = .init(query: captured, scopeTitle: scopeTitle, tagTitles: Dictionary(uniqueKeysWithValues: captured.allTagIDs.union(captured.anyTagIDs).map { ($0, state.tagPresentation.title($0, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag"))) }))
@@ -959,7 +983,7 @@ public struct SharedLibraryBrowser: View {
                     Button(word("removeSelected", "从已选条目移除")) {
                         openTagEditor(activityIDs: validSelection, remove: [id])
                     }
-                }.disabled(validSelection.isEmpty)
+                }.disabled(selectedMetadataKeys.isEmpty)
             }
         }
     }
@@ -1017,7 +1041,7 @@ public struct SharedLibraryBrowser: View {
                     Button(word("removeSelected", "从已选条目移除")) {
                         perform { try store.removeMembers(selectedMetadataKeys, from: id) }
                     }
-                }.disabled(validSelection.isEmpty)
+                }.disabled(selectedMetadataKeys.isEmpty)
             }
             Text(word("folderNote", "分类可重复收录条目；不移动原文件。"))
                 .font(.caption).foregroundStyle(.secondary)

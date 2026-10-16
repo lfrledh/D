@@ -5,6 +5,15 @@ enum WorkflowCanvasTool: String, CaseIterable {
     case pointer, hand
 }
 
+/// Application-only navigation preference, never a project or frozen request field.
+struct WorkflowCanvasNavigationPreferences: Codable, Equatable {
+    var version = 1
+    var wheelSpeed = 1.0
+    static let speedRange = 0.25...4.0
+    var isValid: Bool { version == 1 && wheelSpeed.isFinite && Self.speedRange.contains(wheelSpeed) }
+    var resolvedSpeed: CGFloat { isValid ? CGFloat(wheelSpeed) : 1 }
+}
+
 enum WorkflowCanvasWheelResponse {
     // AppKit reports discrete wheels in lines and precise wheels in points.
     // Keep the established precise response; one discrete unit is a 10% step.

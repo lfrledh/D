@@ -50,7 +50,9 @@ public struct DualWorkbenchView: View {
     @State private var libraryMetadata: [String: ProjectAssetMetadataSnapshot] = [:]
     @State private var libraryRefreshGeneration = UUID()
     @State private var fullLibraryState = SharedLibraryBrowserState()
-    @State private var canvasAssetLibraryState = SharedLibraryBrowserState()
+    @State private var canvasLibraryStates: [WorkflowCanvasLibraryMode:SharedLibraryBrowserState] =
+        Dictionary(uniqueKeysWithValues: [WorkflowCanvasLibraryMode.nodes,.programs,.assets,.text,.image,.video,.audio,.data].map { ($0,SharedLibraryBrowserState()) })
+    @State private var pendingLegacyPreview:SharedLibraryBrowserEntry?
     @State private var compactLibraryState = SharedLibraryBrowserState()
     @State private var previewAsset: LibraryAssetPreview?
     private struct FilesRoute: Identifiable {
@@ -619,7 +621,16 @@ public struct DualWorkbenchView: View {
         .onChange(of: quick.pendingSaveRunID) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .onChange(of: library.isPresented) { _, presented in if !presented { Task { await refreshLibrary(checkModels: false) } } }
         .onChange(of: installationStates) { _, _ in Task { await refreshLibrary(checkModels: false) } }
-        .onChange(of: model.manifest?.effectiveInstanceID) { _, _ in useProjectQuick = true }
+        .onChange(of: model.manifest?.effectiveInstanceID) { _, _ in useProjectQuick = true; model.viewers.reconcile() }
+        .onChange(of: automaticQuickModel.manifest?.effectiveInstanceID) { _,_ in automaticQuickModel.viewers.reconcile() }
+        .alert(workspaceText(language,"pinLegacy","固定已有素材版本","Register existing content version"),isPresented:Binding(get:{pendingLegacyPreview != nil},set:{if !$0 {pendingLegacyPreview=nil}})) {
+            if let value=pendingLegacyPreview {
+                Button(workspaceText(language,"pinAndView","登记此内容版本并查看","Register this version and view")) {
+                    pendingLegacyPreview=nil;Task { await previewLibraryEntry(value,allowPin:true) }
+                }
+            }
+            Button(workspaceText(language,"cancel","取消","Cancel"),role:.cancel) { pendingLegacyPreview=nil }
+        } message: { Text(workspaceText(language,"pinExplanation","此旧素材尚无固定来源记录。明确登记将保存它当前的版本身份；不重新生成或复制媒体。","This legacy asset has no fixed reference. Registration saves its current version identity; it does not generate or duplicate media.")) }
         .onChange(of: model.manifest?.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .onChange(of: quickModelIdentity) { _, _ in Task { await checkDemandReadiness() } }
         .onChange(of: graphModelIdentities) { _, _ in Task { await checkDemandReadiness() } }
@@ -691,17 +702,17 @@ public struct DualWorkbenchView: View {
     }
     @ViewBuilder private func libraryBrowser(compact: Bool, at point: CGPoint, onBack: (() -> Void)? = nil, canvasMode: WorkflowCanvasLibraryMode? = nil) -> some View {
         if let metadata {
-            SharedLibraryBrowser(entries: entries.filter { value in
+            let sourceEntries = canvasMode?.resourceCategory != nil ? workspaceAssetEntries : entries
+            SharedLibraryBrowser(entries: sourceEntries.filter { value in
                 if let canvasMode {
-                    switch value.selection {
-                    case .asset, .assetInstance: return canvasMode == .assets
-                    default: return canvasMode == .nodes
-                    }
+                    if let category=canvasMode.resourceCategory { return value.item.kind == .asset && category.contains(value.item.contentKind) }
+                    return canvasMode == .nodes ? value.item.kind == .model || value.item.kind == .component : value.item.kind == .program || value.item.kind == .tool
                 }
                 guard !compact, let family = modelPickerCategory else { return true }
                 guard case .operation(let operation, _) = value.selection else { return false }
                 return QuickCategory.category(for: operation) == family
-            }, store: metadata, compact: compact, allowsImport: canvasMode != .nodes, state: canvasMode == .assets ? canvasAssetLibraryState : (compact ? compactLibraryState : fullLibraryState),
+            }, store: metadata, compact: compact, allowsImport: canvasMode == nil || canvasMode?.resourceCategory != nil, canvasMode:canvasMode,
+                state: canvasMode.flatMap { canvasLibraryStates[$0] } ?? (compact ? compactLibraryState : fullLibraryState),
                 onUse: useLibraryEntry, onAdd: { value in beginAddingLibraryEntry(value, at: point) },
                 onPreview: { value in Task { await previewLibraryEntry(value) } },
                 onLocation: { value in Task { await showAssetLocation(value) } },
@@ -718,6 +729,19 @@ public struct DualWorkbenchView: View {
                 Button(baselineText(language, "label.17bb056515cd", fallback: "模型下载与安装…")) { libraryVisible = false; library.presentManagement() }
             }.padding()
         }
+    }
+    private var workspaceAssetEntries:[SharedLibraryBrowserEntry] {
+        let saved=entries.filter { $0.item.kind == .asset }
+        guard let controller=canvasModel.projectSession.workflow else { return saved }
+        let references=Set(saved.compactMap { $0.metadataSnapshot?.record?.reference })
+        let projected=WorkflowLibraryValue.entries(controller,language:language).filter { entry in
+            guard let projected=entry.runtimeValue, let reference=projected.reference else { return true }
+            let waiting=controller.runs.first { $0.id == projected.call.address.runID }.map { run in
+                WorkflowWorkspacePanels.records(in:run).contains { $0.address == projected.call.address && $0.id == projected.call.stepID && $0.step.status == .waiting }
+            } ?? false
+            return waiting || !references.contains(reference)
+        }
+        return saved+projected
     }
     private func libraryTagValidation(_ value: SharedLibraryBrowserEntry) -> () throws -> Void {
         let intent = navigationIntent
@@ -898,7 +922,13 @@ public struct DualWorkbenchView: View {
         default: return nil
         }
     }
-    private func previewLibraryEntry(_ value: SharedLibraryBrowserEntry) async {
+    private func previewLibraryEntry(_ value: SharedLibraryBrowserEntry, allowPin:Bool=false) async {
+        if let runtime=value.runtimeValue {
+            guard let controller=canvasModel.projectSession.workflow,runtime.isCurrent(in:controller) else { issue="Run content is no longer available / 运行内容已不可访问。";return }
+            do { canvasModel.viewers.library=metadata;try canvasModel.viewers.open(.init(title:value.item.title,subtitle:value.item.detail,value:runtime.value,call:runtime.call),model:canvasModel,language:language) }
+            catch { issue=error.localizedDescription }
+            return
+        }
         let request = UUID(); previewNavigationRequest = request
         let intent = navigationIntent
         failedAssetRoute = nil
@@ -921,9 +951,18 @@ public struct DualWorkbenchView: View {
             guard current() else { return }
             let ref: WorkflowAssetReference
             if let recorded = value.metadataSnapshot?.record?.reference { ref = recorded }
-            else { ref = try await source.pinWorkflowAsset(identity.2) } // Explicit preview compatibility, never the information reader.
+            else {
+                if entry == .workflow && !allowPin { pendingLegacyPreview=value;return }
+                ref = try await source.pinWorkflowAsset(identity.2)
+            } // Only explicit legacy registration may publish a reference.
             let manifest = await source.snapshot()
             guard current(), manifest.id == identity.0, identity.1 == nil || manifest.effectiveInstanceID == identity.1 else { return }
+            if entry == .workflow {
+                guard let owningModel=[model,automaticQuickModel].first(where: { $0.projectSession === owner }) else { return }
+                owningModel.viewers.library=metadata
+                try owningModel.viewers.open(.init(title:value.item.title,subtitle:value.item.detail,value:.asset(ref)),model:owningModel,language:language)
+                return
+            }
             let choice = [.text, .image, .video, .document].contains(ref.kind)
                 ? ChatProjectAttachmentChoice(name: value.item.title, reference: ref, instanceID: manifest.effectiveInstanceID) : nil
             presentLibraryDestination(.asset(.init(store: source, reference: ref,

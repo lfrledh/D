@@ -4,10 +4,10 @@ import Foundation
 /// Only explicit presentation intent changes tabs. Controller selection also changes during
 /// insertion, Undo and dragging, so it must never be used as a navigation event.
 struct WorkflowWorkspacePanels: Equatable {
-    enum Preparation: String, CaseIterable { case nodes, assets, configuration }
+    enum Preparation: String, CaseIterable { case models, programs, configuration }
     enum Output: String, CaseIterable { case node, overview }
-    var preparation: Preparation = .nodes
-    var lastResource: Preparation = .nodes
+    var preparation: Preparation = .models
+    var lastResource: Preparation = .models
     var output: Output = .overview
     var pinned = false
     var runID: UUID?
@@ -20,12 +20,9 @@ struct WorkflowWorkspacePanels: Equatable {
     }
     mutating func inspect(_ id: UUID) {
         preparation = .configuration
-        guard !pinned else { return }
-        output = .node; nodeID = id; call = nil
     }
     mutating func clearSelection() {
         preparation = lastResource
-        if !pinned { output = .overview; nodeID = nil; call = nil }
     }
     mutating func selectRun(_ id: UUID?) { runID = id; call = nil }
     mutating func selectResult(node: UUID, call: WorkflowCallReference?) {

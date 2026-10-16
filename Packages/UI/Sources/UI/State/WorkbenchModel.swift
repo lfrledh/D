@@ -9,6 +9,8 @@ import UniformTypeIdentifiers
 /// every task and persistence transaction independently of this facade or any SwiftUI view.
 @MainActor @Observable
 public final class WorkbenchModel {
+    @ObservationIgnored let viewers = WorkflowViewerCoordinator()
+    public func suspendContentViewers() { viewers.suspend() }
     var chatDisplaySettings = ChatDisplayPreferencesState()
     @ObservationIgnored private var chatReadingState = ChatReadingStateStore()
     func readingState(for chat: ChatController) -> ChatReadingStateStore {
@@ -51,10 +53,12 @@ public final class WorkbenchModel {
         projectSession.clearError()
         if id == "last-project" {
             guard projectSession.manifest == nil else { return false }
+            viewers.suspend()
             await projectSession.restoreLastProject()
             return projectSession.manifest != nil && projectSession.errorMessage == nil
         }
         guard let id = UUID(uuidString: id) else { return false }
+        viewers.suspend()
         return await projectSession.openRecentProject(id: id)
     }
     public func switchCreatorMode(_ mode: CreatorMode) async {
@@ -746,17 +750,20 @@ public final class WorkbenchModel {
     public func createProject(at url: URL) async {
         guard !refuseEditorClose() else { return }
         guard !isChoosingLocation else { return }
+        viewers.suspend()
         await projectSession.createProject(at: url)
     }
     public func openProject(at url: URL) async {
         guard !refuseEditorClose() else { return }
         guard !isChoosingLocation else { return }
+        viewers.suspend()
         await projectSession.openProject(at: url)
     }
     public func closeProject() async { _ = await requestClose() }
     public func requestClose() async -> Bool {
         guard !refuseEditorClose() else { return false }
         guard !isChoosingLocation else { return false }
+        viewers.suspend()
         let closed = await projectSession.requestClose()
         if closed { chatReadingState.reset() }
         return closed
@@ -764,6 +771,7 @@ public final class WorkbenchModel {
     public func cancelAndCloseProject() async -> Bool {
         guard !refuseEditorClose() else { return false }
         guard !isChoosingLocation else { return false }
+        viewers.suspend()
         let closed = await projectSession.cancelAndCloseProject()
         if closed { chatReadingState.reset() }
         return closed
@@ -782,6 +790,7 @@ public final class WorkbenchModel {
         panel.isExtensionHidden = false
         guard await panel.begin() == .OK, let url = panel.url else { return false }
         projectSession.clearError()
+        viewers.suspend()
         await projectSession.createProject(at: url)
         return projectSession.errorMessage == nil && projectSession.currentStore?.rootURL.standardizedFileURL == url.standardizedFileURL
     }
@@ -800,6 +809,7 @@ public final class WorkbenchModel {
         panel.allowsMultipleSelection = false
         guard await panel.begin() == .OK, let url = panel.url else { return false }
         projectSession.clearError()
+        viewers.suspend()
         await projectSession.openProject(at: url)
         return projectSession.errorMessage == nil && projectSession.currentStore?.rootURL.standardizedFileURL == url.standardizedFileURL
     }

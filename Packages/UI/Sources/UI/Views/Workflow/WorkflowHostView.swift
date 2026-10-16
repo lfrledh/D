@@ -35,8 +35,23 @@ struct WorkflowHostView: View {
                         guard model.projectSession.workflow === controller, controller.canEditCanvas else { return false }
                         Task { await importAssetURL(url, controller: controller) }; return true
                     }, onQuickUse: onQuickUse, libraryContent: libraryContent,
-                    onSharedAssetDrop: onSharedAssetDrop, acceptsLegacyAsset: acceptsLegacyAsset)
-                    .safeAreaInset(edge: .bottom) {
+                    onSharedAssetDrop: onSharedAssetDrop, acceptsLegacyAsset: acceptsLegacyAsset, captureControls:AnyView(captureControls))
+                    .environment(\.workflowViewerModel,model)
+                    .onAppear { model.viewers.library=metadata }
+                    .onChange(of:controller.mediaPreviewReference) { _,reference in
+                        guard let reference,model.projectSession.workflow === controller else { return }
+                        controller.mediaPreviewReference=nil
+                        do { try model.viewers.open(.init(title:controller.availableAssets.first { $0.id == reference.assetID }?.name ?? "D",subtitle:model.manifest?.name ?? "",value:.asset(reference)),model:model,language:languageStore) }
+                        catch { controller.errorMessage=error.localizedDescription }
+                    }
+
+            } else { ProgressView((languageStore?.text("workflow.host.loading", fallback: "正在读取项目流程…") ?? "正在读取项目流程…")) }
+        }
+        .environment(\.workbenchModelReadiness, model.projectSession.explicitModelReadiness)
+        .task(id: model.manifest?.effectiveInstanceID) { await model.projectSession.openWorkflow() }
+    }
+    private var captureControls:some View {
+        VStack(spacing:4) {
                         WorkflowCaptureRecoveryView(model: model)
                         if model.projectSession.workflowRecordingNodeID != nil {
                             HStack {
@@ -46,16 +61,7 @@ struct WorkflowHostView: View {
                                 }.accessibilityIdentifier("workflow-record-finish")
                             }.padding().workbenchPanel(cornerRadius: 12)
                         }
-                    }
-                    .sheet(isPresented: Binding(get: { controller.mediaPreviewReference != nil }, set: { if !$0 { controller.mediaPreviewReference = nil } })) {
-                        if let reference = controller.mediaPreviewReference {
-                            WorkflowMediaPreviewPanel(session: model.projectSession, controller: controller, reference: reference)
-                        }
-                    }
-            } else { ProgressView((languageStore?.text("workflow.host.loading", fallback: "正在读取项目流程…") ?? "正在读取项目流程…")) }
         }
-        .environment(\.workbenchModelReadiness, model.projectSession.explicitModelReadiness)
-        .task(id: model.manifest?.effectiveInstanceID) { await model.projectSession.openWorkflow() }
     }
     private func chooseModel(controller: WorkflowController, kind: WorkflowModelKind) {
         // Capture synchronously, before either the task or the native panel suspends.

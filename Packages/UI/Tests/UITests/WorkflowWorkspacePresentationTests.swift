@@ -299,19 +299,20 @@ extension WorkflowWorkspacePresentationTests {
     @Test func explicitPanelIntentPreservesResourcesPinAndRunTarget() {
         let a = UUID(), b = UUID(), run = UUID()
         var state = WorkflowWorkspacePanels()
-        state.selectPreparation(.assets)
+        state.selectPreparation(.programs)
         state.selectRun(run)
+        state.selectResult(node:a,call:nil)
         state.inspect(a)
         #expect(state.preparation == .configuration && state.output == .node)
         state.pinned = true
         state.inspect(b)
         #expect(state.nodeID == a && state.runID == run)
         state.clearSelection()
-        #expect(state.preparation == .assets && state.output == .node && state.nodeID == a)
+        #expect(state.preparation == .programs && state.output == .node && state.nodeID == a)
         state.pinned = false; state.clearSelection()
-        #expect(state.output == .overview && state.runID == run)
-        state.selectPreparation(.nodes)
-        #expect(state.lastResource == .nodes && state.runID == run)
+        #expect(state.output == .node && state.nodeID == a && state.runID == run)
+        state.selectPreparation(.models)
+        #expect(state.lastResource == .models && state.runID == run)
     }
 
     @Test func selectedRunAndExactCallNeverFallBackToLatestOrOtherNode() {
@@ -423,5 +424,180 @@ extension WorkflowWorkspacePresentationTests {
             registeredAt: Date(), occurrences: [.init(runID: try #require(scope.runID), nodeID: try #require(scope.nodeID), stepID: try #require(scope.stepID))])
         #expect(facts.matches(scope: scope, properties: nil, context: .init()))
         #expect(!facts.matches(scope: other, properties: nil, context: .init()))
+    }
+}
+
+// D-RENDERING-WORKSPACE-01: real service owners, isolated stores, no model submit.
+@MainActor private struct RenderingWorkspaceFixture {
+    let root:URL, suite:String, settings:UserDefaults, owner:ProjectSession
+    let store:ProjectStore, controller:WorkflowController, manifest:ProjectManifest
+    static func make() async throws -> Self {
+        let root=URL(fileURLWithPath:ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent("render-workspace-"+UUID().uuidString)
+        try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
+        let suite="D.RenderingWorkspace."+UUID().uuidString
+        let settings=try #require(UserDefaults(suiteName:suite))
+        let owner=ProjectSession(sessionFactory:{ _ in WorkbenchSession(engine:WorkspaceNoInference(),backendID:"never",status:{ .init(activeRunID:nil,phase:nil,queuedRunIDs:[]) },shutdown:{},cleanup:{},validateModel:{ _ in }) },settings:settings)
+        await owner.createProject(at:root.appendingPathComponent("Fixture.dproject"));await owner.openWorkflow()
+        return Self(root:root,suite:suite,settings:settings,owner:owner,store:try #require(owner.currentStore),controller:try #require(owner.workflow),manifest:try #require(owner.manifest))
+    }
+    func close() async throws { await owner.closeProject();settings.removePersistentDomain(forName:suite);try FileManager.default.removeItem(at:root) }
+    func target(_ reference:WorkflowAssetReference)->WorkflowViewerTarget { .init(title:"Same human title",subtitle:"isolated",value:.asset(reference)) }
+    func viewer(_ target:WorkflowViewerTarget)->WorkflowViewerSession { .init(owner:owner,store:store,projectID:manifest.id,instanceID:manifest.effectiveInstanceID,target:target) }
+}
+
+extension WorkflowWorkspacePresentationTests {
+    @Test(arguments:[0,1,2,3]) func workspaceDraftUsesRealBranchesWithoutChangingOwners(mode:Int) async throws {
+        let f=try await RenderingWorkspaceFixture.make(), c=f.controller
+        c.addExample("template")
+        let graph=try #require(c.graph),target=graph.nodes[2].id
+        try await c.saveExplicitEdits()
+        let before=await f.store.snapshot(),runs=c.runs,graphs=c.graphs,undo=c.canUndo
+        let draft=try WorkflowWorkspaceRunDraft(controller:c,target:target,mode:mode)
+        let expected:Set<UUID> = mode == 0 ? Set(graph.nodes.prefix(3).map(\.id)) : mode == 1 ? [target] : mode == 2 ? [target,graph.nodes[3].id] : [graph.nodes[3].id]
+        #expect(Set(draft.slice.plan.steps.map(\.id)) == expected)
+        #expect(draft.slice.boundaries.count == [0,2,2,1][mode])
+        #expect(expected.isSubset(of:Set(draft.marks.keys)))
+        for boundary in draft.slice.boundaries {
+            #expect(draft.marks[boundary.sourceNodeID]?.kind == (mode == 1 ? .resolvedAtSubmit : .historicalInput))
+        }
+        if mode == 0 {
+            let layers=WorkflowWorkspaceRunDraft.layers(draft.slice.plan)
+            #expect(layers.count == 2 && Set(layers[0].map(\.id)) == Set(graph.nodes.prefix(2).map(\.id)))
+        }
+        c.selectedNodeID=graph.nodes[0].id
+        #expect(draft.isCurrent(in:c))
+        #expect(c.runs == runs && c.graphs == graphs && c.canUndo == undo)
+        #expect((await f.store.snapshot()).revision == before.revision)
+        var node=graph.nodes[0];node.parameters["text"] = .text("changed")
+        c.updateNode(node,in:graph.id)
+        #expect(!draft.isCurrent(in:c))
+        c.undo();#expect(c.graph == graph)
+        try await f.close()
+    }
+
+    @Test func runtimeProjectionAndViewerReadNeverPublishOrLoseWaitingCall() async throws {
+        let f=try await RenderingWorkspaceFixture.make(),c=f.controller
+        c.addExample("template");let graph=try #require(c.graph)
+        await c.run(target:graph.nodes[3].id,only:false)
+        let rows=WorkflowLibraryValue.entries(c,language:nil)
+        let waiting=try #require(rows.first { $0.runtimeValue?.call.address.path.contains(.node(graph.nodes[3].id)) == true })
+        let projected=try #require(waiting.runtimeValue)
+        #expect(projected.isCurrent(in:c))
+        #expect(!SharedLibraryBrowserLogic.allows(.add,entry:waiting))
+        #expect(!SharedLibraryBrowserLogic.allows(.location,entry:waiting))
+        #expect(SharedLibraryBrowserLogic.allows(.preview,entry:waiting))
+        let before=await f.store.snapshot()
+        let viewer=f.viewer(.init(title:waiting.item.title,subtitle:waiting.item.detail,value:projected.value,call:projected.call))
+        await viewer.load()?.value
+        #expect(viewer.exactRecord?.step.status == .waiting)
+        #expect(viewer.text == "Describe a moonlit garden in a restrained editorial tone.")
+        c.selectedNodeID=graph.nodes[0].id
+        #expect(viewer.target.call == projected.call && viewer.exactRecord?.step.status == .waiting)
+        #expect((await f.store.snapshot()).revision == before.revision)
+        viewer.stop();try await f.close()
+    }
+
+    @Test(arguments:[false,true]) func viewerLateSuccessOrFailureCannotReplaceNewFullReference(fail:Bool) async throws {
+        let f=try await RenderingWorkspaceFixture.make()
+        let a=try await f.store.publishWorkflowAsset(data:Data("A 原文".utf8),mediaType:"text/plain",name:"Same",operationID:"d.text.input")
+        let b=try await f.store.publishWorkflowAsset(data:Data("B 👩🏽‍🎨".utf8),mediaType:"text/plain",name:"Same",operationID:"d.text.input")
+        var waiting:CheckedContinuation<Void,Never>?
+        let viewer=WorkflowViewerSession(owner:f.owner,store:f.store,projectID:f.manifest.id,instanceID:f.manifest.effectiveInstanceID,target:f.target(a.record.reference),readText:{ ref in
+            let data=try await f.store.workflowText(ref)
+            if ref == a.record.reference {
+                await withCheckedContinuation { waiting=$0 }
+                if fail { throw WorkflowIssue("late A failure") }
+            }
+            return data
+        })
+        let old=try #require(viewer.load())
+        for _ in 0..<100 where waiting == nil { try await Task.sleep(for:.milliseconds(5)) }
+        let release=try #require(waiting)
+        viewer.replace(f.target(b.record.reference));await viewer.load()?.value
+        let current=viewer.generation
+        release.resume();await old.value
+        #expect(viewer.generation == current && viewer.text == "B 👩🏽‍🎨" && viewer.failure == nil)
+        #expect(viewer.metadata?.record?.reference == b.record.reference)
+        let second=f.viewer(f.target(a.record.reference));await second.load()?.value
+        viewer.stop();#expect(second.text == "A 原文" && second.canRead)
+        await f.owner.closeProject()
+        #expect(second.load() == nil && second.suspended && !second.canRead)
+        var played=false;second.audioAction { played=true };#expect(!played)
+        try await f.close()
+    }
+
+    @Test func viewerMetadataSaveKeepsOriginalCASButNeverPublishesIntoReplacement() async throws {
+        let f=try await RenderingWorkspaceFixture.make()
+        let a=try await f.store.publishWorkflowAsset(data:Data("A".utf8),mediaType:"text/plain",name:"A",operationID:"d.text.input")
+        let b=try await f.store.publishWorkflowAsset(data:Data("B".utf8),mediaType:"text/plain",name:"B",operationID:"d.text.input")
+        await f.owner.refreshAfterFileOperation(store:f.store,instanceID:f.manifest.effectiveInstanceID)
+        var waiting:CheckedContinuation<Void,Never>?
+        let viewer=WorkflowViewerSession(owner:f.owner,store:f.store,projectID:f.manifest.id,instanceID:f.manifest.effectiveInstanceID,target:f.target(a.record.reference),writeAnnotations:{ expected,name,note,favorite in
+            try await f.owner.saveAssetAnnotations(owner:f.store,expected:expected,name:name,note:note,isFavorite:favorite)
+            await withCheckedContinuation { waiting=$0 }
+        })
+        await viewer.load()?.value
+        let expected=ProjectAssetEditBaseline(snapshot:try #require(viewer.metadata))
+        let save=Task { try await viewer.saveMetadata(expected,nil,"A only",nil) }
+        for _ in 0..<100 where waiting == nil { try await Task.sleep(for:.milliseconds(5)) }
+        let release=try #require(waiting)
+        viewer.replace(f.target(b.record.reference));await viewer.load()?.value
+        release.resume();try await save.value
+        #expect(viewer.metadata?.asset.id == b.asset.id && viewer.metadata?.asset.note == "")
+        #expect(try await f.store.assetMetadataSnapshot(id:a.asset.id).asset.note == "A only")
+        await #expect(throws:WorkflowIssue.self) { try await viewer.saveMetadata(expected,nil,"stale",nil) }
+        #expect(try await f.store.workflowText(a.record.reference) == "A")
+        #expect(try await f.store.workflowText(b.record.reference) == "B")
+        viewer.suspend();try await f.close()
+    }
+
+    @Test(arguments:[0.25,1.0,4.0,-1.0,4.1]) func canvasSpeedColdPreferenceAndInvalidProtection(speed:Double) throws {
+        let suite="D.CanvasSpeed."+UUID().uuidString,settings=try #require(UserDefaults(suiteName:suite))
+        defer { settings.removePersistentDomain(forName:suite) }
+        let state=ChatDisplayPreferencesState(settings:settings)
+        var p=state.preferences;p.canvasNavigation = .init(wheelSpeed:speed)
+        let valid=(0.25...4).contains(speed)
+        #expect(state.update(p) == valid)
+        let cold=ChatDisplayPreferencesState(settings:settings)
+        let actual=Double(cold.preferences.canvasNavigation?.resolvedSpeed ?? 1)
+        let expectedSpeed=valid ? speed:1
+        #expect(actual == expectedSpeed)
+        if !valid {
+            let corrupt=try JSONEncoder().encode(p)
+            settings.set(corrupt,forKey:ChatDisplayPreferences.storageKey)
+            let invalid=ChatDisplayPreferencesState(settings:settings)
+            #expect(invalid.hasInvalidStoredRecord && !invalid.update(ChatDisplayPreferences()))
+            #expect(settings.data(forKey:ChatDisplayPreferences.storageKey) == corrupt)
+            invalid.reset();#expect(!invalid.hasInvalidStoredRecord && invalid.preferences.canvasNavigation == nil)
+        }
+    }
+
+    @Test func viewerNativeTextKeepsSelectionAndReadingPositionOnEqualUpdate() async throws {
+        let original=String(repeating:"中文 paragraph\n",count:300)
+        let host=NSHostingView(rootView:WorkflowViewerText(text:original,query:"",next:0));host.frame=CGRect(x:0,y:0,width:500,height:300)
+        func descendants(_ v:NSView)->[NSView] { [v]+v.subviews.flatMap(descendants) }
+        host.layoutSubtreeIfNeeded()
+        let editor=try #require(descendants(host).compactMap { $0 as? NSTextView }.first)
+        editor.setSelectedRange(NSRange(location:50,length:4));editor.enclosingScrollView?.contentView.scroll(to:CGPoint(x:0,y:180))
+        let origin=editor.enclosingScrollView?.contentView.bounds.origin
+        host.rootView=WorkflowViewerText(text:original,query:"",next:0);host.layoutSubtreeIfNeeded()
+        #expect(descendants(host).contains { $0 === editor })
+        #expect(editor.selectedRange() == NSRange(location:50,length:4) && editor.enclosingScrollView?.contentView.bounds.origin == origin)
+        host.rootView=WorkflowViewerText(text:original,query:"paragraph",next:1);host.layoutSubtreeIfNeeded()
+        #expect((editor.string as NSString).substring(with:editor.selectedRange()) == "paragraph")
+        #expect(!editor.isEditable && editor.isSelectable)
+    }
+}
+
+extension WorkflowWorkspacePresentationTests {
+    @Test(arguments:[false,true]) func operationTreeRetainsEveryExactExecutableLeaf(models:Bool) throws {
+        let entries=SharedLibraryProjection.entries(models:[],readiness:[:],tools:[],projects:[],language:nil).filter {
+            models ? [.model,.component].contains($0.item.kind):[.program,.tool].contains($0.item.kind)
+        }
+        let tree=WorkflowOperationTree.make(entries,models:models,language:nil)
+        func leaves(_ nodes:[WorkflowOperationTree])->[SharedLibraryBrowserEntry] { nodes.flatMap { $0.entry.map { [$0] } ?? leaves($0.children ?? []) } }
+        let flat=leaves(tree)
+        #expect(!flat.isEmpty && Set(flat.map(\.id)) == Set(entries.map(\.id)) && flat.count == entries.count)
+        for entry in flat { #expect(entries.first { $0.id == entry.id } == entry) }
     }
 }
