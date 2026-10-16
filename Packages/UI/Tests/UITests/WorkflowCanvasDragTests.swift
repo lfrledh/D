@@ -1,3 +1,4 @@
+import AppKit
 import DWorkbench
 import Foundation
 import SwiftUI
@@ -6,6 +7,87 @@ import Testing
 
 @Suite @MainActor
 struct WorkflowCanvasDragTests {
+    @Test(arguments: [CGFloat(0.02), 0.65, 1, 1.8])
+    func wireDrawingBackingIsViewportBoundAndKeepsFarTopology(zoom: CGFloat) throws {
+        let window = NSWindow(contentRect: .init(x: 0,y: 0,width: 640,height: 480),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let scroll = NSScrollView(frame: .init(x: 0,y: 0,width: 640,height: 480))
+        scroll.hasHorizontalScroller = false; scroll.hasVerticalScroller = false
+        window.contentView = scroll
+        defer { window.contentView = nil; window.close() }
+        let document = WireTestDocument(frame: .init(x: 0,y: 0,width: 200_000 * zoom,height: 160_000 * zoom))
+        document.bounds = .init(x: 0,y: 0,width: 200_000,height: 160_000)
+        scroll.documentView = document
+        let wrapper = WorkflowConnectionDrawingView(frame: document.bounds)
+        document.addSubview(wrapper)
+        let paths = [
+            WorkflowConnectionGeometry.curve(from: .init(x: 120,y: 180), to: .init(x: 500,y: 260)),
+            WorkflowConnectionGeometry.curve(from: .init(x: 180_000,y: 120_000), to: .init(x: 170_000,y: 121_000))
+        ]
+        let origin = CGPoint(x: -200,y: -140)
+        let strokes = paths.enumerated().map { WorkflowConnectionDrawing.Stroke(path: $0.element, color: .red, selected: $0.offset == 0) }
+        wrapper.update(strokes: strokes, origin: origin)
+        window.contentView?.layoutSubtreeIfNeeded()
+        func verify() throws {
+            wrapper.updateViewport()
+            let drawer = wrapper.drawing
+            try #require(!drawer.isHidden && !drawer.bounds.isEmpty)
+            #expect(drawer.bounds.width <= scroll.contentView.bounds.width + 0.01)
+            #expect(drawer.bounds.height <= scroll.contentView.bounds.height + 0.01)
+            let backing = drawer.convertToBacking(drawer.bounds)
+            #expect(backing.width <= scroll.contentView.bounds.width * window.backingScaleFactor + 1)
+            #expect(backing.height <= scroll.contentView.bounds.height * window.backingScaleFactor + 1)
+            #expect(wrapper.hitTest(.zero) == nil && drawer.hitTest(.zero) == nil)
+            #expect(drawer.strokes == strokes && drawer.origin == origin)
+            // Paint the actual viewport child and an independent full-path oracle
+            // into equally sized contexts. No giant bitmap is created by either.
+            let width = Int(ceil(drawer.bounds.width * 2)), height = Int(ceil(drawer.bounds.height * 2))
+            let actual = try #require(WorkbenchLocalRenderer.bitmap(width: width,height: height))
+            let expected = try #require(WorkbenchLocalRenderer.bitmap(width: width,height: height))
+            actual.scaleBy(x: 2,y: 2); expected.scaleBy(x: 2,y: 2)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(cgContext: actual, flipped: true)
+            drawer.draw(drawer.bounds)
+            NSGraphicsContext.restoreGraphicsState()
+            expected.clip(to: drawer.bounds)
+            expected.scaleBy(x: drawer.bounds.width / drawer.sourceRect.width,
+                y: drawer.bounds.height / drawer.sourceRect.height)
+            expected.translateBy(x: -drawer.sourceRect.minX-origin.x,y: -drawer.sourceRect.minY-origin.y)
+            for stroke in strokes {
+                if stroke.selected {
+                    expected.addPath(stroke.path.cgPath); expected.setLineWidth(6)
+                    expected.setStrokeColor(NSColor(Color.primary.opacity(0.75)).cgColor); expected.strokePath()
+                }
+                expected.addPath(stroke.path.cgPath); expected.setLineWidth(2.5)
+                expected.setStrokeColor(NSColor(stroke.color).cgColor); expected.strokePath()
+            }
+            let length = actual.bytesPerRow * actual.height
+            let a = try #require(actual.data).assumingMemoryBound(to: UInt8.self)
+            let b = try #require(expected.data).assumingMemoryBound(to: UInt8.self)
+            #expect(UnsafeBufferPointer(start: a,count: length).elementsEqual(UnsafeBufferPointer(start: b,count: length)))
+            #expect((0..<length).contains { a[$0] != 0 }, "The comparison must include a visible wire")
+        }
+        scroll.contentView.scroll(to: .init(x: 200 * zoom,y: 200 * zoom))
+        try verify()
+        // Move to the distant curve using only native scroll geometry.
+        scroll.contentView.scroll(to: .init(x: 179_900 * zoom,y: 119_900 * zoom))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        try verify()
+        wrapper.isHidden = true
+        scroll.contentView.scroll(to: .init(x: 179_890 * zoom,y: 119_890 * zoom))
+        #expect(wrapper.drawing.isHidden)
+        wrapper.isHidden = false
+        #expect(!wrapper.drawing.isHidden && !wrapper.drawing.frame.isEmpty)
+        try verify()
+        wrapper.update(strokes: [], origin: origin)
+        #expect(wrapper.drawing.isHidden && wrapper.drawing.frame == .zero)
+        wrapper.update(strokes: strokes, origin: origin)
+        try verify()
+        wrapper.removeFromSuperview()
+        #expect(wrapper.drawing.isHidden && wrapper.drawing.frame == .zero)
+    }
+
     @Test func draggedReverseCurveStaysInsideDrawingBounds() {
         let size = CGSize(width: 2400, height: 900)
         let paths = [
@@ -548,3 +630,5 @@ struct WorkflowCanvasDragTests {
         ))
     }
 }
+
+private final class WireTestDocument: NSView { override var isFlipped: Bool { true } }

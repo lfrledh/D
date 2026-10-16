@@ -398,6 +398,14 @@ extension EnvironmentValues {
     var legacyTitlebarBlend: Double?
     private(set) var titlebar: WorkbenchWindowTitlebar?
     private var observers: [NSObjectProtocol] = []
+    private struct Geometry: Equatable {
+        let rect: CGRect
+        let viewport: CGSize
+        let visible: CGRect
+        let rootFrame: CGRect?
+    }
+    private var observedGeometry: Geometry?
+    private(set) var geometryInvalidationCount = 0
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { !isGeometryOnly }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -426,10 +434,30 @@ extension EnvironmentValues {
             view.postsFrameChangedNotifications = true; view.postsBoundsChangedNotifications = true
             for name in [NSView.frameDidChangeNotification, NSView.boundsDidChangeNotification] {
                 observers.append(NotificationCenter.default.addObserver(forName: name, object: view, queue: .main) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.needsDisplay = true; if let self { self.owner?.readability.update(self) }; if self?.isCanvas == true { self?.owner?.invalidate() } }
+                    MainActor.assumeIsolated { self?.geometryDidChange() }
                 })
             }
             ancestor = view.superview
+        }
+        observedGeometry = nil
+        geometryDidChange()
+    }
+    private func geometryDidChange() {
+        let coordinates = owner?.coordinates(for: self) ?? (rect: bounds, viewport: bounds.size)
+        let clipped = visibleRect.intersection(bounds)
+        let visible = isHiddenOrHasHiddenAncestor || clipped.isNull || clipped.isEmpty ? CGRect.zero : clipped
+        let current = Geometry(rect: coordinates.rect, viewport: coordinates.viewport,
+            visible: visible, rootFrame: isCanvas ? convert(bounds, to: nil) : nil)
+        guard current != observedGeometry else { return }
+        observedGeometry = current
+        // Leaving view must still remove an overlap record. Returning to view
+        // resamples the latest source; no node/editor/port view is unmounted.
+        owner?.readability.update(self)
+        guard !visible.isEmpty else { return }
+        if isCanvas {
+            geometryInvalidationCount += 1; needsDisplay = true; owner?.invalidate()
+        } else if drawsGlass && owner?.image != nil {
+            geometryInvalidationCount += 1; needsDisplay = true
         }
     }
     isolated deinit { for observer in observers { NotificationCenter.default.removeObserver(observer) } }

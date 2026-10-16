@@ -137,8 +137,8 @@ public struct WorkbenchSettingsView: View {
                                     }.accessibilityIdentifier("chat-display-send-shortcut")
                                     .disabled(model.chatDisplaySettings.hasInvalidStoredRecord)
                                 Text(text("inputHelp2", "System composition, selection and Undo remain available. Shift–Return inserts a newline.", "保留系统组字、选区及撤销。Shift–回车换行。"))
-                                Text(text("canvasHelp", "Canvas: pointer selects and connects; hand pans; wheel zooms; middle click centers. Fit view changes the viewport, not node positions.",
-                                          "画布：指针选择和连接；手形平移；滚轮缩放；中键回到中心。适配视图只移动视野，不重排节点。"))
+                                Text(text("canvasHelp", "Canvas: pointer selects and connects; hand pans; wheel zooms. Show All Nodes changes the viewport, not node positions.",
+                                          "画布：指针选择和连接；手形平移；滚轮缩放。“显示全部节点”只移动视野，不重排节点。"))
                             }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
                         }
         }

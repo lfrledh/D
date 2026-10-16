@@ -370,10 +370,9 @@ struct WorkflowCanvasViewportHostingTests {
             location: mouseInWindow, modifierFlags: [], timestamp: 0,
             windowNumber: window.windowNumber, context: nil,
             eventNumber: 1, clickCount: 1, pressure: 1))
+        let beforeMiddle = clip.bounds.origin
         try await dispatch(middle)
-        let recentered = zoomedLayout.visibleRawCenter(offset: clip.bounds.origin)
-        #expect(abs(recentered.x - zoomedLayout.centerRawPoint.x) < 3)
-        #expect(abs(recentered.y - zoomedLayout.centerRawPoint.y) < 3)
+        #expect(clip.bounds.origin == beforeMiddle, "Middle click no longer moves the viewport")
         #expect(scroll.documentView?.frame.size == zoomedSize, "Middle click keeps the zoom")
 
         // A non-scrolling SwiftUI card surface uses the same ordinary-wheel zoom route
@@ -595,41 +594,20 @@ struct WorkflowCanvasViewportHostingTests {
             location: mouseInWindow, modifierFlags: [], timestamp: 0,
             windowNumber: window.windowNumber, context: nil,
             eventNumber: 3, clickCount: 1, pressure: 1))
+        let graphlessBeforeMiddle = clip.bounds.origin
         try await dispatch(graphlessMiddle)
+        #expect(clip.bounds.origin == graphlessBeforeMiddle)
         #expect(scroll.documentView?.frame.size == graphlessZoomedSize)
-        let emptyGeometry = WorkflowGraphGeometry(graph: WorkflowGraph())
-        let emptyZoom = try #require(observations.last).zoom
-        let emptyLayout = WorkflowCanvasViewportGeometry(graphSize: emptyGeometry.size,
-            viewportSize: clip.bounds.size, zoom: emptyZoom, translation: emptyGeometry.translation)
-        let emptyCenter = emptyLayout.visibleRawCenter(offset: clip.bounds.origin)
-        #expect(abs(emptyCenter.x - emptyLayout.centerRawPoint.x) < 3)
-        #expect(abs(emptyCenter.y - emptyLayout.centerRawPoint.y) < 3)
-
-        // Locate the actual reset control; its toolbar position is not canvas space.
-        let reset = try #require(accessibilityElements(host).first {
+        #expect(!accessibilityElements(host).contains {
             $0.accessibilityIdentifier() == "workflow-canvas-reset-view"
         })
-        try #require(HostingControlClick.send(to: reset, in: host))
-        for _ in 0..<15 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
-        try #require(observations.last?.zoom == 1)
-        let resetLayout = WorkflowCanvasViewportGeometry(graphSize: emptyGeometry.size,
-            viewportSize: clip.bounds.size, zoom: 1, translation: emptyGeometry.translation)
-        #expect(abs((scroll.documentView?.frame.width ?? 0) - resetLayout.contentSize.width) < 2)
-        let resetCenter = resetLayout.visibleRawCenter(offset: clip.bounds.origin)
-        #expect(abs(resetCenter.x - resetLayout.centerRawPoint.x) < 3)
-        #expect(abs(resetCenter.y - resetLayout.centerRawPoint.y) < 3)
         #expect(controller.graph == nil && controller.canUndo == undoBefore)
 
         // The edit affordance follows the visible configuration panel, not ordinary
         // selection or a separate "last clicked" flag. Use its actual production action.
         controller.selectedGraphID = graph.id
         for _ in 0..<15 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
-        let resetRestoredGraph = try #require(accessibilityElements(host).first {
-            $0.accessibilityIdentifier() == "workflow-canvas-reset-view"
-        })
-        try #require(HostingControlClick.send(to: resetRestoredGraph, in: host))
-        for _ in 0..<15 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
-        try #require(observations.last?.zoom == 1)
+        let restoredZoom = try #require(observations.last).zoom
         func inspectButton(_ nodeID: UUID) throws -> any NSAccessibilityProtocol {
             try #require(accessibilityElements(host).first {
                 $0.accessibilityIdentifier() == "workflow-node-inspect-" + nodeID.uuidString
@@ -637,7 +615,7 @@ struct WorkflowCanvasViewportHostingTests {
         }
         func revealNode(_ nodeID: UUID) async throws {
             let layout = WorkflowCanvasViewportGeometry(graphSize: graphGeometry.size,
-                viewportSize: clip.bounds.size, zoom: 1, translation: graphGeometry.translation)
+                viewportSize: clip.bounds.size, zoom: restoredZoom, translation: graphGeometry.translation)
             clip.scroll(to: layout.centeredOffset(on: graphGeometry.rawPosition(nodeID)))
             scroll.reflectScrolledClipView(clip)
             for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }

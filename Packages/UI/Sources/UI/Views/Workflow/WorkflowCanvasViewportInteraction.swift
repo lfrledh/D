@@ -199,7 +199,6 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     var allowsEvent: (_ point: CGPoint, _ offset: CGPoint, _ viewport: CGSize) -> Bool
     var onViewportSize: (WorkflowCanvasViewportMeasurement) -> Void
     var onWheel: (_ deltaY: CGFloat, _ point: CGPoint, _ offset: CGPoint, _ viewport: CGSize) -> Void
-    var onMiddleClick: (_ viewport: CGSize) -> Void
 
     func makeNSView(context: Context) -> ProbeView {
         let view = ProbeView()
@@ -222,7 +221,6 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         view.allowsEvent = allowsEvent
         view.onViewportSize = onViewportSize
         view.onWheel = onWheel
-        view.onMiddleClick = onMiddleClick
         view.reportViewportSize()
     }
 
@@ -265,7 +263,6 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         var allowsEvent: (CGPoint, CGPoint, CGSize) -> Bool = { _, _, _ in false }
         var onViewportSize: (WorkflowCanvasViewportMeasurement) -> Void = { _ in }
         var onWheel: (CGFloat, CGPoint, CGPoint, CGSize) -> Void = { _, _, _, _ in }
-        var onMiddleClick: (CGSize) -> Void = { _ in }
         private var monitor: Any?
         private var cursorTracking: NSTrackingArea?
         private var resignObserver: NSObjectProtocol?
@@ -321,7 +318,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                 object: window, queue: .main) { [weak self] _ in
                     MainActor.assumeIsolated { self?.cancelPointer(); self?.resetHandCursor() }
                 }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .otherMouseDown,
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel,
                 .mouseMoved, .leftMouseDown, .leftMouseDragged, .leftMouseUp, .keyDown]) { [weak self] event in
                 guard let self else { return event }
                 switch event.type {
@@ -337,20 +334,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                 default: break
                 }
                 if event.type == .scrollWheel { return self.routeWheel(event) ? nil : event }
-                guard self.accepts(event),
-                      let scroll = self.enclosingScrollView else { return event }
-                let clip = scroll.contentView
-                let location = clip.convert(event.locationInWindow, from: nil)
-                let point = CGPoint(
-                    x: location.x - clip.bounds.minX,
-                    y: clip.isFlipped ? location.y - clip.bounds.minY : clip.bounds.maxY - location.y
-                )
-                if self.pointerSession != nil || !self.navigationAllowed() {
-                    return event.type == .scrollWheel ? nil : event
-                }
-                guard self.allowsViewportEvent(point, clip.bounds.origin, clip.bounds.size) else { return event }
-                guard event.buttonNumber == 2 else { return event }
-                return self.dispatchMiddleClick(scroll.contentView.bounds.size) ? nil : event
+                return event
             }
         }
 
@@ -438,13 +422,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             return true
         }
 
-        @discardableResult
-        func dispatchMiddleClick(_ viewport: CGSize) -> Bool {
-            guard navigationAllowed() else { return false }
-            wheelZoom?.cancel(); layoutAnchor.cancel()
-            onMiddleClick(viewport)
-            return true
-        }
+
 
         override func viewDidMoveToSuperview() {
             super.viewDidMoveToSuperview()

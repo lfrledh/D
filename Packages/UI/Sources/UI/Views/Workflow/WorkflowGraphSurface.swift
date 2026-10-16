@@ -614,11 +614,6 @@ struct WorkflowGraphSurface: View {
                     viewportSize: size, zoom: zoom, translation: geometry.translation)
                 zoom = scrollTracking.wheelZoom.request(delta: delta, mouse: point,
                     nativeOffset: offset, layout: old, scope: scope)
-            },
-            onMiddleClick: { size in
-                let current = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
-                    viewportSize: size, zoom: zoom, translation: geometry.translation)
-                scrollPosition.scrollTo(point: current.centeredOffset(on: naturalCenter(of: geometry.graph)))
             })
     }
 
@@ -862,18 +857,12 @@ private struct WorkflowConnectionLayer: View {
         let drawingBounds = WorkflowConnectionGeometry.drawingBounds(size: geometry.size, paths: paths)
         let drawingOrigin = drawingBounds.origin
         ZStack(alignment: .topLeading) {
-            Canvas { context, _ in
-                context.translateBy(x: -drawingOrigin.x, y: -drawingOrigin.y)
-                for (connection, path) in zip(graph.connections, paths) {
-                    if connection.id == selectedConnectionID {
-                        context.stroke(path, with: .color(.primary.opacity(0.75)), lineWidth: 6)
-                    }
-                    context.stroke(path, with: .color(WorkflowPortStyle.color(for: sourcePort(connection))),
-                                   lineWidth: 2.5)
-                }
-            }
-            // Reverse curves can bow beyond both endpoints. Include their actual
-            // bounds without resizing the scroll document or drawing its whole padding.
+            WorkflowConnectionDrawing(strokes: zip(graph.connections, paths).map { connection, path in
+                .init(path: path, color: WorkflowPortStyle.color(for: sourcePort(connection)),
+                      selected: connection.id == selectedConnectionID)
+            }, origin: drawingOrigin)
+            // Preserve the full curve coordinate range, but allocate/draw only
+            // the visible native child; distant nodes do not create a giant bitmap.
             .frame(width: drawingBounds.width, height: drawingBounds.height)
             .offset(x: drawingOrigin.x, y: drawingOrigin.y)
             .allowsHitTesting(false)

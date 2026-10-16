@@ -935,6 +935,13 @@ private actor LocalGlassNoInference: InferenceEngine {
             host.rootView = content(zoom); try await settle()
             let current = descendants(host).compactMap { $0 as? WorkbenchBackgroundNSView }
             #expect(current.contains { $0 === node })
+            let wireLayers = descendants(host).compactMap { $0 as? WorkflowConnectionDrawingView }
+            try #require(wireLayers.count == 1)
+            let wires = try #require(wireLayers.first)
+            #expect(wires.drawing.strokes.count == graph.connections.count)
+            #expect(wires.drawing.bounds.width <= scroll.contentView.bounds.width + 1)
+            #expect(wires.drawing.bounds.height <= scroll.contentView.bounds.height + 1)
+            #expect(wires.layer?.contents == nil, "The large layout wrapper must not own a raster image")
             let rect = node.convert(node.bounds,to:canvas)
             #expect(rect.width > 0 && rect.height > 0)
             let effective = WorkflowCanvasLayoutPolicy.clampedInteractiveZoom(zoom,current:zoom)
@@ -979,6 +986,49 @@ private actor LocalGlassNoInference: InferenceEngine {
         }
         }
         }
+    }
+
+    @Test(arguments: [false, true])
+    func geometryChangesRedrawOnlyVisibleWallpaperConsumers(wallpaper: Bool) async throws {
+        let directory = try temporary(); defer { try? FileManager.default.removeItem(at: directory) }
+        let owner = WorkbenchBackgroundOwner()
+        let root = WorkbenchBackgroundNSView(frame: .init(x: 0,y: 0,width: 640,height: 480))
+        root.owner = owner; root.isCanvas = true; owner.root = root
+        let window = NSWindow(contentRect: root.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = root
+        defer { window.contentView = nil; window.close() }
+        let scroll = NSScrollView(frame: root.bounds); root.addSubview(scroll)
+        let document = WorkbenchBackgroundNSView(frame: .init(x: 0,y: 0,width: 30_000,height: 20_000))
+        document.isGeometryOnly = true; scroll.documentView = document
+        let inside = WorkbenchBackgroundNSView(frame: .init(x: 100,y: 100,width: 150,height: 80))
+        let outside = WorkbenchBackgroundNSView(frame: .init(x: 15_000,y: 10_000,width: 150,height: 80))
+        for plate in [inside,outside] { plate.owner = owner; document.addSubview(plate); owner.surfaces.add(plate) }
+        window.contentView?.layoutSubtreeIfNeeded()
+        if wallpaper {
+            let file = directory.appendingPathComponent("source.png"); try png(pattern(),at: file)
+            owner.load(file)
+            for _ in 0..<100 where owner.image == nil { try await Task.sleep(for: .milliseconds(10)) }
+            try #require(owner.image != nil)
+        }
+        for _ in 0..<5 { window.contentView?.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        let counts = [inside,outside,root].map(\.geometryInvalidationCount)
+        let before = owner.drawCount
+        scroll.contentView.scroll(to: .init(x: 12,y: 8))
+        NotificationCenter.default.post(name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+        #expect(inside.geometryInvalidationCount == counts[0] + (wallpaper ? 1 : 0))
+        #expect(outside.geometryInvalidationCount == counts[1] && root.geometryInvalidationCount == counts[2])
+        #expect(owner.drawCount == before, "Notifications do not synchronously draw")
+        let once = inside.geometryInvalidationCount
+        NotificationCenter.default.post(name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+        #expect(inside.geometryInvalidationCount == once, "Duplicate geometry does not re-invalidate")
+        scroll.contentView.scroll(to: .init(x: 15_000,y: 10_000))
+        NotificationCenter.default.post(name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+        #expect(outside.geometryInvalidationCount == counts[1] + (wallpaper ? 1 : 0))
+        #expect(inside.geometryInvalidationCount == once)
+        owner.load(nil, blur: false)
+        #expect(owner.image == nil)
+        print("GEOMETRY_INVALIDATIONS wallpaper=\(wallpaper) visible=\(inside.geometryInvalidationCount-counts[0]) entered=\(outside.geometryInvalidationCount-counts[1]) root=\(root.geometryInvalidationCount-counts[2])")
+
     }
 
     @Test func canvasPanKeepsDisabledReadabilityIdle() async throws {

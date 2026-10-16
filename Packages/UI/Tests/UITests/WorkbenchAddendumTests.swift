@@ -332,11 +332,6 @@ extension WorkbenchAddendumTests {
             let actual = view.convert(view.bounds,to: host)
             #expect(abs(actual.minX-frame.minX)<2 && abs(actual.minY-frame.minY)<2)
         }
-        let natural = WorkflowGraphGeometry(graph: try #require(controller.graph))
-        #expect(probe.dispatchMiddleClick(clip.bounds.size)); try await settle(host)
-        let centered = try #require(probe.wheelLayout(clip.bounds.size)).visibleRawCenter(offset: clip.bounds.origin)
-        #expect(abs(centered.x - (natural.size.width / 2 - natural.translation.width)) < 2)
-        #expect(abs(centered.y - (natural.size.height / 2 - natural.translation.height)) < 2)
         #expect(controller.runs.isEmpty); #expect(await engine.calls == 0)
         await controller.save(); await controller.load()
         #expect(controller.graphs.first { $0.id == before.id }?.layout == before.layout)

@@ -136,7 +136,6 @@ struct WorkflowCanvasRefinementTests {
         var selecting = true
         var locked = true
         var wheelCalls = 0
-        var middleCalls = 0
         probe.navigationAllowed = {
             WorkflowCanvasViewportNavigationGate.allows(
                 marqueeActive: selecting, interactionLocked: locked,
@@ -144,21 +143,17 @@ struct WorkflowCanvasRefinementTests {
         }
         probe.allowsEvent = { _, _, _ in true }
         probe.onWheel = { _, _, _, _ in wheelCalls += 1 }
-        probe.onMiddleClick = { _ in middleCalls += 1 }
         let viewport = CGSize(width: 260, height: 300)
         #expect(!probe.allowsViewportEvent(.zero, .zero, viewport))
         #expect(!probe.dispatchWheel(1, .zero, .zero, viewport))
-        #expect(!probe.dispatchMiddleClick(viewport))
-        #expect(wheelCalls == 0 && middleCalls == 0)
+        #expect(wheelCalls == 0)
         selecting = false
         #expect(!probe.allowsViewportEvent(.zero, .zero, viewport))
         #expect(!probe.dispatchWheel(1, .zero, .zero, viewport))
-        #expect(!probe.dispatchMiddleClick(viewport))
         locked = false
         #expect(probe.allowsViewportEvent(.zero, .zero, viewport))
         #expect(probe.dispatchWheel(1, .zero, .zero, viewport))
-        #expect(probe.dispatchMiddleClick(viewport))
-        #expect(wheelCalls == 1 && middleCalls == 1)
+        #expect(wheelCalls == 1)
     }
 
     @Test

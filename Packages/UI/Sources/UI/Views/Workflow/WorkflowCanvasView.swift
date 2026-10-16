@@ -856,10 +856,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             Button(text("refinement.workflow.fitAll", "显示全部节点"), systemImage: "arrow.up.left.and.arrow.down.right") {
                 fitAllNodes(targetWidth: targetWidth)
             }.disabled(!fitReady || viewportInteractionLocked).accessibilityIdentifier("workflow-canvas-fit-all").workbenchHelp("CANVAS-FIT")
-            Button(text("workflow.canvas.resetView", "重置画布视图"), systemImage: "scope") {
-                guard !viewportInteractionLocked else { return }
-                zoom = 1; navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: nil)
-            }.disabled(viewportInteractionLocked).accessibilityIdentifier("workflow-canvas-reset-view")
+
         }.buttonStyle(WorkbenchGlassButtonStyle()).controlSize(.small).padding(.horizontal, 18).padding(.vertical, 8)
             .workbenchPanel(cornerRadius: 12).padding(.horizontal, 12)
     }
