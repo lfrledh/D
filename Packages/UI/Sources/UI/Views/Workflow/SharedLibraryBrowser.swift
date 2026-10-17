@@ -303,9 +303,10 @@ struct SharedLibraryBrowserRenameDrafts {
             return metadataText(language, "canvasUnavailable", "当前流程不可编辑，暂时不能添加到画布。", "This workflow cannot currently be edited. Items cannot be added to the canvas.")
         }
         guard case .operation(let id, let modelID) = entry.selection, let modelID else { return nil }
-        guard let definition = controller.registry.operation(id)?.definition,
-              controller.modelChoices.contains(where: { $0.id == modelID && $0.kind == definition.modelKind }) else {
-            return metadataText(language, "modelRegistrationBeforeAdd", "此模型尚未登记到当前项目。请先准备并登记，再添加节点；不会自动下载或登记。", "This model is not registered with the current project. Prepare and register it before adding a node; nothing is downloaded or registered automatically.")
+        guard let definition = controller.registry.operation(id)?.definition, definition.modelKind != nil,
+              (controller.modelChoices.contains(where: { $0.id == modelID && $0.kind == definition.modelKind })
+                || WorkflowModelRoutes.draftChoice(operationID: id, modelID: modelID)?.kind == definition.modelKind) else {
+            return metadataText(language, "modelIdentityBeforeAdd", "此模型身份与操作不匹配，且不是受支持的目录草稿。", "This model identity does not match the operation or a supported catalog draft.")
         }
         return nil
     }

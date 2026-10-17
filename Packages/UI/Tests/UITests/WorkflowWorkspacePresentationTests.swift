@@ -8,7 +8,9 @@ import UniformTypeIdentifiers
 @testable import UI
 
 private actor WorkspaceNoInference: InferenceEngine {
+    private(set) var submissions = 0
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        submissions += 1
         throw WorkflowIssue("Presentation must not submit inference")
     }
 }
@@ -432,14 +434,16 @@ extension WorkflowWorkspacePresentationTests {
 @MainActor private struct RenderingWorkspaceFixture {
     let root:URL, suite:String, settings:UserDefaults, owner:ProjectSession
     let store:ProjectStore, controller:WorkflowController, manifest:ProjectManifest
+    let engine: WorkspaceNoInference
     static func make() async throws -> Self {
         let root=URL(fileURLWithPath:ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent("render-workspace-"+UUID().uuidString)
         try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
         let suite="D.RenderingWorkspace."+UUID().uuidString
         let settings=try #require(UserDefaults(suiteName:suite))
-        let owner=ProjectSession(sessionFactory:{ _ in WorkbenchSession(engine:WorkspaceNoInference(),backendID:"never",status:{ .init(activeRunID:nil,phase:nil,queuedRunIDs:[]) },shutdown:{},cleanup:{},validateModel:{ _ in }) },settings:settings)
+        let engine = WorkspaceNoInference()
+        let owner=ProjectSession(sessionFactory:{ _ in WorkbenchSession(engine:engine,backendID:"never",status:{ .init(activeRunID:nil,phase:nil,queuedRunIDs:[]) },shutdown:{},cleanup:{},validateModel:{ _ in }) },settings:settings)
         await owner.createProject(at:root.appendingPathComponent("Fixture.dproject"));await owner.openWorkflow()
-        return Self(root:root,suite:suite,settings:settings,owner:owner,store:try #require(owner.currentStore),controller:try #require(owner.workflow),manifest:try #require(owner.manifest))
+        return Self(root:root,suite:suite,settings:settings,owner:owner,store:try #require(owner.currentStore),controller:try #require(owner.workflow),manifest:try #require(owner.manifest),engine:engine)
     }
     func close() async throws { await owner.closeProject();settings.removePersistentDomain(forName:suite);try FileManager.default.removeItem(at:root) }
     func target(_ reference:WorkflowAssetReference)->WorkflowViewerTarget { .init(title:"Same human title",subtitle:"isolated",value:.asset(reference)) }
@@ -448,7 +452,7 @@ extension WorkflowWorkspacePresentationTests {
 
 extension WorkflowWorkspacePresentationTests {
     @Test(arguments: ["zh-Hans", "en"])
-    func modelInsertionAdmissionExplainsRegistrationInBothLanguages(locale: String) async throws {
+    func modelDraftInsertionAndPreparationCopyInBothLanguages(locale: String) async throws {
         let f = try await RenderingWorkspaceFixture.make()
         let language = UILanguageStore(settings: f.settings, preferredLanguages: [locale])
         try language.select(locale)
@@ -457,9 +461,10 @@ extension WorkflowWorkspacePresentationTests {
                 guard case .operation(let id, _) = entry.selection else { return false }
                 return f.controller.registry.operation(id)?.definition.modelKind == .text
             })
-        let message = try #require(SharedLibraryBrowserLogic.insertionIssue(for: entry, controller: f.controller, language: language))
-        #expect(message.contains(locale == "en" ? "not registered" : "尚未登记"))
-        #expect(message.contains(locale == "en" ? "automatically" : "不会自动"))
+        #expect(SharedLibraryBrowserLogic.insertionIssue(for: entry, controller: f.controller, language: language) == nil)
+        #expect(language.text("workflow.node.prepare.notReady", fallback: "missing").contains(locale == "en" ? "not ready" : "未就绪"))
+        #expect(language.text("workflow.node.prepare.download", fallback: "missing").contains(locale == "en" ? "Register" : "登记"))
+        #expect(WorkbenchOwnedIssue.summary("此模型身份与操作不匹配，且不是受支持的目录草稿。", language: language)?.contains(locale == "en" ? "does not match" : "不匹配") == true)
         try await f.close()
     }
 
@@ -505,9 +510,10 @@ extension WorkflowWorkspacePresentationTests {
             readiness: [modelID: scenario == "registered-ready" ? .available : .unprepared], tools: [], projects: [], language: nil)
             .first { $0.id == catalog.id })
         // Wrong-kind uses the original exact text identity, never a fallback model.
-        let source = scenario == "wrong-kind" ? catalog : entry
+        let source = scenario == "wrong-kind"
+            ? SharedLibraryBrowserEntry(item: catalog.item, selection: .operation(id: operation, modelID: "image:ef52ee019fd1d0e75ae4deb40476ba65989716d7")) : entry
         let issue = SharedLibraryBrowserLogic.insertionIssue(for: source, controller: c, language: nil)
-        #expect((issue != nil) == ["unregistered", "wrong-kind"].contains(scenario))
+        #expect((issue != nil) == ["wrong-kind"].contains(scenario))
         let provider = SharedLibraryBrowserLogic.dragProvider(for: source, controller: c)
         #expect(provider.hasItemConformingToTypeIdentifier("org.d-workbench.canvas-item") == (issue == nil))
         #expect(provider.canLoadObject(ofClass: NSString.self), "Catalog organization drag remains available")
@@ -531,7 +537,7 @@ extension WorkflowWorkspacePresentationTests {
             onPlan: { _, _ in }, onDropItem: { value, point in commandCalls += 1; return canvas.dropItem(value, point) })
         let point = CGPoint(x: -140, y: 580)
         let accepted = surface.acceptSurfaceDrop([payload], at: point, scope: scope)
-        let succeeds = ["program", "registered-ready", "registered-unprepared"].contains(scenario)
+        let succeeds = ["program", "registered-ready", "registered-unprepared", "unregistered", "removed"].contains(scenario)
         #expect(accepted == succeeds)
         #expect(commandCalls == (["changed-target", "read-only", "closed"].contains(scenario) ? 0 : 1))
         if succeeds {
@@ -544,8 +550,8 @@ extension WorkflowWorkspacePresentationTests {
             c.undo(); #expect(c.graphs == before)
         } else {
             #expect(c.graphs == before)
-            if ["unregistered", "wrong-kind", "removed"].contains(scenario) {
-                #expect(c.errorMessage?.contains("没有登记") == true)
+            if ["wrong-kind"].contains(scenario) {
+                #expect(c.errorMessage?.contains("身份与操作不匹配") == true)
             }
         }
         #expect(c.modelChoices == choices && c.runs == runs)
@@ -925,5 +931,60 @@ extension WorkflowWorkspacePresentationTests {
             item.setDraggingFrame(.init(origin: draggingLocation, size: .init(width: 30, height: 30)), contents: nil)
             var stop: ObjCBool = false; block(item, index, &stop); if stop.boolValue { break }
         }
+    }
+}
+
+extension WorkflowWorkspacePresentationTests {
+    @Test func catalogDraftsRetainNamesAndExactRoutesWithoutRegistration() async throws {
+        let f = try await RenderingWorkspaceFixture.make()
+        let entries = SharedLibraryProjection.entries(models: [], readiness: [:], tools: [], projects: [], language: nil)
+        for entry in entries {
+            guard case .operation(let operation, let identity?) = entry.selection else { continue }
+            let choice = try #require(WorkflowModelRoutes.draftChoice(operationID: operation, modelID: identity))
+            #expect(choice.kind == f.controller.registry.operation(operation)?.definition.modelKind)
+            #expect(SharedLibraryBrowserLogic.insertionIssue(for: entry, controller: f.controller, language: nil) == nil)
+            #expect(WorkflowModelRoutes.draftChoice(operationID: "d.text.input", modelID: identity) == nil)
+            if choice.kind == .text {
+                let wrongRoute = operation == WorkflowModelRoutes.qwen35 ? "d.model.language" : WorkflowModelRoutes.qwen35
+                #expect(WorkflowModelRoutes.draftChoice(operationID: wrongRoute, modelID: identity) == nil)
+            }
+            #expect(WorkflowModelRoutes.draftChoice(operationID: operation, modelID: identity + "unknown") == nil)
+            let node = WorkflowNode(operationID: operation, title: "Draft", parameters: ["modelID": .text(identity)])
+            let presented = WorkflowNodeIdentity.resolve(node: node, definition: f.controller.registry.operation(operation)?.definition,
+                modelChoices: [], assets: [], tools: [], language: nil)
+            #expect(presented.detail?.contains(choice.displayName) == true)
+        }
+        let submissions = await f.engine.submissions
+        #expect(f.controller.modelChoices.isEmpty && submissions == 0)
+        try await f.close()
+    }
+    @Test func unpreparedDraftPersistsIdentityAndStillCannotSubmitInference() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        let identity = "image:ef52ee019fd1d0e75ae4deb40476ba65989716d7"
+        c.addNode(operationID: "d.image.generate", modelID: identity, x: -40, y: 70)
+        let node = try #require(c.graph?.nodes.last)
+        #expect(c.modelSelectionTarget(nodeID: UUID()) == nil)
+        #expect(c.modelSelectionTarget(nodeID: node.id)?.previousIdentity == identity)
+        c.setParameter(nodeID: node.id, key: "promptText", value: .text("Tiny fixture, must never infer"))
+        try await c.saveExplicitEdits()
+        let graphID = try #require(c.graph?.id)
+        await f.owner.closeProject(); await f.owner.openProject(at: f.store.rootURL); await f.owner.openWorkflow()
+        let reopened = try #require(f.owner.workflow)
+        let stored = try #require(reopened.graphs.first { $0.id == graphID }?.nodes.first { $0.id == node.id })
+        #expect(stored.parameters["modelID"] == .text(identity))
+        #expect(reopened.modelChoices.isEmpty)
+        await reopened.run(target: node.id, only: false)
+        #expect((await f.engine.submissions) == 0)
+        #expect(reopened.errorMessage != nil || reopened.runs.contains { $0.status == .failed })
+        try await f.close()
+    }
+    @Test func defaultModelPresentationUsesCurrentDefaultWithoutWritingIt() throws {
+        let definition = try #require(WorkflowRegistry.standard.operation("d.image.generate")?.definition)
+        let node = definition.makeNode()
+        #expect(WorkflowNodeIdentity.modelIdentity(node: node, definition: definition, defaults: ["image": "image:default"]) == "image:default")
+        #expect(WorkflowNodeIdentity.modelIdentity(node: node, definition: definition, defaults: [:]) == nil)
+        var explicit = node; explicit.parameters["modelID"] = .text("image:explicit")
+        #expect(WorkflowNodeIdentity.modelIdentity(node: explicit, definition: definition, defaults: ["image": "image:default"]) == "image:explicit")
+        #expect(node.parameters["modelID"]?.string == "")
     }
 }

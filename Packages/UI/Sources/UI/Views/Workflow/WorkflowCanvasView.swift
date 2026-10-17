@@ -973,7 +973,8 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             }
             Spacer()
             if let rawError = controller.errorMessage {
-                let error = workflowRecoveryErrorText(rawError, runs: controller.runs, language: languageStore)
+                let error = WorkbenchOwnedIssue.summary(rawError, language: languageStore)
+                    ?? workflowRecoveryErrorText(rawError, runs: controller.runs, language: languageStore)
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                     .lineLimit(2)
@@ -1293,9 +1294,7 @@ private struct WorkflowNodeInspector: View {
     }
 
     private func resolvedModelID(_ node: WorkflowNode, definition: WorkflowOperationDefinition) -> String? {
-        if let id = node.parameters["modelID"]?.string, !id.isEmpty { return id }
-        guard let kind = definition.modelKind else { return nil }
-        return controller.services.capturedModelDefaults()[kind.rawValue]
+        WorkflowNodeIdentity.modelIdentity(node: node, definition: definition, defaults: controller.services.capturedModelDefaults())
     }
     private func identity(_ node: WorkflowNode) -> some View {
         WorkflowInspectorSection(workflowText(languageStore, "workflow.section.node", fallback: "节点")) {

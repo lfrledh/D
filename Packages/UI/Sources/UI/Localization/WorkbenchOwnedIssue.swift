@@ -4,6 +4,7 @@ import SwiftUI
 /// Unknown/backend text remains verbatim. The original is available separately.
 @MainActor enum WorkbenchOwnedIssue {
     static let keys: [String: String] = [
+        "此模型身份与操作不匹配，且不是受支持的目录草稿。": "workflow.node.prepare.identityMismatch",
         "长期工作区不可用。": "consistency.ownedIssue.e0",
         "字段来源不可用。": "consistency.ownedIssue.e1",
         "源素材已不存在。": "consistency.ownedIssue.e2",

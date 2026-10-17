@@ -46,6 +46,20 @@ public final class ModelLibraryModel {
     public private(set) var pendingActions: [ModelID: PendingAction] = [:]
     public private(set) var pendingCatalogIDs: Set<String> = []
 
+    /// Only explicit node-button requests live here. Never inferred from a draft
+    /// or restored across launch; the existing queue remains the work owner.
+    private struct NodePreparation {
+        let token = UUID()
+        let entry: ModelCatalogEntry
+        let resource: ModelResourceID
+        let isCurrent: @MainActor () -> Bool
+        let bind: @MainActor (ModelID, @escaping @MainActor () -> Bool) async throws -> Void
+    }
+    @ObservationIgnored private var nodePreparations: [String: NodePreparation] = [:]
+    @ObservationIgnored private var reconcilingNodePreparations = false
+    @ObservationIgnored private var nodePreparationRevocations: [ModelResourceID: UInt64] = [:]
+    private(set) var preparingNodeIdentities: Set<String> = []
+
     @ObservationIgnored public let library: ModelLibrary
     @ObservationIgnored private var preparation: Task<Void, Never>?
     @ObservationIgnored private var importTask: Task<Void, Never>?
@@ -174,8 +188,8 @@ public final class ModelLibraryModel {
         guard generation == refreshGeneration, updated.revision >= (snapshot?.revision ?? 0) else { return }
         // Keep native menu tracking intact while idle. Compare all visible values,
         // including transient copy progress, so real readiness changes still publish.
-        guard snapshot != updated else { return }
-        snapshot = updated
+        if snapshot != updated { snapshot = updated }
+        await reconcileNodePreparations(updated)
     }
 
     public func clearError() { errorMessage = nil }
@@ -463,6 +477,108 @@ extension ModelLibraryModel {
     public func enqueue(_ entries: [String], register: Bool) async {
         await command { _ = try await self.library.enqueueDownloads(entries, postAction: register ? .register : .filesOnly) }
     }
+
+    static func nodeDownloadEntry(operationID: String, identity: String,
+                                  catalog: [ModelCatalogEntry]) -> ModelCatalogEntry? {
+        guard let choice = WorkflowModelRoutes.draftChoice(operationID: operationID, modelID: identity),
+              WorkflowRegistry.standard.operation(operationID)?.definition.modelKind == choice.kind else { return nil }
+        let matches = catalog.filter { $0.workflowIdentity == identity && $0.workflowProfileID == operationID }
+        return matches.count == 1 ? matches.first : nil
+    }
+
+    func prepareNode(operationID: String, identity: String,
+                     isCurrent: @escaping @MainActor () -> Bool,
+                     bind: @escaping @MainActor (ModelID, @escaping @MainActor () -> Bool) async throws -> Void) async {
+        guard isCurrent(), !preparingNodeIdentities.contains(identity) else { return }
+        preparingNodeIdentities.insert(identity)
+        let revocations = nodePreparationRevocations
+        defer { if nodePreparations[identity] == nil { preparingNodeIdentities.remove(identity) } }
+        do {
+            await refresh()
+            guard isCurrent(), let entry = Self.nodeDownloadEntry(operationID: operationID, identity: identity, catalog: catalog) else {
+                throw WorkflowIssue(nodeText("unavailable", "此配置没有内置下载，或目标已改变。已有文件和节点保留。"))
+            }
+            if rootURL == nil { await chooseRoot() }
+            guard isCurrent(), rootURL != nil else { return }
+            guard !isChoosingLocation, globalOperation == nil else {
+                throw WorkflowIssue(nodeText("busy", "请等待当前模型库操作完成后重试。"))
+            }
+            // The original queue/post-action remains authoritative. An existing
+            // files-only task is not silently rewritten by enqueueDownloads.
+            let tasks = try await library.enqueueDownloads([entry.id], postAction: .register)
+            let current = await library.snapshot()
+            guard isCurrent() else { throw WorkflowIssue(nodeText("targetChanged", "目标已改变；下载和文件保留，未绑定到其他节点。")) }
+            let candidates = current.resources.filter {
+                $0.record.catalogID == entry.id && $0.record.revision == entry.revision
+                    && $0.record.storage == .managed && $0.control.role == .original
+                    && $0.control.fileState != .deleted && $0.control.fileState != .deleting
+            }
+            let resource = tasks.first?.resourceID ?? (candidates.count == 1 ? candidates.first?.id : nil)
+            guard let resource, candidates.contains(where: { $0.id == resource }) else {
+                throw WorkflowIssue(nodeText("copyChanged", "模型副本无法唯一确认；资源保留，请在模型与下载中检查。"))
+            }
+            guard nodePreparationRevocations[resource, default: 0] == revocations[resource, default: 0] else { return }
+            nodePreparations[identity] = .init(entry: entry, resource: resource, isCurrent: isCurrent, bind: bind)
+            selectedResource = resource; selectedTask = tasks.first?.id; workspace = "downloads"
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func nodeText(_ key: String, _ fallback: String) -> String {
+        workflowText(language, "workflow.node.prepare." + key, fallback: fallback)
+    }
+    private func reconcileNodePreparations(_ current: ModelLibrarySnapshot) async {
+        guard !reconcilingNodePreparations else { return }
+        reconcilingNodePreparations = true
+        defer { reconcilingNodePreparations = false }
+        for (identity, request) in nodePreparations {
+            var finished = false
+            defer {
+                if finished, nodePreparations[identity]?.token == request.token {
+                    nodePreparations[identity] = nil; preparingNodeIdentities.remove(identity)
+                }
+            }
+            do {
+                guard request.isCurrent() else { throw WorkflowIssue(nodeText("targetChanged", "目标已改变；下载和文件保留，未绑定到其他节点。")) }
+                guard let resource = current.resources.first(where: { $0.id == request.resource }),
+                      resource.record.catalogID == request.entry.id, resource.record.revision == request.entry.revision,
+                      resource.control.fileState != .deleted && resource.control.fileState != .deleting else {
+                    throw WorkflowIssue(nodeText("copyChanged", "模型副本无法唯一确认；资源保留，请在模型与下载中检查。"))
+                }
+                let download = current.downloads.last { $0.resourceID == request.resource }
+                if let download, download.state == .failed || download.state == .cancelled {
+                    throw WorkflowIssue(download.error ?? nodeText("stopped", "下载已停止；节点与已下载文件保留。请明确重试。"))
+                }
+                guard resource.control.fileState == .verified else { continue }
+                if request.entry.preparation != .none {
+                    preparationNotice = nodeText("needsPreparation", "文件已取得，仍须在模型与下载中准备执行包；节点尚未就绪。")
+                    finished = true; continue
+                }
+                guard resource.record.state == .installed else { continue }
+                guard nodePreparations[identity]?.token == request.token else { continue }
+                if resource.record.registrationState != .registered {
+                    if let error = download?.postActionError { throw WorkflowIssue(error) }
+                    // Explicit authorization from this request also covers an
+                    // already-running files-only task after its exact copy finishes.
+                    try await library.registerResource(request.resource)
+                }
+                guard request.isCurrent(), nodePreparations[identity]?.token == request.token else {
+                    throw WorkflowIssue(nodeText("targetChanged", "目标已改变；下载和文件保留，未绑定到其他节点。"))
+                }
+                try await request.bind(resource.record.id) { [weak self] in
+                    self?.nodePreparations[identity]?.token == request.token && request.isCurrent()
+                }
+                guard nodePreparations[identity]?.token == request.token else { continue }
+                preparationNotice = nodeText("ready", "此节点的模型副本已登记并通过校验；尚未运行计算。")
+                finished = true
+            } catch {
+                errorMessage = error.localizedDescription; finished = true
+            }
+        }
+    }
+
     public func registerResource(_ resource: ModelResource) async {
         await command {
             if resource.control.role == .execution {
@@ -471,18 +587,32 @@ extension ModelLibraryModel {
             } else { try await self.library.registerResource(resource.id) }
         }
     }
+    private func revokeNodePreparation(_ resource: ModelResourceID) {
+        nodePreparationRevocations[resource, default: 0] &+= 1
+        for (identity, request) in nodePreparations where request.resource == resource {
+            nodePreparations[identity] = nil; preparingNodeIdentities.remove(identity)
+        }
+    }
     public func unregisterResource(_ resource: ModelResource) async {
+        revokeNodePreparation(resource.id)
         await command { try await self.library.unregister(resource.record.id); self.preparationNotice = self.managementText("unregisteredReceipt", "已解除登记。文件仍在原位置；作品和生成记录保留。") }
     }
     public func deleteResource(_ resource: ModelResource) async {
+        revokeNodePreparation(resource.id)
         await command { try await self.library.deleteOwnedCopy(resource.id); self.preparationNotice = self.managementText("deletedReceipt", "已删除此副本。登记保留但不可用；其他副本及作品保留。") }
     }
     public func continueResource(_ resource: ModelResource) async {
         await command { _ = try await self.library.continuePartial(resource.id) }
     }
     public func pauseTask(_ id: UUID) async { await command { try await self.library.pauseDownload(id) } }
-    public func cancelTask(_ id: UUID, keepPartial: Bool) async { await command { try await self.library.cancelDownload(id, keepPartial: keepPartial) } }
-    public func clearTask(_ id: UUID) async { await command { try await self.library.clearDownloadHistory([id]); self.preparationNotice = self.managementText("clearedReceipt", "已清除一条下载历史。文件、登记和资源来源信息保留。") } }
+    public func cancelTask(_ id: UUID, keepPartial: Bool) async {
+        if let resource = snapshot?.downloads.first(where: { $0.id == id })?.resourceID { revokeNodePreparation(resource) }
+        await command { try await self.library.cancelDownload(id, keepPartial: keepPartial) } }
+    public func clearTask(_ id: UUID) async {
+        if let task = snapshot?.downloads.first(where: { $0.id == id }), task.state == .failed || task.state == .cancelled {
+            revokeNodePreparation(task.resourceID)
+        }
+        await command { try await self.library.clearDownloadHistory([id]); self.preparationNotice = self.managementText("clearedReceipt", "已清除一条下载历史。文件、登记和资源来源信息保留。") } }
     public func pauseQueue() async { await command { try await self.library.pauseQueue() } }
     public func resumeQueue() async { await command { try await self.library.resumeQueue() } }
     public func moveNext(_ id: UUID) async {

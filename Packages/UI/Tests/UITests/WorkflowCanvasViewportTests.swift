@@ -6,7 +6,7 @@ import Testing
 @Suite @MainActor
 struct WorkflowCanvasViewportTests {
     @Test(arguments: [false, true])
-    func stationaryHandCursorRecoversAfterNativeResetWithoutMouseMovement(node: Bool) async throws {
+    func handPointerPresentationDoesNotRepublishDuringWheelLayout(node: Bool) throws {
         let window = CursorFixtureWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 480),
             styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -14,205 +14,63 @@ struct WorkflowCanvasViewportTests {
         let document = CursorFixtureDocument(frame: .init(x: 0, y: 0, width: 3000, height: 2400))
         scroll.documentView = document; window.contentView = scroll
         let probe = WorkflowCanvasViewportInput.ProbeView(frame: document.bounds); document.addSubview(probe)
-        var cursors: [NSCursor] = []; probe.cursorSink = { cursors.append($0) }
         defer { probe.stopMonitoring(); window.contentView = nil; window.close() }
         probe.setTool(.hand); probe.navigationAllowed = { true }; probe.reportViewportSize()
         scroll.layoutSubtreeIfNeeded(); scroll.contentView.scroll(to: .zero)
         if node { document.addSubview(WorkflowNodePlateView(frame: .init(x: 60, y: 60, width: 240, height: 180))) }
         let point = scroll.contentView.convert(.init(x: 120, y: 100), to: nil)
-        window.fixtureMouse = point
-        probe.mouseEntered(with: CursorFixtureEvent(type: .mouseEntered, owner: window, point: point))
-        try #require(cursors.last === NSCursor.openHand)
-        let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .line,
-            wheelCount: 1, wheel1: 1, wheel2: 0, wheel3: 0))
+        let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: 1, wheel2: 0, wheel3: 0))
         let event = FixtureWheel(base: try #require(NSEvent(cgEvent: cg)), owner: window, point: point)
-        var delivered = 0; probe.onWheel = { _, _, _, _ in delivered += 1 }
-        try #require(probe.routeWheel(event))
-        document.setFrameSize(.init(width: 3300, height: 2640)); probe.setFrameSize(document.bounds.size)
-        scroll.layoutSubtreeIfNeeded(); probe.reportViewportSize()
-        // Model AppKit's reset, not a D cursor decision. No entered/exited,
-        // mouseMoved or cursorUpdate is delivered after this point.
-        cursors = [.arrow]
+        var deliveries = 0, changes: [Bool] = []
+        probe.onWheel = { _, _, _, _ in deliveries += 1 }
+        probe.onHandPressedChanged = { changes.append($0) }
         for step in 0..<8 {
-            try #require(probe.routeWheel(event))
+            #expect(probe.routeWheel(event))
             document.setFrameSize(.init(width: 3300 + step * 50, height: 2640 + step * 40))
-            probe.setFrameSize(document.bounds.size)
-            scroll.layoutSubtreeIfNeeded(); probe.reportViewportSize()
-            probe.resetCursorRects()
-            let region = try #require(probe.registeredHandCursorRegion,
-                "Continuous native resets must register hand synchronously, before the queued recovery")
-            #expect(region.cursor === NSCursor.openHand)
-            #expect(region.rect.contains(probe.convert(window.fixtureMouse, from: nil)))
-            let pixels = probe.convertToBacking(region.rect)
-            #expect(pixels.width <= 1.001 && pixels.height <= 1.001)
-            NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
-            #expect(probe.registeredHandCursorRegion == region)
+            probe.setFrameSize(document.bounds.size); scroll.layoutSubtreeIfNeeded(); probe.reportViewportSize()
         }
-        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
-        #expect(delivered == 9)
-        #expect(cursors.last === NSCursor.openHand, "Stationary pointer must recover after native cursor reset")
-        #expect(cursors.filter { $0 === NSCursor.openHand }.count == 1, "Merge a reset burst into one recovery")
-        probe.pointerTarget = { _, _, _ in .blank }
-        try #require(probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: point)))
-        cursors = [.arrow]; probe.resetCursorRects()
-        #expect(probe.registeredHandCursorRegion?.cursor === NSCursor.closedHand)
-        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
-        #expect(probe.handPressed && cursors.last === NSCursor.closedHand)
-        probe.cancelPointer()
-        #expect(!probe.handPressed && cursors.last === NSCursor.arrow)
-    }
-
-    @Test(arguments: ["text", "nested-scroll", "port", "overlay", "outside", "resign", "hidden", "pointer-tool", "detach"])
-    func queuedHandCursorRecoveryYieldsToCurrentNativeOwner(reason: String) async throws {
-        let window = CursorFixtureWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 480),
-            styleMask: [.titled], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        let root = NSView(frame: .init(x: 0, y: 0, width: 640, height: 480))
-        let scroll = NSScrollView(frame: root.bounds)
-        let document = CursorFixtureDocument(frame: .init(x: 0, y: 0, width: 3000, height: 2400))
-        root.addSubview(scroll); window.contentView = root; scroll.documentView = document
-        let probe = WorkflowCanvasViewportInput.ProbeView(frame: document.bounds); document.addSubview(probe)
-        var cursors: [NSCursor] = []; probe.cursorSink = { cursors.append($0) }
-        defer { probe.stopMonitoring(); window.contentView = nil; window.close() }
-        probe.setTool(.hand); probe.reportViewportSize(); scroll.layoutSubtreeIfNeeded()
-        scroll.contentView.scroll(to: .zero)
-        let point = scroll.contentView.convert(.init(x: 120, y: 100), to: nil)
-        window.fixtureMouse = point
-        probe.mouseEntered(with: CursorFixtureEvent(type: .mouseEntered, owner: window, point: point))
-        try #require(cursors.last === NSCursor.openHand)
-        probe.resetCursorRects() // Queue while the canvas still owns this location.
-        let rect = document.convert(NSRect(x: point.x - 20, y: point.y - 20, width: 40, height: 40), from: nil)
-        switch reason {
-        case "text": document.addSubview(NSTextView(frame: rect))
-        case "nested-scroll": document.addSubview(NSScrollView(frame: rect))
-        case "port":
-            let port = WorkflowPortDragView(frame: rect); port.enabled = true; document.addSubview(port)
-        case "overlay": root.addSubview(NSView(frame: root.convert(rect, from: document)))
-        case "outside": window.fixtureMouse = .init(x: -100, y: -100)
-        case "resign": window.fixtureKey = false
-        case "hidden": probe.isHidden = true
-        case "pointer-tool": probe.setTool(.pointer)
-        case "detach": probe.removeFromSuperview()
-        default: break
-        }
-        cursors = [.iBeam] // The next native owner has already chosen its cursor.
-        NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
-        #expect(probe.registeredHandCursorRegion == nil, "Stationary new owner must revoke the native rectangle immediately")
-        #expect(cursors.count == 1 && cursors.last === NSCursor.iBeam)
-        probe.resetCursorRects()
-        #expect(probe.registeredHandCursorRegion == nil)
-        probe.cursorUpdate(with: CursorFixtureEvent(type: .cursorUpdate, owner: window, point: window.fixtureMouse))
-        probe.mouseExited(with: CursorFixtureEvent(type: .mouseExited, owner: window, point: window.fixtureMouse))
-        #expect(cursors.count == 1 && cursors.last === NSCursor.iBeam)
-        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
-        #expect(cursors.count == 1 && cursors.last === NSCursor.iBeam,
-            "A queued canvas decision must neither reclaim hand nor overwrite the next owner's cursor")
-    }
-
-    @Test(arguments: [false, true])
-    func handCursorSurvivesWheelLayoutAndSyntheticTrackingExit(node: Bool) throws {
-        // Hidden component: inject key-window state and event ownership, never
-        // post global input or change the user's system cursor.
-        let window = CursorFixtureWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 480),
-            styleMask: [.titled], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        let scroll = NSScrollView(frame: .init(x: 0, y: 0, width: 640, height: 480))
-        let document = CursorFixtureDocument(frame: .init(x: 0, y: 0, width: 3000, height: 2400))
-        scroll.documentView = document; window.contentView = scroll
-        let probe = WorkflowCanvasViewportInput.ProbeView(frame: document.bounds)
-        document.addSubview(probe)
-        var cursors: [NSCursor] = []
-        probe.cursorSink = { cursors.append($0) }
-        defer { probe.stopMonitoring(); window.contentView = nil; window.close() }
-        probe.navigationAllowed = { true }; probe.pointerTarget = { _, _, _ in .blank }
-        probe.setTool(.hand); probe.reportViewportSize(); scroll.layoutSubtreeIfNeeded()
-        let clip = scroll.contentView
-        clip.scroll(to: .zero)
-        if node { document.addSubview(WorkflowNodePlateView(frame: .init(x: 60, y: 60, width: 240, height: 180))) }
-        let point = clip.convert(.init(x: 120, y: 100), to: nil)
-        let enter = CursorFixtureEvent(type: .mouseEntered, owner: window, point: point)
-        probe.mouseEntered(with: enter)
-        try #require(cursors.last === NSCursor.openHand, "Positive canvas ownership before testing exit")
-        probe.updateTrackingAreas()
-        let original = try #require(probe.trackingAreas.first { $0.owner === probe })
-        let scope = WorkflowCanvasScope(rootGraphID: UUID(), rootRevision: UUID(), graphID: UUID(), bodyPath: [])
-        var layout = WorkflowCanvasViewportGeometry(graphSize: .init(width: 1400, height: 900),
-            viewportSize: clip.bounds.size, zoom: 1, translation: .zero)
-        let wheel = WorkflowCanvasWheelZoom()
-        probe.interactionScope = scope; probe.wheelZoom = wheel; probe.wheelLayout = { _ in layout }
-        var delivered = 0
-        probe.onWheel = { delta, mouse, offset, viewport in
-            delivered += 1
-            let zoom = wheel.request(delta: delta, mouse: mouse, nativeOffset: offset, layout: layout, scope: scope)
-            layout = .init(graphSize: layout.graphSize, viewportSize: viewport, zoom: zoom, translation: .zero)
-        }
-        let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .line,
-            wheelCount: 1, wheel1: 1, wheel2: 0, wheel3: 0))
-        let event = FixtureWheel(base: try #require(NSEvent(cgEvent: cg)), owner: window, point: point)
-        cursors.removeAll()
-        for _ in 0..<4 {
-            try #require(probe.routeWheel(event))
-            document.setFrameSize(layout.contentSize); probe.setFrameSize(layout.contentSize)
-            scroll.layoutSubtreeIfNeeded(); probe.reportViewportSize(); probe.updateTrackingAreas()
-            // AppKit may deliver an old area's exit while the pointer has not
-            // left the canvas. Exercise the real callback, not a parallel policy.
-            probe.mouseExited(with: CursorFixtureEvent(type: .mouseExited, owner: window, point: point))
-            probe.cursorUpdate(with: CursorFixtureEvent(type: .cursorUpdate, owner: window, point: point))
-        }
-        #expect(delivered == 4)
-        #expect(probe.trackingAreas.filter { $0.owner === probe }.count == 1)
-        #expect(probe.trackingAreas.first { $0.owner === probe } === original)
-        #expect(!cursors.contains { $0 === NSCursor.arrow }, "A layout exit at the same canvas point must not flash an arrow")
-        #expect(cursors.last === NSCursor.openHand)
+        #expect(deliveries == 8 && changes.isEmpty)
+        probe.pointerTarget = { _, _, _ in node ? .node(UUID()) : .blank }
         #expect(probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: point)))
-        try #require(probe.handPressed && cursors.last === NSCursor.closedHand)
-        probe.mouseExited(with: CursorFixtureEvent(type: .mouseExited, owner: window, point: point))
-        #expect(probe.handPressed && cursors.last === NSCursor.closedHand)
-        probe.cancelPointer()
-        #expect(!probe.handPressed && cursors.last === NSCursor.arrow)
+        #expect(probe.handPressed && changes == [true])
+        #expect(probe.routePointer(CursorFixtureEvent(type: .leftMouseUp, owner: window, point: point)))
+        #expect(!probe.handPressed && changes == [true, false])
+        #expect(probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: point)))
+        probe.setTool(.pointer)
+        #expect(!probe.handPressed && changes == [true, false, true, false])
+        probe.stopMonitoring(); #expect(changes.count == 4)
+        // This verifies presentation-state delivery, not native cursor appearance.
     }
 
-    @Test(arguments: ["control", "text", "nested-scroll", "overlay", "outside", "foreign-window", "hidden", "resign", "pointer-tool"])
-    func handCursorReleasesOnlyWhenOwnershipEnds(reason: String) throws {
+    @Test(arguments: ["control", "text", "nested-scroll", "port", "overlay", "outside", "resign", "hidden", "detach"])
+    func handPointerCannotAcquireForeignInput(reason: String) throws {
         let window = CursorFixtureWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 480),
             styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
-        let root = NSView(frame: .init(x: 0, y: 0, width: 640, height: 480))
-        let scroll = NSScrollView(frame: root.bounds)
+        let root = NSView(frame: .init(x: 0, y: 0, width: 640, height: 480)), scroll = NSScrollView(frame: .init(x: 0, y: 0, width: 640, height: 480))
         let document = CursorFixtureDocument(frame: .init(x: 0, y: 0, width: 3000, height: 2400))
         root.addSubview(scroll); window.contentView = root; scroll.documentView = document
         let probe = WorkflowCanvasViewportInput.ProbeView(frame: document.bounds); document.addSubview(probe)
-        var cursors: [NSCursor] = []; probe.cursorSink = { cursors.append($0) }
         defer { probe.stopMonitoring(); window.contentView = nil; window.close() }
-        probe.setTool(.hand); probe.reportViewportSize(); scroll.layoutSubtreeIfNeeded()
-        scroll.contentView.scroll(to: .zero)
-        let point = scroll.contentView.convert(.init(x: 120, y: 100), to: nil)
-        probe.mouseEntered(with: CursorFixtureEvent(type: .mouseEntered, owner: window, point: point))
-        try #require(cursors.last === NSCursor.openHand)
+        probe.setTool(.hand); probe.navigationAllowed = { true }; probe.pointerTarget = { _, _, _ in .blank }
+        probe.reportViewportSize(); scroll.layoutSubtreeIfNeeded(); scroll.contentView.scroll(to: .zero)
+        var point = scroll.contentView.convert(.init(x: 120, y: 100), to: nil)
         let rect = document.convert(NSRect(x: point.x - 20, y: point.y - 20, width: 40, height: 40), from: nil)
         switch reason {
         case "control": document.addSubview(NSButton(frame: rect))
         case "text": document.addSubview(NSTextView(frame: rect))
-        case "nested-scroll":
-            let inner = NSScrollView(frame: rect)
-            inner.documentView = NSView(frame: .init(x: 0, y: 0, width: 40, height: 200))
-            document.addSubview(inner)
+        case "nested-scroll": document.addSubview(NSScrollView(frame: rect))
+        case "port": let port = WorkflowPortDragView(frame: rect); port.enabled = true; document.addSubview(port)
         case "overlay": root.addSubview(NSView(frame: root.convert(rect, from: document)))
-        case "hidden": probe.isHidden = true
+        case "outside": point = .init(x: -100, y: -100)
         case "resign": window.fixtureKey = false
-        case "pointer-tool": probe.setTool(.pointer)
+        case "hidden": probe.isHidden = true
+        case "detach": probe.removeFromSuperview()
         default: break
         }
-        let foreign = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: false)
-        foreign.isReleasedWhenClosed = false; defer { foreign.close() }
-        cursors.append(.iBeam) // The next native owner has already chosen its cursor.
-        probe.mouseExited(with: CursorFixtureEvent(type: .mouseExited,
-            owner: reason == "foreign-window" ? foreign : window,
-            point: reason == "outside" ? .init(x: -100, y: -100) : point))
-        #expect(cursors.last === NSCursor.iBeam, "Releasing ownership must not overwrite the next native cursor")
-        let count = cursors.count
-        probe.stopMonitoring()
-        #expect(cursors.count == count, "Do not overwrite another owner's cursor after releasing ours")
+        var changes: [Bool] = []; probe.onHandPressedChanged = { changes.append($0) }
+        #expect(!probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: point)))
+        #expect(changes.isEmpty && !probe.handPressed)
     }
 
     @Test(arguments: [false, true])
@@ -510,4 +368,34 @@ private final class CursorFixtureEvent: NSEvent {
     override var window: NSWindow? { owner }
     override var windowNumber: Int { number }
     override var locationInWindow: NSPoint { point }
+}
+
+extension WorkflowCanvasViewportTests {
+    @Test(arguments: ["hide", "resign", "detach", "cancel"])
+    func acquiredHandPresentationEndsOnceAndRejectsLateUp(reason: String) throws {
+        let window = CursorFixtureWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 480), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let scroll = NSScrollView(frame: .init(x: 0, y: 0, width: 640, height: 480))
+        let document = CursorFixtureDocument(frame: .init(x: 0, y: 0, width: 3000, height: 2400))
+        scroll.documentView = document; window.contentView = scroll
+        let probe = WorkflowCanvasViewportInput.ProbeView(frame: document.bounds); document.addSubview(probe)
+        defer { probe.stopMonitoring(); window.contentView = nil; window.close() }
+        probe.navigationAllowed = { true }; probe.pointerTarget = { _, _, _ in .blank }; probe.setTool(.hand)
+        probe.reportViewportSize(); scroll.layoutSubtreeIfNeeded(); scroll.contentView.scroll(to: .zero)
+        let point = scroll.contentView.convert(.init(x: 100, y: 100), to: nil)
+        var changes: [Bool] = [], clicks = 0
+        probe.onHandPressedChanged = { changes.append($0) }; probe.onPointer = { _ in clicks += 1 }
+        try #require(probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: point)))
+        try #require(probe.handPressed && changes == [true])
+        switch reason {
+        case "hide": probe.isHidden = true
+        case "resign": NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
+        case "detach": probe.removeFromSuperview()
+        default: probe.cancelPointer()
+        }
+        #expect(!probe.handPressed && changes == [true, false])
+        #expect(!probe.routePointer(CursorFixtureEvent(type: .leftMouseUp, owner: window, point: point)))
+        #expect(clicks == 0)
+        probe.stopMonitoring(); #expect(changes == [true, false])
+    }
 }

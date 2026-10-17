@@ -4,6 +4,21 @@ import Foundation
 import Observation
 import SwiftUI
 
+private struct WorkflowPrepareNodeKey: EnvironmentKey {
+    static let defaultValue: (@MainActor (UUID) -> Void)? = nil
+}
+private struct WorkflowPreparingModelsKey: EnvironmentKey { static let defaultValue: Set<String> = [] }
+extension EnvironmentValues {
+    var workflowPrepareNode: (@MainActor (UUID) -> Void)? {
+        get { self[WorkflowPrepareNodeKey.self] }
+        set { self[WorkflowPrepareNodeKey.self] = newValue }
+    }
+    var workflowPreparingModels: Set<String> {
+        get { self[WorkflowPreparingModelsKey.self] }
+        set { self[WorkflowPreparingModelsKey.self] = newValue }
+    }
+}
+
 struct WorkflowGraphSurface: View {
     @Environment(\.workbenchBackground) private var localBackground
     @Environment(\.chatDisplayPreferences) private var displayPreferences
@@ -44,6 +59,7 @@ struct WorkflowGraphSurface: View {
     @State private var connectionDrag = WorkflowConnectionDragPresentation()
     @State private var measuredPortCenters: [WorkflowPortIdentity: CGPoint] = [:]
     @State private var connectionIssue: WorkflowCanvasConnectionIssue?
+    @State private var handPointer = WorkflowCanvasPointerPresentation()
     @State private var scrollTracking = WorkflowCanvasScrollTracking()
     @State private var controlBounds: [CGRect] = []
     @State private var nodeControlBounds: [UUID: [CGRect]] = [:]
@@ -93,6 +109,7 @@ struct WorkflowGraphSurface: View {
                     ZStack(alignment: .topLeading) {
                         displayPreferences.resolvedAppearance.palette(for: colorScheme).canvasColor.opacity(localBackground == nil ? 1 : 0)
                             .contentShape(Rectangle())
+                            .pointerStyle(tool == .hand ? (handPointer.pressed ? .grabActive : .grabIdle) : nil)
                             .help(workflowText(
                                 languageStore,
                                 "workflow.canvas.dropHint",
@@ -111,6 +128,7 @@ struct WorkflowGraphSurface: View {
                                 definition: controller.registry.definition(for: node, tools: controller.tools),
                                 pendingConnection: $pendingConnection,
                                 tool: tool,
+                                handPressed: handPointer.pressed,
                                 pendingConnectionScope: pendingConnectionScope,
                                 readOnly: readOnly,
                                 selected: controller.selectedNodeID == node.id || controller.selectedNodeIDs.contains(node.id),
@@ -478,6 +496,7 @@ struct WorkflowGraphSurface: View {
         -> WorkflowCanvasViewportInput {
         WorkflowCanvasViewportInput(
             tool: tool,
+            onHandPressedChanged: { handPointer.pressed = $0 },
             interactionScope: scope,
             wheelZoom: scrollTracking.wheelZoom,
             navigationID: navigationRequest?.id,
@@ -972,6 +991,9 @@ private struct WorkflowNodeInspectButtonStyle: ButtonStyle {
 }
 
 private struct WorkflowNodeCard: View {
+    @Environment(\.workbenchModelReadiness) private var modelReadiness
+    @Environment(\.workflowPrepareNode) private var prepareNode
+    @Environment(\.workflowPreparingModels) private var preparingModels
     let controller: WorkflowController
     var scale: CGFloat = 1
     let graph: WorkflowGraph
@@ -980,6 +1002,7 @@ private struct WorkflowNodeCard: View {
     let definition: WorkflowOperationDefinition?
     @Binding var pendingConnection: WorkflowPendingConnection?
     let tool: WorkflowCanvasTool
+    let handPressed: Bool
     let pendingConnectionScope: WorkflowCanvasScope?
     let readOnly: Bool
     let selected: Bool
@@ -1000,6 +1023,15 @@ private struct WorkflowNodeCard: View {
     @Environment(\.colorScheme) private var colorScheme
     private var collapsed: Bool { controller.graph?.layout.first(where: { $0.nodeID == node.id })?.collapsed == true }
 
+    private var modelIdentity: String {
+        WorkflowNodeIdentity.modelIdentity(node: node, definition: definition, defaults: controller.services.capturedModelDefaults()) ?? ""
+    }
+    private var modelNotReady: Bool { definition?.modelKind != nil && modelReadiness[modelIdentity] != .available }
+    private var downloadEntry: ModelCatalogEntry? {
+        guard node.parameters["modelID"]?.string?.isEmpty == false else { return nil }
+        return ModelLibraryModel.nodeDownloadEntry(operationID: node.operationID, identity: modelIdentity,
+            catalog: (try? ModelCatalog.entries()) ?? [])
+    }
     var body: some View {
         #if DEBUG
         let _ = WorkflowCanvasUpdateProbe.nodeBody?(node.id)
@@ -1062,6 +1094,33 @@ private struct WorkflowNodeCard: View {
                         .allowsHitTesting(false)
                 }
             }
+            if modelNotReady {
+                VStack(alignment: .leading, spacing: 5 * scale) {
+                    Label(workflowText(languageStore, "workflow.node.prepare.notReady", fallback: "模型未就绪"), systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange).font(.system(size: 11 * scale, weight: .semibold)).allowsHitTesting(false)
+                    if let entry = downloadEntry, let prepareNode {
+                        Button {
+                            guard scope.isCurrent(in: controller) else { return }
+                            prepareNode(node.id)
+                        } label: {
+                            Text(workflowText(languageStore,
+                                preparingModels.contains(modelIdentity) ? "workflow.node.prepare.pending" : "workflow.node.prepare.download",
+                                fallback: preparingModels.contains(modelIdentity) ? "正在准备模型…" : "下载模型并登记"))
+                        }
+                        .buttonStyle(WorkbenchGlassButtonStyle())
+                        .workflowNodeControl(node.id)
+                        .disabled(readOnly || !controller.canEditCanvas || preparingModels.contains(modelIdentity))
+                        .accessibilityIdentifier("workflow-node-prepare-" + node.id.uuidString)
+                        Text(entry.preparation == .none
+                            ? workflowText(languageStore, "workflow.node.prepare.noRun", fallback: "仅准备模型，不运行节点")
+                            : workflowText(languageStore, "workflow.node.prepare.raw", fallback: "下载后仍需准备执行包"))
+                            .font(.system(size: 10 * scale)).foregroundStyle(.secondary).allowsHitTesting(false)
+                    } else {
+                        Text(workflowText(languageStore, "workflow.node.prepare.localOnly", fallback: "此配置暂无内置下载；请在属性中登记已有模型。"))
+                            .font(.system(size: 10 * scale)).foregroundStyle(.secondary).allowsHitTesting(false)
+                    }
+                }
+            }
             if collapsed {
                 Text(workflowText(
                     languageStore,
@@ -1112,7 +1171,8 @@ private struct WorkflowNodeCard: View {
                     }
                 }.allowsHitTesting(false)
             }
-            .background(WorkflowNodePlateReceiver(scale: scale))
+            .background(WorkflowNodePlateReceiver(scale: scale)
+                .pointerStyle(tool == .hand ? (handPressed ? .grabActive : .grabIdle) : nil))
             .background {
                 Group {
                     if displayPreferences.resolvedAppearance.local == nil {
@@ -1125,7 +1185,7 @@ private struct WorkflowNodeCard: View {
         }
         .overlay {
             RoundedRectangle(cornerRadius: 13 * scale, style: .continuous)
-                .stroke(selected ? Color.accentColor : Color.secondary.opacity(0.25),
+                .stroke(selected ? Color.accentColor : (modelNotReady ? Color.orange : Color.secondary.opacity(0.25)),
                         lineWidth: (selected ? 3 : 1) * scale)
                 .allowsHitTesting(false)
         }

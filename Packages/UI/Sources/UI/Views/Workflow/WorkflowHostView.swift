@@ -37,6 +37,8 @@ struct WorkflowHostView: View {
                     }, onQuickUse: onQuickUse, libraryContent: libraryContent,
                     onSharedAssetDrop: onSharedAssetDrop, acceptsLegacyAsset: acceptsLegacyAsset, captureControls:AnyView(captureControls))
                     .environment(\.workflowViewerModel,model)
+                    .environment(\.workflowPrepareNode, preparationAction(controller: controller))
+                    .environment(\.workflowPreparingModels, library?.preparingNodeIdentities ?? [])
                     .onAppear { model.viewers.library=metadata }
                     .onChange(of:controller.mediaPreviewReference) { _,reference in
                         guard let reference,model.projectSession.workflow === controller else { return }
@@ -61,6 +63,41 @@ struct WorkflowHostView: View {
                                 }.accessibilityIdentifier("workflow-record-finish")
                             }.padding().workbenchPanel(cornerRadius: 12)
                         }
+        }
+    }
+    private func preparationAction(controller: WorkflowController) -> (@MainActor (UUID) -> Void)? {
+        guard library != nil else { return nil }
+        return { id in prepareNode(id, controller: controller) }
+    }
+    private func prepareNode(_ nodeID: UUID, controller: WorkflowController) {
+        guard let library, let graph = controller.graph,
+              let node = graph.nodes.first(where: { $0.id == nodeID }),
+              let identity = node.parameters["modelID"]?.string,
+              let choice = WorkflowModelRoutes.draftChoice(operationID: node.operationID, modelID: identity),
+              let target = controller.modelSelectionTarget(nodeID: nodeID) else { return }
+        let owner = model.projectSession, store = model.projectSession.currentStore
+        let rootID = controller.rootGraph?.id, path = controller.bodyPath
+        let isCurrent: @MainActor () -> Bool = {
+            guard (try? owner.checkWorkflowModelSelection(target: target, controller: controller)) != nil else { return false }
+            return model.projectSession === owner && owner.currentStore === store && owner.workflow === controller
+                && !owner.isChangingProject && controller.canEditCanvas
+                && controller.rootGraph?.id == rootID && controller.bodyPath == path && controller.graph?.id == graph.id
+                && controller.graph?.nodes.contains(where: {
+                    $0.id == nodeID && $0.operationID == node.operationID && $0.parameters["modelID"]?.string == identity
+                }) == true
+        }
+        Task {
+            await library.prepareNode(operationID: node.operationID, identity: identity, isCurrent: isCurrent) { id, stillAuthorized in
+                guard stillAuthorized(), isCurrent() else { throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。")) }
+                _ = try await owner.selectWorkflowInstallation(id: id) { prepared in
+                    guard stillAuthorized(), isCurrent(), prepared.id == identity, prepared.kind == choice.kind else {
+                        throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。"))
+                    }
+                }
+                // modelID was already frozen in the draft. Do not edit the graph,
+                // fork a running original, add Undo, or select any Quick draft.
+            }
+            library.isPresented = true
         }
     }
     private func chooseModel(controller: WorkflowController, kind: WorkflowModelKind) {

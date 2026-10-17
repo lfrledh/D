@@ -15,7 +15,10 @@ struct WorkbenchModelCard: View {
     @Environment(\.dLanguageStore) private var language
     @State private var details = false
     @Environment(\.workbenchMenuContext) private var helpOwner
-    private var choice: WorkflowModelChoice? { choices.first { $0.id == modelID && $0.kind == definition.modelKind } }
+    private var choice: WorkflowModelChoice? {
+        choices.first { $0.id == modelID && $0.kind == definition.modelKind }
+            ?? modelID.flatMap { WorkflowModelRoutes.draftChoice(operationID: definition.id, modelID: $0) }
+    }
     private var descriptor: ModelNodeDescriptor? { choice.flatMap(SharedLibraryProjection.descriptor(for:)).map { ModelNodeUILocalization.display($0, language: language) } }
     private var name: String {
         guard definition.modelKind != nil else { return consistencyText(language, "copy.noModelNeeded") }

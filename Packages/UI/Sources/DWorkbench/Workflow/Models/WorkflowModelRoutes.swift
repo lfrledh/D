@@ -1,4 +1,5 @@
 import Foundation
+import DInference
 
 /// Explicit operation identity. Titles and description strings never choose a backend.
 public enum WorkflowModelRoutes {
@@ -18,4 +19,43 @@ public enum WorkflowModelRoutes {
         if choice.id == "music:d06de46b4622f781cf07f4a013a67d591ca52819" { return ace }
         return nil
     }
+
+    /// Fixed descriptive routes may be placed as drafts before installation.
+    /// This lookup is not registration, readiness, or runtime admission.
+    public static func draftChoice(operationID: String, modelID: String) -> WorkflowModelChoice? {
+        draftRoutes.first { $0.operation == operationID && $0.choice.id == modelID }?.choice
+    }
+    private static let draftRoutes: [(operation: String, choice: WorkflowModelChoice)] = {
+        let textIDs = Set((((try? TextModelProfiles.registered()) ?? [])
+            + ((try? TextModelProfiles.registeredVLM()) ?? [])).map(\.id))
+        return ModelNodeCatalog.entries.compactMap { descriptor in
+            let video = ExternalVideoExecutionProfile.allCases.first { descriptor.id == "video.model." + $0.rawValue }
+            let kind: WorkflowModelKind
+            if video != nil { kind = .video }
+            else if textIDs.contains(descriptor.modelIdentity) { kind = .text }
+            else {
+                switch descriptor.id {
+                case "flux2-klein-4b-q8", "flux2-klein-4b-bf16", "flux2-dev-bf16": kind = .image
+                case "mrt2-small-export-v1", "ace-step-1.5-xl-sft-f32-no-lm": kind = .music
+                case "wan21-t2v-1.3b-bf16-v1": kind = .video
+                case "swift-f0-0.1.2-cpu-v1": kind = .pitch
+                default: return nil
+                }
+            }
+            let choice = WorkflowModelChoice(id: kind.rawValue + ":" + (video?.modelIdentity ?? descriptor.revision),
+                kind: kind, displayName: descriptor.title)
+            let fallback: String
+            switch kind {
+            case .text: fallback = "d.model.language"
+            case .image: fallback = "d.image.generate"
+            case .music: fallback = "d.music.generate"
+            case .video: fallback = "d.video.generate"
+            case .pitch: fallback = "d.music.pitch"
+            }
+            let route = video.map { WorkflowVideoRecipe(profile: $0).operationID }
+                ?? operation(for: choice) ?? fallback
+            return (route, choice)
+        }
+    }()
+
 }

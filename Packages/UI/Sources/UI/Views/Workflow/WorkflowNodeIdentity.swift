@@ -8,6 +8,11 @@ struct WorkflowNodeIdentity: Equatable {
     let detail: String?
     let annotation: String?
 
+    static func modelIdentity(node: WorkflowNode, definition: WorkflowOperationDefinition?, defaults: [String: String]) -> String? {
+        if let identity = node.parameters["modelID"]?.string, !identity.isEmpty { return identity }
+        return definition?.modelKind.flatMap { defaults[$0.rawValue] }
+    }
+
     @MainActor
     static func resolve(
         node: WorkflowNode,
@@ -24,6 +29,7 @@ struct WorkflowNodeIdentity: Equatable {
         if let modelKind = definition?.modelKind {
             let modelID = node.parameters["modelID"]?.string ?? ""
             let model = modelChoices.first { $0.id == modelID && $0.kind == modelKind }
+                ?? WorkflowModelRoutes.draftChoice(operationID: node.operationID, modelID: modelID)
             let state = model?.displayName ?? workflowText(language,
                 modelID.isEmpty ? "canvas.identity.chooseModel" : "canvas.identity.unknownModel",
                 fallback: modelID.isEmpty ? "选择模型" : "未识别的模型")

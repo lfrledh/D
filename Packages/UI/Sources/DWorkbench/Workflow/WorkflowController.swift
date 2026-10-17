@@ -404,8 +404,12 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public func addNode(operationID: String, modelID: String? = nil, x: Double? = nil, y: Double? = nil) {
         guard canEditCanvas else { return }
         guard let op = registry.operation(operationID) else { errorMessage = "未知操作。"; return }
-        if let modelID, !modelChoices.contains(where: { $0.id == modelID && $0.kind == op.definition.modelKind }) {
-            errorMessage = "此模型没有登记到当前项目；请选择可用模型。"; return
+        if let modelID {
+            guard let kind = op.definition.modelKind,
+                  modelChoices.contains(where: { $0.id == modelID && $0.kind == kind })
+                    || WorkflowModelRoutes.draftChoice(operationID: operationID, modelID: modelID)?.kind == kind else {
+                errorMessage = "此模型身份与操作不匹配，且不是受支持的目录草稿。"; return
+            }
         }
         guard x?.isFinite != false, y?.isFinite != false else { return }
         let createdGraph = graph == nil
@@ -587,9 +591,10 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             }
         }, changesConfiguration: false)
     }
-    public func modelSelectionTarget() -> WorkflowModelSelectionTarget? {
-        guard canEditCanvas, let graph, let node = selectedNode,
-              let kind = registry.operation(node.operationID)?.definition.modelKind else { return nil }
+    public func modelSelectionTarget(nodeID: UUID? = nil) -> WorkflowModelSelectionTarget? {
+        guard canEditCanvas, let graph else { return nil }
+        let candidate = nodeID == nil ? selectedNode : graph.nodes.first { $0.id == nodeID }
+        guard let node = candidate, let kind = registry.operation(node.operationID)?.definition.modelKind else { return nil }
         return .init(graphID: graph.id, nodeID: node.id, operationID: node.operationID, kind: kind,
                      previousIdentity: node.parameters["modelID"]?.string ?? "")
     }
