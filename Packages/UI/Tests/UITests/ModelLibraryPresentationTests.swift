@@ -129,6 +129,62 @@ extension ModelLibraryPresentationTests {
 }
 
 extension ModelLibraryPresentationTests {
+    @Test func unregisterDuringPreparationRefreshCannotRegisterExistingCopyAgain() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("NodeInitializationRevocation-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let catalog = try ModelCatalog.entries(), bytes = Data(repeating: 0x41, count: 4096)
+        let target = try #require(catalog.first { $0.id == ModelCatalog.flux2ID })
+        let other = try #require(catalog.first { $0.id != target.id && $0.preparation == .none })
+        let entries = [target, other].map { fixed in
+            ModelCatalogEntry(id: fixed.id, title: "Initialization fixture", repository: "fixture/initialization", revision: fixed.revision,
+                files: [.init(path: "payload.bin", size: UInt64(bytes.count), sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())],
+                workflowProfileID: fixed.workflowProfileID, workflowIdentity: fixed.workflowIdentity)
+        }
+        let transport = PresentationTransfer(), gate = NodeBindingGate()
+        let library = try await ModelLibrary(stateDirectory: root.appendingPathComponent("state"), catalog: entries, transport: transport)
+        try await library.configureRoot(at: root)
+        await transport.open()
+        _ = try await library.enqueueDownloads([target.id], postAction: .register)
+        for _ in 0..<500 {
+            if (await library.snapshot()).downloads.first?.state == .completed { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let resource = try #require((await library.snapshot()).resources.first { $0.record.catalogID == target.id })
+        try #require(resource.record.registrationState == .registered)
+        let registrationEvents = resource.control.events.filter { $0.action == "registered" }.count
+        try await library.pauseQueue()
+        let model = ModelLibraryModel(library: library)
+        var entered = false, bound = false
+        // Another real request makes the target's initial refresh suspend inside
+        // reconciliation, without replacing snapshot or the production consumer.
+        await model.prepareNode(operationID: try #require(other.workflowProfileID), identity: try #require(other.workflowIdentity), isCurrent: { true }) { _, _ in
+            entered = true; await gate.wait()
+        }
+        try await library.resumeQueue()
+        for _ in 0..<500 {
+            if (await library.snapshot()).downloads.last?.state == .completed { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let operation = try #require(target.workflowProfileID), identity = try #require(target.workflowIdentity)
+        let prepare = Task { await model.prepareNode(operationID: operation, identity: identity, isCurrent: { true }) { _, _ in bound = true } }
+        for _ in 0..<500 { if entered { break }; await Task.yield() }
+        let suspended = entered
+        await model.unregisterResource(resource)
+        await gate.open(); await prepare.value
+        for _ in 0..<5 { await model.refresh() }
+        #expect(suspended && !bound && model.preparingNodeIdentities.isEmpty)
+        let final = try #require(model.snapshot?.resources.first { $0.id == resource.id })
+        #expect(final.record.registrationState == .unregistered && final.control.fileState == .verified)
+        #expect(final.id == resource.id)
+        #expect(final.control.events.filter { $0.action == "registered" }.count == registrationEvents)
+        #expect(final.control.events.last?.action == "unregistered")
+        #expect(model.snapshot?.downloads.count == 2)
+        #expect(await transport.count == 2)
+        try await library.shutdown()
+    }
+
     @Test(arguments: [false, true])
     func finiteReviewActiveAndDrainingDownloadsKeepRecoveryProtected(cancel: Bool) async throws {
         let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])

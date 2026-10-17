@@ -503,6 +503,10 @@ extension ModelLibraryModel {
             guard !isChoosingLocation, globalOperation == nil else {
                 throw WorkflowIssue(nodeText("busy", "请等待当前模型库操作完成后重试。"))
             }
+            // Initialization can suspend in refresh or directory authorization.
+            // Until the exact copy is known, any explicit revocation invalidates
+            // this pending request before enqueue can register an existing copy.
+            guard nodePreparationRevocations == revocations else { return }
             // The original queue/post-action remains authoritative. An existing
             // files-only task is not silently rewritten by enqueueDownloads.
             let tasks = try await library.enqueueDownloads([entry.id], postAction: .register)
