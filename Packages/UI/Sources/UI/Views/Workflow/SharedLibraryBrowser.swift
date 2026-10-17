@@ -18,6 +18,17 @@ public enum SharedLibraryBrowserSelection: Equatable {
     case unavailable(String)
 }
 
+// Catalog preparation state is not permission to insert into the current project.
+private struct WorkflowLibraryInsertionControllerKey: EnvironmentKey {
+    static let defaultValue: WorkflowController? = nil
+}
+extension EnvironmentValues {
+    var workflowLibraryInsertionController: WorkflowController? {
+        get { self[WorkflowLibraryInsertionControllerKey.self] }
+        set { self[WorkflowLibraryInsertionControllerKey.self] = newValue }
+    }
+}
+
 public struct SharedLibraryBrowserEntry: Identifiable, Equatable {
     public let item: SharedLibraryItem
     public let selection: SharedLibraryBrowserSelection
@@ -266,9 +277,14 @@ struct SharedLibraryBrowserRenameDrafts {
         }
     }
 
-    static func dragProvider(for current: SharedLibraryBrowserEntry) -> NSItemProvider {
+    @MainActor static func dragProvider(for current: SharedLibraryBrowserEntry, controller: WorkflowController? = nil) -> NSItemProvider {
+        let allowsCanvas: Bool
+        switch current.selection {
+        case .operation, .tool: allowsCanvas = insertionIssue(for: current, controller: controller, language: nil) == nil
+        default: allowsCanvas = true // Assets also serve independent Quick/Chat destinations.
+        }
         let provider = NSItemProvider(object: current.id as NSString)
-        if let transfer = canvasTransfer(for: current),
+        if allowsCanvas, let transfer = canvasTransfer(for: current),
            let payload = try? transfer.encoded() {
             provider.registerDataRepresentation(
                 forTypeIdentifier: UTType.workflowCanvasItem.identifier, visibility: .all
@@ -278,6 +294,20 @@ struct SharedLibraryBrowserRenameDrafts {
             }
         }
         return provider
+    }
+
+    @MainActor static func insertionIssue(for entry: SharedLibraryBrowserEntry,
+                                         controller: WorkflowController?, language: UILanguageStore?) -> String? {
+        guard let controller else { return nil } // Existing explicit Add opens the target first.
+        if !controller.canEditCanvas {
+            return metadataText(language, "canvasUnavailable", "当前流程不可编辑，暂时不能添加到画布。", "This workflow cannot currently be edited. Items cannot be added to the canvas.")
+        }
+        guard case .operation(let id, let modelID) = entry.selection, let modelID else { return nil }
+        guard let definition = controller.registry.operation(id)?.definition,
+              controller.modelChoices.contains(where: { $0.id == modelID && $0.kind == definition.modelKind }) else {
+            return metadataText(language, "modelRegistrationBeforeAdd", "此模型尚未登记到当前项目。请先准备并登记，再添加节点；不会自动下载或登记。", "This model is not registered with the current project. Prepare and register it before adding a node; nothing is downloaded or registered automatically.")
+        }
+        return nil
     }
 
     static func quickUseAllowed(_ entry: SharedLibraryBrowserEntry) -> Bool {
@@ -305,6 +335,7 @@ public struct SharedLibraryBrowser: View {
 
     @Environment(\.dLanguageStore) private var language
     @Environment(\.workflowLibraryContext) private var workflowContext
+    @Environment(\.workflowLibraryInsertionController) private var insertionController
     @State private var state: SharedLibraryBrowserState
     @State private var featureHelp = WorkbenchHelpStore()
     @State private var showFilters = false
@@ -698,6 +729,7 @@ public struct SharedLibraryBrowser: View {
     }
 
     @ViewBuilder private func entryRow(_ entry: SharedLibraryBrowserEntry, compact: Bool) -> some View {
+        let addIssue = insertionIssue(entry)
         let row = HStack(alignment: .top, spacing: 7) {
             Image(systemName: icon(entry.item.kind)).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 3) {
@@ -721,6 +753,9 @@ public struct SharedLibraryBrowser: View {
                 }
                 Text(readinessName(entry.item.readiness) + " · " + kindName(entry.item.kind))
                     .font(.caption2).foregroundStyle(.secondary)
+                if let reason = addIssue {
+                    Text(reason).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
             }.frame(maxWidth: .infinity, alignment: .leading)
             if compact {
                 if canPreview(entry), canvasMode?.resourceCategory != nil {
@@ -738,10 +773,11 @@ public struct SharedLibraryBrowser: View {
                 .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                 .accessibilityLabel(selectedKeys.contains(entry.id)
                     ? word("deselect", "取消选择") : word("select", "选择"))
-                if canAdd(entry) {
+                if SharedLibraryBrowserLogic.allows(.add, entry: entry) {
                     Button { dispatch(.add,key:entry.id) } label: { Image(systemName:"plus.circle") }
                         .buttonStyle(WorkbenchGlassButtonStyle(compact:true))
                         .accessibilityLabel(word("addCanvas","添加画布"))
+                        .disabled(addIssue != nil).help(addIssue ?? word("addCanvas", "添加画布"))
                 }
                 Button { compactDetailKey=entry.id } label: { Image(systemName:"info.circle") }
                     .buttonStyle(WorkbenchGlassButtonStyle(compact:true))
@@ -794,9 +830,11 @@ public struct SharedLibraryBrowser: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            if canAdd(entry) {
+            if SharedLibraryBrowserLogic.allows(.add, entry: entry) {
                 Button(word("addCanvas", "添加画布")) { dispatch(.add, key: entry.id) }
                     .accessibilityIdentifier("shared-library-add").workbenchHelp("LIB-ENTRY-ADD", target: "entry:\(entry.id):\(entry.selection):\(entry.metadataSnapshot?.instanceID)")
+                    .disabled(!canAdd(entry))
+                if let reason = insertionIssue(entry) { Text(reason).font(.caption).foregroundStyle(.secondary) }
             }
             if canPreview(entry) {
                 Button(word("preview", "预览")) { dispatch(.preview, key: entry.id) }
@@ -1156,7 +1194,9 @@ public struct SharedLibraryBrowser: View {
         }
         switch action {
         case .use: onUse(current)
-        case .add: onAdd(current)
+        case .add:
+            if let reason = insertionIssue(current) { errorMessage = reason; return }
+            onAdd(current)
         case .preview: onPreview(current)
         case .location: onLocation(current)
         case .prepare: onPrepare(current)
@@ -1164,7 +1204,7 @@ public struct SharedLibraryBrowser: View {
     }
     private func dragProvider(for key: String) -> NSItemProvider {
         guard let current = entries.first(where: { $0.id == key }) else { return NSItemProvider() }
-        return SharedLibraryBrowserLogic.dragProvider(for: current)
+        return SharedLibraryBrowserLogic.dragProvider(for: current, controller: insertionController)
     }
     private func folderDepth(_ id: UUID) -> Int {
         var depth = 0
@@ -1179,7 +1219,10 @@ public struct SharedLibraryBrowser: View {
         SharedLibraryBrowserLogic.allows(.use, entry: entry)
     }
     private func canAdd(_ entry: SharedLibraryBrowserEntry) -> Bool {
-        SharedLibraryBrowserLogic.allows(.add, entry: entry)
+        SharedLibraryBrowserLogic.allows(.add, entry: entry) && insertionIssue(entry) == nil
+    }
+    private func insertionIssue(_ entry: SharedLibraryBrowserEntry) -> String? {
+        SharedLibraryBrowserLogic.insertionIssue(for: entry, controller: insertionController, language: language)
     }
     private func canPreview(_ entry: SharedLibraryBrowserEntry) -> Bool {
         SharedLibraryBrowserLogic.allows(.preview, entry: entry)

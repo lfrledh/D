@@ -714,6 +714,7 @@ public struct DualWorkbenchView: View {
                 onImport: { Task { await importLibraryAsset(forCanvas: canvasMode != nil) } }, onClose: { if let onBack { onBack() } else { libraryVisible = false } }, tagValidation: libraryTagValidation,
                 queryContext: libraryQueryContext(forCanvas: canvasMode != nil),
                 annotationSave: libraryAnnotationSave)
+                .environment(\.workflowLibraryInsertionController, canvasModel.projectSession.workflow)
         } else {
             VStack(alignment: .leading) {
                 Button(baselineText(language, "label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left") {

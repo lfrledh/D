@@ -33,14 +33,29 @@ struct WorkflowCanvasViewportTests {
         // Model AppKit's reset, not a D cursor decision. No entered/exited,
         // mouseMoved or cursorUpdate is delivered after this point.
         cursors = [.arrow]
-        for _ in 0..<8 { probe.resetCursorRects() }
+        for step in 0..<8 {
+            try #require(probe.routeWheel(event))
+            document.setFrameSize(.init(width: 3300 + step * 50, height: 2640 + step * 40))
+            probe.setFrameSize(document.bounds.size)
+            scroll.layoutSubtreeIfNeeded(); probe.reportViewportSize()
+            probe.resetCursorRects()
+            let region = try #require(probe.registeredHandCursorRegion,
+                "Continuous native resets must register hand synchronously, before the queued recovery")
+            #expect(region.cursor === NSCursor.openHand)
+            #expect(region.rect.contains(probe.convert(window.fixtureMouse, from: nil)))
+            let pixels = probe.convertToBacking(region.rect)
+            #expect(pixels.width <= 1.001 && pixels.height <= 1.001)
+            NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
+            #expect(probe.registeredHandCursorRegion == region)
+        }
         await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
-        #expect(delivered == 1)
+        #expect(delivered == 9)
         #expect(cursors.last === NSCursor.openHand, "Stationary pointer must recover after native cursor reset")
         #expect(cursors.filter { $0 === NSCursor.openHand }.count == 1, "Merge a reset burst into one recovery")
         probe.pointerTarget = { _, _, _ in .blank }
         try #require(probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: point)))
         cursors = [.arrow]; probe.resetCursorRects()
+        #expect(probe.registeredHandCursorRegion?.cursor === NSCursor.closedHand)
         await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
         #expect(probe.handPressed && cursors.last === NSCursor.closedHand)
         probe.cancelPointer()
@@ -81,6 +96,14 @@ struct WorkflowCanvasViewportTests {
         default: break
         }
         cursors = [.iBeam] // The next native owner has already chosen its cursor.
+        NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
+        #expect(probe.registeredHandCursorRegion == nil, "Stationary new owner must revoke the native rectangle immediately")
+        #expect(cursors.count == 1 && cursors.last === NSCursor.iBeam)
+        probe.resetCursorRects()
+        #expect(probe.registeredHandCursorRegion == nil)
+        probe.cursorUpdate(with: CursorFixtureEvent(type: .cursorUpdate, owner: window, point: window.fixtureMouse))
+        probe.mouseExited(with: CursorFixtureEvent(type: .mouseExited, owner: window, point: window.fixtureMouse))
+        #expect(cursors.count == 1 && cursors.last === NSCursor.iBeam)
         await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
         #expect(cursors.count == 1 && cursors.last === NSCursor.iBeam,
             "A queued canvas decision must neither reclaim hand nor overwrite the next owner's cursor")
@@ -182,10 +205,11 @@ struct WorkflowCanvasViewportTests {
         }
         let foreign = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: false)
         foreign.isReleasedWhenClosed = false; defer { foreign.close() }
+        cursors.append(.iBeam) // The next native owner has already chosen its cursor.
         probe.mouseExited(with: CursorFixtureEvent(type: .mouseExited,
             owner: reason == "foreign-window" ? foreign : window,
             point: reason == "outside" ? .init(x: -100, y: -100) : point))
-        #expect(cursors.last === NSCursor.arrow)
+        #expect(cursors.last === NSCursor.iBeam, "Releasing ownership must not overwrite the next native cursor")
         let count = cursors.count
         probe.stopMonitoring()
         #expect(cursors.count == count, "Do not overwrite another owner's cursor after releasing ours")

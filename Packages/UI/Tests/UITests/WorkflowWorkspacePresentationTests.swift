@@ -4,6 +4,7 @@ import DWorkbench
 import Foundation
 import SwiftUI
 import Testing
+import UniformTypeIdentifiers
 @testable import UI
 
 private actor WorkspaceNoInference: InferenceEngine {
@@ -446,6 +447,112 @@ extension WorkflowWorkspacePresentationTests {
 }
 
 extension WorkflowWorkspacePresentationTests {
+    @Test(arguments: ["zh-Hans", "en"])
+    func modelInsertionAdmissionExplainsRegistrationInBothLanguages(locale: String) async throws {
+        let f = try await RenderingWorkspaceFixture.make()
+        let language = UILanguageStore(settings: f.settings, preferredLanguages: [locale])
+        try language.select(locale)
+        let entry = try #require(SharedLibraryProjection.entries(models: [], readiness: [:], tools: [], projects: [], language: language)
+            .first { entry in
+                guard case .operation(let id, _) = entry.selection else { return false }
+                return f.controller.registry.operation(id)?.definition.modelKind == .text
+            })
+        let message = try #require(SharedLibraryBrowserLogic.insertionIssue(for: entry, controller: f.controller, language: language))
+        #expect(message.contains(locale == "en" ? "not registered" : "尚未登记"))
+        #expect(message.contains(locale == "en" ? "automatically" : "不会自动"))
+        try await f.close()
+    }
+
+    @Test(arguments: [false, true])
+    func assetDragRetainsIndependentDestinationWhileCanvasIsClosed(explicitInstance: Bool) async throws {
+        let f = try await RenderingWorkspaceFixture.make()
+        f.controller.deactivateAfterClose()
+        let project = UUID(), instance = UUID(), asset = UUID()
+        let selection: SharedLibraryBrowserSelection = explicitInstance
+            ? .assetInstance(projectID: project, instanceID: instance, assetID: asset)
+            : .asset(projectID: project, assetID: asset)
+        let entry = SharedLibraryBrowserEntry(item: .init(key: "asset-test", title: "Fixture", kind: .asset, readiness: .available), selection: selection)
+        #expect(SharedLibraryBrowserLogic.insertionIssue(for: entry, controller: f.controller, language: nil) != nil)
+        let provider = SharedLibraryBrowserLogic.dragProvider(for: entry, controller: f.controller)
+        let value: WorkflowCanvasTransfer = try await withCheckedThrowingContinuation { continuation in
+            _ = provider.loadTransferable(type: WorkflowCanvasTransfer.self) { continuation.resume(with: $0) }
+        }
+        #expect(value == (explicitInstance ? .assetInstance(projectID: project, instanceID: instance, assetID: asset) : .asset(projectID: project, assetID: asset)))
+        try await f.close()
+    }
+
+    @Test(arguments: ["program", "registered-ready", "registered-unprepared", "unregistered", "wrong-kind", "removed", "changed-target", "read-only", "closed"])
+    func libraryProviderThroughProductionCanvasCommandRespectsExactAdmission(scenario: String) async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        c.addExample("template")
+        let graph = try #require(c.graph)
+        let scope = WorkflowCanvasScope(rootGraphID: graph.id, rootRevision: graph.revision,
+            graphID: graph.id, bodyPath: [], projectID: c.projectID, instanceID: c.projectInstanceID)
+        let catalog = try #require(SharedLibraryProjection.entries(models: [], readiness: [:], tools: [], projects: [], language: nil)
+            .first { entry in
+                guard case .operation(let id, _) = entry.selection else { return false }
+                return c.registry.operation(id)?.definition.modelKind == .text
+            })
+        guard case .operation(let operation, let model) = catalog.selection else { throw WorkflowIssue("Missing catalog model") }
+        let modelID = try #require(model)
+        let program = SharedLibraryBrowserEntry(item: .init(key: "operation:d.text.input", title: "Text input", kind: .program, readiness: .available),
+            selection: .operation(id: "d.text.input", modelID: nil))
+        let isProgram = ["program", "changed-target", "read-only", "closed"].contains(scenario)
+        if !isProgram && scenario != "unregistered" {
+            c.modelChoices = [.init(id: modelID, kind: scenario == "wrong-kind" ? .image : .text, displayName: "Fixture registered model")]
+        }
+        let entry = isProgram ? program : try #require(SharedLibraryProjection.entries(models: c.modelChoices,
+            readiness: [modelID: scenario == "registered-ready" ? .available : .unprepared], tools: [], projects: [], language: nil)
+            .first { $0.id == catalog.id })
+        // Wrong-kind uses the original exact text identity, never a fallback model.
+        let source = scenario == "wrong-kind" ? catalog : entry
+        let issue = SharedLibraryBrowserLogic.insertionIssue(for: source, controller: c, language: nil)
+        #expect((issue != nil) == ["unregistered", "wrong-kind"].contains(scenario))
+        let provider = SharedLibraryBrowserLogic.dragProvider(for: source, controller: c)
+        #expect(provider.hasItemConformingToTypeIdentifier("org.d-workbench.canvas-item") == (issue == nil))
+        #expect(provider.canLoadObject(ofClass: NSString.self), "Catalog organization drag remains available")
+        // A transfer captured before admission changes (or by an older source)
+        // must still be rejected by the actual destination/Controller.
+        let captured = issue == nil ? provider : SharedLibraryBrowserLogic.dragProvider(for: source)
+        let payload: WorkflowCanvasTransfer = try await withCheckedThrowingContinuation { continuation in
+            _ = captured.loadTransferable(type: WorkflowCanvasTransfer.self) { continuation.resume(with: $0) }
+        }
+        if scenario == "removed" { c.modelChoices = [] }
+        if scenario == "changed-target" { c.addBlankGraph(name: "Different target") }
+        if scenario == "closed" { c.deactivateAfterClose() }
+        let before = c.graphs, stored = await f.store.snapshot(), choices = c.modelChoices, runs = c.runs
+        let canvas = WorkflowCanvasView(controller: c, onTextModel: {}, onImageModel: {}, onImport: { _ in },
+            onDestination: {}, onPublishText: {}, onReturnText: { _ in }, nodeTags: ModelNodeTagStore(settings: f.settings))
+        var commandCalls = 0
+        let surface = WorkflowGraphSurface(controller: c, graph: graph, zoom: .constant(1), tool: .constant(.pointer),
+            navigationRequest: .constant(nil), viewportInteractionLocked: .constant(false),
+            viewContext: .init(projectID: c.projectID, rootGraphID: graph.id, bodyPath: []),
+            pendingConnection: .constant(nil), selectedConnectionID: .constant(nil), readOnly: scenario == "read-only",
+            onPlan: { _, _ in }, onDropItem: { value, point in commandCalls += 1; return canvas.dropItem(value, point) })
+        let point = CGPoint(x: -140, y: 580)
+        let accepted = surface.acceptSurfaceDrop([payload], at: point, scope: scope)
+        let succeeds = ["program", "registered-ready", "registered-unprepared"].contains(scenario)
+        #expect(accepted == succeeds)
+        #expect(commandCalls == (["changed-target", "read-only", "closed"].contains(scenario) ? 0 : 1))
+        if succeeds {
+            let added = try #require(c.graph?.nodes.last)
+            #expect(c.graph?.nodes.count == graph.nodes.count + 1)
+            #expect(added.operationID == (isProgram ? "d.text.input" : operation))
+            #expect(added.parameters["modelID"] == (isProgram ? nil : .text(modelID)))
+            let layout = try #require(c.graph?.layout.first { $0.nodeID == added.id })
+            #expect(layout.x == point.x && layout.y == point.y)
+            c.undo(); #expect(c.graphs == before)
+        } else {
+            #expect(c.graphs == before)
+            if ["unregistered", "wrong-kind", "removed"].contains(scenario) {
+                #expect(c.errorMessage?.contains("没有登记") == true)
+            }
+        }
+        #expect(c.modelChoices == choices && c.runs == runs)
+        #expect((await f.store.snapshot()).revision == stored.revision, "Drop cannot silently persist or compute")
+        try await f.close()
+    }
+
     @Test(arguments:[0,1,2,3]) func workspaceDraftUsesRealBranchesWithoutChangingOwners(mode:Int) async throws {
         let f=try await RenderingWorkspaceFixture.make(), c=f.controller
         c.addExample("template")
@@ -711,5 +818,112 @@ extension WorkflowWorkspacePresentationTests {
         if kind == "audio" { two.audioAction { try two.audio.seek(toFrame:1) };#expect(two.audio.positionFrame == 1 && two.failure == nil) }
         #expect((await f.store.snapshot()).revision == before.revision)
         two.suspend();try await f.close()
+    }
+}
+
+extension WorkflowWorkspacePresentationTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_NATIVE_CANVAS_DROP"] == "1"), arguments: [false, true])
+    func nativeCanvasDropReceiverAcceptsProgramAndRegisteredModel(model: Bool) async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        c.addExample("template")
+        let original = try #require(c.graph)
+        let entry: SharedLibraryBrowserEntry
+        if model {
+            entry = try #require(SharedLibraryProjection.entries(models: [], readiness: [:], tools: [], projects: [], language: nil)
+                .first { entry in
+                    guard case .operation(let id, _) = entry.selection else { return false }
+                    return c.registry.operation(id)?.definition.modelKind == .text
+                })
+            guard case .operation(_, let id) = entry.selection else { throw WorkflowIssue("Missing model") }
+            c.modelChoices = [.init(id: try #require(id), kind: .text, displayName: "Registered fixture")]
+        } else {
+            entry = .init(item: .init(key: "operation:d.text.input", title: "Text", kind: .program, readiness: .available),
+                          selection: .operation(id: "d.text.input", modelID: nil))
+        }
+        let provider = SharedLibraryBrowserLogic.dragProvider(for: entry, controller: c)
+        let bytes: Data = try await withCheckedThrowingContinuation { continuation in
+            provider.loadDataRepresentation(forTypeIdentifier: "org.d-workbench.canvas-item") { data, error in
+                if let data { continuation.resume(returning: data) }
+                else { continuation.resume(throwing: error ?? CocoaError(.fileReadCorruptFile)) }
+            }
+        }
+        let canvas = WorkflowCanvasView(controller: c, onTextModel: {}, onImageModel: {}, onImport: { _ in },
+            onDestination: {}, onPublishText: {}, onReturnText: { _ in }, nodeTags: ModelNodeTagStore(settings: f.settings))
+        var delivered: [(WorkflowCanvasTransfer, CGPoint)] = []
+        let surface = WorkflowGraphSurface(controller: c, graph: original, zoom: .constant(1), tool: .constant(.pointer),
+            navigationRequest: .constant(nil), viewportInteractionLocked: .constant(false),
+            viewContext: .init(projectID: c.projectID, rootGraphID: original.id, bodyPath: []),
+            pendingConnection: .constant(nil), selectedConnectionID: .constant(nil), readOnly: false,
+            onPlan: { _, _ in }, onDropItem: { value, point in delivered.append((value, point)); return canvas.dropItem(value, point) })
+        let host = NSHostingView(rootView: surface)
+        host.frame = .init(x: 0, y: 0, width: 900, height: 600)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        // The hidden host had no registered drop owner in its native hit path.
+        // Keep this strict probe for an explicitly enabled visible-host run.
+        window.makeKeyAndOrderFront(nil)
+        defer { window.contentView = nil; window.close() }
+        host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(80)); host.layoutSubtreeIfNeeded()
+        func descendants(_ v: NSView) -> [NSView] { v.subviews.flatMap { [$0] + descendants($0) } }
+        let probe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+        let scroll = try #require(probe.enclosingScrollView)
+        scroll.contentView.scroll(to: .zero); host.layoutSubtreeIfNeeded()
+        let local = CGPoint(x: 90, y: 80)
+        let point = scroll.contentView.convert(local, to: nil)
+        var cursor = host.hitTest(host.superview?.convert(point, from: nil) ?? point)
+        var receiver: NSView?
+        while let view = cursor {
+            if view.registeredDraggedTypes.contains(where: { UTType($0.rawValue).map { UTType.workflowCanvasItem.conforms(to: $0) } ?? false }) { receiver = view; break }
+            cursor = view.superview
+        }
+        print("NATIVE_DROP_VIEWS=" + ([host] + descendants(host)).filter { !$0.registeredDraggedTypes.isEmpty }.map { "\(type(of: $0)):\($0.registeredDraggedTypes)" }.joined(separator: ";"))
+        let target = try #require(receiver, "A real drop receiver must own the blank canvas point")
+        let drag = WorkspaceCanvasDropInfo(bytes: bytes, key: entry.id, window: window, point: point)
+        defer { drag.draggingPasteboard.releaseGlobally() }
+        #expect(target.draggingEntered(drag).contains(.copy))
+        try #require(target.prepareForDragOperation(drag))
+        try #require(target.performDragOperation(drag))
+        target.concludeDragOperation(drag)
+        try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
+        #expect(delivered.count == 1)
+        #expect(delivered.first?.0 == (try WorkflowCanvasTransfer.decode(bytes)))
+        #expect(c.graph?.nodes.count == original.nodes.count + 1)
+        #expect(c.graph?.id == original.id)
+        c.undo(); #expect(c.graph == original)
+        try await f.close()
+    }
+}
+
+@MainActor private final class WorkspaceCanvasDropInfo: NSObject, NSDraggingInfo {
+    let draggingPasteboard = NSPasteboard.withUniqueName()
+    var draggingSourceOperationMask: NSDragOperation = .copy
+    var draggingDestinationWindow: NSWindow?
+    var draggingLocation: NSPoint
+    var draggedImageLocation: NSPoint { draggingLocation }
+    nonisolated var draggedImage: NSImage? { nil }
+    var draggingSource: Any? { nil }
+    var draggingSequenceNumber: Int { 1 }
+    var draggingFormation: NSDraggingFormation = .default
+    var animatesToDestination = false
+    var numberOfValidItemsForDrop = 0
+    var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+    init(bytes: Data, key: String, window: NSWindow, point: CGPoint) {
+        draggingDestinationWindow = window; draggingLocation = point; super.init()
+        let item = NSPasteboardItem()
+        item.setData(bytes, forType: .init("org.d-workbench.canvas-item")); item.setString(key, forType: .string)
+        draggingPasteboard.writeObjects([item])
+    }
+    func slideDraggedImage(to screenPoint: NSPoint) {}
+    nonisolated override func namesOfPromisedFilesDropped(atDestination dropDestination: URL) -> [String]? { nil }
+    func resetSpringLoading() {}
+    func enumerateDraggingItems(options enumOpts: NSDraggingItemEnumerationOptions, for view: NSView?,
+        classes classArray: [AnyClass], searchOptions: [NSPasteboard.ReadingOptionKey: Any],
+        using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {
+        for (index, value) in (draggingPasteboard.readObjects(forClasses: classArray, options: searchOptions) ?? []).enumerated() {
+            guard let writer = value as? NSPasteboardWriting else { continue }
+            let item = NSDraggingItem(pasteboardWriter: writer)
+            item.setDraggingFrame(.init(origin: draggingLocation, size: .init(width: 30, height: 30)), contents: nil)
+            var stop: ObjCBool = false; block(item, index, &stop); if stop.boolValue { break }
+        }
     }
 }

@@ -689,7 +689,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         }
     }
 
-    private func dropItem(_ value: WorkflowCanvasTransfer, _ point: CGPoint) -> Bool {
+    func dropItem(_ value: WorkflowCanvasTransfer, _ point: CGPoint) -> Bool {
         guard controller.canEditCanvas else { return false }
         switch value {
         case .operation(let id, let model):

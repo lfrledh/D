@@ -749,7 +749,7 @@ struct WorkflowGraphSurface: View {
         controller.moveNodes(layouts, target: target)
     }
 
-    private func acceptSurfaceDrop(
+    func acceptSurfaceDrop(
         _ items: [WorkflowCanvasTransfer],
         at rawPoint: CGPoint,
         scope: WorkflowCanvasScope
