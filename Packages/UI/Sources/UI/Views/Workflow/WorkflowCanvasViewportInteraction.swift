@@ -290,6 +290,17 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         private(set) var tool: WorkflowCanvasTool = .pointer
         private(set) var handPressed = false
         private var ownsCursor = false
+        #if DEBUG
+        // Observe cursor decisions in component tests without changing the user's cursor.
+        var cursorSink: ((NSCursor) -> Void)?
+        #endif
+
+        private func setCursor(_ cursor: NSCursor) {
+            #if DEBUG
+            if let cursorSink { cursorSink(cursor); return }
+            #endif
+            cursor.set()
+        }
 
         func setTool(_ next: WorkflowCanvasTool) {
             guard next != tool else { return }
@@ -299,7 +310,9 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
 
         override func updateTrackingAreas() {
             super.updateTrackingAreas()
-            if let cursorTracking { removeTrackingArea(cursorTracking) }
+            // inVisibleRect follows native geometry itself. Replacing this area
+            // during every zoom creates exit/enter transitions under a still mouse.
+            guard cursorTracking == nil else { return }
             let area = NSTrackingArea(rect: .zero,
                 options: [.inVisibleRect, .activeInKeyWindow, .mouseEnteredAndExited, .cursorUpdate],
                 owner: self, userInfo: nil)
@@ -308,19 +321,21 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         override func cursorUpdate(with event: NSEvent) { updateHandCursor(for: event) }
         override func mouseEntered(with event: NSEvent) { updateHandCursor(for: event) }
         override func mouseExited(with event: NSEvent) {
-            if !handPressed { resetHandCursor() }
+            // A geometry update can exit an old tracking region without leaving
+            // the canvas. Recheck the actual window hit before releasing ownership.
+            updateHandCursor(for: event)
         }
         private func updateHandCursor(for event: NSEvent) {
             guard tool == .hand, window?.isKeyWindow == true,
                   handPressed || accepts(event) else {
                 if !handPressed { resetHandCursor() }; return
             }
-            (handPressed ? NSCursor.closedHand : NSCursor.openHand).set()
+            setCursor(handPressed ? NSCursor.closedHand : NSCursor.openHand)
             ownsCursor = true
         }
         private func resetHandCursor() {
             handPressed = false
-            if ownsCursor { NSCursor.arrow.set(); ownsCursor = false }
+            if ownsCursor { setCursor(.arrow); ownsCursor = false }
         }
 
         private var reportedSize: WorkflowCanvasViewportMeasurement?
@@ -539,7 +554,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             guard let hit = canvasHit(event), let scroll = enclosingScrollView else { return false }
             var view: NSView? = hit
             while let current = view, current !== scroll {
-                if current is NSControl || current is NSTextView || current is WorkflowPortDragView || current is WorkflowConnectionHitView { return false }
+                if current is NSControl || current is NSTextView || current is NSScrollView || current is WorkflowPortDragView || current is WorkflowConnectionHitView { return false }
                 view = current.superview
             }
             return view === scroll

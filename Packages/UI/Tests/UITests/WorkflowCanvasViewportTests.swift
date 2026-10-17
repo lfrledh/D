@@ -6,6 +6,111 @@ import Testing
 @Suite @MainActor
 struct WorkflowCanvasViewportTests {
     @Test(arguments: [false, true])
+    func handCursorSurvivesWheelLayoutAndSyntheticTrackingExit(node: Bool) throws {
+        // Hidden component: inject key-window state and event ownership, never
+        // post global input or change the user's system cursor.
+        let window = CursorFixtureWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 480),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let scroll = NSScrollView(frame: .init(x: 0, y: 0, width: 640, height: 480))
+        let document = CursorFixtureDocument(frame: .init(x: 0, y: 0, width: 3000, height: 2400))
+        scroll.documentView = document; window.contentView = scroll
+        let probe = WorkflowCanvasViewportInput.ProbeView(frame: document.bounds)
+        document.addSubview(probe)
+        var cursors: [NSCursor] = []
+        probe.cursorSink = { cursors.append($0) }
+        defer { probe.stopMonitoring(); window.contentView = nil; window.close() }
+        probe.navigationAllowed = { true }; probe.pointerTarget = { _, _, _ in .blank }
+        probe.setTool(.hand); probe.reportViewportSize(); scroll.layoutSubtreeIfNeeded()
+        let clip = scroll.contentView
+        clip.scroll(to: .zero)
+        if node { document.addSubview(WorkflowNodePlateView(frame: .init(x: 60, y: 60, width: 240, height: 180))) }
+        let point = clip.convert(.init(x: 120, y: 100), to: nil)
+        let enter = CursorFixtureEvent(type: .mouseEntered, owner: window, point: point)
+        probe.mouseEntered(with: enter)
+        try #require(cursors.last === NSCursor.openHand, "Positive canvas ownership before testing exit")
+        probe.updateTrackingAreas()
+        let original = try #require(probe.trackingAreas.first { $0.owner === probe })
+        let scope = WorkflowCanvasScope(rootGraphID: UUID(), rootRevision: UUID(), graphID: UUID(), bodyPath: [])
+        var layout = WorkflowCanvasViewportGeometry(graphSize: .init(width: 1400, height: 900),
+            viewportSize: clip.bounds.size, zoom: 1, translation: .zero)
+        let wheel = WorkflowCanvasWheelZoom()
+        probe.interactionScope = scope; probe.wheelZoom = wheel; probe.wheelLayout = { _ in layout }
+        var delivered = 0
+        probe.onWheel = { delta, mouse, offset, viewport in
+            delivered += 1
+            let zoom = wheel.request(delta: delta, mouse: mouse, nativeOffset: offset, layout: layout, scope: scope)
+            layout = .init(graphSize: layout.graphSize, viewportSize: viewport, zoom: zoom, translation: .zero)
+        }
+        let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .line,
+            wheelCount: 1, wheel1: 1, wheel2: 0, wheel3: 0))
+        let event = FixtureWheel(base: try #require(NSEvent(cgEvent: cg)), owner: window, point: point)
+        cursors.removeAll()
+        for _ in 0..<4 {
+            try #require(probe.routeWheel(event))
+            document.setFrameSize(layout.contentSize); probe.setFrameSize(layout.contentSize)
+            scroll.layoutSubtreeIfNeeded(); probe.reportViewportSize(); probe.updateTrackingAreas()
+            // AppKit may deliver an old area's exit while the pointer has not
+            // left the canvas. Exercise the real callback, not a parallel policy.
+            probe.mouseExited(with: CursorFixtureEvent(type: .mouseExited, owner: window, point: point))
+            probe.cursorUpdate(with: CursorFixtureEvent(type: .cursorUpdate, owner: window, point: point))
+        }
+        #expect(delivered == 4)
+        #expect(probe.trackingAreas.filter { $0.owner === probe }.count == 1)
+        #expect(probe.trackingAreas.first { $0.owner === probe } === original)
+        #expect(!cursors.contains { $0 === NSCursor.arrow }, "A layout exit at the same canvas point must not flash an arrow")
+        #expect(cursors.last === NSCursor.openHand)
+        #expect(probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: point)))
+        try #require(probe.handPressed && cursors.last === NSCursor.closedHand)
+        probe.mouseExited(with: CursorFixtureEvent(type: .mouseExited, owner: window, point: point))
+        #expect(probe.handPressed && cursors.last === NSCursor.closedHand)
+        probe.cancelPointer()
+        #expect(!probe.handPressed && cursors.last === NSCursor.arrow)
+    }
+
+    @Test(arguments: ["control", "text", "nested-scroll", "overlay", "outside", "foreign-window", "hidden", "resign", "pointer-tool"])
+    func handCursorReleasesOnlyWhenOwnershipEnds(reason: String) throws {
+        let window = CursorFixtureWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 480),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let root = NSView(frame: .init(x: 0, y: 0, width: 640, height: 480))
+        let scroll = NSScrollView(frame: root.bounds)
+        let document = CursorFixtureDocument(frame: .init(x: 0, y: 0, width: 3000, height: 2400))
+        root.addSubview(scroll); window.contentView = root; scroll.documentView = document
+        let probe = WorkflowCanvasViewportInput.ProbeView(frame: document.bounds); document.addSubview(probe)
+        var cursors: [NSCursor] = []; probe.cursorSink = { cursors.append($0) }
+        defer { probe.stopMonitoring(); window.contentView = nil; window.close() }
+        probe.setTool(.hand); probe.reportViewportSize(); scroll.layoutSubtreeIfNeeded()
+        scroll.contentView.scroll(to: .zero)
+        let point = scroll.contentView.convert(.init(x: 120, y: 100), to: nil)
+        probe.mouseEntered(with: CursorFixtureEvent(type: .mouseEntered, owner: window, point: point))
+        try #require(cursors.last === NSCursor.openHand)
+        let rect = document.convert(NSRect(x: point.x - 20, y: point.y - 20, width: 40, height: 40), from: nil)
+        switch reason {
+        case "control": document.addSubview(NSButton(frame: rect))
+        case "text": document.addSubview(NSTextView(frame: rect))
+        case "nested-scroll":
+            let inner = NSScrollView(frame: rect)
+            inner.documentView = NSView(frame: .init(x: 0, y: 0, width: 40, height: 200))
+            document.addSubview(inner)
+        case "overlay": root.addSubview(NSView(frame: root.convert(rect, from: document)))
+        case "hidden": probe.isHidden = true
+        case "resign": window.fixtureKey = false
+        case "pointer-tool": probe.setTool(.pointer)
+        default: break
+        }
+        let foreign = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: false)
+        foreign.isReleasedWhenClosed = false; defer { foreign.close() }
+        probe.mouseExited(with: CursorFixtureEvent(type: .mouseExited,
+            owner: reason == "foreign-window" ? foreign : window,
+            point: reason == "outside" ? .init(x: -100, y: -100) : point))
+        #expect(cursors.last === NSCursor.arrow)
+        let count = cursors.count
+        probe.stopMonitoring()
+        #expect(cursors.count == count, "Do not overwrite another owner's cursor after releasing ours")
+    }
+
+    @Test(arguments: [false, true])
     func wheelDeviceUnitsKeepDirectionAndUseDistinctGain(precise: Bool) throws {
         for amount: Int32 in [-3, -1, 0, 1, 3] {
             let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: precise ? .pixel : .line,
@@ -276,4 +381,26 @@ struct WorkflowCanvasViewportTests {
             #expect(abs(restored.y - visible.y) < 0.0001)
         }
     }
+}
+
+@MainActor private final class CursorFixtureWindow: NSWindow {
+    var fixtureKey = true
+    override var isKeyWindow: Bool { fixtureKey }
+}
+@MainActor private final class CursorFixtureDocument: NSView {
+    override var isFlipped: Bool { true }
+}
+private final class CursorFixtureEvent: NSEvent {
+    let kind: NSEvent.EventType
+    let owner: NSWindow
+    let number: Int
+    let point: CGPoint
+    @MainActor init(type: NSEvent.EventType, owner: NSWindow, point: CGPoint) {
+        kind = type; self.owner = owner; number = owner.windowNumber; self.point = point; super.init()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override var type: NSEvent.EventType { kind }
+    override var window: NSWindow? { owner }
+    override var windowNumber: Int { number }
+    override var locationInWindow: NSPoint { point }
 }

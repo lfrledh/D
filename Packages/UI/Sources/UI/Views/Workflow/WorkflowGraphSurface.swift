@@ -76,10 +76,7 @@ struct WorkflowGraphSurface: View {
                     retained: retainedOrigin,
                     active: activeOrigin
                 )
-                let geometry = WorkflowGraphGeometry(
-                    graph: graph,
-                    tools: controller.tools,
-                    registry: controller.registry,
+                let geometry = naturalGeometry.reframed(
                     translation: origin,
                     minimumSize: retainedExtent?.size(for: scope.identity, translation: origin) ?? .zero
                 )
@@ -104,6 +101,7 @@ struct WorkflowGraphSurface: View {
                             .background(viewportInput(geometry: geometry, scope: scope))
                         ZStack(alignment: .topLeading) {
                         ForEach(graph.nodes) { node in
+                            let position = geometry.displayPosition(node.id)
                             WorkflowNodeCard(
                                 controller: controller,
                                 scale: effectiveZoom,
@@ -149,7 +147,7 @@ struct WorkflowGraphSurface: View {
                                 cardSizes[node.id] = size
                                 nodeSizeObserver?(node.id, size)
                             }
-                            .position(x: geometry.displayPosition(node.id).x * effectiveZoom, y: geometry.displayPosition(node.id).y * effectiveZoom)
+                            .position(x: position.x * effectiveZoom, y: position.y * effectiveZoom)
                             .modifier(WorkflowNodeDragOffset(presentation: nodeDrag,
                                 moving: nodeDrag.movingNodeIDs.contains(node.id), scale: effectiveZoom))
                         }
@@ -1254,6 +1252,7 @@ struct WorkflowGraphGeometry {
     let translation: CGSize
     let size: CGSize
     private let previewPositions: [UUID: CGPoint]
+    private let rawMaximum: CGPoint
 
     init(
         graph: WorkflowGraph,
@@ -1280,8 +1279,22 @@ struct WorkflowGraphGeometry {
         translation = requestedTranslation ?? naturalTranslation
         let maximumX = raw.map(\.x).max() ?? 0
         let maximumY = zip(raw, halfHeights).map { $0.0.y + $0.1 }.max() ?? 0
+        rawMaximum = CGPoint(x: maximumX, y: maximumY)
         size = CGSize(width: max(minimumSize.width, max(1_400, maximumX + translation.width + 320)),
                       height: max(minimumSize.height, max(900, maximumY + translation.height + 24)))
+    }
+
+    /// Reuse this immutable graph projection when only the retained camera
+    /// envelope changes. Keep raw extrema: the minimum canvas size is not an extent.
+    func reframed(translation: CGSize, minimumSize: CGSize = .zero) -> Self {
+        Self(reframing: self, translation: translation, minimumSize: minimumSize)
+    }
+
+    private init(reframing source: Self, translation: CGSize, minimumSize: CGSize) {
+        graph = source.graph; previewPositions = source.previewPositions
+        rawMaximum = source.rawMaximum; self.translation = translation
+        size = CGSize(width: max(minimumSize.width, max(1_400, rawMaximum.x + translation.width + 320)),
+                      height: max(minimumSize.height, max(900, rawMaximum.y + translation.height + 24)))
     }
 
     func rawPosition(_ nodeID: UUID) -> CGPoint {

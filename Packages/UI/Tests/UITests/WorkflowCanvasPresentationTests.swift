@@ -87,6 +87,34 @@ struct WorkflowCanvasPresentationTests {
                 == WorkflowCanvasLayoutPolicy.fallbackPosition(index: 1))
     }
 
+    @Test(arguments: ["empty", "small", "negative", "far", "preview", "many-ports"])
+    func reframedGraphPreservesRawExtentsAndPositions(kind: String) throws {
+        let definition = WorkflowOperationDefinition(id: "fixture.extent", title: "Extent", detail: "",
+            inputs: (0..<(kind == "many-ports" ? 20 : 1)).map { .init("i\($0)", "Input", kinds: [.text]) },
+            outputs: [.init("output", "Output", kinds: [.text])])
+        let registry = try WorkflowRegistry(operations: [.init(definition: definition,
+            execute: { _, _ in throw WorkflowIssue("Geometry must not execute") })])
+        let first = definition.makeNode(), second = definition.makeNode()
+        let graph = kind == "empty" ? WorkflowGraph() : WorkflowGraph(nodes: [first, second], layout: [
+            .init(nodeID: first.id, x: kind == "negative" ? -2500 : 0, y: kind == "negative" ? -1800 : 0),
+            .init(nodeID: second.id, x: kind == "far" ? 8000 : 300, y: kind == "far" ? 6000 : 200)])
+        let preview: [UUID: CGPoint] = kind == "preview" ? [first.id: .init(x: -4000, y: 9000)] : [:]
+        let source = WorkflowGraphGeometry(graph: graph, registry: registry, previewPositions: preview)
+        for translation in [CGSize.zero, source.translation, CGSize(width: -900, height: -500), CGSize(width: 2400, height: 1700)] {
+            for minimum in [CGSize.zero, CGSize(width: 12000, height: 9000)] {
+                let actual = source.reframed(translation: translation, minimumSize: minimum)
+                let reference = WorkflowGraphGeometry(graph: graph, registry: registry, previewPositions: preview,
+                    translation: translation, minimumSize: minimum)
+                #expect(actual.size == reference.size && actual.translation == reference.translation)
+                #expect(actual.graph == graph)
+                for node in graph.nodes {
+                    #expect(actual.rawPosition(node.id) == reference.rawPosition(node.id))
+                    #expect(actual.displayPosition(node.id) == reference.displayPosition(node.id))
+                }
+            }
+        }
+    }
+
     @Test
     func portDescriptionsExposeKindsAndRequirementWithoutUsingCopyAsSchema() {
         let required = WorkflowPortDefinition("input", "输入", kinds: [.text, .image])

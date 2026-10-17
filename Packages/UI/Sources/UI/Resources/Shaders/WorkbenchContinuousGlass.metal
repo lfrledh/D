@@ -58,9 +58,10 @@ static float2 glassSamplePosition(float2 p, device const void *fieldBytes, int f
         // Move the peak outward and use the remaining shoulder for a gentle
         // return to the unchanged center. Both ends have zero value and slope.
         float shoulder = smoothstep(0.0,0.2,t) * (1.0-smoothstep(0.2,1.0,t));
-        // The former unsigned straight-edge peak was .32 * 16*.6^3*.4^2.
-        // Double that physical displacement, not a coefficient that folds it.
-        float peakGain = 2.0 * 0.32 * 0.55296;
+        // Same shoulder extent, 7.2pt peak on an 18pt straight edge. The return
+        // remains below the one-dimensional fold threshold; curved contours
+        // retain their separate two-dimensional GPU regression checks.
+        float peakGain = 0.40;
         q += g * (peakGain * rim * clamp(strength,0.0,1.0) * shoulder);
         }
     }

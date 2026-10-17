@@ -132,9 +132,8 @@ struct WorkbenchContinuousGlassTests {
             let peak=(0..<Int(18*density)).map { x -> Float in
                 coordinates[shoulder.rowIndex*output.width+x].x-20-(Float(x)+0.5)/Float(density)
             }.max()!
-            let oldPeak:Float=0.32*18*0.55296
-            #expect(peak>oldPeak*1.99 && peak<=oldPeak*2.001,
-                "Double the physical straight-edge peak within the same shoulder")
+            #expect(peak>7.1 && peak<=7.21,
+                "Increase the physical straight-edge peak to 7.2pt within the same shoulder")
             for y in 0..<output.height { for x in 0..<output.width {
                 let p=SIMD2<Float>((Float(x)+0.5)/Float(density),(Float(y)+0.5)/Float(density))
                 let distance=min(p.x,p.y,Float(size.width)-p.x,Float(size.height)-p.y)
@@ -147,7 +146,7 @@ struct WorkbenchContinuousGlassTests {
         }
         // A linear ramp must remain monotonic through the entire shoulder. This
         // detects folds and discrete seams. The stronger C1 shoulder has max
-        // straight-edge slope 1 + peakGain*1.5/.2 = 3.655; after .82 mixing
+        // straight-edge slope 1 + peakGain*1.5/.2 = 4; after .82 mixing
         // and 8-bit rounding its adjacent ramp bound is four (formerly two).
         let row=output.height/2
         for x in 2..<output.width-2 {
