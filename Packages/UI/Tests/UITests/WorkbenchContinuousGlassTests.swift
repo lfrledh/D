@@ -125,6 +125,19 @@ struct WorkbenchContinuousGlassTests {
             let index = (shoulder.rowIndex*output.width+shoulder.column)*4
             #expect(Int(glass[index])-Int(plain[index]) >= 2,
                 "The continuous lens must visibly displace the background, beyond the previous subpixel shoulder")
+            let position = coordinates[shoulder.rowIndex*output.width+shoulder.column]
+            let pointX = (Float(shoulder.column)+0.5)/Float(density)
+            #expect(position.x - 20 - pointX > 2.9,
+                "Increase the shoulder displacement without widening its accepted 18-point range")
+            for y in 0..<output.height { for x in 0..<output.width {
+                let p=SIMD2<Float>((Float(x)+0.5)/Float(density),(Float(y)+0.5)/Float(density))
+                let distance=min(p.x,p.y,Float(size.width)-p.x,Float(size.height)-p.y)
+                if distance >= 18 {
+                    let q=coordinates[y*output.width+x]
+                    #expect(abs(q.x-20-p.x)<0.0001 && abs(q.y-30-p.y)<0.0001,
+                        "Stronger refraction must not expand into the clear center")
+                }
+            } }
         }
         // A linear ramp must remain monotonic through the entire shoulder. This
         // detects folds and the former discrete ring transition seams.

@@ -34,8 +34,7 @@ static float2 glassSamplePosition(float2 p, device const void *fieldBytes, int f
         float pixel = min(surface.z / (fieldSize.x-4), surface.w / (fieldSize.y-4));
         float interior = 36.0 / max(pixel,0.001) + 4.0;
         float d = glassDistance(cell, fieldBytes, n, interior) * pixel;
-        // A broader large-surface shoulder gives visible displacement without
-        // increasing the local gradient gain past the curved-boundary checks.
+        // Keep the accepted shoulder width; displacement gain is independent.
         float rim = min(18.0, min(surface.z, surface.w) * 0.25);
         if (d > 0.0 && d < rim) {
         float t = d / max(rim,0.001);
@@ -45,7 +44,7 @@ static float2 glassSamplePosition(float2 p, device const void *fieldBytes, int f
         float2 g = float2(glassDistance(cell + float2(h,0),fieldBytes,n,interior) - glassDistance(cell-float2(h,0),fieldBytes,n,interior),
                           glassDistance(cell + float2(0,h),fieldBytes,n,interior) - glassDistance(cell-float2(0,h),fieldBytes,n,interior)) / (2.0*h);
         float shoulder = 16.0 * t*t * (1.0-t)*(1.0-t);
-        q += g * (0.28 * rim * clamp(strength,0.0,1.0) * shoulder);
+        q += g * (0.32 * rim * clamp(strength,0.0,1.0) * shoulder);
         }
     }
     return q;

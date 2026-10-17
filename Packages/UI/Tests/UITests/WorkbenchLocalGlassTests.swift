@@ -1011,6 +1011,10 @@ private actor LocalGlassNoInference: InferenceEngine {
         let offset = scroll.contentView.bounds.origin, mouse = CGPoint(x: 310, y: 210)
         let anchor = original.rawPoint(screenPoint: mouse, offset: offset)
         let callback = probe.onWheel // Keep this exact production closure throughout the burst.
+        var bodies: [UUID: Int] = [:], menus: [UUID: Int] = [:]
+        WorkflowCanvasUpdateProbe.nodeBody = { bodies[$0, default: 0] += 1 }
+        WorkflowCanvasUpdateProbe.nodeMenuBuild = { menus[$0, default: 0] += 1 }
+        defer { WorkflowCanvasUpdateProbe.nodeBody = nil; WorkflowCanvasUpdateProbe.nodeMenuBuild = nil }
         let delta = direction * CGFloat(log(1.1) / 0.015)
         for _ in 0..<4 { callback(delta, mouse, offset, size) }
         let zoom = (0..<4).reduce(original.zoom) { value, _ in value * CGFloat(exp(Double(delta) * 0.015)) }
@@ -1029,6 +1033,9 @@ private actor LocalGlassNoInference: InferenceEngine {
         let nativeAnchor = ready.rawPoint(screenPoint: mouse, offset: scroll.contentView.bounds.origin)
         #expect(abs(nativeAnchor.x - anchor.x) < 1 && abs(nativeAnchor.y - anchor.y) < 1)
         #expect(wheel.offset(in: target, scope: scope) == nil, "Only the matching final layout consumes the wheel offset")
+        print("WHEEL_NODE_MENUS direction=\(direction) bodies=\(bodies.values.reduce(0,+)) menus=\(menus.values.reduce(0,+)) nodes=\(bodies.count)")
+        #expect(bodies.count == graph.nodes.count && bodies.values.allSatisfy { $0 > 0 })
+        #expect(menus == bodies, "Each real zoom body shares one fresh menu across popup, context menu and accessibility")
         #expect(controller.graph == graph && controller.canUndo == undoBefore)
         try await store.close()
     }

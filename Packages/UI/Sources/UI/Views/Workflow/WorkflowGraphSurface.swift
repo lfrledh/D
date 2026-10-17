@@ -1006,6 +1006,9 @@ private struct WorkflowNodeCard: View {
         #if DEBUG
         let _ = WorkflowCanvasUpdateProbe.nodeBody?(node.id)
         #endif
+        // Share only this render's command tree. Each subsequent body still
+        // captures the current owner, scope, language and admission state.
+        let actions = nodeActions
         VStack(alignment: .leading, spacing: 9 * scale) {
             HStack(alignment: .center, spacing: 8 * scale) {
                 VStack(alignment: .leading, spacing: 2 * scale) {
@@ -1023,7 +1026,7 @@ private struct WorkflowNodeCard: View {
                 }
                 .allowsHitTesting(false)
                 Spacer(minLength: 6 * scale)
-                WorkbenchMenu { nodeActions } label: {
+                WorkbenchMenu { actions } label: {
                     Image(systemName: "ellipsis").frame(width: 22 * scale, height: 22 * scale)
                 }.buttonStyle(WorkbenchIconButtonStyle(diameter: 22 * scale)).fixedSize()
                     .workflowNodeControl(node.id)
@@ -1132,11 +1135,11 @@ private struct WorkflowNodeCard: View {
         .dropDestination(for: WorkflowCanvasTransfer.self) { (items: [WorkflowCanvasTransfer], _: CGPoint) -> Bool in
             acceptAsset(items)
         }
-        .workbenchContextMenu { nodeActions }
+        .workbenchContextMenu { actions }
         .environment(\.workbenchMenuContext, "node:\(scope.projectID):\(scope.instanceID):\(scope.rootGraphID):\(scope.rootRevision):\(scope.bodyPath):\(scope.graphID):\(node.id)")
         .workbenchSurface(.node, group: "node:\(node.id)")
         .accessibilityActions {
-            ForEach(nodeActions.accessibleLeaves, id: \.id) { item in
+            ForEach(actions.accessibleLeaves, id: \.id) { item in
                 Button(item.title) { if item.enabled && item.isCurrent() { item.action?() } }.disabled(!item.enabled)
             }
         }
@@ -1144,6 +1147,9 @@ private struct WorkflowNodeCard: View {
     }
 
     @WorkbenchMenuBuilder private var nodeActions: WorkbenchMenuRows {
+        #if DEBUG
+        let _ = WorkflowCanvasUpdateProbe.nodeMenuBuild?(node.id)
+        #endif
         WorkbenchMenuAction(consistencyText(languageStore, "menu.node.properties"), id: "node.properties") {
             if scope.isCurrent(in: controller) { onInspect(node.id) }
         }.featureHelp("MENU-NODE-PROPERTIES", language: languageStore)
