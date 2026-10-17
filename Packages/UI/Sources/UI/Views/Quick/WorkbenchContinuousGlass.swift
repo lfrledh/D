@@ -32,6 +32,7 @@ final class WorkbenchGlassField {
         // Remove internal overlap seams using the same nonzero fill as the real clip.
         guard let boundary=path.normalized(using:.winding).copy(using:&transform),!boundary.isEmpty else { return nil }
         var segments:[SIMD4<Float>]=[],current=CGPoint.zero,start=CGPoint.zero,valid=true
+        var contours:[Range<Int>]=[],contourStart=0
         func distance(_ p:CGPoint,_ a:CGPoint,_ b:CGPoint)->CGFloat {
             let dx=b.x-a.x,dy=b.y-a.y,n=dx*dx+dy*dy
             let t=n>0 ? max(0,min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/n)):0
@@ -53,17 +54,63 @@ final class WorkbenchGlassField {
         boundary.applyWithBlock { item in
             let e=item.pointee
             switch e.type {
-            case .moveToPoint:current=e.points[0];start=current
+            case .moveToPoint:
+                if contourStart<segments.count { line(current,start);contours.append(contourStart..<segments.count) }
+                contourStart=segments.count;current=e.points[0];start=current
             case .addLineToPoint:line(current,e.points[0]);current=e.points[0]
             case .addQuadCurveToPoint:
                 let c=e.points[0],d=e.points[1]
                 cubic(current,.init(x:current.x+(c.x-current.x)*2/3,y:current.y+(c.y-current.y)*2/3),.init(x:d.x+(c.x-d.x)*2/3,y:d.y+(c.y-d.y)*2/3),d);current=d
             case .addCurveToPoint:cubic(current,e.points[0],e.points[1],e.points[2]);current=e.points[2]
-            case .closeSubpath:line(current,start);current=start
+            case .closeSubpath:
+                line(current,start);current=start
+                if contourStart<segments.count { contours.append(contourStart..<segments.count);contourStart=segments.count }
             @unknown default:valid=false
             }
         }
+        if contourStart<segments.count { line(current,start);contours.append(contourStart..<segments.count) }
         guard valid,!segments.isEmpty else { return nil }
+        // Establish orientation from the actual flattened fill, not an assumed
+        // CGPath contour order. Outer boundaries and holes both keep fill left.
+        let filled=CGMutablePath()
+        for range in contours {
+            let first=segments[range.lowerBound]
+            filled.move(to:.init(x:CGFloat(first.x),y:CGFloat(first.y)))
+            for i in range { let v=segments[i];filled.addLine(to:.init(x:CGFloat(v.z),y:CGFloat(v.w))) }
+            filled.closeSubpath()
+        }
+        var normals=[SIMD4<Float>](repeating:.zero,count:segments.count)
+        func inward(_ v:SIMD4<Float>)->SIMD2<Float> {
+            let dx=v.z-v.x,dy=v.w-v.y,n=max(0.000001,sqrt(dx*dx+dy*dy))
+            return .init(-dy/n,dx/n)
+        }
+        for range in contours {
+            let index=range.max { a,b in
+                let u=segments[a],v=segments[b]
+                return hypot(u.z-u.x,u.w-u.y)<hypot(v.z-v.x,v.w-v.y)
+            }!
+            let v=segments[index],n=inward(v),mid=SIMD2<Float>((v.x+v.z)/2,(v.y+v.w)/2)
+            var fillLeft:Bool?
+            for epsilon:Float in [0.001,0.0001,0.01] {
+                let left=mid+n*epsilon,right=mid-n*epsilon
+                let l=filled.contains(.init(x:CGFloat(left.x),y:CGFloat(left.y)),using:.winding)
+                let r=filled.contains(.init(x:CGFloat(right.x),y:CGFloat(right.y)),using:.winding)
+                if l != r { fillLeft=l;break }
+            }
+            guard let fillLeft else { return nil }
+            if !fillLeft {
+                let reversed=range.reversed().map { i in let v=segments[i];return SIMD4<Float>(v.z,v.w,v.x,v.y) }
+                for (i,v) in zip(range,reversed) { segments[i]=v }
+            }
+            for i in range {
+                let previous=i==range.lowerBound ? range.upperBound-1:i-1
+                let next=i+1==range.upperBound ? range.lowerBound:i+1
+                let a=inward(segments[previous])+inward(segments[i])
+                let b=inward(segments[i])+inward(segments[next])
+                guard a.x*a.x+a.y*a.y>0.00000001,b.x*b.x+b.y*b.y>0.00000001 else { return nil }
+                normals[i] = .init(a.x,a.y,b.x,b.y)
+            }
+        }
         let tile=max(16,Int(ceil(min(size.width,size.height)*density/8)))
         let cols=(width+tile-1)/tile,rows=(height+tile-1)/tile
         guard cols*rows<=65536 else { return nil }
@@ -83,12 +130,12 @@ final class WorkbenchGlassField {
         }
         let useFullList=references>1_000_000
         if useFullList { cells=[Array(segments.indices.map(UInt32.init))] }
-        let count=cells.count,segmentOffset=(5+count*2+3) & ~3,indexOffset=segmentOffset+segments.count*4
+        let count=cells.count,segmentOffset=(5+count*2+3) & ~3,indexOffset=segmentOffset+segments.count*8
         var words:[UInt32]=[UInt32(segmentOffset),UInt32(indexOffset),UInt32(useFullList ? 1:cols),UInt32(useFullList ? 1:rows),UInt32(useFullList ? max(width,height):tile)]
         var offset=0
         for cell in cells { words.append(UInt32(offset));words.append(UInt32(cell.count));offset += cell.count }
         while words.count<segmentOffset { words.append(0) }
-        for v in segments { words += [v.x.bitPattern,v.y.bitPattern,v.z.bitPattern,v.w.bitPattern] }
+        for (v,n) in zip(segments,normals) { words += [v.x.bitPattern,v.y.bitPattern,v.z.bitPattern,v.w.bitPattern,n.x.bitPattern,n.y.bitPattern,n.z.bitPattern,n.w.bitPattern] }
         for cell in cells { words += cell }
         return .init(width:width,height:height,data:words.withUnsafeBytes { Data($0) },path:path,referenceSize:size,density:density)
     }
@@ -99,7 +146,7 @@ private struct WorkbenchGlassGeometryKey:Equatable {
     let size:CGSize
     let density:CGFloat
     func matches(_ field:WorkbenchGlassField)->Bool {
-        path == field.path && abs(size.width-field.referenceSize.width)<0.001 && abs(size.height-field.referenceSize.height)<0.001 && density == field.density
+        density == field.density && abs(size.width-field.referenceSize.width)<0.001 && abs(size.height-field.referenceSize.height)<0.001 && path == field.path
     }
     static func make(path:CGPath,size:CGSize,density:CGFloat)->Self? {
         guard size.width>0,size.height>0,size.width.isFinite,size.height.isFinite,density.isFinite,density>0 else { return nil }
@@ -139,8 +186,13 @@ private struct WorkbenchGlassGeometryKey:Equatable {
         entries.removeAll();bytes=0;live.removeAll { $0.value == nil }
     }
     private func cached(_ key:WorkbenchGlassGeometryKey)->WorkbenchGlassField? {
-        if let index=entries.firstIndex(where:key.matches) { let field=entries.remove(at:index);entries.append(field);return field }
-        return live.compactMap(\.value).first(where:key.matches)
+        if let index=entries.lastIndex(where:key.matches) {
+            let field=entries[index]
+            if index != entries.count-1 { entries.remove(at:index);entries.append(field) }
+            return field
+        }
+        for reference in live { if let field=reference.value,key.matches(field) { return field } }
+        return nil
     }
     private func retain(_ field:WorkbenchGlassField) {
         builds += 1;live.removeAll { $0.value == nil };live.append(.init(value:field))
@@ -150,6 +202,9 @@ private struct WorkbenchGlassGeometryKey:Equatable {
     }
     /// Small contour-only preparation; no pixel raster, EDT or GPU wait.
     func resolve(path:CGPath,size:CGSize,density:CGFloat=2)->WorkbenchGlassField? {
+        #if DEBUG
+        WorkbenchGlassUpdateProbe.event?("field-lookup")
+        #endif
         guard let key=WorkbenchGlassGeometryKey.make(path:path,size:size,density:density) else { return nil }
         if let field=cached(key) { return field }
         guard let field=WorkbenchGlassField.make(path:key.path,size:key.size,density:key.density) else { return nil }

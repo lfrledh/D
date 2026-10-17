@@ -42,6 +42,10 @@ enum WorkbenchWallpaperPublication {
 }
 
 #if DEBUG
+@MainActor enum WorkbenchGlassUpdateProbe {
+    static var event: ((String) -> Void)?
+}
+
 enum WorkbenchBackgroundCounters {
     struct Snapshot: Sendable { var decodes = 0; var blurs = 0; var draws = 0 }
     private static let value = Mutex(Snapshot())
@@ -473,32 +477,42 @@ extension EnvironmentValues {
             view.postsFrameChangedNotifications = true; view.postsBoundsChangedNotifications = true
             for name in [NSView.frameDidChangeNotification, NSView.boundsDidChangeNotification] {
                 observers.append(NotificationCenter.default.addObserver(forName: name, object: view, queue: .main) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.geometryDidChange() }
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        if self.geometryDidChange() { self.needsLayout = true }
+                    }
                 })
             }
             ancestor = view.superview
         }
         observedGeometry = nil
-        geometryDidChange()
+        if geometryDidChange() { needsLayout = true }
     }
-    private func geometryDidChange() {
+    @discardableResult private func geometryDidChange() -> Bool {
+        #if DEBUG
+        WorkbenchGlassUpdateProbe.event?("geometry")
+        #endif
         let coordinates = owner?.coordinates(for: self) ?? (rect: bounds, viewport: bounds.size)
         let clipped = visibleRect.intersection(bounds)
         let visible = isHiddenOrHasHiddenAncestor || clipped.isNull || clipped.isEmpty ? CGRect.zero : clipped
         let current = Geometry(rect: coordinates.rect, viewport: coordinates.viewport,
             visible: visible, rootFrame: isCanvas ? convert(bounds, to: nil) : nil)
-        guard current != observedGeometry else { return }
+        guard current != observedGeometry else { return false }
         observedGeometry = current
-        refreshGlass()
         // Leaving view must still remove an overlap record. Returning to view
         // resamples the latest source; no node/editor/port view is unmounted.
         owner?.readability.update(self)
-        guard !visible.isEmpty else { return }
+        guard !visible.isEmpty else {
+            // AppKit need not lay out an offscreen descendant. Retire its optical
+            // host now; re-entry prepares current geometry at the next layout.
+            clearGlass(); return true
+        }
         if isCanvas {
             geometryInvalidationCount += 1; needsDisplay = true; owner?.invalidate()
         } else if drawsGlass && owner?.image != nil {
             geometryInvalidationCount += 1; needsDisplay = true
         }
+        return true
     }
     private func clearGlass() {
         glassHost?.removeFromSuperview(); glassHost = nil; glassParameters = nil;glassPath=nil
@@ -506,8 +520,12 @@ extension EnvironmentValues {
     }
     /// Event-driven background update. Equal inputs never rebuild the shader host.
     func refreshGlass() {
+        #if DEBUG
+        WorkbenchGlassUpdateProbe.event?("refresh")
+        #endif
+        let clipped = visibleRect.intersection(bounds)
         guard !isCanvas, !isGeometryOnly, drawsGlass, strength > 0,
-              !isHiddenOrHasHiddenAncestor, !visibleRect.isEmpty,
+              !isHiddenOrHasHiddenAncestor, !clipped.isNull, !clipped.isEmpty,
               bounds.width > 0, bounds.height > 0, let owner,
               let image = owner.glassImage(canvas: palette.canvas) else {
             clearGlass(); return
@@ -535,6 +553,9 @@ extension EnvironmentValues {
             glassProtection.source = self; glassProtection.autoresizingMask = [.width, .height]
             glassProtection.frame = bounds; addSubview(glassProtection)
         } else if glassParameters?.matches(next) != true {
+            #if DEBUG
+            WorkbenchGlassUpdateProbe.event?("host-update")
+            #endif
             glassHost?.rootView = WorkbenchGlassDrawing(parameters: next)
             if glassHost?.frame != bounds { glassHost?.frame = bounds; glassProtection.frame = bounds }
         }
@@ -599,7 +620,10 @@ struct WorkbenchLocalSurface: NSViewRepresentable {
         view.synchronizeTitlebar()
         owner?.surfaces.add(view)
         if isCanvas, owner?.root !== view { owner?.root = view; owner?.invalidate() }
-        view.refreshGlass(); view.needsDisplay = true; owner?.readability.update(view)
+        // The new contour can already contain the next zoom while bounds still
+        // belong to the previous layout. Prepare once at the final native size.
+        // Geometry/readability records stay synchronous; draw is a final guard.
+        view.needsLayout = true; view.needsDisplay = true; owner?.readability.update(view)
     }
     static func dismantleNSView(_ view: WorkbenchBackgroundNSView, coordinator: ()) {
         view.releaseTitlebar(); view.owner?.readability.remove(view); view.owner = nil; view.refreshGlass()

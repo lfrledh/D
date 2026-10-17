@@ -992,9 +992,14 @@ private actor LocalGlassNoInference: InferenceEngine {
         await controller.load(); controller.addExample("template")
         let graph = try #require(controller.graph)
         let undoBefore = controller.canUndo
+        let state = ChatDisplayPreferencesState(appearanceDirectory: root.appendingPathComponent("Appearance"))
+        let wallpaper = root.appendingPathComponent("pattern.png"); try png(pattern(width: 1024, height: 768), at: wallpaper)
+        await state.importWallpaper(wallpaper)
         func content() -> some View {
             WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
                 onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in })
+                .modifier(WorkbenchCanvasModifier(state: state))
+                .environment(\.chatDisplayPreferences, state.preferences)
         }
         let host = NSHostingView(rootView: content()); host.frame = CGRect(x: 0, y: 0, width: 1100, height: 760)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -1010,6 +1015,14 @@ private actor LocalGlassNoInference: InferenceEngine {
         let original = try #require(probe.wheelLayout(size))
         let offset = scroll.contentView.bounds.origin, mouse = CGPoint(x: 310, y: 210)
         let anchor = original.rawPoint(screenPoint: mouse, offset: offset)
+        let surfaces = descendants(host).compactMap { $0 as? WorkbenchBackgroundNSView }
+        let owner = try #require(surfaces.first(where: { $0.isCanvas })?.owner)
+        try #require(surfaces.contains(where: { $0.usesContinuousGlass }))
+        let buildsBefore = owner.glassFields.builds
+        var glassUpdates: [String: Int] = [:]
+        WorkbenchGlassUpdateProbe.event = { glassUpdates[$0, default: 0] += 1 }
+        defer { WorkbenchGlassUpdateProbe.event = nil }
+        let began = ProcessInfo.processInfo.systemUptime
         let callback = probe.onWheel // Keep this exact production closure throughout the burst.
         var bodies: [UUID: Int] = [:], menus: [UUID: Int] = [:]
         WorkflowCanvasUpdateProbe.nodeBody = { bodies[$0, default: 0] += 1 }
@@ -1036,6 +1049,17 @@ private actor LocalGlassNoInference: InferenceEngine {
         print("WHEEL_NODE_MENUS direction=\(direction) bodies=\(bodies.values.reduce(0,+)) menus=\(menus.values.reduce(0,+)) nodes=\(bodies.count)")
         #expect(bodies.count == graph.nodes.count && bodies.values.allSatisfy { $0 > 0 })
         #expect(menus == bodies, "Each real zoom body shares one fresh menu across popup, context menu and accessibility")
+        print("WHEEL_GLASS direction=\(direction) work=\(glassUpdates) builds=\(owner.glassFields.builds-buildsBefore) wall_ms=\((ProcessInfo.processInfo.systemUptime-began)*1000)")
+        #expect(glassUpdates["refresh", default: 0] < 80,
+            "Four accumulated events must not rebuild the optical background at every intermediate native notification")
+        let finalSurfaces = descendants(host).compactMap { $0 as? WorkbenchBackgroundNSView }.filter { $0.usesContinuousGlass }
+        try #require(!finalSurfaces.isEmpty)
+        for surface in finalSurfaces {
+            let parameters = try #require(surface.continuousGlassParameters)
+            #expect(parameters.size == surface.bounds.size && parameters.rect == owner.coordinates(for:surface).rect)
+            #expect(surfaces.contains { $0 === surface }, "Zoom retains native decorative hosts")
+        }
+        #expect(owner.decodeCount == 1)
         #expect(controller.graph == graph && controller.canUndo == undoBefore)
         try await store.close()
     }
@@ -1250,9 +1274,15 @@ private actor LocalGlassNoInference: InferenceEngine {
         let inside = WorkbenchBackgroundNSView(frame: .init(x: 100,y: 100,width: 150,height: 80))
         let outside = WorkbenchBackgroundNSView(frame: .init(x: 15_000,y: 10_000,width: 150,height: 80))
         for plate in [inside,outside] { plate.owner = owner; document.addSubview(plate); owner.surfaces.add(plate) }
+        let front = WorkbenchBackgroundNSView(frame:.init(x:110,y:110,width:100,height:50))
+        front.owner = owner; front.readability = .init(enabled:true,amount:1)
+        root.addSubview(front); owner.surfaces.add(front)
         window.contentView?.layoutSubtreeIfNeeded()
         if wallpaper {
-            let file = directory.appendingPathComponent("source.png"); try png(pattern(),at: file)
+            // A uniform source isolates overlap from wallpaper-complexity patches.
+            let bitmap = try #require(WorkbenchLocalRenderer.bitmap(width:16,height:16))
+            bitmap.setFillColor(NSColor.gray.cgColor); bitmap.fill(.init(x:0,y:0,width:16,height:16))
+            let file = directory.appendingPathComponent("source.png"); try png(#require(bitmap.makeImage()),at: file)
             owner.load(file)
             for _ in 0..<100 where owner.image == nil { try await Task.sleep(for: .milliseconds(10)) }
             try #require(owner.image != nil)
@@ -1260,6 +1290,7 @@ private actor LocalGlassNoInference: InferenceEngine {
         for _ in 0..<5 { window.contentView?.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
         let counts = [inside,outside,root].map(\.geometryInvalidationCount)
         let before = owner.drawCount
+        #expect(!owner.readability.effect(for:front).patches.isEmpty)
         scroll.contentView.scroll(to: .init(x: 12,y: 8))
         NotificationCenter.default.post(name: NSView.boundsDidChangeNotification, object: scroll.contentView)
         #expect(inside.geometryInvalidationCount == counts[0] + (wallpaper ? 1 : 0))
@@ -1272,6 +1303,19 @@ private actor LocalGlassNoInference: InferenceEngine {
         NotificationCenter.default.post(name: NSView.boundsDidChangeNotification, object: scroll.contentView)
         #expect(outside.geometryInvalidationCount == counts[1] + (wallpaper ? 1 : 0))
         #expect(inside.geometryInvalidationCount == once)
+        #expect(owner.readability.effect(for:front).patches.isEmpty,
+            "Leaving the viewport removes overlap synchronously, before deferred optical layout")
+        root.layoutSubtreeIfNeeded()
+        #expect(!inside.usesContinuousGlass)
+        if wallpaper {
+            let parameters = try #require(outside.continuousGlassParameters)
+            #expect(parameters.rect == owner.coordinates(for:outside).rect)
+        }
+        scroll.contentView.scroll(to:.zero)
+        NotificationCenter.default.post(name:NSView.boundsDidChangeNotification,object:scroll.contentView)
+        #expect(!owner.readability.effect(for:front).patches.isEmpty)
+        root.layoutSubtreeIfNeeded()
+        if wallpaper { #expect(inside.usesContinuousGlass && !outside.usesContinuousGlass) }
         owner.load(nil, blur: false)
         #expect(owner.image == nil)
         print("GEOMETRY_INVALIDATIONS wallpaper=\(wallpaper) visible=\(inside.geometryInvalidationCount-counts[0]) entered=\(outside.geometryInvalidationCount-counts[1]) root=\(root.geometryInvalidationCount-counts[2])")

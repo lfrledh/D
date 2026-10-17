@@ -129,6 +129,12 @@ struct WorkbenchContinuousGlassTests {
             let pointX = (Float(shoulder.column)+0.5)/Float(density)
             #expect(position.x - 20 - pointX > 2.9,
                 "Increase the shoulder displacement without widening its accepted 18-point range")
+            let peak=(0..<Int(18*density)).map { x -> Float in
+                coordinates[shoulder.rowIndex*output.width+x].x-20-(Float(x)+0.5)/Float(density)
+            }.max()!
+            let oldPeak:Float=0.32*18*0.55296
+            #expect(peak>oldPeak*1.99 && peak<=oldPeak*2.001,
+                "Double the physical straight-edge peak within the same shoulder")
             for y in 0..<output.height { for x in 0..<output.width {
                 let p=SIMD2<Float>((Float(x)+0.5)/Float(density),(Float(y)+0.5)/Float(density))
                 let distance=min(p.x,p.y,Float(size.width)-p.x,Float(size.height)-p.y)
@@ -140,11 +146,13 @@ struct WorkbenchContinuousGlassTests {
             } }
         }
         // A linear ramp must remain monotonic through the entire shoulder. This
-        // detects folds and the former discrete ring transition seams.
+        // detects folds and discrete seams. The stronger C1 shoulder has max
+        // straight-edge slope 1 + peakGain*1.5/.2 = 3.655; after .82 mixing
+        // and 8-bit rounding its adjacent ramp bound is four (formerly two).
         let row=output.height/2
         for x in 2..<output.width-2 {
             let previous=Int(glass[(row*output.width+x-1)*4]), current=Int(glass[(row*output.width+x)*4])
-            #expect(current >= previous && current-previous <= 2)
+            #expect(current >= previous && current-previous <= 4)
         }
         if shape == "continuous160", density == 2,
            let root=ProcessInfo.processInfo.environment["D_GLASS_EVIDENCE_DIR"] {
@@ -183,6 +191,54 @@ struct WorkbenchContinuousGlassTests {
 }
 
 extension WorkbenchContinuousGlassTests {
+    @Test(arguments: [false, true], ["corner", "concave", "hole"])
+    func signedGPUContourUsesFilledSideAtVertices(reversed: Bool, shape: String) throws {
+        let contours: [[CGPoint]]
+        let samples: [(CGPoint, Float)]
+        switch shape {
+        case "concave":
+            contours = [[.init(x:0,y:0),.init(x:30,y:0),.init(x:30,y:10),.init(x:10,y:10),.init(x:10,y:30),.init(x:0,y:30)]]
+            samples = [(.init(x:9,y:9),sqrt(2)),(.init(x:9,y:10),1),(.init(x:10,y:9),1),(.init(x:11,y:11),-1)]
+        case "hole":
+            contours = [[.init(x:0,y:0),.init(x:160,y:0),.init(x:160,y:120),.init(x:0,y:120)],
+                        [.init(x:40,y:40),.init(x:40,y:80),.init(x:120,y:80),.init(x:120,y:40)]]
+            samples = [(.init(x:39,y:40),1),(.init(x:40,y:39),1),(.init(x:39,y:39),sqrt(2)),(.init(x:41,y:41),-1)]
+        default:
+            contours = [[.init(x:0,y:0),.init(x:30,y:0),.init(x:30,y:30),.init(x:0,y:30)]]
+            samples = [(.init(x:-1,y:0),-1),(.init(x:0,y:-1),-1),(.init(x:-1,y:-1),-sqrt(2)),(.init(x:1,y:1),1)]
+        }
+        let path = CGMutablePath()
+        for contour in contours {
+            let points = reversed ? Array(contour.reversed()) : contour
+            path.move(to:points[0]); for p in points.dropFirst() { path.addLine(to:p) }; path.closeSubpath()
+        }
+        let field = try #require(WorkbenchGlassField.make(path:path,size:.init(width:160,height:120),density:2))
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let url = URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/UI/Resources/Shaders/WorkbenchContinuousGlass.metal")
+        let source = try String(contentsOf:url,encoding:.utf8) + """
+        kernel void signedProbe(device const void *field [[buffer(0)]],
+            device const float2 *points [[buffer(1)]], device float *out [[buffer(2)]], uint i [[thread_position_in_grid]]) {
+            if (i<4) out[i]=glassDistance(points[i]*2+2,field,uint2(324,244),1000,true)/2;
+        }
+        """
+        let library = try device.makeLibrary(source:source,options:nil)
+        let pipeline = try device.makeComputePipelineState(function:#require(library.makeFunction(name:"signedProbe")))
+        let buffer = try #require(field.data.withUnsafeBytes { device.makeBuffer(bytes:$0.baseAddress!,length:$0.count) })
+        let points = samples.map { SIMD2<Float>(Float($0.0.x),Float($0.0.y)) }
+        let input = try #require(points.withUnsafeBytes { device.makeBuffer(bytes:$0.baseAddress!,length:$0.count) })
+        let output = try #require(device.makeBuffer(length:4*MemoryLayout<Float>.stride))
+        let queue = try #require(device.makeCommandQueue()), command = try #require(queue.makeCommandBuffer())
+        let encoder = try #require(command.makeComputeCommandEncoder())
+        encoder.setComputePipelineState(pipeline);encoder.setBuffer(buffer,offset:0,index:0)
+        encoder.setBuffer(input,offset:0,index:1);encoder.setBuffer(output,offset:0,index:2)
+        encoder.dispatchThreads(.init(width:4,height:1,depth:1),threadsPerThreadgroup:.init(width:4,height:1,depth:1))
+        encoder.endEncoding();command.commit();command.waitUntilCompleted()
+        try #require(command.status == .completed)
+        let values = output.contents().bindMemory(to:Float.self,capacity:4)
+        for i in samples.indices { #expect(abs(values[i]-samples[i].1)<0.001) }
+    }
+
     @Test func contourPreparationNeverAllocatesPanelAreaOrStarvesLaterSurfaces() throws {
         let cache=WorkbenchGlassFields();var times:[Double]=[]
         for index in 0..<192 {
@@ -227,7 +283,7 @@ extension WorkbenchContinuousGlassTests {
         let cell=min(rows-1,max(0,Int(point.y)/tile))*cols+min(cols-1,max(0,Int(point.x)/tile))
         let first=Int(word(5+cell*2)),count=Int(word(6+cell*2));var best:Float=10000
         for i in first..<first+count {
-            let j=Int(word(0))+Int(word(Int(word(1))+i))*4
+            let j=Int(word(0))+Int(word(Int(word(1))+i))*8
             let a=SIMD2<Float>(Float(bitPattern:word(j)),Float(bitPattern:word(j+1))),b=SIMD2<Float>(Float(bitPattern:word(j+2)),Float(bitPattern:word(j+3)))
             let q=SIMD2<Float>(Float(point.x),Float(point.y))-a,v=b-a
             let t=max(0,min(1,(q.x*v.x+q.y*v.y)/max(0.000001,v.x*v.x+v.y*v.y)))

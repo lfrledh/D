@@ -3,20 +3,31 @@ using namespace metal;
 
 // Filled-boundary geometry only; no foreground or desktop pixels. Each cell
 // includes every segment within the full shoulder and derivative guard.
-static float glassDistance(float2 p, device const void *bytes, uint2 n, float interior) {
+static float glassDistance(float2 p, device const void *bytes, uint2 n, float interior, bool oriented = false) {
     device const uint *w=static_cast<device const uint *>(bytes);
     uint2 c=min(uint2(max(p,float2(0))/float(w[4])),uint2(w[2]-1,w[3]-1));
     uint row=5+(c.y*w[2]+c.x)*2,first=w[row],count=w[row+1];
     device const float4 *segments=reinterpret_cast<device const float4 *>(w+w[0]);
     device const uint *indices=w+w[1];
-    float best=interior*interior;
+    float best=interior*interior,side=1.0;
     for (uint i=0;i<count;i++) {
-        float4 segment=segments[indices[first+i]];
+        uint index=indices[first+i]*2;
+        float4 segment=segments[index];
         float2 v=segment.zw-segment.xy,q=p-segment.xy;
         float t=clamp(dot(q,v)/max(dot(v,v),0.0000001),0.0,1.0);
-        float2 delta=q-v*t;best=min(best,dot(delta,delta));
+        float2 delta=q-v*t;float squared=dot(delta,delta);
+        if (squared<best) {
+            best=squared;
+            if (oriented) {
+                // At a shared vertex use the adjacent inward normals. A single
+                // edge cross product is ambiguous on the other edge's extension.
+                float4 ends=segments[index+1];
+                float2 normal=t<=0 ? ends.xy : (t>=1 ? ends.zw : float2(-v.y,v.x));
+                side=dot(delta,normal)<0 ? -1.0 : 1.0;
+            }
+        }
     }
-    return sqrt(best);
+    return sqrt(best)*side;
 }
 
 static float2 glassContourPosition(float2 p,float2 localSize,float2 fieldSize) {
@@ -33,18 +44,24 @@ static float2 glassSamplePosition(float2 p, device const void *fieldBytes, int f
         float2 cell = glassContourPosition(p,localSize,fieldSize);
         float pixel = min(surface.z / (fieldSize.x-4), surface.w / (fieldSize.y-4));
         float interior = 36.0 / max(pixel,0.001) + 4.0;
-        float d = glassDistance(cell, fieldBytes, n, interior) * pixel;
+        float d = glassDistance(cell, fieldBytes, n, interior, true) * pixel;
         // Keep the accepted shoulder width; displacement gain is independent.
         float rim = min(18.0, min(surface.z, surface.w) * 0.25);
         if (d > 0.0 && d < rim) {
         float t = d / max(rim,0.001);
-        // Average over a full shoulder. Retain the gradient's magnitude: unit
-        // normalization amplifies tiny medial-axis changes and folds corners.
+        // Signed distance keeps the outward sample negative: a straight edge
+        // retains its full inward direction instead of losing half the lens.
+        // Keep the full shoulder average, without near-zero normalization.
         float h = max(1.0, rim / max(pixel,0.001));
-        float2 g = float2(glassDistance(cell + float2(h,0),fieldBytes,n,interior) - glassDistance(cell-float2(h,0),fieldBytes,n,interior),
-                          glassDistance(cell + float2(0,h),fieldBytes,n,interior) - glassDistance(cell-float2(0,h),fieldBytes,n,interior)) / (2.0*h);
-        float shoulder = 16.0 * t*t * (1.0-t)*(1.0-t);
-        q += g * (0.32 * rim * clamp(strength,0.0,1.0) * shoulder);
+        float2 g = float2(glassDistance(cell + float2(h,0),fieldBytes,n,interior,true) - glassDistance(cell-float2(h,0),fieldBytes,n,interior,true),
+                          glassDistance(cell + float2(0,h),fieldBytes,n,interior,true) - glassDistance(cell-float2(0,h),fieldBytes,n,interior,true)) / (2.0*h);
+        // Move the peak outward and use the remaining shoulder for a gentle
+        // return to the unchanged center. Both ends have zero value and slope.
+        float shoulder = smoothstep(0.0,0.2,t) * (1.0-smoothstep(0.2,1.0,t));
+        // The former unsigned straight-edge peak was .32 * 16*.6^3*.4^2.
+        // Double that physical displacement, not a coefficient that folds it.
+        float peakGain = 2.0 * 0.32 * 0.55296;
+        q += g * (peakGain * rim * clamp(strength,0.0,1.0) * shoulder);
         }
     }
     return q;
