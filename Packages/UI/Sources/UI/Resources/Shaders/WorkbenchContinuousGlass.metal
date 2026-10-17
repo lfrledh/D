@@ -43,8 +43,9 @@ half4 workbenchContinuousGlass(float2 p, texture2d<half> background,
         // Smooth normalization tends to zero on a medial axis, instead of a hard normal flip.
         float2 normal = g * rsqrt(dot(g,g) + 0.04);
         float shoulder = 16.0 * t*t * (1.0-t)*(1.0-t);
-        // For a flat shoulder A/w=.12 has |A*g'/w|<.37; no discrete rings.
-        q += normal * (0.12 * rim * clamp(strength,0.0,1.0) * shoulder);
+        // A/w=.28 remains below the flat-shoulder folding limit (|A*g'/w|<.87).
+        // Increase the continuous lens, not its tint or number of edge bands.
+        q += normal * (0.28 * rim * clamp(strength,0.0,1.0) * shoulder);
         }
     }
     float2 uv = (q - imageRect.xy) / max(imageRect.zw, float2(0.001));

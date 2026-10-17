@@ -10,6 +10,91 @@ import UniformTypeIdentifiers
 
 @Suite @MainActor
 struct SharedLibraryBrowserTests {
+    @Test func libraryProjectionReuseKeepsLiveFactsAndExactSelections() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("projection-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Fixture.dproject"), name: "Original")
+        let asset = try await store.publishWorkflowAsset(data: Data("unchanged".utf8), mediaType: "text/plain",
+            name: "Asset", operationID: "fixture.projection")
+        var project = await store.snapshot()
+        let cache = SharedLibraryProjectionCache(), tags = ModelNodeTagStore()
+        let language = UILanguageStore(preferredLanguages: ["zh-Hans"])
+        var choices: [WorkflowModelChoice] = [], readiness: [String:SharedLibraryReadiness] = [:]
+        var tools: [WorkflowToolDefinition] = [], metadata: [String:ProjectAssetMetadataSnapshot] = [:]
+        func read(_ currentTags: ModelNodeTagStore? = nil) -> [SharedLibraryBrowserEntry] {
+            cache.entries(models: choices, readiness: readiness, tools: tools, projects: [project],
+                language: language, metadata: metadata, tags: currentTags ?? tags)
+        }
+        func expectFresh() {
+            let expected = SharedLibraryProjection.entries(models: choices, readiness: readiness, tools: tools,
+                projects: [project], language: language, metadata: metadata).map { entry in
+                    var value = entry
+                    if entry.item.kind == .model || entry.item.kind == .program {
+                        let old = SharedLibraryTagTarget.legacy(tags.readState(for: entry.item.key))
+                        value.legacyTags = old.names; value.legacyFailure = old.failure
+                    }
+                    return value
+                }
+            #expect(read() == expected)
+        }
+        let first = read(), selected = cache.selection(canvasMode: .nodes, family: nil)
+        let start = ProcessInfo.processInfo.systemUptime
+        for _ in 0..<200 { #expect(read() == first); #expect(cache.selection(canvasMode: .nodes, family: nil) == selected) }
+        let reusedMS = (ProcessInfo.processInfo.systemUptime - start) * 1000
+        let referenceStart = ProcessInfo.processInfo.systemUptime
+        for _ in 0..<200 { _ = SharedLibraryProjection.entries(models: choices, readiness: readiness, tools: tools,
+            projects: [project], language: language, metadata: metadata) }
+        print("LIBRARY_PROJECTION_COMPONENT iterations=200 reused_ms=\(reusedMS) uncached_ms=\((ProcessInfo.processInfo.systemUptime-referenceStart)*1000) not_FPS=true")
+        #expect(cache.projectionCount == 1)
+        let modelRow = try #require(first.first { $0.item.kind == .model && $0.item.readiness == .unprepared })
+        guard case .operation(_, let id?) = modelRow.selection else { Issue.record("Expected exact model binding"); return }
+        let descriptor = try #require(ModelNodeCatalog.entries.first { $0.id == modelRow.id })
+        choices = [.init(id: id, kind: try #require(SharedLibraryProjection.modelKind(descriptor)), displayName: "User choice")]
+        for value in [SharedLibraryReadiness.available, .unavailable] {
+            readiness[id] = value; expectFresh()
+            #expect(read().first { $0.id == modelRow.id }?.item.readiness == value)
+            #expect(cache.selection(canvasMode: .nodes, family: nil).first { $0.id == modelRow.id }?.item.readiness == value)
+        }
+        // Same IDs/revisions deliberately change: a revision-only cache is insufficient.
+        project.name = "Renamed"; project.assets[0].note = "Changed note"; expectFresh()
+        #expect(read().first { $0.item.kind == .asset }?.item.assetFacts?.note == "Changed note")
+        metadata["asset-instance:" + project.effectiveInstanceID.uuidString + ":" + asset.record.reference.assetID.uuidString] =
+            .init(project: project, asset: project.assets[0], record: asset.record, job: nil, occurrences: [], sourceIssue: nil)
+        expectFresh()
+        tools = [.init(name: "Tool", graph: WorkflowGraph(name: "Tool graph"))]; expectFresh()
+        tools[0].name = "Changed same version"; expectFresh()
+        #expect(read().contains { $0.item.title == "Changed same version" })
+        try tags.setTags(["live tag"], for: modelRow.item.key); expectFresh()
+        #expect(read().first { $0.id == modelRow.id }?.legacyTags == ["live tag"])
+        #expect(cache.selection(canvasMode: .nodes, family: nil).first { $0.id == modelRow.id }?.legacyTags == ["live tag"])
+        #expect(read(ModelNodeTagStore()).first { $0.id == modelRow.id }?.legacyTags == [])
+        expectFresh()
+        try language.select("en"); expectFresh()
+        language.testingBuiltIn(.init(schemaVersion: 1, locale: "en", displayName: "English",
+            strings: ["consistency.copy.verifyBeforeRun": "Updated bundle text"]))
+        let before = cache.projectionCount; expectFresh(); #expect(cache.projectionCount == before + 1)
+        #expect(read().first { $0.id == modelRow.id }?.facts.contains("Updated bundle text") == true)
+        try await store.close()
+    }
+
+    @Test(arguments: ["all", "nodes", "programs", "text", "image", "video", "audio"])
+    func projectionSelectionMatchesExistingCommandFilter(mode: String) {
+        let cache = SharedLibraryProjectionCache(), tags = ModelNodeTagStore()
+        let rows = cache.entries(models: [], readiness: [:], tools: [], projects: [], language: nil, metadata: [:], tags: tags)
+        let canvas: WorkflowCanvasLibraryMode? = mode == "nodes" ? .nodes : mode == "programs" ? .programs : nil
+        let family = QuickCategory(rawValue: mode)
+        let expected = rows.filter { value in
+            if let canvas { return canvas == .nodes ? value.item.kind == .model || value.item.kind == .component : value.item.kind == .program || value.item.kind == .tool }
+            guard let family else { return true }
+            guard case .operation(let operation, _) = value.selection else { return false }
+            return QuickCategory.category(for: operation) == family
+        }
+        for _ in 0..<5 { #expect(cache.selection(canvasMode: canvas, family: family) == expected) }
+        #expect(!expected.isEmpty)
+    }
+
     @Test func restoredInstanceHasSeparateRowsAndDragWhileTagKeyRemainsLogical() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("library-instances-" + UUID().uuidString)

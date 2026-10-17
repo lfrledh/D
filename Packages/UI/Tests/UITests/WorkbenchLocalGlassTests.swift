@@ -15,6 +15,11 @@ private actor LocalGlassNoInference: InferenceEngine {
     }
 }
 
+@MainActor private final class TitlebarCoordinateHost: NSView {
+    var flipsY = false
+    override var isFlipped: Bool { flipsY }
+}
+
 @Suite("D-owned local glass", .serialized)
 @MainActor struct WorkbenchLocalGlassTests {
     private func temporary() throws -> URL {
@@ -52,21 +57,13 @@ private actor LocalGlassNoInference: InferenceEngine {
     private func titlebarPixel(_ canvas: WorkbenchBackgroundNSView, external: CGColor) throws -> [UInt8] {
         let surface = try #require(canvas.titlebar?.surface)
         try #require(surface.superview === canvas.window?.contentView && !surface.isHidden)
-        let child=surface.subviews.compactMap { $0 as? WorkbenchBackgroundNSView }.first
-        if let child,canvas.strength>0,canvas.drawsGlass,canvas.owner?.image != nil {
-            let parameters=try #require(child.continuousGlassParameters, "The titlebar must actually mount the continuous shader")
-            #expect(parameters.image === canvas.owner?.glassImage(canvas:canvas.palette.canvas))
-            #expect(parameters.strength == canvas.strength)
-            // A parent's CGContext cannot record its Metal child. Execute that
-            // child's actual parameters offscreen instead; this is not a desktop screenshot.
-            return try ContinuousGlassPixelProbe.pixel(parameters)
-        }
+        #expect(surface.subviews.isEmpty, "Native chrome floats over the root background, without a glass strip")
         let c = try #require(WorkbenchLocalRenderer.bitmap(width: Int(surface.bounds.width), height: Int(surface.bounds.height)))
         c.setFillColor(external); c.fill(surface.bounds)
         c.translateBy(x: 0, y: CGFloat(c.height)); c.scaleBy(x: 1, y: -1)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: c, flipped: true)
-        if let child { child.draw(child.bounds) } else { surface.draw(surface.bounds) }
+        surface.draw(surface.bounds)
         NSGraphicsContext.restoreGraphicsState()
         let data = try #require(c.data).assumingMemoryBound(to: UInt8.self)
         let offset = Int(surface.bounds.midY) * c.bytesPerRow + Int(surface.bounds.midX) * 4
@@ -74,7 +71,7 @@ private actor LocalGlassNoInference: InferenceEngine {
     }
 
     @Test(arguments: [ColorScheme.light, .dark])
-    func titlebarKeepsLegacyColorBlendWithoutMigratingPreferences(scheme: ColorScheme) async throws {
+    func titlebarKeepsLegacyPreferencesButUsesRootBackground(scheme: ColorScheme) async throws {
         let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
         let state = ChatDisplayPreferencesState(appearanceDirectory: root)
         var value = state.preferences; value.appearance?.local = nil
@@ -99,17 +96,17 @@ private actor LocalGlassNoInference: InferenceEngine {
             #expect(canvas.legacyTitlebarBlend == blend && !canvas.drawsGlass)
             #expect(state.preferences == value && state.preferences.appearance?.local == nil)
             let pixel = try titlebarPixel(canvas, external: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
-            let expected = try #require(NSColor(canvas.palette.panelFill(canvasBlend: blend)).usingColorSpace(.sRGB))
+            let expected = try #require(NSColor(canvas.palette.canvasColor).usingColorSpace(.sRGB))
             for (actual, expected) in zip(pixel.prefix(3), [expected.redComponent, expected.greenComponent, expected.blueComponent]) {
                 #expect(abs(Double(actual) - Double(expected) * 255) <= 1)
             }
             #expect(pixel[3] == 255); images.append(pixel)
         }
-        #expect(images[0] != images[1] && images[1] != images[2])
+        #expect(images[0] == images[1] && images[1] == images[2])
     }
 
     @Test(arguments: [ColorScheme.light, .dark])
-    func titlebarUsesCanvasMaterialWithoutMovingContentOrReplacingControls(scheme: ColorScheme) async throws {
+    func titlebarContinuesRootWithoutMovingContentOrReplacingControls(scheme: ColorScheme) async throws {
         let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
         let state = ChatDisplayPreferencesState(appearanceDirectory: root.appendingPathComponent("Appearance"))
         let source = root.appendingPathComponent("source.png"); try png(pattern(), at: source)
@@ -167,7 +164,7 @@ private actor LocalGlassNoInference: InferenceEngine {
             #expect(a == b && a[3] == 255, "Titlebar pixels exclude anything behind D")
             images.append(a)
         }
-        #expect(images[0] != images[1] && images[1] != images[2], "Titlebar follows the continuous glass setting: \(images), band \(chrome.frame(in: canvas)), bounds \(canvas.bounds)")
+        #expect(images[0] == images[1] && images[1] == images[2], "Root continuation has no separate glass tint")
         window.setContentSize(CGSize(width: 840, height: 520)); try await settle(); try checkGeometry()
         #expect(owner.decodeCount == 1 && owner.blurCount == 1)
         var value = state.preferences; value.appearance?.local?.material = .solid
@@ -231,6 +228,56 @@ private actor LocalGlassNoInference: InferenceEngine {
         view.releaseTitlebar(); view.releaseTitlebar()
         #expect(other.title == "Unrelated new title" && other.backgroundColor == .orange)
         #expect(!other.titlebarAppearsTransparent && !other.styleMask.contains(.fullSizeContentView))
+    }
+
+    @Test(arguments: [false, true])
+    func titlebarWallpaperMatchesWholeRootAcrossClippedHosts(flipped: Bool) async throws {
+        let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("pattern.png"); try png(pattern(width: 640, height: 420), at: file)
+        let owner = WorkbenchBackgroundOwner(); owner.load(file, blur: false)
+        for _ in 0..<100 where owner.image == nil { try await Task.sleep(for: .milliseconds(5)) }
+        let image = try #require(owner.image)
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 640, height: 400),
+            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; defer { window.contentView = nil; window.close() }
+        let host = TitlebarCoordinateHost(frame: CGRect(x: 0, y: 0, width: 640, height: 400)); host.flipsY = flipped
+        window.contentView = host
+        let clip = NSView(frame: CGRect(x: 0, y: flipped ? 60 : 0, width: 640, height: 340)); clip.clipsToBounds = true; host.addSubview(clip)
+        let canvas = WorkbenchBackgroundNSView(frame: clip.bounds)
+        canvas.isCanvas = true; canvas.stylesWindowTitlebar = true; canvas.owner = owner; owner.root = canvas
+        clip.addSubview(canvas); canvas.synchronizeTitlebar()
+        let surface = try #require(canvas.titlebar?.surface)
+        let coordinates = owner.coordinates(for: surface), size = surface.bounds.size
+        #expect(surface.subviews.isEmpty && surface.hitTest(.zero) == nil)
+        #expect(coordinates.rect.minY == 0, "Root continuation reaches the actual window top")
+        let actual = try #require(WorkbenchLocalRenderer.bitmap(width: Int(size.width), height: Int(size.height)))
+        actual.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1)); actual.fill(surface.bounds)
+        actual.translateBy(x: 0, y: CGFloat(actual.height)); actual.scaleBy(x: 1, y: -1)
+        NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: actual, flipped: true)
+        surface.draw(surface.bounds); NSGraphicsContext.restoreGraphicsState()
+        let whole = try #require(WorkbenchLocalRenderer.bitmap(width: Int(coordinates.viewport.width), height: Int(coordinates.viewport.height)))
+        whole.translateBy(x: 0, y: CGFloat(whole.height)); whole.scaleBy(x: 1, y: -1)
+        WorkbenchLocalRenderer.draw(in: whole, size: coordinates.viewport,
+            rect: CGRect(origin: .zero, size: coordinates.viewport), viewport: coordinates.viewport,
+            image: image, canvas: canvas.palette.canvas, panel: canvas.palette.panel, strength: 0, glass: false)
+        let a = try #require(actual.data).assumingMemoryBound(to: UInt8.self)
+        let b = try #require(whole.data).assumingMemoryBound(to: UInt8.self)
+        // Bitmap storage rows follow the top-left drawing after the explicit CTM flip.
+        let firstRow = Int(coordinates.rect.minY), firstColumn = Int(coordinates.rect.minX)
+        var colors = Set<UInt8>(), maxDifference = 0, alternateDifference = 0
+        for y in 0..<actual.height { for x in 0..<actual.width {
+            let source = (y+firstRow)*whole.bytesPerRow+(x+firstColumn)*4, target = y*actual.bytesPerRow+x*4
+            for channel in 0..<4 {
+                maxDifference = max(maxDifference, abs(Int(a[target+channel])-Int(b[source+channel])))
+                let alternate = (y+whole.height-Int(coordinates.rect.maxY))*whole.bytesPerRow+(x+firstColumn)*4
+                alternateDifference = max(alternateDifference, abs(Int(a[target+channel])-Int(b[alternate+channel])))
+            }
+            #expect(a[target+3] == 255); colors.insert(a[target])
+        } }
+        print("TITLEBAR_COORD flipped=\(flipped) rect=\(coordinates.rect) viewport=\(coordinates.viewport) actual=\(actual.width)x\(actual.height) diff=\(maxDifference) alternate=\(alternateDifference)")
+        #expect(maxDifference <= 1)
+        #expect(alternateDifference > 16, "The opposite strip is a negative coordinate control")
+        #expect(colors.count > 16, "Nonuniform wallpaper must expose a misplaced strip")
     }
 
     @Test(arguments: [CGFloat(22), CGFloat(48), CGFloat(320)])

@@ -35,7 +35,24 @@ import Foundation
     private static func identity(_ descriptor: ModelNodeDescriptor, kind: WorkflowModelKind) -> String {
         kind.rawValue + ":" + (externalProfile(descriptor)?.modelIdentity ?? descriptor.revision)
     }
+    // The bundle's descriptive routes are immutable. Keep this UI-only snapshot
+    // separate from live readiness and the executor's validation/admission.
+    private static let bundledOperations: [String: String] = Dictionary(
+        ModelNodeCatalog.entries.compactMap { descriptor in
+            guard let kind = modelKind(descriptor) else { return nil }
+            let choice = WorkflowModelChoice(id: identity(descriptor, kind: kind), kind: kind, displayName: descriptor.title)
+            return (kind.rawValue + ":" + choice.id, uncachedOperation(choice))
+        }, uniquingKeysWith: { first, _ in first })
+    private static let bundledDescriptorOperations: [String: String] = Dictionary(
+        ModelNodeCatalog.entries.compactMap { descriptor in
+            guard let kind = modelKind(descriptor) else { return nil }
+            let choice = WorkflowModelChoice(id: identity(descriptor, kind: kind), kind: kind, displayName: descriptor.title)
+            return (descriptor.id, externalProfile(descriptor).map { WorkflowVideoRecipe(profile: $0).operationID } ?? WorkflowModelRoutes.operation(for: choice) ?? operation(kind))
+        }, uniquingKeysWith: { first, _ in first })
     private static func operation(_ choice: WorkflowModelChoice) -> String {
+        bundledOperations[choice.kind.rawValue + ":" + choice.id] ?? uncachedOperation(choice)
+    }
+    private static func uncachedOperation(_ choice: WorkflowModelChoice) -> String {
         if let exact = WorkflowModelRoutes.operation(for: choice) { return exact }
         if choice.kind == .video, let profile = ExternalVideoExecutionProfile.allCases.first(where: { choice.id == "video:" + $0.modelIdentity }) {
             return WorkflowVideoRecipe(profile: profile).operationID
@@ -67,7 +84,7 @@ import Foundation
         }
         for descriptor in ModelNodeCatalog.entries {
             guard !result.contains(where: { $0.item.key == descriptor.id }) else { continue }
-            if let kind = modelKind(descriptor), let definition = registry.operation(externalProfile(descriptor).map { WorkflowVideoRecipe(profile: $0).operationID } ?? WorkflowModelRoutes.operation(for: WorkflowModelChoice(id: identity(descriptor, kind: kind), kind: kind, displayName: descriptor.title)) ?? operation(kind))?.definition {
+            if let kind = modelKind(descriptor), let route = bundledDescriptorOperations[descriptor.id], let definition = registry.operation(route)?.definition {
                 let identity = identity(descriptor, kind: kind)
                 result.append(.init(item: .init(key: descriptor.id, title: descriptor.title,
                     detail: WorkflowCanvasPresentation.operationTitle(definition, language: language), kind: .model, role: "primary-model",
@@ -116,5 +133,71 @@ import Foundation
             }
         }
         return result
+    }
+}
+
+/// One bounded snapshot per workbench. Navigation and canvas geometry are not
+/// inputs; every mutable source fact remains part of equality. No command,
+/// permission, model lease or selected runtime result is cached here.
+@MainActor final class SharedLibraryProjectionCache {
+    private struct Input: Equatable {
+        let models: [WorkflowModelChoice]
+        let readiness: [String: SharedLibraryReadiness]
+        let tools: [WorkflowToolDefinition]
+        let projects: [ProjectManifest]
+        let metadata: [String: ProjectAssetMetadataSnapshot]
+        let languageOwner: ObjectIdentifier?
+        let locale: String?
+        let languageRevision: UInt64?
+    }
+    private var input: Input?
+    private var base: [SharedLibraryBrowserEntry] = []
+    private var legacy: [ModelNodeTagReadState] = []
+    private var result: [SharedLibraryBrowserEntry] = []
+    private struct Filter: Hashable { let mode: WorkflowCanvasLibraryMode?; let family: QuickCategory? }
+    private var selections: [Filter: [SharedLibraryBrowserEntry]] = [:]
+    private(set) var projectionCount = 0
+    func entries(models: [WorkflowModelChoice], readiness: [String: SharedLibraryReadiness],
+                 tools: [WorkflowToolDefinition], projects: [ProjectManifest], language: UILanguageStore?,
+                 metadata: [String: ProjectAssetMetadataSnapshot], tags: ModelNodeTagStore) -> [SharedLibraryBrowserEntry] {
+        let next = Input(models: models, readiness: readiness, tools: tools, projects: projects,
+            metadata: metadata, languageOwner: language.map(ObjectIdentifier.init),
+            locale: language?.effectiveLanguageIdentifier, languageRevision: language?.presentationRevision)
+        let changed = input != next
+        if changed {
+            base = SharedLibraryProjection.entries(models: models, readiness: readiness, tools: tools,
+                projects: projects, language: language, metadata: metadata)
+            input = next; projectionCount += 1
+        }
+        // Legacy preferences are not Observable: read them on every presentation
+        // update, including a same-ID store replacement or corruption/recovery.
+        let states = base.filter { $0.item.kind == .model || $0.item.kind == .program }.map { tags.readState(for: $0.item.key) }
+        if changed || states != legacy {
+            var index = 0
+            result = base.map { entry in
+                guard entry.item.kind == .model || entry.item.kind == .program else { return entry }
+                var value = entry
+                let state = SharedLibraryTagTarget.legacy(states[index]); index += 1
+                value.legacyTags = state.names; value.legacyFailure = state.failure
+                return value
+            }
+            legacy = states; selections.removeAll(keepingCapacity: true)
+        }
+        return result
+    }
+    func selection(canvasMode: WorkflowCanvasLibraryMode?, family: QuickCategory?) -> [SharedLibraryBrowserEntry] {
+        let key = Filter(mode: canvasMode, family: family)
+        if let current = selections[key] { return current }
+        let current = result.filter { value in
+            if let canvasMode {
+                if let category = canvasMode.resourceCategory { return value.item.kind == .asset && category.contains(value.item.contentKind) }
+                return canvasMode == .nodes ? value.item.kind == .model || value.item.kind == .component : value.item.kind == .program || value.item.kind == .tool
+            }
+            guard let family else { return true }
+            guard case .operation(let operation, _) = value.selection else { return false }
+            return QuickCategory.category(for: operation) == family
+        }
+        selections[key] = current
+        return current
     }
 }

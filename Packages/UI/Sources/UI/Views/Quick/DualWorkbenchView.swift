@@ -75,17 +75,13 @@ public struct DualWorkbenchView: View {
         let chatChoice: ChatProjectAttachmentChoice?
         var id: WorkflowAssetReference { reference }
     }
+    @State private var libraryProjection = SharedLibraryProjectionCache()
     private var entries: [SharedLibraryBrowserEntry] {
-        SharedLibraryProjection.entries(models: quickModel.projectSession.explicitModelChoices,
+        libraryProjection.entries(models: quickModel.projectSession.explicitModelChoices,
             readiness: quickModel.projectSession.explicitModelReadiness,
-            tools: canvasModel.projectSession.workflow?.tools ?? [], projects: projects, language: language, metadata: libraryMetadata).map { entry in
-                guard entry.item.kind == .model || entry.item.kind == .program else { return entry }
-                var result = entry
-                let legacy = SharedLibraryTagTarget.legacy(nodeTags.readState(for: entry.item.key))
-                result.legacyTags = legacy.names; result.legacyFailure = legacy.failure
-                return result
-            }
+            tools: canvasModel.projectSession.workflow?.tools ?? [], projects: projects, language: language, metadata: libraryMetadata, tags: nodeTags)
     }
+
     @State private var sidebarState = WorkbenchSidebarState()
     @Environment(\.isEnabled) private var controlsEnabled
     private func selectCategory(_ category: QuickCategory) {
@@ -702,16 +698,14 @@ public struct DualWorkbenchView: View {
     }
     @ViewBuilder private func libraryBrowser(compact: Bool, at point: CGPoint, onBack: (() -> Void)? = nil, canvasMode: WorkflowCanvasLibraryMode? = nil) -> some View {
         if let metadata {
-            let sourceEntries = canvasMode?.resourceCategory != nil ? workspaceAssetEntries : entries
-            SharedLibraryBrowser(entries: sourceEntries.filter { value in
-                if let canvasMode {
-                    if let category=canvasMode.resourceCategory { return value.item.kind == .asset && category.contains(value.item.contentKind) }
-                    return canvasMode == .nodes ? value.item.kind == .model || value.item.kind == .component : value.item.kind == .program || value.item.kind == .tool
+            let sourceEntries: [SharedLibraryBrowserEntry] = {
+                if let category = canvasMode?.resourceCategory {
+                    return workspaceAssetEntries.filter { $0.item.kind == .asset && category.contains($0.item.contentKind) }
                 }
-                guard !compact, let family = modelPickerCategory else { return true }
-                guard case .operation(let operation, _) = value.selection else { return false }
-                return QuickCategory.category(for: operation) == family
-            }, store: metadata, compact: compact, allowsImport: canvasMode == nil || canvasMode?.resourceCategory != nil, canvasMode:canvasMode,
+                _ = entries // Refresh the complete semantic inputs before selecting.
+                return libraryProjection.selection(canvasMode: canvasMode, family: compact ? nil : modelPickerCategory)
+            }()
+            SharedLibraryBrowser(entries: sourceEntries, store: metadata, compact: compact, allowsImport: canvasMode == nil || canvasMode?.resourceCategory != nil, canvasMode:canvasMode,
                 state: canvasMode.flatMap { canvasLibraryStates[$0] } ?? (compact ? compactLibraryState : fullLibraryState),
                 onUse: useLibraryEntry, onAdd: { value in beginAddingLibraryEntry(value, at: point) },
                 onPreview: { value in Task { await previewLibraryEntry(value) } },

@@ -44,7 +44,6 @@ import SwiftUI
         appliedBackground = color
         surface.canvas = canvas
         refreshGeometry()
-        surface.synchronizeGlass()
         surface.needsDisplay = true
         // SwiftUI owns preferred/system appearance. Do not pin the native window
         // to today's resolved scheme, which would stop following system changes.
@@ -84,7 +83,7 @@ import SwiftUI
     func restore() {
         guard !restored else { return }; restored = true
         geometry?.invalidate(); geometry = nil
-        surface.canvas = nil; surface.synchronizeGlass(); surface.removeFromSuperview()
+        surface.canvas = nil; surface.removeFromSuperview()
         guard let window else { return }
         if window.backgroundColor == appliedBackground { window.backgroundColor = background }
         if window.isOpaque { window.isOpaque = opaque }
@@ -95,28 +94,12 @@ import SwiftUI
     isolated deinit { restore() }
 }
 
-/// A noninteractive plate attached to the real content host, not a deep SwiftUI
-/// background that can be clipped below the titlebar. The system still owns the
-/// title, traffic lights, drag region and close/termination delegate.
+/// Continue D's root background behind the native floating controls. This is
+/// not a glass plate: no separate tint, blur, refraction or sampled child host.
+/// The shallow canvas may be clipped below the titlebar, so the continuation
+/// belongs to the real content host. AppKit still owns all native interactions.
 @MainActor final class WorkbenchTitlebarSurface: NSView {
     weak var canvas: WorkbenchBackgroundNSView?
-    private let geometry = WorkbenchLocalRenderer.RefractionGeometry()
-    private var glass: WorkbenchBackgroundNSView?
-    func synchronizeGlass() {
-        guard let canvas, canvas.legacyTitlebarBlend == nil, canvas.drawsGlass else {
-            glass?.owner = nil; glass?.refreshGlass(); glass?.removeFromSuperview(); glass = nil; return
-        }
-        if glass == nil {
-            let view = WorkbenchBackgroundNSView(frame: bounds); view.autoresizingMask = [.width, .height]
-            glass = view; addSubview(view)
-        }
-        guard let glass else { return }
-        glass.owner = canvas.owner; glass.palette = canvas.palette; glass.strength = canvas.strength
-        glass.drawsGlass = canvas.drawsGlass
-        if glass.frame != bounds { glass.frame = bounds }
-        canvas.owner?.surfaces.add(glass); glass.refreshGlass(); glass.needsDisplay = true
-    }
-    override func layout() { super.layout(); synchronizeGlass() }
     #if DEBUG
     private var recordedDraw = false
     #endif
@@ -125,16 +108,11 @@ import SwiftUI
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func draw(_ dirtyRect: NSRect) {
         guard let canvas, canvas.window === window, let c = NSGraphicsContext.current?.cgContext else { return }
-        guard glass == nil else { return }
-        if let blend = canvas.legacyTitlebarBlend {
-            c.setFillColor(NSColor(canvas.palette.panelFill(canvasBlend: blend)).cgColor); c.fill(bounds)
-        } else {
-            let coordinates = canvas.owner?.coordinates(for: self) ?? (rect: bounds, viewport: bounds.size)
-            WorkbenchLocalRenderer.draw(in: c, size: bounds.size, rect: coordinates.rect,
-                viewport: coordinates.viewport, image: canvas.drawsGlass ? canvas.owner?.blurred : nil,
-                canvas: canvas.drawsGlass ? canvas.palette.canvas : canvas.palette.panel, panel: canvas.palette.panel,
-                strength: canvas.strength, glass: canvas.drawsGlass, refraction: false, geometry: geometry)
-        }
+        let coordinates = canvas.owner?.coordinates(for: self) ?? (rect: bounds, viewport: bounds.size)
+        WorkbenchLocalRenderer.draw(in: c, size: bounds.size, rect: coordinates.rect,
+            viewport: coordinates.viewport, image: canvas.owner?.image,
+            canvas: canvas.palette.canvas, panel: canvas.palette.panel,
+            strength: 0, glass: false, refraction: false)
         #if DEBUG
         if !recordedDraw, window?.isVisible == true,
            UUID(uuidString: ProcessInfo.processInfo.environment["D_UI_TEST_SESSION"] ?? "") != nil {

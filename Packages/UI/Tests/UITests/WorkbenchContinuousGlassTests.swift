@@ -87,6 +87,12 @@ struct WorkbenchContinuousGlassTests {
         #expect(shifted[center] > glass[center], "Changing D sample origin changes content; no decoration-only surrogate")
         // The middle of each contour has no optical displacement.
         #expect(abs(Int(glass[center])-Int(plain[center])) <= 1)
+        if shape == "rectangle160" {
+            let shoulder = (rowIndex:output.height/2, column:Int(6*density))
+            let index = (shoulder.rowIndex*output.width+shoulder.column)*4
+            #expect(Int(glass[index])-Int(plain[index]) >= 2,
+                "The continuous lens must visibly displace the background, beyond the previous subpixel shoulder")
+        }
         // A linear ramp must remain monotonic through the entire shoulder. This
         // detects folds and the former discrete ring transition seams.
         let row=output.height/2

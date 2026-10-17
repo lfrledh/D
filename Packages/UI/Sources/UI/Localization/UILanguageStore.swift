@@ -38,6 +38,8 @@ public final class UILanguageStore {
     public private(set) var selection: String
     public private(set) var diagnostics: [String] = []
     private var contentRevision: UInt64 = 0
+    // UI projection caches must also invalidate when a pack changes in place.
+    var presentationRevision: UInt64 { contentRevision }
 
     @ObservationIgnored private let settings: UserDefaults?
     @ObservationIgnored private let directory: URL?

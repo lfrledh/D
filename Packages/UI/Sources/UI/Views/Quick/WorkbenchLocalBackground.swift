@@ -377,7 +377,7 @@ enum WorkbenchLocalRenderer {
             }
         }
     }
-    func invalidate() { for view in surfaces.allObjects { view.refreshGlass(); view.needsDisplay = true; view.titlebar?.surface.synchronizeGlass(); view.titlebar?.surface.needsDisplay = true } }
+    func invalidate() { for view in surfaces.allObjects { view.refreshGlass(); view.needsDisplay = true; view.titlebar?.surface.needsDisplay = true } }
     func coordinateRoot(in window: NSWindow?) -> NSView? {
         guard let root, root.window === window else { return window?.contentView }
         return root.stylesWindowTitlebar ? window?.contentView : root
