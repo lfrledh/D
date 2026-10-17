@@ -23,31 +23,39 @@ static float2 glassContourPosition(float2 p,float2 localSize,float2 fieldSize) {
     return p / max(localSize,float2(0.001)) * (fieldSize-4.0) + 2.0;
 }
 
-[[ stitchable ]]
-half4 workbenchContinuousGlass(float2 p, texture2d<half> background,
-    device const void *fieldBytes, int fieldByteCount, float2 fieldSize, float2 localSize,
-    float4 surface, float4 imageRect, half4 canvas, half4 panel, float strength, float refracts) {
+// Pure sampling coordinates are shared with the offscreen GPU regression probe.
+static float2 glassSamplePosition(float2 p, device const void *fieldBytes, int fieldByteCount,
+    float2 fieldSize, float2 localSize, float4 surface, float strength, float refracts) {
     float2 q = surface.xy + p / max(localSize, float2(0.001)) * surface.zw;
     uint2 n = uint2(ceil(max(fieldSize, float2(0))));
     if (refracts > 0 && strength > 0 && n.x >= 5 && n.y >= 5 && n.x <= 8196 && n.y <= 8196
         && fieldByteCount >= 7 * int(sizeof(uint)) && all(surface.zw > 0)) {
         float2 cell = glassContourPosition(p,localSize,fieldSize);
         float pixel = min(surface.z / (fieldSize.x-4), surface.w / (fieldSize.y-4));
-        float interior = 12.0 / max(pixel,0.001) + 4.0;
+        float interior = 36.0 / max(pixel,0.001) + 4.0;
         float d = glassDistance(cell, fieldBytes, n, interior) * pixel;
-        float rim = min(12.0, min(surface.z, surface.w) * 0.25);
+        // A broader large-surface shoulder gives visible displacement without
+        // increasing the local gradient gain past the curved-boundary checks.
+        float rim = min(18.0, min(surface.z, surface.w) * 0.25);
         if (d > 0.0 && d < rim) {
         float t = d / max(rim,0.001);
-        float2 g = float2(glassDistance(cell + float2(1,0),fieldBytes,n,interior) - glassDistance(cell-float2(1,0),fieldBytes,n,interior),
-                          glassDistance(cell + float2(0,1),fieldBytes,n,interior) - glassDistance(cell-float2(0,1),fieldBytes,n,interior)) * 0.5;
-        // Smooth normalization tends to zero on a medial axis, instead of a hard normal flip.
-        float2 normal = g * rsqrt(dot(g,g) + 0.04);
+        // Average over a full shoulder. Retain the gradient's magnitude: unit
+        // normalization amplifies tiny medial-axis changes and folds corners.
+        float h = max(1.0, rim / max(pixel,0.001));
+        float2 g = float2(glassDistance(cell + float2(h,0),fieldBytes,n,interior) - glassDistance(cell-float2(h,0),fieldBytes,n,interior),
+                          glassDistance(cell + float2(0,h),fieldBytes,n,interior) - glassDistance(cell-float2(0,h),fieldBytes,n,interior)) / (2.0*h);
         float shoulder = 16.0 * t*t * (1.0-t)*(1.0-t);
-        // A/w=.28 remains below the flat-shoulder folding limit (|A*g'/w|<.87).
-        // Increase the continuous lens, not its tint or number of edge bands.
-        q += normal * (0.28 * rim * clamp(strength,0.0,1.0) * shoulder);
+        q += g * (0.28 * rim * clamp(strength,0.0,1.0) * shoulder);
         }
     }
+    return q;
+}
+
+[[ stitchable ]]
+half4 workbenchContinuousGlass(float2 p, texture2d<half> background,
+    device const void *fieldBytes, int fieldByteCount, float2 fieldSize, float2 localSize,
+    float4 surface, float4 imageRect, half4 canvas, half4 panel, float strength, float refracts) {
+    float2 q = glassSamplePosition(p,fieldBytes,fieldByteCount,fieldSize,localSize,surface,strength,refracts);
     float2 uv = (q - imageRect.xy) / max(imageRect.zw, float2(0.001));
     constexpr sampler linearSampler(coord::normalized, address::clamp_to_edge, filter::linear);
     half4 source = all(uv >= 0.0) && all(uv <= 1.0) ? background.sample(linearSampler, uv) : canvas;

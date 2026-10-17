@@ -68,8 +68,8 @@ final class WorkbenchGlassField {
         let cols=(width+tile-1)/tile,rows=(height+tile-1)/tile
         guard cols*rows<=65536 else { return nil }
         // Conservative for every scale sharing this canonical contour. Includes
-        // the ±1px normal samples and flattening error, across cell boundaries.
-        let band=Float(min(size.width,size.height)*density/4+4)
+        // the full-shoulder derivative samples and flattening error, across cells.
+        let band=Float(min(size.width,size.height)*density/2+4)
         var cells=[[UInt32]](repeating:[],count:cols*rows),references=0
         for (index,v) in segments.enumerated() {
             let x0=max(0,min(cols-1,Int(floor((min(v.x,v.z)-band)/Float(tile)))))

@@ -8,7 +8,7 @@ import Testing
 /// does not measure desktop presentation or SwiftUI compositor frame pacing.
 @Suite("Continuous D background", .serialized) @MainActor
 struct WorkbenchContinuousGlassTests {
-    @Test(arguments: [CGFloat(1), 2], ["rectangle22", "circle22", "continuous22", "rectangle64", "circle64", "continuous64", "rectangle160", "circle160", "continuous160", "overlap64", "neck64"])
+    @Test(arguments: [CGFloat(1), 2], ["rectangle22", "circle22", "continuous22", "rectangle64", "circle64", "continuous64", "rectangle160", "circle160", "continuous160", "overlap64", "neck64", "neck160", "hole160"])
     func productionShaderSamplesDBackgroundAtDisplayDensity(density: CGFloat, shape: String) throws {
         let device = try #require(MTLCreateSystemDefaultDevice(), "Metal device is required; CPU comparison is not GPU evidence")
         let libraryURL = try #require(WorkbenchContinuousGlassResources.bundle.url(forResource: "default", withExtension: "metallib"))
@@ -20,8 +20,12 @@ struct WorkbenchContinuousGlassTests {
         switch shape {
         case "overlap64":
             let joined=CGMutablePath();joined.addRect(.init(x:0,y:0,width:size.width*0.65,height:size.height));joined.addRect(.init(x:size.width*0.35,y:0,width:size.width*0.65,height:size.height));path=joined
-        case "neck64":
-            let joined=CGMutablePath();joined.addRect(.init(x:0,y:0,width:size.width*0.4,height:size.height));joined.addRect(.init(x:size.width*0.6,y:0,width:size.width*0.4,height:size.height));joined.addRect(.init(x:0,y:size.height*0.45,width:size.width,height:size.height*0.1));path=joined
+        case "hole160":
+            let joined=CGMutablePath();joined.addRect(box)
+            joined.move(to:.init(x:40,y:40));joined.addLine(to:.init(x:40,y:80));joined.addLine(to:.init(x:120,y:80));joined.addLine(to:.init(x:120,y:40));joined.closeSubpath();path=joined
+        case "neck64", "neck160":
+            let neckHeight: CGFloat = shape == "neck160" ? 16 : size.height*0.1
+            let joined=CGMutablePath();joined.addRect(.init(x:0,y:0,width:size.width*0.4,height:size.height));joined.addRect(.init(x:size.width*0.6,y:0,width:size.width*0.4,height:size.height));joined.addRect(.init(x:0,y:(size.height-neckHeight)/2,width:size.width,height:neckHeight));path=joined
         case let s where s.hasPrefix("circle"): path = CGPath(ellipseIn: box, transform: nil)
         case let s where s.hasPrefix("continuous"): path = RoundedRectangle(cornerRadius: min(24,length/4), style: .continuous).path(in: box).cgPath
         default: path = CGPath(rect: box, transform: nil)
@@ -40,6 +44,13 @@ struct WorkbenchContinuousGlassTests {
             half4 value = workbenchContinuousGlass(p, input, field, int(args[0].y), args[0].zw,
                 args[1].xy, args[2], args[3], half4(0.1,0.2,0.3,1), half4(0.1,0.2,0.3,1), 1, args[1].z);
             output.write(value, gid);
+        }
+        kernel void exerciseGlassPosition(device const void *field [[buffer(0)]],
+            constant float4 *args [[buffer(1)]], device float2 *out [[buffer(2)]], uint2 gid [[thread_position_in_grid]]) {
+            uint2 extent=uint2(args[1].xy*args[0].x);
+            if (gid.x>=extent.x || gid.y>=extent.y) return;
+            float2 p=(float2(gid)+0.5)/args[0].x;
+            out[gid.y*extent.x+gid.x]=glassSamplePosition(p,field,int(args[0].y),args[0].zw,args[1].xy,args[2],1,1);
         }
         """
         let library = try device.makeLibrary(source: source, options: nil)
@@ -79,6 +90,28 @@ struct WorkbenchContinuousGlassTests {
             values.withUnsafeMutableBytes { output.getBytes($0.baseAddress!, bytesPerRow: output.width*4, from: MTLRegionMake2D(0,0,output.width,output.height),mipmapLevel:0) }
             return values
         }
+        // Probe the production coordinate function as float2, avoiding colour
+        // quantization hiding a reversal at corners or local medial axes.
+        let positionPipeline = try device.makeComputePipelineState(function: #require(library.makeFunction(name: "exerciseGlassPosition")))
+        let positions = try #require(device.makeBuffer(length: output.width*output.height*MemoryLayout<SIMD2<Float>>.stride, options: .storageModeShared))
+        var positionArgs: [SIMD4<Float>] = [.init(Float(density),Float(field.data.count),Float(field.samplingSize.width),Float(field.samplingSize.height)),
+            .init(Float(size.width),Float(size.height),1,0),.init(20,30,Float(size.width),Float(size.height)),.init(0,0,256,256)]
+        let positionCommand = try #require(queue.makeCommandBuffer()), positionEncoder = try #require(positionCommand.makeComputeCommandEncoder())
+        positionEncoder.setComputePipelineState(positionPipeline); positionEncoder.setBuffer(buffer,offset:0,index:0)
+        positionArgs.withUnsafeBytes { positionEncoder.setBytes($0.baseAddress!,length:$0.count,index:1) }
+        positionEncoder.setBuffer(positions,offset:0,index:2)
+        positionEncoder.dispatchThreads(.init(width:output.width,height:output.height,depth:1),threadsPerThreadgroup:.init(width:8,height:8,depth:1));positionEncoder.endEncoding()
+        positionCommand.commit();positionCommand.waitUntilCompleted();try #require(positionCommand.status == .completed)
+        let coordinates=positions.contents().bindMemory(to:SIMD2<Float>.self,capacity:output.width*output.height)
+        var minimumDeterminant=Float.infinity, minimumAxis=Float.infinity, checked=0
+        for y in 0..<output.height-1 { for x in 0..<output.width-1 {
+            let p=CGPoint(x:(CGFloat(x)+0.5)/density,y:(CGFloat(y)+0.5)/density), step=1/density
+            guard [p,CGPoint(x:p.x+step,y:p.y),CGPoint(x:p.x,y:p.y+step),CGPoint(x:p.x+step,y:p.y+step)].allSatisfy({ path.contains($0,using:.winding) }) else { continue }
+            let q=coordinates[y*output.width+x], dx=(coordinates[y*output.width+x+1]-q)*Float(density), dy=(coordinates[(y+1)*output.width+x]-q)*Float(density)
+            minimumDeterminant=min(minimumDeterminant,dx.x*dy.y-dx.y*dy.x);minimumAxis=min(minimumAxis,dx.x,dy.y);checked += 1
+        } }
+        #expect(checked>20 && minimumDeterminant>0 && minimumAxis>=0, "No coordinate fold over the complete filled contour: \(shape) \(density), det=\(minimumDeterminant), axis=\(minimumAxis)")
+        print("GLASS_JACOBIAN shape=\(shape) density=\(density) checked=\(checked) minDet=\(minimumDeterminant) minAxis=\(minimumAxis)")
         let plain=try render(origin:.init(20,30),refracts:0), glass=try render(origin:.init(20,30),refracts:1)
         #expect(plain != glass, "Production shader must really displace the D background")
         #expect(stride(from:3,to:glass.count,by:4).allSatisfy { glass[$0] == 255 })
@@ -88,7 +121,7 @@ struct WorkbenchContinuousGlassTests {
         // The middle of each contour has no optical displacement.
         #expect(abs(Int(glass[center])-Int(plain[center])) <= 1)
         if shape == "rectangle160" {
-            let shoulder = (rowIndex:output.height/2, column:Int(6*density))
+            let shoulder = (rowIndex:output.height/2, column:Int(9*density))
             let index = (shoulder.rowIndex*output.width+shoulder.column)*4
             #expect(Int(glass[index])-Int(plain[index]) >= 2,
                 "The continuous lens must visibly displace the background, beyond the previous subpixel shoulder")
