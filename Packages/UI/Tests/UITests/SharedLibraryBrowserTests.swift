@@ -3,6 +3,7 @@ import CoreTransferable
 import DWorkbench
 import DInference
 import Foundation
+import Observation
 import SwiftUI
 import Testing
 import UniformTypeIdentifiers
@@ -10,6 +11,98 @@ import UniformTypeIdentifiers
 
 @Suite @MainActor
 struct SharedLibraryBrowserTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_NATIVE_TREE_AX"] == "1", "Requires a visible AX host; hidden native geometry is checked separately"), arguments: [260.0, 360.0], ["zh-Hans", "en"])
+    func nativeCompactOperationTreeIndentsEveryExpandedLevel(width: Double, locale: String) async throws {
+        let language = UILanguageStore(preferredLanguages: [locale])
+        let entries = SharedLibraryProjection.entries(models: [], readiness: [:], tools: [], projects: [], language: language)
+        let model = try #require(entries.first { $0.item.kind == .model && $0.item.title.contains("Qwen") })
+        let store = try SharedLibraryStore(), state = SharedLibraryBrowserState(selectedKeys: [model.id], focusedKey: model.id)
+        var actions = 0
+        let browser = SharedLibraryBrowser(entries: [model], store: store, compact: true, canvasMode: .nodes,
+            state: state, onUse: { _ in actions += 1 }, onAdd: { _ in actions += 1 },
+            onPreview: { _ in actions += 1 }, onPrepare: { _ in actions += 1 },
+            onImport: { actions += 1 }, onClose: { actions += 1 })
+            .environment(\.dLanguageStore, language)
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: width, height: 1400),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: browser); window.contentView = host
+        host.frame = .init(x: 0, y: 0, width: width, height: 1400)
+        defer { window.contentView = nil; window.close() }
+        window.makeKeyAndOrderFront(nil) // Only the explicitly enabled native AX fixture.
+        func settle() async throws {
+            for _ in 0..<5 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        }
+        func accessible() -> [any NSAccessibilityProtocol] {
+            var pending: [NSObject] = [host], seen = Set<ObjectIdentifier>(), result: [any NSAccessibilityProtocol] = []
+            while let object = pending.popLast(), seen.count < 3000 {
+                guard seen.insert(ObjectIdentifier(object)).inserted else { continue }
+                if let value = object as? any NSAccessibilityProtocol {
+                    result.append(value)
+                    pending += (value.accessibilityChildren() ?? []).compactMap { $0 as? NSObject }
+                }
+                if let view = object as? NSView { pending += view.subviews }
+            }
+            return result
+        }
+        try await settle()
+        var path = try #require(WorkflowOperationTree.make([model], models: true, language: language).first)
+        var origins: [CGFloat] = [], firstButton: (any NSAccessibilityProtocol)?
+        while path.entry == nil {
+            let button = try #require(accessible().first { $0.accessibilityRole() == .button && $0.accessibilityLabel() == path.title }, "Real group button: \(path.title)")
+            if firstButton == nil { firstButton = button }
+            origins.append(button.accessibilityFrame().minX)
+            #expect(button.accessibilityValue() as? String == (locale == "en" ? "Collapsed" : "已收起"))
+            try #require(button.accessibilityPerformPress())
+            try await settle()
+            path = try #require(path.children?.first)
+        }
+        #expect(origins.count == 4)
+        for pair in zip(origins, origins.dropFirst()) { #expect(abs(pair.1 - pair.0 - 12) < 1) }
+        let leaf = try #require(accessible().first { $0.accessibilityIdentifier() == "shared-library-entry-" + model.id })
+        #expect(abs(leaf.accessibilityFrame().minX - (try #require(origins.last)) - 12) < 1)
+        #expect(leaf.accessibilityFrame().maxX <= window.convertToScreen(host.convert(host.bounds, to: nil)).maxX + 1)
+        #expect(state.selectedKeys == [model.id] && state.focusedKey == model.id && actions == 0)
+        try #require(firstButton?.accessibilityPerformPress() == true)
+        try await settle()
+        #expect(!accessible().contains { $0.accessibilityIdentifier() == "shared-library-entry-" + model.id })
+        #expect(state.selectedKeys == [model.id] && actions == 0)
+    }
+
+    @Test(arguments: [260.0, 360.0], ["zh-Hans", "en"])
+    func operationDisclosureStyleLaysOutEachLevelAndCollapses(width: Double, locale: String) async throws {
+        let language = UILanguageStore(preferredLanguages: [locale])
+        let entries = SharedLibraryProjection.entries(models: [], readiness: [:], tools: [], projects: [], language: language)
+        let model = try #require(entries.first { $0.item.kind == .model && $0.item.title.contains("Qwen") })
+        let tree = WorkflowOperationTree.make([model], models: true, language: language)
+        var path = try #require(tree.first), groups: [WorkflowOperationTree] = []
+        while path.entry == nil { groups.append(path); path = try #require(path.children?.first) }
+        let state = OperationDisclosureFixtureState(); state.expanded = Set(groups.map(\.id))
+        let host = NSHostingView(rootView: OperationDisclosureFixture(nodes: tree, state: state)
+            .disclosureGroupStyle(WorkflowOperationTreeDisclosureStyle()).environment(\.dLanguageStore, language))
+        host.frame = .init(x: 0, y: 0, width: width, height: 1000)
+        func settle() async throws {
+            for _ in 0..<5 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        }
+        func views(_ v: NSView) -> [NSView] { [v] + v.subviews.flatMap(views) }
+        func frame(_ id: String) throws -> CGRect {
+            let probe = try #require(views(host).first { $0.identifier?.rawValue == id })
+            return probe.convert(probe.bounds, to: host)
+        }
+        try await settle()
+        let labels = try groups.map { try frame($0.id) }
+        #expect(labels.count == 4)
+        for pair in zip(labels, labels.dropFirst()) { #expect(abs(pair.1.minX - pair.0.minX - 12) < 1) }
+        let leaf = try frame(model.id)
+        // Group labels follow a 12 pt chevron plus a 6 pt gap. Leaves have no chevron.
+        #expect(abs(leaf.minX - (try #require(labels.last)).minX - 12 + 18) < 1)
+        #expect(leaf.maxX <= width + 1 && leaf.width > 180)
+        state.expanded.remove(try #require(groups.first).id); try await settle()
+        #expect(!views(host).contains { $0.identifier?.rawValue == model.id })
+        state.expanded.insert(try #require(groups.first).id); try await settle()
+        #expect(try frame(model.id) == leaf)
+    }
+
     @Test func libraryProjectionReuseKeepsLiveFactsAndExactSelections() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("projection-" + UUID().uuidString)
@@ -656,4 +749,37 @@ struct SharedLibraryBrowserTests {
         #expect(useCount == 0 && addCount == 0 && previewCount == 0)
         #expect(prepareCount == 0 && importCount == 0 && closeCount == 0)
     }
+}
+
+// Drives the real DisclosureGroupStyle with the production tree's exact labels
+// and IDs. This hidden layout fixture does not claim visible AX button delivery.
+@MainActor @Observable private final class OperationDisclosureFixtureState {
+    var expanded = Set<String>()
+}
+private struct OperationDisclosureFixture: View {
+    let nodes: [WorkflowOperationTree]
+    let state: OperationDisclosureFixtureState
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(nodes) { node in
+                if node.entry != nil {
+                    Text(node.title).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(OperationDisclosureProbe(id: node.id))
+                } else {
+                    DisclosureGroup(isExpanded: Binding(get: { state.expanded.contains(node.id) }, set: {
+                        if $0 { state.expanded.insert(node.id) } else { state.expanded.remove(node.id) }
+                    })) {
+                        OperationDisclosureFixture(nodes: node.children ?? [], state: state)
+                    } label: {
+                        Text(node.title).background(OperationDisclosureProbe(id: node.id))
+                    }
+                }
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+private struct OperationDisclosureProbe: NSViewRepresentable {
+    let id: String
+    func makeNSView(context: Context) -> NSView { let view = NSView(); view.identifier = .init(id); return view }
+    func updateNSView(_ view: NSView, context: Context) {}
 }

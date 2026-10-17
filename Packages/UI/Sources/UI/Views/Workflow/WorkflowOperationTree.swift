@@ -1,5 +1,33 @@
 import DWorkbench
 import Foundation
+import SwiftUI
+
+/// OutlineGroup is hosted in our scroll surface, not a system outline List.
+/// Indent the complete child group, including its disclosure arrow and leaf card.
+struct WorkflowOperationTreeDisclosureStyle: DisclosureGroupStyle {
+    @Environment(\.dLanguageStore) private var language
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button { configuration.isExpanded.toggle() } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: configuration.isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.semibold)).frame(width: 12)
+                        .accessibilityHidden(true)
+                    configuration.label
+                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(configuration.isExpanded
+                ? workspaceText(language, "treeExpanded", "已展开", "Expanded")
+                : workspaceText(language, "treeCollapsed", "已收起", "Collapsed"))
+            if configuration.isExpanded {
+                configuration.content
+                    .disclosureGroupStyle(WorkflowOperationTreeDisclosureStyle())
+                    .padding(.leading, 12)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
 
 /// Presentation groups only. Executable leaves retain the original entry and
 /// its registered handler; descriptive adapter operations never become fake nodes.

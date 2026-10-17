@@ -488,6 +488,7 @@ public struct SharedLibraryBrowser: View {
                             if let entry=node.entry { entryRow(entry,compact:true) }
                             else { Text(node.title).font(.callout.weight(.medium)).lineLimit(2) }
                         }
+                        .disclosureGroupStyle(WorkflowOperationTreeDisclosureStyle())
                     } else { ForEach(visible) { entry in entryRow(entry, compact: true) } }
                 }.padding(.horizontal, 6)
             }

@@ -6,6 +6,87 @@ import Testing
 @Suite @MainActor
 struct WorkflowCanvasViewportTests {
     @Test(arguments: [false, true])
+    func stationaryHandCursorRecoversAfterNativeResetWithoutMouseMovement(node: Bool) async throws {
+        let window = CursorFixtureWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 480),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let scroll = NSScrollView(frame: .init(x: 0, y: 0, width: 640, height: 480))
+        let document = CursorFixtureDocument(frame: .init(x: 0, y: 0, width: 3000, height: 2400))
+        scroll.documentView = document; window.contentView = scroll
+        let probe = WorkflowCanvasViewportInput.ProbeView(frame: document.bounds); document.addSubview(probe)
+        var cursors: [NSCursor] = []; probe.cursorSink = { cursors.append($0) }
+        defer { probe.stopMonitoring(); window.contentView = nil; window.close() }
+        probe.setTool(.hand); probe.navigationAllowed = { true }; probe.reportViewportSize()
+        scroll.layoutSubtreeIfNeeded(); scroll.contentView.scroll(to: .zero)
+        if node { document.addSubview(WorkflowNodePlateView(frame: .init(x: 60, y: 60, width: 240, height: 180))) }
+        let point = scroll.contentView.convert(.init(x: 120, y: 100), to: nil)
+        window.fixtureMouse = point
+        probe.mouseEntered(with: CursorFixtureEvent(type: .mouseEntered, owner: window, point: point))
+        try #require(cursors.last === NSCursor.openHand)
+        let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .line,
+            wheelCount: 1, wheel1: 1, wheel2: 0, wheel3: 0))
+        let event = FixtureWheel(base: try #require(NSEvent(cgEvent: cg)), owner: window, point: point)
+        var delivered = 0; probe.onWheel = { _, _, _, _ in delivered += 1 }
+        try #require(probe.routeWheel(event))
+        document.setFrameSize(.init(width: 3300, height: 2640)); probe.setFrameSize(document.bounds.size)
+        scroll.layoutSubtreeIfNeeded(); probe.reportViewportSize()
+        // Model AppKit's reset, not a D cursor decision. No entered/exited,
+        // mouseMoved or cursorUpdate is delivered after this point.
+        cursors = [.arrow]
+        for _ in 0..<8 { probe.resetCursorRects() }
+        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+        #expect(delivered == 1)
+        #expect(cursors.last === NSCursor.openHand, "Stationary pointer must recover after native cursor reset")
+        #expect(cursors.filter { $0 === NSCursor.openHand }.count == 1, "Merge a reset burst into one recovery")
+        probe.pointerTarget = { _, _, _ in .blank }
+        try #require(probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: point)))
+        cursors = [.arrow]; probe.resetCursorRects()
+        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+        #expect(probe.handPressed && cursors.last === NSCursor.closedHand)
+        probe.cancelPointer()
+        #expect(!probe.handPressed && cursors.last === NSCursor.arrow)
+    }
+
+    @Test(arguments: ["text", "nested-scroll", "port", "overlay", "outside", "resign", "hidden", "pointer-tool", "detach"])
+    func queuedHandCursorRecoveryYieldsToCurrentNativeOwner(reason: String) async throws {
+        let window = CursorFixtureWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 480),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let root = NSView(frame: .init(x: 0, y: 0, width: 640, height: 480))
+        let scroll = NSScrollView(frame: root.bounds)
+        let document = CursorFixtureDocument(frame: .init(x: 0, y: 0, width: 3000, height: 2400))
+        root.addSubview(scroll); window.contentView = root; scroll.documentView = document
+        let probe = WorkflowCanvasViewportInput.ProbeView(frame: document.bounds); document.addSubview(probe)
+        var cursors: [NSCursor] = []; probe.cursorSink = { cursors.append($0) }
+        defer { probe.stopMonitoring(); window.contentView = nil; window.close() }
+        probe.setTool(.hand); probe.reportViewportSize(); scroll.layoutSubtreeIfNeeded()
+        scroll.contentView.scroll(to: .zero)
+        let point = scroll.contentView.convert(.init(x: 120, y: 100), to: nil)
+        window.fixtureMouse = point
+        probe.mouseEntered(with: CursorFixtureEvent(type: .mouseEntered, owner: window, point: point))
+        try #require(cursors.last === NSCursor.openHand)
+        probe.resetCursorRects() // Queue while the canvas still owns this location.
+        let rect = document.convert(NSRect(x: point.x - 20, y: point.y - 20, width: 40, height: 40), from: nil)
+        switch reason {
+        case "text": document.addSubview(NSTextView(frame: rect))
+        case "nested-scroll": document.addSubview(NSScrollView(frame: rect))
+        case "port":
+            let port = WorkflowPortDragView(frame: rect); port.enabled = true; document.addSubview(port)
+        case "overlay": root.addSubview(NSView(frame: root.convert(rect, from: document)))
+        case "outside": window.fixtureMouse = .init(x: -100, y: -100)
+        case "resign": window.fixtureKey = false
+        case "hidden": probe.isHidden = true
+        case "pointer-tool": probe.setTool(.pointer)
+        case "detach": probe.removeFromSuperview()
+        default: break
+        }
+        cursors = [.iBeam] // The next native owner has already chosen its cursor.
+        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+        #expect(cursors.count == 1 && cursors.last === NSCursor.iBeam,
+            "A queued canvas decision must neither reclaim hand nor overwrite the next owner's cursor")
+    }
+
+    @Test(arguments: [false, true])
     func handCursorSurvivesWheelLayoutAndSyntheticTrackingExit(node: Bool) throws {
         // Hidden component: inject key-window state and event ownership, never
         // post global input or change the user's system cursor.
@@ -385,6 +466,8 @@ struct WorkflowCanvasViewportTests {
 
 @MainActor private final class CursorFixtureWindow: NSWindow {
     var fixtureKey = true
+    var fixtureMouse = CGPoint(x: -100, y: -100)
+    override var mouseLocationOutsideOfEventStream: NSPoint { fixtureMouse }
     override var isKeyWindow: Bool { fixtureKey }
 }
 @MainActor private final class CursorFixtureDocument: NSView {

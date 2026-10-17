@@ -290,6 +290,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         private(set) var tool: WorkflowCanvasTool = .pointer
         private(set) var handPressed = false
         private var ownsCursor = false
+        private var cursorRefresh: UUID?
         #if DEBUG
         // Observe cursor decisions in component tests without changing the user's cursor.
         var cursorSink: ((NSCursor) -> Void)?
@@ -304,6 +305,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
 
         func setTool(_ next: WorkflowCanvasTool) {
             guard next != tool else { return }
+            cursorRefresh = nil
             cancelPointer(); layoutAnchor.cancel(); resetHandCursor(); tool = next
             window?.invalidateCursorRects(for: self)
         }
@@ -317,6 +319,34 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                 options: [.inVisibleRect, .activeInKeyWindow, .mouseEnteredAndExited, .cursorUpdate],
                 owner: self, userInfo: nil)
             addTrackingArea(area); cursorTracking = area
+        }
+        override func resetCursorRects() {
+            super.resetCursorRects()
+            scheduleCursorRefresh()
+        }
+
+        // AppKit resets cursor rectangles after scrolling and layout, even if
+        // the mouse has not moved. Reconcile once after that synchronous work;
+        // this is event-driven, never a timer or a self-sustaining render loop.
+        private func scheduleCursorRefresh() {
+            guard tool == .hand, cursorRefresh == nil, let window else { return }
+            let request = UUID()
+            cursorRefresh = request
+            DispatchQueue.main.async { [weak self, weak window] in
+                guard let self, self.cursorRefresh == request else { return }
+                self.cursorRefresh = nil
+                guard let window, self.window === window, window.isKeyWindow,
+                      self.tool == .hand, self.visibleCanvasScroll() != nil,
+                      (self.handPressed && self.pointerSession != nil)
+                        || self.accepts(at: window.mouseLocationOutsideOfEventStream) else {
+                    // Another native owner may already have installed an I-beam
+                    // or resize cursor. Never overwrite it using old ownership.
+                    self.ownsCursor = false
+                    return
+                }
+                self.setCursor(self.handPressed ? .closedHand : .openHand)
+                self.ownsCursor = true
+            }
         }
         override func cursorUpdate(with event: NSEvent) { updateHandCursor(for: event) }
         override func mouseEntered(with event: NSEvent) { updateHandCursor(for: event) }
@@ -468,6 +498,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         override func layout() {
             super.layout()
             reportViewportSize()
+            scheduleCursorRefresh()
         }
 
         func reportViewportSize() {
@@ -551,7 +582,11 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         }
 
         private func accepts(_ event: NSEvent) -> Bool {
-            guard let hit = canvasHit(event), let scroll = enclosingScrollView else { return false }
+            guard let window, event.window === window || event.windowNumber == window.windowNumber else { return false }
+            return accepts(at: event.locationInWindow)
+        }
+        private func accepts(at location: CGPoint) -> Bool {
+            guard let hit = canvasHit(at: location), let scroll = enclosingScrollView else { return false }
             var view: NSView? = hit
             while let current = view, current !== scroll {
                 if current is NSControl || current is NSTextView || current is NSScrollView || current is WorkflowPortDragView || current is WorkflowConnectionHitView { return false }
@@ -564,6 +599,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         func routeWheel(_ event: NSEvent) -> Bool {
             guard let scroll = visibleCanvasScroll(), let window,
                   event.window === window || event.windowNumber == window.windowNumber else { return false }
+            defer { scheduleCursorRefresh() }
             return routeWheel(event, in: scroll, window: window, location: event.locationInWindow)
         }
 
@@ -651,6 +687,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         }
 
         func stopMonitoring() {
+            cursorRefresh = nil
             layoutAnchor.cancel()
             wheelOwner = nil; wheelScrollOwner = nil
             cancelPointer()
