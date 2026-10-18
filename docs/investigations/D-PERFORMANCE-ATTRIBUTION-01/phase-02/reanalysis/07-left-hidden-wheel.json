@@ -1,0 +1,1650 @@
+{
+  "phase": "07-left-hidden-wheel",
+  "window_ns": [
+    3601077000,
+    27604369000
+  ],
+  "seed": 20261018,
+  "xml_row_counts": {
+    "hitches": 208,
+    "hitches-renders": 861,
+    "displayed-surfaces-interval": 752,
+    "hitches-updates": 476,
+    "process-info": 716,
+    "metal-command-buffer-completed": 2701,
+    "device-thermal-state-intervals": 1,
+    "thread-info": 5224,
+    "time-profile": 19503,
+    "hitches-frame-lifetimes": 757,
+    "thread-state": 196654,
+    "display-surface-swap": 753
+  },
+  "reference_definitions": 318483,
+  "window_kind": "Phase 1 requested gesture/cue window; no actual input timestamps",
+  "scopes": {
+    "all": {
+      "sample_weight_ms": 16874.0,
+      "sample_count": 16874,
+      "leaf_module_ms": {
+        "libobjc.A.dylib": 636.0,
+        "libswiftCore.dylib": 6143.0,
+        "libswift_StringProcessing.dylib": 79.0,
+        "libicucore.A.dylib": 84.0,
+        "libsystem_featureflags.dylib": 2.0,
+        "libsystem_platform.dylib": 566.0,
+        "CoreFoundation": 513.0,
+        "libswiftObservation.dylib": 82.0,
+        "SwiftUICore": 2577.0,
+        "D.debug.dylib": 1274.0,
+        "AttributeGraph": 1365.0,
+        "libsystem_malloc.dylib": 660.0,
+        "CoreText": 49.0,
+        "AppKit": 293.0,
+        "QuartzCore": 113.0,
+        "libsystem_kernel.dylib": 236.0,
+        "SwiftUI": 868.0,
+        "Foundation": 229.0,
+        "dyld": 30.0,
+        "CoreAutoLayout": 43.0,
+        "CoreGraphics": 194.0,
+        "libsystem_c.dylib": 10.0,
+        "vImage": 68.0,
+        "IOGPU": 3.0,
+        "libsystem_pthread.dylib": 337.0,
+        "libswift_Concurrency.dylib": 80.0,
+        "libFontParser.dylib": 16.0,
+        "RenderBox": 68.0,
+        "IOKit": 30.0,
+        "UIFoundation": 34.0,
+        "IOSurface": 2.0,
+        "libdyld.dylib": 31.0,
+        "Metal": 5.0,
+        "libswiftos.dylib": 4.0,
+        "SkyLight": 21.0,
+        "libswiftCoreFoundation.dylib": 1.0,
+        "AGXMetalG16G_B0": 14.0,
+        "CoreUI": 10.0,
+        "libmecab.dylib": 2.0,
+        "CarbonCore": 6.0,
+        "CoreSVG": 6.0,
+        "libc++abi.dylib": 5.0,
+        "<unknown-binary>": 2.0,
+        "DesignLibrary": 12.0,
+        "libdispatch.dylib": 17.0,
+        "libhvf.dylib": 1.0,
+        "libxpc.dylib": 7.0,
+        "HIToolbox": 16.0,
+        "libsystem_blocks.dylib": 11.0,
+        "ViewBridge": 3.0,
+        "Symbols": 1.0,
+        "HIServices": 1.0,
+        "CoreTransferable": 3.0,
+        "libsystem_trace.dylib": 2.0,
+        "libswiftRegexBuilder.dylib": 1.0,
+        "libsystem_m.dylib": 1.0,
+        "ConfigurationProfiles": 1.0,
+        "LaunchServices": 3.0,
+        "libswiftObjectiveC.dylib": 3.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 15742.0,
+        "deduplicated": 898.0,
+        "unsymbolicated": 234.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 15231.0,
+        "swiftui_graph": 819.0,
+        "library": 126.0,
+        "readability": 7.0,
+        "layout_ancestor": 236.0,
+        "layout_ancestor+swiftui_graph": 265.0,
+        "render_commit_ancestor": 51.0,
+        "language_resolution": 27.0,
+        "canvas_surface": 42.0,
+        "canvas_surface+viewport_input": 7.0,
+        "glass_background_cpu": 1.0,
+        "menu_feature": 34.0,
+        "operation_tree": 3.0,
+        "library+library_entry_equality": 1.0,
+        "node_body": 8.0,
+        "glass_controls": 3.0,
+        "layout_ancestor+node_body": 1.0,
+        "connection_draw": 4.0,
+        "layout_ancestor+library": 2.0,
+        "node_port_input": 3.0,
+        "glass_background_cpu+layout_ancestor": 1.0,
+        "connection_geometry": 2.0
+      },
+      "inclusive_class_ms_overlapping": {
+        "layout_ancestor": 14963.0,
+        "render_commit_ancestor": 15752.0,
+        "language_resolution": 1313.0,
+        "canvas_surface": 1537.0,
+        "menu_feature": 879.0,
+        "swiftui_graph": 13947.0,
+        "node_body": 589.0,
+        "library": 2981.0,
+        "operation_tree": 574.0,
+        "library_entry_equality": 838.0,
+        "glass_background_cpu": 377.0,
+        "readability": 257.0,
+        "history_output_projection": 1.0,
+        "viewport_input": 249.0,
+        "asset_projection": 90.0,
+        "glass_controls": 42.0,
+        "node_port_input": 8.0,
+        "connection_draw": 23.0,
+        "connection_geometry": 6.0
+      },
+      "top_self": [
+        {
+          "module": "SwiftUICore",
+          "symbol": "<deduplicated_symbol>",
+          "ms": 550.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_release",
+          "ms": 457.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_retain",
+          "ms": 381.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::UpdateStack::update()",
+          "ms": 368.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift::MetadataCacheKey::operator==(swift::MetadataCacheKey const&) const",
+          "ms": 366.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memmove",
+          "ms": 361.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "___chkstk_darwin",
+          "ms": 276.0
+        },
+        {
+          "module": "SwiftUICore",
+          "symbol": "DYLD-STUB$$protocol witness for OptionSet.init(rawValue:) in conformance DisplayList.Properties",
+          "ms": 265.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::propagate_dirty(AG::AttributeID)",
+          "ms": 238.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_bridgeObjectRelease",
+          "ms": 214.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_msgSend",
+          "ms": 208.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_free",
+          "ms": 200.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_bridgeObjectRetain",
+          "ms": 187.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift::TargetContextDescriptor<swift::InProcess>::getGenericContext() const",
+          "ms": 185.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "getCache(swift::TargetTypeContextDescriptor<swift::InProcess> const&)",
+          "ms": 180.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_xzone_malloc_tiny",
+          "ms": 155.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "<deduplicated_symbol>",
+          "ms": 150.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::LayoutDescriptor::Compare::operator()(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)",
+          "ms": 136.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_getAssociatedTypeWitness",
+          "ms": 129.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "bool swift::RefCounts<swift::RefCountBitsT<(swift::RefCountInlinedness)1>>::doDecrementSlow<(swift::PerformDeinit)1>(swift::RefCountBitsT<(swift::RefCountInlinedness)1>, unsigned int)",
+          "ms": 116.0
+        }
+      ]
+    },
+    "event": {
+      "sample_weight_ms": 79.0,
+      "sample_count": 79,
+      "leaf_module_ms": {
+        "Foundation": 2.0,
+        "libsystem_kernel.dylib": 48.0,
+        "SkyLight": 16.0,
+        "libsystem_malloc.dylib": 3.0,
+        "libsystem_pthread.dylib": 1.0,
+        "CoreFoundation": 5.0,
+        "libsystem_platform.dylib": 1.0,
+        "libdispatch.dylib": 1.0,
+        "libobjc.A.dylib": 1.0,
+        "AppKit": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 79.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 79.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 39.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "__bsdthread_ctl",
+          "ms": 4.0
+        },
+        {
+          "module": "SkyLight",
+          "symbol": "SLS::TokenizedCoding::Storage::valid() const",
+          "ms": 3.0
+        },
+        {
+          "module": "CoreFoundation",
+          "symbol": "CFRelease",
+          "ms": 2.0
+        },
+        {
+          "module": "SkyLight",
+          "symbol": "SLEventCreateNextEvent",
+          "ms": 2.0
+        },
+        {
+          "module": "SkyLight",
+          "symbol": "invocation function for block in auto bool SLS::TokenizedCoding::Decoder::decode_with_manager<(anonymous namespace)::MessageInitDataCustomSerializationBasis::Create(void const*, unsigned long)::$_0>((anonymous namespace)::MessageInitDataCustomSerializationBasis::Create(void const*, unsigned long)::$_0&&)::'lambda'((anonymous namespace)::MessageInitDataCustomSerializationBasis::Create(void const*, unsigned long)::$_0&)::operator()<SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>>((anonymous namespace)::MessageInitDataCustomSerializationBasis::Create(void const*, unsigned long)::$_0&) const",
+          "ms": 2.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "_kernelrpc_mach_port_deallocate_trap",
+          "ms": 2.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "_kernelrpc_mach_vm_deallocate_trap",
+          "ms": 2.0
+        },
+        {
+          "module": "AppKit",
+          "symbol": "__StateNew_block_invoke_5",
+          "ms": 1.0
+        },
+        {
+          "module": "CoreFoundation",
+          "symbol": "DYLD-STUB$$pthread_mutex_unlock",
+          "ms": 1.0
+        },
+        {
+          "module": "CoreFoundation",
+          "symbol": "__CFAllocatorSystemAllocateTyped",
+          "ms": 1.0
+        },
+        {
+          "module": "CoreFoundation",
+          "symbol": "__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE1_PERFORM_FUNCTION__",
+          "ms": 1.0
+        },
+        {
+          "module": "Foundation",
+          "symbol": "-[_NSInlineData initWithBytes:length:]",
+          "ms": 1.0
+        },
+        {
+          "module": "Foundation",
+          "symbol": "probeGC",
+          "ms": 1.0
+        },
+        {
+          "module": "SkyLight",
+          "symbol": "(anonymous namespace)::MessageInitDataCustomSerializationBasis::signature() const",
+          "ms": 1.0
+        },
+        {
+          "module": "SkyLight",
+          "symbol": "CGSConnectionByID",
+          "ms": 1.0
+        },
+        {
+          "module": "SkyLight",
+          "symbol": "DYLD-STUB$$operator delete(void*)",
+          "ms": 1.0
+        },
+        {
+          "module": "SkyLight",
+          "symbol": "SLEventFieldDecodeDescriptor<SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>> const* SLEventGetFieldDecodeDescriptor<SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>>(SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>)::'lambda'(SLSEventRecord*, unsigned int, SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>&)::__invoke(SLSEventRecord*, unsigned int, SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>&)",
+          "ms": 1.0
+        },
+        {
+          "module": "SkyLight",
+          "symbol": "SLEventFieldDecodeDescriptor<SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>> const* SLEventGetFieldDecodeDescriptor<SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>>(SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>)::'lambda9'(SLSEventRecord*, unsigned int, SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>&)::__invoke(SLSEventRecord*, unsigned int, SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>&)",
+          "ms": 1.0
+        },
+        {
+          "module": "SkyLight",
+          "symbol": "SLS::TokenizedCoding::(anonymous namespace)::ManagedAddressStorage<SLS::TokenizedCoding::ReadStorage::CreateWithUnownedAddressAndLength(void const*, unsigned long)::$_0 const>::address() const",
+          "ms": 1.0
+        }
+      ]
+    },
+    "main": {
+      "sample_weight_ms": 16636.0,
+      "sample_count": 16636,
+      "leaf_module_ms": {
+        "libobjc.A.dylib": 632.0,
+        "libswiftCore.dylib": 6143.0,
+        "libswift_StringProcessing.dylib": 79.0,
+        "libicucore.A.dylib": 84.0,
+        "libsystem_featureflags.dylib": 2.0,
+        "libsystem_platform.dylib": 562.0,
+        "CoreFoundation": 504.0,
+        "libswiftObservation.dylib": 82.0,
+        "SwiftUICore": 2577.0,
+        "D.debug.dylib": 1273.0,
+        "AttributeGraph": 1365.0,
+        "libsystem_malloc.dylib": 655.0,
+        "CoreText": 49.0,
+        "AppKit": 292.0,
+        "QuartzCore": 105.0,
+        "libsystem_kernel.dylib": 168.0,
+        "SwiftUI": 868.0,
+        "Foundation": 227.0,
+        "dyld": 30.0,
+        "CoreAutoLayout": 43.0,
+        "CoreGraphics": 194.0,
+        "libsystem_c.dylib": 9.0,
+        "libsystem_pthread.dylib": 295.0,
+        "libswift_Concurrency.dylib": 80.0,
+        "libFontParser.dylib": 16.0,
+        "RenderBox": 65.0,
+        "IOKit": 27.0,
+        "UIFoundation": 34.0,
+        "IOSurface": 1.0,
+        "libdyld.dylib": 31.0,
+        "vImage": 12.0,
+        "Metal": 4.0,
+        "libswiftos.dylib": 4.0,
+        "libswiftCoreFoundation.dylib": 1.0,
+        "AGXMetalG16G_B0": 14.0,
+        "CoreUI": 10.0,
+        "IOGPU": 2.0,
+        "libmecab.dylib": 2.0,
+        "CarbonCore": 6.0,
+        "CoreSVG": 6.0,
+        "libc++abi.dylib": 5.0,
+        "<unknown-binary>": 2.0,
+        "DesignLibrary": 12.0,
+        "libdispatch.dylib": 5.0,
+        "libhvf.dylib": 1.0,
+        "libxpc.dylib": 7.0,
+        "HIToolbox": 16.0,
+        "libsystem_blocks.dylib": 11.0,
+        "SkyLight": 5.0,
+        "ViewBridge": 3.0,
+        "Symbols": 1.0,
+        "HIServices": 1.0,
+        "CoreTransferable": 3.0,
+        "libsystem_trace.dylib": 2.0,
+        "libswiftRegexBuilder.dylib": 1.0,
+        "libsystem_m.dylib": 1.0,
+        "ConfigurationProfiles": 1.0,
+        "LaunchServices": 3.0,
+        "libswiftObjectiveC.dylib": 3.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 15504.0,
+        "deduplicated": 898.0,
+        "unsymbolicated": 234.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 14993.0,
+        "swiftui_graph": 819.0,
+        "library": 126.0,
+        "readability": 7.0,
+        "layout_ancestor": 236.0,
+        "layout_ancestor+swiftui_graph": 265.0,
+        "render_commit_ancestor": 51.0,
+        "language_resolution": 27.0,
+        "canvas_surface": 42.0,
+        "canvas_surface+viewport_input": 7.0,
+        "glass_background_cpu": 1.0,
+        "menu_feature": 34.0,
+        "operation_tree": 3.0,
+        "library+library_entry_equality": 1.0,
+        "node_body": 8.0,
+        "glass_controls": 3.0,
+        "layout_ancestor+node_body": 1.0,
+        "connection_draw": 4.0,
+        "layout_ancestor+library": 2.0,
+        "node_port_input": 3.0,
+        "glass_background_cpu+layout_ancestor": 1.0,
+        "connection_geometry": 2.0
+      },
+      "inclusive_class_ms_overlapping": {
+        "layout_ancestor": 14962.0,
+        "render_commit_ancestor": 15752.0,
+        "language_resolution": 1313.0,
+        "canvas_surface": 1537.0,
+        "menu_feature": 879.0,
+        "swiftui_graph": 13947.0,
+        "node_body": 589.0,
+        "library": 2981.0,
+        "operation_tree": 574.0,
+        "library_entry_equality": 838.0,
+        "glass_background_cpu": 377.0,
+        "readability": 257.0,
+        "history_output_projection": 1.0,
+        "viewport_input": 249.0,
+        "asset_projection": 90.0,
+        "glass_controls": 42.0,
+        "node_port_input": 8.0,
+        "connection_draw": 23.0,
+        "connection_geometry": 6.0
+      },
+      "top_self": [
+        {
+          "module": "SwiftUICore",
+          "symbol": "<deduplicated_symbol>",
+          "ms": 550.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_release",
+          "ms": 457.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_retain",
+          "ms": 381.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::UpdateStack::update()",
+          "ms": 368.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift::MetadataCacheKey::operator==(swift::MetadataCacheKey const&) const",
+          "ms": 366.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memmove",
+          "ms": 360.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "___chkstk_darwin",
+          "ms": 276.0
+        },
+        {
+          "module": "SwiftUICore",
+          "symbol": "DYLD-STUB$$protocol witness for OptionSet.init(rawValue:) in conformance DisplayList.Properties",
+          "ms": 265.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::propagate_dirty(AG::AttributeID)",
+          "ms": 238.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_bridgeObjectRelease",
+          "ms": 214.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_msgSend",
+          "ms": 208.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_free",
+          "ms": 198.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_bridgeObjectRetain",
+          "ms": 187.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift::TargetContextDescriptor<swift::InProcess>::getGenericContext() const",
+          "ms": 185.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "getCache(swift::TargetTypeContextDescriptor<swift::InProcess> const&)",
+          "ms": 180.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_xzone_malloc_tiny",
+          "ms": 155.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "<deduplicated_symbol>",
+          "ms": 150.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::LayoutDescriptor::Compare::operator()(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)",
+          "ms": 136.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_getAssociatedTypeWitness",
+          "ms": 129.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "bool swift::RefCounts<swift::RefCountBitsT<(swift::RefCountInlinedness)1>>::doDecrementSlow<(swift::PerformDeinit)1>(swift::RefCountBitsT<(swift::RefCountInlinedness)1>, unsigned int)",
+          "ms": 116.0
+        }
+      ]
+    },
+    "worker-01": {
+      "sample_weight_ms": 16.0,
+      "sample_count": 16,
+      "leaf_module_ms": {
+        "vImage": 6.0,
+        "libsystem_kernel.dylib": 1.0,
+        "IOKit": 1.0,
+        "libobjc.A.dylib": 1.0,
+        "libsystem_pthread.dylib": 4.0,
+        "QuartzCore": 2.0,
+        "RenderBox": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 16.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 16.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "vImage",
+          "symbol": "vCGCompositeConstMask_ARGB16F_vec",
+          "ms": 6.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 4.0
+        },
+        {
+          "module": "IOKit",
+          "symbol": "iokit_user_client_trap",
+          "ms": 1.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "CABackingStoreCollect_(double, bool)",
+          "ms": 1.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "delete_buffer(unsigned long, CAImageQueueBuffer*, void*)",
+          "ms": 1.0
+        },
+        {
+          "module": "RenderBox",
+          "symbol": "RB::SurfacePool::collect(bool)",
+          "ms": 1.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "weak_unregister_no_lock",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-02": {
+      "sample_weight_ms": 17.0,
+      "sample_count": 17,
+      "leaf_module_ms": {
+        "vImage": 7.0,
+        "libsystem_kernel.dylib": 4.0,
+        "QuartzCore": 1.0,
+        "libsystem_pthread.dylib": 3.0,
+        "libsystem_malloc.dylib": 1.0,
+        "libsystem_platform.dylib": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 17.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 17.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "vImage",
+          "symbol": "vCGCompositeConstMask_ARGB16F_vec",
+          "ms": 7.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "kevent_id",
+          "ms": 3.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 3.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "CABackingStoreCollect_(double, bool)",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "kevent_qos",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "malloc_type_malloc",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "__bzero",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-03": {
+      "sample_weight_ms": 20.0,
+      "sample_count": 20,
+      "leaf_module_ms": {
+        "IOGPU": 1.0,
+        "libsystem_pthread.dylib": 4.0,
+        "vImage": 8.0,
+        "CoreFoundation": 1.0,
+        "QuartzCore": 2.0,
+        "libsystem_malloc.dylib": 1.0,
+        "RenderBox": 1.0,
+        "libdispatch.dylib": 1.0,
+        "libsystem_kernel.dylib": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 20.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 20.0
+      },
+      "inclusive_class_ms_overlapping": {
+        "layout_ancestor": 1.0
+      },
+      "top_self": [
+        {
+          "module": "vImage",
+          "symbol": "vCGCompositeConstMask_ARGB16F_vec",
+          "ms": 8.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 4.0
+        },
+        {
+          "module": "CoreFoundation",
+          "symbol": "_CFRetain",
+          "ms": 1.0
+        },
+        {
+          "module": "IOGPU",
+          "symbol": "DYLD-STUB$$_Block_object_dispose",
+          "ms": 1.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "CABackingStoreCollect_(double, bool)",
+          "ms": 1.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "CACurrentMediaTime",
+          "ms": 1.0
+        },
+        {
+          "module": "RenderBox",
+          "symbol": "RB::SurfacePool::collect(bool)",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "_dispatch_queue_wakeup",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_absolute_time",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_free",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-04": {
+      "sample_weight_ms": 17.0,
+      "sample_count": 17,
+      "leaf_module_ms": {
+        "libsystem_kernel.dylib": 6.0,
+        "vImage": 6.0,
+        "Metal": 1.0,
+        "libsystem_pthread.dylib": 3.0,
+        "libsystem_platform.dylib": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 17.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 17.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "vImage",
+          "symbol": "vCGCompositeConstMask_ARGB16F_vec",
+          "ms": 6.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 3.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_absolute_time",
+          "ms": 2.0
+        },
+        {
+          "module": "Metal",
+          "symbol": "-[_MTLCommandBuffer didCompleteWithStartTime:endTime:error:]",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "__kdebug_trace64",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "_kernelrpc_mach_port_allocate_trap",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "kevent_id",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "kevent_qos",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memset",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-05": {
+      "sample_weight_ms": 21.0,
+      "sample_count": 21,
+      "leaf_module_ms": {
+        "vImage": 6.0,
+        "libsystem_pthread.dylib": 7.0,
+        "libobjc.A.dylib": 1.0,
+        "IOKit": 2.0,
+        "libsystem_c.dylib": 1.0,
+        "libsystem_kernel.dylib": 2.0,
+        "libdispatch.dylib": 2.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 21.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 21.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 7.0
+        },
+        {
+          "module": "vImage",
+          "symbol": "vCGCompositeConstMask_ARGB16F_vec",
+          "ms": 6.0
+        },
+        {
+          "module": "IOKit",
+          "symbol": "iokit_user_client_trap",
+          "ms": 2.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "_dispatch_apply_invoke3",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "_dispatch_timer_heap_resift",
+          "ms": 1.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_autoreleasePoolPop",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_c.dylib",
+          "symbol": "__vfprintf",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "__workq_kernreturn",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "_kernelrpc_mach_vm_purgable_control_trap",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-06": {
+      "sample_weight_ms": 15.0,
+      "sample_count": 15,
+      "leaf_module_ms": {
+        "libsystem_pthread.dylib": 5.0,
+        "vImage": 6.0,
+        "CoreFoundation": 1.0,
+        "libdispatch.dylib": 1.0,
+        "libsystem_kernel.dylib": 1.0,
+        "QuartzCore": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 15.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 15.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "vImage",
+          "symbol": "vCGCompositeConstMask_ARGB16F_vec",
+          "ms": 6.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 5.0
+        },
+        {
+          "module": "CoreFoundation",
+          "symbol": "__CFStringHash",
+          "ms": 1.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "CABackingStoreCollect_(double, bool)",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "dispatch_group_leave",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "_kernelrpc_mach_port_allocate_trap",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-07": {
+      "sample_weight_ms": 14.0,
+      "sample_count": 14,
+      "leaf_module_ms": {
+        "vImage": 4.0,
+        "libobjc.A.dylib": 1.0,
+        "libsystem_kernel.dylib": 2.0,
+        "libsystem_pthread.dylib": 2.0,
+        "QuartzCore": 2.0,
+        "libdispatch.dylib": 2.0,
+        "CoreFoundation": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 14.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 14.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "vImage",
+          "symbol": "vCGCompositeConstMask_ARGB16F_vec",
+          "ms": 4.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "CABackingStoreCollect_(double, bool)",
+          "ms": 2.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 2.0
+        },
+        {
+          "module": "CoreFoundation",
+          "symbol": "-[__NSArrayM insertObject:atIndex:]",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "_dispatch_apply_invoke3",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "_dispatch_root_queue_drain",
+          "ms": 1.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_autoreleasePoolPush",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "kevent_id",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-08": {
+      "sample_weight_ms": 19.0,
+      "sample_count": 19,
+      "leaf_module_ms": {
+        "vImage": 8.0,
+        "libsystem_pthread.dylib": 5.0,
+        "CoreFoundation": 1.0,
+        "libdispatch.dylib": 4.0,
+        "libsystem_kernel.dylib": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 19.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 19.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "vImage",
+          "symbol": "vCGCompositeConstMask_ARGB16F_vec",
+          "ms": 8.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 5.0
+        },
+        {
+          "module": "CoreFoundation",
+          "symbol": "-[__NSCFArray objectAtIndex:]",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "_dispatch_apply_invoke3",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "_dispatch_event_loop_drain_timers",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "_dispatch_last_resort_autorelease_pool_push",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "_dispatch_timer_heap_resift",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-09": {
+      "sample_weight_ms": 20.0,
+      "sample_count": 20,
+      "leaf_module_ms": {
+        "libsystem_pthread.dylib": 8.0,
+        "D.debug.dylib": 1.0,
+        "RenderBox": 1.0,
+        "libsystem_kernel.dylib": 2.0,
+        "vImage": 5.0,
+        "libsystem_platform.dylib": 1.0,
+        "IOSurface": 1.0,
+        "libdispatch.dylib": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 20.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 20.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 8.0
+        },
+        {
+          "module": "vImage",
+          "symbol": "vCGCompositeConstMask_ARGB16F_vec",
+          "ms": 5.0
+        },
+        {
+          "module": "D.debug.dylib",
+          "symbol": "initializeWithCopy for ModelRecord",
+          "ms": 1.0
+        },
+        {
+          "module": "IOSurface",
+          "symbol": "_ioSurfaceConnectInternal",
+          "ms": 1.0
+        },
+        {
+          "module": "RenderBox",
+          "symbol": "RB::Surface::remove_queue_id(_CAImageQueue*)",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "dispatch_time",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "kevent_id",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memset",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-10": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    },
+    "worker-11": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    },
+    "worker-12": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    },
+    "worker-13": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    },
+    "worker-14": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    }
+  },
+  "scheduler": {
+    "event": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 23618659243,
+        "Runnable": 79908507,
+        "Running": 289989303,
+        "Interrupted": 3310541,
+        "Preempted": 11424406
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 23618659243,
+        "Runnable": 79908507,
+        "Running": 289989303,
+        "Interrupted": 3310541,
+        "Preempted": 11424406
+      }
+    },
+    "main": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 7386087510,
+        "Runnable": 17185597,
+        "Running": 16507529393,
+        "Interrupted": 86214815,
+        "Preempted": 6274685
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 7386087510,
+        "Runnable": 17185597,
+        "Running": 16507529393,
+        "Interrupted": 86214815,
+        "Preempted": 6274685
+      }
+    },
+    "worker-01": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Idle": 23975717068,
+        "Runnable": 4986805,
+        "Running": 14725996,
+        "Interrupted": 321004,
+        "Blocked": 1952416,
+        "Preempted": 5588711
+      },
+      "raw_state_sum_ns": {
+        "Idle": 23975717068,
+        "Runnable": 4986805,
+        "Running": 14725996,
+        "Interrupted": 321004,
+        "Blocked": 1952416,
+        "Preempted": 5588711
+      }
+    },
+    "worker-02": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Idle": 23978692286,
+        "Runnable": 4509536,
+        "Running": 14194332,
+        "Interrupted": 328134,
+        "Preempted": 3832375,
+        "Blocked": 1735337
+      },
+      "raw_state_sum_ns": {
+        "Idle": 23978692286,
+        "Runnable": 4509536,
+        "Running": 14194332,
+        "Interrupted": 328134,
+        "Preempted": 3832375,
+        "Blocked": 1735337
+      }
+    },
+    "worker-03": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Idle": 23973889105,
+        "Runnable": 4166067,
+        "Running": 14813246,
+        "Interrupted": 310373,
+        "Preempted": 7232374,
+        "Blocked": 2880835
+      },
+      "raw_state_sum_ns": {
+        "Idle": 23973889105,
+        "Runnable": 4166067,
+        "Running": 14813246,
+        "Interrupted": 310373,
+        "Preempted": 7232374,
+        "Blocked": 2880835
+      }
+    },
+    "worker-04": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Idle": 23977716659,
+        "Runnable": 4183720,
+        "Running": 12602864,
+        "Interrupted": 321754,
+        "Preempted": 6558169,
+        "Blocked": 1908834
+      },
+      "raw_state_sum_ns": {
+        "Idle": 23977716659,
+        "Runnable": 4183720,
+        "Running": 12602864,
+        "Interrupted": 321754,
+        "Preempted": 6558169,
+        "Blocked": 1908834
+      }
+    },
+    "worker-05": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Idle": 23976742995,
+        "Runnable": 4188053,
+        "Running": 14041072,
+        "Interrupted": 323088,
+        "Preempted": 5610125,
+        "Blocked": 2386667
+      },
+      "raw_state_sum_ns": {
+        "Idle": 23976742995,
+        "Runnable": 4188053,
+        "Running": 14041072,
+        "Interrupted": 323088,
+        "Preempted": 5610125,
+        "Blocked": 2386667
+      }
+    },
+    "worker-06": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Idle": 23973724158,
+        "Runnable": 5266963,
+        "Running": 14974285,
+        "Interrupted": 386385,
+        "Preempted": 7376208,
+        "Blocked": 1564001
+      },
+      "raw_state_sum_ns": {
+        "Idle": 23973724158,
+        "Runnable": 5266963,
+        "Running": 14974285,
+        "Interrupted": 386385,
+        "Preempted": 7376208,
+        "Blocked": 1564001
+      }
+    },
+    "worker-07": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Idle": 23978515530,
+        "Runnable": 4716843,
+        "Running": 13808575,
+        "Blocked": 2145043,
+        "Preempted": 3779997,
+        "Interrupted": 326012
+      },
+      "raw_state_sum_ns": {
+        "Idle": 23978515530,
+        "Runnable": 4716843,
+        "Running": 13808575,
+        "Blocked": 2145043,
+        "Preempted": 3779997,
+        "Interrupted": 326012
+      }
+    },
+    "worker-08": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Idle": 23976212108,
+        "Runnable": 4669539,
+        "Running": 14040685,
+        "Interrupted": 363829,
+        "Preempted": 6746671,
+        "Blocked": 1259168
+      },
+      "raw_state_sum_ns": {
+        "Idle": 23976212108,
+        "Runnable": 4669539,
+        "Running": 14040685,
+        "Interrupted": 363829,
+        "Preempted": 6746671,
+        "Blocked": 1259168
+      }
+    },
+    "worker-09": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Idle": 23980167040,
+        "Runnable": 4287549,
+        "Running": 13135277,
+        "Interrupted": 322215,
+        "Preempted": 3199126,
+        "Blocked": 2180793
+      },
+      "raw_state_sum_ns": {
+        "Idle": 23980167040,
+        "Runnable": 4287549,
+        "Running": 13135277,
+        "Interrupted": 322215,
+        "Preempted": 3199126,
+        "Blocked": 2180793
+      }
+    },
+    "worker-10": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Unknown": 289732166,
+        "Runnable": 23713559834
+      },
+      "raw_state_sum_ns": {
+        "Unknown": 289732166,
+        "Runnable": 23713559834
+      }
+    },
+    "worker-11": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Unknown": 24003292000
+      },
+      "raw_state_sum_ns": {
+        "Unknown": 24003292000
+      }
+    },
+    "worker-12": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 24003292000
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 24003292000
+      }
+    },
+    "worker-13": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 24003292000
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 24003292000
+      }
+    },
+    "worker-14": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 24003292000
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 24003292000
+      }
+    }
+  },
+  "presentation_inventory": {
+    "hitches-renders": {
+      "rows": 861,
+      "target_pid_rows": 0,
+      "no_pid_rows": 861,
+      "fields": [
+        "start-time",
+        "duration",
+        "display-name",
+        "uint32",
+        "uint32",
+        "uint32",
+        "event-concept",
+        "uint32",
+        "string"
+      ]
+    },
+    "displayed-surfaces-interval": {
+      "rows": 752,
+      "target_pid_rows": 0,
+      "no_pid_rows": 752,
+      "fields": [
+        "start-time",
+        "duration",
+        "sentinel",
+        "display-name",
+        "connection-uuid64",
+        "uint64",
+        "string",
+        "render-buffer-depth",
+        "metal-workload-priority",
+        "narrative",
+        "display-event-name",
+        "metal-nesting-level",
+        "boolean",
+        "size-in-pixels",
+        "sentinel",
+        "sentinel"
+      ]
+    },
+    "hitches-updates": {
+      "rows": 476,
+      "target_pid_rows": 476,
+      "no_pid_rows": 0,
+      "fields": [
+        "start-time",
+        "duration",
+        "process",
+        "display-name",
+        "uint32",
+        "uint32",
+        "event-concept",
+        "uint32",
+        "string"
+      ]
+    },
+    "metal-command-buffer-completed": {
+      "rows": 2701,
+      "target_pid_rows": 0,
+      "no_pid_rows": 2701,
+      "fields": [
+        "start-time",
+        "metal-command-buffer-id",
+        "uint64"
+      ]
+    },
+    "hitches-frame-lifetimes": {
+      "rows": 757,
+      "target_pid_rows": 0,
+      "no_pid_rows": 757,
+      "fields": [
+        "start-time",
+        "duration",
+        "display-name",
+        "uint32",
+        "uint32",
+        "event-concept",
+        "layout-id",
+        "string"
+      ]
+    },
+    "display-surface-swap": {
+      "rows": 753,
+      "target_pid_rows": 0,
+      "no_pid_rows": 753,
+      "fields": [
+        "start-time",
+        "start-time",
+        "display-name",
+        "displayed-surface-swap",
+        "uint32",
+        "displayed-surface-swap",
+        "render-buffer-depth",
+        "string",
+        "start-time",
+        "start-time",
+        "uint32",
+        "start-time",
+        "sentinel",
+        "sentinel",
+        "string",
+        "string"
+      ]
+    }
+  },
+  "time_profile_schema": {
+    "target-pid": "SINGLE",
+    "context-switch-sampling": "0",
+    "high-frequency-sampling": "0",
+    "schema": "time-profile",
+    "record-waiting-threads": "0",
+    "needs-kernel-callstack": "0",
+    "documentation": "When combined with other time-profile samples, creates a statistical picture of where your application is spending its time."
+  }
+}

@@ -1,0 +1,482 @@
+{
+  "phase": "06-idle-current",
+  "window_ns": [
+    2000000000,
+    10773137000
+  ],
+  "seed": 20261018,
+  "xml_row_counts": {
+    "hitches-renders": 667,
+    "displayed-surfaces-interval": 534,
+    "process-info": 709,
+    "metal-command-buffer-completed": 1555,
+    "device-thermal-state-intervals": 1,
+    "thread-info": 4835,
+    "time-profile": 13,
+    "hitches-frame-lifetimes": 648,
+    "thread-state": 1355,
+    "display-surface-swap": 535
+  },
+  "reference_definitions": 27244,
+  "window_kind": "Phase 1 requested gesture/cue window; no actual input timestamps",
+  "scopes": {
+    "all": {
+      "sample_weight_ms": 6.0,
+      "sample_count": 6,
+      "leaf_module_ms": {
+        "libdispatch.dylib": 1.0,
+        "libsystem_pthread.dylib": 1.0,
+        "libsystem_malloc.dylib": 1.0,
+        "D.debug.dylib": 1.0,
+        "libsystem_kernel.dylib": 1.0,
+        "CoreFoundation": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 6.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 6.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "CoreFoundation",
+          "symbol": "-[__NSArrayM count]",
+          "ms": 1.0
+        },
+        {
+          "module": "D.debug.dylib",
+          "symbol": "outlined destroy of Zip2Sequence<[ModelRecord], [ModelLibrary.StoredRecord]>",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "_dispatch_alloc_continuation_free",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "kevent_id",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_xzone_malloc_from_freelist_chunk",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "___chkstk_darwin",
+          "ms": 1.0
+        }
+      ]
+    },
+    "event": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    },
+    "main": {
+      "sample_weight_ms": 1.0,
+      "sample_count": 1,
+      "leaf_module_ms": {
+        "CoreFoundation": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 1.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 1.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "CoreFoundation",
+          "symbol": "-[__NSArrayM count]",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-01": {
+      "sample_weight_ms": 2.0,
+      "sample_count": 2,
+      "leaf_module_ms": {
+        "D.debug.dylib": 1.0,
+        "libsystem_kernel.dylib": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 2.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 2.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "D.debug.dylib",
+          "symbol": "outlined destroy of Zip2Sequence<[ModelRecord], [ModelLibrary.StoredRecord]>",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "kevent_id",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-02": {
+      "sample_weight_ms": 1.0,
+      "sample_count": 1,
+      "leaf_module_ms": {
+        "libdispatch.dylib": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 1.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 1.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "_dispatch_alloc_continuation_free",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-03": {
+      "sample_weight_ms": 2.0,
+      "sample_count": 2,
+      "leaf_module_ms": {
+        "libsystem_pthread.dylib": 1.0,
+        "libsystem_malloc.dylib": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 2.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 2.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_xzone_malloc_from_freelist_chunk",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "___chkstk_darwin",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-04": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    },
+    "worker-05": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    },
+    "worker-06": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    },
+    "worker-07": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    }
+  },
+  "scheduler": {
+    "event": {
+      "window_ns": 8773137000,
+      "covered_ns": 8773137000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 8773137000
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 8773137000
+      }
+    },
+    "main": {
+      "window_ns": 8773137000,
+      "covered_ns": 8773137000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 8768818125,
+        "Runnable": 755915,
+        "Running": 3278752,
+        "Interrupted": 48375,
+        "Preempted": 235833
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 8768818125,
+        "Runnable": 755915,
+        "Running": 3278752,
+        "Interrupted": 48375,
+        "Preempted": 235833
+      }
+    },
+    "worker-01": {
+      "window_ns": 8773137000,
+      "covered_ns": 8773137000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Idle": 8764254459,
+        "Runnable": 4300250,
+        "Running": 3710832,
+        "Interrupted": 104625,
+        "Preempted": 694542,
+        "Blocked": 72292
+      },
+      "raw_state_sum_ns": {
+        "Idle": 8764254459,
+        "Runnable": 4300250,
+        "Running": 3710832,
+        "Interrupted": 104625,
+        "Preempted": 694542,
+        "Blocked": 72292
+      }
+    },
+    "worker-02": {
+      "window_ns": 8773137000,
+      "covered_ns": 8773137000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 2043702999,
+        "Runnable": 96042,
+        "Running": 576168,
+        "Preempted": 23000,
+        "Interrupted": 13207,
+        "Terminated": 6728725584
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 2043702999,
+        "Runnable": 96042,
+        "Running": 576168,
+        "Preempted": 23000,
+        "Interrupted": 13207,
+        "Terminated": 6728725584
+      }
+    },
+    "worker-03": {
+      "window_ns": 8773137000,
+      "covered_ns": 8773137000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Idle": 8759730295,
+        "Runnable": 5566420,
+        "Running": 3414202,
+        "Interrupted": 95043,
+        "Preempted": 4267040,
+        "Blocked": 64000
+      },
+      "raw_state_sum_ns": {
+        "Idle": 8759730295,
+        "Runnable": 5566420,
+        "Running": 3414202,
+        "Interrupted": 95043,
+        "Preempted": 4267040,
+        "Blocked": 64000
+      }
+    },
+    "worker-04": {
+      "window_ns": 8773137000,
+      "covered_ns": 8773137000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Unknown": 2963821791,
+        "Runnable": 5809315209
+      },
+      "raw_state_sum_ns": {
+        "Unknown": 2963821791,
+        "Runnable": 5809315209
+      }
+    },
+    "worker-05": {
+      "window_ns": 8773137000,
+      "covered_ns": 8773137000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 8773137000
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 8773137000
+      }
+    },
+    "worker-06": {
+      "window_ns": 8773137000,
+      "covered_ns": 8773137000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 8773137000
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 8773137000
+      }
+    },
+    "worker-07": {
+      "window_ns": 8773137000,
+      "covered_ns": 8773137000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 8773137000
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 8773137000
+      }
+    }
+  },
+  "presentation_inventory": {
+    "hitches-renders": {
+      "rows": 667,
+      "target_pid_rows": 0,
+      "no_pid_rows": 667,
+      "fields": [
+        "start-time",
+        "duration",
+        "display-name",
+        "uint32",
+        "uint32",
+        "uint32",
+        "event-concept",
+        "uint32",
+        "string"
+      ]
+    },
+    "displayed-surfaces-interval": {
+      "rows": 534,
+      "target_pid_rows": 0,
+      "no_pid_rows": 534,
+      "fields": [
+        "start-time",
+        "duration",
+        "sentinel",
+        "display-name",
+        "connection-uuid64",
+        "uint64",
+        "string",
+        "render-buffer-depth",
+        "metal-workload-priority",
+        "narrative",
+        "display-event-name",
+        "metal-nesting-level",
+        "boolean",
+        "size-in-pixels",
+        "sentinel",
+        "sentinel"
+      ]
+    },
+    "metal-command-buffer-completed": {
+      "rows": 1555,
+      "target_pid_rows": 0,
+      "no_pid_rows": 1555,
+      "fields": [
+        "start-time",
+        "metal-command-buffer-id",
+        "uint64"
+      ]
+    },
+    "hitches-frame-lifetimes": {
+      "rows": 648,
+      "target_pid_rows": 0,
+      "no_pid_rows": 648,
+      "fields": [
+        "start-time",
+        "duration",
+        "display-name",
+        "uint32",
+        "uint32",
+        "event-concept",
+        "layout-id",
+        "string"
+      ]
+    },
+    "display-surface-swap": {
+      "rows": 535,
+      "target_pid_rows": 0,
+      "no_pid_rows": 535,
+      "fields": [
+        "start-time",
+        "start-time",
+        "display-name",
+        "displayed-surface-swap",
+        "uint32",
+        "displayed-surface-swap",
+        "render-buffer-depth",
+        "string",
+        "start-time",
+        "start-time",
+        "uint32",
+        "start-time",
+        "sentinel",
+        "sentinel",
+        "string",
+        "string"
+      ]
+    }
+  },
+  "time_profile_schema": {
+    "target-pid": "SINGLE",
+    "context-switch-sampling": "0",
+    "high-frequency-sampling": "0",
+    "schema": "time-profile",
+    "needs-kernel-callstack": "0",
+    "record-waiting-threads": "0",
+    "documentation": "When combined with other time-profile samples, creates a statistical picture of where your application is spending its time."
+  }
+}

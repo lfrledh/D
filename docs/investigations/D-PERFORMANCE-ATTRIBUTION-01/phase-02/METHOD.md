@@ -1,0 +1,36 @@
+# 离线复算方法
+
+本目录方法仅Python标准库，读指定旧证据、写指定衍生目录；不启动App、不发输入、不联网。外部顾问取得本地受控旧证据后运行：
+
+```sh
+python3 -m unittest discover -s method -v
+python3 method/reanalyze.py --old-root "$PHASE1_ROOT" --output "$OUTPUT" --scratch "$SCRATCH" --rules method/classification-rules.json
+python3 method/presentation_join.py --old-root "$PHASE1_ROOT" --scratch "$SCRATCH" --output "$OUTPUT/presentation-record-joins.json"
+```
+
+变量由本地保管人指向证据根，不包含在Git。输入需要`exports/{phase}-toc.xml`、`exports/{phase}-data.xml`和`reports/{phase}-analysis.json`。五段列表固化，未自动纳入无效08。输入摘要见capture-manifest；当前工具要求单run、匹配TOC，不能盲目适配任意未来schema。
+
+1. XML用iterparse流式读；id/ref是整份XML命名空间，用外部临时SQLite索引加8192项LRU保存定义。跨row/table的process/thread/backtrace/frame/binary和标量均解引用；不按行或表清空引用。当前嵌套栈在内存，结束元素从ET父移除；不建立全部raw DOM。未解引用、循环、重复ID、TOC索引/schema名称不符直接拒绝。
+2. 精确PID来自对应TOC；线程必须有TID。TID只在同段内部映射main/event/worker匿名别名；同名不同TID不合并。没有按Main Thread名称把所有线程当主线程。所有目标Running采样均计入，单位原weight纳秒→毫秒，负数拒绝，不假设每行1ms。半开窗`lo <= t < hi`。
+3. 时窗沿用Phase1请求操作窗，整数ns舍入；不把CPU活跃起点伪造为输入起点。每线程及全线程给whole、等三分、固定1s bin，最后短尾保留实际时长。timeline的weight是区间CPU样本权重，不是FPS；不能把不足1秒尾bin视作整秒频率。
+4. 调度区间裁窗后做事件扫线：每状态原始sum与union、总体covered/gap、重叠时间union、跨状态重叠、重复区间分别保留。显式Unknown不是gap。`scheduler-accounting.csv.overlap_s`表示有多重覆盖的时间union；manifest规范的overlap_s表示重复计数excess，语义不同，本次两者均0。Blocked等待原因未知，time-profile的record-waiting-threads=0，不能从运行栈补造阻塞栈。
+5. self取导出叶帧；inclusive每样本对相同(module,symbol)仅计一次，防递归重复，但祖先之间仍重叠。全局排序不经过关键词；业务类别是后附的可重叠标记。self累计比例分母为总Running权重；inclusive累计分母为所有inclusive重叠权重之和，**不是CPU覆盖率**。CSV另列denominator_ms为该scope样本总权重，供独立计算具体符号覆盖。
+6. 匿名地址保留sha256截取标识，避免把不同未符号化地址合成一个桶；不公布真实地址。路径隐去。`<deduplicated_symbol>`是工具已丢失细节的符号，不可恢复；路径直方图完整保留当前导出的匿名符号序列，不能称原始执行路径无损。
+7. 代表栈规则：每线程每等分，取累计最高叶符号的第一条匹配栈，以及seed20261018的uniform样本；另取最高权重1秒bin的时间序列加权中位样本。未按业务关键词择首条。每条给row/time/weight/完整leaf→root，空段不造样本；同叶的代表栈不能代替其所有样本共同调用链。完整路径直方图另存gzip，gzip mtime=0保证重现。
+8. 规则v2按当前源码连接geometry、hit、draw、port/node接收器分开，未用旧WorkflowWire零命中排除当前实现。分类无论命中多少均不改变全局排行。
+
+初版评审发现同名TID可能合并、负weight/空窗校验不足、地址桶合并、加权中位实现不一致，均修正并补测试，随后重跑全部五段exit0。22个测试方法覆盖跨表引用、重复标签/ID、循环、缺失/前向引用、schema、身份、权重、递归、边界、未知状态、overlap/gap、选样确定性和精确显示join。它们不证明trace真实性或D产品通过。方法在Python3.9执行。
+
+重放未实施：不把组件测试已有的postEvent→sendEvent循环当作全App定时重放；其每步等布局会产生coordinated omission。下一次必须用固定墙钟计划、记录发送/实际接收/状态以及迟到、合并、失焦中止，组件层只用于不变式，不输出原生FPS。
+
+## Fixed production source references
+
+These are source evidence, not latency measurements.
+
+- [Input and native viewport](https://github.com/lfrledh/D/blob/9eae90e4adc4008c3894f09bcd07c71e23701045/Packages/UI/Sources/UI/Views/Workflow/WorkflowCanvasViewportInteraction.swift#L350)
+- [PAN observation guard](https://github.com/lfrledh/D/blob/9eae90e4adc4008c3894f09bcd07c71e23701045/Packages/UI/Sources/UI/Views/Workflow/WorkflowGraphSurface.swift#L275)
+- [Library hosting and execution bar](https://github.com/lfrledh/D/blob/9eae90e4adc4008c3894f09bcd07c71e23701045/Packages/UI/Sources/UI/Views/Workflow/WorkflowCanvasView.swift#L510)
+- [Glass geometry and host](https://github.com/lfrledh/D/blob/9eae90e4adc4008c3894f09bcd07c71e23701045/Packages/UI/Sources/UI/Views/Quick/WorkbenchLocalBackground.swift#L491)
+- [Connection drawing](https://github.com/lfrledh/D/blob/9eae90e4adc4008c3894f09bcd07c71e23701045/Packages/UI/Sources/UI/Views/Workflow/WorkflowConnectionDrawing.swift)
+- [Connection hit receiver](https://github.com/lfrledh/D/blob/9eae90e4adc4008c3894f09bcd07c71e23701045/Packages/UI/Sources/UI/Views/Workflow/WorkflowConnectionReceiver.swift)
+- [Native directory admission](https://github.com/lfrledh/D/blob/9eae90e4adc4008c3894f09bcd07c71e23701045/D/WorkbenchBootstrap.swift#L61)

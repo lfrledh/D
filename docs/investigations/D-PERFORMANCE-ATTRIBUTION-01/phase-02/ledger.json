@@ -1,0 +1,387 @@
+{
+  "task": "D-PERFORMANCE-ATTRIBUTION-01",
+  "phase": 2,
+  "date": "2026-10-18",
+  "timezone": "Asia/Tokyo",
+  "expected_report_commit": "af5a2ce8b2766910209ca93b544e2aee76b74680",
+  "known_production_commit": "9eae90e4adc4008c3894f09bcd07c71e23701045",
+  "scope": "investigation_only",
+  "product_repairs_authorized": false,
+  "diagnostic_patches": {
+    "local_isolated_only": true,
+    "may_instrument": true,
+    "may_counterfactually_gate": true,
+    "must_check_effect_and_equivalence": true,
+    "push_product_patch": false
+  },
+  "report_push": {
+    "sanitized_reports": true,
+    "pure_offline_analyzer_and_synthetic_tests": true,
+    "raw_traces": false,
+    "force_push": false,
+    "merge": false,
+    "deploy": false
+  },
+  "interactions": [
+    "NODE",
+    "PAN",
+    "ZOOM"
+  ],
+  "automation_levels": [
+    "A_NATIVE_TARGETED",
+    "B_IN_PROCESS",
+    "C_COMPONENT_OFFSCREEN",
+    "MANUAL_SINGLE_SESSION"
+  ],
+  "budget": {
+    "new_capture_file_max": 18,
+    "recorded_seconds_max": 360,
+    "core_independent_repeats": 3,
+    "extra_contrast_groups_max": 4,
+    "failure_retry_max_with_new_reason": 1
+  },
+  "steps": [
+    {
+      "id": "G0.1",
+      "kind": "BASELINE",
+      "title": "核对版本与原会话",
+      "output": "记录代码/二进制/进程及保护边界",
+      "depends_on": [],
+      "status": "DONE",
+      "evidence": [
+        "REPORT.zh-CN.md",
+        "build-qualification.json"
+      ],
+      "reason": "No running review process; no user session touched. Read-only environment checked. Budget preregistered."
+    },
+    {
+      "id": "G0.2",
+      "kind": "ENVIRONMENT",
+      "title": "存储和工具前置",
+      "output": "原始数据可读；采样风险与能力矩阵",
+      "depends_on": [
+        "G0.1"
+      ],
+      "status": "DONE",
+      "evidence": [
+        "REPORT.zh-CN.md",
+        "build-qualification.json"
+      ],
+      "reason": "No running review process; no user session touched. Read-only environment checked. Budget preregistered."
+    },
+    {
+      "id": "G0.3",
+      "kind": "PREREGISTRATION",
+      "title": "登记假设、规则与预算",
+      "output": "一份ledger及实验选择标准",
+      "depends_on": [
+        "G0.1"
+      ],
+      "status": "DONE",
+      "evidence": [
+        "REPORT.zh-CN.md",
+        "build-qualification.json"
+      ],
+      "reason": "No running review process; no user session touched. Read-only environment checked. Budget preregistered."
+    },
+    {
+      "id": "G1.1",
+      "kind": "OFFLINE",
+      "title": "审计既有分析方法",
+      "output": "schema/refs/units/合成测试",
+      "depends_on": [
+        "G0.1"
+      ],
+      "status": "DONE",
+      "evidence": [
+        "REPORT.zh-CN.md",
+        "METHOD.md",
+        "hypothesis-coverage.json"
+      ],
+      "reason": "Offline evidence and source review completed; causal and native limits retained"
+    },
+    {
+      "id": "G1.2",
+      "kind": "OFFLINE",
+      "title": "调度和覆盖对账",
+      "output": "所有状态+unknown/gap/overlap",
+      "depends_on": [
+        "G1.1"
+      ],
+      "status": "DONE",
+      "evidence": [
+        "REPORT.zh-CN.md",
+        "METHOD.md",
+        "hypothesis-coverage.json"
+      ],
+      "reason": "Offline evidence and source review completed; causal and native limits retained"
+    },
+    {
+      "id": "G1.3",
+      "kind": "OFFLINE",
+      "title": "无预设全局热点",
+      "output": "全线程self/inclusive和未分类",
+      "depends_on": [
+        "G1.1"
+      ],
+      "status": "DONE",
+      "evidence": [
+        "REPORT.zh-CN.md",
+        "METHOD.md",
+        "hypothesis-coverage.json"
+      ],
+      "reason": "Offline evidence and source review completed; causal and native limits retained"
+    },
+    {
+      "id": "G1.4",
+      "kind": "OFFLINE",
+      "title": "时间切片与代表栈",
+      "output": "三操作早中晚与选择规则",
+      "depends_on": [
+        "G1.3"
+      ],
+      "status": "DONE",
+      "evidence": [
+        "REPORT.zh-CN.md",
+        "METHOD.md",
+        "hypothesis-coverage.json"
+      ],
+      "reason": "Offline evidence and source review completed; causal and native limits retained"
+    },
+    {
+      "id": "G1.5",
+      "kind": "OFFLINE",
+      "title": "独立PAN画像",
+      "output": "PAN初判与决定性缺口",
+      "depends_on": [
+        "G1.2",
+        "G1.4"
+      ],
+      "status": "DONE",
+      "evidence": [
+        "REPORT.zh-CN.md",
+        "METHOD.md",
+        "hypothesis-coverage.json"
+      ],
+      "reason": "Offline evidence and source review completed; causal and native limits retained"
+    },
+    {
+      "id": "G2.1",
+      "kind": "AUTOMATION",
+      "title": "选择A/B/C自动化层级",
+      "output": "能力实查与证据级别",
+      "depends_on": [
+        "G0.2",
+        "G0.3",
+        "G1.5"
+      ],
+      "status": "DONE",
+      "evidence": [
+        "build-qualification.json",
+        "REPORT.zh-CN.md"
+      ],
+      "reason": "A/B/C capability inspected; no safe native route qualified"
+    },
+    {
+      "id": "G2.2",
+      "kind": "AUTOMATION",
+      "title": "隔离合成场景与停止条件",
+      "output": "无害预试与真实目标核对",
+      "depends_on": [
+        "G2.1"
+      ],
+      "status": "PARTIAL_BLOCKED",
+      "evidence": [
+        "build-qualification.json"
+      ],
+      "reason": "Fresh fixture prepared/cold-read; new-root native authorization and visible target unavailable"
+    },
+    {
+      "id": "G2.3",
+      "kind": "AUTOMATION",
+      "title": "场景指纹与输入轨迹",
+      "output": "实际发送/接收可核对",
+      "depends_on": [
+        "G2.2"
+      ],
+      "status": "BLOCKED",
+      "evidence": [
+        "REPORT.zh-CN.md"
+      ],
+      "reason": "Actual input qualification missing; A denied, B driver not implemented and admission pending"
+    },
+    {
+      "id": "G3.1",
+      "kind": "MEASURE",
+      "title": "三种交互基线",
+      "output": "独立重复、同条件与有效窗",
+      "depends_on": [
+        "G2.3"
+      ],
+      "status": "BLOCKED",
+      "evidence": [
+        "REPORT.zh-CN.md"
+      ],
+      "reason": "Actual input qualification missing; A denied, B driver not implemented and admission pending"
+    },
+    {
+      "id": "G3.2",
+      "kind": "MEASURE",
+      "title": "关键路径与呈现关联",
+      "output": "取得/缺失分开，不虚报FPS",
+      "depends_on": [
+        "G3.1"
+      ],
+      "status": "PARTIAL",
+      "evidence": [
+        "PRESENTATION.md"
+      ],
+      "reason": "Old process-record joins derived; no window/content/input presentation bridge"
+    },
+    {
+      "id": "G4.1",
+      "kind": "METHOD",
+      "title": "工具和构建敏感性",
+      "output": "原包/optimized/观察扰动资格",
+      "depends_on": [
+        "G3.1"
+      ],
+      "status": "PARTIAL",
+      "evidence": [
+        "build-qualification.json"
+      ],
+      "reason": "Same-source optimized build prepared; no qualified native paired comparison"
+    },
+    {
+      "id": "G4.2",
+      "kind": "CROSS_LAYER",
+      "title": "H01-H10覆盖",
+      "output": "三操作逐格证据或阻塞",
+      "depends_on": [
+        "G1.5",
+        "G3.2"
+      ],
+      "status": "DONE",
+      "evidence": [
+        "REPORT.zh-CN.md",
+        "METHOD.md",
+        "hypothesis-coverage.json"
+      ],
+      "reason": "Offline evidence and source review completed; causal and native limits retained"
+    },
+    {
+      "id": "G5.1",
+      "kind": "DIAGNOSTIC",
+      "title": "选择有限反事实实验",
+      "output": "预测/反证、独立变量/混杂",
+      "depends_on": [
+        "G4.1",
+        "G4.2"
+      ],
+      "status": "PARTIAL",
+      "evidence": [
+        "experiments.csv"
+      ],
+      "reason": "At most two conditional candidates each PAN/ZOOM; no delay evidence to admit intervention"
+    },
+    {
+      "id": "G5.2",
+      "kind": "DIAGNOSTIC",
+      "title": "单因素往返与等价核对",
+      "output": "热点与延迟共同变化/不变",
+      "depends_on": [
+        "G5.1"
+      ],
+      "status": "NOT_RUN",
+      "evidence": [
+        "experiments.csv"
+      ],
+      "reason": "No G2/G3 qualification; no causal pair or restoration claim"
+    },
+    {
+      "id": "G6.1",
+      "kind": "REVIEW",
+      "title": "独立方法和未知项复核",
+      "output": "数据资格而非只审文字",
+      "depends_on": [
+        "G4.2"
+      ],
+      "status": "DONE",
+      "evidence": [
+        "REPORT.zh-CN.md",
+        "METHOD.md",
+        "hypothesis-coverage.json"
+      ],
+      "reason": "Offline evidence and source review completed; causal and native limits retained"
+    },
+    {
+      "id": "G6.2",
+      "kind": "DELIVERY",
+      "title": "证据报告和去敏同步",
+      "output": "保持原会话；停止不修补",
+      "depends_on": [
+        "G6.1"
+      ],
+      "status": "DONE",
+      "evidence": [
+        "REPORT.zh-CN.md"
+      ],
+      "reason": "Sanitized reports/offline method only; final commit/remote identity in delivery receipt"
+    }
+  ],
+  "experiment_ids": [
+    "E01",
+    "E02",
+    "E03",
+    "E04",
+    "E05",
+    "E06",
+    "E07",
+    "E08",
+    "E09",
+    "E10",
+    "E11",
+    "E12"
+  ],
+  "hypothesis_ids": [
+    "H01",
+    "H02",
+    "H03",
+    "H04",
+    "H05",
+    "H06",
+    "H07",
+    "H08",
+    "H09",
+    "H10"
+  ],
+  "rules": [
+    "No result is preselected",
+    "PAN and ZOOM require separate explanations",
+    "Global top stacks before keyword classes",
+    "No cue as input timestamp",
+    "No FPS without valid target-display mapping",
+    "No schema guesses",
+    "Keep failures and counterevidence",
+    "No user data reset",
+    "No security bypass",
+    "Not a repair task"
+  ],
+  "note": "Executed Phase2 statuses; capture budget zero used. Build/fixture not native measurements.",
+  "started_utc": "2026-10-18T13:35:38.182576+00:00",
+  "new_capture_count": 0,
+  "new_capture_seconds": 0,
+  "diagnostic_product_changes": [],
+  "deviations": [
+    "New native repetitions and causal interventions not run due qualification gate; no grant bypass.",
+    "Only two small old-table exports added, not new recordings.",
+    "B full-App timed replay remains unimplemented; distinguished from environment blocker."
+  ],
+  "selection_policy": {
+    "representative_seed": 20261018,
+    "windows": "Retain cue windows; thirds/1s; dominant leaf, seeded uniform per thread/third, weighted middle in maximum-weight bin",
+    "hypothesis_order": "global self/inclusive and scheduler before keyword categories",
+    "new_capture_admission": "G1 complete + safe visible target and isolated root + input-receipt qualification; otherwise continue offline"
+  },
+  "diagnostic_build": "clean detached source at production SHA; no product patch"
+}

@@ -1,0 +1,108 @@
+{
+  "commands": [
+    {
+      "step": "preflight",
+      "command": "xcrun swift native-preflight.swift",
+      "exit_code": 0,
+      "note": "Read-only AX/PostEvent/ScreenCapture false; no request"
+    },
+    {
+      "step": "original signature",
+      "command": "codesign --verify --deep --strict <ORIGINAL_APP>",
+      "exit_code": 0,
+      "note": "Ten code digests matched original receipt"
+    },
+    {
+      "step": "schema export1",
+      "command": "xcrun xctrace export --input <OLD05> --xpath <hitches-updates> --output <PRIVATE>",
+      "exit_code": 0,
+      "note": "No new capture"
+    },
+    {
+      "step": "schema export2",
+      "command": "xcrun xctrace export --input <OLD05> --xpath <hitches-frame-lifetimes> --output <PRIVATE>",
+      "exit_code": 0,
+      "note": "No new capture"
+    },
+    {
+      "step": "reanalysis-v2",
+      "command": "python3 method/reanalyze.py --old-root <OLD> --output <DERIVED> --scratch <TMP> --rules method/classification-rules.json",
+      "exit_code": 0,
+      "note": "All five phases"
+    },
+    {
+      "step": "method tests",
+      "command": "python3 -m unittest -v",
+      "exit_code": 0,
+      "note": "22 pure offline methods"
+    },
+    {
+      "step": "display first attempt",
+      "command": "python3 method/presentation_join.py ...",
+      "exit_code": 1,
+      "note": "display-name mistakenly parsed as integer; original failure log retained"
+    },
+    {
+      "step": "display final",
+      "command": "python3 method/presentation_join.py ...",
+      "exit_code": 0,
+      "note": "Exact scalar schema type corrected, no dropped rows"
+    },
+    {
+      "step": "optimized build",
+      "command": "bash scripts/build-local.sh --offline <isolated paths; optimized xcconfig>",
+      "exit_code": 0,
+      "note": "D/UI actual -O, DEBUG and D_REVIEW_ONLY retained; signed, not launched"
+    },
+    {
+      "step": "optimized signature",
+      "command": "codesign --verify --deep --strict <OPTIMIZED_APP>",
+      "exit_code": 0,
+      "note": "Sandbox and persistent marker separately checked"
+    },
+    {
+      "step": "fixture initial link",
+      "command": "xcrun swiftc <source and incomplete declared object list>",
+      "exit_code": 1,
+      "note": "Missing declared package dependency objects; no native execution"
+    },
+    {
+      "step": "fixture final link",
+      "command": "xcrun swiftc <source plus declared transitive objects>",
+      "exit_code": 0,
+      "note": "Existing same-source build products"
+    },
+    {
+      "step": "fixture run",
+      "command": "<PHASE2_PREPARE> <FRESH_UUID_ROOT>",
+      "exit_code": 0,
+      "note": "Real Store save/close/cold read; no engine"
+    },
+    {
+      "step": "rules-update initial",
+      "command": "python3 <rules-update>",
+      "exit_code": 1,
+      "note": "Wrong relative method path; corrected before v2 analysis; shell aggregate0 did not mean this subcommand passed"
+    },
+    {
+      "step": "display review correction",
+      "command": "python3 method/presentation_join.py ...; separate unittest run",
+      "exit_code": 0,
+      "note": "Three old phases rerun; ambiguous-chain and actual-recording-duration corrections; current counts unchanged; 22 tests exit0"
+    },
+    {
+      "step": "optional static plot",
+      "command": "bundled python method/plot_timeline.py ...",
+      "exit_code": 1,
+      "note": "matplotlib unavailable; no plot published, numeric timeline retained; no package install"
+    },
+    {
+      "step": "manifest validation",
+      "command": "package validate_capture on 9 entries and validate_coverage on 30 cells",
+      "exit_code": 0,
+      "note": "Structural/accounting checks only"
+    }
+  ],
+  "new_recordings": 0,
+  "boundary": "Placeholders hide private roots; exact argv/logs/UUIDs remain in local evidence root. No product performance claim."
+}

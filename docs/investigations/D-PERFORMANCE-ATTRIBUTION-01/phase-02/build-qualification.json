@@ -1,0 +1,94 @@
+{
+  "source_sha": "9eae90e4adc4008c3894f09bcd07c71e23701045",
+  "source_dirty": false,
+  "diagnostic_source_changes": false,
+  "configuration": "Debug, optimization override -O; definitions retained",
+  "actual_compile_flags": {
+    "DInference": {
+      "optimization": [
+        "-O"
+      ],
+      "defines": [
+        "-DDEBUG",
+        "-DDEBUG=1",
+        "-DD_REVIEW_ONLY",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-DSWIFT_PACKAGE",
+        "-DXcode",
+        "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG"
+      ],
+      "debug_info": true
+    },
+    "DWorkbench": {
+      "optimization": [
+        "-O"
+      ],
+      "defines": [
+        "-DDEBUG",
+        "-DDEBUG=1",
+        "-DD_REVIEW_ONLY",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+        "-DSWIFT_PACKAGE",
+        "-DXcode",
+        "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG"
+      ],
+      "debug_info": true
+    },
+    "UI": {
+      "optimization": [
+        "-O"
+      ],
+      "defines": [
+        "-DDEBUG",
+        "-DDEBUG=1",
+        "-DD_REVIEW_ONLY",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+        "-DSWIFT_PACKAGE",
+        "-DXcode",
+        "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG"
+      ],
+      "debug_info": true
+    },
+    "D": {
+      "optimization": [
+        "-O"
+      ],
+      "defines": [
+        "-DDEBUG",
+        "-DDEBUG=1",
+        "-DD_REVIEW_ONLY",
+        "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG"
+      ],
+      "debug_info": true
+    }
+  },
+  "build_exit": 0,
+  "signature_exit": 0,
+  "entitlements_exit": 0,
+  "sandbox": true,
+  "marker": "isolated-download-v1",
+  "symbol_uuids": [
+    "36FF9154-7735-3F2F-9D0C-3B2B71898DC6"
+  ],
+  "old_binary_uuids": [
+    "80B8C85E-E3B6-3AD2-9828-170D37E49F45",
+    "B727B6E7-8FC6-3539-A03E-CFB5AAC13C45"
+  ],
+  "native_launched": false,
+  "status": "BUILD_PREPARED; NATIVE_COMPARISON_BLOCKED",
+  "dependency_source": "same pinned sources, isolated cloned package/cache roots, offline resolution",
+  "initial_fixture_link_exit": 1,
+  "initial_fixture_link_reason": "standalone link omitted declared ZIPFoundation/MCP transitive objects; source compiled",
+  "final_fixture_compile_exit": 0,
+  "fixture_run_exit": 0,
+  "synthetic_scene": {
+    "cold_read_equal": true,
+    "edges": 6,
+    "graphs": 2,
+    "inference": "not invoked",
+    "native_visible_state": "NOT_MEASURED",
+    "nodes": 8,
+    "runs": 0
+  },
+  "scope": "No inference backend constructed; no visible window or native route qualified"
+}

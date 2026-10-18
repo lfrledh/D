@@ -1,0 +1,1629 @@
+phase,thread,period,start_s,end_s,weight_ms,samples,classes_json
+03-pan,all,whole,3.856365,14.864441,1518.0,1518,"{""canvas_surface"": 96.0, ""connection_draw"": 11.0, ""connection_geometry"": 2.0, ""glass_background_cpu"": 102.0, ""language_resolution"": 10.0, ""layout_ancestor"": 668.0, ""library"": 16.0, ""menu_feature"": 11.0, ""node_body"": 16.0, ""operation_tree"": 3.0, ""readability"": 76.0, ""render_commit_ancestor"": 834.0, ""swiftui_graph"": 452.0, ""titlebar"": 2.0, ""viewport_input"": 76.0}"
+03-pan,all,early,3.856365,7.525723666,3.0,3,{}
+03-pan,all,middle,7.525723666,11.195082333,269.0,269,"{""language_resolution"": 1.0, ""layout_ancestor"": 84.0, ""node_body"": 1.0, ""render_commit_ancestor"": 75.0, ""swiftui_graph"": 86.0, ""titlebar"": 2.0}"
+03-pan,all,late,11.195082333,14.864441,1246.0,1246,"{""canvas_surface"": 96.0, ""connection_draw"": 11.0, ""connection_geometry"": 2.0, ""glass_background_cpu"": 102.0, ""language_resolution"": 9.0, ""layout_ancestor"": 584.0, ""library"": 16.0, ""menu_feature"": 11.0, ""node_body"": 15.0, ""operation_tree"": 3.0, ""readability"": 76.0, ""render_commit_ancestor"": 759.0, ""swiftui_graph"": 366.0, ""viewport_input"": 76.0}"
+03-pan,all,bin-00,3.856365,4.856365,1.0,1,{}
+03-pan,all,bin-01,4.856365,5.856365,2.0,2,{}
+03-pan,all,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,all,bin-03,6.856365,7.856365,1.0,1,{}
+03-pan,all,bin-04,7.856365,8.856365,3.0,3,{}
+03-pan,all,bin-05,8.856365,9.856365,1.0,1,{}
+03-pan,all,bin-06,9.856365,10.856365,239.0,239,"{""language_resolution"": 1.0, ""layout_ancestor"": 83.0, ""node_body"": 1.0, ""render_commit_ancestor"": 74.0, ""swiftui_graph"": 86.0, ""titlebar"": 2.0}"
+03-pan,all,bin-07,10.856365,11.856365,106.0,106,"{""layout_ancestor"": 2.0, ""render_commit_ancestor"": 2.0}"
+03-pan,all,bin-08,11.856365,12.856365,298.0,298,"{""canvas_surface"": 11.0, ""glass_background_cpu"": 4.0, ""language_resolution"": 3.0, ""layout_ancestor"": 95.0, ""library"": 3.0, ""menu_feature"": 6.0, ""node_body"": 5.0, ""readability"": 2.0, ""render_commit_ancestor"": 99.0, ""swiftui_graph"": 68.0, ""viewport_input"": 3.0}"
+03-pan,all,bin-09,12.856365,13.856365,464.0,464,"{""canvas_surface"": 49.0, ""connection_draw"": 5.0, ""glass_background_cpu"": 51.0, ""language_resolution"": 2.0, ""layout_ancestor"": 263.0, ""library"": 9.0, ""menu_feature"": 1.0, ""node_body"": 2.0, ""operation_tree"": 2.0, ""readability"": 39.0, ""render_commit_ancestor"": 357.0, ""swiftui_graph"": 159.0, ""viewport_input"": 40.0}"
+03-pan,all,bin-10,13.856365,14.856365,402.0,402,"{""canvas_surface"": 36.0, ""connection_draw"": 6.0, ""connection_geometry"": 2.0, ""glass_background_cpu"": 47.0, ""language_resolution"": 4.0, ""layout_ancestor"": 225.0, ""library"": 4.0, ""menu_feature"": 4.0, ""node_body"": 8.0, ""operation_tree"": 1.0, ""readability"": 35.0, ""render_commit_ancestor"": 302.0, ""swiftui_graph"": 139.0, ""viewport_input"": 33.0}"
+03-pan,all,bin-11,14.856365,14.864441,1.0,1,{}
+03-pan,event,whole,3.856365,14.864441,12.0,12,{}
+03-pan,event,early,3.856365,7.525723666,0.0,0,{}
+03-pan,event,middle,7.525723666,11.195082333,5.0,5,{}
+03-pan,event,late,11.195082333,14.864441,7.0,7,{}
+03-pan,event,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,event,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,event,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,event,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,event,bin-04,7.856365,8.856365,0.0,0,{}
+03-pan,event,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,event,bin-06,9.856365,10.856365,5.0,5,{}
+03-pan,event,bin-07,10.856365,11.856365,0.0,0,{}
+03-pan,event,bin-08,11.856365,12.856365,2.0,2,{}
+03-pan,event,bin-09,12.856365,13.856365,3.0,3,{}
+03-pan,event,bin-10,13.856365,14.856365,2.0,2,{}
+03-pan,event,bin-11,14.856365,14.864441,0.0,0,{}
+03-pan,main,whole,3.856365,14.864441,1383.0,1383,"{""canvas_surface"": 96.0, ""connection_draw"": 11.0, ""connection_geometry"": 2.0, ""glass_background_cpu"": 102.0, ""language_resolution"": 10.0, ""layout_ancestor"": 666.0, ""library"": 16.0, ""menu_feature"": 11.0, ""node_body"": 16.0, ""operation_tree"": 3.0, ""readability"": 76.0, ""render_commit_ancestor"": 834.0, ""swiftui_graph"": 452.0, ""titlebar"": 2.0, ""viewport_input"": 76.0}"
+03-pan,main,early,3.856365,7.525723666,1.0,1,{}
+03-pan,main,middle,7.525723666,11.195082333,259.0,259,"{""language_resolution"": 1.0, ""layout_ancestor"": 84.0, ""node_body"": 1.0, ""render_commit_ancestor"": 75.0, ""swiftui_graph"": 86.0, ""titlebar"": 2.0}"
+03-pan,main,late,11.195082333,14.864441,1123.0,1123,"{""canvas_surface"": 96.0, ""connection_draw"": 11.0, ""connection_geometry"": 2.0, ""glass_background_cpu"": 102.0, ""language_resolution"": 9.0, ""layout_ancestor"": 582.0, ""library"": 16.0, ""menu_feature"": 11.0, ""node_body"": 15.0, ""operation_tree"": 3.0, ""readability"": 76.0, ""render_commit_ancestor"": 759.0, ""swiftui_graph"": 366.0, ""viewport_input"": 76.0}"
+03-pan,main,bin-00,3.856365,4.856365,1.0,1,{}
+03-pan,main,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,main,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,main,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,main,bin-04,7.856365,8.856365,2.0,2,{}
+03-pan,main,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,main,bin-06,9.856365,10.856365,232.0,232,"{""language_resolution"": 1.0, ""layout_ancestor"": 83.0, ""node_body"": 1.0, ""render_commit_ancestor"": 74.0, ""swiftui_graph"": 86.0, ""titlebar"": 2.0}"
+03-pan,main,bin-07,10.856365,11.856365,105.0,105,"{""layout_ancestor"": 2.0, ""render_commit_ancestor"": 2.0}"
+03-pan,main,bin-08,11.856365,12.856365,279.0,279,"{""canvas_surface"": 11.0, ""glass_background_cpu"": 4.0, ""language_resolution"": 3.0, ""layout_ancestor"": 95.0, ""library"": 3.0, ""menu_feature"": 6.0, ""node_body"": 5.0, ""readability"": 2.0, ""render_commit_ancestor"": 99.0, ""swiftui_graph"": 68.0, ""viewport_input"": 3.0}"
+03-pan,main,bin-09,12.856365,13.856365,407.0,407,"{""canvas_surface"": 49.0, ""connection_draw"": 5.0, ""glass_background_cpu"": 51.0, ""language_resolution"": 2.0, ""layout_ancestor"": 262.0, ""library"": 9.0, ""menu_feature"": 1.0, ""node_body"": 2.0, ""operation_tree"": 2.0, ""readability"": 39.0, ""render_commit_ancestor"": 357.0, ""swiftui_graph"": 159.0, ""viewport_input"": 40.0}"
+03-pan,main,bin-10,13.856365,14.856365,356.0,356,"{""canvas_surface"": 36.0, ""connection_draw"": 6.0, ""connection_geometry"": 2.0, ""glass_background_cpu"": 47.0, ""language_resolution"": 4.0, ""layout_ancestor"": 224.0, ""library"": 4.0, ""menu_feature"": 4.0, ""node_body"": 8.0, ""operation_tree"": 1.0, ""readability"": 35.0, ""render_commit_ancestor"": 302.0, ""swiftui_graph"": 139.0, ""viewport_input"": 33.0}"
+03-pan,main,bin-11,14.856365,14.864441,1.0,1,{}
+03-pan,worker-01,whole,3.856365,14.864441,42.0,42,"{""layout_ancestor"": 1.0}"
+03-pan,worker-01,early,3.856365,7.525723666,0.0,0,{}
+03-pan,worker-01,middle,7.525723666,11.195082333,1.0,1,{}
+03-pan,worker-01,late,11.195082333,14.864441,41.0,41,"{""layout_ancestor"": 1.0}"
+03-pan,worker-01,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,worker-01,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,worker-01,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,worker-01,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,worker-01,bin-04,7.856365,8.856365,1.0,1,{}
+03-pan,worker-01,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,worker-01,bin-06,9.856365,10.856365,0.0,0,{}
+03-pan,worker-01,bin-07,10.856365,11.856365,0.0,0,{}
+03-pan,worker-01,bin-08,11.856365,12.856365,2.0,2,{}
+03-pan,worker-01,bin-09,12.856365,13.856365,25.0,25,"{""layout_ancestor"": 1.0}"
+03-pan,worker-01,bin-10,13.856365,14.856365,14.0,14,{}
+03-pan,worker-01,bin-11,14.856365,14.864441,0.0,0,{}
+03-pan,worker-02,whole,3.856365,14.864441,9.0,9,{}
+03-pan,worker-02,early,3.856365,7.525723666,2.0,2,{}
+03-pan,worker-02,middle,7.525723666,11.195082333,4.0,4,{}
+03-pan,worker-02,late,11.195082333,14.864441,3.0,3,{}
+03-pan,worker-02,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,worker-02,bin-01,4.856365,5.856365,2.0,2,{}
+03-pan,worker-02,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,worker-02,bin-03,6.856365,7.856365,1.0,1,{}
+03-pan,worker-02,bin-04,7.856365,8.856365,0.0,0,{}
+03-pan,worker-02,bin-05,8.856365,9.856365,1.0,1,{}
+03-pan,worker-02,bin-06,9.856365,10.856365,2.0,2,{}
+03-pan,worker-02,bin-07,10.856365,11.856365,1.0,1,{}
+03-pan,worker-02,bin-08,11.856365,12.856365,2.0,2,{}
+03-pan,worker-02,bin-09,12.856365,13.856365,0.0,0,{}
+03-pan,worker-02,bin-10,13.856365,14.856365,0.0,0,{}
+03-pan,worker-02,bin-11,14.856365,14.864441,0.0,0,{}
+03-pan,worker-03,whole,3.856365,14.864441,2.0,2,{}
+03-pan,worker-03,early,3.856365,7.525723666,0.0,0,{}
+03-pan,worker-03,middle,7.525723666,11.195082333,0.0,0,{}
+03-pan,worker-03,late,11.195082333,14.864441,2.0,2,{}
+03-pan,worker-03,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,worker-03,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,worker-03,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,worker-03,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,worker-03,bin-04,7.856365,8.856365,0.0,0,{}
+03-pan,worker-03,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,worker-03,bin-06,9.856365,10.856365,0.0,0,{}
+03-pan,worker-03,bin-07,10.856365,11.856365,0.0,0,{}
+03-pan,worker-03,bin-08,11.856365,12.856365,2.0,2,{}
+03-pan,worker-03,bin-09,12.856365,13.856365,0.0,0,{}
+03-pan,worker-03,bin-10,13.856365,14.856365,0.0,0,{}
+03-pan,worker-03,bin-11,14.856365,14.864441,0.0,0,{}
+03-pan,worker-04,whole,3.856365,14.864441,2.0,2,{}
+03-pan,worker-04,early,3.856365,7.525723666,0.0,0,{}
+03-pan,worker-04,middle,7.525723666,11.195082333,0.0,0,{}
+03-pan,worker-04,late,11.195082333,14.864441,2.0,2,{}
+03-pan,worker-04,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,worker-04,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,worker-04,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,worker-04,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,worker-04,bin-04,7.856365,8.856365,0.0,0,{}
+03-pan,worker-04,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,worker-04,bin-06,9.856365,10.856365,0.0,0,{}
+03-pan,worker-04,bin-07,10.856365,11.856365,0.0,0,{}
+03-pan,worker-04,bin-08,11.856365,12.856365,2.0,2,{}
+03-pan,worker-04,bin-09,12.856365,13.856365,0.0,0,{}
+03-pan,worker-04,bin-10,13.856365,14.856365,0.0,0,{}
+03-pan,worker-04,bin-11,14.856365,14.864441,0.0,0,{}
+03-pan,worker-05,whole,3.856365,14.864441,2.0,2,{}
+03-pan,worker-05,early,3.856365,7.525723666,0.0,0,{}
+03-pan,worker-05,middle,7.525723666,11.195082333,0.0,0,{}
+03-pan,worker-05,late,11.195082333,14.864441,2.0,2,{}
+03-pan,worker-05,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,worker-05,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,worker-05,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,worker-05,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,worker-05,bin-04,7.856365,8.856365,0.0,0,{}
+03-pan,worker-05,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,worker-05,bin-06,9.856365,10.856365,0.0,0,{}
+03-pan,worker-05,bin-07,10.856365,11.856365,0.0,0,{}
+03-pan,worker-05,bin-08,11.856365,12.856365,2.0,2,{}
+03-pan,worker-05,bin-09,12.856365,13.856365,0.0,0,{}
+03-pan,worker-05,bin-10,13.856365,14.856365,0.0,0,{}
+03-pan,worker-05,bin-11,14.856365,14.864441,0.0,0,{}
+03-pan,worker-06,whole,3.856365,14.864441,19.0,19,"{""layout_ancestor"": 1.0}"
+03-pan,worker-06,early,3.856365,7.525723666,0.0,0,{}
+03-pan,worker-06,middle,7.525723666,11.195082333,0.0,0,{}
+03-pan,worker-06,late,11.195082333,14.864441,19.0,19,"{""layout_ancestor"": 1.0}"
+03-pan,worker-06,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,worker-06,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,worker-06,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,worker-06,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,worker-06,bin-04,7.856365,8.856365,0.0,0,{}
+03-pan,worker-06,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,worker-06,bin-06,9.856365,10.856365,0.0,0,{}
+03-pan,worker-06,bin-07,10.856365,11.856365,0.0,0,{}
+03-pan,worker-06,bin-08,11.856365,12.856365,2.0,2,{}
+03-pan,worker-06,bin-09,12.856365,13.856365,7.0,7,{}
+03-pan,worker-06,bin-10,13.856365,14.856365,10.0,10,"{""layout_ancestor"": 1.0}"
+03-pan,worker-06,bin-11,14.856365,14.864441,0.0,0,{}
+03-pan,worker-07,whole,3.856365,14.864441,24.0,24,{}
+03-pan,worker-07,early,3.856365,7.525723666,0.0,0,{}
+03-pan,worker-07,middle,7.525723666,11.195082333,0.0,0,{}
+03-pan,worker-07,late,11.195082333,14.864441,24.0,24,{}
+03-pan,worker-07,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,worker-07,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,worker-07,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,worker-07,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,worker-07,bin-04,7.856365,8.856365,0.0,0,{}
+03-pan,worker-07,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,worker-07,bin-06,9.856365,10.856365,0.0,0,{}
+03-pan,worker-07,bin-07,10.856365,11.856365,0.0,0,{}
+03-pan,worker-07,bin-08,11.856365,12.856365,2.0,2,{}
+03-pan,worker-07,bin-09,12.856365,13.856365,16.0,16,{}
+03-pan,worker-07,bin-10,13.856365,14.856365,6.0,6,{}
+03-pan,worker-07,bin-11,14.856365,14.864441,0.0,0,{}
+03-pan,worker-08,whole,3.856365,14.864441,23.0,23,{}
+03-pan,worker-08,early,3.856365,7.525723666,0.0,0,{}
+03-pan,worker-08,middle,7.525723666,11.195082333,0.0,0,{}
+03-pan,worker-08,late,11.195082333,14.864441,23.0,23,{}
+03-pan,worker-08,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,worker-08,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,worker-08,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,worker-08,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,worker-08,bin-04,7.856365,8.856365,0.0,0,{}
+03-pan,worker-08,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,worker-08,bin-06,9.856365,10.856365,0.0,0,{}
+03-pan,worker-08,bin-07,10.856365,11.856365,0.0,0,{}
+03-pan,worker-08,bin-08,11.856365,12.856365,3.0,3,{}
+03-pan,worker-08,bin-09,12.856365,13.856365,6.0,6,{}
+03-pan,worker-08,bin-10,13.856365,14.856365,14.0,14,{}
+03-pan,worker-08,bin-11,14.856365,14.864441,0.0,0,{}
+03-pan,worker-09,whole,3.856365,14.864441,0.0,0,{}
+03-pan,worker-09,early,3.856365,7.525723666,0.0,0,{}
+03-pan,worker-09,middle,7.525723666,11.195082333,0.0,0,{}
+03-pan,worker-09,late,11.195082333,14.864441,0.0,0,{}
+03-pan,worker-09,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,worker-09,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,worker-09,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,worker-09,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,worker-09,bin-04,7.856365,8.856365,0.0,0,{}
+03-pan,worker-09,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,worker-09,bin-06,9.856365,10.856365,0.0,0,{}
+03-pan,worker-09,bin-07,10.856365,11.856365,0.0,0,{}
+03-pan,worker-09,bin-08,11.856365,12.856365,0.0,0,{}
+03-pan,worker-09,bin-09,12.856365,13.856365,0.0,0,{}
+03-pan,worker-09,bin-10,13.856365,14.856365,0.0,0,{}
+03-pan,worker-09,bin-11,14.856365,14.864441,0.0,0,{}
+03-pan,worker-10,whole,3.856365,14.864441,0.0,0,{}
+03-pan,worker-10,early,3.856365,7.525723666,0.0,0,{}
+03-pan,worker-10,middle,7.525723666,11.195082333,0.0,0,{}
+03-pan,worker-10,late,11.195082333,14.864441,0.0,0,{}
+03-pan,worker-10,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,worker-10,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,worker-10,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,worker-10,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,worker-10,bin-04,7.856365,8.856365,0.0,0,{}
+03-pan,worker-10,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,worker-10,bin-06,9.856365,10.856365,0.0,0,{}
+03-pan,worker-10,bin-07,10.856365,11.856365,0.0,0,{}
+03-pan,worker-10,bin-08,11.856365,12.856365,0.0,0,{}
+03-pan,worker-10,bin-09,12.856365,13.856365,0.0,0,{}
+03-pan,worker-10,bin-10,13.856365,14.856365,0.0,0,{}
+03-pan,worker-10,bin-11,14.856365,14.864441,0.0,0,{}
+03-pan,worker-11,whole,3.856365,14.864441,0.0,0,{}
+03-pan,worker-11,early,3.856365,7.525723666,0.0,0,{}
+03-pan,worker-11,middle,7.525723666,11.195082333,0.0,0,{}
+03-pan,worker-11,late,11.195082333,14.864441,0.0,0,{}
+03-pan,worker-11,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,worker-11,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,worker-11,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,worker-11,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,worker-11,bin-04,7.856365,8.856365,0.0,0,{}
+03-pan,worker-11,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,worker-11,bin-06,9.856365,10.856365,0.0,0,{}
+03-pan,worker-11,bin-07,10.856365,11.856365,0.0,0,{}
+03-pan,worker-11,bin-08,11.856365,12.856365,0.0,0,{}
+03-pan,worker-11,bin-09,12.856365,13.856365,0.0,0,{}
+03-pan,worker-11,bin-10,13.856365,14.856365,0.0,0,{}
+03-pan,worker-11,bin-11,14.856365,14.864441,0.0,0,{}
+03-pan,worker-12,whole,3.856365,14.864441,0.0,0,{}
+03-pan,worker-12,early,3.856365,7.525723666,0.0,0,{}
+03-pan,worker-12,middle,7.525723666,11.195082333,0.0,0,{}
+03-pan,worker-12,late,11.195082333,14.864441,0.0,0,{}
+03-pan,worker-12,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,worker-12,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,worker-12,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,worker-12,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,worker-12,bin-04,7.856365,8.856365,0.0,0,{}
+03-pan,worker-12,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,worker-12,bin-06,9.856365,10.856365,0.0,0,{}
+03-pan,worker-12,bin-07,10.856365,11.856365,0.0,0,{}
+03-pan,worker-12,bin-08,11.856365,12.856365,0.0,0,{}
+03-pan,worker-12,bin-09,12.856365,13.856365,0.0,0,{}
+03-pan,worker-12,bin-10,13.856365,14.856365,0.0,0,{}
+03-pan,worker-12,bin-11,14.856365,14.864441,0.0,0,{}
+03-pan,worker-13,whole,3.856365,14.864441,0.0,0,{}
+03-pan,worker-13,early,3.856365,7.525723666,0.0,0,{}
+03-pan,worker-13,middle,7.525723666,11.195082333,0.0,0,{}
+03-pan,worker-13,late,11.195082333,14.864441,0.0,0,{}
+03-pan,worker-13,bin-00,3.856365,4.856365,0.0,0,{}
+03-pan,worker-13,bin-01,4.856365,5.856365,0.0,0,{}
+03-pan,worker-13,bin-02,5.856365,6.856365,0.0,0,{}
+03-pan,worker-13,bin-03,6.856365,7.856365,0.0,0,{}
+03-pan,worker-13,bin-04,7.856365,8.856365,0.0,0,{}
+03-pan,worker-13,bin-05,8.856365,9.856365,0.0,0,{}
+03-pan,worker-13,bin-06,9.856365,10.856365,0.0,0,{}
+03-pan,worker-13,bin-07,10.856365,11.856365,0.0,0,{}
+03-pan,worker-13,bin-08,11.856365,12.856365,0.0,0,{}
+03-pan,worker-13,bin-09,12.856365,13.856365,0.0,0,{}
+03-pan,worker-13,bin-10,13.856365,14.856365,0.0,0,{}
+03-pan,worker-13,bin-11,14.856365,14.864441,0.0,0,{}
+02-node-drag-repeat,all,whole,3.113751,14.119936,1840.0,1840,"{""canvas_surface"": 108.0, ""connection_draw"": 8.0, ""connection_geometry"": 3.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 173.0, ""glass_controls"": 1.0, ""language_resolution"": 2.0, ""layout_ancestor"": 1086.0, ""library"": 6.0, ""library_entry_equality"": 1.0, ""menu_feature"": 6.0, ""node_body"": 12.0, ""node_port_input"": 5.0, ""operation_tree"": 1.0, ""readability"": 151.0, ""render_commit_ancestor"": 1388.0, ""swiftui_graph"": 618.0, ""titlebar"": 2.0, ""viewport_input"": 83.0}"
+02-node-drag-repeat,all,early,3.113751,6.782479333,2.0,2,{}
+02-node-drag-repeat,all,middle,6.782479333,10.451207666,140.0,140,"{""glass_controls"": 1.0, ""layout_ancestor"": 55.0, ""menu_feature"": 1.0, ""node_body"": 1.0, ""render_commit_ancestor"": 45.0, ""swiftui_graph"": 52.0, ""titlebar"": 2.0}"
+02-node-drag-repeat,all,late,10.451207666,14.119936,1698.0,1698,"{""canvas_surface"": 108.0, ""connection_draw"": 8.0, ""connection_geometry"": 3.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 173.0, ""language_resolution"": 2.0, ""layout_ancestor"": 1031.0, ""library"": 6.0, ""library_entry_equality"": 1.0, ""menu_feature"": 5.0, ""node_body"": 11.0, ""node_port_input"": 5.0, ""operation_tree"": 1.0, ""readability"": 151.0, ""render_commit_ancestor"": 1343.0, ""swiftui_graph"": 566.0, ""viewport_input"": 83.0}"
+02-node-drag-repeat,all,bin-00,3.113751,4.113751,1.0,1,{}
+02-node-drag-repeat,all,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,all,bin-02,5.113751,6.113751,1.0,1,{}
+02-node-drag-repeat,all,bin-03,6.113751,7.113751,1.0,1,{}
+02-node-drag-repeat,all,bin-04,7.113751,8.113751,1.0,1,{}
+02-node-drag-repeat,all,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,all,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,all,bin-07,10.113751,11.113751,206.0,206,"{""glass_controls"": 1.0, ""layout_ancestor"": 55.0, ""menu_feature"": 1.0, ""node_body"": 1.0, ""render_commit_ancestor"": 45.0, ""swiftui_graph"": 52.0, ""titlebar"": 2.0}"
+02-node-drag-repeat,all,bin-08,11.113751,12.113751,470.0,470,"{""canvas_surface"": 25.0, ""connection_draw"": 2.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 39.0, ""language_resolution"": 2.0, ""layout_ancestor"": 301.0, ""library"": 6.0, ""library_entry_equality"": 1.0, ""menu_feature"": 2.0, ""node_body"": 6.0, ""node_port_input"": 2.0, ""operation_tree"": 1.0, ""readability"": 33.0, ""render_commit_ancestor"": 378.0, ""swiftui_graph"": 182.0, ""viewport_input"": 20.0}"
+02-node-drag-repeat,all,bin-09,12.113751,13.113751,583.0,583,"{""canvas_surface"": 47.0, ""connection_draw"": 4.0, ""connection_geometry"": 2.0, ""glass_background_cpu"": 64.0, ""layout_ancestor"": 356.0, ""menu_feature"": 2.0, ""node_body"": 2.0, ""node_port_input"": 1.0, ""readability"": 54.0, ""render_commit_ancestor"": 481.0, ""swiftui_graph"": 184.0, ""viewport_input"": 33.0}"
+02-node-drag-repeat,all,bin-10,13.113751,14.113751,574.0,574,"{""canvas_surface"": 36.0, ""connection_draw"": 2.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 70.0, ""layout_ancestor"": 373.0, ""menu_feature"": 1.0, ""node_body"": 3.0, ""node_port_input"": 2.0, ""readability"": 64.0, ""render_commit_ancestor"": 481.0, ""swiftui_graph"": 199.0, ""viewport_input"": 30.0}"
+02-node-drag-repeat,all,bin-11,14.113751,14.119936,3.0,3,"{""layout_ancestor"": 1.0, ""render_commit_ancestor"": 3.0, ""swiftui_graph"": 1.0}"
+02-node-drag-repeat,event,whole,3.113751,14.119936,23.0,23,{}
+02-node-drag-repeat,event,early,3.113751,6.782479333,0.0,0,{}
+02-node-drag-repeat,event,middle,6.782479333,10.451207666,0.0,0,{}
+02-node-drag-repeat,event,late,10.451207666,14.119936,23.0,23,{}
+02-node-drag-repeat,event,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,event,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,event,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,event,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,event,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,event,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,event,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,event,bin-07,10.113751,11.113751,5.0,5,{}
+02-node-drag-repeat,event,bin-08,11.113751,12.113751,5.0,5,{}
+02-node-drag-repeat,event,bin-09,12.113751,13.113751,4.0,4,{}
+02-node-drag-repeat,event,bin-10,13.113751,14.113751,9.0,9,{}
+02-node-drag-repeat,event,bin-11,14.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,main,whole,3.113751,14.119936,1720.0,1720,"{""canvas_surface"": 108.0, ""connection_draw"": 8.0, ""connection_geometry"": 3.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 173.0, ""glass_controls"": 1.0, ""language_resolution"": 2.0, ""layout_ancestor"": 1085.0, ""library"": 6.0, ""library_entry_equality"": 1.0, ""menu_feature"": 6.0, ""node_body"": 12.0, ""node_port_input"": 5.0, ""operation_tree"": 1.0, ""readability"": 151.0, ""render_commit_ancestor"": 1388.0, ""swiftui_graph"": 618.0, ""titlebar"": 2.0, ""viewport_input"": 83.0}"
+02-node-drag-repeat,main,early,3.113751,6.782479333,1.0,1,{}
+02-node-drag-repeat,main,middle,6.782479333,10.451207666,136.0,136,"{""glass_controls"": 1.0, ""layout_ancestor"": 55.0, ""menu_feature"": 1.0, ""node_body"": 1.0, ""render_commit_ancestor"": 45.0, ""swiftui_graph"": 52.0, ""titlebar"": 2.0}"
+02-node-drag-repeat,main,late,10.451207666,14.119936,1583.0,1583,"{""canvas_surface"": 108.0, ""connection_draw"": 8.0, ""connection_geometry"": 3.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 173.0, ""language_resolution"": 2.0, ""layout_ancestor"": 1030.0, ""library"": 6.0, ""library_entry_equality"": 1.0, ""menu_feature"": 5.0, ""node_body"": 11.0, ""node_port_input"": 5.0, ""operation_tree"": 1.0, ""readability"": 151.0, ""render_commit_ancestor"": 1343.0, ""swiftui_graph"": 566.0, ""viewport_input"": 83.0}"
+02-node-drag-repeat,main,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,main,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,main,bin-02,5.113751,6.113751,1.0,1,{}
+02-node-drag-repeat,main,bin-03,6.113751,7.113751,1.0,1,{}
+02-node-drag-repeat,main,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,main,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,main,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,main,bin-07,10.113751,11.113751,197.0,197,"{""glass_controls"": 1.0, ""layout_ancestor"": 55.0, ""menu_feature"": 1.0, ""node_body"": 1.0, ""render_commit_ancestor"": 45.0, ""swiftui_graph"": 52.0, ""titlebar"": 2.0}"
+02-node-drag-repeat,main,bin-08,11.113751,12.113751,442.0,442,"{""canvas_surface"": 25.0, ""connection_draw"": 2.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 39.0, ""language_resolution"": 2.0, ""layout_ancestor"": 301.0, ""library"": 6.0, ""library_entry_equality"": 1.0, ""menu_feature"": 2.0, ""node_body"": 6.0, ""node_port_input"": 2.0, ""operation_tree"": 1.0, ""readability"": 33.0, ""render_commit_ancestor"": 378.0, ""swiftui_graph"": 182.0, ""viewport_input"": 20.0}"
+02-node-drag-repeat,main,bin-09,12.113751,13.113751,538.0,538,"{""canvas_surface"": 47.0, ""connection_draw"": 4.0, ""connection_geometry"": 2.0, ""glass_background_cpu"": 64.0, ""layout_ancestor"": 356.0, ""menu_feature"": 2.0, ""node_body"": 2.0, ""node_port_input"": 1.0, ""readability"": 54.0, ""render_commit_ancestor"": 481.0, ""swiftui_graph"": 184.0, ""viewport_input"": 33.0}"
+02-node-drag-repeat,main,bin-10,13.113751,14.113751,538.0,538,"{""canvas_surface"": 36.0, ""connection_draw"": 2.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 70.0, ""layout_ancestor"": 372.0, ""menu_feature"": 1.0, ""node_body"": 3.0, ""node_port_input"": 2.0, ""readability"": 64.0, ""render_commit_ancestor"": 481.0, ""swiftui_graph"": 199.0, ""viewport_input"": 30.0}"
+02-node-drag-repeat,main,bin-11,14.113751,14.119936,3.0,3,"{""layout_ancestor"": 1.0, ""render_commit_ancestor"": 3.0, ""swiftui_graph"": 1.0}"
+02-node-drag-repeat,worker-01,whole,3.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-01,early,3.113751,6.782479333,0.0,0,{}
+02-node-drag-repeat,worker-01,middle,6.782479333,10.451207666,0.0,0,{}
+02-node-drag-repeat,worker-01,late,10.451207666,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-01,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,worker-01,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,worker-01,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,worker-01,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,worker-01,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,worker-01,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,worker-01,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,worker-01,bin-07,10.113751,11.113751,0.0,0,{}
+02-node-drag-repeat,worker-01,bin-08,11.113751,12.113751,0.0,0,{}
+02-node-drag-repeat,worker-01,bin-09,12.113751,13.113751,0.0,0,{}
+02-node-drag-repeat,worker-01,bin-10,13.113751,14.113751,0.0,0,{}
+02-node-drag-repeat,worker-01,bin-11,14.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-02,whole,3.113751,14.119936,3.0,3,{}
+02-node-drag-repeat,worker-02,early,3.113751,6.782479333,0.0,0,{}
+02-node-drag-repeat,worker-02,middle,6.782479333,10.451207666,1.0,1,{}
+02-node-drag-repeat,worker-02,late,10.451207666,14.119936,2.0,2,{}
+02-node-drag-repeat,worker-02,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,worker-02,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,worker-02,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,worker-02,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,worker-02,bin-04,7.113751,8.113751,1.0,1,{}
+02-node-drag-repeat,worker-02,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,worker-02,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,worker-02,bin-07,10.113751,11.113751,0.0,0,{}
+02-node-drag-repeat,worker-02,bin-08,11.113751,12.113751,2.0,2,{}
+02-node-drag-repeat,worker-02,bin-09,12.113751,13.113751,0.0,0,{}
+02-node-drag-repeat,worker-02,bin-10,13.113751,14.113751,0.0,0,{}
+02-node-drag-repeat,worker-02,bin-11,14.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-03,whole,3.113751,14.119936,33.0,33,"{""layout_ancestor"": 1.0}"
+02-node-drag-repeat,worker-03,early,3.113751,6.782479333,1.0,1,{}
+02-node-drag-repeat,worker-03,middle,6.782479333,10.451207666,0.0,0,{}
+02-node-drag-repeat,worker-03,late,10.451207666,14.119936,32.0,32,"{""layout_ancestor"": 1.0}"
+02-node-drag-repeat,worker-03,bin-00,3.113751,4.113751,1.0,1,{}
+02-node-drag-repeat,worker-03,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,worker-03,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,worker-03,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,worker-03,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,worker-03,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,worker-03,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,worker-03,bin-07,10.113751,11.113751,0.0,0,{}
+02-node-drag-repeat,worker-03,bin-08,11.113751,12.113751,2.0,2,{}
+02-node-drag-repeat,worker-03,bin-09,12.113751,13.113751,15.0,15,{}
+02-node-drag-repeat,worker-03,bin-10,13.113751,14.113751,15.0,15,"{""layout_ancestor"": 1.0}"
+02-node-drag-repeat,worker-03,bin-11,14.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-04,whole,3.113751,14.119936,7.0,7,{}
+02-node-drag-repeat,worker-04,early,3.113751,6.782479333,0.0,0,{}
+02-node-drag-repeat,worker-04,middle,6.782479333,10.451207666,3.0,3,{}
+02-node-drag-repeat,worker-04,late,10.451207666,14.119936,4.0,4,{}
+02-node-drag-repeat,worker-04,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,worker-04,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,worker-04,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,worker-04,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,worker-04,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,worker-04,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,worker-04,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,worker-04,bin-07,10.113751,11.113751,4.0,4,{}
+02-node-drag-repeat,worker-04,bin-08,11.113751,12.113751,3.0,3,{}
+02-node-drag-repeat,worker-04,bin-09,12.113751,13.113751,0.0,0,{}
+02-node-drag-repeat,worker-04,bin-10,13.113751,14.113751,0.0,0,{}
+02-node-drag-repeat,worker-04,bin-11,14.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-05,whole,3.113751,14.119936,1.0,1,{}
+02-node-drag-repeat,worker-05,early,3.113751,6.782479333,0.0,0,{}
+02-node-drag-repeat,worker-05,middle,6.782479333,10.451207666,0.0,0,{}
+02-node-drag-repeat,worker-05,late,10.451207666,14.119936,1.0,1,{}
+02-node-drag-repeat,worker-05,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,worker-05,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,worker-05,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,worker-05,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,worker-05,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,worker-05,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,worker-05,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,worker-05,bin-07,10.113751,11.113751,0.0,0,{}
+02-node-drag-repeat,worker-05,bin-08,11.113751,12.113751,1.0,1,{}
+02-node-drag-repeat,worker-05,bin-09,12.113751,13.113751,0.0,0,{}
+02-node-drag-repeat,worker-05,bin-10,13.113751,14.113751,0.0,0,{}
+02-node-drag-repeat,worker-05,bin-11,14.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-06,whole,3.113751,14.119936,1.0,1,{}
+02-node-drag-repeat,worker-06,early,3.113751,6.782479333,0.0,0,{}
+02-node-drag-repeat,worker-06,middle,6.782479333,10.451207666,0.0,0,{}
+02-node-drag-repeat,worker-06,late,10.451207666,14.119936,1.0,1,{}
+02-node-drag-repeat,worker-06,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,worker-06,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,worker-06,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,worker-06,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,worker-06,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,worker-06,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,worker-06,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,worker-06,bin-07,10.113751,11.113751,0.0,0,{}
+02-node-drag-repeat,worker-06,bin-08,11.113751,12.113751,1.0,1,{}
+02-node-drag-repeat,worker-06,bin-09,12.113751,13.113751,0.0,0,{}
+02-node-drag-repeat,worker-06,bin-10,13.113751,14.113751,0.0,0,{}
+02-node-drag-repeat,worker-06,bin-11,14.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-07,whole,3.113751,14.119936,27.0,27,{}
+02-node-drag-repeat,worker-07,early,3.113751,6.782479333,0.0,0,{}
+02-node-drag-repeat,worker-07,middle,6.782479333,10.451207666,0.0,0,{}
+02-node-drag-repeat,worker-07,late,10.451207666,14.119936,27.0,27,{}
+02-node-drag-repeat,worker-07,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,worker-07,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,worker-07,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,worker-07,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,worker-07,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,worker-07,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,worker-07,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,worker-07,bin-07,10.113751,11.113751,0.0,0,{}
+02-node-drag-repeat,worker-07,bin-08,11.113751,12.113751,6.0,6,{}
+02-node-drag-repeat,worker-07,bin-09,12.113751,13.113751,15.0,15,{}
+02-node-drag-repeat,worker-07,bin-10,13.113751,14.113751,6.0,6,{}
+02-node-drag-repeat,worker-07,bin-11,14.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-08,whole,3.113751,14.119936,13.0,13,{}
+02-node-drag-repeat,worker-08,early,3.113751,6.782479333,0.0,0,{}
+02-node-drag-repeat,worker-08,middle,6.782479333,10.451207666,0.0,0,{}
+02-node-drag-repeat,worker-08,late,10.451207666,14.119936,13.0,13,{}
+02-node-drag-repeat,worker-08,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,worker-08,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,worker-08,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,worker-08,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,worker-08,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,worker-08,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,worker-08,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,worker-08,bin-07,10.113751,11.113751,0.0,0,{}
+02-node-drag-repeat,worker-08,bin-08,11.113751,12.113751,2.0,2,{}
+02-node-drag-repeat,worker-08,bin-09,12.113751,13.113751,8.0,8,{}
+02-node-drag-repeat,worker-08,bin-10,13.113751,14.113751,3.0,3,{}
+02-node-drag-repeat,worker-08,bin-11,14.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-09,whole,3.113751,14.119936,1.0,1,{}
+02-node-drag-repeat,worker-09,early,3.113751,6.782479333,0.0,0,{}
+02-node-drag-repeat,worker-09,middle,6.782479333,10.451207666,0.0,0,{}
+02-node-drag-repeat,worker-09,late,10.451207666,14.119936,1.0,1,{}
+02-node-drag-repeat,worker-09,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,worker-09,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,worker-09,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,worker-09,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,worker-09,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,worker-09,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,worker-09,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,worker-09,bin-07,10.113751,11.113751,0.0,0,{}
+02-node-drag-repeat,worker-09,bin-08,11.113751,12.113751,1.0,1,{}
+02-node-drag-repeat,worker-09,bin-09,12.113751,13.113751,0.0,0,{}
+02-node-drag-repeat,worker-09,bin-10,13.113751,14.113751,0.0,0,{}
+02-node-drag-repeat,worker-09,bin-11,14.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-10,whole,3.113751,14.119936,11.0,11,{}
+02-node-drag-repeat,worker-10,early,3.113751,6.782479333,0.0,0,{}
+02-node-drag-repeat,worker-10,middle,6.782479333,10.451207666,0.0,0,{}
+02-node-drag-repeat,worker-10,late,10.451207666,14.119936,11.0,11,{}
+02-node-drag-repeat,worker-10,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,worker-10,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,worker-10,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,worker-10,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,worker-10,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,worker-10,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,worker-10,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,worker-10,bin-07,10.113751,11.113751,0.0,0,{}
+02-node-drag-repeat,worker-10,bin-08,11.113751,12.113751,5.0,5,{}
+02-node-drag-repeat,worker-10,bin-09,12.113751,13.113751,3.0,3,{}
+02-node-drag-repeat,worker-10,bin-10,13.113751,14.113751,3.0,3,{}
+02-node-drag-repeat,worker-10,bin-11,14.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-11,whole,3.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-11,early,3.113751,6.782479333,0.0,0,{}
+02-node-drag-repeat,worker-11,middle,6.782479333,10.451207666,0.0,0,{}
+02-node-drag-repeat,worker-11,late,10.451207666,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-11,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,worker-11,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,worker-11,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,worker-11,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,worker-11,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,worker-11,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,worker-11,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,worker-11,bin-07,10.113751,11.113751,0.0,0,{}
+02-node-drag-repeat,worker-11,bin-08,11.113751,12.113751,0.0,0,{}
+02-node-drag-repeat,worker-11,bin-09,12.113751,13.113751,0.0,0,{}
+02-node-drag-repeat,worker-11,bin-10,13.113751,14.113751,0.0,0,{}
+02-node-drag-repeat,worker-11,bin-11,14.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-12,whole,3.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-12,early,3.113751,6.782479333,0.0,0,{}
+02-node-drag-repeat,worker-12,middle,6.782479333,10.451207666,0.0,0,{}
+02-node-drag-repeat,worker-12,late,10.451207666,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-12,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,worker-12,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,worker-12,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,worker-12,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,worker-12,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,worker-12,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,worker-12,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,worker-12,bin-07,10.113751,11.113751,0.0,0,{}
+02-node-drag-repeat,worker-12,bin-08,11.113751,12.113751,0.0,0,{}
+02-node-drag-repeat,worker-12,bin-09,12.113751,13.113751,0.0,0,{}
+02-node-drag-repeat,worker-12,bin-10,13.113751,14.113751,0.0,0,{}
+02-node-drag-repeat,worker-12,bin-11,14.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-13,whole,3.113751,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-13,early,3.113751,6.782479333,0.0,0,{}
+02-node-drag-repeat,worker-13,middle,6.782479333,10.451207666,0.0,0,{}
+02-node-drag-repeat,worker-13,late,10.451207666,14.119936,0.0,0,{}
+02-node-drag-repeat,worker-13,bin-00,3.113751,4.113751,0.0,0,{}
+02-node-drag-repeat,worker-13,bin-01,4.113751,5.113751,0.0,0,{}
+02-node-drag-repeat,worker-13,bin-02,5.113751,6.113751,0.0,0,{}
+02-node-drag-repeat,worker-13,bin-03,6.113751,7.113751,0.0,0,{}
+02-node-drag-repeat,worker-13,bin-04,7.113751,8.113751,0.0,0,{}
+02-node-drag-repeat,worker-13,bin-05,8.113751,9.113751,0.0,0,{}
+02-node-drag-repeat,worker-13,bin-06,9.113751,10.113751,0.0,0,{}
+02-node-drag-repeat,worker-13,bin-07,10.113751,11.113751,0.0,0,{}
+02-node-drag-repeat,worker-13,bin-08,11.113751,12.113751,0.0,0,{}
+02-node-drag-repeat,worker-13,bin-09,12.113751,13.113751,0.0,0,{}
+02-node-drag-repeat,worker-13,bin-10,13.113751,14.113751,0.0,0,{}
+02-node-drag-repeat,worker-13,bin-11,14.113751,14.119936,0.0,0,{}
+05-wheel-zoom-repeat,all,whole,3.674945,27.681206,14180.0,14180,"{""asset_projection"": 84.0, ""canvas_surface"": 1266.0, ""connection_draw"": 19.0, ""connection_geometry"": 2.0, ""connection_hit"": 2.0, ""glass_background_cpu"": 325.0, ""glass_controls"": 53.0, ""history_output_projection"": 1.0, ""language_resolution"": 1118.0, ""layout_ancestor"": 12546.0, ""library"": 2490.0, ""library_entry_equality"": 717.0, ""menu_feature"": 688.0, ""node_body"": 494.0, ""node_port_input"": 7.0, ""operation_tree"": 477.0, ""readability"": 206.0, ""render_commit_ancestor"": 13261.0, ""swiftui_graph"": 11680.0, ""viewport_input"": 216.0}"
+05-wheel-zoom-repeat,all,early,3.674945,11.677032,4758.0,4758,"{""asset_projection"": 32.0, ""canvas_surface"": 476.0, ""connection_draw"": 12.0, ""connection_geometry"": 1.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 87.0, ""glass_controls"": 14.0, ""language_resolution"": 401.0, ""layout_ancestor"": 4336.0, ""library"": 873.0, ""library_entry_equality"": 251.0, ""menu_feature"": 224.0, ""node_body"": 167.0, ""node_port_input"": 3.0, ""operation_tree"": 171.0, ""readability"": 54.0, ""render_commit_ancestor"": 4572.0, ""swiftui_graph"": 4062.0, ""viewport_input"": 89.0}"
+05-wheel-zoom-repeat,all,middle,11.677032,19.679119,4905.0,4905,"{""asset_projection"": 29.0, ""canvas_surface"": 413.0, ""connection_draw"": 4.0, ""connection_geometry"": 1.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 103.0, ""glass_controls"": 20.0, ""history_output_projection"": 1.0, ""language_resolution"": 382.0, ""layout_ancestor"": 4256.0, ""library"": 856.0, ""library_entry_equality"": 244.0, ""menu_feature"": 255.0, ""node_body"": 180.0, ""node_port_input"": 1.0, ""operation_tree"": 158.0, ""readability"": 69.0, ""render_commit_ancestor"": 4494.0, ""swiftui_graph"": 3970.0, ""viewport_input"": 66.0}"
+05-wheel-zoom-repeat,all,late,19.679119,27.681206,4517.0,4517,"{""asset_projection"": 23.0, ""canvas_surface"": 377.0, ""connection_draw"": 3.0, ""glass_background_cpu"": 135.0, ""glass_controls"": 19.0, ""language_resolution"": 335.0, ""layout_ancestor"": 3954.0, ""library"": 761.0, ""library_entry_equality"": 222.0, ""menu_feature"": 209.0, ""node_body"": 147.0, ""node_port_input"": 3.0, ""operation_tree"": 148.0, ""readability"": 83.0, ""render_commit_ancestor"": 4195.0, ""swiftui_graph"": 3648.0, ""viewport_input"": 61.0}"
+05-wheel-zoom-repeat,all,bin-00,3.674945,4.674945,610.0,610,"{""asset_projection"": 6.0, ""canvas_surface"": 59.0, ""connection_draw"": 2.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 9.0, ""glass_controls"": 4.0, ""language_resolution"": 47.0, ""layout_ancestor"": 561.0, ""library"": 105.0, ""library_entry_equality"": 28.0, ""menu_feature"": 26.0, ""node_body"": 25.0, ""node_port_input"": 1.0, ""operation_tree"": 21.0, ""readability"": 8.0, ""render_commit_ancestor"": 591.0, ""swiftui_graph"": 522.0, ""viewport_input"": 10.0}"
+05-wheel-zoom-repeat,all,bin-01,4.674945,5.674945,688.0,688,"{""asset_projection"": 7.0, ""canvas_surface"": 77.0, ""glass_background_cpu"": 21.0, ""glass_controls"": 2.0, ""language_resolution"": 63.0, ""layout_ancestor"": 629.0, ""library"": 122.0, ""library_entry_equality"": 35.0, ""menu_feature"": 33.0, ""node_body"": 19.0, ""operation_tree"": 25.0, ""readability"": 8.0, ""render_commit_ancestor"": 671.0, ""swiftui_graph"": 593.0, ""viewport_input"": 14.0}"
+05-wheel-zoom-repeat,all,bin-02,5.674945,6.674945,445.0,445,"{""asset_projection"": 3.0, ""canvas_surface"": 46.0, ""connection_draw"": 4.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 12.0, ""language_resolution"": 37.0, ""layout_ancestor"": 406.0, ""library"": 85.0, ""library_entry_equality"": 26.0, ""menu_feature"": 19.0, ""node_body"": 17.0, ""operation_tree"": 17.0, ""readability"": 7.0, ""render_commit_ancestor"": 430.0, ""swiftui_graph"": 380.0, ""viewport_input"": 9.0}"
+05-wheel-zoom-repeat,all,bin-03,6.674945,7.674945,674.0,674,"{""asset_projection"": 4.0, ""canvas_surface"": 62.0, ""connection_draw"": 2.0, ""glass_background_cpu"": 15.0, ""language_resolution"": 46.0, ""layout_ancestor"": 575.0, ""library"": 112.0, ""library_entry_equality"": 34.0, ""menu_feature"": 29.0, ""node_body"": 25.0, ""node_port_input"": 1.0, ""operation_tree"": 22.0, ""readability"": 8.0, ""render_commit_ancestor"": 599.0, ""swiftui_graph"": 537.0, ""viewport_input"": 8.0}"
+05-wheel-zoom-repeat,all,bin-04,7.674945,8.674945,606.0,606,"{""asset_projection"": 3.0, ""canvas_surface"": 62.0, ""connection_draw"": 2.0, ""glass_background_cpu"": 7.0, ""glass_controls"": 1.0, ""language_resolution"": 54.0, ""layout_ancestor"": 566.0, ""library"": 114.0, ""library_entry_equality"": 35.0, ""menu_feature"": 34.0, ""node_body"": 21.0, ""operation_tree"": 24.0, ""readability"": 4.0, ""render_commit_ancestor"": 597.0, ""swiftui_graph"": 537.0, ""viewport_input"": 13.0}"
+05-wheel-zoom-repeat,all,bin-05,8.674945,9.674945,711.0,711,"{""asset_projection"": 3.0, ""canvas_surface"": 63.0, ""glass_background_cpu"": 8.0, ""glass_controls"": 2.0, ""language_resolution"": 74.0, ""layout_ancestor"": 659.0, ""library"": 137.0, ""library_entry_equality"": 38.0, ""menu_feature"": 34.0, ""node_body"": 23.0, ""node_port_input"": 1.0, ""operation_tree"": 26.0, ""readability"": 9.0, ""render_commit_ancestor"": 698.0, ""swiftui_graph"": 613.0, ""viewport_input"": 8.0}"
+05-wheel-zoom-repeat,all,bin-06,9.674945,10.674945,635.0,635,"{""asset_projection"": 4.0, ""canvas_surface"": 67.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 10.0, ""glass_controls"": 3.0, ""language_resolution"": 42.0, ""layout_ancestor"": 578.0, ""library"": 119.0, ""library_entry_equality"": 28.0, ""menu_feature"": 28.0, ""node_body"": 21.0, ""operation_tree"": 22.0, ""readability"": 6.0, ""render_commit_ancestor"": 608.0, ""swiftui_graph"": 540.0, ""viewport_input"": 20.0}"
+05-wheel-zoom-repeat,all,bin-07,10.674945,11.674945,387.0,387,"{""asset_projection"": 2.0, ""canvas_surface"": 40.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 5.0, ""glass_controls"": 2.0, ""language_resolution"": 38.0, ""layout_ancestor"": 360.0, ""library"": 79.0, ""library_entry_equality"": 27.0, ""menu_feature"": 21.0, ""node_body"": 16.0, ""operation_tree"": 14.0, ""readability"": 4.0, ""render_commit_ancestor"": 376.0, ""swiftui_graph"": 338.0, ""viewport_input"": 7.0}"
+05-wheel-zoom-repeat,all,bin-08,11.674945,12.674945,641.0,641,"{""asset_projection"": 3.0, ""canvas_surface"": 56.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 12.0, ""glass_controls"": 1.0, ""history_output_projection"": 1.0, ""language_resolution"": 59.0, ""layout_ancestor"": 592.0, ""library"": 119.0, ""library_entry_equality"": 29.0, ""menu_feature"": 38.0, ""node_body"": 26.0, ""operation_tree"": 20.0, ""readability"": 8.0, ""render_commit_ancestor"": 624.0, ""swiftui_graph"": 555.0, ""viewport_input"": 5.0}"
+05-wheel-zoom-repeat,all,bin-09,12.674945,13.674945,307.0,307,"{""asset_projection"": 2.0, ""canvas_surface"": 30.0, ""glass_background_cpu"": 5.0, ""glass_controls"": 2.0, ""language_resolution"": 23.0, ""layout_ancestor"": 284.0, ""library"": 60.0, ""library_entry_equality"": 17.0, ""menu_feature"": 21.0, ""node_body"": 15.0, ""operation_tree"": 10.0, ""readability"": 2.0, ""render_commit_ancestor"": 301.0, ""swiftui_graph"": 266.0, ""viewport_input"": 6.0}"
+05-wheel-zoom-repeat,all,bin-10,13.674945,14.674945,616.0,616,"{""asset_projection"": 5.0, ""canvas_surface"": 57.0, ""glass_background_cpu"": 16.0, ""glass_controls"": 4.0, ""language_resolution"": 51.0, ""layout_ancestor"": 577.0, ""library"": 116.0, ""library_entry_equality"": 38.0, ""menu_feature"": 35.0, ""node_body"": 27.0, ""node_port_input"": 1.0, ""operation_tree"": 24.0, ""readability"": 13.0, ""render_commit_ancestor"": 603.0, ""swiftui_graph"": 536.0, ""viewport_input"": 11.0}"
+05-wheel-zoom-repeat,all,bin-11,14.674945,15.674945,621.0,621,"{""asset_projection"": 5.0, ""canvas_surface"": 66.0, ""connection_draw"": 1.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 19.0, ""glass_controls"": 2.0, ""language_resolution"": 50.0, ""layout_ancestor"": 584.0, ""library"": 116.0, ""library_entry_equality"": 31.0, ""menu_feature"": 26.0, ""node_body"": 23.0, ""operation_tree"": 22.0, ""readability"": 9.0, ""render_commit_ancestor"": 612.0, ""swiftui_graph"": 555.0, ""viewport_input"": 10.0}"
+05-wheel-zoom-repeat,all,bin-12,15.674945,16.674945,508.0,508,"{""asset_projection"": 1.0, ""canvas_surface"": 38.0, ""glass_background_cpu"": 8.0, ""glass_controls"": 3.0, ""language_resolution"": 40.0, ""layout_ancestor"": 464.0, ""library"": 98.0, ""library_entry_equality"": 28.0, ""menu_feature"": 30.0, ""node_body"": 20.0, ""operation_tree"": 17.0, ""readability"": 6.0, ""render_commit_ancestor"": 495.0, ""swiftui_graph"": 434.0, ""viewport_input"": 7.0}"
+05-wheel-zoom-repeat,all,bin-13,16.674945,17.674945,938.0,938,"{""asset_projection"": 6.0, ""canvas_surface"": 70.0, ""glass_background_cpu"": 17.0, ""glass_controls"": 4.0, ""language_resolution"": 66.0, ""layout_ancestor"": 774.0, ""library"": 151.0, ""library_entry_equality"": 37.0, ""menu_feature"": 43.0, ""node_body"": 29.0, ""operation_tree"": 28.0, ""readability"": 15.0, ""render_commit_ancestor"": 817.0, ""swiftui_graph"": 720.0, ""viewport_input"": 8.0}"
+05-wheel-zoom-repeat,all,bin-14,17.674945,18.674945,528.0,528,"{""canvas_surface"": 33.0, ""glass_background_cpu"": 13.0, ""glass_controls"": 2.0, ""language_resolution"": 43.0, ""layout_ancestor"": 371.0, ""library"": 72.0, ""library_entry_equality"": 24.0, ""menu_feature"": 25.0, ""node_body"": 15.0, ""operation_tree"": 15.0, ""readability"": 8.0, ""render_commit_ancestor"": 398.0, ""swiftui_graph"": 345.0, ""viewport_input"": 7.0}"
+05-wheel-zoom-repeat,all,bin-15,18.674945,19.674945,746.0,746,"{""asset_projection"": 7.0, ""canvas_surface"": 63.0, ""connection_draw"": 2.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 13.0, ""glass_controls"": 2.0, ""language_resolution"": 50.0, ""layout_ancestor"": 612.0, ""library"": 124.0, ""library_entry_equality"": 40.0, ""menu_feature"": 37.0, ""node_body"": 25.0, ""operation_tree"": 22.0, ""readability"": 8.0, ""render_commit_ancestor"": 646.0, ""swiftui_graph"": 561.0, ""viewport_input"": 12.0}"
+05-wheel-zoom-repeat,all,bin-16,19.674945,20.674945,664.0,664,"{""asset_projection"": 3.0, ""canvas_surface"": 50.0, ""glass_background_cpu"": 38.0, ""glass_controls"": 3.0, ""language_resolution"": 40.0, ""layout_ancestor"": 549.0, ""library"": 83.0, ""library_entry_equality"": 25.0, ""menu_feature"": 34.0, ""node_body"": 23.0, ""operation_tree"": 17.0, ""readability"": 16.0, ""render_commit_ancestor"": 595.0, ""swiftui_graph"": 469.0, ""viewport_input"": 7.0}"
+05-wheel-zoom-repeat,all,bin-17,20.674945,21.674945,586.0,586,"{""asset_projection"": 3.0, ""canvas_surface"": 48.0, ""glass_background_cpu"": 13.0, ""glass_controls"": 2.0, ""language_resolution"": 49.0, ""layout_ancestor"": 511.0, ""library"": 100.0, ""library_entry_equality"": 30.0, ""menu_feature"": 22.0, ""node_body"": 19.0, ""node_port_input"": 1.0, ""operation_tree"": 21.0, ""readability"": 8.0, ""render_commit_ancestor"": 541.0, ""swiftui_graph"": 474.0, ""viewport_input"": 6.0}"
+05-wheel-zoom-repeat,all,bin-18,21.674945,22.674945,574.0,574,"{""canvas_surface"": 36.0, ""glass_background_cpu"": 9.0, ""glass_controls"": 3.0, ""language_resolution"": 37.0, ""layout_ancestor"": 421.0, ""library"": 79.0, ""library_entry_equality"": 24.0, ""menu_feature"": 15.0, ""node_body"": 13.0, ""operation_tree"": 18.0, ""readability"": 6.0, ""render_commit_ancestor"": 447.0, ""swiftui_graph"": 401.0, ""viewport_input"": 5.0}"
+05-wheel-zoom-repeat,all,bin-19,22.674945,23.674945,579.0,579,"{""asset_projection"": 2.0, ""canvas_surface"": 55.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 18.0, ""glass_controls"": 3.0, ""language_resolution"": 41.0, ""layout_ancestor"": 514.0, ""library"": 105.0, ""library_entry_equality"": 30.0, ""menu_feature"": 22.0, ""node_body"": 18.0, ""operation_tree"": 21.0, ""readability"": 14.0, ""render_commit_ancestor"": 550.0, ""swiftui_graph"": 476.0, ""viewport_input"": 7.0}"
+05-wheel-zoom-repeat,all,bin-20,23.674945,24.674945,414.0,414,"{""asset_projection"": 2.0, ""canvas_surface"": 38.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 12.0, ""glass_controls"": 1.0, ""language_resolution"": 35.0, ""layout_ancestor"": 378.0, ""library"": 78.0, ""library_entry_equality"": 24.0, ""menu_feature"": 21.0, ""node_body"": 14.0, ""operation_tree"": 15.0, ""readability"": 8.0, ""render_commit_ancestor"": 398.0, ""swiftui_graph"": 346.0, ""viewport_input"": 7.0}"
+05-wheel-zoom-repeat,all,bin-21,24.674945,25.674945,709.0,709,"{""asset_projection"": 7.0, ""canvas_surface"": 63.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 13.0, ""glass_controls"": 3.0, ""language_resolution"": 63.0, ""layout_ancestor"": 663.0, ""library"": 131.0, ""library_entry_equality"": 35.0, ""menu_feature"": 46.0, ""node_body"": 28.0, ""operation_tree"": 24.0, ""readability"": 6.0, ""render_commit_ancestor"": 697.0, ""swiftui_graph"": 619.0, ""viewport_input"": 10.0}"
+05-wheel-zoom-repeat,all,bin-22,25.674945,26.674945,327.0,327,"{""asset_projection"": 1.0, ""canvas_surface"": 24.0, ""glass_background_cpu"": 10.0, ""glass_controls"": 2.0, ""language_resolution"": 27.0, ""layout_ancestor"": 299.0, ""library"": 61.0, ""library_entry_equality"": 16.0, ""menu_feature"": 20.0, ""node_body"": 11.0, ""node_port_input"": 2.0, ""operation_tree"": 10.0, ""readability"": 7.0, ""render_commit_ancestor"": 317.0, ""swiftui_graph"": 277.0, ""viewport_input"": 6.0}"
+05-wheel-zoom-repeat,all,bin-23,26.674945,27.674945,660.0,660,"{""asset_projection"": 4.0, ""canvas_surface"": 61.0, ""glass_background_cpu"": 21.0, ""glass_controls"": 2.0, ""language_resolution"": 42.0, ""layout_ancestor"": 613.0, ""library"": 122.0, ""library_entry_equality"": 38.0, ""menu_feature"": 28.0, ""node_body"": 21.0, ""operation_tree"": 22.0, ""readability"": 17.0, ""render_commit_ancestor"": 644.0, ""swiftui_graph"": 580.0, ""viewport_input"": 12.0}"
+05-wheel-zoom-repeat,all,bin-24,27.674945,27.681206,6.0,6,"{""asset_projection"": 1.0, ""canvas_surface"": 2.0, ""glass_background_cpu"": 1.0, ""language_resolution"": 1.0, ""layout_ancestor"": 6.0, ""library"": 2.0, ""menu_feature"": 1.0, ""readability"": 1.0, ""render_commit_ancestor"": 6.0, ""swiftui_graph"": 6.0, ""viewport_input"": 1.0}"
+05-wheel-zoom-repeat,event,whole,3.674945,27.681206,332.0,332,{}
+05-wheel-zoom-repeat,event,early,3.674945,11.677032,42.0,42,{}
+05-wheel-zoom-repeat,event,middle,11.677032,19.679119,200.0,200,{}
+05-wheel-zoom-repeat,event,late,19.679119,27.681206,90.0,90,{}
+05-wheel-zoom-repeat,event,bin-00,3.674945,4.674945,1.0,1,{}
+05-wheel-zoom-repeat,event,bin-01,4.674945,5.674945,0.0,0,{}
+05-wheel-zoom-repeat,event,bin-02,5.674945,6.674945,1.0,1,{}
+05-wheel-zoom-repeat,event,bin-03,6.674945,7.674945,35.0,35,{}
+05-wheel-zoom-repeat,event,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,event,bin-05,8.674945,9.674945,2.0,2,{}
+05-wheel-zoom-repeat,event,bin-06,9.674945,10.674945,1.0,1,{}
+05-wheel-zoom-repeat,event,bin-07,10.674945,11.674945,2.0,2,{}
+05-wheel-zoom-repeat,event,bin-08,11.674945,12.674945,0.0,0,{}
+05-wheel-zoom-repeat,event,bin-09,12.674945,13.674945,1.0,1,{}
+05-wheel-zoom-repeat,event,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,event,bin-11,14.674945,15.674945,1.0,1,{}
+05-wheel-zoom-repeat,event,bin-12,15.674945,16.674945,0.0,0,{}
+05-wheel-zoom-repeat,event,bin-13,16.674945,17.674945,89.0,89,{}
+05-wheel-zoom-repeat,event,bin-14,17.674945,18.674945,62.0,62,{}
+05-wheel-zoom-repeat,event,bin-15,18.674945,19.674945,46.0,46,{}
+05-wheel-zoom-repeat,event,bin-16,19.674945,20.674945,20.0,20,{}
+05-wheel-zoom-repeat,event,bin-17,20.674945,21.674945,13.0,13,{}
+05-wheel-zoom-repeat,event,bin-18,21.674945,22.674945,54.0,54,{}
+05-wheel-zoom-repeat,event,bin-19,22.674945,23.674945,1.0,1,{}
+05-wheel-zoom-repeat,event,bin-20,23.674945,24.674945,0.0,0,{}
+05-wheel-zoom-repeat,event,bin-21,24.674945,25.674945,0.0,0,{}
+05-wheel-zoom-repeat,event,bin-22,25.674945,26.674945,1.0,1,{}
+05-wheel-zoom-repeat,event,bin-23,26.674945,27.674945,2.0,2,{}
+05-wheel-zoom-repeat,event,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,main,whole,3.674945,27.681206,13726.0,13726,"{""asset_projection"": 84.0, ""canvas_surface"": 1266.0, ""connection_draw"": 19.0, ""connection_geometry"": 2.0, ""connection_hit"": 2.0, ""glass_background_cpu"": 325.0, ""glass_controls"": 53.0, ""history_output_projection"": 1.0, ""language_resolution"": 1118.0, ""layout_ancestor"": 12544.0, ""library"": 2490.0, ""library_entry_equality"": 717.0, ""menu_feature"": 688.0, ""node_body"": 494.0, ""node_port_input"": 7.0, ""operation_tree"": 477.0, ""readability"": 206.0, ""render_commit_ancestor"": 13261.0, ""swiftui_graph"": 11680.0, ""viewport_input"": 216.0}"
+05-wheel-zoom-repeat,main,early,3.674945,11.677032,4675.0,4675,"{""asset_projection"": 32.0, ""canvas_surface"": 476.0, ""connection_draw"": 12.0, ""connection_geometry"": 1.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 87.0, ""glass_controls"": 14.0, ""language_resolution"": 401.0, ""layout_ancestor"": 4336.0, ""library"": 873.0, ""library_entry_equality"": 251.0, ""menu_feature"": 224.0, ""node_body"": 167.0, ""node_port_input"": 3.0, ""operation_tree"": 171.0, ""readability"": 54.0, ""render_commit_ancestor"": 4572.0, ""swiftui_graph"": 4062.0, ""viewport_input"": 89.0}"
+05-wheel-zoom-repeat,main,middle,11.677032,19.679119,4669.0,4669,"{""asset_projection"": 29.0, ""canvas_surface"": 413.0, ""connection_draw"": 4.0, ""connection_geometry"": 1.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 103.0, ""glass_controls"": 20.0, ""history_output_projection"": 1.0, ""language_resolution"": 382.0, ""layout_ancestor"": 4255.0, ""library"": 856.0, ""library_entry_equality"": 244.0, ""menu_feature"": 255.0, ""node_body"": 180.0, ""node_port_input"": 1.0, ""operation_tree"": 158.0, ""readability"": 69.0, ""render_commit_ancestor"": 4494.0, ""swiftui_graph"": 3970.0, ""viewport_input"": 66.0}"
+05-wheel-zoom-repeat,main,late,19.679119,27.681206,4382.0,4382,"{""asset_projection"": 23.0, ""canvas_surface"": 377.0, ""connection_draw"": 3.0, ""glass_background_cpu"": 135.0, ""glass_controls"": 19.0, ""language_resolution"": 335.0, ""layout_ancestor"": 3953.0, ""library"": 761.0, ""library_entry_equality"": 222.0, ""menu_feature"": 209.0, ""node_body"": 147.0, ""node_port_input"": 3.0, ""operation_tree"": 148.0, ""readability"": 83.0, ""render_commit_ancestor"": 4195.0, ""swiftui_graph"": 3648.0, ""viewport_input"": 61.0}"
+05-wheel-zoom-repeat,main,bin-00,3.674945,4.674945,600.0,600,"{""asset_projection"": 6.0, ""canvas_surface"": 59.0, ""connection_draw"": 2.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 9.0, ""glass_controls"": 4.0, ""language_resolution"": 47.0, ""layout_ancestor"": 561.0, ""library"": 105.0, ""library_entry_equality"": 28.0, ""menu_feature"": 26.0, ""node_body"": 25.0, ""node_port_input"": 1.0, ""operation_tree"": 21.0, ""readability"": 8.0, ""render_commit_ancestor"": 591.0, ""swiftui_graph"": 522.0, ""viewport_input"": 10.0}"
+05-wheel-zoom-repeat,main,bin-01,4.674945,5.674945,681.0,681,"{""asset_projection"": 7.0, ""canvas_surface"": 77.0, ""glass_background_cpu"": 21.0, ""glass_controls"": 2.0, ""language_resolution"": 63.0, ""layout_ancestor"": 629.0, ""library"": 122.0, ""library_entry_equality"": 35.0, ""menu_feature"": 33.0, ""node_body"": 19.0, ""operation_tree"": 25.0, ""readability"": 8.0, ""render_commit_ancestor"": 671.0, ""swiftui_graph"": 593.0, ""viewport_input"": 14.0}"
+05-wheel-zoom-repeat,main,bin-02,5.674945,6.674945,436.0,436,"{""asset_projection"": 3.0, ""canvas_surface"": 46.0, ""connection_draw"": 4.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 12.0, ""language_resolution"": 37.0, ""layout_ancestor"": 406.0, ""library"": 85.0, ""library_entry_equality"": 26.0, ""menu_feature"": 19.0, ""node_body"": 17.0, ""operation_tree"": 17.0, ""readability"": 7.0, ""render_commit_ancestor"": 430.0, ""swiftui_graph"": 380.0, ""viewport_input"": 9.0}"
+05-wheel-zoom-repeat,main,bin-03,6.674945,7.674945,638.0,638,"{""asset_projection"": 4.0, ""canvas_surface"": 62.0, ""connection_draw"": 2.0, ""glass_background_cpu"": 15.0, ""language_resolution"": 46.0, ""layout_ancestor"": 575.0, ""library"": 112.0, ""library_entry_equality"": 34.0, ""menu_feature"": 29.0, ""node_body"": 25.0, ""node_port_input"": 1.0, ""operation_tree"": 22.0, ""readability"": 8.0, ""render_commit_ancestor"": 599.0, ""swiftui_graph"": 537.0, ""viewport_input"": 8.0}"
+05-wheel-zoom-repeat,main,bin-04,7.674945,8.674945,605.0,605,"{""asset_projection"": 3.0, ""canvas_surface"": 62.0, ""connection_draw"": 2.0, ""glass_background_cpu"": 7.0, ""glass_controls"": 1.0, ""language_resolution"": 54.0, ""layout_ancestor"": 566.0, ""library"": 114.0, ""library_entry_equality"": 35.0, ""menu_feature"": 34.0, ""node_body"": 21.0, ""operation_tree"": 24.0, ""readability"": 4.0, ""render_commit_ancestor"": 597.0, ""swiftui_graph"": 537.0, ""viewport_input"": 13.0}"
+05-wheel-zoom-repeat,main,bin-05,8.674945,9.674945,708.0,708,"{""asset_projection"": 3.0, ""canvas_surface"": 63.0, ""glass_background_cpu"": 8.0, ""glass_controls"": 2.0, ""language_resolution"": 74.0, ""layout_ancestor"": 659.0, ""library"": 137.0, ""library_entry_equality"": 38.0, ""menu_feature"": 34.0, ""node_body"": 23.0, ""node_port_input"": 1.0, ""operation_tree"": 26.0, ""readability"": 9.0, ""render_commit_ancestor"": 698.0, ""swiftui_graph"": 613.0, ""viewport_input"": 8.0}"
+05-wheel-zoom-repeat,main,bin-06,9.674945,10.674945,625.0,625,"{""asset_projection"": 4.0, ""canvas_surface"": 67.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 10.0, ""glass_controls"": 3.0, ""language_resolution"": 42.0, ""layout_ancestor"": 578.0, ""library"": 119.0, ""library_entry_equality"": 28.0, ""menu_feature"": 28.0, ""node_body"": 21.0, ""operation_tree"": 22.0, ""readability"": 6.0, ""render_commit_ancestor"": 608.0, ""swiftui_graph"": 540.0, ""viewport_input"": 20.0}"
+05-wheel-zoom-repeat,main,bin-07,10.674945,11.674945,380.0,380,"{""asset_projection"": 2.0, ""canvas_surface"": 40.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 5.0, ""glass_controls"": 2.0, ""language_resolution"": 38.0, ""layout_ancestor"": 360.0, ""library"": 79.0, ""library_entry_equality"": 27.0, ""menu_feature"": 21.0, ""node_body"": 16.0, ""operation_tree"": 14.0, ""readability"": 4.0, ""render_commit_ancestor"": 376.0, ""swiftui_graph"": 338.0, ""viewport_input"": 7.0}"
+05-wheel-zoom-repeat,main,bin-08,11.674945,12.674945,630.0,630,"{""asset_projection"": 3.0, ""canvas_surface"": 56.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 12.0, ""glass_controls"": 1.0, ""history_output_projection"": 1.0, ""language_resolution"": 59.0, ""layout_ancestor"": 592.0, ""library"": 119.0, ""library_entry_equality"": 29.0, ""menu_feature"": 38.0, ""node_body"": 26.0, ""operation_tree"": 20.0, ""readability"": 8.0, ""render_commit_ancestor"": 624.0, ""swiftui_graph"": 555.0, ""viewport_input"": 5.0}"
+05-wheel-zoom-repeat,main,bin-09,12.674945,13.674945,305.0,305,"{""asset_projection"": 2.0, ""canvas_surface"": 30.0, ""glass_background_cpu"": 5.0, ""glass_controls"": 2.0, ""language_resolution"": 23.0, ""layout_ancestor"": 284.0, ""library"": 60.0, ""library_entry_equality"": 17.0, ""menu_feature"": 21.0, ""node_body"": 15.0, ""operation_tree"": 10.0, ""readability"": 2.0, ""render_commit_ancestor"": 301.0, ""swiftui_graph"": 266.0, ""viewport_input"": 6.0}"
+05-wheel-zoom-repeat,main,bin-10,13.674945,14.674945,615.0,615,"{""asset_projection"": 5.0, ""canvas_surface"": 57.0, ""glass_background_cpu"": 16.0, ""glass_controls"": 4.0, ""language_resolution"": 51.0, ""layout_ancestor"": 577.0, ""library"": 116.0, ""library_entry_equality"": 38.0, ""menu_feature"": 35.0, ""node_body"": 27.0, ""node_port_input"": 1.0, ""operation_tree"": 24.0, ""readability"": 13.0, ""render_commit_ancestor"": 603.0, ""swiftui_graph"": 536.0, ""viewport_input"": 11.0}"
+05-wheel-zoom-repeat,main,bin-11,14.674945,15.674945,618.0,618,"{""asset_projection"": 5.0, ""canvas_surface"": 66.0, ""connection_draw"": 1.0, ""connection_hit"": 1.0, ""glass_background_cpu"": 19.0, ""glass_controls"": 2.0, ""language_resolution"": 50.0, ""layout_ancestor"": 584.0, ""library"": 116.0, ""library_entry_equality"": 31.0, ""menu_feature"": 26.0, ""node_body"": 23.0, ""operation_tree"": 22.0, ""readability"": 9.0, ""render_commit_ancestor"": 612.0, ""swiftui_graph"": 555.0, ""viewport_input"": 10.0}"
+05-wheel-zoom-repeat,main,bin-12,15.674945,16.674945,501.0,501,"{""asset_projection"": 1.0, ""canvas_surface"": 38.0, ""glass_background_cpu"": 8.0, ""glass_controls"": 3.0, ""language_resolution"": 40.0, ""layout_ancestor"": 464.0, ""library"": 98.0, ""library_entry_equality"": 28.0, ""menu_feature"": 30.0, ""node_body"": 20.0, ""operation_tree"": 17.0, ""readability"": 6.0, ""render_commit_ancestor"": 495.0, ""swiftui_graph"": 434.0, ""viewport_input"": 7.0}"
+05-wheel-zoom-repeat,main,bin-13,16.674945,17.674945,849.0,849,"{""asset_projection"": 6.0, ""canvas_surface"": 70.0, ""glass_background_cpu"": 17.0, ""glass_controls"": 4.0, ""language_resolution"": 66.0, ""layout_ancestor"": 774.0, ""library"": 151.0, ""library_entry_equality"": 37.0, ""menu_feature"": 43.0, ""node_body"": 29.0, ""operation_tree"": 28.0, ""readability"": 15.0, ""render_commit_ancestor"": 817.0, ""swiftui_graph"": 720.0, ""viewport_input"": 8.0}"
+05-wheel-zoom-repeat,main,bin-14,17.674945,18.674945,460.0,460,"{""canvas_surface"": 33.0, ""glass_background_cpu"": 13.0, ""glass_controls"": 2.0, ""language_resolution"": 43.0, ""layout_ancestor"": 370.0, ""library"": 72.0, ""library_entry_equality"": 24.0, ""menu_feature"": 25.0, ""node_body"": 15.0, ""operation_tree"": 15.0, ""readability"": 8.0, ""render_commit_ancestor"": 398.0, ""swiftui_graph"": 345.0, ""viewport_input"": 7.0}"
+05-wheel-zoom-repeat,main,bin-15,18.674945,19.674945,692.0,692,"{""asset_projection"": 7.0, ""canvas_surface"": 63.0, ""connection_draw"": 2.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 13.0, ""glass_controls"": 2.0, ""language_resolution"": 50.0, ""layout_ancestor"": 612.0, ""library"": 124.0, ""library_entry_equality"": 40.0, ""menu_feature"": 37.0, ""node_body"": 25.0, ""operation_tree"": 22.0, ""readability"": 8.0, ""render_commit_ancestor"": 646.0, ""swiftui_graph"": 561.0, ""viewport_input"": 12.0}"
+05-wheel-zoom-repeat,main,bin-16,19.674945,20.674945,634.0,634,"{""asset_projection"": 3.0, ""canvas_surface"": 50.0, ""glass_background_cpu"": 38.0, ""glass_controls"": 3.0, ""language_resolution"": 40.0, ""layout_ancestor"": 549.0, ""library"": 83.0, ""library_entry_equality"": 25.0, ""menu_feature"": 34.0, ""node_body"": 23.0, ""operation_tree"": 17.0, ""readability"": 16.0, ""render_commit_ancestor"": 595.0, ""swiftui_graph"": 469.0, ""viewport_input"": 7.0}"
+05-wheel-zoom-repeat,main,bin-17,20.674945,21.674945,562.0,562,"{""asset_projection"": 3.0, ""canvas_surface"": 48.0, ""glass_background_cpu"": 13.0, ""glass_controls"": 2.0, ""language_resolution"": 49.0, ""layout_ancestor"": 510.0, ""library"": 100.0, ""library_entry_equality"": 30.0, ""menu_feature"": 22.0, ""node_body"": 19.0, ""node_port_input"": 1.0, ""operation_tree"": 21.0, ""readability"": 8.0, ""render_commit_ancestor"": 541.0, ""swiftui_graph"": 474.0, ""viewport_input"": 6.0}"
+05-wheel-zoom-repeat,main,bin-18,21.674945,22.674945,520.0,520,"{""canvas_surface"": 36.0, ""glass_background_cpu"": 9.0, ""glass_controls"": 3.0, ""language_resolution"": 37.0, ""layout_ancestor"": 421.0, ""library"": 79.0, ""library_entry_equality"": 24.0, ""menu_feature"": 15.0, ""node_body"": 13.0, ""operation_tree"": 18.0, ""readability"": 6.0, ""render_commit_ancestor"": 447.0, ""swiftui_graph"": 401.0, ""viewport_input"": 5.0}"
+05-wheel-zoom-repeat,main,bin-19,22.674945,23.674945,570.0,570,"{""asset_projection"": 2.0, ""canvas_surface"": 55.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 18.0, ""glass_controls"": 3.0, ""language_resolution"": 41.0, ""layout_ancestor"": 514.0, ""library"": 105.0, ""library_entry_equality"": 30.0, ""menu_feature"": 22.0, ""node_body"": 18.0, ""operation_tree"": 21.0, ""readability"": 14.0, ""render_commit_ancestor"": 550.0, ""swiftui_graph"": 476.0, ""viewport_input"": 7.0}"
+05-wheel-zoom-repeat,main,bin-20,23.674945,24.674945,410.0,410,"{""asset_projection"": 2.0, ""canvas_surface"": 38.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 12.0, ""glass_controls"": 1.0, ""language_resolution"": 35.0, ""layout_ancestor"": 378.0, ""library"": 78.0, ""library_entry_equality"": 24.0, ""menu_feature"": 21.0, ""node_body"": 14.0, ""operation_tree"": 15.0, ""readability"": 8.0, ""render_commit_ancestor"": 398.0, ""swiftui_graph"": 346.0, ""viewport_input"": 7.0}"
+05-wheel-zoom-repeat,main,bin-21,24.674945,25.674945,706.0,706,"{""asset_projection"": 7.0, ""canvas_surface"": 63.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 13.0, ""glass_controls"": 3.0, ""language_resolution"": 63.0, ""layout_ancestor"": 663.0, ""library"": 131.0, ""library_entry_equality"": 35.0, ""menu_feature"": 46.0, ""node_body"": 28.0, ""operation_tree"": 24.0, ""readability"": 6.0, ""render_commit_ancestor"": 697.0, ""swiftui_graph"": 619.0, ""viewport_input"": 10.0}"
+05-wheel-zoom-repeat,main,bin-22,25.674945,26.674945,321.0,321,"{""asset_projection"": 1.0, ""canvas_surface"": 24.0, ""glass_background_cpu"": 10.0, ""glass_controls"": 2.0, ""language_resolution"": 27.0, ""layout_ancestor"": 299.0, ""library"": 61.0, ""library_entry_equality"": 16.0, ""menu_feature"": 20.0, ""node_body"": 11.0, ""node_port_input"": 2.0, ""operation_tree"": 10.0, ""readability"": 7.0, ""render_commit_ancestor"": 317.0, ""swiftui_graph"": 277.0, ""viewport_input"": 6.0}"
+05-wheel-zoom-repeat,main,bin-23,26.674945,27.674945,654.0,654,"{""asset_projection"": 4.0, ""canvas_surface"": 61.0, ""glass_background_cpu"": 21.0, ""glass_controls"": 2.0, ""language_resolution"": 42.0, ""layout_ancestor"": 613.0, ""library"": 122.0, ""library_entry_equality"": 38.0, ""menu_feature"": 28.0, ""node_body"": 21.0, ""operation_tree"": 22.0, ""readability"": 17.0, ""render_commit_ancestor"": 644.0, ""swiftui_graph"": 580.0, ""viewport_input"": 12.0}"
+05-wheel-zoom-repeat,main,bin-24,27.674945,27.681206,6.0,6,"{""asset_projection"": 1.0, ""canvas_surface"": 2.0, ""glass_background_cpu"": 1.0, ""language_resolution"": 1.0, ""layout_ancestor"": 6.0, ""library"": 2.0, ""menu_feature"": 1.0, ""readability"": 1.0, ""render_commit_ancestor"": 6.0, ""swiftui_graph"": 6.0, ""viewport_input"": 1.0}"
+05-wheel-zoom-repeat,worker-01,whole,3.674945,27.681206,8.0,8,{}
+05-wheel-zoom-repeat,worker-01,early,3.674945,11.677032,1.0,1,{}
+05-wheel-zoom-repeat,worker-01,middle,11.677032,19.679119,2.0,2,{}
+05-wheel-zoom-repeat,worker-01,late,19.679119,27.681206,5.0,5,{}
+05-wheel-zoom-repeat,worker-01,bin-00,3.674945,4.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-01,bin-01,4.674945,5.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-02,5.674945,6.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-03,6.674945,7.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-05,8.674945,9.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-06,9.674945,10.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-07,10.674945,11.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-08,11.674945,12.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-01,bin-09,12.674945,13.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-11,14.674945,15.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-12,15.674945,16.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-14,17.674945,18.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-01,bin-15,18.674945,19.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-16,19.674945,20.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-01,bin-17,20.674945,21.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-19,22.674945,23.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-01,bin-20,23.674945,24.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-01,bin-21,24.674945,25.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-01,bin-22,25.674945,26.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-01,bin-23,26.674945,27.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-01,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,whole,3.674945,27.681206,19.0,19,{}
+05-wheel-zoom-repeat,worker-02,early,3.674945,11.677032,12.0,12,{}
+05-wheel-zoom-repeat,worker-02,middle,11.677032,19.679119,2.0,2,{}
+05-wheel-zoom-repeat,worker-02,late,19.679119,27.681206,5.0,5,{}
+05-wheel-zoom-repeat,worker-02,bin-00,3.674945,4.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-02,bin-01,4.674945,5.674945,5.0,5,{}
+05-wheel-zoom-repeat,worker-02,bin-02,5.674945,6.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-02,bin-03,6.674945,7.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-04,7.674945,8.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-02,bin-05,8.674945,9.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-06,9.674945,10.674945,3.0,3,{}
+05-wheel-zoom-repeat,worker-02,bin-07,10.674945,11.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-08,11.674945,12.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-02,bin-09,12.674945,13.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-11,14.674945,15.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-12,15.674945,16.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-02,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-14,17.674945,18.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-15,18.674945,19.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-16,19.674945,20.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-02,bin-17,20.674945,21.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-19,22.674945,23.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-02,bin-20,23.674945,24.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-02,bin-21,24.674945,25.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-22,25.674945,26.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-23,26.674945,27.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-02,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,whole,3.674945,27.681206,19.0,19,{}
+05-wheel-zoom-repeat,worker-03,early,3.674945,11.677032,11.0,11,{}
+05-wheel-zoom-repeat,worker-03,middle,11.677032,19.679119,2.0,2,{}
+05-wheel-zoom-repeat,worker-03,late,19.679119,27.681206,6.0,6,{}
+05-wheel-zoom-repeat,worker-03,bin-00,3.674945,4.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-03,bin-01,4.674945,5.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-03,bin-02,5.674945,6.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-03,bin-03,6.674945,7.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-05,8.674945,9.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-06,9.674945,10.674945,3.0,3,{}
+05-wheel-zoom-repeat,worker-03,bin-07,10.674945,11.674945,3.0,3,{}
+05-wheel-zoom-repeat,worker-03,bin-08,11.674945,12.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-09,12.674945,13.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-11,14.674945,15.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-12,15.674945,16.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-14,17.674945,18.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-03,bin-15,18.674945,19.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-16,19.674945,20.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-03,bin-17,20.674945,21.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-03,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-19,22.674945,23.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-20,23.674945,24.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-21,24.674945,25.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-22,25.674945,26.674945,4.0,4,{}
+05-wheel-zoom-repeat,worker-03,bin-23,26.674945,27.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-03,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,whole,3.674945,27.681206,7.0,7,{}
+05-wheel-zoom-repeat,worker-04,early,3.674945,11.677032,2.0,2,{}
+05-wheel-zoom-repeat,worker-04,middle,11.677032,19.679119,3.0,3,{}
+05-wheel-zoom-repeat,worker-04,late,19.679119,27.681206,2.0,2,{}
+05-wheel-zoom-repeat,worker-04,bin-00,3.674945,4.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-04,bin-01,4.674945,5.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-02,5.674945,6.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-03,6.674945,7.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-05,8.674945,9.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-04,bin-06,9.674945,10.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-07,10.674945,11.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-08,11.674945,12.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-04,bin-09,12.674945,13.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-11,14.674945,15.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-12,15.674945,16.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-14,17.674945,18.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-15,18.674945,19.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-04,bin-16,19.674945,20.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-04,bin-17,20.674945,21.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-19,22.674945,23.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-20,23.674945,24.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-21,24.674945,25.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-04,bin-22,25.674945,26.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-23,26.674945,27.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-04,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,whole,3.674945,27.681206,11.0,11,"{""layout_ancestor"": 1.0}"
+05-wheel-zoom-repeat,worker-05,early,3.674945,11.677032,3.0,3,{}
+05-wheel-zoom-repeat,worker-05,middle,11.677032,19.679119,4.0,4,"{""layout_ancestor"": 1.0}"
+05-wheel-zoom-repeat,worker-05,late,19.679119,27.681206,4.0,4,{}
+05-wheel-zoom-repeat,worker-05,bin-00,3.674945,4.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-05,bin-01,4.674945,5.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-02,5.674945,6.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-03,6.674945,7.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-05,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-05,8.674945,9.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-06,9.674945,10.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-05,bin-07,10.674945,11.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-08,11.674945,12.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-05,bin-09,12.674945,13.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-11,14.674945,15.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-12,15.674945,16.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-05,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-14,17.674945,18.674945,2.0,2,"{""layout_ancestor"": 1.0}"
+05-wheel-zoom-repeat,worker-05,bin-15,18.674945,19.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-16,19.674945,20.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-05,bin-17,20.674945,21.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-19,22.674945,23.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-05,bin-20,23.674945,24.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-21,24.674945,25.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-22,25.674945,26.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-05,bin-23,26.674945,27.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-05,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,whole,3.674945,27.681206,16.0,16,"{""layout_ancestor"": 1.0}"
+05-wheel-zoom-repeat,worker-06,early,3.674945,11.677032,3.0,3,{}
+05-wheel-zoom-repeat,worker-06,middle,11.677032,19.679119,6.0,6,{}
+05-wheel-zoom-repeat,worker-06,late,19.679119,27.681206,7.0,7,"{""layout_ancestor"": 1.0}"
+05-wheel-zoom-repeat,worker-06,bin-00,3.674945,4.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-06,bin-01,4.674945,5.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-02,5.674945,6.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-06,bin-03,6.674945,7.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-05,8.674945,9.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-06,9.674945,10.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-07,10.674945,11.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-08,11.674945,12.674945,4.0,4,{}
+05-wheel-zoom-repeat,worker-06,bin-09,12.674945,13.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-11,14.674945,15.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-12,15.674945,16.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-14,17.674945,18.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-06,bin-15,18.674945,19.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-06,bin-16,19.674945,20.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-06,bin-17,20.674945,21.674945,3.0,3,"{""layout_ancestor"": 1.0}"
+05-wheel-zoom-repeat,worker-06,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-19,22.674945,23.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-20,23.674945,24.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-21,24.674945,25.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-06,bin-22,25.674945,26.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-06,bin-23,26.674945,27.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-06,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-07,whole,3.674945,27.681206,14.0,14,{}
+05-wheel-zoom-repeat,worker-07,early,3.674945,11.677032,5.0,5,{}
+05-wheel-zoom-repeat,worker-07,middle,11.677032,19.679119,6.0,6,{}
+05-wheel-zoom-repeat,worker-07,late,19.679119,27.681206,3.0,3,{}
+05-wheel-zoom-repeat,worker-07,bin-00,3.674945,4.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-07,bin-01,4.674945,5.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-07,bin-02,5.674945,6.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-07,bin-03,6.674945,7.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-07,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-07,bin-05,8.674945,9.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-07,bin-06,9.674945,10.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-07,bin-07,10.674945,11.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-07,bin-08,11.674945,12.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-07,bin-09,12.674945,13.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-07,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-07,bin-11,14.674945,15.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-07,bin-12,15.674945,16.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-07,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-07,bin-14,17.674945,18.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-07,bin-15,18.674945,19.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-07,bin-16,19.674945,20.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-07,bin-17,20.674945,21.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-07,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-07,bin-19,22.674945,23.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-07,bin-20,23.674945,24.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-07,bin-21,24.674945,25.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-07,bin-22,25.674945,26.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-07,bin-23,26.674945,27.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-07,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,whole,3.674945,27.681206,11.0,11,{}
+05-wheel-zoom-repeat,worker-08,early,3.674945,11.677032,1.0,1,{}
+05-wheel-zoom-repeat,worker-08,middle,11.677032,19.679119,3.0,3,{}
+05-wheel-zoom-repeat,worker-08,late,19.679119,27.681206,7.0,7,{}
+05-wheel-zoom-repeat,worker-08,bin-00,3.674945,4.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-08,bin-01,4.674945,5.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-02,5.674945,6.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-03,6.674945,7.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-05,8.674945,9.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-06,9.674945,10.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-07,10.674945,11.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-08,11.674945,12.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-08,bin-09,12.674945,13.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-11,14.674945,15.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-12,15.674945,16.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-08,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-14,17.674945,18.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-15,18.674945,19.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-16,19.674945,20.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-08,bin-17,20.674945,21.674945,5.0,5,{}
+05-wheel-zoom-repeat,worker-08,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-19,22.674945,23.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-20,23.674945,24.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-21,24.674945,25.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-08,bin-22,25.674945,26.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-23,26.674945,27.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-08,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,whole,3.674945,27.681206,16.0,16,{}
+05-wheel-zoom-repeat,worker-09,early,3.674945,11.677032,3.0,3,{}
+05-wheel-zoom-repeat,worker-09,middle,11.677032,19.679119,8.0,8,{}
+05-wheel-zoom-repeat,worker-09,late,19.679119,27.681206,5.0,5,{}
+05-wheel-zoom-repeat,worker-09,bin-00,3.674945,4.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-09,bin-01,4.674945,5.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-02,5.674945,6.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-09,bin-03,6.674945,7.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-05,8.674945,9.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-06,9.674945,10.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-07,10.674945,11.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-09,bin-08,11.674945,12.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-09,12.674945,13.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-10,13.674945,14.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-09,bin-11,14.674945,15.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-09,bin-12,15.674945,16.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-09,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-14,17.674945,18.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-15,18.674945,19.674945,4.0,4,{}
+05-wheel-zoom-repeat,worker-09,bin-16,19.674945,20.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-09,bin-17,20.674945,21.674945,2.0,2,{}
+05-wheel-zoom-repeat,worker-09,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-19,22.674945,23.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-09,bin-20,23.674945,24.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-21,24.674945,25.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-22,25.674945,26.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-23,26.674945,27.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-09,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,whole,3.674945,27.681206,1.0,1,{}
+05-wheel-zoom-repeat,worker-10,early,3.674945,11.677032,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,middle,11.677032,19.679119,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,late,19.679119,27.681206,1.0,1,{}
+05-wheel-zoom-repeat,worker-10,bin-00,3.674945,4.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-01,4.674945,5.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-02,5.674945,6.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-03,6.674945,7.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-05,8.674945,9.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-06,9.674945,10.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-07,10.674945,11.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-08,11.674945,12.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-09,12.674945,13.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-11,14.674945,15.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-12,15.674945,16.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-14,17.674945,18.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-15,18.674945,19.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-16,19.674945,20.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-17,20.674945,21.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-19,22.674945,23.674945,1.0,1,{}
+05-wheel-zoom-repeat,worker-10,bin-20,23.674945,24.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-21,24.674945,25.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-22,25.674945,26.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-23,26.674945,27.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-10,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,whole,3.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,early,3.674945,11.677032,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,middle,11.677032,19.679119,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,late,19.679119,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-00,3.674945,4.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-01,4.674945,5.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-02,5.674945,6.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-03,6.674945,7.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-05,8.674945,9.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-06,9.674945,10.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-07,10.674945,11.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-08,11.674945,12.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-09,12.674945,13.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-11,14.674945,15.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-12,15.674945,16.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-14,17.674945,18.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-15,18.674945,19.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-16,19.674945,20.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-17,20.674945,21.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-19,22.674945,23.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-20,23.674945,24.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-21,24.674945,25.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-22,25.674945,26.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-23,26.674945,27.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-11,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,whole,3.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,early,3.674945,11.677032,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,middle,11.677032,19.679119,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,late,19.679119,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-00,3.674945,4.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-01,4.674945,5.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-02,5.674945,6.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-03,6.674945,7.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-05,8.674945,9.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-06,9.674945,10.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-07,10.674945,11.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-08,11.674945,12.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-09,12.674945,13.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-11,14.674945,15.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-12,15.674945,16.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-14,17.674945,18.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-15,18.674945,19.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-16,19.674945,20.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-17,20.674945,21.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-19,22.674945,23.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-20,23.674945,24.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-21,24.674945,25.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-22,25.674945,26.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-23,26.674945,27.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-12,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,whole,3.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,early,3.674945,11.677032,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,middle,11.677032,19.679119,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,late,19.679119,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-00,3.674945,4.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-01,4.674945,5.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-02,5.674945,6.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-03,6.674945,7.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-05,8.674945,9.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-06,9.674945,10.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-07,10.674945,11.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-08,11.674945,12.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-09,12.674945,13.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-11,14.674945,15.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-12,15.674945,16.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-14,17.674945,18.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-15,18.674945,19.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-16,19.674945,20.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-17,20.674945,21.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-19,22.674945,23.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-20,23.674945,24.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-21,24.674945,25.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-22,25.674945,26.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-23,26.674945,27.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-13,bin-24,27.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,whole,3.674945,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,early,3.674945,11.677032,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,middle,11.677032,19.679119,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,late,19.679119,27.681206,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-00,3.674945,4.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-01,4.674945,5.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-02,5.674945,6.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-03,6.674945,7.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-04,7.674945,8.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-05,8.674945,9.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-06,9.674945,10.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-07,10.674945,11.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-08,11.674945,12.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-09,12.674945,13.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-10,13.674945,14.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-11,14.674945,15.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-12,15.674945,16.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-13,16.674945,17.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-14,17.674945,18.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-15,18.674945,19.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-16,19.674945,20.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-17,20.674945,21.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-18,21.674945,22.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-19,22.674945,23.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-20,23.674945,24.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-21,24.674945,25.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-22,25.674945,26.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-23,26.674945,27.674945,0.0,0,{}
+05-wheel-zoom-repeat,worker-14,bin-24,27.674945,27.681206,0.0,0,{}
+06-idle-current,all,whole,2.0,10.773137,6.0,6,{}
+06-idle-current,all,early,2.0,4.924379,1.0,1,{}
+06-idle-current,all,middle,4.924379,7.848758,2.0,2,{}
+06-idle-current,all,late,7.848758,10.773137,3.0,3,{}
+06-idle-current,all,bin-00,2.0,3.0,0.0,0,{}
+06-idle-current,all,bin-01,3.0,4.0,0.0,0,{}
+06-idle-current,all,bin-02,4.0,5.0,1.0,1,{}
+06-idle-current,all,bin-03,5.0,6.0,2.0,2,{}
+06-idle-current,all,bin-04,6.0,7.0,0.0,0,{}
+06-idle-current,all,bin-05,7.0,8.0,0.0,0,{}
+06-idle-current,all,bin-06,8.0,9.0,0.0,0,{}
+06-idle-current,all,bin-07,9.0,10.0,1.0,1,{}
+06-idle-current,all,bin-08,10.0,10.773137,2.0,2,{}
+06-idle-current,event,whole,2.0,10.773137,0.0,0,{}
+06-idle-current,event,early,2.0,4.924379,0.0,0,{}
+06-idle-current,event,middle,4.924379,7.848758,0.0,0,{}
+06-idle-current,event,late,7.848758,10.773137,0.0,0,{}
+06-idle-current,event,bin-00,2.0,3.0,0.0,0,{}
+06-idle-current,event,bin-01,3.0,4.0,0.0,0,{}
+06-idle-current,event,bin-02,4.0,5.0,0.0,0,{}
+06-idle-current,event,bin-03,5.0,6.0,0.0,0,{}
+06-idle-current,event,bin-04,6.0,7.0,0.0,0,{}
+06-idle-current,event,bin-05,7.0,8.0,0.0,0,{}
+06-idle-current,event,bin-06,8.0,9.0,0.0,0,{}
+06-idle-current,event,bin-07,9.0,10.0,0.0,0,{}
+06-idle-current,event,bin-08,10.0,10.773137,0.0,0,{}
+06-idle-current,main,whole,2.0,10.773137,1.0,1,{}
+06-idle-current,main,early,2.0,4.924379,0.0,0,{}
+06-idle-current,main,middle,4.924379,7.848758,0.0,0,{}
+06-idle-current,main,late,7.848758,10.773137,1.0,1,{}
+06-idle-current,main,bin-00,2.0,3.0,0.0,0,{}
+06-idle-current,main,bin-01,3.0,4.0,0.0,0,{}
+06-idle-current,main,bin-02,4.0,5.0,0.0,0,{}
+06-idle-current,main,bin-03,5.0,6.0,0.0,0,{}
+06-idle-current,main,bin-04,6.0,7.0,0.0,0,{}
+06-idle-current,main,bin-05,7.0,8.0,0.0,0,{}
+06-idle-current,main,bin-06,8.0,9.0,0.0,0,{}
+06-idle-current,main,bin-07,9.0,10.0,0.0,0,{}
+06-idle-current,main,bin-08,10.0,10.773137,1.0,1,{}
+06-idle-current,worker-01,whole,2.0,10.773137,2.0,2,{}
+06-idle-current,worker-01,early,2.0,4.924379,0.0,0,{}
+06-idle-current,worker-01,middle,4.924379,7.848758,0.0,0,{}
+06-idle-current,worker-01,late,7.848758,10.773137,2.0,2,{}
+06-idle-current,worker-01,bin-00,2.0,3.0,0.0,0,{}
+06-idle-current,worker-01,bin-01,3.0,4.0,0.0,0,{}
+06-idle-current,worker-01,bin-02,4.0,5.0,0.0,0,{}
+06-idle-current,worker-01,bin-03,5.0,6.0,0.0,0,{}
+06-idle-current,worker-01,bin-04,6.0,7.0,0.0,0,{}
+06-idle-current,worker-01,bin-05,7.0,8.0,0.0,0,{}
+06-idle-current,worker-01,bin-06,8.0,9.0,0.0,0,{}
+06-idle-current,worker-01,bin-07,9.0,10.0,1.0,1,{}
+06-idle-current,worker-01,bin-08,10.0,10.773137,1.0,1,{}
+06-idle-current,worker-02,whole,2.0,10.773137,1.0,1,{}
+06-idle-current,worker-02,early,2.0,4.924379,1.0,1,{}
+06-idle-current,worker-02,middle,4.924379,7.848758,0.0,0,{}
+06-idle-current,worker-02,late,7.848758,10.773137,0.0,0,{}
+06-idle-current,worker-02,bin-00,2.0,3.0,0.0,0,{}
+06-idle-current,worker-02,bin-01,3.0,4.0,0.0,0,{}
+06-idle-current,worker-02,bin-02,4.0,5.0,1.0,1,{}
+06-idle-current,worker-02,bin-03,5.0,6.0,0.0,0,{}
+06-idle-current,worker-02,bin-04,6.0,7.0,0.0,0,{}
+06-idle-current,worker-02,bin-05,7.0,8.0,0.0,0,{}
+06-idle-current,worker-02,bin-06,8.0,9.0,0.0,0,{}
+06-idle-current,worker-02,bin-07,9.0,10.0,0.0,0,{}
+06-idle-current,worker-02,bin-08,10.0,10.773137,0.0,0,{}
+06-idle-current,worker-03,whole,2.0,10.773137,2.0,2,{}
+06-idle-current,worker-03,early,2.0,4.924379,0.0,0,{}
+06-idle-current,worker-03,middle,4.924379,7.848758,2.0,2,{}
+06-idle-current,worker-03,late,7.848758,10.773137,0.0,0,{}
+06-idle-current,worker-03,bin-00,2.0,3.0,0.0,0,{}
+06-idle-current,worker-03,bin-01,3.0,4.0,0.0,0,{}
+06-idle-current,worker-03,bin-02,4.0,5.0,0.0,0,{}
+06-idle-current,worker-03,bin-03,5.0,6.0,2.0,2,{}
+06-idle-current,worker-03,bin-04,6.0,7.0,0.0,0,{}
+06-idle-current,worker-03,bin-05,7.0,8.0,0.0,0,{}
+06-idle-current,worker-03,bin-06,8.0,9.0,0.0,0,{}
+06-idle-current,worker-03,bin-07,9.0,10.0,0.0,0,{}
+06-idle-current,worker-03,bin-08,10.0,10.773137,0.0,0,{}
+06-idle-current,worker-04,whole,2.0,10.773137,0.0,0,{}
+06-idle-current,worker-04,early,2.0,4.924379,0.0,0,{}
+06-idle-current,worker-04,middle,4.924379,7.848758,0.0,0,{}
+06-idle-current,worker-04,late,7.848758,10.773137,0.0,0,{}
+06-idle-current,worker-04,bin-00,2.0,3.0,0.0,0,{}
+06-idle-current,worker-04,bin-01,3.0,4.0,0.0,0,{}
+06-idle-current,worker-04,bin-02,4.0,5.0,0.0,0,{}
+06-idle-current,worker-04,bin-03,5.0,6.0,0.0,0,{}
+06-idle-current,worker-04,bin-04,6.0,7.0,0.0,0,{}
+06-idle-current,worker-04,bin-05,7.0,8.0,0.0,0,{}
+06-idle-current,worker-04,bin-06,8.0,9.0,0.0,0,{}
+06-idle-current,worker-04,bin-07,9.0,10.0,0.0,0,{}
+06-idle-current,worker-04,bin-08,10.0,10.773137,0.0,0,{}
+06-idle-current,worker-05,whole,2.0,10.773137,0.0,0,{}
+06-idle-current,worker-05,early,2.0,4.924379,0.0,0,{}
+06-idle-current,worker-05,middle,4.924379,7.848758,0.0,0,{}
+06-idle-current,worker-05,late,7.848758,10.773137,0.0,0,{}
+06-idle-current,worker-05,bin-00,2.0,3.0,0.0,0,{}
+06-idle-current,worker-05,bin-01,3.0,4.0,0.0,0,{}
+06-idle-current,worker-05,bin-02,4.0,5.0,0.0,0,{}
+06-idle-current,worker-05,bin-03,5.0,6.0,0.0,0,{}
+06-idle-current,worker-05,bin-04,6.0,7.0,0.0,0,{}
+06-idle-current,worker-05,bin-05,7.0,8.0,0.0,0,{}
+06-idle-current,worker-05,bin-06,8.0,9.0,0.0,0,{}
+06-idle-current,worker-05,bin-07,9.0,10.0,0.0,0,{}
+06-idle-current,worker-05,bin-08,10.0,10.773137,0.0,0,{}
+06-idle-current,worker-06,whole,2.0,10.773137,0.0,0,{}
+06-idle-current,worker-06,early,2.0,4.924379,0.0,0,{}
+06-idle-current,worker-06,middle,4.924379,7.848758,0.0,0,{}
+06-idle-current,worker-06,late,7.848758,10.773137,0.0,0,{}
+06-idle-current,worker-06,bin-00,2.0,3.0,0.0,0,{}
+06-idle-current,worker-06,bin-01,3.0,4.0,0.0,0,{}
+06-idle-current,worker-06,bin-02,4.0,5.0,0.0,0,{}
+06-idle-current,worker-06,bin-03,5.0,6.0,0.0,0,{}
+06-idle-current,worker-06,bin-04,6.0,7.0,0.0,0,{}
+06-idle-current,worker-06,bin-05,7.0,8.0,0.0,0,{}
+06-idle-current,worker-06,bin-06,8.0,9.0,0.0,0,{}
+06-idle-current,worker-06,bin-07,9.0,10.0,0.0,0,{}
+06-idle-current,worker-06,bin-08,10.0,10.773137,0.0,0,{}
+06-idle-current,worker-07,whole,2.0,10.773137,0.0,0,{}
+06-idle-current,worker-07,early,2.0,4.924379,0.0,0,{}
+06-idle-current,worker-07,middle,4.924379,7.848758,0.0,0,{}
+06-idle-current,worker-07,late,7.848758,10.773137,0.0,0,{}
+06-idle-current,worker-07,bin-00,2.0,3.0,0.0,0,{}
+06-idle-current,worker-07,bin-01,3.0,4.0,0.0,0,{}
+06-idle-current,worker-07,bin-02,4.0,5.0,0.0,0,{}
+06-idle-current,worker-07,bin-03,5.0,6.0,0.0,0,{}
+06-idle-current,worker-07,bin-04,6.0,7.0,0.0,0,{}
+06-idle-current,worker-07,bin-05,7.0,8.0,0.0,0,{}
+06-idle-current,worker-07,bin-06,8.0,9.0,0.0,0,{}
+06-idle-current,worker-07,bin-07,9.0,10.0,0.0,0,{}
+06-idle-current,worker-07,bin-08,10.0,10.773137,0.0,0,{}
+07-left-hidden-wheel,all,whole,3.601077,27.604369,16874.0,16874,"{""asset_projection"": 90.0, ""canvas_surface"": 1537.0, ""connection_draw"": 23.0, ""connection_geometry"": 6.0, ""glass_background_cpu"": 377.0, ""glass_controls"": 42.0, ""history_output_projection"": 1.0, ""language_resolution"": 1313.0, ""layout_ancestor"": 14963.0, ""library"": 2981.0, ""library_entry_equality"": 838.0, ""menu_feature"": 879.0, ""node_body"": 589.0, ""node_port_input"": 8.0, ""operation_tree"": 574.0, ""readability"": 257.0, ""render_commit_ancestor"": 15752.0, ""swiftui_graph"": 13947.0, ""viewport_input"": 249.0}"
+07-left-hidden-wheel,all,early,3.601077,11.602174333,5356.0,5356,"{""asset_projection"": 26.0, ""canvas_surface"": 531.0, ""connection_draw"": 6.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 123.0, ""glass_controls"": 12.0, ""history_output_projection"": 1.0, ""language_resolution"": 438.0, ""layout_ancestor"": 4832.0, ""library"": 965.0, ""library_entry_equality"": 276.0, ""menu_feature"": 277.0, ""node_body"": 193.0, ""node_port_input"": 3.0, ""operation_tree"": 191.0, ""readability"": 73.0, ""render_commit_ancestor"": 5087.0, ""swiftui_graph"": 4502.0, ""viewport_input"": 87.0}"
+07-left-hidden-wheel,all,middle,11.602174333,19.603271666,6085.0,6085,"{""asset_projection"": 40.0, ""canvas_surface"": 535.0, ""connection_draw"": 10.0, ""connection_geometry"": 3.0, ""glass_background_cpu"": 141.0, ""glass_controls"": 20.0, ""language_resolution"": 473.0, ""layout_ancestor"": 5450.0, ""library"": 1110.0, ""library_entry_equality"": 313.0, ""menu_feature"": 337.0, ""node_body"": 221.0, ""node_port_input"": 4.0, ""operation_tree"": 210.0, ""readability"": 97.0, ""render_commit_ancestor"": 5740.0, ""swiftui_graph"": 5105.0, ""viewport_input"": 84.0}"
+07-left-hidden-wheel,all,late,19.603271666,27.604369,5433.0,5433,"{""asset_projection"": 24.0, ""canvas_surface"": 471.0, ""connection_draw"": 7.0, ""connection_geometry"": 2.0, ""glass_background_cpu"": 113.0, ""glass_controls"": 10.0, ""language_resolution"": 402.0, ""layout_ancestor"": 4681.0, ""library"": 906.0, ""library_entry_equality"": 249.0, ""menu_feature"": 265.0, ""node_body"": 175.0, ""node_port_input"": 1.0, ""operation_tree"": 173.0, ""readability"": 87.0, ""render_commit_ancestor"": 4925.0, ""swiftui_graph"": 4340.0, ""viewport_input"": 78.0}"
+07-left-hidden-wheel,all,bin-00,3.601077,4.601077,559.0,559,"{""asset_projection"": 4.0, ""canvas_surface"": 64.0, ""glass_background_cpu"": 12.0, ""glass_controls"": 1.0, ""history_output_projection"": 1.0, ""language_resolution"": 58.0, ""layout_ancestor"": 521.0, ""library"": 109.0, ""library_entry_equality"": 31.0, ""menu_feature"": 30.0, ""node_body"": 24.0, ""operation_tree"": 20.0, ""readability"": 7.0, ""render_commit_ancestor"": 546.0, ""swiftui_graph"": 482.0, ""viewport_input"": 10.0}"
+07-left-hidden-wheel,all,bin-01,4.601077,5.601077,611.0,611,"{""asset_projection"": 4.0, ""canvas_surface"": 58.0, ""glass_background_cpu"": 12.0, ""glass_controls"": 1.0, ""language_resolution"": 45.0, ""layout_ancestor"": 559.0, ""library"": 108.0, ""library_entry_equality"": 25.0, ""menu_feature"": 29.0, ""node_body"": 22.0, ""node_port_input"": 1.0, ""operation_tree"": 20.0, ""readability"": 6.0, ""render_commit_ancestor"": 589.0, ""swiftui_graph"": 518.0, ""viewport_input"": 9.0}"
+07-left-hidden-wheel,all,bin-02,5.601077,6.601077,802.0,802,"{""asset_projection"": 2.0, ""canvas_surface"": 82.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 22.0, ""language_resolution"": 67.0, ""layout_ancestor"": 736.0, ""library"": 150.0, ""library_entry_equality"": 49.0, ""menu_feature"": 42.0, ""node_body"": 28.0, ""operation_tree"": 30.0, ""readability"": 12.0, ""render_commit_ancestor"": 774.0, ""swiftui_graph"": 685.0, ""viewport_input"": 14.0}"
+07-left-hidden-wheel,all,bin-03,6.601077,7.601077,712.0,712,"{""asset_projection"": 3.0, ""canvas_surface"": 77.0, ""glass_background_cpu"": 16.0, ""language_resolution"": 58.0, ""layout_ancestor"": 660.0, ""library"": 144.0, ""library_entry_equality"": 38.0, ""menu_feature"": 36.0, ""node_body"": 24.0, ""operation_tree"": 28.0, ""readability"": 10.0, ""render_commit_ancestor"": 686.0, ""swiftui_graph"": 615.0, ""viewport_input"": 15.0}"
+07-left-hidden-wheel,all,bin-04,7.601077,8.601077,729.0,729,"{""asset_projection"": 3.0, ""canvas_surface"": 68.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 19.0, ""glass_controls"": 3.0, ""language_resolution"": 60.0, ""layout_ancestor"": 635.0, ""library"": 125.0, ""library_entry_equality"": 41.0, ""menu_feature"": 36.0, ""node_body"": 28.0, ""operation_tree"": 26.0, ""readability"": 9.0, ""render_commit_ancestor"": 668.0, ""swiftui_graph"": 591.0, ""viewport_input"": 12.0}"
+07-left-hidden-wheel,all,bin-05,8.601077,9.601077,778.0,778,"{""asset_projection"": 4.0, ""canvas_surface"": 77.0, ""connection_draw"": 3.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 20.0, ""glass_controls"": 6.0, ""language_resolution"": 54.0, ""layout_ancestor"": 709.0, ""library"": 137.0, ""library_entry_equality"": 38.0, ""menu_feature"": 45.0, ""node_body"": 28.0, ""node_port_input"": 2.0, ""operation_tree"": 28.0, ""readability"": 14.0, ""render_commit_ancestor"": 753.0, ""swiftui_graph"": 667.0, ""viewport_input"": 11.0}"
+07-left-hidden-wheel,all,bin-06,9.601077,10.601077,510.0,510,"{""asset_projection"": 5.0, ""canvas_surface"": 49.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 11.0, ""language_resolution"": 44.0, ""layout_ancestor"": 448.0, ""library"": 87.0, ""library_entry_equality"": 23.0, ""menu_feature"": 28.0, ""node_body"": 21.0, ""operation_tree"": 16.0, ""readability"": 8.0, ""render_commit_ancestor"": 474.0, ""swiftui_graph"": 422.0, ""viewport_input"": 9.0}"
+07-left-hidden-wheel,all,bin-07,10.601077,11.601077,655.0,655,"{""asset_projection"": 1.0, ""canvas_surface"": 56.0, ""glass_background_cpu"": 11.0, ""glass_controls"": 1.0, ""language_resolution"": 52.0, ""layout_ancestor"": 564.0, ""library"": 105.0, ""library_entry_equality"": 31.0, ""menu_feature"": 31.0, ""node_body"": 18.0, ""operation_tree"": 23.0, ""readability"": 7.0, ""render_commit_ancestor"": 597.0, ""swiftui_graph"": 522.0, ""viewport_input"": 7.0}"
+07-left-hidden-wheel,all,bin-08,11.601077,12.601077,822.0,822,"{""asset_projection"": 4.0, ""canvas_surface"": 67.0, ""connection_draw"": 5.0, ""connection_geometry"": 2.0, ""glass_background_cpu"": 18.0, ""glass_controls"": 3.0, ""language_resolution"": 59.0, ""layout_ancestor"": 735.0, ""library"": 142.0, ""library_entry_equality"": 39.0, ""menu_feature"": 47.0, ""node_body"": 32.0, ""operation_tree"": 27.0, ""readability"": 15.0, ""render_commit_ancestor"": 777.0, ""swiftui_graph"": 686.0, ""viewport_input"": 10.0}"
+07-left-hidden-wheel,all,bin-09,12.601077,13.601077,713.0,713,"{""asset_projection"": 4.0, ""canvas_surface"": 68.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 24.0, ""glass_controls"": 1.0, ""language_resolution"": 47.0, ""layout_ancestor"": 625.0, ""library"": 128.0, ""library_entry_equality"": 37.0, ""menu_feature"": 54.0, ""node_body"": 24.0, ""node_port_input"": 1.0, ""operation_tree"": 24.0, ""readability"": 15.0, ""render_commit_ancestor"": 657.0, ""swiftui_graph"": 584.0, ""viewport_input"": 6.0}"
+07-left-hidden-wheel,all,bin-10,13.601077,14.601077,774.0,774,"{""asset_projection"": 3.0, ""canvas_surface"": 57.0, ""glass_background_cpu"": 12.0, ""glass_controls"": 3.0, ""language_resolution"": 65.0, ""layout_ancestor"": 701.0, ""library"": 139.0, ""library_entry_equality"": 39.0, ""menu_feature"": 41.0, ""node_body"": 30.0, ""operation_tree"": 29.0, ""readability"": 9.0, ""render_commit_ancestor"": 736.0, ""swiftui_graph"": 662.0, ""viewport_input"": 12.0}"
+07-left-hidden-wheel,all,bin-11,14.601077,15.601077,705.0,705,"{""asset_projection"": 5.0, ""canvas_surface"": 71.0, ""connection_draw"": 1.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 15.0, ""glass_controls"": 4.0, ""language_resolution"": 63.0, ""layout_ancestor"": 649.0, ""library"": 133.0, ""library_entry_equality"": 38.0, ""menu_feature"": 39.0, ""node_body"": 29.0, ""operation_tree"": 24.0, ""readability"": 12.0, ""render_commit_ancestor"": 682.0, ""swiftui_graph"": 615.0, ""viewport_input"": 13.0}"
+07-left-hidden-wheel,all,bin-12,15.601077,16.601077,692.0,692,"{""asset_projection"": 6.0, ""canvas_surface"": 58.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 16.0, ""language_resolution"": 45.0, ""layout_ancestor"": 598.0, ""library"": 131.0, ""library_entry_equality"": 38.0, ""menu_feature"": 34.0, ""node_body"": 28.0, ""operation_tree"": 24.0, ""readability"": 9.0, ""render_commit_ancestor"": 626.0, ""swiftui_graph"": 556.0, ""viewport_input"": 10.0}"
+07-left-hidden-wheel,all,bin-13,16.601077,17.601077,834.0,834,"{""asset_projection"": 7.0, ""canvas_surface"": 85.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 16.0, ""glass_controls"": 2.0, ""language_resolution"": 70.0, ""layout_ancestor"": 743.0, ""library"": 160.0, ""library_entry_equality"": 48.0, ""menu_feature"": 38.0, ""node_body"": 23.0, ""node_port_input"": 2.0, ""operation_tree"": 28.0, ""readability"": 12.0, ""render_commit_ancestor"": 786.0, ""swiftui_graph"": 693.0, ""viewport_input"": 13.0}"
+07-left-hidden-wheel,all,bin-14,17.601077,18.601077,790.0,790,"{""asset_projection"": 6.0, ""canvas_surface"": 57.0, ""glass_background_cpu"": 21.0, ""glass_controls"": 4.0, ""language_resolution"": 65.0, ""layout_ancestor"": 722.0, ""library"": 141.0, ""library_entry_equality"": 37.0, ""menu_feature"": 41.0, ""node_body"": 30.0, ""node_port_input"": 1.0, ""operation_tree"": 29.0, ""readability"": 13.0, ""render_commit_ancestor"": 764.0, ""swiftui_graph"": 677.0, ""viewport_input"": 9.0}"
+07-left-hidden-wheel,all,bin-15,18.601077,19.601077,752.0,752,"{""asset_projection"": 5.0, ""canvas_surface"": 72.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 19.0, ""glass_controls"": 3.0, ""language_resolution"": 59.0, ""layout_ancestor"": 674.0, ""library"": 135.0, ""library_entry_equality"": 37.0, ""menu_feature"": 43.0, ""node_body"": 25.0, ""operation_tree"": 25.0, ""readability"": 12.0, ""render_commit_ancestor"": 709.0, ""swiftui_graph"": 629.0, ""viewport_input"": 11.0}"
+07-left-hidden-wheel,all,bin-16,19.601077,20.601077,670.0,670,"{""asset_projection"": 1.0, ""canvas_surface"": 63.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 14.0, ""glass_controls"": 1.0, ""language_resolution"": 52.0, ""layout_ancestor"": 569.0, ""library"": 124.0, ""library_entry_equality"": 34.0, ""menu_feature"": 35.0, ""node_body"": 24.0, ""operation_tree"": 20.0, ""readability"": 12.0, ""render_commit_ancestor"": 600.0, ""swiftui_graph"": 534.0, ""viewport_input"": 8.0}"
+07-left-hidden-wheel,all,bin-17,20.601077,21.601077,661.0,661,"{""asset_projection"": 3.0, ""canvas_surface"": 51.0, ""glass_background_cpu"": 10.0, ""glass_controls"": 2.0, ""language_resolution"": 48.0, ""layout_ancestor"": 562.0, ""library"": 119.0, ""library_entry_equality"": 39.0, ""menu_feature"": 31.0, ""node_body"": 17.0, ""operation_tree"": 23.0, ""readability"": 10.0, ""render_commit_ancestor"": 596.0, ""swiftui_graph"": 521.0, ""viewport_input"": 7.0}"
+07-left-hidden-wheel,all,bin-18,21.601077,22.601077,524.0,524,"{""asset_projection"": 4.0, ""canvas_surface"": 44.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 14.0, ""glass_controls"": 1.0, ""language_resolution"": 40.0, ""layout_ancestor"": 425.0, ""library"": 81.0, ""library_entry_equality"": 25.0, ""menu_feature"": 22.0, ""node_body"": 18.0, ""operation_tree"": 18.0, ""readability"": 10.0, ""render_commit_ancestor"": 445.0, ""swiftui_graph"": 394.0, ""viewport_input"": 10.0}"
+07-left-hidden-wheel,all,bin-19,22.601077,23.601077,768.0,768,"{""asset_projection"": 4.0, ""canvas_surface"": 62.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 14.0, ""glass_controls"": 1.0, ""language_resolution"": 54.0, ""layout_ancestor"": 679.0, ""library"": 122.0, ""library_entry_equality"": 35.0, ""menu_feature"": 43.0, ""node_body"": 27.0, ""operation_tree"": 25.0, ""readability"": 11.0, ""render_commit_ancestor"": 714.0, ""swiftui_graph"": 623.0, ""viewport_input"": 15.0}"
+07-left-hidden-wheel,all,bin-20,23.601077,24.601077,716.0,716,"{""asset_projection"": 3.0, ""canvas_surface"": 57.0, ""connection_draw"": 1.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 13.0, ""glass_controls"": 1.0, ""language_resolution"": 47.0, ""layout_ancestor"": 624.0, ""library"": 122.0, ""library_entry_equality"": 29.0, ""menu_feature"": 35.0, ""node_body"": 24.0, ""node_port_input"": 1.0, ""operation_tree"": 23.0, ""readability"": 6.0, ""render_commit_ancestor"": 649.0, ""swiftui_graph"": 583.0, ""viewport_input"": 8.0}"
+07-left-hidden-wheel,all,bin-21,24.601077,25.601077,826.0,826,"{""asset_projection"": 3.0, ""canvas_surface"": 78.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 25.0, ""glass_controls"": 3.0, ""language_resolution"": 59.0, ""layout_ancestor"": 762.0, ""library"": 137.0, ""library_entry_equality"": 36.0, ""menu_feature"": 38.0, ""node_body"": 25.0, ""operation_tree"": 26.0, ""readability"": 18.0, ""render_commit_ancestor"": 800.0, ""swiftui_graph"": 704.0, ""viewport_input"": 13.0}"
+07-left-hidden-wheel,all,bin-22,25.601077,26.601077,596.0,596,"{""asset_projection"": 2.0, ""canvas_surface"": 54.0, ""connection_draw"": 1.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 15.0, ""language_resolution"": 42.0, ""layout_ancestor"": 498.0, ""library"": 85.0, ""library_entry_equality"": 18.0, ""menu_feature"": 27.0, ""node_body"": 17.0, ""operation_tree"": 18.0, ""readability"": 11.0, ""render_commit_ancestor"": 530.0, ""swiftui_graph"": 461.0, ""viewport_input"": 10.0}"
+07-left-hidden-wheel,all,bin-23,26.601077,27.601077,674.0,674,"{""asset_projection"": 4.0, ""canvas_surface"": 62.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 8.0, ""glass_controls"": 1.0, ""language_resolution"": 60.0, ""layout_ancestor"": 565.0, ""library"": 117.0, ""library_entry_equality"": 33.0, ""menu_feature"": 34.0, ""node_body"": 23.0, ""operation_tree"": 20.0, ""readability"": 9.0, ""render_commit_ancestor"": 594.0, ""swiftui_graph"": 523.0, ""viewport_input"": 7.0}"
+07-left-hidden-wheel,all,bin-24,27.601077,27.604369,1.0,1,{}
+07-left-hidden-wheel,event,whole,3.601077,27.604369,79.0,79,{}
+07-left-hidden-wheel,event,early,3.601077,11.602174333,22.0,22,{}
+07-left-hidden-wheel,event,middle,11.602174333,19.603271666,23.0,23,{}
+07-left-hidden-wheel,event,late,19.603271666,27.604369,34.0,34,{}
+07-left-hidden-wheel,event,bin-00,3.601077,4.601077,2.0,2,{}
+07-left-hidden-wheel,event,bin-01,4.601077,5.601077,1.0,1,{}
+07-left-hidden-wheel,event,bin-02,5.601077,6.601077,2.0,2,{}
+07-left-hidden-wheel,event,bin-03,6.601077,7.601077,4.0,4,{}
+07-left-hidden-wheel,event,bin-04,7.601077,8.601077,2.0,2,{}
+07-left-hidden-wheel,event,bin-05,8.601077,9.601077,2.0,2,{}
+07-left-hidden-wheel,event,bin-06,9.601077,10.601077,3.0,3,{}
+07-left-hidden-wheel,event,bin-07,10.601077,11.601077,6.0,6,{}
+07-left-hidden-wheel,event,bin-08,11.601077,12.601077,3.0,3,{}
+07-left-hidden-wheel,event,bin-09,12.601077,13.601077,4.0,4,{}
+07-left-hidden-wheel,event,bin-10,13.601077,14.601077,2.0,2,{}
+07-left-hidden-wheel,event,bin-11,14.601077,15.601077,1.0,1,{}
+07-left-hidden-wheel,event,bin-12,15.601077,16.601077,2.0,2,{}
+07-left-hidden-wheel,event,bin-13,16.601077,17.601077,3.0,3,{}
+07-left-hidden-wheel,event,bin-14,17.601077,18.601077,5.0,5,{}
+07-left-hidden-wheel,event,bin-15,18.601077,19.601077,3.0,3,{}
+07-left-hidden-wheel,event,bin-16,19.601077,20.601077,7.0,7,{}
+07-left-hidden-wheel,event,bin-17,20.601077,21.601077,6.0,6,{}
+07-left-hidden-wheel,event,bin-18,21.601077,22.601077,3.0,3,{}
+07-left-hidden-wheel,event,bin-19,22.601077,23.601077,5.0,5,{}
+07-left-hidden-wheel,event,bin-20,23.601077,24.601077,4.0,4,{}
+07-left-hidden-wheel,event,bin-21,24.601077,25.601077,0.0,0,{}
+07-left-hidden-wheel,event,bin-22,25.601077,26.601077,3.0,3,{}
+07-left-hidden-wheel,event,bin-23,26.601077,27.601077,6.0,6,{}
+07-left-hidden-wheel,event,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,main,whole,3.601077,27.604369,16636.0,16636,"{""asset_projection"": 90.0, ""canvas_surface"": 1537.0, ""connection_draw"": 23.0, ""connection_geometry"": 6.0, ""glass_background_cpu"": 377.0, ""glass_controls"": 42.0, ""history_output_projection"": 1.0, ""language_resolution"": 1313.0, ""layout_ancestor"": 14962.0, ""library"": 2981.0, ""library_entry_equality"": 838.0, ""menu_feature"": 879.0, ""node_body"": 589.0, ""node_port_input"": 8.0, ""operation_tree"": 574.0, ""readability"": 257.0, ""render_commit_ancestor"": 15752.0, ""swiftui_graph"": 13947.0, ""viewport_input"": 249.0}"
+07-left-hidden-wheel,main,early,3.601077,11.602174333,5271.0,5271,"{""asset_projection"": 26.0, ""canvas_surface"": 531.0, ""connection_draw"": 6.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 123.0, ""glass_controls"": 12.0, ""history_output_projection"": 1.0, ""language_resolution"": 438.0, ""layout_ancestor"": 4832.0, ""library"": 965.0, ""library_entry_equality"": 276.0, ""menu_feature"": 277.0, ""node_body"": 193.0, ""node_port_input"": 3.0, ""operation_tree"": 191.0, ""readability"": 73.0, ""render_commit_ancestor"": 5087.0, ""swiftui_graph"": 4502.0, ""viewport_input"": 87.0}"
+07-left-hidden-wheel,main,middle,11.602174333,19.603271666,6010.0,6010,"{""asset_projection"": 40.0, ""canvas_surface"": 535.0, ""connection_draw"": 10.0, ""connection_geometry"": 3.0, ""glass_background_cpu"": 141.0, ""glass_controls"": 20.0, ""language_resolution"": 473.0, ""layout_ancestor"": 5449.0, ""library"": 1110.0, ""library_entry_equality"": 313.0, ""menu_feature"": 337.0, ""node_body"": 221.0, ""node_port_input"": 4.0, ""operation_tree"": 210.0, ""readability"": 97.0, ""render_commit_ancestor"": 5740.0, ""swiftui_graph"": 5105.0, ""viewport_input"": 84.0}"
+07-left-hidden-wheel,main,late,19.603271666,27.604369,5355.0,5355,"{""asset_projection"": 24.0, ""canvas_surface"": 471.0, ""connection_draw"": 7.0, ""connection_geometry"": 2.0, ""glass_background_cpu"": 113.0, ""glass_controls"": 10.0, ""language_resolution"": 402.0, ""layout_ancestor"": 4681.0, ""library"": 906.0, ""library_entry_equality"": 249.0, ""menu_feature"": 265.0, ""node_body"": 175.0, ""node_port_input"": 1.0, ""operation_tree"": 173.0, ""readability"": 87.0, ""render_commit_ancestor"": 4925.0, ""swiftui_graph"": 4340.0, ""viewport_input"": 78.0}"
+07-left-hidden-wheel,main,bin-00,3.601077,4.601077,551.0,551,"{""asset_projection"": 4.0, ""canvas_surface"": 64.0, ""glass_background_cpu"": 12.0, ""glass_controls"": 1.0, ""history_output_projection"": 1.0, ""language_resolution"": 58.0, ""layout_ancestor"": 521.0, ""library"": 109.0, ""library_entry_equality"": 31.0, ""menu_feature"": 30.0, ""node_body"": 24.0, ""operation_tree"": 20.0, ""readability"": 7.0, ""render_commit_ancestor"": 546.0, ""swiftui_graph"": 482.0, ""viewport_input"": 10.0}"
+07-left-hidden-wheel,main,bin-01,4.601077,5.601077,598.0,598,"{""asset_projection"": 4.0, ""canvas_surface"": 58.0, ""glass_background_cpu"": 12.0, ""glass_controls"": 1.0, ""language_resolution"": 45.0, ""layout_ancestor"": 559.0, ""library"": 108.0, ""library_entry_equality"": 25.0, ""menu_feature"": 29.0, ""node_body"": 22.0, ""node_port_input"": 1.0, ""operation_tree"": 20.0, ""readability"": 6.0, ""render_commit_ancestor"": 589.0, ""swiftui_graph"": 518.0, ""viewport_input"": 9.0}"
+07-left-hidden-wheel,main,bin-02,5.601077,6.601077,787.0,787,"{""asset_projection"": 2.0, ""canvas_surface"": 82.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 22.0, ""language_resolution"": 67.0, ""layout_ancestor"": 736.0, ""library"": 150.0, ""library_entry_equality"": 49.0, ""menu_feature"": 42.0, ""node_body"": 28.0, ""operation_tree"": 30.0, ""readability"": 12.0, ""render_commit_ancestor"": 774.0, ""swiftui_graph"": 685.0, ""viewport_input"": 14.0}"
+07-left-hidden-wheel,main,bin-03,6.601077,7.601077,704.0,704,"{""asset_projection"": 3.0, ""canvas_surface"": 77.0, ""glass_background_cpu"": 16.0, ""language_resolution"": 58.0, ""layout_ancestor"": 660.0, ""library"": 144.0, ""library_entry_equality"": 38.0, ""menu_feature"": 36.0, ""node_body"": 24.0, ""operation_tree"": 28.0, ""readability"": 10.0, ""render_commit_ancestor"": 686.0, ""swiftui_graph"": 615.0, ""viewport_input"": 15.0}"
+07-left-hidden-wheel,main,bin-04,7.601077,8.601077,723.0,723,"{""asset_projection"": 3.0, ""canvas_surface"": 68.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 19.0, ""glass_controls"": 3.0, ""language_resolution"": 60.0, ""layout_ancestor"": 635.0, ""library"": 125.0, ""library_entry_equality"": 41.0, ""menu_feature"": 36.0, ""node_body"": 28.0, ""operation_tree"": 26.0, ""readability"": 9.0, ""render_commit_ancestor"": 668.0, ""swiftui_graph"": 591.0, ""viewport_input"": 12.0}"
+07-left-hidden-wheel,main,bin-05,8.601077,9.601077,765.0,765,"{""asset_projection"": 4.0, ""canvas_surface"": 77.0, ""connection_draw"": 3.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 20.0, ""glass_controls"": 6.0, ""language_resolution"": 54.0, ""layout_ancestor"": 709.0, ""library"": 137.0, ""library_entry_equality"": 38.0, ""menu_feature"": 45.0, ""node_body"": 28.0, ""node_port_input"": 2.0, ""operation_tree"": 28.0, ""readability"": 14.0, ""render_commit_ancestor"": 753.0, ""swiftui_graph"": 667.0, ""viewport_input"": 11.0}"
+07-left-hidden-wheel,main,bin-06,9.601077,10.601077,503.0,503,"{""asset_projection"": 5.0, ""canvas_surface"": 49.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 11.0, ""language_resolution"": 44.0, ""layout_ancestor"": 448.0, ""library"": 87.0, ""library_entry_equality"": 23.0, ""menu_feature"": 28.0, ""node_body"": 21.0, ""operation_tree"": 16.0, ""readability"": 8.0, ""render_commit_ancestor"": 474.0, ""swiftui_graph"": 422.0, ""viewport_input"": 9.0}"
+07-left-hidden-wheel,main,bin-07,10.601077,11.601077,640.0,640,"{""asset_projection"": 1.0, ""canvas_surface"": 56.0, ""glass_background_cpu"": 11.0, ""glass_controls"": 1.0, ""language_resolution"": 52.0, ""layout_ancestor"": 564.0, ""library"": 105.0, ""library_entry_equality"": 31.0, ""menu_feature"": 31.0, ""node_body"": 18.0, ""operation_tree"": 23.0, ""readability"": 7.0, ""render_commit_ancestor"": 597.0, ""swiftui_graph"": 522.0, ""viewport_input"": 7.0}"
+07-left-hidden-wheel,main,bin-08,11.601077,12.601077,817.0,817,"{""asset_projection"": 4.0, ""canvas_surface"": 67.0, ""connection_draw"": 5.0, ""connection_geometry"": 2.0, ""glass_background_cpu"": 18.0, ""glass_controls"": 3.0, ""language_resolution"": 59.0, ""layout_ancestor"": 735.0, ""library"": 142.0, ""library_entry_equality"": 39.0, ""menu_feature"": 47.0, ""node_body"": 32.0, ""operation_tree"": 27.0, ""readability"": 15.0, ""render_commit_ancestor"": 777.0, ""swiftui_graph"": 686.0, ""viewport_input"": 10.0}"
+07-left-hidden-wheel,main,bin-09,12.601077,13.601077,702.0,702,"{""asset_projection"": 4.0, ""canvas_surface"": 68.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 24.0, ""glass_controls"": 1.0, ""language_resolution"": 47.0, ""layout_ancestor"": 624.0, ""library"": 128.0, ""library_entry_equality"": 37.0, ""menu_feature"": 54.0, ""node_body"": 24.0, ""node_port_input"": 1.0, ""operation_tree"": 24.0, ""readability"": 15.0, ""render_commit_ancestor"": 657.0, ""swiftui_graph"": 584.0, ""viewport_input"": 6.0}"
+07-left-hidden-wheel,main,bin-10,13.601077,14.601077,764.0,764,"{""asset_projection"": 3.0, ""canvas_surface"": 57.0, ""glass_background_cpu"": 12.0, ""glass_controls"": 3.0, ""language_resolution"": 65.0, ""layout_ancestor"": 701.0, ""library"": 139.0, ""library_entry_equality"": 39.0, ""menu_feature"": 41.0, ""node_body"": 30.0, ""operation_tree"": 29.0, ""readability"": 9.0, ""render_commit_ancestor"": 736.0, ""swiftui_graph"": 662.0, ""viewport_input"": 12.0}"
+07-left-hidden-wheel,main,bin-11,14.601077,15.601077,695.0,695,"{""asset_projection"": 5.0, ""canvas_surface"": 71.0, ""connection_draw"": 1.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 15.0, ""glass_controls"": 4.0, ""language_resolution"": 63.0, ""layout_ancestor"": 649.0, ""library"": 133.0, ""library_entry_equality"": 38.0, ""menu_feature"": 39.0, ""node_body"": 29.0, ""operation_tree"": 24.0, ""readability"": 12.0, ""render_commit_ancestor"": 682.0, ""swiftui_graph"": 615.0, ""viewport_input"": 13.0}"
+07-left-hidden-wheel,main,bin-12,15.601077,16.601077,684.0,684,"{""asset_projection"": 6.0, ""canvas_surface"": 58.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 16.0, ""language_resolution"": 45.0, ""layout_ancestor"": 598.0, ""library"": 131.0, ""library_entry_equality"": 38.0, ""menu_feature"": 34.0, ""node_body"": 28.0, ""operation_tree"": 24.0, ""readability"": 9.0, ""render_commit_ancestor"": 626.0, ""swiftui_graph"": 556.0, ""viewport_input"": 10.0}"
+07-left-hidden-wheel,main,bin-13,16.601077,17.601077,824.0,824,"{""asset_projection"": 7.0, ""canvas_surface"": 85.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 16.0, ""glass_controls"": 2.0, ""language_resolution"": 70.0, ""layout_ancestor"": 743.0, ""library"": 160.0, ""library_entry_equality"": 48.0, ""menu_feature"": 38.0, ""node_body"": 23.0, ""node_port_input"": 2.0, ""operation_tree"": 28.0, ""readability"": 12.0, ""render_commit_ancestor"": 786.0, ""swiftui_graph"": 693.0, ""viewport_input"": 13.0}"
+07-left-hidden-wheel,main,bin-14,17.601077,18.601077,777.0,777,"{""asset_projection"": 6.0, ""canvas_surface"": 57.0, ""glass_background_cpu"": 21.0, ""glass_controls"": 4.0, ""language_resolution"": 65.0, ""layout_ancestor"": 722.0, ""library"": 141.0, ""library_entry_equality"": 37.0, ""menu_feature"": 41.0, ""node_body"": 30.0, ""node_port_input"": 1.0, ""operation_tree"": 29.0, ""readability"": 13.0, ""render_commit_ancestor"": 764.0, ""swiftui_graph"": 677.0, ""viewport_input"": 9.0}"
+07-left-hidden-wheel,main,bin-15,18.601077,19.601077,744.0,744,"{""asset_projection"": 5.0, ""canvas_surface"": 72.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 19.0, ""glass_controls"": 3.0, ""language_resolution"": 59.0, ""layout_ancestor"": 674.0, ""library"": 135.0, ""library_entry_equality"": 37.0, ""menu_feature"": 43.0, ""node_body"": 25.0, ""operation_tree"": 25.0, ""readability"": 12.0, ""render_commit_ancestor"": 709.0, ""swiftui_graph"": 629.0, ""viewport_input"": 11.0}"
+07-left-hidden-wheel,main,bin-16,19.601077,20.601077,660.0,660,"{""asset_projection"": 1.0, ""canvas_surface"": 63.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 14.0, ""glass_controls"": 1.0, ""language_resolution"": 52.0, ""layout_ancestor"": 569.0, ""library"": 124.0, ""library_entry_equality"": 34.0, ""menu_feature"": 35.0, ""node_body"": 24.0, ""operation_tree"": 20.0, ""readability"": 12.0, ""render_commit_ancestor"": 600.0, ""swiftui_graph"": 534.0, ""viewport_input"": 8.0}"
+07-left-hidden-wheel,main,bin-17,20.601077,21.601077,646.0,646,"{""asset_projection"": 3.0, ""canvas_surface"": 51.0, ""glass_background_cpu"": 10.0, ""glass_controls"": 2.0, ""language_resolution"": 48.0, ""layout_ancestor"": 562.0, ""library"": 119.0, ""library_entry_equality"": 39.0, ""menu_feature"": 31.0, ""node_body"": 17.0, ""operation_tree"": 23.0, ""readability"": 10.0, ""render_commit_ancestor"": 596.0, ""swiftui_graph"": 521.0, ""viewport_input"": 7.0}"
+07-left-hidden-wheel,main,bin-18,21.601077,22.601077,518.0,518,"{""asset_projection"": 4.0, ""canvas_surface"": 44.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 14.0, ""glass_controls"": 1.0, ""language_resolution"": 40.0, ""layout_ancestor"": 425.0, ""library"": 81.0, ""library_entry_equality"": 25.0, ""menu_feature"": 22.0, ""node_body"": 18.0, ""operation_tree"": 18.0, ""readability"": 10.0, ""render_commit_ancestor"": 445.0, ""swiftui_graph"": 394.0, ""viewport_input"": 10.0}"
+07-left-hidden-wheel,main,bin-19,22.601077,23.601077,745.0,745,"{""asset_projection"": 4.0, ""canvas_surface"": 62.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 14.0, ""glass_controls"": 1.0, ""language_resolution"": 54.0, ""layout_ancestor"": 679.0, ""library"": 122.0, ""library_entry_equality"": 35.0, ""menu_feature"": 43.0, ""node_body"": 27.0, ""operation_tree"": 25.0, ""readability"": 11.0, ""render_commit_ancestor"": 714.0, ""swiftui_graph"": 623.0, ""viewport_input"": 15.0}"
+07-left-hidden-wheel,main,bin-20,23.601077,24.601077,709.0,709,"{""asset_projection"": 3.0, ""canvas_surface"": 57.0, ""connection_draw"": 1.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 13.0, ""glass_controls"": 1.0, ""language_resolution"": 47.0, ""layout_ancestor"": 624.0, ""library"": 122.0, ""library_entry_equality"": 29.0, ""menu_feature"": 35.0, ""node_body"": 24.0, ""node_port_input"": 1.0, ""operation_tree"": 23.0, ""readability"": 6.0, ""render_commit_ancestor"": 649.0, ""swiftui_graph"": 583.0, ""viewport_input"": 8.0}"
+07-left-hidden-wheel,main,bin-21,24.601077,25.601077,823.0,823,"{""asset_projection"": 3.0, ""canvas_surface"": 78.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 25.0, ""glass_controls"": 3.0, ""language_resolution"": 59.0, ""layout_ancestor"": 762.0, ""library"": 137.0, ""library_entry_equality"": 36.0, ""menu_feature"": 38.0, ""node_body"": 25.0, ""operation_tree"": 26.0, ""readability"": 18.0, ""render_commit_ancestor"": 800.0, ""swiftui_graph"": 704.0, ""viewport_input"": 13.0}"
+07-left-hidden-wheel,main,bin-22,25.601077,26.601077,589.0,589,"{""asset_projection"": 2.0, ""canvas_surface"": 54.0, ""connection_draw"": 1.0, ""connection_geometry"": 1.0, ""glass_background_cpu"": 15.0, ""language_resolution"": 42.0, ""layout_ancestor"": 498.0, ""library"": 85.0, ""library_entry_equality"": 18.0, ""menu_feature"": 27.0, ""node_body"": 17.0, ""operation_tree"": 18.0, ""readability"": 11.0, ""render_commit_ancestor"": 530.0, ""swiftui_graph"": 461.0, ""viewport_input"": 10.0}"
+07-left-hidden-wheel,main,bin-23,26.601077,27.601077,667.0,667,"{""asset_projection"": 4.0, ""canvas_surface"": 62.0, ""connection_draw"": 1.0, ""glass_background_cpu"": 8.0, ""glass_controls"": 1.0, ""language_resolution"": 60.0, ""layout_ancestor"": 565.0, ""library"": 117.0, ""library_entry_equality"": 33.0, ""menu_feature"": 34.0, ""node_body"": 23.0, ""operation_tree"": 20.0, ""readability"": 9.0, ""render_commit_ancestor"": 594.0, ""swiftui_graph"": 523.0, ""viewport_input"": 7.0}"
+07-left-hidden-wheel,main,bin-24,27.601077,27.604369,1.0,1,{}
+07-left-hidden-wheel,worker-01,whole,3.601077,27.604369,16.0,16,{}
+07-left-hidden-wheel,worker-01,early,3.601077,11.602174333,5.0,5,{}
+07-left-hidden-wheel,worker-01,middle,11.602174333,19.603271666,4.0,4,{}
+07-left-hidden-wheel,worker-01,late,19.603271666,27.604369,7.0,7,{}
+07-left-hidden-wheel,worker-01,bin-00,3.601077,4.601077,0.0,0,{}
+07-left-hidden-wheel,worker-01,bin-01,4.601077,5.601077,1.0,1,{}
+07-left-hidden-wheel,worker-01,bin-02,5.601077,6.601077,1.0,1,{}
+07-left-hidden-wheel,worker-01,bin-03,6.601077,7.601077,1.0,1,{}
+07-left-hidden-wheel,worker-01,bin-04,7.601077,8.601077,0.0,0,{}
+07-left-hidden-wheel,worker-01,bin-05,8.601077,9.601077,1.0,1,{}
+07-left-hidden-wheel,worker-01,bin-06,9.601077,10.601077,1.0,1,{}
+07-left-hidden-wheel,worker-01,bin-07,10.601077,11.601077,0.0,0,{}
+07-left-hidden-wheel,worker-01,bin-08,11.601077,12.601077,0.0,0,{}
+07-left-hidden-wheel,worker-01,bin-09,12.601077,13.601077,1.0,1,{}
+07-left-hidden-wheel,worker-01,bin-10,13.601077,14.601077,0.0,0,{}
+07-left-hidden-wheel,worker-01,bin-11,14.601077,15.601077,1.0,1,{}
+07-left-hidden-wheel,worker-01,bin-12,15.601077,16.601077,0.0,0,{}
+07-left-hidden-wheel,worker-01,bin-13,16.601077,17.601077,1.0,1,{}
+07-left-hidden-wheel,worker-01,bin-14,17.601077,18.601077,1.0,1,{}
+07-left-hidden-wheel,worker-01,bin-15,18.601077,19.601077,0.0,0,{}
+07-left-hidden-wheel,worker-01,bin-16,19.601077,20.601077,1.0,1,{}
+07-left-hidden-wheel,worker-01,bin-17,20.601077,21.601077,1.0,1,{}
+07-left-hidden-wheel,worker-01,bin-18,21.601077,22.601077,2.0,2,{}
+07-left-hidden-wheel,worker-01,bin-19,22.601077,23.601077,2.0,2,{}
+07-left-hidden-wheel,worker-01,bin-20,23.601077,24.601077,1.0,1,{}
+07-left-hidden-wheel,worker-01,bin-21,24.601077,25.601077,0.0,0,{}
+07-left-hidden-wheel,worker-01,bin-22,25.601077,26.601077,0.0,0,{}
+07-left-hidden-wheel,worker-01,bin-23,26.601077,27.601077,0.0,0,{}
+07-left-hidden-wheel,worker-01,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-02,whole,3.601077,27.604369,17.0,17,{}
+07-left-hidden-wheel,worker-02,early,3.601077,11.602174333,4.0,4,{}
+07-left-hidden-wheel,worker-02,middle,11.602174333,19.603271666,5.0,5,{}
+07-left-hidden-wheel,worker-02,late,19.603271666,27.604369,8.0,8,{}
+07-left-hidden-wheel,worker-02,bin-00,3.601077,4.601077,0.0,0,{}
+07-left-hidden-wheel,worker-02,bin-01,4.601077,5.601077,1.0,1,{}
+07-left-hidden-wheel,worker-02,bin-02,5.601077,6.601077,2.0,2,{}
+07-left-hidden-wheel,worker-02,bin-03,6.601077,7.601077,0.0,0,{}
+07-left-hidden-wheel,worker-02,bin-04,7.601077,8.601077,0.0,0,{}
+07-left-hidden-wheel,worker-02,bin-05,8.601077,9.601077,1.0,1,{}
+07-left-hidden-wheel,worker-02,bin-06,9.601077,10.601077,0.0,0,{}
+07-left-hidden-wheel,worker-02,bin-07,10.601077,11.601077,0.0,0,{}
+07-left-hidden-wheel,worker-02,bin-08,11.601077,12.601077,0.0,0,{}
+07-left-hidden-wheel,worker-02,bin-09,12.601077,13.601077,2.0,2,{}
+07-left-hidden-wheel,worker-02,bin-10,13.601077,14.601077,0.0,0,{}
+07-left-hidden-wheel,worker-02,bin-11,14.601077,15.601077,1.0,1,{}
+07-left-hidden-wheel,worker-02,bin-12,15.601077,16.601077,0.0,0,{}
+07-left-hidden-wheel,worker-02,bin-13,16.601077,17.601077,1.0,1,{}
+07-left-hidden-wheel,worker-02,bin-14,17.601077,18.601077,1.0,1,{}
+07-left-hidden-wheel,worker-02,bin-15,18.601077,19.601077,0.0,0,{}
+07-left-hidden-wheel,worker-02,bin-16,19.601077,20.601077,1.0,1,{}
+07-left-hidden-wheel,worker-02,bin-17,20.601077,21.601077,2.0,2,{}
+07-left-hidden-wheel,worker-02,bin-18,21.601077,22.601077,0.0,0,{}
+07-left-hidden-wheel,worker-02,bin-19,22.601077,23.601077,2.0,2,{}
+07-left-hidden-wheel,worker-02,bin-20,23.601077,24.601077,2.0,2,{}
+07-left-hidden-wheel,worker-02,bin-21,24.601077,25.601077,1.0,1,{}
+07-left-hidden-wheel,worker-02,bin-22,25.601077,26.601077,0.0,0,{}
+07-left-hidden-wheel,worker-02,bin-23,26.601077,27.601077,0.0,0,{}
+07-left-hidden-wheel,worker-02,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-03,whole,3.601077,27.604369,20.0,20,"{""layout_ancestor"": 1.0}"
+07-left-hidden-wheel,worker-03,early,3.601077,11.602174333,10.0,10,{}
+07-left-hidden-wheel,worker-03,middle,11.602174333,19.603271666,5.0,5,"{""layout_ancestor"": 1.0}"
+07-left-hidden-wheel,worker-03,late,19.603271666,27.604369,5.0,5,{}
+07-left-hidden-wheel,worker-03,bin-00,3.601077,4.601077,1.0,1,{}
+07-left-hidden-wheel,worker-03,bin-01,4.601077,5.601077,2.0,2,{}
+07-left-hidden-wheel,worker-03,bin-02,5.601077,6.601077,3.0,3,{}
+07-left-hidden-wheel,worker-03,bin-03,6.601077,7.601077,1.0,1,{}
+07-left-hidden-wheel,worker-03,bin-04,7.601077,8.601077,1.0,1,{}
+07-left-hidden-wheel,worker-03,bin-05,8.601077,9.601077,1.0,1,{}
+07-left-hidden-wheel,worker-03,bin-06,9.601077,10.601077,0.0,0,{}
+07-left-hidden-wheel,worker-03,bin-07,10.601077,11.601077,1.0,1,{}
+07-left-hidden-wheel,worker-03,bin-08,11.601077,12.601077,1.0,1,{}
+07-left-hidden-wheel,worker-03,bin-09,12.601077,13.601077,2.0,2,"{""layout_ancestor"": 1.0}"
+07-left-hidden-wheel,worker-03,bin-10,13.601077,14.601077,1.0,1,{}
+07-left-hidden-wheel,worker-03,bin-11,14.601077,15.601077,1.0,1,{}
+07-left-hidden-wheel,worker-03,bin-12,15.601077,16.601077,0.0,0,{}
+07-left-hidden-wheel,worker-03,bin-13,16.601077,17.601077,0.0,0,{}
+07-left-hidden-wheel,worker-03,bin-14,17.601077,18.601077,0.0,0,{}
+07-left-hidden-wheel,worker-03,bin-15,18.601077,19.601077,0.0,0,{}
+07-left-hidden-wheel,worker-03,bin-16,19.601077,20.601077,1.0,1,{}
+07-left-hidden-wheel,worker-03,bin-17,20.601077,21.601077,1.0,1,{}
+07-left-hidden-wheel,worker-03,bin-18,21.601077,22.601077,0.0,0,{}
+07-left-hidden-wheel,worker-03,bin-19,22.601077,23.601077,2.0,2,{}
+07-left-hidden-wheel,worker-03,bin-20,23.601077,24.601077,0.0,0,{}
+07-left-hidden-wheel,worker-03,bin-21,24.601077,25.601077,0.0,0,{}
+07-left-hidden-wheel,worker-03,bin-22,25.601077,26.601077,0.0,0,{}
+07-left-hidden-wheel,worker-03,bin-23,26.601077,27.601077,1.0,1,{}
+07-left-hidden-wheel,worker-03,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-04,whole,3.601077,27.604369,17.0,17,{}
+07-left-hidden-wheel,worker-04,early,3.601077,11.602174333,7.0,7,{}
+07-left-hidden-wheel,worker-04,middle,11.602174333,19.603271666,8.0,8,{}
+07-left-hidden-wheel,worker-04,late,19.603271666,27.604369,2.0,2,{}
+07-left-hidden-wheel,worker-04,bin-00,3.601077,4.601077,1.0,1,{}
+07-left-hidden-wheel,worker-04,bin-01,4.601077,5.601077,1.0,1,{}
+07-left-hidden-wheel,worker-04,bin-02,5.601077,6.601077,1.0,1,{}
+07-left-hidden-wheel,worker-04,bin-03,6.601077,7.601077,0.0,0,{}
+07-left-hidden-wheel,worker-04,bin-04,7.601077,8.601077,1.0,1,{}
+07-left-hidden-wheel,worker-04,bin-05,8.601077,9.601077,2.0,2,{}
+07-left-hidden-wheel,worker-04,bin-06,9.601077,10.601077,0.0,0,{}
+07-left-hidden-wheel,worker-04,bin-07,10.601077,11.601077,1.0,1,{}
+07-left-hidden-wheel,worker-04,bin-08,11.601077,12.601077,1.0,1,{}
+07-left-hidden-wheel,worker-04,bin-09,12.601077,13.601077,0.0,0,{}
+07-left-hidden-wheel,worker-04,bin-10,13.601077,14.601077,2.0,2,{}
+07-left-hidden-wheel,worker-04,bin-11,14.601077,15.601077,1.0,1,{}
+07-left-hidden-wheel,worker-04,bin-12,15.601077,16.601077,0.0,0,{}
+07-left-hidden-wheel,worker-04,bin-13,16.601077,17.601077,2.0,2,{}
+07-left-hidden-wheel,worker-04,bin-14,17.601077,18.601077,2.0,2,{}
+07-left-hidden-wheel,worker-04,bin-15,18.601077,19.601077,0.0,0,{}
+07-left-hidden-wheel,worker-04,bin-16,19.601077,20.601077,0.0,0,{}
+07-left-hidden-wheel,worker-04,bin-17,20.601077,21.601077,1.0,1,{}
+07-left-hidden-wheel,worker-04,bin-18,21.601077,22.601077,0.0,0,{}
+07-left-hidden-wheel,worker-04,bin-19,22.601077,23.601077,1.0,1,{}
+07-left-hidden-wheel,worker-04,bin-20,23.601077,24.601077,0.0,0,{}
+07-left-hidden-wheel,worker-04,bin-21,24.601077,25.601077,0.0,0,{}
+07-left-hidden-wheel,worker-04,bin-22,25.601077,26.601077,0.0,0,{}
+07-left-hidden-wheel,worker-04,bin-23,26.601077,27.601077,0.0,0,{}
+07-left-hidden-wheel,worker-04,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-05,whole,3.601077,27.604369,21.0,21,{}
+07-left-hidden-wheel,worker-05,early,3.601077,11.602174333,9.0,9,{}
+07-left-hidden-wheel,worker-05,middle,11.602174333,19.603271666,9.0,9,{}
+07-left-hidden-wheel,worker-05,late,19.603271666,27.604369,3.0,3,{}
+07-left-hidden-wheel,worker-05,bin-00,3.601077,4.601077,2.0,2,{}
+07-left-hidden-wheel,worker-05,bin-01,4.601077,5.601077,1.0,1,{}
+07-left-hidden-wheel,worker-05,bin-02,5.601077,6.601077,1.0,1,{}
+07-left-hidden-wheel,worker-05,bin-03,6.601077,7.601077,1.0,1,{}
+07-left-hidden-wheel,worker-05,bin-04,7.601077,8.601077,0.0,0,{}
+07-left-hidden-wheel,worker-05,bin-05,8.601077,9.601077,2.0,2,{}
+07-left-hidden-wheel,worker-05,bin-06,9.601077,10.601077,0.0,0,{}
+07-left-hidden-wheel,worker-05,bin-07,10.601077,11.601077,2.0,2,{}
+07-left-hidden-wheel,worker-05,bin-08,11.601077,12.601077,0.0,0,{}
+07-left-hidden-wheel,worker-05,bin-09,12.601077,13.601077,0.0,0,{}
+07-left-hidden-wheel,worker-05,bin-10,13.601077,14.601077,2.0,2,{}
+07-left-hidden-wheel,worker-05,bin-11,14.601077,15.601077,1.0,1,{}
+07-left-hidden-wheel,worker-05,bin-12,15.601077,16.601077,2.0,2,{}
+07-left-hidden-wheel,worker-05,bin-13,16.601077,17.601077,1.0,1,{}
+07-left-hidden-wheel,worker-05,bin-14,17.601077,18.601077,1.0,1,{}
+07-left-hidden-wheel,worker-05,bin-15,18.601077,19.601077,2.0,2,{}
+07-left-hidden-wheel,worker-05,bin-16,19.601077,20.601077,0.0,0,{}
+07-left-hidden-wheel,worker-05,bin-17,20.601077,21.601077,0.0,0,{}
+07-left-hidden-wheel,worker-05,bin-18,21.601077,22.601077,0.0,0,{}
+07-left-hidden-wheel,worker-05,bin-19,22.601077,23.601077,3.0,3,{}
+07-left-hidden-wheel,worker-05,bin-20,23.601077,24.601077,0.0,0,{}
+07-left-hidden-wheel,worker-05,bin-21,24.601077,25.601077,0.0,0,{}
+07-left-hidden-wheel,worker-05,bin-22,25.601077,26.601077,0.0,0,{}
+07-left-hidden-wheel,worker-05,bin-23,26.601077,27.601077,0.0,0,{}
+07-left-hidden-wheel,worker-05,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-06,whole,3.601077,27.604369,15.0,15,{}
+07-left-hidden-wheel,worker-06,early,3.601077,11.602174333,6.0,6,{}
+07-left-hidden-wheel,worker-06,middle,11.602174333,19.603271666,5.0,5,{}
+07-left-hidden-wheel,worker-06,late,19.603271666,27.604369,4.0,4,{}
+07-left-hidden-wheel,worker-06,bin-00,3.601077,4.601077,1.0,1,{}
+07-left-hidden-wheel,worker-06,bin-01,4.601077,5.601077,1.0,1,{}
+07-left-hidden-wheel,worker-06,bin-02,5.601077,6.601077,0.0,0,{}
+07-left-hidden-wheel,worker-06,bin-03,6.601077,7.601077,0.0,0,{}
+07-left-hidden-wheel,worker-06,bin-04,7.601077,8.601077,0.0,0,{}
+07-left-hidden-wheel,worker-06,bin-05,8.601077,9.601077,1.0,1,{}
+07-left-hidden-wheel,worker-06,bin-06,9.601077,10.601077,1.0,1,{}
+07-left-hidden-wheel,worker-06,bin-07,10.601077,11.601077,2.0,2,{}
+07-left-hidden-wheel,worker-06,bin-08,11.601077,12.601077,0.0,0,{}
+07-left-hidden-wheel,worker-06,bin-09,12.601077,13.601077,0.0,0,{}
+07-left-hidden-wheel,worker-06,bin-10,13.601077,14.601077,1.0,1,{}
+07-left-hidden-wheel,worker-06,bin-11,14.601077,15.601077,1.0,1,{}
+07-left-hidden-wheel,worker-06,bin-12,15.601077,16.601077,1.0,1,{}
+07-left-hidden-wheel,worker-06,bin-13,16.601077,17.601077,1.0,1,{}
+07-left-hidden-wheel,worker-06,bin-14,17.601077,18.601077,1.0,1,{}
+07-left-hidden-wheel,worker-06,bin-15,18.601077,19.601077,0.0,0,{}
+07-left-hidden-wheel,worker-06,bin-16,19.601077,20.601077,0.0,0,{}
+07-left-hidden-wheel,worker-06,bin-17,20.601077,21.601077,1.0,1,{}
+07-left-hidden-wheel,worker-06,bin-18,21.601077,22.601077,0.0,0,{}
+07-left-hidden-wheel,worker-06,bin-19,22.601077,23.601077,2.0,2,{}
+07-left-hidden-wheel,worker-06,bin-20,23.601077,24.601077,0.0,0,{}
+07-left-hidden-wheel,worker-06,bin-21,24.601077,25.601077,0.0,0,{}
+07-left-hidden-wheel,worker-06,bin-22,25.601077,26.601077,1.0,1,{}
+07-left-hidden-wheel,worker-06,bin-23,26.601077,27.601077,0.0,0,{}
+07-left-hidden-wheel,worker-06,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-07,whole,3.601077,27.604369,14.0,14,{}
+07-left-hidden-wheel,worker-07,early,3.601077,11.602174333,5.0,5,{}
+07-left-hidden-wheel,worker-07,middle,11.602174333,19.603271666,4.0,4,{}
+07-left-hidden-wheel,worker-07,late,19.603271666,27.604369,5.0,5,{}
+07-left-hidden-wheel,worker-07,bin-00,3.601077,4.601077,0.0,0,{}
+07-left-hidden-wheel,worker-07,bin-01,4.601077,5.601077,1.0,1,{}
+07-left-hidden-wheel,worker-07,bin-02,5.601077,6.601077,1.0,1,{}
+07-left-hidden-wheel,worker-07,bin-03,6.601077,7.601077,0.0,0,{}
+07-left-hidden-wheel,worker-07,bin-04,7.601077,8.601077,0.0,0,{}
+07-left-hidden-wheel,worker-07,bin-05,8.601077,9.601077,2.0,2,{}
+07-left-hidden-wheel,worker-07,bin-06,9.601077,10.601077,1.0,1,{}
+07-left-hidden-wheel,worker-07,bin-07,10.601077,11.601077,0.0,0,{}
+07-left-hidden-wheel,worker-07,bin-08,11.601077,12.601077,0.0,0,{}
+07-left-hidden-wheel,worker-07,bin-09,12.601077,13.601077,1.0,1,{}
+07-left-hidden-wheel,worker-07,bin-10,13.601077,14.601077,1.0,1,{}
+07-left-hidden-wheel,worker-07,bin-11,14.601077,15.601077,1.0,1,{}
+07-left-hidden-wheel,worker-07,bin-12,15.601077,16.601077,0.0,0,{}
+07-left-hidden-wheel,worker-07,bin-13,16.601077,17.601077,1.0,1,{}
+07-left-hidden-wheel,worker-07,bin-14,17.601077,18.601077,0.0,0,{}
+07-left-hidden-wheel,worker-07,bin-15,18.601077,19.601077,0.0,0,{}
+07-left-hidden-wheel,worker-07,bin-16,19.601077,20.601077,0.0,0,{}
+07-left-hidden-wheel,worker-07,bin-17,20.601077,21.601077,1.0,1,{}
+07-left-hidden-wheel,worker-07,bin-18,21.601077,22.601077,1.0,1,{}
+07-left-hidden-wheel,worker-07,bin-19,22.601077,23.601077,2.0,2,{}
+07-left-hidden-wheel,worker-07,bin-20,23.601077,24.601077,0.0,0,{}
+07-left-hidden-wheel,worker-07,bin-21,24.601077,25.601077,0.0,0,{}
+07-left-hidden-wheel,worker-07,bin-22,25.601077,26.601077,1.0,1,{}
+07-left-hidden-wheel,worker-07,bin-23,26.601077,27.601077,0.0,0,{}
+07-left-hidden-wheel,worker-07,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-08,whole,3.601077,27.604369,19.0,19,{}
+07-left-hidden-wheel,worker-08,early,3.601077,11.602174333,7.0,7,{}
+07-left-hidden-wheel,worker-08,middle,11.602174333,19.603271666,7.0,7,{}
+07-left-hidden-wheel,worker-08,late,19.603271666,27.604369,5.0,5,{}
+07-left-hidden-wheel,worker-08,bin-00,3.601077,4.601077,0.0,0,{}
+07-left-hidden-wheel,worker-08,bin-01,4.601077,5.601077,1.0,1,{}
+07-left-hidden-wheel,worker-08,bin-02,5.601077,6.601077,2.0,2,{}
+07-left-hidden-wheel,worker-08,bin-03,6.601077,7.601077,0.0,0,{}
+07-left-hidden-wheel,worker-08,bin-04,7.601077,8.601077,0.0,0,{}
+07-left-hidden-wheel,worker-08,bin-05,8.601077,9.601077,1.0,1,{}
+07-left-hidden-wheel,worker-08,bin-06,9.601077,10.601077,1.0,1,{}
+07-left-hidden-wheel,worker-08,bin-07,10.601077,11.601077,2.0,2,{}
+07-left-hidden-wheel,worker-08,bin-08,11.601077,12.601077,0.0,0,{}
+07-left-hidden-wheel,worker-08,bin-09,12.601077,13.601077,1.0,1,{}
+07-left-hidden-wheel,worker-08,bin-10,13.601077,14.601077,1.0,1,{}
+07-left-hidden-wheel,worker-08,bin-11,14.601077,15.601077,1.0,1,{}
+07-left-hidden-wheel,worker-08,bin-12,15.601077,16.601077,1.0,1,{}
+07-left-hidden-wheel,worker-08,bin-13,16.601077,17.601077,0.0,0,{}
+07-left-hidden-wheel,worker-08,bin-14,17.601077,18.601077,1.0,1,{}
+07-left-hidden-wheel,worker-08,bin-15,18.601077,19.601077,2.0,2,{}
+07-left-hidden-wheel,worker-08,bin-16,19.601077,20.601077,0.0,0,{}
+07-left-hidden-wheel,worker-08,bin-17,20.601077,21.601077,1.0,1,{}
+07-left-hidden-wheel,worker-08,bin-18,21.601077,22.601077,0.0,0,{}
+07-left-hidden-wheel,worker-08,bin-19,22.601077,23.601077,2.0,2,{}
+07-left-hidden-wheel,worker-08,bin-20,23.601077,24.601077,0.0,0,{}
+07-left-hidden-wheel,worker-08,bin-21,24.601077,25.601077,1.0,1,{}
+07-left-hidden-wheel,worker-08,bin-22,25.601077,26.601077,1.0,1,{}
+07-left-hidden-wheel,worker-08,bin-23,26.601077,27.601077,0.0,0,{}
+07-left-hidden-wheel,worker-08,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-09,whole,3.601077,27.604369,20.0,20,{}
+07-left-hidden-wheel,worker-09,early,3.601077,11.602174333,10.0,10,{}
+07-left-hidden-wheel,worker-09,middle,11.602174333,19.603271666,5.0,5,{}
+07-left-hidden-wheel,worker-09,late,19.603271666,27.604369,5.0,5,{}
+07-left-hidden-wheel,worker-09,bin-00,3.601077,4.601077,1.0,1,{}
+07-left-hidden-wheel,worker-09,bin-01,4.601077,5.601077,3.0,3,{}
+07-left-hidden-wheel,worker-09,bin-02,5.601077,6.601077,2.0,2,{}
+07-left-hidden-wheel,worker-09,bin-03,6.601077,7.601077,1.0,1,{}
+07-left-hidden-wheel,worker-09,bin-04,7.601077,8.601077,2.0,2,{}
+07-left-hidden-wheel,worker-09,bin-05,8.601077,9.601077,0.0,0,{}
+07-left-hidden-wheel,worker-09,bin-06,9.601077,10.601077,0.0,0,{}
+07-left-hidden-wheel,worker-09,bin-07,10.601077,11.601077,1.0,1,{}
+07-left-hidden-wheel,worker-09,bin-08,11.601077,12.601077,0.0,0,{}
+07-left-hidden-wheel,worker-09,bin-09,12.601077,13.601077,0.0,0,{}
+07-left-hidden-wheel,worker-09,bin-10,13.601077,14.601077,0.0,0,{}
+07-left-hidden-wheel,worker-09,bin-11,14.601077,15.601077,1.0,1,{}
+07-left-hidden-wheel,worker-09,bin-12,15.601077,16.601077,2.0,2,{}
+07-left-hidden-wheel,worker-09,bin-13,16.601077,17.601077,0.0,0,{}
+07-left-hidden-wheel,worker-09,bin-14,17.601077,18.601077,1.0,1,{}
+07-left-hidden-wheel,worker-09,bin-15,18.601077,19.601077,1.0,1,{}
+07-left-hidden-wheel,worker-09,bin-16,19.601077,20.601077,0.0,0,{}
+07-left-hidden-wheel,worker-09,bin-17,20.601077,21.601077,1.0,1,{}
+07-left-hidden-wheel,worker-09,bin-18,21.601077,22.601077,0.0,0,{}
+07-left-hidden-wheel,worker-09,bin-19,22.601077,23.601077,2.0,2,{}
+07-left-hidden-wheel,worker-09,bin-20,23.601077,24.601077,0.0,0,{}
+07-left-hidden-wheel,worker-09,bin-21,24.601077,25.601077,1.0,1,{}
+07-left-hidden-wheel,worker-09,bin-22,25.601077,26.601077,1.0,1,{}
+07-left-hidden-wheel,worker-09,bin-23,26.601077,27.601077,0.0,0,{}
+07-left-hidden-wheel,worker-09,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-10,whole,3.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-10,early,3.601077,11.602174333,0.0,0,{}
+07-left-hidden-wheel,worker-10,middle,11.602174333,19.603271666,0.0,0,{}
+07-left-hidden-wheel,worker-10,late,19.603271666,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-00,3.601077,4.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-01,4.601077,5.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-02,5.601077,6.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-03,6.601077,7.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-04,7.601077,8.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-05,8.601077,9.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-06,9.601077,10.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-07,10.601077,11.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-08,11.601077,12.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-09,12.601077,13.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-10,13.601077,14.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-11,14.601077,15.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-12,15.601077,16.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-13,16.601077,17.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-14,17.601077,18.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-15,18.601077,19.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-16,19.601077,20.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-17,20.601077,21.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-18,21.601077,22.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-19,22.601077,23.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-20,23.601077,24.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-21,24.601077,25.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-22,25.601077,26.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-23,26.601077,27.601077,0.0,0,{}
+07-left-hidden-wheel,worker-10,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-11,whole,3.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-11,early,3.601077,11.602174333,0.0,0,{}
+07-left-hidden-wheel,worker-11,middle,11.602174333,19.603271666,0.0,0,{}
+07-left-hidden-wheel,worker-11,late,19.603271666,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-00,3.601077,4.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-01,4.601077,5.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-02,5.601077,6.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-03,6.601077,7.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-04,7.601077,8.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-05,8.601077,9.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-06,9.601077,10.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-07,10.601077,11.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-08,11.601077,12.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-09,12.601077,13.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-10,13.601077,14.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-11,14.601077,15.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-12,15.601077,16.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-13,16.601077,17.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-14,17.601077,18.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-15,18.601077,19.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-16,19.601077,20.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-17,20.601077,21.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-18,21.601077,22.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-19,22.601077,23.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-20,23.601077,24.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-21,24.601077,25.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-22,25.601077,26.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-23,26.601077,27.601077,0.0,0,{}
+07-left-hidden-wheel,worker-11,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-12,whole,3.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-12,early,3.601077,11.602174333,0.0,0,{}
+07-left-hidden-wheel,worker-12,middle,11.602174333,19.603271666,0.0,0,{}
+07-left-hidden-wheel,worker-12,late,19.603271666,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-00,3.601077,4.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-01,4.601077,5.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-02,5.601077,6.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-03,6.601077,7.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-04,7.601077,8.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-05,8.601077,9.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-06,9.601077,10.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-07,10.601077,11.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-08,11.601077,12.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-09,12.601077,13.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-10,13.601077,14.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-11,14.601077,15.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-12,15.601077,16.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-13,16.601077,17.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-14,17.601077,18.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-15,18.601077,19.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-16,19.601077,20.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-17,20.601077,21.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-18,21.601077,22.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-19,22.601077,23.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-20,23.601077,24.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-21,24.601077,25.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-22,25.601077,26.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-23,26.601077,27.601077,0.0,0,{}
+07-left-hidden-wheel,worker-12,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-13,whole,3.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-13,early,3.601077,11.602174333,0.0,0,{}
+07-left-hidden-wheel,worker-13,middle,11.602174333,19.603271666,0.0,0,{}
+07-left-hidden-wheel,worker-13,late,19.603271666,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-00,3.601077,4.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-01,4.601077,5.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-02,5.601077,6.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-03,6.601077,7.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-04,7.601077,8.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-05,8.601077,9.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-06,9.601077,10.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-07,10.601077,11.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-08,11.601077,12.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-09,12.601077,13.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-10,13.601077,14.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-11,14.601077,15.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-12,15.601077,16.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-13,16.601077,17.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-14,17.601077,18.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-15,18.601077,19.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-16,19.601077,20.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-17,20.601077,21.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-18,21.601077,22.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-19,22.601077,23.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-20,23.601077,24.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-21,24.601077,25.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-22,25.601077,26.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-23,26.601077,27.601077,0.0,0,{}
+07-left-hidden-wheel,worker-13,bin-24,27.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-14,whole,3.601077,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-14,early,3.601077,11.602174333,0.0,0,{}
+07-left-hidden-wheel,worker-14,middle,11.602174333,19.603271666,0.0,0,{}
+07-left-hidden-wheel,worker-14,late,19.603271666,27.604369,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-00,3.601077,4.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-01,4.601077,5.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-02,5.601077,6.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-03,6.601077,7.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-04,7.601077,8.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-05,8.601077,9.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-06,9.601077,10.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-07,10.601077,11.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-08,11.601077,12.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-09,12.601077,13.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-10,13.601077,14.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-11,14.601077,15.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-12,15.601077,16.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-13,16.601077,17.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-14,17.601077,18.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-15,18.601077,19.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-16,19.601077,20.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-17,20.601077,21.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-18,21.601077,22.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-19,22.601077,23.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-20,23.601077,24.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-21,24.601077,25.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-22,25.601077,26.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-23,26.601077,27.601077,0.0,0,{}
+07-left-hidden-wheel,worker-14,bin-24,27.601077,27.604369,0.0,0,{}

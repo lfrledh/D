@@ -1,0 +1,3763 @@
+[
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "event",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 162,
+    "t_s": 10.730206833,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_trap"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_internal"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg_overwrite"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg"
+      ],
+      [
+        "SkyLight",
+        "CGSSnarfAndDispatchDatagrams"
+      ],
+      [
+        "SkyLight",
+        "SLSGetNextEventRecordInternal"
+      ],
+      [
+        "SkyLight",
+        "SLEventCreateNextEvent"
+      ],
+      [
+        "HIToolbox",
+        "PullEventsFromWindowServerOnConnection(unsigned int, unsigned char, __CFMachPortBoost*)"
+      ],
+      [
+        "HIToolbox",
+        "MessageHandler(__CFMachPort*, void*, long, void*)"
+      ],
+      [
+        "CoreFoundation",
+        "__CFMachPortPerform"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE1_PERFORM_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoSource1"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "AppKit",
+        "_NSEventThread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_start"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "thread_start"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "event",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 360,
+    "t_s": 11.565206916,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "SkyLight",
+        "SLS::TokenizedCoding::Storage::valid() const"
+      ],
+      [
+        "SkyLight",
+        "SLS::TokenizedCoding::ReadDataProvider::with_buffer_b(unsigned long, void (void const*, unsigned long) block_pointer)"
+      ],
+      [
+        "SkyLight",
+        "SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>::decode_with_manager_b(bool (SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>&) block_pointer)"
+      ],
+      [
+        "SkyLight",
+        "_SLEventRecordCreateWithBytesModern(void const*, unsigned long, unsigned int)"
+      ],
+      [
+        "SkyLight",
+        "CGSDecodeEventRecord"
+      ],
+      [
+        "SkyLight",
+        "event_datagram_handler(unsigned int, CGSDatagramType, void*, unsigned long, void*)"
+      ],
+      [
+        "SkyLight",
+        "CGSSnarfAndDispatchDatagrams"
+      ],
+      [
+        "SkyLight",
+        "SLSGetNextEventRecordInternal"
+      ],
+      [
+        "SkyLight",
+        "SLEventCreateNextEvent"
+      ],
+      [
+        "HIToolbox",
+        "PullEventsFromWindowServerOnConnection(unsigned int, unsigned char, __CFMachPortBoost*)"
+      ],
+      [
+        "HIToolbox",
+        "MessageHandler(__CFMachPort*, void*, long, void*)"
+      ],
+      [
+        "CoreFoundation",
+        "__CFMachPortPerform"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE1_PERFORM_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoSource1"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "AppKit",
+        "_NSEventThread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_start"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "thread_start"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "event",
+    "period": "bin-10",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 1603,
+    "t_s": 13.722207333,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "SkyLight",
+        "SLS::TokenizedCoding::(anonymous namespace)::ManagedAddressStorage<SLS::TokenizedCoding::ReadStorage::CreateWithUnownedAddressAndLength(void const*, unsigned long)::$_0 const>::address() const"
+      ],
+      [
+        "SkyLight",
+        "SLS::TokenizedCoding::Storage::valid() const"
+      ],
+      [
+        "SkyLight",
+        "SLS::TokenizedCoding::ReadDataProvider::with_buffer_b(unsigned long, void (void const*, unsigned long) block_pointer)"
+      ],
+      [
+        "SkyLight",
+        "SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>::decode_with_manager_b(bool (SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>&) block_pointer)"
+      ],
+      [
+        "SkyLight",
+        "SLEventAuthenticationMessageCreateWithData"
+      ],
+      [
+        "SkyLight",
+        "invocation function for block in SLEventFieldDecodeDescriptor<SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>> const* SLEventGetFieldDecodeDescriptor<SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>>(SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>)::'lambda7'(SLSEventRecord*, unsigned int, SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>&)::operator()(SLSEventRecord*, unsigned int, SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>&) const"
+      ],
+      [
+        "SkyLight",
+        "SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>::decode_bytes_b(unsigned long, void (void const*, unsigned long) block_pointer)"
+      ],
+      [
+        "SkyLight",
+        "bool SLS::TokenizedCoding::Decoder::invoke_versioned<bool SLS::TokenizedCoding::Decoder::decode_bytes<void (void const*, unsigned long) block_pointer>(unsigned long, void (void const*, unsigned long) block_pointer&&)::'lambda'(void (void const*, unsigned long) block_pointer&)>(void (void const*, unsigned long) block_pointer)"
+      ],
+      [
+        "SkyLight",
+        "SLEventFieldDecodeDescriptor<SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>> const* SLEventGetFieldDecodeDescriptor<SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>>(SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>)::'lambda7'(SLSEventRecord*, unsigned int, SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>&)::__invoke(SLSEventRecord*, unsigned int, SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>&)"
+      ],
+      [
+        "SkyLight",
+        "invocation function for block in auto bool SLS::TokenizedCoding::Decoder::decode_with_manager<_SLEventRecordCreateWithBytesModern(void const*, unsigned long, unsigned int)::$_0>(_SLEventRecordCreateWithBytesModern(void const*, unsigned long, unsigned int)::$_0&&)::'lambda'(_SLEventRecordCreateWithBytesModern(void const*, unsigned long, unsigned int)::$_0&)::operator()<SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>>(_SLEventRecordCreateWithBytesModern(void const*, unsigned long, unsigned int)::$_0&) const"
+      ],
+      [
+        "SkyLight",
+        "invocation function for block in SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>::decode_with_manager_b(bool (SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>&) block_pointer)"
+      ],
+      [
+        "SkyLight",
+        "invocation function for block in SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>::with_slice_b(unsigned long, void (SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>&) block_pointer)"
+      ],
+      [
+        "SkyLight",
+        "SLS::TokenizedCoding::ReadDataProvider::with_slice_b(unsigned long, void (std::__1::shared_ptr<SLS::TokenizedCoding::ReadDataProvider>&) block_pointer)"
+      ],
+      [
+        "SkyLight",
+        "SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>::decode_with_manager_b(bool (SLS::TokenizedCoding::Token<(SLS::TokenizedCoding::Version)3>, SLS::TokenizedCoding::VersionedDecoder<(SLS::TokenizedCoding::Version)3>&) block_pointer)"
+      ],
+      [
+        "SkyLight",
+        "_SLEventRecordCreateWithBytesModern(void const*, unsigned long, unsigned int)"
+      ],
+      [
+        "SkyLight",
+        "CGSDecodeEventRecord"
+      ],
+      [
+        "SkyLight",
+        "event_datagram_handler(unsigned int, CGSDatagramType, void*, unsigned long, void*)"
+      ],
+      [
+        "SkyLight",
+        "CGSSnarfAndDispatchDatagrams"
+      ],
+      [
+        "SkyLight",
+        "SLSGetNextEventRecordInternal"
+      ],
+      [
+        "SkyLight",
+        "SLEventCreateNextEvent"
+      ],
+      [
+        "HIToolbox",
+        "PullEventsFromWindowServerOnConnection(unsigned int, unsigned char, __CFMachPortBoost*)"
+      ],
+      [
+        "HIToolbox",
+        "MessageHandler(__CFMachPort*, void*, long, void*)"
+      ],
+      [
+        "CoreFoundation",
+        "__CFMachPortPerform"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE1_PERFORM_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoSource1"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "AppKit",
+        "_NSEventThread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_start"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "thread_start"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "main",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 7,
+    "t_s": 5.429208083,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "___chkstk_darwin"
+      ],
+      [
+        "D.debug.dylib",
+        "static ModelResource.__derived_struct_equals(_:_:)"
+      ],
+      [
+        "D.debug.dylib",
+        "protocol witness for static Equatable.== infix(_:_:) in conformance ModelResource"
+      ],
+      [
+        "libswiftCore.dylib",
+        "static Array<A>.== infix(_:_:)"
+      ],
+      [
+        "D.debug.dylib",
+        "static ModelLibrarySnapshot.__derived_struct_equals(_:_:)"
+      ],
+      [
+        "D.debug.dylib",
+        "ModelLibraryModel.refresh()"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "completeTaskWithClosure(swift::AsyncContext*, swift::SwiftError*)"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "main",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 7,
+    "t_s": 5.429208083,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "___chkstk_darwin"
+      ],
+      [
+        "D.debug.dylib",
+        "static ModelResource.__derived_struct_equals(_:_:)"
+      ],
+      [
+        "D.debug.dylib",
+        "protocol witness for static Equatable.== infix(_:_:) in conformance ModelResource"
+      ],
+      [
+        "libswiftCore.dylib",
+        "static Array<A>.== infix(_:_:)"
+      ],
+      [
+        "D.debug.dylib",
+        "static ModelLibrarySnapshot.__derived_struct_equals(_:_:)"
+      ],
+      [
+        "D.debug.dylib",
+        "ModelLibraryModel.refresh()"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "completeTaskWithClosure(swift::AsyncContext*, swift::SwiftError*)"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "main",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 16,
+    "t_s": 10.203208125,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libobjc.A.dylib",
+        "objc_msgSend"
+      ],
+      [
+        "Foundation",
+        "_NSKeyValueObservationInfoGetObservances"
+      ],
+      [
+        "Foundation",
+        "NSKeyValueWillChangeWithPerThreadPendingNotifications"
+      ],
+      [
+        "AppKit",
+        "-[NSThemeFrame _willChangeContentLayoutRect]"
+      ],
+      [
+        "AppKit",
+        "-[NSThemeFrame _updateContentLayoutGuideFrame]"
+      ],
+      [
+        "AppKit",
+        "-[NSThemeFrame titlebarAppearsTransparentChanged]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow setTitlebarAppearsTransparent:]"
+      ],
+      [
+        "SwiftUI",
+        "BarAppearanceBridge.updateWindowToolbarAppearance(configuration:window:context:)"
+      ],
+      [
+        "SwiftUI",
+        "closure #1 in BarAppearanceBridge.updateWindowToolbarConfiguration()"
+      ],
+      [
+        "SwiftUI",
+        "BarAppearanceBridge.updatePlatformBar(_:)"
+      ],
+      [
+        "SwiftUI",
+        "BarAppearanceBridge.updateBarsToConfiguration()"
+      ],
+      [
+        "SwiftUI",
+        "AppKitWindowController.hostingView<A>(_:willUpdate:)"
+      ],
+      [
+        "SwiftUI",
+        "closure #1 in NSHostingView.updateEnvironment()"
+      ],
+      [
+        "SwiftUI",
+        "NSHostingView.updateEnvironment()"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in ViewGraphRootValueUpdater.updateGraph()"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraphRootValueUpdater.updateGraph()"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraphRootValueUpdater._updateViewGraph<A>(body:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraphRootValueUpdater.updateGraph<A>(body:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in GraphHost.init(data:)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::Context::call_update()"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::call_update()"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::update_attribute(AG::data::ptr<AG::Node>, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::value_ref(AG::AttributeID, unsigned int, AGSwiftMetadata const*, unsigned char&)"
+      ],
+      [
+        "AttributeGraph",
+        "AGGraphGetWeakValue"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraph.sizeThatFits(_:)"
+      ],
+      [
+        "SwiftUICore",
+        "partial apply for closure #1 in ViewGraphRootValueUpdater._sizeThatFits(_:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraphRootValueUpdater._updateViewGraph<A>(body:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraphRootValueUpdater._sizeThatFits(_:)"
+      ],
+      [
+        "AppKit",
+        "<address-0dcf9dd98deb7941>"
+      ],
+      [
+        "AppKit",
+        "<address-b7f86174a4a59ef3>"
+      ],
+      [
+        "AppKit",
+        "-[NSSliderCell _trackRectForCellFrame:]"
+      ],
+      [
+        "AppKit",
+        "-[NSSliderCell _resetTrackRectWithCellFrame:]"
+      ],
+      [
+        "AppKit",
+        "-[NSSlider _layoutComponentSubviewsIfNecessary]"
+      ],
+      [
+        "AppKit",
+        "-[NSSlider(NSTickMarkLayoutPoints) updateCell:]"
+      ],
+      [
+        "AppKit",
+        "__35-[NSControl _windowChangedKeyState]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "+[NSAppearance _performWithCurrentAppearance:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "-[NSControl _windowChangedKeyState]"
+      ],
+      [
+        "AppKit",
+        "-[NSView _windowChangedKeyState]"
+      ],
+      [
+        "AppKit",
+        "-[NSView _windowChangedKeyState]"
+      ],
+      [
+        "SwiftUI",
+        "NSHostingView._windowChangedKeyState()"
+      ],
+      [
+        "SwiftUI",
+        "@objc NSHostingView._windowChangedKeyState()"
+      ],
+      [
+        "AppKit",
+        "-[NSView _windowChangedKeyState]"
+      ],
+      [
+        "AppKit",
+        "-[NSView _windowChangedKeyState]"
+      ],
+      [
+        "SwiftUI",
+        "NSHostingView._windowChangedKeyState()"
+      ],
+      [
+        "SwiftUI",
+        "@objc NSHostingView._windowChangedKeyState()"
+      ],
+      [
+        "AppKit",
+        "-[NSView _windowChangedKeyState]"
+      ],
+      [
+        "AppKit",
+        "-[NSThemeFrame _windowChangedKeyState]"
+      ],
+      [
+        "AppKit",
+        "+[NSWindow _enableKeyStateChangeNotifications]"
+      ],
+      [
+        "AppKit",
+        "_NXShowKeyAndMain"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication _handleActivatedEvent:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) sendEvent:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication _handleEvent:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "main",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 25,
+    "t_s": 10.216207125,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "ViewBridge",
+        "-[NSRemoteView __vbWithLockPerform:]"
+      ],
+      [
+        "ViewBridge",
+        "-[NSRemoteView release]"
+      ],
+      [
+        "libsystem_blocks.dylib",
+        "_call_dispose_helpers_excp"
+      ],
+      [
+        "libsystem_blocks.dylib",
+        "_Block_release"
+      ],
+      [
+        "ViewBridge",
+        "-[NSVB_ViewServiceImplicitAnimationEncodingProxy dealloc]"
+      ],
+      [
+        "libobjc.A.dylib",
+        "AutoreleasePoolPage::releaseUntil(objc_object**)"
+      ],
+      [
+        "libobjc.A.dylib",
+        "objc_autoreleasePoolPop"
+      ],
+      [
+        "CoreFoundation",
+        "_CFAutoreleasePoolPop"
+      ],
+      [
+        "Foundation",
+        "-[NSAutoreleasePool drain]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "main",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 173,
+    "t_s": 10.802207125,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libobjc.A.dylib",
+        "objc_msgSend"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "-[_NSTrackingAreaAKManager _updateActiveTrackingAreasForWindowLocation:modifierFlags:]"
+      ],
+      [
+        "AppKit",
+        "-[_NSTrackingAreaAKManager _mouseMoved:]"
+      ],
+      [
+        "AppKit",
+        "_routeMouseMovedEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSEventRouting) _reallySendEvent:isDelayedEvent:]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSEventRouting) sendEvent:]"
+      ],
+      [
+        "AppKit",
+        "routeMouseMovedEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) sendEvent:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication _handleEvent:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "main",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 1150,
+    "t_s": 12.923206916,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "AppKit",
+        "+[_NSDisplayOperationStack currentThreadDisplayOperationStack]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow _unlockViewHierarchyForReading]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "___nonOverridableViewHitTest_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "AppKit",
+        "-[_NSTrackingAreaAKManager _updateDragTrackingAreasForWindowLocation:modifierFlags:]"
+      ],
+      [
+        "AppKit",
+        "__58-[_NSTrackingAreaAKManager _activeTrackingAreasNeedUpdate]_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoBlocks"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "HIToolbox",
+        "RunCurrentEventLoopInMode"
+      ],
+      [
+        "HIToolbox",
+        "ReceiveNextEventCommon"
+      ],
+      [
+        "HIToolbox",
+        "_BlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSBlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSNextEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) _nextEventMatchingEventMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) nextEventMatchingMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "main",
+    "period": "bin-09",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 975,
+    "t_s": 12.613206791,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libswiftCore.dylib",
+        "bool swift::RefCounts<swift::RefCountBitsT<(swift::RefCountInlinedness)1>>::doDecrementSlow<(swift::PerformDeinit)1>(swift::RefCountBitsT<(swift::RefCountInlinedness)1>, unsigned int)"
+      ],
+      [
+        "D.debug.dylib",
+        "WorkbenchGlassParameters.shader.getter"
+      ],
+      [
+        "D.debug.dylib",
+        "WorkbenchGlassDrawing.body.getter"
+      ],
+      [
+        "D.debug.dylib",
+        "protocol witness for View.body.getter in conformance WorkbenchGlassDrawing"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in ViewBodyAccessor.updateBody(of:changed:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewBodyAccessor.updateBody(of:changed:)"
+      ],
+      [
+        "SwiftUICore",
+        "protocol witness for BodyAccessor.updateBody(of:changed:) in conformance ViewBodyAccessor<A>"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in StaticBody.updateValue()"
+      ],
+      [
+        "SwiftUICore",
+        "StaticBody.updateValue()"
+      ],
+      [
+        "SwiftUICore",
+        "partial apply for implicit closure #1 in closure #1 in closure #1 in Attribute.init<A>(_:)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::UpdateStack::update()"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Subgraph::update(unsigned int)"
+      ],
+      [
+        "SwiftUICore",
+        "specialized GraphHost.runTransaction(_:do:id:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraph.updateOutputs(at:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUI",
+        "closure #1 in NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "AppKit",
+        "+[NSAnimationContext runAnimationGroup:]"
+      ],
+      [
+        "SwiftUI",
+        "NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "@objc NSHostingView.layout()"
+      ],
+      [
+        "AppKit",
+        "<address-94a413e98bd120ec>"
+      ],
+      [
+        "AppKit",
+        "<address-ce0a63259acb4ac2>"
+      ],
+      [
+        "AppKit",
+        "<address-6f210abad80993a4>"
+      ],
+      [
+        "AppKit",
+        "<address-9ea155b44eb19cd6>"
+      ],
+      [
+        "AppKit",
+        "___NSViewLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "_NSViewLayout"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__56-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView layoutSubtreeIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) _layoutViewTree]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) layoutIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "__NSWindowGetDisplayCycleObserverForLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleObserverInvoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleFlush"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::run_commit_handlers(CATransactionPhase)"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::commit()"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::flush_as_runloop_observer(bool)"
+      ],
+      [
+        "AppKit",
+        "stepTransactionFlush"
+      ],
+      [
+        "UpdateCycle",
+        "UC::DriverCore::continueProcessing()"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_AN_OBSERVER_CALLBACK_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoObservers"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "HIToolbox",
+        "RunCurrentEventLoopInMode"
+      ],
+      [
+        "HIToolbox",
+        "ReceiveNextEventCommon"
+      ],
+      [
+        "HIToolbox",
+        "_BlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSBlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSNextEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) _nextEventMatchingEventMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) nextEventMatchingMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-02",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 9,
+    "t_s": 7.874207125,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "D.debug.dylib",
+        "<address-e64ff3fb0232b45d>"
+      ],
+      [
+        "D.debug.dylib",
+        "getEnumTagSinglePayload for ModelResourceControl"
+      ],
+      [
+        "D.debug.dylib",
+        "initializeWithCopy for ModelLibrary.StoredRecord"
+      ],
+      [
+        "D.debug.dylib",
+        "ModelLibrary.snapshot()"
+      ],
+      [
+        "D.debug.dylib",
+        "ModelLibraryModel.refresh()"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "completeTaskWithClosure(swift::AsyncContext*, swift::SwiftError*)"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-02",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 9,
+    "t_s": 7.874207125,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "D.debug.dylib",
+        "<address-e64ff3fb0232b45d>"
+      ],
+      [
+        "D.debug.dylib",
+        "getEnumTagSinglePayload for ModelResourceControl"
+      ],
+      [
+        "D.debug.dylib",
+        "initializeWithCopy for ModelLibrary.StoredRecord"
+      ],
+      [
+        "D.debug.dylib",
+        "ModelLibrary.snapshot()"
+      ],
+      [
+        "D.debug.dylib",
+        "ModelLibraryModel.refresh()"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "completeTaskWithClosure(swift::AsyncContext*, swift::SwiftError*)"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-02",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 290,
+    "t_s": 11.43320675,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "CoreFoundation",
+        "_CFRelease"
+      ],
+      [
+        "SkyLight",
+        "SLSDeviceDestroy"
+      ],
+      [
+        "SkyLight",
+        "invocation function for block in _SLSTransactionAddPostDecodeAction(_SLSTransaction*, void (_SLSTransaction*) block_pointer)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_call_block_and_release"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-02",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 290,
+    "t_s": 11.43320675,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "CoreFoundation",
+        "_CFRelease"
+      ],
+      [
+        "SkyLight",
+        "SLSDeviceDestroy"
+      ],
+      [
+        "SkyLight",
+        "invocation function for block in _SLSTransactionAddPostDecodeAction(_SLSTransaction*, void (_SLSTransaction*) block_pointer)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_call_block_and_release"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-02",
+    "period": "bin-08",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 290,
+    "t_s": 11.43320675,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "CoreFoundation",
+        "_CFRelease"
+      ],
+      [
+        "SkyLight",
+        "SLSDeviceDestroy"
+      ],
+      [
+        "SkyLight",
+        "invocation function for block in _SLSTransactionAddPostDecodeAction(_SLSTransaction*, void (_SLSTransaction*) block_pointer)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_call_block_and_release"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-03",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 6,
+    "t_s": 3.799207333,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libswiftCore.dylib",
+        "swift_conformsToProtocolMaybeInstantiateSuperclasses(swift::TargetMetadata<swift::InProcess> const*, swift::TargetProtocolDescriptor<swift::InProcess> const*, bool)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "Executor.asSchedulingExecutor.getter"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "specialized static Task<>.currentSchedulingExecutor.getter"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "specialized static Task<>._sleep<A>(until:tolerance:clock:)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "D.debug.dylib",
+        "Clock.sleep(for:tolerance:)"
+      ],
+      [
+        "D.debug.dylib",
+        "static Task<>.sleep<A>(for:tolerance:clock:)"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "completeTaskWithClosure(swift::AsyncContext*, swift::SwiftError*)"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-03",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 6,
+    "t_s": 3.799207333,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libswiftCore.dylib",
+        "swift_conformsToProtocolMaybeInstantiateSuperclasses(swift::TargetMetadata<swift::InProcess> const*, swift::TargetProtocolDescriptor<swift::InProcess> const*, bool)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "Executor.asSchedulingExecutor.getter"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "specialized static Task<>.currentSchedulingExecutor.getter"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "specialized static Task<>._sleep<A>(until:tolerance:clock:)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "D.debug.dylib",
+        "Clock.sleep(for:tolerance:)"
+      ],
+      [
+        "D.debug.dylib",
+        "static Task<>.sleep<A>(for:tolerance:clock:)"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "completeTaskWithClosure(swift::AsyncContext*, swift::SwiftError*)"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-03",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 793,
+    "t_s": 12.298206916,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-03",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 1280,
+    "t_s": 13.132207,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "_kernelrpc_mach_port_allocate_trap"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_port_allocate"
+      ],
+      [
+        "QuartzCore",
+        "CA::Context::synchronize(unsigned int, int, bool)"
+      ],
+      [
+        "QuartzCore",
+        "-[CAContext waitForCommitId:timeout:]"
+      ],
+      [
+        "RenderBox",
+        "RB::CommitMarker::Observer::test_displayed(bool, double)"
+      ],
+      [
+        "RenderBox",
+        "RB::SharedSurfaceGroup::test_markers(RB::vector<RB::CommitMarker, 0ul, unsigned int>&)"
+      ],
+      [
+        "RenderBox",
+        "RB::SharedSurfaceGroup::prune_removed_locked()::$_0::__invoke(void*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-03",
+    "period": "bin-09",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 936,
+    "t_s": 12.53920675,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "__kdebug_trace64"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandBuffer setCurrentCommandEncoder:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandEncoder initWithCommandBuffer:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandEncoder initWithCommandBuffer:]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXG16GFamilyRenderContext initWithCommandBuffer:descriptor:subEncoderIndex:framebuffer:]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXG16GFamilyCommandBuffer renderCommandEncoderWithDescriptor:]"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::start_render_encoder(CA::OGL::MetalSurface*, bool)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::set_surface(CA::OGL::Surface*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::Context::prepare_destination_()"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::draw(MTLPrimitiveType, unsigned int, unsigned int, void const*, unsigned long, unsigned long, unsigned int, unsigned int, unsigned short const*, CA::OGL::ClipPlane const*, CA::OGL::MetalBufferPool::MetalBuffer const*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::draw_elements(CA::OGL::PrimitiveMode, unsigned int, unsigned short const*, CA::OGL::Vertex const*, unsigned int, unsigned int, CA::OGL::ClipPlane const*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::Context::ClippedArray::next_rect(CA::Bounds&)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::fill_rect(CA::OGL::Context&, CA::OGL::RectState const&)"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::FillRects::draw_shape(CA::CG::Renderer&) const"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::DrawOp::render(CA::CG::Renderer&) const"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::Queue::render_callback(void*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-04",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 73,
+    "t_s": 10.26920675,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libobjc.A.dylib",
+        "protocol_conformsToProtocol_nolock(protocol_t*, protocol_t*)"
+      ],
+      [
+        "libobjc.A.dylib",
+        "_class_conformsToProtocol_unrealized_nolock(objc_class*, Protocol*)"
+      ],
+      [
+        "libobjc.A.dylib",
+        "class_conformsToProtocol"
+      ],
+      [
+        "libobjc.A.dylib",
+        "+[NSObject conformsToProtocol:]"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder _validateAllowedClass:forKey:allowingInvocations:]"
+      ],
+      [
+        "Foundation",
+        "_decodeObject"
+      ],
+      [
+        "Foundation",
+        "__44-[NSXPCDecoder _decodeArrayOfObjectsForKey:]_block_invoke"
+      ],
+      [
+        "Foundation",
+        "_NSXPCSerializationIterateArrayObject"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder _decodeArrayOfObjectsForKey:]"
+      ],
+      [
+        "Foundation",
+        "-[NSDictionary(NSDictionary) initWithCoder:]"
+      ],
+      [
+        "Foundation",
+        "_decodeObject"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder _decodeObjectOfClasses:atObject:]"
+      ],
+      [
+        "Foundation",
+        "_NSXPCSerializationDecodeTypedObjCValuesFromArray"
+      ],
+      [
+        "Foundation",
+        "_NSXPCSerializationDecodeInvocationArgumentArray"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder __decodeXPCObject:allowingSimpleMessageSend:outInvocation:outArguments:outArgumentsMaxCount:outMethodSignature:outSelector:isReply:replySelector:]"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder _decodeReplyFromXPCObject:forSelector:]"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCConnection _decodeAndInvokeReplyBlockWithEvent:sequence:replyInfo:]"
+      ],
+      [
+        "Foundation",
+        "__88-[NSXPCConnection _sendInvocation:orArguments:count:methodSignature:selector:withProxy:]_block_invoke_3"
+      ],
+      [
+        "libxpc.dylib",
+        "_xpc_connection_reply_callout"
+      ],
+      [
+        "libxpc.dylib",
+        "_xpc_connection_call_reply_async"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mach_msg_async_reply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-04",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 73,
+    "t_s": 10.26920675,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libobjc.A.dylib",
+        "protocol_conformsToProtocol_nolock(protocol_t*, protocol_t*)"
+      ],
+      [
+        "libobjc.A.dylib",
+        "_class_conformsToProtocol_unrealized_nolock(objc_class*, Protocol*)"
+      ],
+      [
+        "libobjc.A.dylib",
+        "class_conformsToProtocol"
+      ],
+      [
+        "libobjc.A.dylib",
+        "+[NSObject conformsToProtocol:]"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder _validateAllowedClass:forKey:allowingInvocations:]"
+      ],
+      [
+        "Foundation",
+        "_decodeObject"
+      ],
+      [
+        "Foundation",
+        "__44-[NSXPCDecoder _decodeArrayOfObjectsForKey:]_block_invoke"
+      ],
+      [
+        "Foundation",
+        "_NSXPCSerializationIterateArrayObject"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder _decodeArrayOfObjectsForKey:]"
+      ],
+      [
+        "Foundation",
+        "-[NSDictionary(NSDictionary) initWithCoder:]"
+      ],
+      [
+        "Foundation",
+        "_decodeObject"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder _decodeObjectOfClasses:atObject:]"
+      ],
+      [
+        "Foundation",
+        "_NSXPCSerializationDecodeTypedObjCValuesFromArray"
+      ],
+      [
+        "Foundation",
+        "_NSXPCSerializationDecodeInvocationArgumentArray"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder __decodeXPCObject:allowingSimpleMessageSend:outInvocation:outArguments:outArgumentsMaxCount:outMethodSignature:outSelector:isReply:replySelector:]"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder _decodeReplyFromXPCObject:forSelector:]"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCConnection _decodeAndInvokeReplyBlockWithEvent:sequence:replyInfo:]"
+      ],
+      [
+        "Foundation",
+        "__88-[NSXPCConnection _sendInvocation:orArguments:count:methodSignature:selector:withProxy:]_block_invoke_3"
+      ],
+      [
+        "libxpc.dylib",
+        "_xpc_connection_reply_callout"
+      ],
+      [
+        "libxpc.dylib",
+        "_xpc_connection_call_reply_async"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mach_msg_async_reply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-04",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 247,
+    "t_s": 11.237208125,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "QuartzCore",
+        "CABackingStoreCollect_(double, bool)"
+      ],
+      [
+        "QuartzCore",
+        "CABackingStoreCollect"
+      ],
+      [
+        "QuartzCore",
+        "async_collect_callback(void*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-04",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 220,
+    "t_s": 11.138207333,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-04",
+    "period": "bin-07",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 73,
+    "t_s": 10.26920675,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libobjc.A.dylib",
+        "protocol_conformsToProtocol_nolock(protocol_t*, protocol_t*)"
+      ],
+      [
+        "libobjc.A.dylib",
+        "_class_conformsToProtocol_unrealized_nolock(objc_class*, Protocol*)"
+      ],
+      [
+        "libobjc.A.dylib",
+        "class_conformsToProtocol"
+      ],
+      [
+        "libobjc.A.dylib",
+        "+[NSObject conformsToProtocol:]"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder _validateAllowedClass:forKey:allowingInvocations:]"
+      ],
+      [
+        "Foundation",
+        "_decodeObject"
+      ],
+      [
+        "Foundation",
+        "__44-[NSXPCDecoder _decodeArrayOfObjectsForKey:]_block_invoke"
+      ],
+      [
+        "Foundation",
+        "_NSXPCSerializationIterateArrayObject"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder _decodeArrayOfObjectsForKey:]"
+      ],
+      [
+        "Foundation",
+        "-[NSDictionary(NSDictionary) initWithCoder:]"
+      ],
+      [
+        "Foundation",
+        "_decodeObject"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder _decodeObjectOfClasses:atObject:]"
+      ],
+      [
+        "Foundation",
+        "_NSXPCSerializationDecodeTypedObjCValuesFromArray"
+      ],
+      [
+        "Foundation",
+        "_NSXPCSerializationDecodeInvocationArgumentArray"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder __decodeXPCObject:allowingSimpleMessageSend:outInvocation:outArguments:outArgumentsMaxCount:outMethodSignature:outSelector:isReply:replySelector:]"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCDecoder _decodeReplyFromXPCObject:forSelector:]"
+      ],
+      [
+        "Foundation",
+        "-[NSXPCConnection _decodeAndInvokeReplyBlockWithEvent:sequence:replyInfo:]"
+      ],
+      [
+        "Foundation",
+        "__88-[NSXPCConnection _sendInvocation:orArguments:count:methodSignature:selector:withProxy:]_block_invoke_3"
+      ],
+      [
+        "libxpc.dylib",
+        "_xpc_connection_reply_callout"
+      ],
+      [
+        "libxpc.dylib",
+        "_xpc_connection_call_reply_async"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mach_msg_async_reply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-05",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 339,
+    "t_s": 11.552206791,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec"
+      ],
+      [
+        "vImage",
+        "AnyToAnyBlockInternal"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-05",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 339,
+    "t_s": 11.552206791,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec"
+      ],
+      [
+        "vImage",
+        "AnyToAnyBlockInternal"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-05",
+    "period": "bin-08",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 339,
+    "t_s": 11.552206791,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec"
+      ],
+      [
+        "vImage",
+        "AnyToAnyBlockInternal"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-06",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 343,
+    "t_s": 11.552207541,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec"
+      ],
+      [
+        "vImage",
+        "AnyToAnyBlockInternal"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-06",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 343,
+    "t_s": 11.552207541,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec"
+      ],
+      [
+        "vImage",
+        "AnyToAnyBlockInternal"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-06",
+    "period": "bin-08",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 343,
+    "t_s": 11.552207541,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec"
+      ],
+      [
+        "vImage",
+        "AnyToAnyBlockInternal"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-07",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 516,
+    "t_s": 11.815206708,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-07",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 1634,
+    "t_s": 13.773206791,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "QuartzCore",
+        "CA::OGL::Context::collect(bool)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::Context::collect(bool)"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::Renderer::collect_()"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::AccelQueue::flush_renderer(CA::CG::Queue::FlushMode, CA::CG::Renderer*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::AccelQueue::flush_all_renderers(CA::CG::Queue::FlushMode)"
+      ],
+      [
+        "QuartzCore",
+        "invocation function for block in CA::CG::Queue::Flush::callback(void*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::Queue::Flush::callback(void*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-07",
+    "period": "bin-09",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 1052,
+    "t_s": 12.757206833,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "QuartzCore",
+        "DYLD-STUB$$voucher_mach_msg_set"
+      ],
+      [
+        "QuartzCore",
+        "_CASSynchronize"
+      ],
+      [
+        "QuartzCore",
+        "CA::Context::synchronize(unsigned int, int, bool)"
+      ],
+      [
+        "QuartzCore",
+        "-[CAContext waitForCommitId:timeout:]"
+      ],
+      [
+        "RenderBox",
+        "RB::CommitMarker::Observer::test_displayed(bool, double)"
+      ],
+      [
+        "RenderBox",
+        "RB::SharedSurfaceGroup::test_markers(RB::vector<RB::CommitMarker, 0ul, unsigned int>&)"
+      ],
+      [
+        "RenderBox",
+        "RB::SharedSurfaceGroup::prune_removed_locked()::$_0::__invoke(void*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-08",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 687,
+    "t_s": 12.115206958,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-08",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 687,
+    "t_s": 12.115206958,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-08",
+    "period": "bin-09",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 1166,
+    "t_s": 12.948207458,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-09",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 346,
+    "t_s": 11.55220775,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec"
+      ],
+      [
+        "vImage",
+        "AnyToAnyBlockInternal"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-09",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 346,
+    "t_s": 11.55220775,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec"
+      ],
+      [
+        "vImage",
+        "AnyToAnyBlockInternal"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-09",
+    "period": "bin-08",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 346,
+    "t_s": 11.55220775,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec"
+      ],
+      [
+        "vImage",
+        "AnyToAnyBlockInternal"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-10",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 597,
+    "t_s": 11.956206791,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-10",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 394,
+    "t_s": 11.615206875,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "__kdebug_trace64"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandBuffer setCurrentCommandEncoder:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandEncoder endEncoding]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandEncoder endEncoding]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXG16GFamilyRenderContext endEncoding]"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::stop_encoders()"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::set_surface(CA::OGL::Surface*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::Context::prepare_destination_()"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::create_surface_with_properties(int, CA::Bounds const&, unsigned int, CA::OGL::Context::SurfaceProperties const&, __CFString const*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::Context::create_surface(int, CA::Bounds const&, unsigned int, __CFString const*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::DrawOp::render(CA::CG::Renderer&) const"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::Queue::render_callback(void*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "thread": "worker-10",
+    "period": "bin-08",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 546,
+    "t_s": 11.866206833,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  }
+]

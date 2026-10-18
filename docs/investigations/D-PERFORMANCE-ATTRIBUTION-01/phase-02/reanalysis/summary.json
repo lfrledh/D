@@ -1,0 +1,974 @@
+[
+  {
+    "phase": "03-pan",
+    "main": {
+      "sample_weight_ms": 1383.0,
+      "sample_count": 1383,
+      "leaf_module_ms": {
+        "libsystem_kernel.dylib": 80.0,
+        "libsystem_malloc.dylib": 61.0,
+        "CarbonCore": 1.0,
+        "CoreFoundation": 109.0,
+        "dyld": 11.0,
+        "SwiftUI": 47.0,
+        "SwiftUICore": 166.0,
+        "libswiftCore.dylib": 259.0,
+        "CoreUI": 2.0,
+        "libobjc.A.dylib": 167.0,
+        "AppKit": 96.0,
+        "AttributeGraph": 86.0,
+        "Foundation": 45.0,
+        "libsystem_platform.dylib": 36.0,
+        "libsystem_pthread.dylib": 25.0,
+        "QuartzCore": 29.0,
+        "libswiftObservation.dylib": 3.0,
+        "CoreAutoLayout": 16.0,
+        "DesignLibrary": 2.0,
+        "libsystem_blocks.dylib": 4.0,
+        "libcmark-gfm.dylib": 1.0,
+        "ViewBridge": 8.0,
+        "HIToolbox": 3.0,
+        "libdyld.dylib": 9.0,
+        "SkyLight": 2.0,
+        "RenderBox": 12.0,
+        "libdispatch.dylib": 4.0,
+        "Gestures": 1.0,
+        "D.debug.dylib": 42.0,
+        "vImage": 2.0,
+        "libGPUCompilerUtils.dylib": 1.0,
+        "<unknown-binary>": 1.0,
+        "IOKit": 17.0,
+        "libsystem_c.dylib": 1.0,
+        "UIFoundation": 2.0,
+        "libswift_Concurrency.dylib": 4.0,
+        "HIServices": 1.0,
+        "CoreGraphics": 18.0,
+        "libswiftos.dylib": 2.0,
+        "Metal": 2.0,
+        "AGXMetalG16G_B0": 3.0,
+        "ColorSync": 1.0,
+        "IOGPU": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 1320.0,
+        "deduplicated": 47.0,
+        "unsymbolicated": 16.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 1245.0,
+        "swiftui_graph": 72.0,
+        "render_commit_ancestor": 6.0,
+        "layout_ancestor": 44.0,
+        "layout_ancestor+swiftui_graph": 4.0,
+        "canvas_surface": 3.0,
+        "library": 1.0,
+        "viewport_input": 1.0,
+        "connection_draw": 4.0,
+        "readability": 1.0,
+        "canvas_surface+viewport_input": 1.0,
+        "language_resolution": 1.0
+      },
+      "inclusive_class_ms_overlapping": {
+        "layout_ancestor": 666.0,
+        "swiftui_graph": 452.0,
+        "language_resolution": 10.0,
+        "titlebar": 2.0,
+        "render_commit_ancestor": 834.0,
+        "node_body": 16.0,
+        "canvas_surface": 96.0,
+        "viewport_input": 76.0,
+        "glass_background_cpu": 102.0,
+        "readability": 76.0,
+        "menu_feature": 11.0,
+        "library": 16.0,
+        "operation_tree": 3.0,
+        "connection_draw": 11.0,
+        "connection_geometry": 2.0
+      },
+      "top_self": [
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_msgSend",
+          "ms": 57.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 30.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::propagate_dirty(AG::AttributeID)",
+          "ms": 29.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_retain",
+          "ms": 27.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "__kdebug_trace64",
+          "ms": 21.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Subgraph::update(unsigned int)",
+          "ms": 19.0
+        },
+        {
+          "module": "SwiftUICore",
+          "symbol": "<deduplicated_symbol>",
+          "ms": 19.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_xzone_malloc_tiny",
+          "ms": 19.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "___chkstk_darwin",
+          "ms": 18.0
+        },
+        {
+          "module": "SwiftUICore",
+          "symbol": "DYLD-STUB$$protocol witness for OptionSet.init(rawValue:) in conformance DisplayList.Properties",
+          "ms": 17.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_free",
+          "ms": 17.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memmove",
+          "ms": 17.0
+        },
+        {
+          "module": "IOKit",
+          "symbol": "iokit_user_client_trap",
+          "ms": 16.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "bool swift::RefCounts<swift::RefCountBitsT<(swift::RefCountInlinedness)1>>::doDecrementSlow<(swift::PerformDeinit)1>(swift::RefCountBitsT<(swift::RefCountInlinedness)1>, unsigned int)",
+          "ms": 16.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::UpdateStack::update()",
+          "ms": 15.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_release",
+          "ms": 12.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "bool objc::DenseMapBase<objc::DenseMap<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>, objc::DenseMapValueInfo<objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>, objc::DenseMapInfo<DisguisedPtr<objc_object>>, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>>, DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>, objc::DenseMapValueInfo<objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>, objc::DenseMapInfo<DisguisedPtr<objc_object>>, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>>::LookupBucketFor<DisguisedPtr<objc_object>>(DisguisedPtr<objc_object> const&, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>> const*&) const",
+          "ms": 11.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift::RefCounts<swift::RefCountBitsT<(swift::RefCountInlinedness)1>>::incrementSlow(swift::RefCountBitsT<(swift::RefCountInlinedness)1>, unsigned int)",
+          "ms": 10.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_release",
+          "ms": 10.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift::MetadataCacheKey::operator==(swift::MetadataCacheKey const&) const",
+          "ms": 9.0
+        }
+      ]
+    },
+    "all_weight_ms": 1518.0,
+    "main_scheduler": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 9606351766,
+        "Runnable": 18070348,
+        "Running": 1367778502,
+        "Interrupted": 11188492,
+        "Preempted": 4686892
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 9606351766,
+        "Runnable": 18070348,
+        "Running": 1367778502,
+        "Interrupted": 11188492,
+        "Preempted": 4686892
+      }
+    }
+  },
+  {
+    "phase": "02-node-drag-repeat",
+    "main": {
+      "sample_weight_ms": 1720.0,
+      "sample_count": 1720,
+      "leaf_module_ms": {
+        "libsystem_pthread.dylib": 27.0,
+        "D.debug.dylib": 67.0,
+        "CoreFoundation": 93.0,
+        "libsystem_kernel.dylib": 75.0,
+        "libsystem_trace.dylib": 2.0,
+        "libobjc.A.dylib": 193.0,
+        "AppKit": 122.0,
+        "AttributeGraph": 140.0,
+        "libswiftCore.dylib": 287.0,
+        "SwiftUICore": 270.0,
+        "dyld": 5.0,
+        "ViewBridge": 2.0,
+        "Foundation": 29.0,
+        "libsystem_malloc.dylib": 78.0,
+        "libswift_Concurrency.dylib": 13.0,
+        "SwiftUI": 55.0,
+        "libsystem_platform.dylib": 49.0,
+        "DesignLibrary": 3.0,
+        "QuartzCore": 45.0,
+        "RenderBox": 28.0,
+        "CoreText": 1.0,
+        "HIServices": 1.0,
+        "HIToolbox": 7.0,
+        "LaunchServices": 2.0,
+        "CoreGraphics": 44.0,
+        "libxpc.dylib": 2.0,
+        "vImage": 1.0,
+        "<unknown-binary>": 2.0,
+        "IOKit": 29.0,
+        "AGXMetalG16G_B0": 3.0,
+        "CoreAutoLayout": 18.0,
+        "IOGPU": 5.0,
+        "Metal": 4.0,
+        "UIFoundation": 2.0,
+        "libsystem_blocks.dylib": 1.0,
+        "libdyld.dylib": 3.0,
+        "libswiftObservation.dylib": 6.0,
+        "IOSurface": 1.0,
+        "SkyLight": 3.0,
+        "CarbonCore": 1.0,
+        "libdispatch.dylib": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 1657.0,
+        "unsymbolicated": 16.0,
+        "deduplicated": 47.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 1509.0,
+        "swiftui_graph": 94.0,
+        "glass_controls": 1.0,
+        "layout_ancestor+swiftui_graph": 7.0,
+        "render_commit_ancestor": 22.0,
+        "layout_ancestor": 61.0,
+        "library": 1.0,
+        "readability": 13.0,
+        "viewport_input": 4.0,
+        "canvas_surface": 4.0,
+        "connection_draw": 1.0,
+        "menu_feature": 1.0,
+        "node_body": 1.0,
+        "glass_background_cpu": 1.0
+      },
+      "inclusive_class_ms_overlapping": {
+        "layout_ancestor": 1085.0,
+        "swiftui_graph": 618.0,
+        "titlebar": 2.0,
+        "render_commit_ancestor": 1388.0,
+        "node_body": 12.0,
+        "menu_feature": 6.0,
+        "glass_controls": 1.0,
+        "node_port_input": 5.0,
+        "canvas_surface": 108.0,
+        "language_resolution": 2.0,
+        "library": 6.0,
+        "operation_tree": 1.0,
+        "library_entry_equality": 1.0,
+        "glass_background_cpu": 173.0,
+        "readability": 151.0,
+        "viewport_input": 83.0,
+        "connection_hit": 1.0,
+        "connection_draw": 8.0,
+        "connection_geometry": 3.0
+      },
+      "top_self": [
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_msgSend",
+          "ms": 82.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::UpdateStack::update()",
+          "ms": 45.0
+        },
+        {
+          "module": "IOKit",
+          "symbol": "iokit_user_client_trap",
+          "ms": 29.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "__kdebug_trace64",
+          "ms": 28.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_xzone_malloc_tiny",
+          "ms": 28.0
+        },
+        {
+          "module": "SwiftUICore",
+          "symbol": "<deduplicated_symbol>",
+          "ms": 27.0
+        },
+        {
+          "module": "SwiftUICore",
+          "symbol": "DYLD-STUB$$protocol witness for OptionSet.init(rawValue:) in conformance DisplayList.Properties",
+          "ms": 26.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_release",
+          "ms": 26.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Subgraph::update(unsigned int)",
+          "ms": 23.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift::MetadataCacheKey::operator==(swift::MetadataCacheKey const&) const",
+          "ms": 23.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_free",
+          "ms": 21.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "___chkstk_darwin",
+          "ms": 19.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "weak_entry_for_referent",
+          "ms": 17.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_retain",
+          "ms": 16.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memmove",
+          "ms": 15.0
+        },
+        {
+          "module": "CoreFoundation",
+          "symbol": "___CFBasicHashFindBucket_Linear",
+          "ms": 13.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::propagate_dirty(AG::AttributeID)",
+          "ms": 12.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AGGraphSetOutputValue",
+          "ms": 12.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_release",
+          "ms": 12.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 12.0
+        }
+      ]
+    },
+    "all_weight_ms": 1840.0,
+    "main_scheduler": {
+      "window_ns": 11006185000,
+      "covered_ns": 11006185000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 9295636999,
+        "Runnable": 8349401,
+        "Running": 1686253349,
+        "Interrupted": 7780392,
+        "Preempted": 8164859
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 9295636999,
+        "Runnable": 8349401,
+        "Running": 1686253349,
+        "Interrupted": 7780392,
+        "Preempted": 8164859
+      }
+    }
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "main": {
+      "sample_weight_ms": 13726.0,
+      "sample_count": 13726,
+      "leaf_module_ms": {
+        "SwiftUI": 699.0,
+        "AttributeGraph": 1119.0,
+        "SwiftUICore": 2174.0,
+        "libswift_Concurrency.dylib": 59.0,
+        "libswiftCore.dylib": 4900.0,
+        "libsystem_malloc.dylib": 619.0,
+        "D.debug.dylib": 1094.0,
+        "libsystem_pthread.dylib": 254.0,
+        "libobjc.A.dylib": 447.0,
+        "CoreGraphics": 175.0,
+        "QuartzCore": 72.0,
+        "AppKit": 201.0,
+        "libicucore.A.dylib": 88.0,
+        "CoreUI": 9.0,
+        "UIFoundation": 44.0,
+        "Foundation": 208.0,
+        "libsystem_kernel.dylib": 193.0,
+        "RenderBox": 66.0,
+        "libsystem_platform.dylib": 478.0,
+        "CoreFoundation": 414.0,
+        "IOGPU": 4.0,
+        "libsystem_m.dylib": 5.0,
+        "libswiftos.dylib": 4.0,
+        "SkyLight": 1.0,
+        "CoreText": 64.0,
+        "libxpc.dylib": 6.0,
+        "libFontParser.dylib": 18.0,
+        "libsystem_darwin.dylib": 1.0,
+        "libswiftRegexBuilder.dylib": 1.0,
+        "libswiftObservation.dylib": 56.0,
+        "ViewBridge": 2.0,
+        "vImage": 3.0,
+        "liblangid.dylib": 5.0,
+        "IOKit": 34.0,
+        "libcache.dylib": 1.0,
+        "libswift_StringProcessing.dylib": 58.0,
+        "libc++abi.dylib": 9.0,
+        "libsystem_c.dylib": 5.0,
+        "CoreAutoLayout": 41.0,
+        "libcmark-gfm.dylib": 4.0,
+        "Metal": 1.0,
+        "CoreSVG": 4.0,
+        "libdyld.dylib": 16.0,
+        "libswiftObjectiveC.dylib": 3.0,
+        "<unknown-binary>": 3.0,
+        "libsystem_blocks.dylib": 8.0,
+        "AGXMetalG16G_B0": 4.0,
+        "DesignLibrary": 5.0,
+        "libswiftUniformTypeIdentifiers.dylib": 1.0,
+        "dyld": 19.0,
+        "libdispatch.dylib": 6.0,
+        "CoreTransferable": 4.0,
+        "CoreNLP": 3.0,
+        "libmecab.dylib": 1.0,
+        "HIServices": 2.0,
+        "HIToolbox": 3.0,
+        "IOSurface": 1.0,
+        "libsystem_trace.dylib": 1.0,
+        "Symbols": 1.0,
+        "ColorSync": 1.0,
+        "libswiftCoreFoundation.dylib": 1.0,
+        "UpdateCycle": 1.0,
+        "libsystem_featureflags.dylib": 1.0,
+        "Combine": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 12741.0,
+        "deduplicated": 776.0,
+        "unsymbolicated": 209.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 12373.0,
+        "layout_ancestor+swiftui_graph": 200.0,
+        "swiftui_graph": 674.0,
+        "library": 104.0,
+        "layout_ancestor": 220.0,
+        "canvas_surface+viewport_input": 3.0,
+        "node_port_input": 1.0,
+        "language_resolution": 23.0,
+        "render_commit_ancestor": 33.0,
+        "layout_ancestor+node_body": 4.0,
+        "menu_feature": 21.0,
+        "glass_controls": 6.0,
+        "canvas_surface": 31.0,
+        "node_body": 8.0,
+        "glass_background_cpu": 4.0,
+        "readability": 6.0,
+        "connection_draw": 3.0,
+        "layout_ancestor+library": 1.0,
+        "viewport_input": 2.0,
+        "history_output_projection+library": 1.0,
+        "operation_tree": 3.0,
+        "canvas_surface+layout_ancestor+viewport_input": 1.0,
+        "library+menu_feature": 1.0,
+        "layout_ancestor+library+menu_feature": 1.0,
+        "library+library_entry_equality": 2.0
+      },
+      "inclusive_class_ms_overlapping": {
+        "layout_ancestor": 12544.0,
+        "swiftui_graph": 11680.0,
+        "render_commit_ancestor": 13261.0,
+        "library": 2490.0,
+        "operation_tree": 477.0,
+        "library_entry_equality": 717.0,
+        "language_resolution": 1118.0,
+        "canvas_surface": 1266.0,
+        "viewport_input": 216.0,
+        "menu_feature": 688.0,
+        "glass_controls": 53.0,
+        "node_body": 494.0,
+        "connection_geometry": 2.0,
+        "connection_draw": 19.0,
+        "glass_background_cpu": 325.0,
+        "readability": 206.0,
+        "node_port_input": 7.0,
+        "asset_projection": 84.0,
+        "connection_hit": 2.0,
+        "history_output_projection": 1.0
+      },
+      "top_self": [
+        {
+          "module": "SwiftUICore",
+          "symbol": "<deduplicated_symbol>",
+          "ms": 487.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_release",
+          "ms": 375.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memmove",
+          "ms": 308.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_retain",
+          "ms": 307.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift::MetadataCacheKey::operator==(swift::MetadataCacheKey const&) const",
+          "ms": 279.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::UpdateStack::update()",
+          "ms": 270.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "___chkstk_darwin",
+          "ms": 246.0
+        },
+        {
+          "module": "SwiftUICore",
+          "symbol": "DYLD-STUB$$protocol witness for OptionSet.init(rawValue:) in conformance DisplayList.Properties",
+          "ms": 243.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::propagate_dirty(AG::AttributeID)",
+          "ms": 224.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_free",
+          "ms": 194.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_bridgeObjectRetain",
+          "ms": 185.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_bridgeObjectRelease",
+          "ms": 183.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_xzone_malloc_tiny",
+          "ms": 155.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_msgSend",
+          "ms": 152.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "getCache(swift::TargetTypeContextDescriptor<swift::InProcess> const&)",
+          "ms": 145.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift::TargetContextDescriptor<swift::InProcess>::getGenericContext() const",
+          "ms": 145.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "<deduplicated_symbol>",
+          "ms": 129.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::LayoutDescriptor::Compare::operator()(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)",
+          "ms": 110.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "protocol witness for IteratorProtocol.next() in conformance IndexingIterator<A>",
+          "ms": 101.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Subgraph::update(unsigned int)",
+          "ms": 95.0
+        }
+      ]
+    },
+    "all_weight_ms": 14180.0,
+    "main_scheduler": {
+      "window_ns": 24006261000,
+      "covered_ns": 24006261000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Running": 13624244985,
+        "Interrupted": 70173997,
+        "Blocked": 10298527983,
+        "Runnable": 9055862,
+        "Preempted": 4258173
+      },
+      "raw_state_sum_ns": {
+        "Running": 13624244985,
+        "Interrupted": 70173997,
+        "Blocked": 10298527983,
+        "Runnable": 9055862,
+        "Preempted": 4258173
+      }
+    }
+  },
+  {
+    "phase": "06-idle-current",
+    "main": {
+      "sample_weight_ms": 1.0,
+      "sample_count": 1,
+      "leaf_module_ms": {
+        "CoreFoundation": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 1.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 1.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "CoreFoundation",
+          "symbol": "-[__NSArrayM count]",
+          "ms": 1.0
+        }
+      ]
+    },
+    "all_weight_ms": 6.0,
+    "main_scheduler": {
+      "window_ns": 8773137000,
+      "covered_ns": 8773137000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 8768818125,
+        "Runnable": 755915,
+        "Running": 3278752,
+        "Interrupted": 48375,
+        "Preempted": 235833
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 8768818125,
+        "Runnable": 755915,
+        "Running": 3278752,
+        "Interrupted": 48375,
+        "Preempted": 235833
+      }
+    }
+  },
+  {
+    "phase": "07-left-hidden-wheel",
+    "main": {
+      "sample_weight_ms": 16636.0,
+      "sample_count": 16636,
+      "leaf_module_ms": {
+        "libobjc.A.dylib": 632.0,
+        "libswiftCore.dylib": 6143.0,
+        "libswift_StringProcessing.dylib": 79.0,
+        "libicucore.A.dylib": 84.0,
+        "libsystem_featureflags.dylib": 2.0,
+        "libsystem_platform.dylib": 562.0,
+        "CoreFoundation": 504.0,
+        "libswiftObservation.dylib": 82.0,
+        "SwiftUICore": 2577.0,
+        "D.debug.dylib": 1273.0,
+        "AttributeGraph": 1365.0,
+        "libsystem_malloc.dylib": 655.0,
+        "CoreText": 49.0,
+        "AppKit": 292.0,
+        "QuartzCore": 105.0,
+        "libsystem_kernel.dylib": 168.0,
+        "SwiftUI": 868.0,
+        "Foundation": 227.0,
+        "dyld": 30.0,
+        "CoreAutoLayout": 43.0,
+        "CoreGraphics": 194.0,
+        "libsystem_c.dylib": 9.0,
+        "libsystem_pthread.dylib": 295.0,
+        "libswift_Concurrency.dylib": 80.0,
+        "libFontParser.dylib": 16.0,
+        "RenderBox": 65.0,
+        "IOKit": 27.0,
+        "UIFoundation": 34.0,
+        "IOSurface": 1.0,
+        "libdyld.dylib": 31.0,
+        "vImage": 12.0,
+        "Metal": 4.0,
+        "libswiftos.dylib": 4.0,
+        "libswiftCoreFoundation.dylib": 1.0,
+        "AGXMetalG16G_B0": 14.0,
+        "CoreUI": 10.0,
+        "IOGPU": 2.0,
+        "libmecab.dylib": 2.0,
+        "CarbonCore": 6.0,
+        "CoreSVG": 6.0,
+        "libc++abi.dylib": 5.0,
+        "<unknown-binary>": 2.0,
+        "DesignLibrary": 12.0,
+        "libdispatch.dylib": 5.0,
+        "libhvf.dylib": 1.0,
+        "libxpc.dylib": 7.0,
+        "HIToolbox": 16.0,
+        "libsystem_blocks.dylib": 11.0,
+        "SkyLight": 5.0,
+        "ViewBridge": 3.0,
+        "Symbols": 1.0,
+        "HIServices": 1.0,
+        "CoreTransferable": 3.0,
+        "libsystem_trace.dylib": 2.0,
+        "libswiftRegexBuilder.dylib": 1.0,
+        "libsystem_m.dylib": 1.0,
+        "ConfigurationProfiles": 1.0,
+        "LaunchServices": 3.0,
+        "libswiftObjectiveC.dylib": 3.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 15504.0,
+        "deduplicated": 898.0,
+        "unsymbolicated": 234.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 14993.0,
+        "swiftui_graph": 819.0,
+        "library": 126.0,
+        "readability": 7.0,
+        "layout_ancestor": 236.0,
+        "layout_ancestor+swiftui_graph": 265.0,
+        "render_commit_ancestor": 51.0,
+        "language_resolution": 27.0,
+        "canvas_surface": 42.0,
+        "canvas_surface+viewport_input": 7.0,
+        "glass_background_cpu": 1.0,
+        "menu_feature": 34.0,
+        "operation_tree": 3.0,
+        "library+library_entry_equality": 1.0,
+        "node_body": 8.0,
+        "glass_controls": 3.0,
+        "layout_ancestor+node_body": 1.0,
+        "connection_draw": 4.0,
+        "layout_ancestor+library": 2.0,
+        "node_port_input": 3.0,
+        "glass_background_cpu+layout_ancestor": 1.0,
+        "connection_geometry": 2.0
+      },
+      "inclusive_class_ms_overlapping": {
+        "layout_ancestor": 14962.0,
+        "render_commit_ancestor": 15752.0,
+        "language_resolution": 1313.0,
+        "canvas_surface": 1537.0,
+        "menu_feature": 879.0,
+        "swiftui_graph": 13947.0,
+        "node_body": 589.0,
+        "library": 2981.0,
+        "operation_tree": 574.0,
+        "library_entry_equality": 838.0,
+        "glass_background_cpu": 377.0,
+        "readability": 257.0,
+        "history_output_projection": 1.0,
+        "viewport_input": 249.0,
+        "asset_projection": 90.0,
+        "glass_controls": 42.0,
+        "node_port_input": 8.0,
+        "connection_draw": 23.0,
+        "connection_geometry": 6.0
+      },
+      "top_self": [
+        {
+          "module": "SwiftUICore",
+          "symbol": "<deduplicated_symbol>",
+          "ms": 550.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_release",
+          "ms": 457.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_retain",
+          "ms": 381.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::UpdateStack::update()",
+          "ms": 368.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift::MetadataCacheKey::operator==(swift::MetadataCacheKey const&) const",
+          "ms": 366.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memmove",
+          "ms": 360.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "___chkstk_darwin",
+          "ms": 276.0
+        },
+        {
+          "module": "SwiftUICore",
+          "symbol": "DYLD-STUB$$protocol witness for OptionSet.init(rawValue:) in conformance DisplayList.Properties",
+          "ms": 265.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::propagate_dirty(AG::AttributeID)",
+          "ms": 238.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_bridgeObjectRelease",
+          "ms": 214.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_msgSend",
+          "ms": 208.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_free",
+          "ms": 198.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_bridgeObjectRetain",
+          "ms": 187.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift::TargetContextDescriptor<swift::InProcess>::getGenericContext() const",
+          "ms": 185.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "getCache(swift::TargetTypeContextDescriptor<swift::InProcess> const&)",
+          "ms": 180.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_xzone_malloc_tiny",
+          "ms": 155.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "<deduplicated_symbol>",
+          "ms": 150.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::LayoutDescriptor::Compare::operator()(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)",
+          "ms": 136.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_getAssociatedTypeWitness",
+          "ms": 129.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "bool swift::RefCounts<swift::RefCountBitsT<(swift::RefCountInlinedness)1>>::doDecrementSlow<(swift::PerformDeinit)1>(swift::RefCountBitsT<(swift::RefCountInlinedness)1>, unsigned int)",
+          "ms": 116.0
+        }
+      ]
+    },
+    "all_weight_ms": 16874.0,
+    "main_scheduler": {
+      "window_ns": 24003292000,
+      "covered_ns": 24003292000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 7386087510,
+        "Runnable": 17185597,
+        "Running": 16507529393,
+        "Interrupted": 86214815,
+        "Preempted": 6274685
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 7386087510,
+        "Runnable": 17185597,
+        "Running": 16507529393,
+        "Interrupted": 86214815,
+        "Preempted": 6274685
+      }
+    }
+  }
+]

@@ -1,5 +1,7 @@
 # D 性能归因调查 — 2026-10-18
 
+当前阶段：[Phase 2 完整报告](phase-02/REPORT.zh-CN.md) · [三操作时间表](phase-02/timeline.csv) · [全线程排行](phase-02/global-hotspots.csv) · [可复算方法](phase-02/METHOD.md)。Phase 2补全旧证据全线程/时间切片、调度漏列状态与部分显示记录关联；没有新原生录制或性能修补，原生/因果资格仍有缺口。以下为Phase 1历史结论，不替代Phase 2的分级。
+
 状态：调查完成，待用户审计与外部独立复核；尚不足以宣布唯一根因或选择正式修补。2026-10-18 用户追加授权将去敏调查文档提交到 GitHub。本次归档只含文档及静态证据摘要，没有生产源码或诊断代码变更，没有构建、合并、部署或替换普通 D。
 
 审阅材料：[数据 CSV](interaction-summary.csv) · [证据与复算口径](EVIDENCE.zh-CN.md) · [只读复核](consultant-review.md) · [当前集中待办](../../FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#d-performance-attribution-01-当前队列)。原始资料保留在受控本地，Git 版不包含用户正文、书签、索引、私有绝对路径或完整系统进程资料。

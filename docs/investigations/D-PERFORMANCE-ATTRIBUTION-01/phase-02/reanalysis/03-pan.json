@@ -1,0 +1,1445 @@
+{
+  "phase": "03-pan",
+  "window_ns": [
+    3856365000,
+    14864441000
+  ],
+  "seed": 20261018,
+  "xml_row_counts": {
+    "hitches-renders": 1396,
+    "displayed-surfaces-interval": 1372,
+    "hitches": 88,
+    "hitches-updates": 472,
+    "process-info": 718,
+    "metal-command-buffer-completed": 6050,
+    "device-thermal-state-intervals": 1,
+    "thread-info": 4773,
+    "time-profile": 2246,
+    "hitches-frame-lifetimes": 1372,
+    "thread-state": 107944,
+    "display-surface-swap": 1373
+  },
+  "reference_definitions": 180986,
+  "window_kind": "Phase 1 requested gesture/cue window; no actual input timestamps",
+  "scopes": {
+    "all": {
+      "sample_weight_ms": 1518.0,
+      "sample_count": 1518,
+      "leaf_module_ms": {
+        "libsystem_kernel.dylib": 114.0,
+        "libsystem_pthread.dylib": 46.0,
+        "libswift_Concurrency.dylib": 5.0,
+        "libsystem_platform.dylib": 41.0,
+        "libsystem_malloc.dylib": 62.0,
+        "CarbonCore": 1.0,
+        "CoreFoundation": 110.0,
+        "libsystem_trace.dylib": 3.0,
+        "dyld": 11.0,
+        "SwiftUI": 47.0,
+        "SwiftUICore": 166.0,
+        "libswiftCore.dylib": 259.0,
+        "CoreUI": 2.0,
+        "libobjc.A.dylib": 171.0,
+        "AppKit": 96.0,
+        "AttributeGraph": 86.0,
+        "Foundation": 45.0,
+        "QuartzCore": 37.0,
+        "libswiftObservation.dylib": 3.0,
+        "CoreAutoLayout": 16.0,
+        "DesignLibrary": 2.0,
+        "libsystem_blocks.dylib": 4.0,
+        "libcmark-gfm.dylib": 1.0,
+        "ViewBridge": 8.0,
+        "HIToolbox": 3.0,
+        "libdyld.dylib": 9.0,
+        "SkyLight": 5.0,
+        "RenderBox": 13.0,
+        "libdispatch.dylib": 7.0,
+        "Gestures": 1.0,
+        "D.debug.dylib": 43.0,
+        "vImage": 18.0,
+        "libGPUCompilerUtils.dylib": 1.0,
+        "<unknown-binary>": 1.0,
+        "IOKit": 43.0,
+        "libsystem_c.dylib": 1.0,
+        "UIFoundation": 2.0,
+        "HIServices": 1.0,
+        "IOGPU": 3.0,
+        "CoreGraphics": 18.0,
+        "libswiftos.dylib": 2.0,
+        "Metal": 5.0,
+        "AGXMetalG16G_B0": 5.0,
+        "ColorSync": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 1455.0,
+        "deduplicated": 47.0,
+        "unsymbolicated": 16.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 1379.0,
+        "swiftui_graph": 72.0,
+        "render_commit_ancestor": 6.0,
+        "layout_ancestor": 45.0,
+        "layout_ancestor+swiftui_graph": 4.0,
+        "canvas_surface": 3.0,
+        "library": 1.0,
+        "viewport_input": 1.0,
+        "connection_draw": 4.0,
+        "readability": 1.0,
+        "canvas_surface+viewport_input": 1.0,
+        "language_resolution": 1.0
+      },
+      "inclusive_class_ms_overlapping": {
+        "layout_ancestor": 668.0,
+        "swiftui_graph": 452.0,
+        "language_resolution": 10.0,
+        "titlebar": 2.0,
+        "render_commit_ancestor": 834.0,
+        "node_body": 16.0,
+        "canvas_surface": 96.0,
+        "viewport_input": 76.0,
+        "glass_background_cpu": 102.0,
+        "readability": 76.0,
+        "menu_feature": 11.0,
+        "library": 16.0,
+        "operation_tree": 3.0,
+        "connection_draw": 11.0,
+        "connection_geometry": 2.0
+      },
+      "top_self": [
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_msgSend",
+          "ms": 58.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 47.0
+        },
+        {
+          "module": "IOKit",
+          "symbol": "iokit_user_client_trap",
+          "ms": 41.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::propagate_dirty(AG::AttributeID)",
+          "ms": 29.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_retain",
+          "ms": 27.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "__kdebug_trace64",
+          "ms": 27.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 21.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_xzone_malloc_tiny",
+          "ms": 20.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Subgraph::update(unsigned int)",
+          "ms": 19.0
+        },
+        {
+          "module": "SwiftUICore",
+          "symbol": "<deduplicated_symbol>",
+          "ms": 19.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memmove",
+          "ms": 18.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "___chkstk_darwin",
+          "ms": 18.0
+        },
+        {
+          "module": "vImage",
+          "symbol": "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec",
+          "ms": 18.0
+        },
+        {
+          "module": "SwiftUICore",
+          "symbol": "DYLD-STUB$$protocol witness for OptionSet.init(rawValue:) in conformance DisplayList.Properties",
+          "ms": 17.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_free",
+          "ms": 17.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "bool swift::RefCounts<swift::RefCountBitsT<(swift::RefCountInlinedness)1>>::doDecrementSlow<(swift::PerformDeinit)1>(swift::RefCountBitsT<(swift::RefCountInlinedness)1>, unsigned int)",
+          "ms": 16.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::UpdateStack::update()",
+          "ms": 15.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_release",
+          "ms": 13.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "bool objc::DenseMapBase<objc::DenseMap<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>, objc::DenseMapValueInfo<objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>, objc::DenseMapInfo<DisguisedPtr<objc_object>>, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>>, DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>, objc::DenseMapValueInfo<objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>, objc::DenseMapInfo<DisguisedPtr<objc_object>>, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>>::LookupBucketFor<DisguisedPtr<objc_object>>(DisguisedPtr<objc_object> const&, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>> const*&) const",
+          "ms": 12.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "kevent_id",
+          "ms": 11.0
+        }
+      ]
+    },
+    "event": {
+      "sample_weight_ms": 12.0,
+      "sample_count": 12,
+      "leaf_module_ms": {
+        "libsystem_kernel.dylib": 7.0,
+        "SkyLight": 3.0,
+        "libsystem_malloc.dylib": 1.0,
+        "libdispatch.dylib": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 12.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 12.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 6.0
+        },
+        {
+          "module": "SkyLight",
+          "symbol": "SLS::TokenizedCoding::Storage::valid() const",
+          "ms": 2.0
+        },
+        {
+          "module": "SkyLight",
+          "symbol": "SLEventRecordSetIntegerValue(SLSEventRecord*, CGEventField, long long)",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "voucher_copy",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "_kernelrpc_mach_vm_deallocate_trap",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_xzone_malloc_tiny",
+          "ms": 1.0
+        }
+      ]
+    },
+    "main": {
+      "sample_weight_ms": 1383.0,
+      "sample_count": 1383,
+      "leaf_module_ms": {
+        "libsystem_kernel.dylib": 80.0,
+        "libsystem_malloc.dylib": 61.0,
+        "CarbonCore": 1.0,
+        "CoreFoundation": 109.0,
+        "dyld": 11.0,
+        "SwiftUI": 47.0,
+        "SwiftUICore": 166.0,
+        "libswiftCore.dylib": 259.0,
+        "CoreUI": 2.0,
+        "libobjc.A.dylib": 167.0,
+        "AppKit": 96.0,
+        "AttributeGraph": 86.0,
+        "Foundation": 45.0,
+        "libsystem_platform.dylib": 36.0,
+        "libsystem_pthread.dylib": 25.0,
+        "QuartzCore": 29.0,
+        "libswiftObservation.dylib": 3.0,
+        "CoreAutoLayout": 16.0,
+        "DesignLibrary": 2.0,
+        "libsystem_blocks.dylib": 4.0,
+        "libcmark-gfm.dylib": 1.0,
+        "ViewBridge": 8.0,
+        "HIToolbox": 3.0,
+        "libdyld.dylib": 9.0,
+        "SkyLight": 2.0,
+        "RenderBox": 12.0,
+        "libdispatch.dylib": 4.0,
+        "Gestures": 1.0,
+        "D.debug.dylib": 42.0,
+        "vImage": 2.0,
+        "libGPUCompilerUtils.dylib": 1.0,
+        "<unknown-binary>": 1.0,
+        "IOKit": 17.0,
+        "libsystem_c.dylib": 1.0,
+        "UIFoundation": 2.0,
+        "libswift_Concurrency.dylib": 4.0,
+        "HIServices": 1.0,
+        "CoreGraphics": 18.0,
+        "libswiftos.dylib": 2.0,
+        "Metal": 2.0,
+        "AGXMetalG16G_B0": 3.0,
+        "ColorSync": 1.0,
+        "IOGPU": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 1320.0,
+        "deduplicated": 47.0,
+        "unsymbolicated": 16.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 1245.0,
+        "swiftui_graph": 72.0,
+        "render_commit_ancestor": 6.0,
+        "layout_ancestor": 44.0,
+        "layout_ancestor+swiftui_graph": 4.0,
+        "canvas_surface": 3.0,
+        "library": 1.0,
+        "viewport_input": 1.0,
+        "connection_draw": 4.0,
+        "readability": 1.0,
+        "canvas_surface+viewport_input": 1.0,
+        "language_resolution": 1.0
+      },
+      "inclusive_class_ms_overlapping": {
+        "layout_ancestor": 666.0,
+        "swiftui_graph": 452.0,
+        "language_resolution": 10.0,
+        "titlebar": 2.0,
+        "render_commit_ancestor": 834.0,
+        "node_body": 16.0,
+        "canvas_surface": 96.0,
+        "viewport_input": 76.0,
+        "glass_background_cpu": 102.0,
+        "readability": 76.0,
+        "menu_feature": 11.0,
+        "library": 16.0,
+        "operation_tree": 3.0,
+        "connection_draw": 11.0,
+        "connection_geometry": 2.0
+      },
+      "top_self": [
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_msgSend",
+          "ms": 57.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 30.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::propagate_dirty(AG::AttributeID)",
+          "ms": 29.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_retain",
+          "ms": 27.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "__kdebug_trace64",
+          "ms": 21.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Subgraph::update(unsigned int)",
+          "ms": 19.0
+        },
+        {
+          "module": "SwiftUICore",
+          "symbol": "<deduplicated_symbol>",
+          "ms": 19.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_xzone_malloc_tiny",
+          "ms": 19.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "___chkstk_darwin",
+          "ms": 18.0
+        },
+        {
+          "module": "SwiftUICore",
+          "symbol": "DYLD-STUB$$protocol witness for OptionSet.init(rawValue:) in conformance DisplayList.Properties",
+          "ms": 17.0
+        },
+        {
+          "module": "libsystem_malloc.dylib",
+          "symbol": "_xzm_free",
+          "ms": 17.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memmove",
+          "ms": 17.0
+        },
+        {
+          "module": "IOKit",
+          "symbol": "iokit_user_client_trap",
+          "ms": 16.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "bool swift::RefCounts<swift::RefCountBitsT<(swift::RefCountInlinedness)1>>::doDecrementSlow<(swift::PerformDeinit)1>(swift::RefCountBitsT<(swift::RefCountInlinedness)1>, unsigned int)",
+          "ms": 16.0
+        },
+        {
+          "module": "AttributeGraph",
+          "symbol": "AG::Graph::UpdateStack::update()",
+          "ms": 15.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_release",
+          "ms": 12.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "bool objc::DenseMapBase<objc::DenseMap<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>, objc::DenseMapValueInfo<objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>, objc::DenseMapInfo<DisguisedPtr<objc_object>>, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>>, DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>, objc::DenseMapValueInfo<objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>, objc::DenseMapInfo<DisguisedPtr<objc_object>>, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>>::LookupBucketFor<DisguisedPtr<objc_object>>(DisguisedPtr<objc_object> const&, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>> const*&) const",
+          "ms": 11.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift::RefCounts<swift::RefCountBitsT<(swift::RefCountInlinedness)1>>::incrementSlow(swift::RefCountBitsT<(swift::RefCountInlinedness)1>, unsigned int)",
+          "ms": 10.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift_release",
+          "ms": 10.0
+        },
+        {
+          "module": "libswiftCore.dylib",
+          "symbol": "swift::MetadataCacheKey::operator==(swift::MetadataCacheKey const&) const",
+          "ms": 9.0
+        }
+      ]
+    },
+    "worker-01": {
+      "sample_weight_ms": 42.0,
+      "sample_count": 42,
+      "leaf_module_ms": {
+        "libsystem_pthread.dylib": 9.0,
+        "vImage": 2.0,
+        "IOKit": 10.0,
+        "libsystem_kernel.dylib": 10.0,
+        "libsystem_platform.dylib": 3.0,
+        "QuartzCore": 2.0,
+        "Metal": 3.0,
+        "libsystem_trace.dylib": 1.0,
+        "IOGPU": 1.0,
+        "libobjc.A.dylib": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 42.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 42.0
+      },
+      "inclusive_class_ms_overlapping": {
+        "layout_ancestor": 1.0
+      },
+      "top_self": [
+        {
+          "module": "IOKit",
+          "symbol": "iokit_user_client_trap",
+          "ms": 10.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 9.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 5.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "kevent_id",
+          "ms": 2.0
+        },
+        {
+          "module": "vImage",
+          "symbol": "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec",
+          "ms": 2.0
+        },
+        {
+          "module": "IOGPU",
+          "symbol": "-[IOGPUMetalResource setPurgeableState:]",
+          "ms": 1.0
+        },
+        {
+          "module": "Metal",
+          "symbol": "-[MTLTextureDescriptorInternal setMipmapLevelCount:]",
+          "ms": 1.0
+        },
+        {
+          "module": "Metal",
+          "symbol": "-[_MTLDevice supportsFamily:withFamilyArray:count:]",
+          "ms": 1.0
+        },
+        {
+          "module": "Metal",
+          "symbol": "MTLPixelFormatQuery::supportsFamily(MTLGPUFamily)",
+          "ms": 1.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "CA::CG::DrawTransparencyLayer::compute_dod(CA::Rect&) const",
+          "ms": 1.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "CABackingStoreCollect_(double, bool)",
+          "ms": 1.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_release",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "__kdebug_trace64",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "__psynch_mutexdrop",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "_kernelrpc_mach_port_allocate_trap",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "__bzero",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memmove",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memset",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_trace.dylib",
+          "symbol": "_os_log_fmt_flatten_to_blob",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-02": {
+      "sample_weight_ms": 9.0,
+      "sample_count": 9,
+      "leaf_module_ms": {
+        "libsystem_kernel.dylib": 1.0,
+        "libsystem_pthread.dylib": 2.0,
+        "libswift_Concurrency.dylib": 1.0,
+        "libsystem_platform.dylib": 1.0,
+        "libsystem_trace.dylib": 1.0,
+        "QuartzCore": 1.0,
+        "vImage": 2.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 9.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 9.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 2.0
+        },
+        {
+          "module": "vImage",
+          "symbol": "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec",
+          "ms": 2.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "CABackingStoreCollect_(double, bool)",
+          "ms": 1.0
+        },
+        {
+          "module": "libswift_Concurrency.dylib",
+          "symbol": "swift_continuation_throwingResume",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "kevent_id",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memcmp",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_trace.dylib",
+          "symbol": "_os_log_find",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-03": {
+      "sample_weight_ms": 2.0,
+      "sample_count": 2,
+      "leaf_module_ms": {
+        "vImage": 2.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 2.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 2.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "vImage",
+          "symbol": "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec",
+          "ms": 2.0
+        }
+      ]
+    },
+    "worker-04": {
+      "sample_weight_ms": 2.0,
+      "sample_count": 2,
+      "leaf_module_ms": {
+        "vImage": 2.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 2.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 2.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "vImage",
+          "symbol": "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec",
+          "ms": 2.0
+        }
+      ]
+    },
+    "worker-05": {
+      "sample_weight_ms": 2.0,
+      "sample_count": 2,
+      "leaf_module_ms": {
+        "vImage": 2.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 2.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 2.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "vImage",
+          "symbol": "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec",
+          "ms": 2.0
+        }
+      ]
+    },
+    "worker-06": {
+      "sample_weight_ms": 19.0,
+      "sample_count": 19,
+      "leaf_module_ms": {
+        "vImage": 2.0,
+        "IOKit": 6.0,
+        "libsystem_kernel.dylib": 6.0,
+        "libsystem_pthread.dylib": 2.0,
+        "libobjc.A.dylib": 1.0,
+        "AGXMetalG16G_B0": 1.0,
+        "QuartzCore": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 19.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 18.0,
+        "layout_ancestor": 1.0
+      },
+      "inclusive_class_ms_overlapping": {
+        "layout_ancestor": 1.0
+      },
+      "top_self": [
+        {
+          "module": "IOKit",
+          "symbol": "iokit_user_client_trap",
+          "ms": 5.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "__kdebug_trace64",
+          "ms": 3.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "kevent_id",
+          "ms": 2.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 2.0
+        },
+        {
+          "module": "vImage",
+          "symbol": "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec",
+          "ms": 2.0
+        },
+        {
+          "module": "AGXMetalG16G_B0",
+          "symbol": "AGX::Texture<(AGXTextureMemoryLayout)3, AGX::HAL200::Encoders, AGX::HAL200::Classes>::assembleTextureInfoEmission(unsigned long long, bool, bool, unsigned long long&, unsigned long long&, unsigned long long&, unsigned long long&)",
+          "ms": 1.0
+        },
+        {
+          "module": "IOKit",
+          "symbol": "io_connect_method",
+          "ms": 1.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "CABackingStoreCollect_(double, bool)",
+          "ms": 1.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "objc_msgSend",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-07": {
+      "sample_weight_ms": 24.0,
+      "sample_count": 24,
+      "leaf_module_ms": {
+        "vImage": 2.0,
+        "IOGPU": 1.0,
+        "libsystem_platform.dylib": 1.0,
+        "QuartzCore": 4.0,
+        "IOKit": 6.0,
+        "RenderBox": 1.0,
+        "CoreFoundation": 1.0,
+        "libdispatch.dylib": 1.0,
+        "libsystem_pthread.dylib": 3.0,
+        "libsystem_kernel.dylib": 3.0,
+        "libobjc.A.dylib": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 24.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 24.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "IOKit",
+          "symbol": "iokit_user_client_trap",
+          "ms": 6.0
+        },
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 3.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 2.0
+        },
+        {
+          "module": "vImage",
+          "symbol": "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec",
+          "ms": 2.0
+        },
+        {
+          "module": "CoreFoundation",
+          "symbol": "-[__NSCFConstantString release]",
+          "ms": 1.0
+        },
+        {
+          "module": "IOGPU",
+          "symbol": "ioGPUResourceListAddHashValue",
+          "ms": 1.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "-[CAContext waitForCommitId:timeout:]",
+          "ms": 1.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "CA::CG::fill_path(CA::CG::Renderer&, CGPath const*, CA::CG::StrokeParameters const*, CA::Rect const*, CA::ScanConverter::FillRule, CA::Mat2<double> const&, bool)",
+          "ms": 1.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "CA::OGL::Context::collect(bool)",
+          "ms": 1.0
+        },
+        {
+          "module": "QuartzCore",
+          "symbol": "CA::OGL::MetalContext::delete_image(CA::OGL::Image*)",
+          "ms": 1.0
+        },
+        {
+          "module": "RenderBox",
+          "symbol": "RB::SharedSurfaceGroup::prune_removed_locked()",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "_dispatch_lane_serial_drain",
+          "ms": 1.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "bool objc::DenseMapBase<objc::DenseMap<DisguisedPtr<objc_object const>, unsigned long, (anonymous namespace)::RefcountMapValuePurgeable, objc::DenseMapInfo<DisguisedPtr<objc_object const>>, objc::detail::DenseMapPair<DisguisedPtr<objc_object const>, unsigned long>>, DisguisedPtr<objc_object const>, unsigned long, (anonymous namespace)::RefcountMapValuePurgeable, objc::DenseMapInfo<DisguisedPtr<objc_object const>>, objc::detail::DenseMapPair<DisguisedPtr<objc_object const>, unsigned long>>::LookupBucketFor<DisguisedPtr<objc_object const>>(DisguisedPtr<objc_object const> const&, objc::detail::DenseMapPair<DisguisedPtr<objc_object const>, unsigned long>*&)",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "__kdebug_trace64",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_platform.dylib",
+          "symbol": "_platform_memset",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-08": {
+      "sample_weight_ms": 23.0,
+      "sample_count": 23,
+      "leaf_module_ms": {
+        "vImage": 2.0,
+        "libsystem_pthread.dylib": 5.0,
+        "libsystem_kernel.dylib": 7.0,
+        "D.debug.dylib": 1.0,
+        "IOKit": 4.0,
+        "AGXMetalG16G_B0": 1.0,
+        "libdispatch.dylib": 1.0,
+        "libsystem_trace.dylib": 1.0,
+        "libobjc.A.dylib": 1.0
+      },
+      "leaf_symbol_status_ms": {
+        "named": 23.0
+      },
+      "leaf_class_partition_ms": {
+        "UNCLASSIFIED": 23.0
+      },
+      "inclusive_class_ms_overlapping": {},
+      "top_self": [
+        {
+          "module": "libsystem_pthread.dylib",
+          "symbol": "start_wqthread",
+          "ms": 5.0
+        },
+        {
+          "module": "IOKit",
+          "symbol": "iokit_user_client_trap",
+          "ms": 4.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "mach_msg2_trap",
+          "ms": 3.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "kevent_id",
+          "ms": 2.0
+        },
+        {
+          "module": "vImage",
+          "symbol": "vConvert_PermuteChannelsWithMaskedInsert_ARGB8888_CV_vec",
+          "ms": 2.0
+        },
+        {
+          "module": "AGXMetalG16G_B0",
+          "symbol": "AGX::ContextCommon<AGX::HAL200::Encoders, AGX::HAL200::Classes, AGX::HAL200::ObjClasses, AGX::HAL200::DataBufferAllocator>::newCommand(unsigned long, bool)",
+          "ms": 1.0
+        },
+        {
+          "module": "D.debug.dylib",
+          "symbol": "type metadata accessor for ModelResourceControl",
+          "ms": 1.0
+        },
+        {
+          "module": "libdispatch.dylib",
+          "symbol": "_dispatch_lane_push",
+          "ms": 1.0
+        },
+        {
+          "module": "libobjc.A.dylib",
+          "symbol": "bool objc::DenseMapBase<objc::DenseMap<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>, objc::DenseMapValueInfo<objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>, objc::DenseMapInfo<DisguisedPtr<objc_object>>, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>>, DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>, objc::DenseMapValueInfo<objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>, objc::DenseMapInfo<DisguisedPtr<objc_object>>, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>>>::LookupBucketFor<DisguisedPtr<objc_object>>(DisguisedPtr<objc_object> const&, objc::detail::DenseMapPair<DisguisedPtr<objc_object>, objc::DenseMap<void const*, objc::ObjcAssociation, objc::DenseMapValueInfo<objc::ObjcAssociation>, objc::DenseMapInfo<void const*>, objc::detail::DenseMapPair<void const*, objc::ObjcAssociation>>> const*&) const",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "__kdebug_trace64",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_kernel.dylib",
+          "symbol": "__psynch_cvwait",
+          "ms": 1.0
+        },
+        {
+          "module": "libsystem_trace.dylib",
+          "symbol": "DYLD-STUB$$__error",
+          "ms": 1.0
+        }
+      ]
+    },
+    "worker-09": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    },
+    "worker-10": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    },
+    "worker-11": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    },
+    "worker-12": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    },
+    "worker-13": {
+      "sample_weight_ms": 0,
+      "sample_count": 0,
+      "leaf_module_ms": {},
+      "leaf_symbol_status_ms": {},
+      "leaf_class_partition_ms": {},
+      "inclusive_class_ms_overlapping": {},
+      "top_self": []
+    }
+  },
+  "scheduler": {
+    "event": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 10832766838,
+        "Runnable": 37073540,
+        "Running": 135729694,
+        "Interrupted": 697297,
+        "Preempted": 1808631
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 10832766838,
+        "Runnable": 37073540,
+        "Running": 135729694,
+        "Interrupted": 697297,
+        "Preempted": 1808631
+      }
+    },
+    "main": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 9606351766,
+        "Runnable": 18070348,
+        "Running": 1367778502,
+        "Interrupted": 11188492,
+        "Preempted": 4686892
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 9606351766,
+        "Runnable": 18070348,
+        "Running": 1367778502,
+        "Interrupted": 11188492,
+        "Preempted": 4686892
+      }
+    },
+    "worker-01": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Idle": 10932249544,
+        "Runnable": 9908695,
+        "Running": 44464884,
+        "Interrupted": 1000710,
+        "Preempted": 1174050,
+        "Blocked": 19278117
+      },
+      "raw_state_sum_ns": {
+        "Idle": 10932249544,
+        "Runnable": 9908695,
+        "Running": 44464884,
+        "Interrupted": 1000710,
+        "Preempted": 1174050,
+        "Blocked": 19278117
+      }
+    },
+    "worker-02": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Idle": 10992171843,
+        "Runnable": 3945203,
+        "Running": 8829124,
+        "Interrupted": 94957,
+        "Preempted": 1061499,
+        "Blocked": 1973374
+      },
+      "raw_state_sum_ns": {
+        "Idle": 10992171843,
+        "Runnable": 3945203,
+        "Running": 8829124,
+        "Interrupted": 94957,
+        "Preempted": 1061499,
+        "Blocked": 1973374
+      }
+    },
+    "worker-03": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Unknown": 8158492750,
+        "Runnable": 100208,
+        "Running": 1736958,
+        "Interrupted": 4042,
+        "Preempted": 18625,
+        "Blocked": 4208,
+        "Idle": 2847719209
+      },
+      "raw_state_sum_ns": {
+        "Unknown": 8158492750,
+        "Runnable": 100208,
+        "Running": 1736958,
+        "Interrupted": 4042,
+        "Preempted": 18625,
+        "Blocked": 4208,
+        "Idle": 2847719209
+      }
+    },
+    "worker-04": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Unknown": 8158523666,
+        "Runnable": 84792,
+        "Running": 1693540,
+        "Interrupted": 3168,
+        "Blocked": 19417,
+        "Idle": 2847751417
+      },
+      "raw_state_sum_ns": {
+        "Unknown": 8158523666,
+        "Runnable": 84792,
+        "Running": 1693540,
+        "Interrupted": 3168,
+        "Blocked": 19417,
+        "Idle": 2847751417
+      }
+    },
+    "worker-05": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Unknown": 8158518708,
+        "Runnable": 245000,
+        "Running": 1516041,
+        "Interrupted": 2792,
+        "Preempted": 92750,
+        "Blocked": 33375,
+        "Idle": 2847667334
+      },
+      "raw_state_sum_ns": {
+        "Unknown": 8158518708,
+        "Runnable": 245000,
+        "Running": 1516041,
+        "Interrupted": 2792,
+        "Preempted": 92750,
+        "Blocked": 33375,
+        "Idle": 2847667334
+      }
+    },
+    "worker-06": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Unknown": 8158486375,
+        "Runnable": 4035948,
+        "Running": 22906553,
+        "Interrupted": 459378,
+        "Preempted": 399294,
+        "Idle": 2814327285,
+        "Blocked": 7461167
+      },
+      "raw_state_sum_ns": {
+        "Unknown": 8158486375,
+        "Runnable": 4035948,
+        "Running": 22906553,
+        "Interrupted": 459378,
+        "Preempted": 399294,
+        "Idle": 2814327285,
+        "Blocked": 7461167
+      }
+    },
+    "worker-07": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 8173198033,
+        "Runnable": 4815819,
+        "Running": 27692516,
+        "Interrupted": 501584,
+        "Preempted": 385374,
+        "Idle": 2801482674
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 8173198033,
+        "Runnable": 4815819,
+        "Running": 27692516,
+        "Interrupted": 501584,
+        "Preempted": 385374,
+        "Idle": 2801482674
+      }
+    },
+    "worker-08": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Unknown": 8158508375,
+        "Runnable": 4080939,
+        "Running": 21393313,
+        "Interrupted": 468415,
+        "Blocked": 6418837,
+        "Preempted": 552130,
+        "Idle": 2816653991
+      },
+      "raw_state_sum_ns": {
+        "Unknown": 8158508375,
+        "Runnable": 4080939,
+        "Running": 21393313,
+        "Interrupted": 468415,
+        "Blocked": 6418837,
+        "Preempted": 552130,
+        "Idle": 2816653991
+      }
+    },
+    "worker-09": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Unknown": 8158502291,
+        "Runnable": 90084,
+        "Running": 942417,
+        "Blocked": 161625,
+        "Interrupted": 8250,
+        "Preempted": 707458,
+        "Idle": 2847663875
+      },
+      "raw_state_sum_ns": {
+        "Unknown": 8158502291,
+        "Runnable": 90084,
+        "Running": 942417,
+        "Blocked": 161625,
+        "Interrupted": 8250,
+        "Preempted": 707458,
+        "Idle": 2847663875
+      }
+    },
+    "worker-10": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Unknown": 8159887500,
+        "Runnable": 6041,
+        "Running": 23250,
+        "Idle": 2848159209
+      },
+      "raw_state_sum_ns": {
+        "Unknown": 8159887500,
+        "Runnable": 6041,
+        "Running": 23250,
+        "Idle": 2848159209
+      }
+    },
+    "worker-11": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 11008076000
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 11008076000
+      }
+    },
+    "worker-12": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 11008076000
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 11008076000
+      }
+    },
+    "worker-13": {
+      "window_ns": 11008076000,
+      "covered_ns": 11008076000,
+      "gap_ns": 0,
+      "overlap_ns": 0,
+      "cross_state_overlap_ns": 0,
+      "exact_duplicate_intervals": 0,
+      "state_union_ns": {
+        "Blocked": 11008076000
+      },
+      "raw_state_sum_ns": {
+        "Blocked": 11008076000
+      }
+    }
+  },
+  "presentation_inventory": {
+    "hitches-renders": {
+      "rows": 1396,
+      "target_pid_rows": 0,
+      "no_pid_rows": 1396,
+      "fields": [
+        "start-time",
+        "duration",
+        "display-name",
+        "uint32",
+        "uint32",
+        "uint32",
+        "event-concept",
+        "uint32",
+        "string"
+      ]
+    },
+    "displayed-surfaces-interval": {
+      "rows": 1372,
+      "target_pid_rows": 0,
+      "no_pid_rows": 1372,
+      "fields": [
+        "start-time",
+        "duration",
+        "sentinel",
+        "display-name",
+        "connection-uuid64",
+        "uint64",
+        "string",
+        "render-buffer-depth",
+        "metal-workload-priority",
+        "narrative",
+        "display-event-name",
+        "metal-nesting-level",
+        "boolean",
+        "size-in-pixels",
+        "sentinel",
+        "sentinel"
+      ]
+    },
+    "hitches-updates": {
+      "rows": 472,
+      "target_pid_rows": 472,
+      "no_pid_rows": 0,
+      "fields": [
+        "start-time",
+        "duration",
+        "process",
+        "display-name",
+        "uint32",
+        "uint32",
+        "event-concept",
+        "uint32",
+        "string"
+      ]
+    },
+    "metal-command-buffer-completed": {
+      "rows": 6050,
+      "target_pid_rows": 0,
+      "no_pid_rows": 6050,
+      "fields": [
+        "start-time",
+        "metal-command-buffer-id",
+        "uint64"
+      ]
+    },
+    "hitches-frame-lifetimes": {
+      "rows": 1372,
+      "target_pid_rows": 0,
+      "no_pid_rows": 1372,
+      "fields": [
+        "start-time",
+        "duration",
+        "display-name",
+        "uint32",
+        "uint32",
+        "event-concept",
+        "layout-id",
+        "string"
+      ]
+    },
+    "display-surface-swap": {
+      "rows": 1373,
+      "target_pid_rows": 0,
+      "no_pid_rows": 1373,
+      "fields": [
+        "start-time",
+        "start-time",
+        "display-name",
+        "displayed-surface-swap",
+        "uint32",
+        "displayed-surface-swap",
+        "render-buffer-depth",
+        "string",
+        "start-time",
+        "start-time",
+        "uint32",
+        "start-time",
+        "sentinel",
+        "sentinel",
+        "string",
+        "string"
+      ]
+    }
+  },
+  "time_profile_schema": {
+    "target-pid": "SINGLE",
+    "context-switch-sampling": "0",
+    "high-frequency-sampling": "0",
+    "schema": "time-profile",
+    "needs-kernel-callstack": "0",
+    "record-waiting-threads": "0",
+    "documentation": "When combined with other time-profile samples, creates a statistical picture of where your application is spending its time."
+  }
+}

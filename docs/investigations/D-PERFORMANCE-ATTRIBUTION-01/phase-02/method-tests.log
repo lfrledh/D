@@ -1,0 +1,27 @@
+test_duplicate_swap_and_display_remain_ambiguous (test_presentation_join.JoinTests) ... ok
+test_exact_time_and_surface_only_no_nearest_matching (test_presentation_join.JoinTests) ... ok
+test_nested_levels_are_not_silently_discarded (test_presentation_join.JoinTests) ... ok
+test_two_swaps_one_interval_is_not_unique_chain (test_presentation_join.JoinTests) ... ok
+test_anonymous_addresses_remain_distinct (test_reanalyze.MethodTests) ... ok
+test_classification_overlap_and_current_connection_symbols (test_reanalyze.MethodTests) ... ok
+test_cross_row_table_nested_and_repeated_tags (test_reanalyze.MethodTests) ... ok
+test_distinct_tid_with_same_role_does_not_merge (test_reanalyze.MethodTests) ... ok
+test_duplicate_id_rejected (test_reanalyze.MethodTests) ... ok
+test_end_to_end_all_threads_weights_recursion_modules_and_half_open (test_reanalyze.MethodTests) ... ok
+test_invalid_window_rejected (test_reanalyze.MethodTests) ... ok
+test_missing_and_forward_reference_rejected_at_use (test_reanalyze.MethodTests) ... ok
+test_missing_tid_and_negative_weight_rejected (test_reanalyze.MethodTests) ... ok
+test_reference_cycle_rejected (test_reanalyze.MethodTests) ... ok
+test_scheduler_all_named_states_and_adjacency (test_reanalyze.MethodTests) ... ok
+test_scheduler_boundaries_and_explicit_unknown_not_gap (test_reanalyze.MethodTests) ... ok
+test_scheduler_duplicate_same_and_cross_state_overlap (test_reanalyze.MethodTests) ... ok
+test_schema_mismatch_and_index_rejected (test_reanalyze.MethodTests) ... ok
+test_selection_determinism_and_empty_thirds (test_reanalyze.MethodTests) ... ok
+test_unknown_schema_xpath_rejected (test_reanalyze.MethodTests) ... ok
+test_weighted_middle_is_not_row_middle (test_reanalyze.MethodTests) ... ok
+test_zero_sample_window_keeps_scheduler (test_reanalyze.MethodTests) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 0.027s
+
+OK

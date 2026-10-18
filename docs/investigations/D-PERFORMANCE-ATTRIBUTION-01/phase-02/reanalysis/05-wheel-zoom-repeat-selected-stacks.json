@@ -1,0 +1,7150 @@
+[
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "event",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 2435,
+    "t_s": 3.949268291,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_trap"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_internal"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg_overwrite"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg"
+      ],
+      [
+        "SkyLight",
+        "CGSSnarfAndDispatchDatagrams"
+      ],
+      [
+        "SkyLight",
+        "SLSGetNextEventRecordInternal"
+      ],
+      [
+        "SkyLight",
+        "SLEventCreateNextEvent"
+      ],
+      [
+        "HIToolbox",
+        "PullEventsFromWindowServerOnConnection(unsigned int, unsigned char, __CFMachPortBoost*)"
+      ],
+      [
+        "HIToolbox",
+        "MessageHandler(__CFMachPort*, void*, long, void*)"
+      ],
+      [
+        "CoreFoundation",
+        "__CFMachPortPerform"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE1_PERFORM_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoSource1"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "AppKit",
+        "_NSEventThread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_start"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "thread_start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "event",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 4470,
+    "t_s": 7.1152695,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_trap"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_internal"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg_overwrite"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg"
+      ],
+      [
+        "CoreFoundation",
+        "CFRunLoopWakeUp"
+      ],
+      [
+        "HIToolbox",
+        "PushToCGEventQueue(__CGEvent*, unsigned int, unsigned char, __CFMachPortBoost*)"
+      ],
+      [
+        "HIToolbox",
+        "PullEventsFromWindowServerOnConnection(unsigned int, unsigned char, __CFMachPortBoost*)"
+      ],
+      [
+        "HIToolbox",
+        "MessageHandler(__CFMachPort*, void*, long, void*)"
+      ],
+      [
+        "CoreFoundation",
+        "__CFMachPortPerform"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE1_PERFORM_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoSource1"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "AppKit",
+        "_NSEventThread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_start"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "thread_start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "event",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 8740,
+    "t_s": 14.85426875,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_trap"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_internal"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg_overwrite"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg"
+      ],
+      [
+        "SkyLight",
+        "CGSSnarfAndDispatchDatagrams"
+      ],
+      [
+        "SkyLight",
+        "SLSGetNextEventRecordInternal"
+      ],
+      [
+        "SkyLight",
+        "SLEventCreateNextEvent"
+      ],
+      [
+        "HIToolbox",
+        "PullEventsFromWindowServerOnConnection(unsigned int, unsigned char, __CFMachPortBoost*)"
+      ],
+      [
+        "HIToolbox",
+        "MessageHandler(__CFMachPort*, void*, long, void*)"
+      ],
+      [
+        "CoreFoundation",
+        "__CFMachPortPerform"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE1_PERFORM_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoSource1"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "AppKit",
+        "_NSEventThread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_start"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "thread_start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "event",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 10537,
+    "t_s": 17.427268833,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_platform.dylib",
+        "_platform_memset"
+      ],
+      [
+        "libsystem_malloc.dylib",
+        "_xzm_free"
+      ],
+      [
+        "SkyLight",
+        "CGSSnarfAndDispatchDatagrams"
+      ],
+      [
+        "SkyLight",
+        "SLSGetNextEventRecordInternal"
+      ],
+      [
+        "SkyLight",
+        "SLEventCreateNextEvent"
+      ],
+      [
+        "HIToolbox",
+        "PullEventsFromWindowServerOnConnection(unsigned int, unsigned char, __CFMachPortBoost*)"
+      ],
+      [
+        "HIToolbox",
+        "MessageHandler(__CFMachPort*, void*, long, void*)"
+      ],
+      [
+        "CoreFoundation",
+        "__CFMachPortPerform"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE1_PERFORM_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoSource1"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "AppKit",
+        "_NSEventThread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_start"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "thread_start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "event",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 12054,
+    "t_s": 19.697268416,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_trap"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_internal"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg_overwrite"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg"
+      ],
+      [
+        "SkyLight",
+        "CGSSnarfAndDispatchDatagrams"
+      ],
+      [
+        "SkyLight",
+        "SLSGetNextEventRecordInternal"
+      ],
+      [
+        "SkyLight",
+        "SLEventCreateNextEvent"
+      ],
+      [
+        "HIToolbox",
+        "PullEventsFromWindowServerOnConnection(unsigned int, unsigned char, __CFMachPortBoost*)"
+      ],
+      [
+        "HIToolbox",
+        "MessageHandler(__CFMachPort*, void*, long, void*)"
+      ],
+      [
+        "CoreFoundation",
+        "__CFMachPortPerform"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE1_PERFORM_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoSource1"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "AppKit",
+        "_NSEventThread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_start"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "thread_start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "event",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 12179,
+    "t_s": 19.841268666,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_trap"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_internal"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg_overwrite"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg"
+      ],
+      [
+        "SkyLight",
+        "CGSSnarfAndDispatchDatagrams"
+      ],
+      [
+        "SkyLight",
+        "SLSGetNextEventRecordInternal"
+      ],
+      [
+        "SkyLight",
+        "SLEventCreateNextEvent"
+      ],
+      [
+        "HIToolbox",
+        "PullEventsFromWindowServerOnConnection(unsigned int, unsigned char, __CFMachPortBoost*)"
+      ],
+      [
+        "HIToolbox",
+        "MessageHandler(__CFMachPort*, void*, long, void*)"
+      ],
+      [
+        "CoreFoundation",
+        "__CFMachPortPerform"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE1_PERFORM_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoSource1"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "AppKit",
+        "_NSEventThread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_start"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "thread_start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "event",
+    "period": "bin-13",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 10351,
+    "t_s": 17.271269125,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_trap"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_internal"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg_overwrite"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg"
+      ],
+      [
+        "SkyLight",
+        "CGSSnarfAndDispatchDatagrams"
+      ],
+      [
+        "SkyLight",
+        "SLSGetNextEventRecordInternal"
+      ],
+      [
+        "SkyLight",
+        "SLEventCreateNextEvent"
+      ],
+      [
+        "HIToolbox",
+        "PullEventsFromWindowServerOnConnection(unsigned int, unsigned char, __CFMachPortBoost*)"
+      ],
+      [
+        "HIToolbox",
+        "MessageHandler(__CFMachPort*, void*, long, void*)"
+      ],
+      [
+        "CoreFoundation",
+        "__CFMachPortPerform"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE1_PERFORM_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoSource1"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "AppKit",
+        "_NSEventThread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_start"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "thread_start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "main",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 2379,
+    "t_s": 3.677268291,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "SwiftUICore",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libswiftCore.dylib",
+        "void tuple_destroy<false, false>(swift::OpaqueValue*, swift::TargetMetadata<swift::InProcess> const*)"
+      ],
+      [
+        "SwiftUICore",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "SwiftUICore",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libswiftCore.dylib",
+        "void tuple_destroy<false, false>(swift::OpaqueValue*, swift::TargetMetadata<swift::InProcess> const*)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in VStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "_VariadicView.Tree.init(_:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "VStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "D.debug.dylib",
+        "SharedLibraryBrowser.compactBody.getter"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in SharedLibraryBrowser.body.getter"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in VStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "_VariadicView.Tree.init(_:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "VStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "D.debug.dylib",
+        "SharedLibraryBrowser.body.getter"
+      ],
+      [
+        "D.debug.dylib",
+        "protocol witness for View.body.getter in conformance SharedLibraryBrowser"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in ViewBodyAccessor.updateBody(of:changed:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewBodyAccessor.updateBody(of:changed:)"
+      ],
+      [
+        "SwiftUICore",
+        "protocol witness for BodyAccessor.updateBody(of:changed:) in conformance ViewBodyAccessor<A>"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in DynamicBody.updateValue()"
+      ],
+      [
+        "SwiftUICore",
+        "DynamicBody.updateValue()"
+      ],
+      [
+        "SwiftUICore",
+        "partial apply for implicit closure #1 in closure #1 in closure #1 in Attribute.init<A>(_:)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::UpdateStack::update()"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::update_attribute(AG::data::ptr<AG::Node>, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::value_ref(AG::AttributeID, unsigned int, AGSwiftMetadata const*, unsigned char&)"
+      ],
+      [
+        "AttributeGraph",
+        "AGGraphGetWeakValue"
+      ],
+      [
+        "SwiftUI",
+        "AccessibilityViewGraph.rootFocusStoreList.getter"
+      ],
+      [
+        "SwiftUI",
+        "AccessibilityViewGraph.needsUpdate(graph:)"
+      ],
+      [
+        "SwiftUICore",
+        "static ViewGraphFeatureBuffer._VTable.needsUpdate(elt:graph:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraph.updateOutputs(at:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUI",
+        "closure #1 in NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "AppKit",
+        "+[NSAnimationContext runAnimationGroup:]"
+      ],
+      [
+        "SwiftUI",
+        "NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "@objc NSHostingView.layout()"
+      ],
+      [
+        "AppKit",
+        "<address-94a413e98bd120ec>"
+      ],
+      [
+        "AppKit",
+        "<address-ce0a63259acb4ac2>"
+      ],
+      [
+        "AppKit",
+        "<address-6f210abad80993a4>"
+      ],
+      [
+        "AppKit",
+        "<address-9ea155b44eb19cd6>"
+      ],
+      [
+        "AppKit",
+        "___NSViewLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "_NSViewLayout"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__56-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView layoutSubtreeIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) _layoutViewTree]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) layoutIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "__NSWindowGetDisplayCycleObserverForLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleObserverInvoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleFlush"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::run_commit_handlers(CATransactionPhase)"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::commit()"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::flush_as_runloop_observer(bool)"
+      ],
+      [
+        "AppKit",
+        "stepTransactionFlush"
+      ],
+      [
+        "UpdateCycle",
+        "UC::DriverCore::continueProcessing()"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_AN_OBSERVER_CALLBACK_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoObservers"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "HIToolbox",
+        "RunCurrentEventLoopInMode"
+      ],
+      [
+        "HIToolbox",
+        "ReceiveNextEventCommon"
+      ],
+      [
+        "HIToolbox",
+        "_BlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSBlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSNextEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) _nextEventMatchingEventMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) nextEventMatchingMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "main",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 6189,
+    "t_s": 9.778270916,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "SwiftUI",
+        "DYLD-STUB$$swift_release"
+      ],
+      [
+        "SwiftUI",
+        "static AccessibilityViewModifierAccessor.willCreateNode(modifier:for:)"
+      ],
+      [
+        "SwiftUI",
+        "PropertiesTransform.updateValue()"
+      ],
+      [
+        "SwiftUI",
+        "specialized implicit closure #1 in closure #1 in closure #1 in Attribute.init<A>(_:)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::UpdateStack::update()"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::update_attribute(AG::data::ptr<AG::Node>, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::value_ref(AG::AttributeID, unsigned int, AGSwiftMetadata const*, unsigned char&)"
+      ],
+      [
+        "AttributeGraph",
+        "AGGraphGetWeakValue"
+      ],
+      [
+        "SwiftUI",
+        "AccessibilityViewGraph.needsUpdate(graph:)"
+      ],
+      [
+        "SwiftUICore",
+        "static ViewGraphFeatureBuffer._VTable.needsUpdate(elt:graph:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraph.updateOutputs(at:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUI",
+        "closure #1 in NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "AppKit",
+        "+[NSAnimationContext runAnimationGroup:]"
+      ],
+      [
+        "SwiftUI",
+        "NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "@objc NSHostingView.layout()"
+      ],
+      [
+        "AppKit",
+        "<address-94a413e98bd120ec>"
+      ],
+      [
+        "AppKit",
+        "<address-ce0a63259acb4ac2>"
+      ],
+      [
+        "AppKit",
+        "<address-6f210abad80993a4>"
+      ],
+      [
+        "AppKit",
+        "<address-9ea155b44eb19cd6>"
+      ],
+      [
+        "AppKit",
+        "___NSViewLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "_NSViewLayout"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__56-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView layoutSubtreeIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) _layoutViewTree]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) layoutIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "__NSWindowGetDisplayCycleObserverForLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleObserverInvoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleFlush"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::run_commit_handlers(CATransactionPhase)"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::commit()"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::flush_as_runloop_observer(bool)"
+      ],
+      [
+        "AppKit",
+        "stepTransactionFlush"
+      ],
+      [
+        "UpdateCycle",
+        "UC::DriverCore::continueProcessing()"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_AN_OBSERVER_CALLBACK_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoObservers"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "HIToolbox",
+        "RunCurrentEventLoopInMode"
+      ],
+      [
+        "HIToolbox",
+        "ReceiveNextEventCommon"
+      ],
+      [
+        "HIToolbox",
+        "_BlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSBlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSNextEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) _nextEventMatchingEventMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) nextEventMatchingMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "main",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 7143,
+    "t_s": 11.68526825,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "SwiftUICore",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "SwiftUI",
+        "initializeWithCopy for AccessibilityAttachmentStorage"
+      ],
+      [
+        "SwiftUI",
+        "outlined init with copy of AccessibilityAttachmentStorage"
+      ],
+      [
+        "SwiftUI",
+        "AccessibilityNode.isPlatformNode.getter"
+      ],
+      [
+        "SwiftUI",
+        "AccessibilityAttachmentModifier.updatedAttachment(for:nodes:atIndex:)"
+      ],
+      [
+        "SwiftUI",
+        "static AccessibilityViewModifierAccessor.updatedAttachment(modifier:for:nodes:atIndex:)"
+      ],
+      [
+        "SwiftUI",
+        "PropertiesTransform.updateValue()"
+      ],
+      [
+        "SwiftUI",
+        "specialized implicit closure #1 in closure #1 in closure #1 in Attribute.init<A>(_:)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::UpdateStack::update()"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::update_attribute(AG::data::ptr<AG::Node>, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::value_ref(AG::AttributeID, unsigned int, AGSwiftMetadata const*, unsigned char&)"
+      ],
+      [
+        "AttributeGraph",
+        "AGGraphGetWeakValue"
+      ],
+      [
+        "SwiftUI",
+        "AccessibilityViewGraph.needsUpdate(graph:)"
+      ],
+      [
+        "SwiftUICore",
+        "static ViewGraphFeatureBuffer._VTable.needsUpdate(elt:graph:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraph.updateOutputs(at:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUI",
+        "closure #1 in NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "AppKit",
+        "+[NSAnimationContext runAnimationGroup:]"
+      ],
+      [
+        "SwiftUI",
+        "NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "@objc NSHostingView.layout()"
+      ],
+      [
+        "AppKit",
+        "<address-94a413e98bd120ec>"
+      ],
+      [
+        "AppKit",
+        "<address-ce0a63259acb4ac2>"
+      ],
+      [
+        "AppKit",
+        "<address-6f210abad80993a4>"
+      ],
+      [
+        "AppKit",
+        "<address-9ea155b44eb19cd6>"
+      ],
+      [
+        "AppKit",
+        "___NSViewLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "_NSViewLayout"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__56-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView layoutSubtreeIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) _layoutViewTree]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) layoutIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "__NSWindowGetDisplayCycleObserverForLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleObserverInvoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleFlush"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::run_commit_handlers(CATransactionPhase)"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::commit()"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::flush_as_runloop_observer(bool)"
+      ],
+      [
+        "AppKit",
+        "stepTransactionFlush"
+      ],
+      [
+        "UpdateCycle",
+        "UC::DriverCore::continueProcessing()"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_AN_OBSERVER_CALLBACK_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoObservers"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "HIToolbox",
+        "RunCurrentEventLoopInMode"
+      ],
+      [
+        "HIToolbox",
+        "ReceiveNextEventCommon"
+      ],
+      [
+        "HIToolbox",
+        "_BlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSBlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSNextEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) _nextEventMatchingEventMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) nextEventMatchingMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "main",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 11435,
+    "t_s": 18.836268458,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "D.debug.dylib",
+        "static SharedLibraryItem.== infix(_:_:)"
+      ],
+      [
+        "D.debug.dylib",
+        "static SharedLibraryBrowserEntry.__derived_struct_equals(_:_:)"
+      ],
+      [
+        "D.debug.dylib",
+        "protocol witness for static Equatable.== infix(_:_:) in conformance SharedLibraryBrowserEntry"
+      ],
+      [
+        "libswiftCore.dylib",
+        "static Array<A>.== infix(_:_:)"
+      ],
+      [
+        "AttributeGraph",
+        "AGDispatchEquatable"
+      ],
+      [
+        "AttributeGraph",
+        "AG::LayoutDescriptor::Compare::operator()(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::LayoutDescriptor::Compare::operator()(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::LayoutDescriptor::compare(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::LayoutDescriptor::Compare::operator()(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::LayoutDescriptor::compare(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned int)"
+      ],
+      [
+        "SwiftUICore",
+        "partial apply for closure #1 in closure #1 in compareValues<A>(_:_:options:)"
+      ],
+      [
+        "SwiftUICore",
+        "withUnsafePointer<A, B, C>(to:_:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in compareValues<A>(_:_:options:)"
+      ],
+      [
+        "SwiftUICore",
+        "partial apply for closure #1 in compareValues<A>(_:_:options:)"
+      ],
+      [
+        "SwiftUICore",
+        "partial apply for closure #1 in compareValues<A>(_:_:options:)"
+      ],
+      [
+        "SwiftUICore",
+        "withUnsafePointer<A, B, C>(to:_:)"
+      ],
+      [
+        "SwiftUICore",
+        "static FunctionalLocation.== infix(_:_:)"
+      ],
+      [
+        "SwiftUICore",
+        "protocol witness for static Equatable.== infix(_:_:) in conformance FunctionalLocation<A>"
+      ],
+      [
+        "SwiftUICore",
+        "LocationBox.isEqual(to:)"
+      ],
+      [
+        "SwiftUICore",
+        "static AnyLocation.== infix(_:_:)"
+      ],
+      [
+        "SwiftUICore",
+        "protocol witness for static Equatable.== infix(_:_:) in conformance AnyLocation<A>"
+      ],
+      [
+        "AttributeGraph",
+        "AGDispatchEquatable"
+      ],
+      [
+        "AttributeGraph",
+        "AG::LayoutDescriptor::Compare::operator()(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::LayoutDescriptor::Compare::operator()(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::LayoutDescriptor::Compare::operator()(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::LayoutDescriptor::Compare::operator()(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::LayoutDescriptor::Compare::operator()(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::LayoutDescriptor::Compare::operator()(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::LayoutDescriptor::compare_partial(unsigned char const*, unsigned char const*, unsigned char const*, unsigned long, unsigned long, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AGGraphSetOutputValue"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in StatefulRule.value.setter"
+      ],
+      [
+        "SwiftUICore",
+        "partial apply for closure #1 in StatefulRule.value.setter"
+      ],
+      [
+        "SwiftUICore",
+        "withUnsafePointer<A, B, C>(to:_:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in closure #1 in UnwrapConditional.updateValue()"
+      ],
+      [
+        "SwiftUICore",
+        "ConditionalTypeDescriptor.project(at:baseIndex:_:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #2 in ConditionalTypeDescriptor.project(at:baseIndex:_:)"
+      ],
+      [
+        "SwiftUICore",
+        "ConditionalTypeDescriptor.project(at:baseIndex:_:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in UnwrapConditional.updateValue()"
+      ],
+      [
+        "SwiftUICore",
+        "partial apply for closure #1 in UnwrapConditional.updateValue()"
+      ],
+      [
+        "SwiftUICore",
+        "withUnsafePointer<A, B, C>(to:_:)"
+      ],
+      [
+        "SwiftUICore",
+        "UnwrapConditional.updateValue()"
+      ],
+      [
+        "SwiftUICore",
+        "partial apply for implicit closure #1 in closure #1 in closure #1 in Attribute.init<A>(_:)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::UpdateStack::update()"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::update_attribute(AG::data::ptr<AG::Node>, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::value_ref(AG::AttributeID, unsigned int, AGSwiftMetadata const*, unsigned char&)"
+      ],
+      [
+        "AttributeGraph",
+        "AGGraphGetWeakValue"
+      ],
+      [
+        "SwiftUI",
+        "AccessibilityViewGraph.rootFocusStoreList.getter"
+      ],
+      [
+        "SwiftUI",
+        "AccessibilityViewGraph.needsUpdate(graph:)"
+      ],
+      [
+        "SwiftUICore",
+        "static ViewGraphFeatureBuffer._VTable.needsUpdate(elt:graph:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraph.updateOutputs(at:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUI",
+        "closure #1 in NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "AppKit",
+        "+[NSAnimationContext runAnimationGroup:]"
+      ],
+      [
+        "SwiftUI",
+        "NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "@objc NSHostingView.layout()"
+      ],
+      [
+        "AppKit",
+        "<address-94a413e98bd120ec>"
+      ],
+      [
+        "AppKit",
+        "<address-ce0a63259acb4ac2>"
+      ],
+      [
+        "AppKit",
+        "<address-6f210abad80993a4>"
+      ],
+      [
+        "AppKit",
+        "<address-9ea155b44eb19cd6>"
+      ],
+      [
+        "AppKit",
+        "___NSViewLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "_NSViewLayout"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__56-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView layoutSubtreeIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) _layoutViewTree]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) layoutIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "__NSWindowGetDisplayCycleObserverForLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleObserverInvoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleFlush"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::run_commit_handlers(CATransactionPhase)"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::commit()"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::flush_as_runloop_observer(bool)"
+      ],
+      [
+        "AppKit",
+        "stepTransactionFlush"
+      ],
+      [
+        "UpdateCycle",
+        "UC::DriverCore::continueProcessing()"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_AN_OBSERVER_CALLBACK_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoObservers"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "HIToolbox",
+        "RunCurrentEventLoopInMode"
+      ],
+      [
+        "HIToolbox",
+        "ReceiveNextEventCommon"
+      ],
+      [
+        "HIToolbox",
+        "_BlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSBlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSNextEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) _nextEventMatchingEventMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) nextEventMatchingMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "main",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 12070,
+    "t_s": 19.713268333,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "SwiftUICore",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "SwiftUICore",
+        "initializeWithCopy for AddGestureModifier"
+      ],
+      [
+        "AttributeGraph",
+        "<address-a3f780aaf7f57937>"
+      ],
+      [
+        "SwiftUICore",
+        "implicit closure #1 in closure #1 in closure #1 in Attribute.init<A>(_:)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::UpdateStack::update()"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::update_attribute(AG::data::ptr<AG::Node>, unsigned int)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::value_ref(AG::AttributeID, unsigned int, AGSwiftMetadata const*, unsigned char&)"
+      ],
+      [
+        "AttributeGraph",
+        "AGGraphGetWeakValue"
+      ],
+      [
+        "SwiftUI",
+        "AccessibilityViewGraph.needsUpdate(graph:)"
+      ],
+      [
+        "SwiftUICore",
+        "static ViewGraphFeatureBuffer._VTable.needsUpdate(elt:graph:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraph.updateOutputs(at:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUI",
+        "closure #1 in NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "AppKit",
+        "+[NSAnimationContext runAnimationGroup:]"
+      ],
+      [
+        "SwiftUI",
+        "NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "@objc NSHostingView.layout()"
+      ],
+      [
+        "AppKit",
+        "<address-94a413e98bd120ec>"
+      ],
+      [
+        "AppKit",
+        "<address-ce0a63259acb4ac2>"
+      ],
+      [
+        "AppKit",
+        "<address-6f210abad80993a4>"
+      ],
+      [
+        "AppKit",
+        "<address-9ea155b44eb19cd6>"
+      ],
+      [
+        "AppKit",
+        "___NSViewLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "_NSViewLayout"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__56-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView layoutSubtreeIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) _layoutViewTree]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) layoutIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "__NSWindowGetDisplayCycleObserverForLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleObserverInvoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleFlush"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::run_commit_handlers(CATransactionPhase)"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::commit()"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::flush_as_runloop_observer(bool)"
+      ],
+      [
+        "AppKit",
+        "stepTransactionFlush"
+      ],
+      [
+        "UpdateCycle",
+        "UC::DriverCore::continueProcessing()"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_AN_OBSERVER_CALLBACK_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoObservers"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "HIToolbox",
+        "RunCurrentEventLoopInMode"
+      ],
+      [
+        "HIToolbox",
+        "ReceiveNextEventCommon"
+      ],
+      [
+        "HIToolbox",
+        "_BlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSBlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSNextEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) _nextEventMatchingEventMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) nextEventMatchingMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "main",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 13024,
+    "t_s": 21.231270791,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "CoreGraphics",
+        "addCubeMonotonic"
+      ],
+      [
+        "CoreGraphics",
+        "path_iterator_unrollpath"
+      ],
+      [
+        "CoreGraphics",
+        "path_reverse_iterate"
+      ],
+      [
+        "CoreGraphics",
+        "path_iterator_iterate"
+      ],
+      [
+        "CoreGraphics",
+        "path_orientation_end"
+      ],
+      [
+        "CoreGraphics",
+        "CG::Path::apply_iterator(path_iterator*) const"
+      ],
+      [
+        "CoreGraphics",
+        "CGGlyphBitmapCreateWithPathAndDilation"
+      ],
+      [
+        "CoreGraphics",
+        "CGGlyphBuilderLockBitmaps"
+      ],
+      [
+        "CoreGraphics",
+        "render_glyphs"
+      ],
+      [
+        "CoreGraphics",
+        "draw_glyph_bitmaps"
+      ],
+      [
+        "CoreGraphics",
+        "ripc_DrawGlyphs"
+      ],
+      [
+        "CoreGraphics",
+        "CGContextDelegateDrawGlyphs"
+      ],
+      [
+        "CoreGraphics",
+        "CG::DisplayList::executeEntries(std::__1::__wrap_iter<std::__1::shared_ptr<CG::DisplayListEntry const>*>, std::__1::__wrap_iter<std::__1::shared_ptr<CG::DisplayListEntry const>*>, CGContextDelegate*, CGRenderingState*, CGGStack*, CGRect const*, __CFDictionary const*, bool)"
+      ],
+      [
+        "CoreGraphics",
+        "CGDisplayListDrawInContextDelegate"
+      ],
+      [
+        "QuartzCore",
+        "CABackingStoreUpdate_"
+      ],
+      [
+        "QuartzCore",
+        "invocation function for block in CA::Layer::display_()"
+      ],
+      [
+        "QuartzCore",
+        "-[CALayer _display]"
+      ],
+      [
+        "QuartzCore",
+        "CA::Layer::display_if_needed(CA::Transaction*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::Context::commit_transaction(CA::Transaction*, double, double*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::commit()"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::flush_as_runloop_observer(bool)"
+      ],
+      [
+        "AppKit",
+        "stepTransactionFlush"
+      ],
+      [
+        "UpdateCycle",
+        "UC::DriverCore::continueProcessing()"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_AN_OBSERVER_CALLBACK_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoObservers"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "HIToolbox",
+        "RunCurrentEventLoopInMode"
+      ],
+      [
+        "HIToolbox",
+        "ReceiveNextEventCommon"
+      ],
+      [
+        "HIToolbox",
+        "_BlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSBlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSNextEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) _nextEventMatchingEventMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) nextEventMatchingMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "main",
+    "period": "bin-13",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 10282,
+    "t_s": 17.214268208,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libswiftCore.dylib",
+        "String.init(_builtinStringLiteral:utf8CodeUnitCount:isASCII:)"
+      ],
+      [
+        "D.debug.dylib",
+        "consistencyText(_:_:arguments:)"
+      ],
+      [
+        "D.debug.dylib",
+        "WorkflowCanvasView.runHelpReason.getter"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in closure #1 in WorkflowCanvasView.executionBar.getter"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in HStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "_VariadicView.Tree.init(_:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "HStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in WorkflowCanvasView.executionBar.getter"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in VStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "_VariadicView.Tree.init(_:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "VStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "D.debug.dylib",
+        "WorkflowCanvasView.executionBar.getter"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in closure #3 in closure #2 in closure #1 in WorkflowCanvasView.panels(height:width:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in HStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "_VariadicView.Tree.init(_:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "HStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #3 in closure #2 in closure #1 in WorkflowCanvasView.panels(height:width:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in VStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "_VariadicView.Tree.init(_:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "VStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #2 in closure #1 in WorkflowCanvasView.panels(height:width:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in VStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "_VariadicView.Tree.init(_:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "VStack.init(alignment:spacing:content:)"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in WorkflowCanvasView.panels(height:width:)"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in ZStack.init(alignment:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "_VariadicView.Tree.init(_:content:)"
+      ],
+      [
+        "SwiftUICore",
+        "ZStack.init(alignment:content:)"
+      ],
+      [
+        "D.debug.dylib",
+        "WorkflowCanvasView.panels(height:width:)"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in closure #1 in closure #2 in WorkflowCanvasView.body.getter"
+      ],
+      [
+        "SwiftUICore",
+        "partial apply for closure #1 in closure #1 in GeometryReader.Child.updateValue()"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in Attribute.syncMainIfReferences<A>(do:)"
+      ],
+      [
+        "SwiftUICore",
+        "Attribute.syncMainIfReferences<A>(do:)"
+      ],
+      [
+        "SwiftUICore",
+        "partial apply for closure #1 in GeometryReader.Child.updateValue()"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in ObservationCenter._withObservation<A>(do:)"
+      ],
+      [
+        "SwiftUICore",
+        "partial apply for closure #1 in ObservationCenter._withObservation<A>(do:)"
+      ],
+      [
+        "SwiftUICore",
+        "withUnsafeMutablePointer<A, B, C>(to:_:)"
+      ],
+      [
+        "SwiftUICore",
+        "GeometryReader.Child.updateValue()"
+      ],
+      [
+        "SwiftUICore",
+        "partial apply for implicit closure #1 in closure #1 in closure #1 in Attribute.init<A>(_:)"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Graph::UpdateStack::update()"
+      ],
+      [
+        "AttributeGraph",
+        "AG::Subgraph::update(unsigned int)"
+      ],
+      [
+        "SwiftUICore",
+        "specialized GraphHost.runTransaction(_:do:id:)"
+      ],
+      [
+        "SwiftUICore",
+        "GraphHost.flushTransactions()"
+      ],
+      [
+        "SwiftUICore",
+        "closure #1 in ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUICore",
+        "ViewGraphRootValueUpdater.render(interval:updateDisplayList:targetTimestamp:)"
+      ],
+      [
+        "SwiftUI",
+        "closure #1 in NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "SwiftUI",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "AppKit",
+        "+[NSAnimationContext runAnimationGroup:]"
+      ],
+      [
+        "SwiftUI",
+        "NSHostingView.layout()"
+      ],
+      [
+        "SwiftUI",
+        "@objc NSHostingView.layout()"
+      ],
+      [
+        "AppKit",
+        "<address-94a413e98bd120ec>"
+      ],
+      [
+        "AppKit",
+        "<address-ce0a63259acb4ac2>"
+      ],
+      [
+        "AppKit",
+        "<address-6f210abad80993a4>"
+      ],
+      [
+        "AppKit",
+        "<address-9ea155b44eb19cd6>"
+      ],
+      [
+        "AppKit",
+        "___NSViewLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "_NSViewLayout"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__36-[NSView _layoutSubtreeWithOldSize:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeWithOldSize:]"
+      ],
+      [
+        "AppKit",
+        "__56-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView _layoutSubtreeIfNeededAndAllowTemporaryEngine:]"
+      ],
+      [
+        "AppKit",
+        "NSPerformVisuallyAtomicChange"
+      ],
+      [
+        "AppKit",
+        "-[NSView layoutSubtreeIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) _layoutViewTree]"
+      ],
+      [
+        "AppKit",
+        "-[NSWindow(NSConstraintBasedLayoutInternal) layoutIfNeeded]"
+      ],
+      [
+        "AppKit",
+        "__NSWindowGetDisplayCycleObserverForLayout_block_invoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleObserverInvoke"
+      ],
+      [
+        "AppKit",
+        "NSDisplayCycleFlush"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::run_commit_handlers(CATransactionPhase)"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::commit()"
+      ],
+      [
+        "QuartzCore",
+        "CA::Transaction::flush_as_runloop_observer(bool)"
+      ],
+      [
+        "AppKit",
+        "stepTransactionFlush"
+      ],
+      [
+        "UpdateCycle",
+        "UC::DriverCore::continueProcessing()"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_AN_OBSERVER_CALLBACK_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoObservers"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "HIToolbox",
+        "RunCurrentEventLoopInMode"
+      ],
+      [
+        "HIToolbox",
+        "ReceiveNextEventCommon"
+      ],
+      [
+        "HIToolbox",
+        "_BlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSBlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSNextEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) _nextEventMatchingEventMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) nextEventMatchingMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-01",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 2911,
+    "t_s": 4.599269083,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vCGCompositeConstMask_ARGB16F_vec"
+      ],
+      [
+        "vImage",
+        "Do_CGCompositeConstMask_ARGB16F"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-01",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 2911,
+    "t_s": 4.599269083,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vCGCompositeConstMask_ARGB16F_vec"
+      ],
+      [
+        "vImage",
+        "Do_CGCompositeConstMask_ARGB16F"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-01",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 11155,
+    "t_s": 18.284268708,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-01",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 7306,
+    "t_s": 11.847268458,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-01",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 14854,
+    "t_s": 24.611271541,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-01",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 16537,
+    "t_s": 27.664268291,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-01",
+    "period": "bin-00",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 2911,
+    "t_s": 4.599269083,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vCGCompositeConstMask_ARGB16F_vec"
+      ],
+      [
+        "vImage",
+        "Do_CGCompositeConstMask_ARGB16F"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-02",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 3333,
+    "t_s": 5.279268375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-02",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 3413,
+    "t_s": 5.411269958,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "RenderBox",
+        "RB::Surface::remove_queue_id(_CAImageQueue*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-02",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 7711,
+    "t_s": 12.539268166,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mgr_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_kevent_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-02",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 9691,
+    "t_s": 16.311268375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-02",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 14284,
+    "t_s": 23.519268541,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_platform.dylib",
+        "_platform_memset"
+      ],
+      [
+        "Metal",
+        "-[MTLResourceList releaseAllObjectsAndReset]"
+      ],
+      [
+        "IOGPU",
+        "IOGPUMetalCommandBufferStorageReset"
+      ],
+      [
+        "IOGPU",
+        "IOGPUMetalCommandBufferStorageDealloc"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandBuffer didCompleteWithStartTime:endTime:error:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue commandBufferDidComplete:startTime:completionTime:error:]"
+      ],
+      [
+        "IOGPU",
+        "IOGPUNotificationQueueDispatchAvailableCompletionNotifications"
+      ],
+      [
+        "IOGPU",
+        "__IOGPUNotificationQueueSetDispatchQueue_block_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout4"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mach_msg_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mach_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-02",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 14519,
+    "t_s": 23.919269083,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "kevent_qos"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_kq_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_event_loop_poke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mgr_queue_push"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "swift_dispatchEnqueueWithDeadline"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "specialized _dispatchEnqueue<A, B>(_:at:tolerance:clock:executor:global:)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "specialized static Task<>._sleep<A>(until:tolerance:clock:)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "D.debug.dylib",
+        "Clock.sleep(for:tolerance:)"
+      ],
+      [
+        "D.debug.dylib",
+        "static Task<>.sleep<A>(for:tolerance:clock:)"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "completeTaskWithClosure(swift::AsyncContext*, swift::SwiftError*)"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-02",
+    "period": "bin-01",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 3410,
+    "t_s": 5.356268291,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-03",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 2745,
+    "t_s": 4.286269583,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOSurface",
+        "IOSurfaceClientDecrementUseCountForCategory"
+      ],
+      [
+        "QuartzCore",
+        "release_image(_CAImageQueue*, unsigned long, CAImageQueueReleased*, bool)"
+      ],
+      [
+        "QuartzCore",
+        "CAImageQueueCollect_"
+      ],
+      [
+        "RenderBox",
+        "RB::SurfacePool::collect(bool)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-03",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 3638,
+    "t_s": 5.63926825,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-03",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 11157,
+    "t_s": 18.285271041,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-03",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 10899,
+    "t_s": 17.929269166,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "kevent_qos"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_kq_poll"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_kq_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_event_loop_poke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mgr_queue_push"
+      ],
+      [
+        "libdispatch.dylib",
+        "dispatch_channel_cancel"
+      ],
+      [
+        "QuartzCore",
+        "CA::Render::Fence::Transaction::Observer::~Observer()"
+      ],
+      [
+        "QuartzCore",
+        "CA::fo_completed(CA::Render::Fence::Transaction::Observer*, std::__1::unordered_set<unsigned long long, std::__1::hash<unsigned long long>, std::__1::equal_to<unsigned long long>, std::__1::allocator<unsigned long long>> const&)"
+      ],
+      [
+        "QuartzCore",
+        "invocation function for block in CA::Render::Fence::Transaction::Observer::activate(std::__1::unordered_set<unsigned long long, std::__1::hash<unsigned long long>, std::__1::equal_to<unsigned long long>, std::__1::allocator<unsigned long long>>, void (*)(CA::Render::Fence::Transaction::Observer*, std::__1::unordered_set<unsigned long long, std::__1::hash<unsigned long long>, std::__1::equal_to<unsigned long long>, std::__1::allocator<unsigned long long>> const&, double, unsigned int, unsigned long long), void (*)(CA::Render::Fence::Transaction::Observer*, std::__1::unordered_set<unsigned long long, std::__1::hash<unsigned long long>, std::__1::equal_to<unsigned long long>, std::__1::allocator<unsigned long long>> const&, unsigned int, unsigned int), void (*)(CA::Render::Fence::Transaction::Observer*, std::__1::unordered_set<unsigned long long, std::__1::hash<unsigned long long>, std::__1::equal_to<unsigned long long>, std::__1::allocator<unsigned long long>> const&))"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout4"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mach_msg_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mach_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-03",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 12860,
+    "t_s": 21.067268625,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-03",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 12860,
+    "t_s": 21.067268625,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-03",
+    "period": "bin-22",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 15567,
+    "t_s": 25.9632695,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "CoreFoundation",
+        "__CFStringAppendFormatCore"
+      ],
+      [
+        "CoreFoundation",
+        "CFStringAppendFormatAndArguments"
+      ],
+      [
+        "CoreFoundation",
+        "CFStringAppendFormat"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalTexture copyAnnotations]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMemoryInfo getAnnotationListAndEmitResourceInfo]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "__53-[AGXG16GFamilyDevice _registerForSignpostEnablement]_block_invoke"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "invocation function for block in AGX::agxaSignpostInitialize()"
+      ],
+      [
+        "libsystem_notify.dylib",
+        "<address-1c0952665250e996>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_block_async_invoke2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-04",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 5929,
+    "t_s": 9.237272708,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-04",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 2910,
+    "t_s": 4.599269,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vCGCompositeConstMask_ARGB16F_vec"
+      ],
+      [
+        "vImage",
+        "Do_CGCompositeConstMask_ARGB16F"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-04",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 11496,
+    "t_s": 18.896268375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "ioGPUResourceFinalize"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRelease"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalResource dealloc]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalTexture dealloc]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXTexture dealloc]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXG16GFamilyTexture dealloc]"
+      ],
+      [
+        "Metal",
+        "MTLResourceListChunkFreeEntries(MTLResourceListChunk*)"
+      ],
+      [
+        "Metal",
+        "-[MTLResourceList releaseAllObjectsAndReset]"
+      ],
+      [
+        "IOGPU",
+        "IOGPUMetalCommandBufferStorageReset"
+      ],
+      [
+        "IOGPU",
+        "IOGPUMetalCommandBufferStorageDealloc"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandBuffer didCompleteWithStartTime:endTime:error:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue commandBufferDidComplete:startTime:completionTime:error:]"
+      ],
+      [
+        "IOGPU",
+        "IOGPUNotificationQueueDispatchAvailableCompletionNotifications"
+      ],
+      [
+        "IOGPU",
+        "__IOGPUNotificationQueueSetDispatchQueue_block_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout4"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mach_msg_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mach_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-04",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 11496,
+    "t_s": 18.896268375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "ioGPUResourceFinalize"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRelease"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalResource dealloc]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalTexture dealloc]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXTexture dealloc]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXG16GFamilyTexture dealloc]"
+      ],
+      [
+        "Metal",
+        "MTLResourceListChunkFreeEntries(MTLResourceListChunk*)"
+      ],
+      [
+        "Metal",
+        "-[MTLResourceList releaseAllObjectsAndReset]"
+      ],
+      [
+        "IOGPU",
+        "IOGPUMetalCommandBufferStorageReset"
+      ],
+      [
+        "IOGPU",
+        "IOGPUMetalCommandBufferStorageDealloc"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandBuffer didCompleteWithStartTime:endTime:error:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue commandBufferDidComplete:startTime:completionTime:error:]"
+      ],
+      [
+        "IOGPU",
+        "IOGPUNotificationQueueDispatchAvailableCompletionNotifications"
+      ],
+      [
+        "IOGPU",
+        "__IOGPUNotificationQueueSetDispatchQueue_block_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout4"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mach_msg_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mach_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-04",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 15242,
+    "t_s": 25.150268375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-04",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 12563,
+    "t_s": 20.239268541,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vCGCompositeConstMask_ARGB16F_vec"
+      ],
+      [
+        "vImage",
+        "Do_CGCompositeConstMask_ARGB16F"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-04",
+    "period": "bin-15",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 11409,
+    "t_s": 18.811268375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libobjc.A.dylib",
+        "objc_msgSend"
+      ],
+      [
+        "Metal",
+        "MTLPixelFormatGetInfoForFeatureSetQuery(MTLPixelFormatQuery&, MTLPixelFormat)"
+      ],
+      [
+        "Metal",
+        "MTLPixelFormatGetInfoForDevice"
+      ],
+      [
+        "IOGPU",
+        "+[IOGPUMetalTexture initNewTextureDataWithDevice:descriptor:sysMemSize:sysMemRowBytes:vidMemSize:vidMemRowBytes:args:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalTexture initWithDevice:descriptor:sysMemSize:sysMemRowBytes:vidMemSize:vidMemRowBytes:args:argsSize:]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXTexture initWithDevice:desc:isSuballocDisabled:]"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::add_path_buffer_texture(CA::OGL::MetalSurface*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::set_destination_textures(unsigned long, unsigned long*, unsigned long, bool, bool)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::set_destination_iosurface(__IOSurface*, bool, bool)"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::AccelRenderer::acquire(CA::CG::AccelDrawable&, CA::CG::AccelRenderer**, unsigned long long, unsigned int, bool, __CFString const*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::Queue::render_callback(void*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-05",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 4656,
+    "t_s": 7.538268416,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOSurface",
+        "IOSurfaceClientDecrementUseCountForCategory"
+      ],
+      [
+        "QuartzCore",
+        "CA::Render::Surface::~Surface()"
+      ],
+      [
+        "QuartzCore",
+        "CA::Render::Surface::~Surface()"
+      ],
+      [
+        "RenderBox",
+        "-[RBSurfaceContents .cxx_destruct]"
+      ],
+      [
+        "libobjc.A.dylib",
+        "object_cxxDestructFromClass(objc_object*, objc_class*)"
+      ],
+      [
+        "libobjc.A.dylib",
+        "objc_destructInstance_nonnull_realized(objc_object*)"
+      ],
+      [
+        "libobjc.A.dylib",
+        "_objc_rootDealloc"
+      ],
+      [
+        "RenderBox",
+        "RB::SurfacePool::dealloc(RB::Surface*, _CAImageQueue*)"
+      ],
+      [
+        "RenderBox",
+        "RB::SharedSurface::~SharedSurface()"
+      ],
+      [
+        "RenderBox",
+        "RB::SharedSurface::~SharedSurface()"
+      ],
+      [
+        "RenderBox",
+        "RB::SharedSurfaceGroup::prune_caches_locked(unsigned int, unsigned int)"
+      ],
+      [
+        "RenderBox",
+        "RB::SharedSurfaceGroup::prune_removed_locked()::$_0::__invoke(void*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-05",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 2909,
+    "t_s": 4.599268875,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vCGCompositeConstMask_ARGB16F_vec"
+      ],
+      [
+        "vImage",
+        "Do_CGCompositeConstMask_ARGB16F"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-05",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 7305,
+    "t_s": 11.847268333,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-05",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 9483,
+    "t_s": 16.106268333,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-05",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 14037,
+    "t_s": 23.076268208,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-05",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 14037,
+    "t_s": 23.076268208,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-05",
+    "period": "bin-14",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 11072,
+    "t_s": 18.202268208,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "ioGPUResourceFinalize"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRelease"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalResource dealloc]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalTexture dealloc]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXTexture dealloc]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXG16GFamilyTexture dealloc]"
+      ],
+      [
+        "Metal",
+        "-[MTLRenderPassColorAttachmentDescriptorInternal setTexture:]"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::set_surface(CA::OGL::Surface*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::Context::prepare_destination_()"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::draw(MTLPrimitiveType, unsigned int, unsigned int, void const*, unsigned long, unsigned long, unsigned int, unsigned int, unsigned short const*, CA::OGL::ClipPlane const*, CA::OGL::MetalBufferPool::MetalBuffer const*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::draw_elements(CA::OGL::PrimitiveMode, unsigned int, unsigned short const*, CA::OGL::Vertex const*, unsigned int, unsigned int, CA::OGL::ClipPlane const*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::emit_combine(CA::OGL::Context&, CA::OGL::TextureFunction, CA::OGL::Surface*, int, CA::OGL::Surface*, int, CA::Shape const*, CA::Vec4<float> const&)"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::FillRects::draw_shape(CA::CG::Renderer&) const"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::DrawOp::render(CA::CG::Renderer&) const"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::Queue::render_callback(void*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-06",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 3957,
+    "t_s": 6.295268625,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_trap"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_msg2_internal"
+      ],
+      [
+        "IOKit",
+        "io_connect_method"
+      ],
+      [
+        "IOKit",
+        "IOConnectCallMethod"
+      ],
+      [
+        "IOSurface",
+        "IOSurfaceClientUpdateNonBulkValueCache"
+      ],
+      [
+        "IOSurface",
+        "IOSurfaceClientCopyValue"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXG16GFamilyDevice newTextureWithDescriptor:iosurface:plane:]"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::alloc_destination_texture(__IOSurface*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::set_destination_iosurface(__IOSurface*, bool, bool)"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::AccelRenderer::acquire(CA::CG::AccelDrawable&, CA::CG::AccelRenderer**, unsigned long long, unsigned int, bool, __CFString const*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::Queue::render_callback(void*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-06",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 4111,
+    "t_s": 6.447268333,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-06",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 7308,
+    "t_s": 11.847269,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-06",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 10994,
+    "t_s": 18.124271041,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-06",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 12766,
+    "t_s": 20.741268375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-06",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 12567,
+    "t_s": 20.239269916,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vCGCompositeConstMask_ARGB16F_vec"
+      ],
+      [
+        "vImage",
+        "Do_CGCompositeConstMask_ARGB16F"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-06",
+    "period": "bin-08",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 7312,
+    "t_s": 11.848268291,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_platform.dylib",
+        "_platform_memset"
+      ],
+      [
+        "Metal",
+        "-[MTLResourceList releaseAllObjectsAndReset]"
+      ],
+      [
+        "IOGPU",
+        "IOGPUMetalCommandBufferStorageReset"
+      ],
+      [
+        "IOGPU",
+        "IOGPUMetalCommandBufferStorageDealloc"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandBuffer didCompleteWithStartTime:endTime:error:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue commandBufferDidComplete:startTime:completionTime:error:]"
+      ],
+      [
+        "IOGPU",
+        "IOGPUNotificationQueueDispatchAvailableCompletionNotifications"
+      ],
+      [
+        "IOGPU",
+        "__IOGPUNotificationQueueSetDispatchQueue_block_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout4"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mach_msg_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_mach_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-07",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 4113,
+    "t_s": 6.661269333,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "CoreFoundation",
+        "CFRetain"
+      ],
+      [
+        "RenderBox",
+        "RB::SurfacePool::collect(bool)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-07",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 2907,
+    "t_s": 4.599268666,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vCGCompositeConstMask_ARGB16F_vec"
+      ],
+      [
+        "vImage",
+        "Do_CGCompositeConstMask_ARGB16F"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-07",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 7774,
+    "t_s": 12.781272333,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "ioGPUResourceFinalize"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRelease"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalResource dealloc]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalTexture dealloc]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXTexture dealloc]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXG16GFamilyTexture dealloc]"
+      ],
+      [
+        "RenderBox",
+        "RB::Surface::~Surface()"
+      ],
+      [
+        "RenderBox",
+        "RB::Surface::~Surface()"
+      ],
+      [
+        "RenderBox",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "RenderBox",
+        "RB::SurfacePool::collect(bool)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-07",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 11327,
+    "t_s": 18.709268375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-07",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 14201,
+    "t_s": 23.314268333,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-07",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 14853,
+    "t_s": 24.611269375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-07",
+    "period": "bin-06",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 6270,
+    "t_s": 9.857268958,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "QuartzCore",
+        "CABackingStoreCollect_(double, bool)"
+      ],
+      [
+        "QuartzCore",
+        "CABackingStoreCollect"
+      ],
+      [
+        "QuartzCore",
+        "async_collect_callback(void*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-08",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 2905,
+    "t_s": 4.599268333,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vCGCompositeConstMask_ARGB16F_vec"
+      ],
+      [
+        "vImage",
+        "Do_CGCompositeConstMask_ARGB16F"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-08",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 2905,
+    "t_s": 4.599268333,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vCGCompositeConstMask_ARGB16F_vec"
+      ],
+      [
+        "vImage",
+        "Do_CGCompositeConstMask_ARGB16F"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-08",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 7310,
+    "t_s": 11.847269208,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-08",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 7310,
+    "t_s": 11.847269208,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-08",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 12944,
+    "t_s": 21.15126825,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-08",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 15243,
+    "t_s": 25.150268416,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-08",
+    "period": "bin-17",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 13091,
+    "t_s": 21.298268375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "mach_absolute_time"
+      ],
+      [
+        "QuartzCore",
+        "CACurrentMediaTime"
+      ],
+      [
+        "RenderBox",
+        "RB::SurfacePool::collect(bool)"
+      ],
+      [
+        "RenderBox",
+        "RB::SurfacePool::notifier_callback(void*, unsigned int, unsigned long long, unsigned long long)"
+      ],
+      [
+        "IOKit",
+        "IODispatchCalloutFromCFMessage"
+      ],
+      [
+        "IOKit",
+        "_IODispatchCalloutWithDispatch"
+      ],
+      [
+        "libdispatch.dylib",
+        "dispatch_mig_server"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-09",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 6746,
+    "t_s": 10.734270791,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_malloc.dylib",
+        "_xzm_free"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayI dealloc]"
+      ],
+      [
+        "CoreSpotlight",
+        "-[CSSearchableItemAttributeSet(CSPhotos_Private) extractedAddresses]"
+      ],
+      [
+        "CoreSpotlight",
+        "-[CSSearchableItem(Internal) _standardizeExtractedEntities:]"
+      ],
+      [
+        "CoreSpotlight",
+        "-[CSSearchableItem(Internal) standardizeAttributesForBundle:protectionClass:]"
+      ],
+      [
+        "CoreSpotlight",
+        "__39-[CSSearchableIndex _standardizeItems:]_block_invoke"
+      ],
+      [
+        "CoreFoundation",
+        "__NSARRAY_IS_CALLING_OUT_TO_A_BLOCK__"
+      ],
+      [
+        "CoreFoundation",
+        "____NSCollectionHandleConcurrentEnumerationIfSpecified_block_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_serial"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_sync_function_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_with_attr_f"
+      ],
+      [
+        "libdispatch.dylib",
+        "dispatch_apply"
+      ],
+      [
+        "CoreFoundation",
+        "__NSCollectionHandleConcurrentEnumerationIfSpecified"
+      ],
+      [
+        "CoreFoundation",
+        "-[__NSArrayM enumerateObjectsWithOptions:usingBlock:]"
+      ],
+      [
+        "CoreSpotlight",
+        "-[CSSearchableIndex _standardizeItems:]"
+      ],
+      [
+        "CoreSpotlight",
+        "-[CSSearchableIndex indexSearchableItems:deleteSearchableItemsWithIdentifiers:clientState:expectedClientState:clientStateName:updatingDonationProgress:protectionClass:forBundleID:options:reason:completionHandler:]"
+      ],
+      [
+        "CoreSpotlight",
+        "-[CSSearchableIndex indexSearchableItems:deleteSearchableItemsWithIdentifiers:clientState:expectedClientState:updatingDonationProgress:protectionClass:forBundleID:options:reason:completionHandler:]"
+      ],
+      [
+        "CoreSpotlight",
+        "__131-[CSSearchableIndex endIndexBatchWithExpectedClientState:newClientState:critical:reason:updatingDonationProgres:completionHandler:]_block_invoke"
+      ],
+      [
+        "libsystem_trace.dylib",
+        "_os_activity_initiate_impl"
+      ],
+      [
+        "CoreSpotlight",
+        "-[CSSearchableIndex endIndexBatchWithExpectedClientState:newClientState:critical:reason:updatingDonationProgres:completionHandler:]"
+      ],
+      [
+        "AppKit",
+        "<address-d0703fdd88640b00>"
+      ],
+      [
+        "AppKit",
+        "<address-5881e08de5109f48>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_call_block_and_release"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-09",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 2908,
+    "t_s": 4.599268791,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "vImage",
+        "vCGCompositeConstMask_ARGB16F_vec"
+      ],
+      [
+        "vImage",
+        "Do_CGCompositeConstMask_ARGB16F"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke3"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_once_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_apply_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "<deduplicated_symbol>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_worker_thread2"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-09",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 11328,
+    "t_s": 18.71026825,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-09",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 9254,
+    "t_s": 15.61126825,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "_kernelrpc_mach_port_mod_refs_trap"
+      ],
+      [
+        "libsystem_kernel.dylib",
+        "mach_port_mod_refs"
+      ],
+      [
+        "QuartzCore",
+        "CA::Context::synchronize(unsigned int, int, bool)"
+      ],
+      [
+        "QuartzCore",
+        "-[CAContext waitForCommitId:timeout:]"
+      ],
+      [
+        "RenderBox",
+        "RB::CommitMarker::Observer::test_displayed(bool, double)"
+      ],
+      [
+        "RenderBox",
+        "RB::SharedSurfaceGroup::test_markers(RB::vector<RB::CommitMarker, 0ul, unsigned int>&)"
+      ],
+      [
+        "RenderBox",
+        "RB::SharedSurfaceGroup::prune_removed_locked()::$_0::__invoke(void*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-09",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 12764,
+    "t_s": 20.736268208,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "AGXMetalG16G_B0",
+        "AGX::RenderContext<AGX::HAL200::Encoders, AGX::HAL200::Classes, AGX::HAL200::ObjClasses, AGX::HAL200::CommandEncoding>::setRenderPipelineStateCommon(AGX::HAL200::RenderPipeline const*)"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "-[AGXG16GFamilyRenderContext setRenderPipelineState:]"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::draw(MTLPrimitiveType, unsigned int, unsigned int, void const*, unsigned long, unsigned long, unsigned int, unsigned int, unsigned short const*, CA::OGL::ClipPlane const*, CA::OGL::MetalBufferPool::MetalBuffer const*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::MetalContext::draw_elements(CA::OGL::PrimitiveMode, unsigned int, unsigned short const*, CA::OGL::Vertex const*, unsigned int, unsigned int, CA::OGL::ClipPlane const*)"
+      ],
+      [
+        "QuartzCore",
+        "CA::OGL::emit_combine(CA::OGL::Context&, CA::OGL::TextureFunction, CA::OGL::Surface*, int, CA::OGL::Surface*, int, CA::Shape const*, CA::Vec4<float> const&)"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::FillRects::draw_shape(CA::CG::Renderer&) const"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::DrawOp::render(CA::CG::Renderer&) const"
+      ],
+      [
+        "QuartzCore",
+        "CA::CG::Queue::render_callback(void*)"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-09",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 12673,
+    "t_s": 20.64626975,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "qos_class_main"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-09",
+    "period": "bin-15",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 11411,
+    "t_s": 18.812268375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-10",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 14280,
+    "t_s": 23.51626825,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-10",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 14280,
+    "t_s": 23.51626825,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "thread": "worker-10",
+    "period": "bin-19",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 14280,
+    "t_s": 23.51626825,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "IOKit",
+        "iokit_user_client_trap"
+      ],
+      [
+        "IOGPU",
+        "IOGPUCommandQueueSubmitCommandBuffers"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue _submitCommandBuffers:count:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalCommandQueue submitCommandBuffers:count:]"
+      ],
+      [
+        "Metal",
+        "-[_MTLCommandQueue _submitAvailableCommandBuffers]"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  }
+]

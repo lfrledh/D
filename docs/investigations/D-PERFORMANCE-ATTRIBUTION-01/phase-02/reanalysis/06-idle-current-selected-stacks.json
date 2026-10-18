@@ -1,0 +1,778 @@
+[
+  {
+    "phase": "06-idle-current",
+    "thread": "main",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 10,
+    "t_s": 10.656196208,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "CoreFoundation",
+        "-[__NSArrayM count]"
+      ],
+      [
+        "HIServices",
+        "__56+[HIRunLoopUtilities addRunLoopModesForDeferredActions:]_block_invoke_3"
+      ],
+      [
+        "HIServices",
+        "whileHoldingLockPerform(os_unfair_lock_s*, void () block_pointer)"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_AN_OBSERVER_CALLBACK_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoObservers"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "HIToolbox",
+        "RunCurrentEventLoopInMode"
+      ],
+      [
+        "HIToolbox",
+        "ReceiveNextEventCommon"
+      ],
+      [
+        "HIToolbox",
+        "_BlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSBlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSNextEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) _nextEventMatchingEventMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) nextEventMatchingMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "06-idle-current",
+    "thread": "main",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 10,
+    "t_s": 10.656196208,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "CoreFoundation",
+        "-[__NSArrayM count]"
+      ],
+      [
+        "HIServices",
+        "__56+[HIRunLoopUtilities addRunLoopModesForDeferredActions:]_block_invoke_3"
+      ],
+      [
+        "HIServices",
+        "whileHoldingLockPerform(os_unfair_lock_s*, void () block_pointer)"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_AN_OBSERVER_CALLBACK_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoObservers"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "HIToolbox",
+        "RunCurrentEventLoopInMode"
+      ],
+      [
+        "HIToolbox",
+        "ReceiveNextEventCommon"
+      ],
+      [
+        "HIToolbox",
+        "_BlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSBlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSNextEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) _nextEventMatchingEventMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) nextEventMatchingMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "06-idle-current",
+    "thread": "main",
+    "period": "bin-08",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 10,
+    "t_s": 10.656196208,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "CoreFoundation",
+        "-[__NSArrayM count]"
+      ],
+      [
+        "HIServices",
+        "__56+[HIRunLoopUtilities addRunLoopModesForDeferredActions:]_block_invoke_3"
+      ],
+      [
+        "HIServices",
+        "whileHoldingLockPerform(os_unfair_lock_s*, void () block_pointer)"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRUNLOOP_IS_CALLING_OUT_TO_AN_OBSERVER_CALLBACK_FUNCTION__"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopDoObservers"
+      ],
+      [
+        "CoreFoundation",
+        "__CFRunLoopRun"
+      ],
+      [
+        "CoreFoundation",
+        "_CFRunLoopRunSpecificWithOptions"
+      ],
+      [
+        "HIToolbox",
+        "RunCurrentEventLoopInMode"
+      ],
+      [
+        "HIToolbox",
+        "ReceiveNextEventCommon"
+      ],
+      [
+        "HIToolbox",
+        "_BlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSBlockUntilNextEventMatchingListInMode"
+      ],
+      [
+        "AppKit",
+        "_DPSNextEvent"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) _nextEventMatchingEventMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication(NSEventRouting) nextEventMatchingMask:untilDate:inMode:dequeue:]"
+      ],
+      [
+        "AppKit",
+        "-[NSApplication run]"
+      ],
+      [
+        "AppKit",
+        "NSApplicationMain"
+      ],
+      [
+        "SwiftUI",
+        "specialized runApp(_:)"
+      ],
+      [
+        "SwiftUI",
+        "runApp<A>(_:)"
+      ],
+      [
+        "SwiftUI",
+        "static App.main()"
+      ],
+      [
+        "D.debug.dylib",
+        "static DApp.$main()"
+      ],
+      [
+        "D.debug.dylib",
+        "__debug_main_executable_dylib_entry_point"
+      ],
+      [
+        "dyld",
+        "start"
+      ]
+    ]
+  },
+  {
+    "phase": "06-idle-current",
+    "thread": "worker-01",
+    "period": "late",
+    "selection": "dominant-leaf",
+    "row": 8,
+    "t_s": 9.437196416,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "D.debug.dylib",
+        "outlined destroy of Zip2Sequence<[ModelRecord], [ModelLibrary.StoredRecord]>"
+      ],
+      [
+        "D.debug.dylib",
+        "ModelLibrary.snapshot()"
+      ],
+      [
+        "D.debug.dylib",
+        "ModelLibraryModel.refresh()"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "completeTaskWithClosure(swift::AsyncContext*, swift::SwiftError*)"
+      ]
+    ]
+  },
+  {
+    "phase": "06-idle-current",
+    "thread": "worker-01",
+    "period": "late",
+    "selection": "seeded-uniform",
+    "row": 9,
+    "t_s": 10.436196291,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_kernel.dylib",
+        "kevent_id"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_kq_poll"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_event_loop_poke"
+      ],
+      [
+        "libsystem_notify.dylib",
+        "<address-09fbc5acd6a31ae5>"
+      ],
+      [
+        "libsystem_notify.dylib",
+        "<address-535e38df345e3899>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_continuation_pop"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_latch_and_call"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_source_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "06-idle-current",
+    "thread": "worker-01",
+    "period": "bin-07",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 8,
+    "t_s": 9.437196416,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "D.debug.dylib",
+        "outlined destroy of Zip2Sequence<[ModelRecord], [ModelLibrary.StoredRecord]>"
+      ],
+      [
+        "D.debug.dylib",
+        "ModelLibrary.snapshot()"
+      ],
+      [
+        "D.debug.dylib",
+        "ModelLibraryModel.refresh()"
+      ],
+      [
+        "D.debug.dylib",
+        "closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for closure #1 in ModelLibraryModel.start()"
+      ],
+      [
+        "D.debug.dylib",
+        "thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "D.debug.dylib",
+        "partial apply for thunk for @escaping @isolated(any) @callee_guaranteed @async () -> (@out A)"
+      ],
+      [
+        "libswift_Concurrency.dylib",
+        "completeTaskWithClosure(swift::AsyncContext*, swift::SwiftError*)"
+      ]
+    ]
+  },
+  {
+    "phase": "06-idle-current",
+    "thread": "worker-02",
+    "period": "early",
+    "selection": "dominant-leaf",
+    "row": 5,
+    "t_s": 4.044197375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libdispatch.dylib",
+        "_dispatch_alloc_continuation_free"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_cache_cleanup"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_tsd_cleanup"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_exit"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread_exit"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "06-idle-current",
+    "thread": "worker-02",
+    "period": "early",
+    "selection": "seeded-uniform",
+    "row": 5,
+    "t_s": 4.044197375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libdispatch.dylib",
+        "_dispatch_alloc_continuation_free"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_cache_cleanup"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_tsd_cleanup"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_exit"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread_exit"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "06-idle-current",
+    "thread": "worker-02",
+    "period": "bin-02",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 5,
+    "t_s": 4.044197375,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libdispatch.dylib",
+        "_dispatch_alloc_continuation_free"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_cache_cleanup"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_tsd_cleanup"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_exit"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread_exit"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "06-idle-current",
+    "thread": "worker-03",
+    "period": "middle",
+    "selection": "dominant-leaf",
+    "row": 7,
+    "t_s": 5.965197125,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_malloc.dylib",
+        "_xzm_xzone_malloc_from_freelist_chunk"
+      ],
+      [
+        "libsystem_malloc.dylib",
+        "_xzm_xzone_find_and_malloc_from_freelist_chunk"
+      ],
+      [
+        "libsystem_malloc.dylib",
+        "_xzm_xzone_malloc_freelist_outlined"
+      ],
+      [
+        "libobjc.A.dylib",
+        "class_createInstance"
+      ],
+      [
+        "CoreFoundation",
+        "__CFAllocateObject"
+      ],
+      [
+        "CoreFoundation",
+        "__NSArrayM_new"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalResource copyAnnotationDictionary:obj_key_name:obj_dict:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalBuffer copyAnnotations]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMemoryInfo getAnnotationListAndEmitResourceInfo]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "__53-[AGXG16GFamilyDevice _registerForSignpostEnablement]_block_invoke"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "invocation function for block in AGX::agxaSignpostInitialize()"
+      ],
+      [
+        "libsystem_notify.dylib",
+        "<address-1c0952665250e996>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_block_async_invoke2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "06-idle-current",
+    "thread": "worker-03",
+    "period": "middle",
+    "selection": "seeded-uniform",
+    "row": 7,
+    "t_s": 5.965197125,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_malloc.dylib",
+        "_xzm_xzone_malloc_from_freelist_chunk"
+      ],
+      [
+        "libsystem_malloc.dylib",
+        "_xzm_xzone_find_and_malloc_from_freelist_chunk"
+      ],
+      [
+        "libsystem_malloc.dylib",
+        "_xzm_xzone_malloc_freelist_outlined"
+      ],
+      [
+        "libobjc.A.dylib",
+        "class_createInstance"
+      ],
+      [
+        "CoreFoundation",
+        "__CFAllocateObject"
+      ],
+      [
+        "CoreFoundation",
+        "__NSArrayM_new"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalResource copyAnnotationDictionary:obj_key_name:obj_dict:]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMetalBuffer copyAnnotations]"
+      ],
+      [
+        "IOGPU",
+        "-[IOGPUMemoryInfo getAnnotationListAndEmitResourceInfo]"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "__53-[AGXG16GFamilyDevice _registerForSignpostEnablement]_block_invoke"
+      ],
+      [
+        "AGXMetalG16G_B0",
+        "invocation function for block in AGX::agxaSignpostInitialize()"
+      ],
+      [
+        "libsystem_notify.dylib",
+        "<address-1c0952665250e996>"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_block_async_invoke2"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_client_callout"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_serial_drain"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_lane_invoke"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_root_queue_drain_deferred_wlh"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_workloop_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  },
+  {
+    "phase": "06-idle-current",
+    "thread": "worker-03",
+    "period": "bin-03",
+    "selection": "highest-work-bin-weighted-middle-sample",
+    "row": 6,
+    "t_s": 5.779197666,
+    "weight_ms": 1.0,
+    "frames": [
+      [
+        "libsystem_pthread.dylib",
+        "___chkstk_darwin"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_event_loop_merge"
+      ],
+      [
+        "libdispatch.dylib",
+        "_dispatch_kevent_worker_thread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "_pthread_wqthread"
+      ],
+      [
+        "libsystem_pthread.dylib",
+        "start_wqthread"
+      ]
+    ]
+  }
+]

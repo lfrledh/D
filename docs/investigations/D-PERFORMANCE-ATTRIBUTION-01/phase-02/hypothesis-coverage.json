@@ -1,0 +1,512 @@
+{
+  "template_only": false,
+  "cells": [
+    {
+      "hypothesis_id": "H01",
+      "interaction": "NODE",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "Actual receiver source inspected; legacy user confirmation"
+      ],
+      "counterevidence": [
+        "No measured queue/receipt/clock alignment"
+      ],
+      "limitations": [
+        "Cue is not actual input",
+        "No visible qualified target"
+      ],
+      "reason": "No event-to-state timestamps; A posting denied, B driver not implemented and new-root admission pending"
+    },
+    {
+      "hypothesis_id": "H02",
+      "interaction": "NODE",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "02-node-drag-repeat: library inclusive 6 ms; all-thread global ranking retained"
+      ],
+      "counterevidence": [
+        "No exact Binding getter/setter or cause graph"
+      ],
+      "limitations": [
+        "No causal intervention",
+        "Do not transfer zoom evidence to pan"
+      ],
+      "reason": "Dependency direction and criticality not resolved"
+    },
+    {
+      "hypothesis_id": "H03",
+      "interaction": "NODE",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "02-node-drag-repeat: library 6 ms",
+        "Independent interaction sample categories"
+      ],
+      "counterevidence": [
+        "Cache exists; calls do not prove misses",
+        "Quick/activity not all permanently retained"
+      ],
+      "limitations": [
+        "Visited-page and historical data size unknown",
+        "07 composite visibility/area change; 08 invalid"
+      ],
+      "reason": "No page/data-scale single-factor experiment"
+    },
+    {
+      "hypothesis_id": "H04",
+      "interaction": "NODE",
+      "status": "OBSERVED",
+      "evidence": [
+        "02-node-drag-repeat: layout ancestor 1085 ms; connection draw/geometry/hit 8/3/1 ms",
+        "Current receiver/connection types checked"
+      ],
+      "counterevidence": [
+        "Hit caches and viewport drawing reuse exist",
+        "PAN clip path does not rebuild every graph path"
+      ],
+      "limitations": [
+        "Inclusive overlaps; no operation counts or latency bridge",
+        "Visible area and exact zoom unknown"
+      ],
+      "reason": null
+    },
+    {
+      "hypothesis_id": "H05",
+      "interaction": "NODE",
+      "status": "OBSERVED",
+      "evidence": [
+        "02-node-drag-repeat: glass host 173 ms; geometry observer/host path source checked"
+      ],
+      "counterevidence": [
+        "Same-geometry early-out; offscreen release; host rootView update is not creation"
+      ],
+      "limitations": [
+        "CPU symbol coverage is not host-count telemetry or GPU cost"
+      ],
+      "reason": null
+    },
+    {
+      "hypothesis_id": "H06",
+      "interaction": "NODE",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "Process-level partial display joins in presentation-record-joins.json",
+        "Production continuous shader source remains enabled"
+      ],
+      "counterevidence": [
+        "No surface/window/content association; CPU shader hit fraction cannot exclude GPU"
+      ],
+      "limitations": [
+        "No shader/host-equivalent A/B",
+        "No GPU/overdraw critical timeline"
+      ],
+      "reason": "Current schema does not resolve main-window and content-to-present bridge; no qualified new capture"
+    },
+    {
+      "hypothesis_id": "H07",
+      "interaction": "NODE",
+      "status": "OBSERVED",
+      "evidence": [
+        "02-node-drag-repeat: readability inclusive 151 ms"
+      ],
+      "counterevidence": [
+        "No-consumer and same-geometry early-outs, spatial buckets exist"
+      ],
+      "limitations": [
+        "No index-only equivalence contrast",
+        "Changing readability can also alter pixels"
+      ],
+      "reason": null
+    },
+    {
+      "hypothesis_id": "H08",
+      "interaction": "NODE",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "All target threads and scheduler reviewed",
+        "Historical Nominal thermal; current free storage recovered"
+      ],
+      "counterevidence": [
+        "Main Runnable small; no evidence of prolonged CPU scheduling starvation",
+        "No deliberate model or pressure workload"
+      ],
+      "limitations": [
+        "Blocked causes not recorded",
+        "Current free space not historical pressure measurement",
+        "Concurrent GPU unknown"
+      ],
+      "reason": "Waiting stacks absent from record-waiting-threads=0 profile; no memory/GPU time series"
+    },
+    {
+      "hypothesis_id": "H09",
+      "interaction": "NODE",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "Legacy Debug/-Onone",
+        "Same-source -O isolated build prepared; flags checked"
+      ],
+      "counterevidence": [
+        "No matched repeated -Onone/-O interactions; profiler overhead unknown"
+      ],
+      "limitations": [
+        "No native comparison",
+        "Optimized artifacts are not a product fix"
+      ],
+      "reason": "Native input and scene qualification failed; build alone cannot quantify sensitivity"
+    },
+    {
+      "hypothesis_id": "H10",
+      "interaction": "NODE",
+      "status": "OBSERVED",
+      "evidence": [
+        "02-node-drag-repeat: unfiltered self/inclusive all-thread ranks, symbol/path histogram and selected stacks",
+        "Debug Swift runtime, AppKit, AG, QuartzCore visible"
+      ],
+      "counterevidence": [
+        "UNCLASSIFIED keyword work is mostly named framework code, not missing symbols"
+      ],
+      "limitations": [
+        "Deduplicated/unsymbolicated frames retained; no invented ownership",
+        "No actual late-frame association"
+      ],
+      "reason": null
+    },
+    {
+      "hypothesis_id": "H01",
+      "interaction": "PAN",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "Actual receiver source inspected; legacy user confirmation"
+      ],
+      "counterevidence": [
+        "No measured queue/receipt/clock alignment"
+      ],
+      "limitations": [
+        "Cue is not actual input",
+        "No visible qualified target"
+      ],
+      "reason": "No event-to-state timestamps; A posting denied, B driver not implemented and new-root admission pending"
+    },
+    {
+      "hypothesis_id": "H02",
+      "interaction": "PAN",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "03-pan: library inclusive 16 ms; all-thread global ranking retained"
+      ],
+      "counterevidence": [
+        "PAN source suppresses parent observation during native clip pan"
+      ],
+      "limitations": [
+        "No causal intervention",
+        "Do not transfer zoom evidence to pan"
+      ],
+      "reason": "Dependency direction and criticality not resolved"
+    },
+    {
+      "hypothesis_id": "H03",
+      "interaction": "PAN",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "03-pan: library 16 ms",
+        "Independent interaction sample categories"
+      ],
+      "counterevidence": [
+        "Cache exists; calls do not prove misses",
+        "Quick/activity not all permanently retained"
+      ],
+      "limitations": [
+        "Visited-page and historical data size unknown",
+        "07 composite visibility/area change; 08 invalid"
+      ],
+      "reason": "No page/data-scale single-factor experiment"
+    },
+    {
+      "hypothesis_id": "H04",
+      "interaction": "PAN",
+      "status": "OBSERVED",
+      "evidence": [
+        "03-pan: layout ancestor 666 ms; connection draw/geometry/hit 11/2/0 ms",
+        "Current receiver/connection types checked"
+      ],
+      "counterevidence": [
+        "Hit caches and viewport drawing reuse exist",
+        "PAN clip path does not rebuild every graph path"
+      ],
+      "limitations": [
+        "Inclusive overlaps; no operation counts or latency bridge",
+        "Visible area and exact zoom unknown"
+      ],
+      "reason": null
+    },
+    {
+      "hypothesis_id": "H05",
+      "interaction": "PAN",
+      "status": "OBSERVED",
+      "evidence": [
+        "03-pan: glass host 102 ms; geometry observer/host path source checked"
+      ],
+      "counterevidence": [
+        "Same-geometry early-out; offscreen release; host rootView update is not creation"
+      ],
+      "limitations": [
+        "CPU symbol coverage is not host-count telemetry or GPU cost"
+      ],
+      "reason": null
+    },
+    {
+      "hypothesis_id": "H06",
+      "interaction": "PAN",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "Process-level partial display joins in presentation-record-joins.json",
+        "Production continuous shader source remains enabled"
+      ],
+      "counterevidence": [
+        "No surface/window/content association; CPU shader hit fraction cannot exclude GPU"
+      ],
+      "limitations": [
+        "No shader/host-equivalent A/B",
+        "No GPU/overdraw critical timeline"
+      ],
+      "reason": "Current schema does not resolve main-window and content-to-present bridge; no qualified new capture"
+    },
+    {
+      "hypothesis_id": "H07",
+      "interaction": "PAN",
+      "status": "OBSERVED",
+      "evidence": [
+        "03-pan: readability inclusive 76 ms"
+      ],
+      "counterevidence": [
+        "No-consumer and same-geometry early-outs, spatial buckets exist"
+      ],
+      "limitations": [
+        "No index-only equivalence contrast",
+        "Changing readability can also alter pixels"
+      ],
+      "reason": null
+    },
+    {
+      "hypothesis_id": "H08",
+      "interaction": "PAN",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "All target threads and scheduler reviewed",
+        "Historical Nominal thermal; current free storage recovered"
+      ],
+      "counterevidence": [
+        "Main Runnable small; no evidence of prolonged CPU scheduling starvation",
+        "No deliberate model or pressure workload"
+      ],
+      "limitations": [
+        "Blocked causes not recorded",
+        "Current free space not historical pressure measurement",
+        "Concurrent GPU unknown"
+      ],
+      "reason": "Waiting stacks absent from record-waiting-threads=0 profile; no memory/GPU time series"
+    },
+    {
+      "hypothesis_id": "H09",
+      "interaction": "PAN",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "Legacy Debug/-Onone",
+        "Same-source -O isolated build prepared; flags checked"
+      ],
+      "counterevidence": [
+        "No matched repeated -Onone/-O interactions; profiler overhead unknown"
+      ],
+      "limitations": [
+        "No native comparison",
+        "Optimized artifacts are not a product fix"
+      ],
+      "reason": "Native input and scene qualification failed; build alone cannot quantify sensitivity"
+    },
+    {
+      "hypothesis_id": "H10",
+      "interaction": "PAN",
+      "status": "OBSERVED",
+      "evidence": [
+        "03-pan: unfiltered self/inclusive all-thread ranks, symbol/path histogram and selected stacks",
+        "Debug Swift runtime, AppKit, AG, QuartzCore visible"
+      ],
+      "counterevidence": [
+        "UNCLASSIFIED keyword work is mostly named framework code, not missing symbols"
+      ],
+      "limitations": [
+        "Deduplicated/unsymbolicated frames retained; no invented ownership",
+        "No actual late-frame association"
+      ],
+      "reason": null
+    },
+    {
+      "hypothesis_id": "H01",
+      "interaction": "ZOOM",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "Actual receiver source inspected; legacy user confirmation"
+      ],
+      "counterevidence": [
+        "No measured queue/receipt/clock alignment"
+      ],
+      "limitations": [
+        "Cue is not actual input",
+        "No visible qualified target"
+      ],
+      "reason": "No event-to-state timestamps; A posting denied, B driver not implemented and new-root admission pending"
+    },
+    {
+      "hypothesis_id": "H02",
+      "interaction": "ZOOM",
+      "status": "OBSERVED",
+      "evidence": [
+        "05-wheel-zoom-repeat: library inclusive 2490 ms; all-thread global ranking retained"
+      ],
+      "counterevidence": [
+        "No exact Binding getter/setter or cause graph"
+      ],
+      "limitations": [
+        "No causal intervention",
+        "Do not transfer zoom evidence to pan"
+      ],
+      "reason": "Dependency direction and criticality not resolved"
+    },
+    {
+      "hypothesis_id": "H03",
+      "interaction": "ZOOM",
+      "status": "OBSERVED",
+      "evidence": [
+        "05-wheel-zoom-repeat: library 2490 ms",
+        "07 operation tree persists while left collapsed (qualified)"
+      ],
+      "counterevidence": [
+        "Cache exists; calls do not prove misses",
+        "Quick/activity not all permanently retained"
+      ],
+      "limitations": [
+        "Visited-page and historical data size unknown",
+        "07 composite visibility/area change; 08 invalid"
+      ],
+      "reason": "No page/data-scale single-factor experiment"
+    },
+    {
+      "hypothesis_id": "H04",
+      "interaction": "ZOOM",
+      "status": "OBSERVED",
+      "evidence": [
+        "05-wheel-zoom-repeat: layout ancestor 12544 ms; connection draw/geometry/hit 19/2/2 ms",
+        "Current receiver/connection types checked"
+      ],
+      "counterevidence": [
+        "Hit caches and viewport drawing reuse exist",
+        "PAN clip path does not rebuild every graph path"
+      ],
+      "limitations": [
+        "Inclusive overlaps; no operation counts or latency bridge",
+        "Visible area and exact zoom unknown"
+      ],
+      "reason": null
+    },
+    {
+      "hypothesis_id": "H05",
+      "interaction": "ZOOM",
+      "status": "OBSERVED",
+      "evidence": [
+        "05-wheel-zoom-repeat: glass host 325 ms; geometry observer/host path source checked"
+      ],
+      "counterevidence": [
+        "Same-geometry early-out; offscreen release; host rootView update is not creation"
+      ],
+      "limitations": [
+        "CPU symbol coverage is not host-count telemetry or GPU cost"
+      ],
+      "reason": null
+    },
+    {
+      "hypothesis_id": "H06",
+      "interaction": "ZOOM",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "Process-level partial display joins in presentation-record-joins.json",
+        "Production continuous shader source remains enabled"
+      ],
+      "counterevidence": [
+        "No surface/window/content association; CPU shader hit fraction cannot exclude GPU"
+      ],
+      "limitations": [
+        "No shader/host-equivalent A/B",
+        "No GPU/overdraw critical timeline"
+      ],
+      "reason": "Current schema does not resolve main-window and content-to-present bridge; no qualified new capture"
+    },
+    {
+      "hypothesis_id": "H07",
+      "interaction": "ZOOM",
+      "status": "OBSERVED",
+      "evidence": [
+        "05-wheel-zoom-repeat: readability inclusive 206 ms"
+      ],
+      "counterevidence": [
+        "No-consumer and same-geometry early-outs, spatial buckets exist"
+      ],
+      "limitations": [
+        "No index-only equivalence contrast",
+        "Changing readability can also alter pixels"
+      ],
+      "reason": null
+    },
+    {
+      "hypothesis_id": "H08",
+      "interaction": "ZOOM",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "All target threads and scheduler reviewed",
+        "Historical Nominal thermal; current free storage recovered"
+      ],
+      "counterevidence": [
+        "Main Runnable small; no evidence of prolonged CPU scheduling starvation",
+        "No deliberate model or pressure workload"
+      ],
+      "limitations": [
+        "Blocked causes not recorded",
+        "Current free space not historical pressure measurement",
+        "Concurrent GPU unknown"
+      ],
+      "reason": "Waiting stacks absent from record-waiting-threads=0 profile; no memory/GPU time series"
+    },
+    {
+      "hypothesis_id": "H09",
+      "interaction": "ZOOM",
+      "status": "INCONCLUSIVE",
+      "evidence": [
+        "Legacy Debug/-Onone",
+        "Same-source -O isolated build prepared; flags checked"
+      ],
+      "counterevidence": [
+        "No matched repeated -Onone/-O interactions; profiler overhead unknown"
+      ],
+      "limitations": [
+        "No native comparison",
+        "Optimized artifacts are not a product fix"
+      ],
+      "reason": "Native input and scene qualification failed; build alone cannot quantify sensitivity"
+    },
+    {
+      "hypothesis_id": "H10",
+      "interaction": "ZOOM",
+      "status": "OBSERVED",
+      "evidence": [
+        "05-wheel-zoom-repeat: unfiltered self/inclusive all-thread ranks, symbol/path histogram and selected stacks",
+        "Debug Swift runtime, AppKit, AG, QuartzCore visible"
+      ],
+      "counterevidence": [
+        "UNCLASSIFIED keyword work is mostly named framework code, not missing symbols"
+      ],
+      "limitations": [
+        "Deduplicated/unsymbolicated frames retained; no invented ownership",
+        "No actual late-frame association"
+      ],
+      "reason": null
+    }
+  ]
+}

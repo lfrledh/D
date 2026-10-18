@@ -1,0 +1,268 @@
+[
+  {
+    "phase": "02-node-drag-repeat",
+    "window_ns": [
+      3113751000,
+      14119936000
+    ],
+    "recording_duration_ns": 16720272000,
+    "periods": [
+      {
+        "period": "whole_recording",
+        "update_rows": 468,
+        "distinct_process_display_swap_surface_keys": 463,
+        "containment_counts": {
+          "0": 463,
+          "1": 5
+        },
+        "top_level_rows": 463,
+        "unique_swap_matches": 463,
+        "unique_displayed_matches": 462,
+        "swap_outside_requested_window": 119
+      },
+      {
+        "period": "requested_window",
+        "update_rows": 347,
+        "distinct_process_display_swap_surface_keys": 347,
+        "containment_counts": {
+          "0": 347
+        },
+        "top_level_rows": 347,
+        "unique_swap_matches": 347,
+        "unique_displayed_matches": 347,
+        "swap_outside_requested_window": 3
+      },
+      {
+        "period": "early",
+        "update_rows": 0,
+        "distinct_process_display_swap_surface_keys": 0,
+        "containment_counts": {},
+        "top_level_rows": 0,
+        "unique_swap_matches": 0,
+        "unique_displayed_matches": 0,
+        "swap_outside_requested_window": 0
+      },
+      {
+        "period": "middle",
+        "update_rows": 5,
+        "distinct_process_display_swap_surface_keys": 5,
+        "containment_counts": {
+          "0": 5
+        },
+        "top_level_rows": 5,
+        "unique_swap_matches": 5,
+        "unique_displayed_matches": 5,
+        "swap_outside_requested_window": 0
+      },
+      {
+        "period": "late",
+        "update_rows": 342,
+        "distinct_process_display_swap_surface_keys": 342,
+        "containment_counts": {
+          "0": 342
+        },
+        "top_level_rows": 342,
+        "unique_swap_matches": 342,
+        "unique_displayed_matches": 342,
+        "swap_outside_requested_window": 3
+      }
+    ],
+    "unmatched_top_level": [
+      {
+        "row": 468,
+        "time": 16552930916,
+        "duration": 667583,
+        "level": 0,
+        "swap_matches": 1,
+        "displayed_matches": 0
+      }
+    ],
+    "long_start_zero_lifetimes": [
+      {
+        "row": 1,
+        "time_ns": 0,
+        "duration_ns": 123218402541
+      }
+    ],
+    "status": "PROCESS_RECORD_JOIN_ONLY; NOT_WINDOW_OR_CONTENT_ASSOCIATED",
+    "fps": null,
+    "input_latency": null
+  },
+  {
+    "phase": "03-pan",
+    "window_ns": [
+      3856365000,
+      14864441000
+    ],
+    "recording_duration_ns": 16730475000,
+    "periods": [
+      {
+        "period": "whole_recording",
+        "update_rows": 472,
+        "distinct_process_display_swap_surface_keys": 467,
+        "containment_counts": {
+          "0": 467,
+          "1": 5
+        },
+        "top_level_rows": 467,
+        "unique_swap_matches": 467,
+        "unique_displayed_matches": 467,
+        "swap_outside_requested_window": 137
+      },
+      {
+        "period": "requested_window",
+        "update_rows": 333,
+        "distinct_process_display_swap_surface_keys": 330,
+        "containment_counts": {
+          "0": 330,
+          "1": 3
+        },
+        "top_level_rows": 330,
+        "unique_swap_matches": 330,
+        "unique_displayed_matches": 330,
+        "swap_outside_requested_window": 0
+      },
+      {
+        "period": "early",
+        "update_rows": 0,
+        "distinct_process_display_swap_surface_keys": 0,
+        "containment_counts": {},
+        "top_level_rows": 0,
+        "unique_swap_matches": 0,
+        "unique_displayed_matches": 0,
+        "swap_outside_requested_window": 0
+      },
+      {
+        "period": "middle",
+        "update_rows": 25,
+        "distinct_process_display_swap_surface_keys": 25,
+        "containment_counts": {
+          "0": 25
+        },
+        "top_level_rows": 25,
+        "unique_swap_matches": 25,
+        "unique_displayed_matches": 25,
+        "swap_outside_requested_window": 0
+      },
+      {
+        "period": "late",
+        "update_rows": 308,
+        "distinct_process_display_swap_surface_keys": 305,
+        "containment_counts": {
+          "0": 305,
+          "1": 3
+        },
+        "top_level_rows": 305,
+        "unique_swap_matches": 305,
+        "unique_displayed_matches": 305,
+        "swap_outside_requested_window": 0
+      }
+    ],
+    "unmatched_top_level": [],
+    "long_start_zero_lifetimes": [
+      {
+        "row": 1,
+        "time_ns": 0,
+        "duration_ns": 55303042083
+      }
+    ],
+    "status": "PROCESS_RECORD_JOIN_ONLY; NOT_WINDOW_OR_CONTENT_ASSOCIATED",
+    "fps": null,
+    "input_latency": null
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "window_ns": [
+      3674945000,
+      27681206000
+    ],
+    "recording_duration_ns": 31762287000,
+    "periods": [
+      {
+        "period": "whole_recording",
+        "update_rows": 506,
+        "distinct_process_display_swap_surface_keys": 288,
+        "containment_counts": {
+          "0": 288,
+          "1": 218
+        },
+        "top_level_rows": 288,
+        "unique_swap_matches": 287,
+        "unique_displayed_matches": 287,
+        "swap_outside_requested_window": 98
+      },
+      {
+        "period": "requested_window",
+        "update_rows": 361,
+        "distinct_process_display_swap_surface_keys": 190,
+        "containment_counts": {
+          "0": 190,
+          "1": 171
+        },
+        "top_level_rows": 190,
+        "unique_swap_matches": 190,
+        "unique_displayed_matches": 190,
+        "swap_outside_requested_window": 2
+      },
+      {
+        "period": "early",
+        "update_rows": 124,
+        "distinct_process_display_swap_surface_keys": 62,
+        "containment_counts": {
+          "0": 62,
+          "1": 62
+        },
+        "top_level_rows": 62,
+        "unique_swap_matches": 62,
+        "unique_displayed_matches": 62,
+        "swap_outside_requested_window": 0
+      },
+      {
+        "period": "middle",
+        "update_rows": 114,
+        "distinct_process_display_swap_surface_keys": 57,
+        "containment_counts": {
+          "0": 57,
+          "1": 57
+        },
+        "top_level_rows": 57,
+        "unique_swap_matches": 57,
+        "unique_displayed_matches": 57,
+        "swap_outside_requested_window": 0
+      },
+      {
+        "period": "late",
+        "update_rows": 123,
+        "distinct_process_display_swap_surface_keys": 71,
+        "containment_counts": {
+          "0": 71,
+          "1": 52
+        },
+        "top_level_rows": 71,
+        "unique_swap_matches": 71,
+        "unique_displayed_matches": 71,
+        "swap_outside_requested_window": 2
+      }
+    ],
+    "unmatched_top_level": [
+      {
+        "row": 506,
+        "time": 31795894125,
+        "duration": 1933416,
+        "level": 0,
+        "swap_matches": 0,
+        "displayed_matches": 0
+      }
+    ],
+    "long_start_zero_lifetimes": [
+      {
+        "row": 1,
+        "time_ns": 0,
+        "duration_ns": 132254450750
+      }
+    ],
+    "status": "PROCESS_RECORD_JOIN_ONLY; NOT_WINDOW_OR_CONTENT_ASSOCIATED",
+    "fps": null,
+    "input_latency": null
+  }
+]
