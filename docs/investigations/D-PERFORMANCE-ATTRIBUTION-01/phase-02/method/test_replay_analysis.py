@@ -36,7 +36,7 @@ class ReplayAuditTests(unittest.TestCase):
  def test_foreign_receiver_invalid(self):
   r,p,rows=self.fixture();rows[-1]['consumed']=False;self.assertIn('receiver-did-not-own-input',analyze(r,p,rows)['issues'])
  def test_effective_motion_required(self):
-  r,p,rows=self.fixture();r['effectiveMotion']=False;self.assertIn('no-effective-motion',analyze(r,p,rows)['issues'])
+  r,p,rows=self.fixture();r['effectiveMotion']=False;self.assertIn('reported-motion-flag-conflict',analyze(r,p,rows)['issues']);self.assertEqual(analyze(r,p,rows)['qualification'],'INVALID')
  def test_scene_change_invalid(self):
   r,p,rows=self.fixture();r['after']['window']=2;self.assertIn('scene-changed:window',analyze(r,p,rows)['issues'])
  def test_stage_order_invalid(self):
@@ -106,4 +106,85 @@ class ReplayAuditTests(unittest.TestCase):
     for row in rows:
      if row['stage']=='handler-return-state':row['zoom']=2
     self.assertIn('unexpected-zoom-during-nonzoom',analyze(r,p,rows)['issues'])
+
+class ReplayQualificationV2Tests(unittest.TestCase):
+ def fixture(self,interaction='PAN'):
+  old=ReplayAuditTests();r,p,_=old.fixture(interaction)
+  p.update(activeSeconds=1.25,lateLimit=.25,profile='qualification-low-load-v1',slots=expected_slots(interaction,1.25,'qualification-low-load-v1'))
+  r.update(protocolRevision=2,profile=p['profile'],segment=2,inputWindowStart={'x':210,'y':170},posted=len(p['slots']),received=len(p['slots']))
+  r['after']['zoom']=1
+  rows=[];cumulative=0
+  for slot in p['slots']:
+   cumulative+=slot['wheel']
+   for j,stage in enumerate(('intent','main-enter','post-begin','posted','received','handler-return-state')):
+    row={'sequence':slot['sequence'],'stage':stage,'time':10+slot['seconds']+j*.001,'planned':10+slot['seconds']}
+    if stage in ('posted','received'):row.update(x=210+slot['dx'],y=170+slot['dy'])
+    if stage=='handler-return-state':row.update(consumed=True,x=100-slot['dx'] if interaction=='PAN' else 100,y=100+slot['dy'] if interaction=='PAN' else 100,zoom=1.1**cumulative if interaction=='ZOOM' else 1,nodeX=slot['dx'] if slot['kind']=='drag' else 0,nodeY=-slot['dy'] if slot['kind']=='drag' else 0)
+    rows.append(row)
+  rows.append({'sequence':-1,'stage':'sending-ended','time':15.9})
+  c={'segment':2,'interaction':interaction,'sendingStopped':True,'resetGraphVerified':True,'reason':None,'time':16.1}
+  return r,p,rows,c
+ def test_all_three_qualify_only_as_low_load(self):
+  for action in ('NODE','PAN','ZOOM'):
+   with self.subTest(action=action):self.assertEqual(analyze(*self.fixture(action))['qualification'],'B_LOW_LOAD_ACTION_QUALIFIED')
+ def test_profile_cannot_be_mixed(self):
+  r,p,rows,c=self.fixture();r['profile']='performance';self.assertIn('profile-mismatch',analyze(r,p,rows,c)['issues'])
+ def test_low_load_cannot_claim_old_revision(self):
+  r,p,rows,c=self.fixture();r['protocolRevision']=1;self.assertIn('qualification-requires-revision-2',analyze(r,p,rows,c)['issues'])
+ def test_exact_slots_required(self):
+  r,p,rows,c=self.fixture();p['slots'][1]['dx']=9;self.assertIn('invalid-plan-payload',analyze(r,p,rows,c)['issues'])
+ def test_each_new_stage_required(self):
+  for stage in ('main-enter','post-begin'):
+   with self.subTest(stage=stage):
+    r,p,rows,c=self.fixture();self.assertIn('missing-or-duplicate:'+stage,analyze(r,p,[x for x in rows if x['stage']!=stage],c)['issues'])
+ def test_coordinate_assertion_both_stages(self):
+  for stage in ('posted','received'):
+   with self.subTest(stage=stage):
+    r,p,rows,c=self.fixture();next(x for x in rows if x['stage']==stage)['x']+=20
+    self.assertIn('coordinate-mismatch:'+stage,analyze(r,p,rows,c)['issues'])
+ def test_new_stage_inversion(self):
+  r,p,rows,c=self.fixture();next(x for x in rows if x['stage']=='main-enter')['time']=10.2
+  self.assertIn('non-monotonic-stage',analyze(r,p,rows,c)['issues'])
+ def test_late_construction_rejected(self):
+  r,p,rows,c=self.fixture();next(x for x in rows if x['stage']=='posted')['time']=10.26
+  self.assertIn('late-beyond-preregistered-limit',analyze(r,p,rows,c)['issues'])
+ def test_completion_required(self):
+  r,p,rows,c=self.fixture();self.assertIn('missing-completion',analyze(r,p,rows)['issues'])
+ def test_reset_failure_invalidates_success_report(self):
+  r,p,rows,c=self.fixture('NODE');c.update(resetGraphVerified=False,reason='synthetic-reset-failed')
+  self.assertIn('reset-not-verified',analyze(r,p,rows,c)['issues'])
+ def test_completion_identity_time_stop(self):
+  for key,value,issue in [('segment',3,'completion-identity-mismatch'),('time',8,'invalid-completion-time'),('sendingStopped',False,'sending-not-stopped')]:
+   with self.subTest(key=key):
+    r,p,rows,c=self.fixture();c[key]=value;self.assertIn(issue,analyze(r,p,rows,c)['issues'])
+ def test_stop_export_order(self):
+  r,p,rows,c=self.fixture();rows[-1]['time']=10.001
+  self.assertIn('post-after-sending-ended',analyze(r,p,rows,c)['issues'])
+ def test_backlog_retains_local_delay_without_qualifying(self):
+  r,p,rows,c=self.fixture();rows=[{'sequence':0,'stage':'intent','time':10.002,'planned':10},{'sequence':0,'stage':'main-enter','time':10.32,'planned':10},{'sequence':1,'stage':'scheduler-stop','time':10.25,'planned':10.25,'detail':'main-delivery-slot-backlog'},{'sequence':-1,'stage':'sending-ended','time':15.9}]
+  r.update(posted=0,received=0,notPosted=list(range(6)),reason='main-delivery-slot-backlog');c['reason']=r['reason']
+  a=analyze(r,p,rows,c);self.assertEqual(a['qualification'],'INVALID');self.assertTrue(a['partial_delays_retained']);self.assertAlmostEqual(a['delays']['intent_to_main_enter']['max_ms'],318)
+
+ def test_post_receive_distance_is_direct(self):
+  r,p,rows,c=self.fixture()
+  for row in rows:
+   if row['sequence']==0 and row['stage'] in ('posted','received'):row['x']+=.6 if row['stage']=='posted' else -.6
+  self.assertIn('posted-received-coordinate-mismatch',analyze(r,p,rows,c)['issues'])
+ def test_catch_up_spacing_rejected(self):
+  r,p,rows,c=self.fixture()
+  for row in rows:
+   if row['sequence']==0:row['time']+=.2
+  self.assertIn('posting-minimum-spacing-violated',analyze(r,p,rows,c)['issues'])
+
+ def test_diagonal_partial_motion_is_not_erased(self):
+  r,p,rows,c=self.fixture('NODE');rows=[x for x in rows if x.get('sequence') in (0,1,-1)]
+  state=next(x for x in rows if x.get('sequence')==1 and x['stage']=='handler-return-state');state.update(nodeX=4.301838,nodeY=-3.105829)
+  r.update(posted=2,received=2,notPosted=[2,3,4,5],effectiveMotion=False,reason='main-delivery-slot-backlog')
+  a=analyze(r,p,rows,c);self.assertEqual(a['qualification'],'INVALID');self.assertTrue(a['partial_state_observations']['node_any_nonzero_offset']);self.assertGreater(a['partial_state_observations']['node_max_offset_norm'],5);self.assertTrue(a['motion_recomputed']);self.assertTrue(a['partial_state_observations']['motion_flag_disagrees'])
+
+ def test_missing_endpoint_is_not_a_mismatched_endpoint(self):
+  r,p,rows,c=self.fixture('NODE');last=p['slots'][-1]['sequence'];rows=[x for x in rows if x.get('sequence')!=last]
+  r['after'].update(canUndo=False,canRedo=True)
+  a=analyze(r,p,rows,c);self.assertEqual(a['qualification'],'INVALID');self.assertIn('terminal-state-unobserved',a['issues']);self.assertNotIn('final-zoom-mismatch',a['issues']);self.assertNotIn('final-viewport-mismatch',a['issues']);self.assertNotIn('node-undo-boundary',a['issues'])
+
 if __name__=='__main__':unittest.main()

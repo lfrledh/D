@@ -1,7 +1,4 @@
 {
   "status": "MANIFEST_CHECKS_PASSED",
-  "errors": [],
-  "capture_entries": 11,
-  "hypothesis_cells": 30,
-  "boundary": "Structural checks only; not trace authenticity, native qualification or causal verdict."
+  "errors": []
 }

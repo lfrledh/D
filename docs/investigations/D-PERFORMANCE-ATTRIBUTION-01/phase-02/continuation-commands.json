@@ -514,6 +514,159 @@
       ],
       "exit_code": 0,
       "scope": "11 manifests / 30 hypothesis cells; structural only"
+    },
+    {
+      "evidence": "diagnostic-onone-13-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOnoneDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-onone-13.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "exit_code": 65,
+      "scope": "diagnostic-only build; 13 compile failure retained; 14 intermediate; 15 and O08 final pair"
+    },
+    {
+      "evidence": "diagnostic-onone-14-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOnoneDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-onone-14.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "exit_code": 0,
+      "scope": "diagnostic-only build; 13 compile failure retained; 14 intermediate; 15 and O08 final pair"
+    },
+    {
+      "evidence": "diagnostic-onone-15-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOnoneDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-onone-15.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "exit_code": 0,
+      "scope": "diagnostic-only build; 13 compile failure retained; 14 intermediate; 15 and O08 final pair"
+    },
+    {
+      "evidence": "diagnostic-optimized-08-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOptimizedDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-optimized-08.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "exit_code": 0,
+      "scope": "diagnostic-only build; 13 compile failure retained; 14 intermediate; 15 and O08 final pair"
+    },
+    {
+      "evidence": "qualification-03/coordinate-matrix-results.json",
+      "exit_codes": [
+        1,
+        1,
+        0,
+        0
+      ],
+      "scope": "C cold/warm x inspect/opaque; 3 points each; negatives retained"
+    },
+    {
+      "evidence": "qualification-03/clock-selfcheck.log",
+      "exit_code": 0,
+      "scope": "C5 scenarios; includes sender expiry and main backlog"
+    },
+    {
+      "evidence": "qualification-03/wheel-selfcheck.log",
+      "exit_code": 0,
+      "scope": "C6 scenarios; no visible input or performance claim"
+    },
+    {
+      "evidence": "qualification-03/offline-audit-tests-final.log",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "test_replay_analysis",
+        "-v"
+      ],
+      "exit_code": 0,
+      "scope": "59 methods/66 expanded cases, synthetic records"
+    },
+    {
+      "evidence": "qualification-03/paired-build-identity.json",
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "scope": "both packages signature/identity/entitlements/uuid/links checks; actual macro/resource comparison"
+    },
+    {
+      "evidence": "qualification-03/launch.log",
+      "command": [
+        "python3",
+        "diagnostic.py",
+        "--launch"
+      ],
+      "wrapper_exit_code": null,
+      "app_exit_code": null,
+      "scope": "exact owned process still alive; stopped sending, exported; no getApp"
+    },
+    {
+      "evidence": "qualification-03/continue-baseline.log",
+      "command": [
+        "python3",
+        "diagnostic.py",
+        "--continue-batch"
+      ],
+      "exit_code": 0,
+      "scope": "only after independent raw qualification; first continuous NODE safety-stopped"
     }
   ]
 }

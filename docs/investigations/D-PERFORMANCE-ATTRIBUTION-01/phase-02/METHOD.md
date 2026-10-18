@@ -21,7 +21,7 @@ python3 method/presentation_join.py --old-root "$PHASE1_ROOT" --scratch "$SCRATC
 
 初版评审发现同名TID可能合并、负weight/空窗校验不足、地址桶合并、加权中位实现不一致，均修正并补测试，随后重跑全部五段exit0。22个测试方法覆盖跨表引用、重复标签/ID、循环、缺失/前向引用、schema、身份、权重、递归、边界、未知状态、overlap/gap、选样确定性和精确显示join。它们不证明trace真实性或D产品通过。方法在Python3.9执行。
 
-重放未实施：不把组件测试已有的postEvent→sendEvent循环当作全App定时重放；其每步等布局会产生coordinated omission。下一次必须用固定墙钟计划、记录发送/实际接收/状态以及迟到、合并、失焦中止，组件层只用于不变式，不输出原生FPS。
+G1阶段记录：当时重放未实施：不把组件测试已有的postEvent→sendEvent循环当作全App定时重放；其每步等布局会产生coordinated omission。下一次必须用固定墙钟计划、记录发送/实际接收/状态以及迟到、合并、失焦中止，组件层只用于不变式，不输出原生FPS。
 
 ## Fixed production source references
 
@@ -42,3 +42,13 @@ These are source evidence, not latency measurements.
 42方法/43展开合成情景；一个方法含NODE/PAN两个参数反例。旧22方法仅沿用，不把26、41等中间轮数累加。失败与修正均保留私有日志。几何callback没有输入到布局完成的唯一桥，输出明确不提供layout完成时延；ZOOM锚点未由handler状态独立验证。缺文件/崩溃记录不得补零，原生试录失败不用于性能结论。
 
 复算入口：`python3 method/replay_analysis.py $PRIVATE_PREFIX --output $PRIVATE_RESULT`；合成自检：`python3 -m unittest discover -s method -p test_replay_analysis.py -v`。原始事件和崩溃文件不随报告推送。
+
+## 2026-10-19 资格协议v2与截断证据
+
+`replay_analysis.py`同时保留v1，v2严格绑定report/plan profile。`qualification-low-load-v1`为1.25秒、250ms间距、NODE/PAN6条与ZOOM4条；只可得到B_LOW_LOAD_ACTION_QUALIFIED，不计连续重复。时间链为planned（计划值）→intent→main-enter→post-begin→posted→received→handler-return-state；received是在真实生产monitor出队后的入口，handler-return-state为同步路由返回时状态快照，不能扩张为布局/屏幕完成。
+
+v2要求逐槽完整/唯一/顺序、实际最小post间距、计划/投递/出队坐标以及投递到接收欧氏距离<1点；必须有sending-ended与对应completion，完整成功要求提交/Undo/测量外复位。CLI用同一prefix自动读report、plan、events和completion。协议阈值来自预登记，不从结果调优。
+
+截断段仍为INVALID完整计划，但保留已观察阶段的分布与`partial_state_observations`。运动采用生产一致的向量长度；原reported_motion另存，冲突不改写raw。缺失末槽表示terminal-state-unobserved，不生成虚假的最终视口/倍率不匹配或Undo错误。只在存在末槽时执行原终态比较；完整资格绝不因此放宽。纯合成测试59方法/66展开情景通过，含新增17/23；旧全线程/显示分析测试未无理由重跑。
+
+`qualification-03-timeline.csv`为去敏相对时序：相对每段预定epoch，保留停止、未投递及阶段间隔，不含实际PID、项目身份、路径或内容。绝对单调时钟/完整身份与原始事件留本地。CSV没有FPS、GPU或输入到显示换算。

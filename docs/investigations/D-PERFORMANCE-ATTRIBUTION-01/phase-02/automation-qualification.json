@@ -1,6 +1,7 @@
 {
   "production_sha": "9eae90e4adc4008c3894f09bcd07c71e23701045",
-  "final_local_patch_sha256": "439ad8915345e2e25c5db5c36859f498d117c5698715bbb644f48943b693de51",
+  "report_continuation_base": "dc772c8e18658b95790f53e6f09c37fe57a37c63",
+  "final_local_patch_sha256": "978d2a229b27f039729698f08d317fa2ff7f0f8ce095d3d200473352a4b0e98c",
   "local_source_files": [
     "D/WorkbenchBootstrap.swift",
     "Packages/UI/Sources/UI/Views/Quick/DualWorkbenchView.swift",
@@ -14,36 +15,28 @@
   ],
   "local_source_file_sha256": {
     "D/WorkbenchBootstrap.swift": "2ee9467db3c6c2ad490df4ae716e00bec42d302245809e9ec0609e0c9f290c4b",
-    "Packages/UI/Sources/UI/Views/Quick/DualWorkbenchView.swift": "b8b9199b63dd472addf3bd01f69ed6ccf639a20b06c713736306e281d095fafb",
+    "Packages/UI/Sources/UI/Views/Quick/DualWorkbenchView.swift": "e66a5ddcc16c555b599fcc3f22173d18551f0c5a708e31ac2e1a7ba49a93d0d7",
     "Packages/UI/Sources/UI/Views/Workflow/WorkflowCanvasView.swift": "80a35fc7ad4e4add8a53edb3ff12040d7f442586379f1a9ed8f21203e90f2d86",
     "Packages/UI/Sources/UI/Views/Workflow/WorkflowCanvasViewportInteraction.swift": "4211aba50bda96dba4b7f6a2b61beb5ae942acf65e7be584bd73fb53cb900de0",
     "Packages/UI/Sources/UI/Views/Workflow/WorkflowGraphSurface.swift": "37b9113016444e7974e954c0510fef5fe7486aa060ff4779c2c469da4faa808c",
     "scripts/build-local.sh": "29b8d2551329ffee554b3ce37e0b0a789f93ddb74c1e69d3dcccf3465e752d3f",
-    "Packages/UI/Sources/UI/Diagnostics/PerformanceReplayEventFactory.swift": "dc2db9fcfe532f94a1347c7412786a818ccd78bb50f10cc0bfb1157322e0a9ae",
-    "Packages/UI/Sources/UI/Diagnostics/PerformanceReplayPlan.swift": "afe19793858f8068118dc1b5c8dfb2fad62b6c4b0462491ac8727a23b223adfb",
-    "Packages/UI/Sources/UI/Diagnostics/WorkbenchPerformanceReplay.swift": "511dfc60957740eae107c509904962f770cb0f14708d3ed0f55311c5a5dee201"
+    "Packages/UI/Sources/UI/Diagnostics/PerformanceReplayEventFactory.swift": "d5f8c063e4feae770dfae9d274bd386b6fa9711d68a9461fab888510728f865b",
+    "Packages/UI/Sources/UI/Diagnostics/PerformanceReplayPlan.swift": "3d9ac456c6065897c3a7d9c5c121ad2b9db73b3e6422ea632d230ea430692114",
+    "Packages/UI/Sources/UI/Diagnostics/WorkbenchPerformanceReplay.swift": "ec6a6f7ef980ba2c8a9f62fd127c77a1ffdb50e011994a9032f8956eccdf4c35"
   },
-  "evidence_level": "Implemented B route; native qualification failed; final C selfchecks and build only",
-  "native_execution_sealed": true,
-  "native_execution_reason": "Two failed pilots retained; bounded retry exhausted for this continuation. Final local build is unverified natively. Independent review and a new finite execution decision required.",
+  "evidence_level": "B_LOW_LOAD_ACTION_QUALIFIED for NODE/PAN/ZOOM; continuous NODE truncated at main-delivery guard; no complete performance baseline",
+  "native_opportunity": {
+    "authorized": 1,
+    "used": 1,
+    "retries": 0,
+    "new_qualification_segments": 3,
+    "following_continuous_segments_started": 1,
+    "current_state": "sequence-stopped after full export; no sending; exact existing diagnostic process retained"
+  },
   "selfchecks": {
-    "plan": {
-      "programs": 1,
-      "assertion_checks": 33,
-      "exit_code": 0
-    },
-    "event_construction_queue_identity": {
-      "programs": 1,
-      "mouse_event_cases": 3,
-      "assertion_checks": 16,
-      "exit_code": 0,
-      "queued_coordinate_matches": 0,
-      "queued_coordinate_cases": 3,
-      "scope": "hidden window construction and identity; coordinate failures retained; not native delivery"
-    },
     "shared_clock": {
       "programs": 1,
-      "parameter_scenarios": 3,
+      "scenarios": 5,
       "exit_code": 0,
       "results": [
         {
@@ -66,38 +59,447 @@
           "pass": true,
           "planned": 122,
           "reason": "sender-timer-late"
+        },
+        {
+          "delivered": 0,
+          "mode": "main-backlog",
+          "pass": true,
+          "planned": 122,
+          "reason": "main-delivery-slot-backlog"
+        },
+        {
+          "delivered": 6,
+          "mode": "qualification",
+          "pass": true,
+          "planned": 6,
+          "reason": null
         }
       ],
-      "scope": "same factory as App; C only"
+      "level": "C"
+    },
+    "mouse_coordinate_matrix": {
+      "programs": 1,
+      "arms": 4,
+      "points_per_arm": 3,
+      "cold_matches": [
+        2,
+        2
+      ],
+      "warm_matches": [
+        3,
+        3
+      ],
+      "cold_exit_codes": [
+        1,
+        1
+      ],
+      "warm_exit_codes": [
+        0,
+        0
+      ],
+      "level": "C",
+      "limit": "Supports run-loop/window-initialization condition; exact AppKit internal cause unknown. No offset compensation."
+    },
+    "wheel_queue": {
+      "programs": 1,
+      "scenarios": 6,
+      "exit_code": 0,
+      "level": "C",
+      "conditions": "3 noncollinear local points x +/-1 line delta; window identity, units, token, construction/queue coordinates retained"
     },
     "offline_qualifier": {
-      "methods": 42,
-      "expanded_cases": 43,
+      "methods": 59,
+      "expanded_cases": 66,
+      "new_methods": 17,
+      "new_expanded_cases": 23,
       "exit_code": 0,
-      "scope": "synthetic records only"
+      "scope": "synthetic records, including strict rev2 and partial-prefix counterexamples; not product UI tests"
+    }
+  },
+  "native_records": {
+    "replay-02-NODE": {
+      "partial_state_observations": {
+        "handler_states": 6,
+        "node_max_offset_norm": 12.0,
+        "node_any_nonzero_offset": true,
+        "full_trajectory_verified": true,
+        "terminal_state_observed": true,
+        "reported_motion": true,
+        "motion_flag_disagrees": false
+      },
+      "interaction": "NODE",
+      "qualification": "B_LOW_LOAD_ACTION_QUALIFIED",
+      "issues": [],
+      "planned": 6,
+      "posted": 6,
+      "received": 6,
+      "delays": {
+        "planned_to_intent": {
+          "n": 6,
+          "p50_ms": 0.07941666626720689,
+          "p95_ms": 0.08866666757967323,
+          "max_ms": 0.08866666757967323
+        },
+        "planned_to_posted": {
+          "n": 6,
+          "p50_ms": 0.6132500020612497,
+          "p95_ms": 0.6589166659978218,
+          "max_ms": 0.6589166659978218
+        },
+        "intent_to_posted": {
+          "n": 6,
+          "p50_ms": 0.5314166701282375,
+          "p95_ms": 0.5941666640865151,
+          "max_ms": 0.5941666640865151
+        },
+        "posted_to_received": {
+          "n": 6,
+          "p50_ms": 0.4475833338801749,
+          "p95_ms": 0.5128749980940484,
+          "max_ms": 0.5128749980940484
+        },
+        "received_to_handler_return": {
+          "n": 6,
+          "p50_ms": 0.3055000015592668,
+          "p95_ms": 4.740083331853384,
+          "max_ms": 4.740083331853384
+        },
+        "intent_to_main_enter": {
+          "n": 6,
+          "p50_ms": 0.06708333239657804,
+          "p95_ms": 0.08466666986350901,
+          "max_ms": 0.08466666986350901
+        },
+        "main_enter_to_post_begin": {
+          "n": 6,
+          "p50_ms": 0.007374997949227691,
+          "p95_ms": 0.009708332072477788,
+          "max_ms": 0.009708332072477788
+        },
+        "post_begin_to_posted": {
+          "n": 6,
+          "p50_ms": 0.43937500231550075,
+          "p95_ms": 0.5209999981161673,
+          "max_ms": 0.5209999981161673
+        }
+      },
+      "motion_recomputed": true,
+      "trajectory_verified": true,
+      "no_claims": [
+        "hardware input latency",
+        "presented FPS",
+        "GPU duration",
+        "causal attribution"
+      ],
+      "pilot": true,
+      "profile": "qualification-low-load-v1",
+      "protocolRevision": 2,
+      "partial_delays_retained": false,
+      "phase_meanings": "v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+      "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+      "zoom_anchor": "not independently qualified by handler-return samples",
+      "not_posted_count": 0,
+      "unreceived_count": 0,
+      "capture_seconds": 5.261245833331486,
+      "sending_stop_relative_seconds": null
+    },
+    "replay-03-PAN": {
+      "partial_state_observations": {
+        "handler_states": 6,
+        "node_max_offset_norm": 0.0,
+        "node_any_nonzero_offset": false,
+        "full_trajectory_verified": true,
+        "terminal_state_observed": true,
+        "reported_motion": true,
+        "motion_flag_disagrees": false
+      },
+      "interaction": "PAN",
+      "qualification": "B_LOW_LOAD_ACTION_QUALIFIED",
+      "issues": [],
+      "planned": 6,
+      "posted": 6,
+      "received": 6,
+      "delays": {
+        "planned_to_intent": {
+          "n": 6,
+          "p50_ms": 0.0769166654208675,
+          "p95_ms": 0.09537499863654375,
+          "max_ms": 0.09537499863654375
+        },
+        "planned_to_posted": {
+          "n": 6,
+          "p50_ms": 0.43758333049481735,
+          "p95_ms": 0.6307083313004114,
+          "max_ms": 0.6307083313004114
+        },
+        "intent_to_posted": {
+          "n": 6,
+          "p50_ms": 0.3555833318387158,
+          "p95_ms": 0.5537916658795439,
+          "max_ms": 0.5537916658795439
+        },
+        "posted_to_received": {
+          "n": 6,
+          "p50_ms": 0.7957500019983854,
+          "p95_ms": 0.9774999998626299,
+          "max_ms": 0.9774999998626299
+        },
+        "received_to_handler_return": {
+          "n": 6,
+          "p50_ms": 0.5984583331155591,
+          "p95_ms": 2.4301666671817657,
+          "max_ms": 2.4301666671817657
+        },
+        "intent_to_main_enter": {
+          "n": 6,
+          "p50_ms": 0.06404166560969315,
+          "p95_ms": 0.08116666504065506,
+          "max_ms": 0.08116666504065506
+        },
+        "main_enter_to_post_begin": {
+          "n": 6,
+          "p50_ms": 0.006583333743037656,
+          "p95_ms": 0.01679166598478332,
+          "max_ms": 0.01679166598478332
+        },
+        "post_begin_to_posted": {
+          "n": 6,
+          "p50_ms": 0.26429166609887034,
+          "p95_ms": 0.4716666662716307,
+          "max_ms": 0.4716666662716307
+        }
+      },
+      "motion_recomputed": true,
+      "trajectory_verified": true,
+      "no_claims": [
+        "hardware input latency",
+        "presented FPS",
+        "GPU duration",
+        "causal attribution"
+      ],
+      "pilot": true,
+      "profile": "qualification-low-load-v1",
+      "protocolRevision": 2,
+      "partial_delays_retained": false,
+      "phase_meanings": "v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+      "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+      "zoom_anchor": "not independently qualified by handler-return samples",
+      "not_posted_count": 0,
+      "unreceived_count": 0,
+      "capture_seconds": 5.260519249997742,
+      "sending_stop_relative_seconds": null
+    },
+    "replay-04-ZOOM": {
+      "partial_state_observations": {
+        "handler_states": 4,
+        "node_max_offset_norm": 0.0,
+        "node_any_nonzero_offset": false,
+        "full_trajectory_verified": true,
+        "terminal_state_observed": true,
+        "reported_motion": true,
+        "motion_flag_disagrees": false
+      },
+      "interaction": "ZOOM",
+      "qualification": "B_LOW_LOAD_ACTION_QUALIFIED",
+      "issues": [],
+      "planned": 4,
+      "posted": 4,
+      "received": 4,
+      "delays": {
+        "planned_to_intent": {
+          "n": 4,
+          "p50_ms": 0.07845833169994876,
+          "p95_ms": 0.0819583328848239,
+          "max_ms": 0.0819583328848239
+        },
+        "planned_to_posted": {
+          "n": 4,
+          "p50_ms": 0.354791663994547,
+          "p95_ms": 0.9721249989524949,
+          "max_ms": 0.9721249989524949
+        },
+        "intent_to_posted": {
+          "n": 4,
+          "p50_ms": 0.2749999985098839,
+          "p95_ms": 0.8936666672525462,
+          "max_ms": 0.8936666672525462
+        },
+        "posted_to_received": {
+          "n": 4,
+          "p50_ms": 0.15895833348622546,
+          "p95_ms": 0.30229166804929264,
+          "max_ms": 0.30229166804929264
+        },
+        "received_to_handler_return": {
+          "n": 4,
+          "p50_ms": 1.4101666674832813,
+          "p95_ms": 2.5329583331767935,
+          "max_ms": 2.5329583331767935
+        },
+        "intent_to_main_enter": {
+          "n": 4,
+          "p50_ms": 0.0462916650576517,
+          "p95_ms": 0.08554166561225429,
+          "max_ms": 0.08554166561225429
+        },
+        "main_enter_to_post_begin": {
+          "n": 4,
+          "p50_ms": 0.0027916648832615465,
+          "p95_ms": 0.007958333299029619,
+          "max_ms": 0.007958333299029619
+        },
+        "post_begin_to_posted": {
+          "n": 4,
+          "p50_ms": 0.22487499882117845,
+          "p95_ms": 0.8001666683412623,
+          "max_ms": 0.8001666683412623
+        }
+      },
+      "motion_recomputed": true,
+      "trajectory_verified": true,
+      "no_claims": [
+        "hardware input latency",
+        "presented FPS",
+        "GPU duration",
+        "causal attribution"
+      ],
+      "pilot": true,
+      "profile": "qualification-low-load-v1",
+      "protocolRevision": 2,
+      "partial_delays_retained": false,
+      "phase_meanings": "v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+      "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+      "zoom_anchor": "not independently qualified by handler-return samples",
+      "not_posted_count": 0,
+      "unreceived_count": 0,
+      "capture_seconds": 5.262191541667562,
+      "sending_stop_relative_seconds": null
+    },
+    "replay-05-NODE": {
+      "partial_state_observations": {
+        "handler_states": 6,
+        "node_max_offset_norm": 5.305844174613342,
+        "node_any_nonzero_offset": true,
+        "full_trajectory_verified": false,
+        "terminal_state_observed": false,
+        "reported_motion": false,
+        "motion_flag_disagrees": true
+      },
+      "interaction": "NODE",
+      "qualification": "INVALID",
+      "issues": [
+        "cancelled-or-refused-slot",
+        "completion-failed:main-delivery-slot-backlog",
+        "graph-commit-not-verified",
+        "missing-or-duplicate:handler-return-state",
+        "missing-or-duplicate:intent",
+        "missing-or-duplicate:main-enter",
+        "missing-or-duplicate:post-begin",
+        "missing-or-duplicate:posted",
+        "missing-or-duplicate:received",
+        "reported-motion-flag-conflict",
+        "segment-stopped:main-delivery-slot-backlog",
+        "stop-record:main-delivery-slot-backlog",
+        "terminal-state-unobserved",
+        "trajectory-not-verified"
+      ],
+      "planned": 482,
+      "posted": 6,
+      "received": 6,
+      "delays": {
+        "planned_to_intent": {
+          "n": 8,
+          "p50_ms": 0.0777916684455704,
+          "p95_ms": 0.10208333333139308,
+          "max_ms": 0.10208333333139308
+        },
+        "planned_to_posted": {
+          "n": 6,
+          "p50_ms": 0.3522500010149088,
+          "p95_ms": 0.5805833352496848,
+          "max_ms": 0.5805833352496848
+        },
+        "intent_to_posted": {
+          "n": 6,
+          "p50_ms": 0.27220833362662233,
+          "p95_ms": 0.508291668666061,
+          "max_ms": 0.508291668666061
+        },
+        "posted_to_received": {
+          "n": 6,
+          "p50_ms": 0.27545833290787414,
+          "p95_ms": 0.3973749990109354,
+          "max_ms": 0.3973749990109354
+        },
+        "received_to_handler_return": {
+          "n": 6,
+          "p50_ms": 0.018541668396210298,
+          "p95_ms": 2.6142499991692603,
+          "max_ms": 2.6142499991692603
+        },
+        "intent_to_main_enter": {
+          "n": 7,
+          "p50_ms": 0.04350000017439015,
+          "p95_ms": 29.0062083331577,
+          "max_ms": 29.0062083331577
+        },
+        "main_enter_to_post_begin": {
+          "n": 6,
+          "p50_ms": 0.0029166658350732177,
+          "p95_ms": 0.004958332283422351,
+          "max_ms": 0.004958332283422351
+        },
+        "post_begin_to_posted": {
+          "n": 6,
+          "p50_ms": 0.21700000070268288,
+          "p95_ms": 0.4380416685307864,
+          "max_ms": 0.4380416685307864
+        }
+      },
+      "motion_recomputed": true,
+      "trajectory_verified": false,
+      "no_claims": [
+        "hardware input latency",
+        "presented FPS",
+        "GPU duration",
+        "causal attribution"
+      ],
+      "pilot": false,
+      "profile": "performance",
+      "protocolRevision": 2,
+      "partial_delays_retained": true,
+      "phase_meanings": "v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+      "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+      "zoom_anchor": "not independently qualified by handler-return samples",
+      "not_posted_count": 476,
+      "unreceived_count": 0,
+      "capture_seconds": 12.002704874998017,
+      "sending_stop_relative_seconds": 0.12906199999997625
     }
   },
   "original_protection": {
     "ordinary_and_old_session_fingerprints_matched": 8,
     "review_code_files_matched": 10,
     "personal_scheme_unchanged": true,
-    "original_review_window_metadata": "unknown: no full prior fingerprint",
-    "D_processes_at_final_check": 0
+    "synthetic_project_disk_unchanged": true,
+    "original_review_window_metadata": "unknown historical gap; no speculative rollback"
   },
   "private_evidence_root_alias": "D-PERFORMANCE-ATTRIBUTION-01/run-20261018-phase02-01/diagnostic-private",
   "private_evidence_index": [
-    "diagnostic-source.diff",
-    "diagnostic-launch.json",
-    "paired-build-identity.json",
-    "diagnostic.py",
-    "prepare-diagnostic-receipt.py",
-    "attempt-01/",
-    "attempt-02/",
-    "side-instance-observation.json",
-    "protection-final-continuation.json",
-    "scene/<diagnostic-session>/replay-00-NODE.json",
-    "scene/<diagnostic-session>/replay-00-NODE-plan.json",
-    "scene/<diagnostic-session>/replay-00-NODE-events.json"
+    "qualification-03/final-diagnostic-source.diff",
+    "qualification-03/final-diagnostic-launch.json",
+    "qualification-03/preregistration.json",
+    "qualification-03/baseline-preregistration.json",
+    "qualification-03/paired-build-identity.json",
+    "qualification-03/qualification-gate.json",
+    "qualification-03/coordinate-*.json",
+    "qualification-03/wheel-selfcheck.json",
+    "qualification-03/clock-selfcheck.json",
+    "qualification-03/protection-final.json",
+    "scene/<diagnostic-session>/replay-02-NODE*",
+    "scene/<diagnostic-session>/replay-03-PAN*",
+    "scene/<diagnostic-session>/replay-04-ZOOM*",
+    "scene/<diagnostic-session>/replay-05-NODE*"
   ],
   "not_pushed": [
     "diagnostic product source and patch",
@@ -106,75 +508,193 @@
     "private paths and identities"
   ],
   "limits": [
-    "No qualified baseline",
-    "No tool or build performance pair",
-    "No causal intervention",
-    "No FPS or input-to-display estimate",
-    "Final shared-clock fix not natively retested"
+    "B in-process input is not hardware input",
+    "Low-load action qualification is not a continuous baseline",
+    "Single pending-main-delivery guard truncates at next slot even before lateLimit",
+    "No qualified repeated NODE/PAN/ZOOM performance series",
+    "No build/tool sensitivity or causal intervention",
+    "No presented FPS, display latency or GPU timing",
+    "Handler-return state snapshots are not layout/presentation completion",
+    "Final zoom anchor visual behavior not independently established"
   ],
-  "failed_pilot_01_scene": {
-    "assets": 0,
-    "runs": 0,
-    "nodes": 4,
-    "edges": 3,
-    "scale": 2,
-    "screen": "{{0, 0}, {1920, 1080}}",
-    "frame": "{{0, 0}, {1920, 1050}}",
-    "clip": "{{3532, 1798.5}, {1888, 899}}",
-    "clipX": 3532,
-    "clipY": 1798.5,
-    "zoom": 1,
-    "tool": "pointer",
-    "canvasContext": {
-      "activity": false,
-      "appearance": {
-        "appearance": {
-          "backgroundTransparency": 0.12,
-          "dark": {
-            "accent": "#9AD3B8",
-            "canvas": "#111D1A",
-            "foreground": "#E8F2EC",
-            "panel": "#1D2B25",
-            "secondary": "#B8CCC0"
-          },
-          "light": {
-            "accent": "#24634F",
-            "canvas": "#EDF2EB",
-            "foreground": "#162F29",
-            "panel": "#FAFCF9",
-            "secondary": "#455D54"
-          },
-          "lightweight": false,
-          "local": {
-            "material": "glass",
-            "strength": 0.55,
-            "version": 1
-          },
-          "motion": 0.5
-        },
-        "sendShortcut": "commandReturn",
-        "textPointSize": 14,
-        "theme": "system",
-        "transcriptWidth": 760,
-        "wrapsCode": false
-      },
-      "language": "zh-Hans",
-      "leading": true,
-      "modelLoad": "none",
-      "trailing": true,
-      "visibleNodeCoverage": "not yet independently measured",
-      "visitedOutput": [
-        "overview"
-      ],
-      "visitedPreparation": [
-        "models"
-      ],
-      "visitedResources": [
-        "all"
-      ],
-      "wheelSpeed": 1
+  "historical_prior_delivery": {
+    "production_sha": "9eae90e4adc4008c3894f09bcd07c71e23701045",
+    "final_local_patch_sha256": "439ad8915345e2e25c5db5c36859f498d117c5698715bbb644f48943b693de51",
+    "local_source_files": [
+      "D/WorkbenchBootstrap.swift",
+      "Packages/UI/Sources/UI/Views/Quick/DualWorkbenchView.swift",
+      "Packages/UI/Sources/UI/Views/Workflow/WorkflowCanvasView.swift",
+      "Packages/UI/Sources/UI/Views/Workflow/WorkflowCanvasViewportInteraction.swift",
+      "Packages/UI/Sources/UI/Views/Workflow/WorkflowGraphSurface.swift",
+      "scripts/build-local.sh",
+      "Packages/UI/Sources/UI/Diagnostics/PerformanceReplayEventFactory.swift",
+      "Packages/UI/Sources/UI/Diagnostics/PerformanceReplayPlan.swift",
+      "Packages/UI/Sources/UI/Diagnostics/WorkbenchPerformanceReplay.swift"
+    ],
+    "local_source_file_sha256": {
+      "D/WorkbenchBootstrap.swift": "2ee9467db3c6c2ad490df4ae716e00bec42d302245809e9ec0609e0c9f290c4b",
+      "Packages/UI/Sources/UI/Views/Quick/DualWorkbenchView.swift": "b8b9199b63dd472addf3bd01f69ed6ccf639a20b06c713736306e281d095fafb",
+      "Packages/UI/Sources/UI/Views/Workflow/WorkflowCanvasView.swift": "80a35fc7ad4e4add8a53edb3ff12040d7f442586379f1a9ed8f21203e90f2d86",
+      "Packages/UI/Sources/UI/Views/Workflow/WorkflowCanvasViewportInteraction.swift": "4211aba50bda96dba4b7f6a2b61beb5ae942acf65e7be584bd73fb53cb900de0",
+      "Packages/UI/Sources/UI/Views/Workflow/WorkflowGraphSurface.swift": "37b9113016444e7974e954c0510fef5fe7486aa060ff4779c2c469da4faa808c",
+      "scripts/build-local.sh": "29b8d2551329ffee554b3ce37e0b0a789f93ddb74c1e69d3dcccf3465e752d3f",
+      "Packages/UI/Sources/UI/Diagnostics/PerformanceReplayEventFactory.swift": "dc2db9fcfe532f94a1347c7412786a818ccd78bb50f10cc0bfb1157322e0a9ae",
+      "Packages/UI/Sources/UI/Diagnostics/PerformanceReplayPlan.swift": "afe19793858f8068118dc1b5c8dfb2fad62b6c4b0462491ac8727a23b223adfb",
+      "Packages/UI/Sources/UI/Diagnostics/WorkbenchPerformanceReplay.swift": "511dfc60957740eae107c509904962f770cb0f14708d3ed0f55311c5a5dee201"
     },
-    "display_device_identity": "private receipt; logical geometry does not identify physical display or presented frames"
-  },
-  "failed_pilot_02_scene": "No completed export; do not substitute attempt01 fingerprint"
+    "evidence_level": "Implemented B route; native qualification failed; final C selfchecks and build only",
+    "native_execution_sealed": true,
+    "native_execution_reason": "Two failed pilots retained; bounded retry exhausted for this continuation. Final local build is unverified natively. Independent review and a new finite execution decision required.",
+    "selfchecks": {
+      "plan": {
+        "programs": 1,
+        "assertion_checks": 33,
+        "exit_code": 0
+      },
+      "event_construction_queue_identity": {
+        "programs": 1,
+        "mouse_event_cases": 3,
+        "assertion_checks": 16,
+        "exit_code": 0,
+        "queued_coordinate_matches": 0,
+        "queued_coordinate_cases": 3,
+        "scope": "hidden window construction and identity; coordinate failures retained; not native delivery"
+      },
+      "shared_clock": {
+        "programs": 1,
+        "parameter_scenarios": 3,
+        "exit_code": 0,
+        "results": [
+          {
+            "delivered": 122,
+            "mode": "normal",
+            "pass": true,
+            "planned": 122,
+            "reason": null
+          },
+          {
+            "delivered": 0,
+            "mode": "cancelled",
+            "pass": true,
+            "planned": 122,
+            "reason": "explicit-selftest-cancel"
+          },
+          {
+            "delivered": 0,
+            "mode": "expired",
+            "pass": true,
+            "planned": 122,
+            "reason": "sender-timer-late"
+          }
+        ],
+        "scope": "same factory as App; C only"
+      },
+      "offline_qualifier": {
+        "methods": 42,
+        "expanded_cases": 43,
+        "exit_code": 0,
+        "scope": "synthetic records only"
+      }
+    },
+    "original_protection": {
+      "ordinary_and_old_session_fingerprints_matched": 8,
+      "review_code_files_matched": 10,
+      "personal_scheme_unchanged": true,
+      "original_review_window_metadata": "unknown: no full prior fingerprint",
+      "D_processes_at_final_check": 0
+    },
+    "private_evidence_root_alias": "D-PERFORMANCE-ATTRIBUTION-01/run-20261018-phase02-01/diagnostic-private",
+    "private_evidence_index": [
+      "diagnostic-source.diff",
+      "diagnostic-launch.json",
+      "paired-build-identity.json",
+      "diagnostic.py",
+      "prepare-diagnostic-receipt.py",
+      "attempt-01/",
+      "attempt-02/",
+      "side-instance-observation.json",
+      "protection-final-continuation.json",
+      "scene/<diagnostic-session>/replay-00-NODE.json",
+      "scene/<diagnostic-session>/replay-00-NODE-plan.json",
+      "scene/<diagnostic-session>/replay-00-NODE-events.json"
+    ],
+    "not_pushed": [
+      "diagnostic product source and patch",
+      "signed App artifacts",
+      "raw event records and crash report",
+      "private paths and identities"
+    ],
+    "limits": [
+      "No qualified baseline",
+      "No tool or build performance pair",
+      "No causal intervention",
+      "No FPS or input-to-display estimate",
+      "Final shared-clock fix not natively retested"
+    ],
+    "failed_pilot_01_scene": {
+      "assets": 0,
+      "runs": 0,
+      "nodes": 4,
+      "edges": 3,
+      "scale": 2,
+      "screen": "{{0, 0}, {1920, 1080}}",
+      "frame": "{{0, 0}, {1920, 1050}}",
+      "clip": "{{3532, 1798.5}, {1888, 899}}",
+      "clipX": 3532,
+      "clipY": 1798.5,
+      "zoom": 1,
+      "tool": "pointer",
+      "canvasContext": {
+        "activity": false,
+        "appearance": {
+          "appearance": {
+            "backgroundTransparency": 0.12,
+            "dark": {
+              "accent": "#9AD3B8",
+              "canvas": "#111D1A",
+              "foreground": "#E8F2EC",
+              "panel": "#1D2B25",
+              "secondary": "#B8CCC0"
+            },
+            "light": {
+              "accent": "#24634F",
+              "canvas": "#EDF2EB",
+              "foreground": "#162F29",
+              "panel": "#FAFCF9",
+              "secondary": "#455D54"
+            },
+            "lightweight": false,
+            "local": {
+              "material": "glass",
+              "strength": 0.55,
+              "version": 1
+            },
+            "motion": 0.5
+          },
+          "sendShortcut": "commandReturn",
+          "textPointSize": 14,
+          "theme": "system",
+          "transcriptWidth": 760,
+          "wrapsCode": false
+        },
+        "language": "zh-Hans",
+        "leading": true,
+        "modelLoad": "none",
+        "trailing": true,
+        "visibleNodeCoverage": "not yet independently measured",
+        "visitedOutput": [
+          "overview"
+        ],
+        "visitedPreparation": [
+          "models"
+        ],
+        "visitedResources": [
+          "all"
+        ],
+        "wheelSpeed": 1
+      },
+      "display_device_identity": "private receipt; logical geometry does not identify physical display or presented frames"
+    },
+    "failed_pilot_02_scene": "No completed export; do not substitute attempt01 fingerprint"
+  }
 }

@@ -509,5 +509,5 @@
       "reason": null
     }
   ],
-  "continuation_status": "2026-10-19: G1 coverage reused; two failed B pilots, no new qualified causal cells; diagnostic implementation is no longer absent"
+  "continuation_status": "2026-10-19 final qualification: G1 reused; low-load NODE/PAN/ZOOM B-qualified; first continuous NODE truncated at main-delivery slot; no new causal cells"
 }

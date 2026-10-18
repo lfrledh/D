@@ -3,7 +3,7 @@
   "phase": 2,
   "date": "2026-10-19",
   "timezone": "Asia/Tokyo",
-  "expected_report_commit": "0e662f0724b165724ad05789dcdd3539b6b93cf5",
+  "expected_report_commit": "dc772c8e18658b95790f53e6f09c37fe57a37c63",
   "known_production_commit": "9eae90e4adc4008c3894f09bcd07c71e23701045",
   "scope": "investigation_only",
   "product_repairs_authorized": false,
@@ -38,7 +38,9 @@
     "recorded_seconds_max": 360,
     "core_independent_repeats": 3,
     "extra_contrast_groups_max": 4,
-    "failure_retry_max_with_new_reason": 1
+    "failure_retry_max_with_new_reason": 1,
+    "additional_bounded_qualification_opportunities_authorized": 1,
+    "additional_bounded_qualification_opportunities_used": 1
   },
   "steps": [
     {
@@ -190,11 +192,11 @@
       "depends_on": [
         "G2.1"
       ],
-      "status": "IMPLEMENTED_NATIVE_PARTIAL",
+      "status": "LOW_LOAD_FULL_APP_QUALIFIED",
       "evidence": [
         "build-qualification.json"
       ],
-      "reason": "Real admission and synthetic full App reached; final shared-clock/source build selfchecked; input path still unqualified"
+      "reason": "NODE/PAN/ZOOM exact receive/state/graph/reset records passed; failure-injection matrix and continuous load remain limited"
     },
     {
       "id": "G2.3",
@@ -204,11 +206,11 @@
       "depends_on": [
         "G2.2"
       ],
-      "status": "IMPLEMENTED_QUALIFICATION_FAILED",
+      "status": "LOW_LOAD_FULL_APP_QUALIFIED",
       "evidence": [
         "REPORT.zh-CN.md"
       ],
-      "reason": "Two failed NODE pilots; no effective qualified native input; final fix C-only checked"
+      "reason": "NODE/PAN/ZOOM exact receive/state/graph/reset records passed; failure-injection matrix and continuous load remain limited"
     },
     {
       "id": "G3.1",
@@ -218,11 +220,11 @@
       "depends_on": [
         "G2.3"
       ],
-      "status": "NOT_RUN",
+      "status": "STARTED_TRUNCATED",
       "evidence": [
         "REPORT.zh-CN.md"
       ],
-      "reason": "G2 input qualification failed for diagnostic engineering reasons; no three-way baseline"
+      "reason": "First NODE continuous segment only; 6 receives then main delivery guard; remaining 8 did not start"
     },
     {
       "id": "G3.2",
@@ -236,7 +238,7 @@
       "evidence": [
         "PRESENTATION.md"
       ],
-      "reason": "Old display joins retained; new pilot only sender failure; no handler/layout/presentation latency"
+      "reason": "29.006 ms intent to main-entry wait observed; after-post queue was below0.398 ms on6 received events; no display/GPU attribution"
     },
     {
       "id": "G4.1",
@@ -250,7 +252,7 @@
       "evidence": [
         "build-qualification.json"
       ],
-      "reason": "Matched local -Onone/-O diagnostic pair compiled; no performance pair or sampler overhead estimate"
+      "reason": "New same-source Onone15/O08 pair; no sensitivity run after incomplete baseline"
     },
     {
       "id": "G4.2",
@@ -312,7 +314,7 @@
         "METHOD.md",
         "hypothesis-coverage.json"
       ],
-      "reason": "Non-implementers reviewed parser counterexamples and actual failed-pilot timeline/UUID; final local selfchecks do not upgrade native evidence"
+      "reason": "Non-author source/launcher review, raw qualification before explanation, continuous-prefix review, sanitized delivery"
     },
     {
       "id": "G6.2",
@@ -326,7 +328,7 @@
       "evidence": [
         "REPORT.zh-CN.md"
       ],
-      "reason": "Sanitized report/offline files only; exact commit/readback in local delivery receipt"
+      "reason": "Non-author source/launcher review, raw qualification before explanation, continuous-prefix review, sanitized delivery"
     }
   ],
   "experiment_ids": [
@@ -367,10 +369,10 @@
     "No security bypass",
     "Not a repair task"
   ],
-  "note": "G1 reused; two failed B pilots; no new valid baseline or causal experiment",
+  "note": "G1 reused; one newly authorized qualification opportunity passed low-load NODE/PAN/ZOOM; first continuous NODE truncated; other 8 core segments not started",
   "started_utc": "2026-10-18T13:35:38.182576+00:00",
-  "new_capture_count": 2,
-  "new_capture_seconds": 12.005371917,
+  "new_capture_count": 6,
+  "new_capture_seconds": 39.79203341666289,
   "diagnostic_product_changes": {
     "local_only": true,
     "files": 9,
@@ -378,11 +380,11 @@
     "formal_repairs": false
   },
   "deviations": [
-    "Two native qualification attempts failed for diagnostic engineering reasons; not attributed to permission denial.",
-    "No third native attempt after the preregistered bounded retry; final shared clock repaired and C-selfchecked.",
-    "No G3 repeated baselines or G4/G5 performance/causal pairs.",
-    "First attempt retained old review bundle due xcconfig precedence; corrected and identity assertion added.",
-    "Observer opened unadmitted diagnostic side instances; refused and normally terminated; excluded from target evidence."
+    "Earlier two failed native attempts retained; cumulative budget not reset.",
+    "User authorized one corrected native qualification opportunity; D-internal start avoids foreground/chat conflict.",
+    "Low-load B actions passed; continuous NODE stopped at bounded single-main-slot guard. No automatic retry/rate reduction.",
+    "No complete rotated performance repeat, no build/tool comparison and no causal intervention.",
+    "Original observed preflight/main timing boundary retained; no product cause inferred."
   ],
   "selection_policy": {
     "representative_seed": 20261018,
@@ -390,7 +392,7 @@
     "hypothesis_order": "global self/inclusive and scheduler before keyword categories",
     "new_capture_admission": "G1 complete + safe visible target and isolated root + input-receipt qualification; otherwise continue offline"
   },
-  "diagnostic_build": "local patched diagnostic pair, not a product candidate; final native qualification unverified",
+  "diagnostic_build": "Onone15 and O08 same local source/defines/resources/signing packaging; only Onone used; no performance sensitivity inference",
   "history": [
     {
       "date": "2026-10-18",
@@ -404,6 +406,20 @@
         "B full-App timed replay remains unimplemented; distinguished from environment blocker."
       ],
       "diagnostic_build": "clean detached source at production SHA; no product patch"
+    },
+    {
+      "date": "2026-10-19 prior delivery",
+      "report_commit": "dc772c8e18658b95790f53e6f09c37fe57a37c63",
+      "new_capture_count": 2,
+      "new_capture_seconds": 12.005371917,
+      "deviations": [
+        "Two native qualification attempts failed for diagnostic engineering reasons; not attributed to permission denial.",
+        "No third native attempt after the preregistered bounded retry; final shared clock repaired and C-selfchecked.",
+        "No G3 repeated baselines or G4/G5 performance/causal pairs.",
+        "First attempt retained old review bundle due xcconfig precedence; corrected and identity assertion added.",
+        "Observer opened unadmitted diagnostic side instances; refused and normally terminated; excluded from target evidence."
+      ],
+      "diagnostic_build": "local patched diagnostic pair, not a product candidate; final native qualification unverified"
     }
   ],
   "capture_accounting": [
@@ -424,6 +440,50 @@
       "charge_kind": "accounting_estimate_preregistered_max",
       "posted": null,
       "received": null
+    },
+    {
+      "capture": 2,
+      "interaction": "NODE",
+      "profile": "qualification-low-load-v1",
+      "status": "B_LOW_LOAD_ACTION_QUALIFIED",
+      "measured_capture_seconds": 5.261245833331486,
+      "charged_seconds": 5.261245833331486,
+      "planned_action_seconds": 1.25,
+      "posted": 6,
+      "received": 6
+    },
+    {
+      "capture": 3,
+      "interaction": "PAN",
+      "profile": "qualification-low-load-v1",
+      "status": "B_LOW_LOAD_ACTION_QUALIFIED",
+      "measured_capture_seconds": 5.260519249997742,
+      "charged_seconds": 5.260519249997742,
+      "planned_action_seconds": 1.25,
+      "posted": 6,
+      "received": 6
+    },
+    {
+      "capture": 4,
+      "interaction": "ZOOM",
+      "profile": "qualification-low-load-v1",
+      "status": "B_LOW_LOAD_ACTION_QUALIFIED",
+      "measured_capture_seconds": 5.262191541667562,
+      "charged_seconds": 5.262191541667562,
+      "planned_action_seconds": 1.25,
+      "posted": 4,
+      "received": 4
+    },
+    {
+      "capture": 5,
+      "interaction": "NODE",
+      "profile": "performance",
+      "status": "INCOMPLETE_WITH_VALID_LOCAL_PREFIX",
+      "measured_capture_seconds": 12.002704874998017,
+      "charged_seconds": 12.002704874998017,
+      "planned_action_seconds": 8,
+      "posted": 6,
+      "received": 6
     }
   ]
 }

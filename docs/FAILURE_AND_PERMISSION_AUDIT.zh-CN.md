@@ -1,23 +1,23 @@
 # 历史失败与权限审计
 
 <a id="d-performance-attribution-01-当前队列"></a>
-## 2026-10-19 D-PERFORMANCE-ATTRIBUTION-01 当前队列（Phase 2续办，仅调查）
+## 2026-10-19 D-PERFORMANCE-ATTRIBUTION-01 当前队列（Phase 2，仅调查）
 
-生产`9eae90e4adc4008c3894f09bcd07c71e23701045`不变；报告续接`0e662f0724b165724ad05789dcdd3539b6b93cf5`。[唯一当前调查入口](investigations/D-PERFORMANCE-ATTRIBUTION-01/phase-02/REPORT.zh-CN.md)。诊断产品源码/patch和原始证据只在外盘，去敏报告与纯离线方法按原分支交付；不修补产品、不合并/部署。
+报告续接`dc772c8e18658b95790f53e6f09c37fe57a37c63`，生产`9eae90e4adc4008c3894f09bcd07c71e23701045`保持。[唯一当前调查入口](investigations/D-PERFORMANCE-ATTRIBUTION-01/phase-02/REPORT.zh-CN.md)。前次两失败与副实例事件原证据保留；本轮不更改产品性能实现。
 
-|类别|当前事项|责任与最小下一步|
+|类别|当前事项|责任与下一步|
 |---|---|---|
-|HISTORICAL_REANALYZED|旧五段全线程/调度/时间切片/显示局部join|沿用已审G1，不重跑；22旧离线方法不算本轮新实跑。|
-|IMPLEMENTED_LOCAL_ONLY|完整App定时入口与专属合成项目、目标/退出/取消、收发状态、有效运动、复位及导出|Agent已实现并匹配编译；不是“重放器尚未实现”。最终共用时钟3情景C自检通过；42方法/43情景离线资格审计通过。|
-|NATIVE_QUALIFICATION_FAILED：Agent|两次NODE资格试录失败，尚无合格NODE/PAN/ZOOM重复|第一次投递前时钟晚到/backlog，第二次诊断回调线程断言；保留原始失败和修正。不是产品根因或权限解释。按既定重试限制，本轮不第三次试录；最终修正完整App回归仍待有界准入。|
-|HUMAN_COMPLETED|新合成UUID目录真实系统授权两次|用户已完成；不再要求找按钮、手势或统计。未来重启诊断包时系统可能仍需一次同目录授权，与AX/屏幕/事件权限分开。当前无需额外操作。|
-|ENVIRONMENT_LIMITED|本执行进程AX/系统事件投递/屏幕捕获preflight false|未改系统权限。B真实窗口可进入，但输入资格因上述工程失败未通过；桌面观察工具会另起无env副实例，已停用，不能按名称绑定。|
-|PREPARED_NOT_MEASURED|同源码-Onone/-O匹配产物、低开销/extended计数选择|无优化敏感性或观察扰动实测；统一debug-dylib包装后仅完成构建准备，不宣称Release或性能通过。|
-|DEFERRED：Agent|G3三次轮换、G4关键阶段/工具、G5单因素对照|须先验证最终完整App输入与轨迹；PAN/ZOOM分别最多两条，由实际延迟选择，不盲跑矩阵。GPU、最终呈现及ZOOM最终锚点未证实。|
-|OPEN_DEFECT|平移、缩放手感问题|没有修补/关闭声明，也没有足以选定正式修补范围的新证据。|
-|INCIDENT_BOUNDED|工具在目标崩溃后启动两份无env诊断副实例|持久标记拒绝服务，按精确PID正常退出请求成功，退出码未知、后续无D进程；不把副实例当目标证据。首轮误用旧review bundle已纠正；原review容器窗口元数据缺完整前置摘要，unknown，不推测回滚。|
-|PROTECTED|普通数据/模型/原App/项目/scheme|普通8项、原包10项和个人scheme摘要保持；未操作原B9FC项目或回滚索引。诊断仅自己的零模型合成项目；当前无D进程。|
-|DECISION_PENDING|外部独立顾问复审最终诊断方法与有限下一步|先审失败资格、全局旧画像、时钟修正和准入，再决定继续小试或后续修补讨论；不要求用户代做工程排错。|
+|HISTORICAL_REANALYZED|旧G1全线程、调度和时间切片|已审结果沿用，不重跑或重新扩写。|
+|IMPLEMENTED_AND_QUALIFIED_LOW_LOAD|D内开始、身份/坐标/接收/状态/停止导出及合成复位|一次获准修后机会，NODE/PAN/ZOOM 6/6/4条全部核验，非编写者审原始记录；不是硬件输入、连续负载或FPS通过。|
+|TOOL_CAPACITY_LIMIT：Agent|连续NODE首段被单个待主线程槽上限截断|6条实际接收，已开始拖动；29.006ms进入主线程等待，定时器最大晚到0.102ms。保留前缀；其余8段未启动。先讨论有限容量/最长等待/终态，不盲目放宽阈值或降频。|
+|OFFLINE_CORRECTED：Agent|原诊断最大单轴判断漏掉对角位移|向量5.305844已超过生产阈值；原始false flag保留，离线区分完整资格/局部运动/未观察终点。59方法/66情景exit0。没有借此宣布完整NODE通过。|
+|HUMAN_COMPLETED|同一专属合成根系统准入与D内开始|本轮无需聊天确认开始、手势或计时；采集已停并导出。当前没有需用户立即操作项。未来重启如系统再次要求授权须如实办理，不绕过。|
+|ENVIRONMENT_LIMITED|系统级事件/屏幕权限及最终显示指标|未改权限。此次B路径可用；不把其等同A硬件输入。仅精确PID/启动回执观察，getApp/按名称路径继续停用。|
+|PREPARED_NOT_MEASURED|Onone15/O08同源码优化配对|编译/签名/宏/资源/布局匹配已核；O未启动，敏感性及工具扰动未测。|
+|DEFERRED：Agent|G3完整3×3重复、G4/G5敏感性和因果实验|累计6/18段、39.792033417/360秒，0/4组；旧失败不抹。PAN/ZOOM仍仅低负载资格，不用NODE入口等待代替其性能解释。|
+|OPEN_DEFECT|平移/缩放体验|未修补、未关闭、未测FPS；玻璃/几何/跨页等候选未因本次结果排除。|
+|PROTECTED|普通App/用户数据/原项目/个人scheme|普通8项、原包10项、scheme及专属合成磁盘文件摘要一致；唯一诊断进程已停发送并保留，未另起普通副实例。旧review容器窗口元数据缺前置摘要仍unknown。|
+|DECISION_PENDING|独立顾问复核和用户决定|先审资格、原始时序与工具边界，再决定最小诊断续查。无正式产品修补授权，不合并/部署/替换普通D。|
 
 ## 2026-10-18 D-PERFORMANCE-ATTRIBUTION-01 Phase 1历史队列（已被上方Phase 2覆盖）
 
