@@ -1,94 +1,287 @@
 {
   "source_sha": "9eae90e4adc4008c3894f09bcd07c71e23701045",
-  "source_dirty": false,
-  "diagnostic_source_changes": false,
-  "configuration": "Debug, optimization override -O; definitions retained",
-  "actual_compile_flags": {
-    "DInference": {
-      "optimization": [
-        "-O"
+  "status": "MATCHED_DIAGNOSTIC_BUILDS_PREPARED_NOT_NATIVELY_QUALIFIED",
+  "diagnostic_source_changes": true,
+  "local_only": true,
+  "diagnostic_patch_sha256": "439ad8915345e2e25c5db5c36859f498d117c5698715bbb644f48943b693de51",
+  "configuration": "Debug; shared definitions; explicit ENABLE_DEBUG_DYLIB=NO; only optimization differs",
+  "native_launched_final_builds": false,
+  "native_performance_comparison": "NOT_RUN",
+  "comparison": {
+    "info_equal": true,
+    "entitlements_equal": true,
+    "shader_equal": true,
+    "macos_layout_equal": true,
+    "active_executable_links_debug_dylib": false,
+    "module_defines_equal": true,
+    "ui_resources_equal": true
+  },
+  "builds": {
+    "Onone": {
+      "build_log": "diagnostic-onone-12.log",
+      "build_exit_code": 0,
+      "actual_compile_flags": {
+        "DInference": {
+          "optimization": [
+            "-Onone"
+          ],
+          "defines": [
+            "DEBUG",
+            "D_PERFORMANCE_DIAGNOSTIC",
+            "D_REVIEW_ONLY",
+            "SWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+            "SWIFT_PACKAGE",
+            "Xcode",
+            "_LIBCPP_HARDENING_MODE"
+          ],
+          "compile_log": "diagnostic-onone-build.log",
+          "scope": "latest module compiler invocation in same incremental derived-data lineage"
+        },
+        "DWorkbench": {
+          "optimization": [
+            "-Onone"
+          ],
+          "defines": [
+            "DEBUG",
+            "D_PERFORMANCE_DIAGNOSTIC",
+            "D_REVIEW_ONLY",
+            "SWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+            "SWIFT_PACKAGE",
+            "Xcode",
+            "_LIBCPP_HARDENING_MODE"
+          ],
+          "compile_log": "diagnostic-onone-04.log",
+          "scope": "latest module compiler invocation in same incremental derived-data lineage"
+        },
+        "UI": {
+          "optimization": [
+            "-Onone"
+          ],
+          "defines": [
+            "DEBUG",
+            "D_PERFORMANCE_DIAGNOSTIC",
+            "D_REVIEW_ONLY",
+            "SWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+            "SWIFT_PACKAGE",
+            "Xcode",
+            "_LIBCPP_HARDENING_MODE"
+          ],
+          "compile_log": "diagnostic-onone-11.log",
+          "scope": "latest module compiler invocation in same incremental derived-data lineage"
+        },
+        "D": {
+          "optimization": [
+            "-Onone"
+          ],
+          "defines": [
+            "DEBUG",
+            "D_PERFORMANCE_DIAGNOSTIC",
+            "D_REVIEW_ONLY",
+            "_LIBCPP_HARDENING_MODE"
+          ],
+          "compile_log": "diagnostic-onone-11.log",
+          "scope": "latest module compiler invocation in same incremental derived-data lineage"
+        }
+      },
+      "binary_uuid": "194C0013-B73C-34AB-9B2F-D7F3B71880F8",
+      "binary_sha256": "be9df80d3a65b64e670c39a1049ac34b2f738f2f14b958df1cf1a2d21580c114",
+      "info_sha256": "9fefd6f3bac46a1f23ef4c9779d7da6f7b126364e017776ca242d3c8e75bbf2e",
+      "ui_resources_sha256": {
+        "Contents/Resources/UI_UI.bundle/Contents/Resources/en.json": "c948ee3c3d79cb2a69b89ae2b0f77689c44847a55430d9edce74444d2bb69f53",
+        "Contents/Resources/UI_UI.bundle/Contents/Resources/zh-Hans.json": "b68cc0b76675250d13a34a8813eb1d9bbbd1b63ed9dcfd35b7043d13cc0e4105",
+        "Contents/Resources/UI_UI.bundle/Contents/Resources/WorkbenchFeatureHelp.json": "498db0ff4d75d7fc478d462b4b980b48462dcd24195efdcf6970e1f14ae9e5ca",
+        "Contents/Resources/UI_UI.bundle/Contents/Resources/default.metallib": "8f5edaa8399afef404742ad5941ff0a2ff23abf6bec83c3634b4c0f9206026f2"
+      },
+      "signature_exit_code": 0,
+      "entitlements_exit_code": 0,
+      "sandbox": true,
+      "bundle_id": "first-test.D.performance-phase2",
+      "review_marker": "isolated-download-v1",
+      "diagnostic_marker": "phase2-replay-v1",
+      "macos_file_layout": [
+        "D"
       ],
-      "defines": [
-        "-DDEBUG",
-        "-DDEBUG=1",
-        "-DD_REVIEW_ONLY",
-        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
-        "-DSWIFT_PACKAGE",
-        "-DXcode",
-        "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG"
-      ],
-      "debug_info": true
+      "native_evidence": "NOT_RUN"
     },
-    "DWorkbench": {
-      "optimization": [
-        "-O"
+    "O": {
+      "build_log": "diagnostic-optimized-07.log",
+      "build_exit_code": 0,
+      "actual_compile_flags": {
+        "DInference": {
+          "optimization": [
+            "-O"
+          ],
+          "defines": [
+            "DEBUG",
+            "D_PERFORMANCE_DIAGNOSTIC",
+            "D_REVIEW_ONLY",
+            "SWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+            "SWIFT_PACKAGE",
+            "Xcode",
+            "_LIBCPP_HARDENING_MODE"
+          ],
+          "compile_log": "diagnostic-optimized-01.log",
+          "scope": "latest module compiler invocation in same incremental derived-data lineage"
+        },
+        "DWorkbench": {
+          "optimization": [
+            "-O"
+          ],
+          "defines": [
+            "DEBUG",
+            "D_PERFORMANCE_DIAGNOSTIC",
+            "D_REVIEW_ONLY",
+            "SWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+            "SWIFT_PACKAGE",
+            "Xcode",
+            "_LIBCPP_HARDENING_MODE"
+          ],
+          "compile_log": "diagnostic-optimized-01.log",
+          "scope": "latest module compiler invocation in same incremental derived-data lineage"
+        },
+        "UI": {
+          "optimization": [
+            "-O"
+          ],
+          "defines": [
+            "DEBUG",
+            "D_PERFORMANCE_DIAGNOSTIC",
+            "D_REVIEW_ONLY",
+            "SWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+            "SWIFT_PACKAGE",
+            "Xcode",
+            "_LIBCPP_HARDENING_MODE"
+          ],
+          "compile_log": "diagnostic-optimized-06.log",
+          "scope": "latest module compiler invocation in same incremental derived-data lineage"
+        },
+        "D": {
+          "optimization": [
+            "-O"
+          ],
+          "defines": [
+            "DEBUG",
+            "D_PERFORMANCE_DIAGNOSTIC",
+            "D_REVIEW_ONLY",
+            "_LIBCPP_HARDENING_MODE"
+          ],
+          "compile_log": "diagnostic-optimized-06.log",
+          "scope": "latest module compiler invocation in same incremental derived-data lineage"
+        }
+      },
+      "binary_uuid": "65A681DD-D0A9-35AE-A62E-1824E98C1347",
+      "binary_sha256": "1d280f8e0f27ebbde72126db66edb80a036a2d38b7aad91366952b8f3584ac6f",
+      "info_sha256": "9fefd6f3bac46a1f23ef4c9779d7da6f7b126364e017776ca242d3c8e75bbf2e",
+      "ui_resources_sha256": {
+        "Contents/Resources/UI_UI.bundle/Contents/Resources/en.json": "c948ee3c3d79cb2a69b89ae2b0f77689c44847a55430d9edce74444d2bb69f53",
+        "Contents/Resources/UI_UI.bundle/Contents/Resources/zh-Hans.json": "b68cc0b76675250d13a34a8813eb1d9bbbd1b63ed9dcfd35b7043d13cc0e4105",
+        "Contents/Resources/UI_UI.bundle/Contents/Resources/WorkbenchFeatureHelp.json": "498db0ff4d75d7fc478d462b4b980b48462dcd24195efdcf6970e1f14ae9e5ca",
+        "Contents/Resources/UI_UI.bundle/Contents/Resources/default.metallib": "8f5edaa8399afef404742ad5941ff0a2ff23abf6bec83c3634b4c0f9206026f2"
+      },
+      "signature_exit_code": 0,
+      "entitlements_exit_code": 0,
+      "sandbox": true,
+      "bundle_id": "first-test.D.performance-phase2",
+      "review_marker": "isolated-download-v1",
+      "diagnostic_marker": "phase2-replay-v1",
+      "macos_file_layout": [
+        "D"
       ],
-      "defines": [
-        "-DDEBUG",
-        "-DDEBUG=1",
-        "-DD_REVIEW_ONLY",
-        "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
-        "-DSWIFT_PACKAGE",
-        "-DXcode",
-        "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG"
-      ],
-      "debug_info": true
-    },
-    "UI": {
-      "optimization": [
-        "-O"
-      ],
-      "defines": [
-        "-DDEBUG",
-        "-DDEBUG=1",
-        "-DD_REVIEW_ONLY",
-        "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
-        "-DSWIFT_PACKAGE",
-        "-DXcode",
-        "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG"
-      ],
-      "debug_info": true
-    },
-    "D": {
-      "optimization": [
-        "-O"
-      ],
-      "defines": [
-        "-DDEBUG",
-        "-DDEBUG=1",
-        "-DD_REVIEW_ONLY",
-        "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG"
-      ],
-      "debug_info": true
+      "native_evidence": "NOT_RUN"
     }
   },
-  "build_exit": 0,
-  "signature_exit": 0,
-  "entitlements_exit": 0,
-  "sandbox": true,
-  "marker": "isolated-download-v1",
-  "symbol_uuids": [
-    "36FF9154-7735-3F2F-9D0C-3B2B71898DC6"
-  ],
-  "old_binary_uuids": [
-    "80B8C85E-E3B6-3AD2-9828-170D37E49F45",
-    "B727B6E7-8FC6-3539-A03E-CFB5AAC13C45"
-  ],
-  "native_launched": false,
-  "status": "BUILD_PREPARED; NATIVE_COMPARISON_BLOCKED",
-  "dependency_source": "same pinned sources, isolated cloned package/cache roots, offline resolution",
-  "initial_fixture_link_exit": 1,
-  "initial_fixture_link_reason": "standalone link omitted declared ZIPFoundation/MCP transitive objects; source compiled",
-  "final_fixture_compile_exit": 0,
-  "fixture_run_exit": 0,
-  "synthetic_scene": {
-    "cold_read_equal": true,
-    "edges": 6,
-    "graphs": 2,
-    "inference": "not invoked",
-    "native_visible_state": "NOT_MEASURED",
-    "nodes": 8,
-    "runs": 0
-  },
-  "scope": "No inference backend constructed; no visible window or native route qualified"
+  "historical_2026_10_18_initial_preparation": {
+    "source_sha": "9eae90e4adc4008c3894f09bcd07c71e23701045",
+    "source_dirty": false,
+    "diagnostic_source_changes": false,
+    "configuration": "Debug, optimization override -O; definitions retained",
+    "actual_compile_flags": {
+      "DInference": {
+        "optimization": [
+          "-O"
+        ],
+        "defines": [
+          "-DDEBUG",
+          "-DDEBUG=1",
+          "-DD_REVIEW_ONLY",
+          "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+          "-DSWIFT_PACKAGE",
+          "-DXcode",
+          "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG"
+        ],
+        "debug_info": true
+      },
+      "DWorkbench": {
+        "optimization": [
+          "-O"
+        ],
+        "defines": [
+          "-DDEBUG",
+          "-DDEBUG=1",
+          "-DD_REVIEW_ONLY",
+          "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+          "-DSWIFT_PACKAGE",
+          "-DXcode",
+          "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG"
+        ],
+        "debug_info": true
+      },
+      "UI": {
+        "optimization": [
+          "-O"
+        ],
+        "defines": [
+          "-DDEBUG",
+          "-DDEBUG=1",
+          "-DD_REVIEW_ONLY",
+          "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+          "-DSWIFT_PACKAGE",
+          "-DXcode",
+          "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG"
+        ],
+        "debug_info": true
+      },
+      "D": {
+        "optimization": [
+          "-O"
+        ],
+        "defines": [
+          "-DDEBUG",
+          "-DDEBUG=1",
+          "-DD_REVIEW_ONLY",
+          "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG"
+        ],
+        "debug_info": true
+      }
+    },
+    "build_exit": 0,
+    "signature_exit": 0,
+    "entitlements_exit": 0,
+    "sandbox": true,
+    "marker": "isolated-download-v1",
+    "symbol_uuids": [
+      "36FF9154-7735-3F2F-9D0C-3B2B71898DC6"
+    ],
+    "old_binary_uuids": [
+      "80B8C85E-E3B6-3AD2-9828-170D37E49F45",
+      "B727B6E7-8FC6-3539-A03E-CFB5AAC13C45"
+    ],
+    "native_launched": false,
+    "status": "BUILD_PREPARED; NATIVE_COMPARISON_BLOCKED",
+    "dependency_source": "same pinned sources, isolated cloned package/cache roots, offline resolution",
+    "initial_fixture_link_exit": 1,
+    "initial_fixture_link_reason": "standalone link omitted declared ZIPFoundation/MCP transitive objects; source compiled",
+    "final_fixture_compile_exit": 0,
+    "fixture_run_exit": 0,
+    "synthetic_scene": {
+      "cold_read_equal": true,
+      "edges": 6,
+      "graphs": 2,
+      "inference": "not invoked",
+      "native_visible_state": "NOT_MEASURED",
+      "nodes": 8,
+      "runs": 0
+    },
+    "scope": "No inference backend constructed; no visible window or native route qualified"
+  }
 }

@@ -1,0 +1,519 @@
+{
+  "boundary": "Sanitized command index; complete local commands/logs retained; no native performance pass",
+  "commands": [
+    {
+      "evidence": "diagnostic-onone-03-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOnoneDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-onone-03.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "onone",
+      "started_unix": 1792335957.677129,
+      "finished_unix": 1792336067.1217191,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-onone-04-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOnoneDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-onone-04.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "onone",
+      "started_unix": 1792336129.492413,
+      "finished_unix": 1792336194.983236,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-onone-05-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOnoneDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-onone-05.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "onone",
+      "started_unix": 1792336227.388351,
+      "finished_unix": 1792336282.26135,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-onone-06-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOnoneDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-onone-06.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "onone",
+      "started_unix": 1792336452.299385,
+      "finished_unix": 1792336509.7770472,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-onone-07-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOnoneDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-onone-07.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "onone",
+      "started_unix": 1792337044.3799272,
+      "finished_unix": 1792337104.1084921,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-onone-08-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOnoneDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-onone-08.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "onone",
+      "started_unix": 1792337405.160714,
+      "finished_unix": 1792337466.1258,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-onone-09-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOnoneDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-onone-09.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "onone",
+      "started_unix": 1792337798.85492,
+      "finished_unix": 1792337857.6383061,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-onone-10-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOnoneDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-onone-10.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "onone",
+      "started_unix": 1792337939.825194,
+      "finished_unix": 1792338000.0377011,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-onone-11-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOnoneDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-onone-11.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "onone",
+      "started_unix": 1792338330.564973,
+      "finished_unix": 1792338392.863433,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-onone-12-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOnoneDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-onone-12.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "onone",
+      "started_unix": 1792338550.010713,
+      "finished_unix": 1792338585.967571,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-optimized-01-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOptimizedDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-optimized-01.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "optimized",
+      "started_unix": 1792336724.974384,
+      "finished_unix": 1792336942.248132,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-optimized-02-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOptimizedDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-optimized-02.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "optimized",
+      "started_unix": 1792337104.14115,
+      "finished_unix": 1792337166.8290482,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-optimized-03-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOptimizedDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-optimized-03.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "optimized",
+      "started_unix": 1792337466.166116,
+      "finished_unix": 1792337528.245692,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-optimized-04-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOptimizedDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-optimized-04.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "optimized",
+      "started_unix": 1792337857.679544,
+      "finished_unix": 1792337913.513263,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-optimized-05-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOptimizedDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-optimized-05.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "optimized",
+      "started_unix": 1792338000.091049,
+      "finished_unix": 1792338061.995008,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-optimized-06-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOptimizedDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-optimized-06.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "optimized",
+      "started_unix": 1792338392.8972642,
+      "finished_unix": 1792338454.42095,
+      "exit_code": 0
+    },
+    {
+      "evidence": "diagnostic-optimized-07-result.json",
+      "command": [
+        "bash",
+        "scripts/build-local.sh",
+        "--derived-data-path",
+        "$DIAGNOSTIC_PRIVATE/DiagnosticOptimizedDerivedData",
+        "--source-packages-path",
+        "$DIAGNOSTIC_PRIVATE/packages",
+        "--package-cache-path",
+        "$DIAGNOSTIC_PRIVATE/cache",
+        "--log-path",
+        "$DIAGNOSTIC_PRIVATE/diagnostic-optimized-07.log",
+        "--review-info-plist",
+        "$DIAGNOSTIC_PRIVATE/ReviewOnly-Info.plist",
+        "--offline"
+      ],
+      "cwd": "$DIAGNOSTIC_PRIVATE/optimized-source",
+      "mode": "optimized",
+      "started_unix": 1792338586.000801,
+      "finished_unix": 1792338608.687017,
+      "exit_code": 0
+    },
+    {
+      "evidence": "attempt-01",
+      "command": [
+        "python3",
+        "diagnostic.py",
+        "--launch"
+      ],
+      "wrapper_exit_code": 0,
+      "app_exit_code": 0,
+      "qualification": "FAILED_BEFORE_DELIVERY"
+    },
+    {
+      "evidence": "attempt-02",
+      "command": [
+        "python3",
+        "diagnostic.py",
+        "--launch",
+        "--reviewed-pilot-retry"
+      ],
+      "wrapper_exit_code": 0,
+      "app_exit_code": -5,
+      "qualification": "FAILED_CRASH_NO_COMPLETE_EXPORT"
+    },
+    {
+      "evidence": "replay-event-selftest-v2",
+      "exit_code": -5,
+      "qualification": "FAILED_COORDINATE_ASSERTION_RETAINED"
+    },
+    {
+      "evidence": "event-queue-identity-probe",
+      "exit_code": 2,
+      "qualification": "FAILED_QUEUE_IDENTITY_RETAINED"
+    },
+    {
+      "evidence": "replay-plan-selftest-v4.log",
+      "exit_code": 0,
+      "scope": "C 33 assertions"
+    },
+    {
+      "evidence": "replay-event-selftest-v3.log",
+      "exit_code": 0,
+      "scope": "C identity/construction only; coordinates remain failed"
+    },
+    {
+      "evidence": "replay-clock-selftest.log",
+      "exit_code": 0,
+      "scope": "C 3 scenarios"
+    },
+    {
+      "evidence": "replay-analysis-tests-final.log",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "method",
+        "-p",
+        "test_replay_analysis.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "scope": "offline 42 methods / 43 cases"
+    },
+    {
+      "evidence": "paired-build-identity.json",
+      "commands": [
+        "codesign --verify --deep --strict <app>",
+        "codesign -dvv <app>",
+        "codesign -d --entitlements :- <app>",
+        "dwarfdump --uuid <executable>",
+        "otool -L <executable>"
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "applies_to": [
+        "final Onone",
+        "final O"
+      ]
+    },
+    {
+      "evidence": "diagnostic.py verification only",
+      "command": [
+        "python3",
+        "diagnostic.py"
+      ],
+      "exit_code": 0,
+      "native_launched": false
+    },
+    {
+      "evidence": "side-instance-observation.json",
+      "scope": "Unadmitted observer-launched diagnostic side instances; exact PID normal termination requests returned true",
+      "app_exit_codes": [
+        null,
+        null
+      ]
+    },
+    {
+      "evidence": "sealed launcher selfcheck",
+      "command": [
+        "python3",
+        "diagnostic.py",
+        "--launch"
+      ],
+      "exit_code": 1,
+      "expected": true,
+      "reason": "Native execution sealed before any App/server launch; bounded retry exhausted",
+      "native_launched": false
+    },
+    {
+      "evidence": "manifest-validation.json",
+      "command": [
+        "python3",
+        "method/validate_report.py"
+      ],
+      "exit_code": 0,
+      "scope": "11 manifests / 30 hypothesis cells; structural only"
+    }
+  ]
+}

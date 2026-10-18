@@ -34,3 +34,11 @@ These are source evidence, not latency measurements.
 - [Connection drawing](https://github.com/lfrledh/D/blob/9eae90e4adc4008c3894f09bcd07c71e23701045/Packages/UI/Sources/UI/Views/Workflow/WorkflowConnectionDrawing.swift)
 - [Connection hit receiver](https://github.com/lfrledh/D/blob/9eae90e4adc4008c3894f09bcd07c71e23701045/Packages/UI/Sources/UI/Views/Workflow/WorkflowConnectionReceiver.swift)
 - [Native directory admission](https://github.com/lfrledh/D/blob/9eae90e4adc4008c3894f09bcd07c71e23701045/D/WorkbenchBootstrap.swift#L61)
+
+## 2026-10-19 新重放记录的资格方法
+
+`method/replay_analysis.py`只读取已导出的本地JSON，不发送事件。输入为同前缀report/plan/events，输出逐项INVALID或B_LOCAL_STAGE_EVIDENCE。先检查记录schema/来源级别、完整目标/来源标识、固定轨迹/数量/节奏、非有限数与布尔序号，再核对每槽intent→posted→received→handler-return及全局顺序、缺失/重复/取消、最终图/视口/倍率。NODE/PAN发生额外缩放会拒绝。pilot标记保留，不能混算正式重复。真实身份仍须与本地签名和启动回执互核，JSON自称B不证明来源。
+
+42方法/43展开合成情景；一个方法含NODE/PAN两个参数反例。旧22方法仅沿用，不把26、41等中间轮数累加。失败与修正均保留私有日志。几何callback没有输入到布局完成的唯一桥，输出明确不提供layout完成时延；ZOOM锚点未由handler状态独立验证。缺文件/崩溃记录不得补零，原生试录失败不用于性能结论。
+
+复算入口：`python3 method/replay_analysis.py $PRIVATE_PREFIX --output $PRIVATE_RESULT`；合成自检：`python3 -m unittest discover -s method -p test_replay_analysis.py -v`。原始事件和崩溃文件不随报告推送。

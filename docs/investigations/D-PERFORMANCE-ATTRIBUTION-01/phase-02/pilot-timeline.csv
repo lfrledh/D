@@ -1,0 +1,10 @@
+attempt,event,relative_seconds,clock_or_basis,meaning,usable_for_product_latency
+01,plan_slot_0,0,relative to planned action epoch,planned only,False
+01,intent_0,0.046170625,relative to planned action epoch,sender late; no post,False
+01,plan_slot_1,0.016666666666666666,relative to planned action epoch,planned only,False
+01,intent_1,0.046213875,relative to planned action epoch,second late intent 43.250 microseconds later,False
+01,backlog_stop,0.0462565,relative to planned action epoch,42.625 microseconds after second intent,False
+01,record_interval,6.005371917,whole record interval duration; not action duration,2 second plan; zero delivered actions,False
+02,entered_measurement,,status clock retained locally,no complete event export,False
+02,SIGTRAP_5,,IPS captureTime; separate from report creation time,background timer invoked MainActor-inherited closure,False
+02,budget_charge,6,accounting estimate only,actual duration unknown,False

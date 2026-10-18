@@ -1,0 +1,180 @@
+{
+  "production_sha": "9eae90e4adc4008c3894f09bcd07c71e23701045",
+  "final_local_patch_sha256": "439ad8915345e2e25c5db5c36859f498d117c5698715bbb644f48943b693de51",
+  "local_source_files": [
+    "D/WorkbenchBootstrap.swift",
+    "Packages/UI/Sources/UI/Views/Quick/DualWorkbenchView.swift",
+    "Packages/UI/Sources/UI/Views/Workflow/WorkflowCanvasView.swift",
+    "Packages/UI/Sources/UI/Views/Workflow/WorkflowCanvasViewportInteraction.swift",
+    "Packages/UI/Sources/UI/Views/Workflow/WorkflowGraphSurface.swift",
+    "scripts/build-local.sh",
+    "Packages/UI/Sources/UI/Diagnostics/PerformanceReplayEventFactory.swift",
+    "Packages/UI/Sources/UI/Diagnostics/PerformanceReplayPlan.swift",
+    "Packages/UI/Sources/UI/Diagnostics/WorkbenchPerformanceReplay.swift"
+  ],
+  "local_source_file_sha256": {
+    "D/WorkbenchBootstrap.swift": "2ee9467db3c6c2ad490df4ae716e00bec42d302245809e9ec0609e0c9f290c4b",
+    "Packages/UI/Sources/UI/Views/Quick/DualWorkbenchView.swift": "b8b9199b63dd472addf3bd01f69ed6ccf639a20b06c713736306e281d095fafb",
+    "Packages/UI/Sources/UI/Views/Workflow/WorkflowCanvasView.swift": "80a35fc7ad4e4add8a53edb3ff12040d7f442586379f1a9ed8f21203e90f2d86",
+    "Packages/UI/Sources/UI/Views/Workflow/WorkflowCanvasViewportInteraction.swift": "4211aba50bda96dba4b7f6a2b61beb5ae942acf65e7be584bd73fb53cb900de0",
+    "Packages/UI/Sources/UI/Views/Workflow/WorkflowGraphSurface.swift": "37b9113016444e7974e954c0510fef5fe7486aa060ff4779c2c469da4faa808c",
+    "scripts/build-local.sh": "29b8d2551329ffee554b3ce37e0b0a789f93ddb74c1e69d3dcccf3465e752d3f",
+    "Packages/UI/Sources/UI/Diagnostics/PerformanceReplayEventFactory.swift": "dc2db9fcfe532f94a1347c7412786a818ccd78bb50f10cc0bfb1157322e0a9ae",
+    "Packages/UI/Sources/UI/Diagnostics/PerformanceReplayPlan.swift": "afe19793858f8068118dc1b5c8dfb2fad62b6c4b0462491ac8727a23b223adfb",
+    "Packages/UI/Sources/UI/Diagnostics/WorkbenchPerformanceReplay.swift": "511dfc60957740eae107c509904962f770cb0f14708d3ed0f55311c5a5dee201"
+  },
+  "evidence_level": "Implemented B route; native qualification failed; final C selfchecks and build only",
+  "native_execution_sealed": true,
+  "native_execution_reason": "Two failed pilots retained; bounded retry exhausted for this continuation. Final local build is unverified natively. Independent review and a new finite execution decision required.",
+  "selfchecks": {
+    "plan": {
+      "programs": 1,
+      "assertion_checks": 33,
+      "exit_code": 0
+    },
+    "event_construction_queue_identity": {
+      "programs": 1,
+      "mouse_event_cases": 3,
+      "assertion_checks": 16,
+      "exit_code": 0,
+      "queued_coordinate_matches": 0,
+      "queued_coordinate_cases": 3,
+      "scope": "hidden window construction and identity; coordinate failures retained; not native delivery"
+    },
+    "shared_clock": {
+      "programs": 1,
+      "parameter_scenarios": 3,
+      "exit_code": 0,
+      "results": [
+        {
+          "delivered": 122,
+          "mode": "normal",
+          "pass": true,
+          "planned": 122,
+          "reason": null
+        },
+        {
+          "delivered": 0,
+          "mode": "cancelled",
+          "pass": true,
+          "planned": 122,
+          "reason": "explicit-selftest-cancel"
+        },
+        {
+          "delivered": 0,
+          "mode": "expired",
+          "pass": true,
+          "planned": 122,
+          "reason": "sender-timer-late"
+        }
+      ],
+      "scope": "same factory as App; C only"
+    },
+    "offline_qualifier": {
+      "methods": 42,
+      "expanded_cases": 43,
+      "exit_code": 0,
+      "scope": "synthetic records only"
+    }
+  },
+  "original_protection": {
+    "ordinary_and_old_session_fingerprints_matched": 8,
+    "review_code_files_matched": 10,
+    "personal_scheme_unchanged": true,
+    "original_review_window_metadata": "unknown: no full prior fingerprint",
+    "D_processes_at_final_check": 0
+  },
+  "private_evidence_root_alias": "D-PERFORMANCE-ATTRIBUTION-01/run-20261018-phase02-01/diagnostic-private",
+  "private_evidence_index": [
+    "diagnostic-source.diff",
+    "diagnostic-launch.json",
+    "paired-build-identity.json",
+    "diagnostic.py",
+    "prepare-diagnostic-receipt.py",
+    "attempt-01/",
+    "attempt-02/",
+    "side-instance-observation.json",
+    "protection-final-continuation.json",
+    "scene/<diagnostic-session>/replay-00-NODE.json",
+    "scene/<diagnostic-session>/replay-00-NODE-plan.json",
+    "scene/<diagnostic-session>/replay-00-NODE-events.json"
+  ],
+  "not_pushed": [
+    "diagnostic product source and patch",
+    "signed App artifacts",
+    "raw event records and crash report",
+    "private paths and identities"
+  ],
+  "limits": [
+    "No qualified baseline",
+    "No tool or build performance pair",
+    "No causal intervention",
+    "No FPS or input-to-display estimate",
+    "Final shared-clock fix not natively retested"
+  ],
+  "failed_pilot_01_scene": {
+    "assets": 0,
+    "runs": 0,
+    "nodes": 4,
+    "edges": 3,
+    "scale": 2,
+    "screen": "{{0, 0}, {1920, 1080}}",
+    "frame": "{{0, 0}, {1920, 1050}}",
+    "clip": "{{3532, 1798.5}, {1888, 899}}",
+    "clipX": 3532,
+    "clipY": 1798.5,
+    "zoom": 1,
+    "tool": "pointer",
+    "canvasContext": {
+      "activity": false,
+      "appearance": {
+        "appearance": {
+          "backgroundTransparency": 0.12,
+          "dark": {
+            "accent": "#9AD3B8",
+            "canvas": "#111D1A",
+            "foreground": "#E8F2EC",
+            "panel": "#1D2B25",
+            "secondary": "#B8CCC0"
+          },
+          "light": {
+            "accent": "#24634F",
+            "canvas": "#EDF2EB",
+            "foreground": "#162F29",
+            "panel": "#FAFCF9",
+            "secondary": "#455D54"
+          },
+          "lightweight": false,
+          "local": {
+            "material": "glass",
+            "strength": 0.55,
+            "version": 1
+          },
+          "motion": 0.5
+        },
+        "sendShortcut": "commandReturn",
+        "textPointSize": 14,
+        "theme": "system",
+        "transcriptWidth": 760,
+        "wrapsCode": false
+      },
+      "language": "zh-Hans",
+      "leading": true,
+      "modelLoad": "none",
+      "trailing": true,
+      "visibleNodeCoverage": "not yet independently measured",
+      "visitedOutput": [
+        "overview"
+      ],
+      "visitedPreparation": [
+        "models"
+      ],
+      "visitedResources": [
+        "all"
+      ],
+      "wheelSpeed": 1
+    },
+    "display_device_identity": "private receipt; logical geometry does not identify physical display or presented frames"
+  },
+  "failed_pilot_02_scene": "No completed export; do not substitute attempt01 fingerprint"
+}

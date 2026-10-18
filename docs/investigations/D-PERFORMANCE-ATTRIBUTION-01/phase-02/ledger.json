@@ -1,9 +1,9 @@
 {
   "task": "D-PERFORMANCE-ATTRIBUTION-01",
   "phase": 2,
-  "date": "2026-10-18",
+  "date": "2026-10-19",
   "timezone": "Asia/Tokyo",
-  "expected_report_commit": "af5a2ce8b2766910209ca93b544e2aee76b74680",
+  "expected_report_commit": "0e662f0724b165724ad05789dcdd3539b6b93cf5",
   "known_production_commit": "9eae90e4adc4008c3894f09bcd07c71e23701045",
   "scope": "investigation_only",
   "product_repairs_authorized": false,
@@ -52,7 +52,7 @@
         "REPORT.zh-CN.md",
         "build-qualification.json"
       ],
-      "reason": "No running review process; no user session touched. Read-only environment checked. Budget preregistered."
+      "reason": "Continuation verified; original protections and fixed production retained; storage probe passed; no budget reset"
     },
     {
       "id": "G0.2",
@@ -67,7 +67,7 @@
         "REPORT.zh-CN.md",
         "build-qualification.json"
       ],
-      "reason": "No running review process; no user session touched. Read-only environment checked. Budget preregistered."
+      "reason": "Continuation verified; original protections and fixed production retained; storage probe passed; no budget reset"
     },
     {
       "id": "G0.3",
@@ -82,7 +82,7 @@
         "REPORT.zh-CN.md",
         "build-qualification.json"
       ],
-      "reason": "No running review process; no user session touched. Read-only environment checked. Budget preregistered."
+      "reason": "Continuation verified; original protections and fixed production retained; storage probe passed; no budget reset"
     },
     {
       "id": "G1.1",
@@ -180,7 +180,7 @@
         "build-qualification.json",
         "REPORT.zh-CN.md"
       ],
-      "reason": "A/B/C capability inspected; no safe native route qualified"
+      "reason": "A unavailable to execution process; B implemented and attempted; C explicitly scoped"
     },
     {
       "id": "G2.2",
@@ -190,11 +190,11 @@
       "depends_on": [
         "G2.1"
       ],
-      "status": "PARTIAL_BLOCKED",
+      "status": "IMPLEMENTED_NATIVE_PARTIAL",
       "evidence": [
         "build-qualification.json"
       ],
-      "reason": "Fresh fixture prepared/cold-read; new-root native authorization and visible target unavailable"
+      "reason": "Real admission and synthetic full App reached; final shared-clock/source build selfchecked; input path still unqualified"
     },
     {
       "id": "G2.3",
@@ -204,11 +204,11 @@
       "depends_on": [
         "G2.2"
       ],
-      "status": "BLOCKED",
+      "status": "IMPLEMENTED_QUALIFICATION_FAILED",
       "evidence": [
         "REPORT.zh-CN.md"
       ],
-      "reason": "Actual input qualification missing; A denied, B driver not implemented and admission pending"
+      "reason": "Two failed NODE pilots; no effective qualified native input; final fix C-only checked"
     },
     {
       "id": "G3.1",
@@ -218,11 +218,11 @@
       "depends_on": [
         "G2.3"
       ],
-      "status": "BLOCKED",
+      "status": "NOT_RUN",
       "evidence": [
         "REPORT.zh-CN.md"
       ],
-      "reason": "Actual input qualification missing; A denied, B driver not implemented and admission pending"
+      "reason": "G2 input qualification failed for diagnostic engineering reasons; no three-way baseline"
     },
     {
       "id": "G3.2",
@@ -236,7 +236,7 @@
       "evidence": [
         "PRESENTATION.md"
       ],
-      "reason": "Old process-record joins derived; no window/content/input presentation bridge"
+      "reason": "Old display joins retained; new pilot only sender failure; no handler/layout/presentation latency"
     },
     {
       "id": "G4.1",
@@ -246,11 +246,11 @@
       "depends_on": [
         "G3.1"
       ],
-      "status": "PARTIAL",
+      "status": "PREPARED_NOT_MEASURED",
       "evidence": [
         "build-qualification.json"
       ],
-      "reason": "Same-source optimized build prepared; no qualified native paired comparison"
+      "reason": "Matched local -Onone/-O diagnostic pair compiled; no performance pair or sampler overhead estimate"
     },
     {
       "id": "G4.2",
@@ -282,7 +282,7 @@
       "evidence": [
         "experiments.csv"
       ],
-      "reason": "At most two conditional candidates each PAN/ZOOM; no delay evidence to admit intervention"
+      "reason": "Conditional PAN/ZOOM candidates unchanged; no qualified delay to admit intervention"
     },
     {
       "id": "G5.2",
@@ -296,7 +296,7 @@
       "evidence": [
         "experiments.csv"
       ],
-      "reason": "No G2/G3 qualification; no causal pair or restoration claim"
+      "reason": "No qualified G2/G3 baseline; zero intervention pairs or restoration claims"
     },
     {
       "id": "G6.1",
@@ -306,13 +306,13 @@
       "depends_on": [
         "G4.2"
       ],
-      "status": "DONE",
+      "status": "UPDATED",
       "evidence": [
         "REPORT.zh-CN.md",
         "METHOD.md",
         "hypothesis-coverage.json"
       ],
-      "reason": "Offline evidence and source review completed; causal and native limits retained"
+      "reason": "Non-implementers reviewed parser counterexamples and actual failed-pilot timeline/UUID; final local selfchecks do not upgrade native evidence"
     },
     {
       "id": "G6.2",
@@ -322,11 +322,11 @@
       "depends_on": [
         "G6.1"
       ],
-      "status": "DONE",
+      "status": "UPDATED",
       "evidence": [
         "REPORT.zh-CN.md"
       ],
-      "reason": "Sanitized reports/offline method only; final commit/remote identity in delivery receipt"
+      "reason": "Sanitized report/offline files only; exact commit/readback in local delivery receipt"
     }
   ],
   "experiment_ids": [
@@ -367,15 +367,22 @@
     "No security bypass",
     "Not a repair task"
   ],
-  "note": "Executed Phase2 statuses; capture budget zero used. Build/fixture not native measurements.",
+  "note": "G1 reused; two failed B pilots; no new valid baseline or causal experiment",
   "started_utc": "2026-10-18T13:35:38.182576+00:00",
-  "new_capture_count": 0,
-  "new_capture_seconds": 0,
-  "diagnostic_product_changes": [],
+  "new_capture_count": 2,
+  "new_capture_seconds": 12.005371917,
+  "diagnostic_product_changes": {
+    "local_only": true,
+    "files": 9,
+    "patch_pushed": false,
+    "formal_repairs": false
+  },
   "deviations": [
-    "New native repetitions and causal interventions not run due qualification gate; no grant bypass.",
-    "Only two small old-table exports added, not new recordings.",
-    "B full-App timed replay remains unimplemented; distinguished from environment blocker."
+    "Two native qualification attempts failed for diagnostic engineering reasons; not attributed to permission denial.",
+    "No third native attempt after the preregistered bounded retry; final shared clock repaired and C-selfchecked.",
+    "No G3 repeated baselines or G4/G5 performance/causal pairs.",
+    "First attempt retained old review bundle due xcconfig precedence; corrected and identity assertion added.",
+    "Observer opened unadmitted diagnostic side instances; refused and normally terminated; excluded from target evidence."
   ],
   "selection_policy": {
     "representative_seed": 20261018,
@@ -383,5 +390,40 @@
     "hypothesis_order": "global self/inclusive and scheduler before keyword categories",
     "new_capture_admission": "G1 complete + safe visible target and isolated root + input-receipt qualification; otherwise continue offline"
   },
-  "diagnostic_build": "clean detached source at production SHA; no product patch"
+  "diagnostic_build": "local patched diagnostic pair, not a product candidate; final native qualification unverified",
+  "history": [
+    {
+      "date": "2026-10-18",
+      "expected_report_commit": "af5a2ce8b2766910209ca93b544e2aee76b74680",
+      "new_capture_count": 0,
+      "new_capture_seconds": 0,
+      "diagnostic_product_changes": [],
+      "deviations": [
+        "New native repetitions and causal interventions not run due qualification gate; no grant bypass.",
+        "Only two small old-table exports added, not new recordings.",
+        "B full-App timed replay remains unimplemented; distinguished from environment blocker."
+      ],
+      "diagnostic_build": "clean detached source at production SHA; no product patch"
+    }
+  ],
+  "capture_accounting": [
+    {
+      "attempt": 1,
+      "status": "INVALID",
+      "measured_capture_seconds": 6.005371917,
+      "charged_seconds": 6.005371917,
+      "planned_action_seconds": 2,
+      "posted": 0,
+      "received": 0
+    },
+    {
+      "attempt": 2,
+      "status": "INCOMPLETE_CRASH",
+      "measured_capture_seconds": null,
+      "charged_seconds": 6,
+      "charge_kind": "accounting_estimate_preregistered_max",
+      "posted": null,
+      "received": null
+    }
+  ]
 }

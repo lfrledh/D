@@ -25,3 +25,52 @@ test_zero_sample_window_keeps_scheduler (test_reanalyze.MethodTests) ... ok
 Ran 22 tests in 0.027s
 
 OK
+
+=== 2026-10-19 replay qualification only: 42 methods / 43 expanded cases ===
+test_boolean_row_id (test_replay_analysis.ReplayAuditTests) ... ok
+test_conflicting_interaction (test_replay_analysis.ReplayAuditTests) ... ok
+test_conflicting_planned (test_replay_analysis.ReplayAuditTests) ... ok
+test_duplicate_plan (test_replay_analysis.ReplayAuditTests) ... ok
+test_duplicate_rejected (test_replay_analysis.ReplayAuditTests) ... ok
+test_effective_motion_required (test_replay_analysis.ReplayAuditTests) ... ok
+test_false_motion_claim (test_replay_analysis.ReplayAuditTests) ... ok
+test_foreign_receiver_invalid (test_replay_analysis.ReplayAuditTests) ... ok
+test_incomplete_invalid (test_replay_analysis.ReplayAuditTests) ... ok
+test_invalid_identity (test_replay_analysis.ReplayAuditTests) ... ok
+test_late_sender_not_hidden (test_replay_analysis.ReplayAuditTests) ... ok
+test_missing_intents (test_replay_analysis.ReplayAuditTests) ... ok
+test_missing_scene_fields (test_replay_analysis.ReplayAuditTests) ... ok
+test_missing_two_states (test_replay_analysis.ReplayAuditTests) ... ok
+test_nan_plan_payload (test_replay_analysis.ReplayAuditTests) ... ok
+test_nan_timestamp (test_replay_analysis.ReplayAuditTests) ... ok
+test_negative_sequence_stop (test_replay_analysis.ReplayAuditTests) ... ok
+test_no_send_no_receive (test_replay_analysis.ReplayAuditTests) ... ok
+test_node_failed_commit (test_replay_analysis.ReplayAuditTests) ... ok
+test_node_pan_do_not_also_zoom (test_replay_analysis.ReplayAuditTests) ... ok
+test_node_positive (test_replay_analysis.ReplayAuditTests) ... ok
+test_node_wrong_target (test_replay_analysis.ReplayAuditTests) ... ok
+test_order_independent (test_replay_analysis.ReplayAuditTests) ... ok
+test_overflow_invalid (test_replay_analysis.ReplayAuditTests) ... ok
+test_pan_final_view_changed (test_replay_analysis.ReplayAuditTests) ... ok
+test_pan_graph_changed (test_replay_analysis.ReplayAuditTests) ... ok
+test_percentiles_not_fps (test_replay_analysis.ReplayAuditTests) ... ok
+test_pilot_not_baseline_repeat (test_replay_analysis.ReplayAuditTests) ... ok
+test_reordered_receiving (test_replay_analysis.ReplayAuditTests) ... ok
+test_scene_change_invalid (test_replay_analysis.ReplayAuditTests) ... ok
+test_stage_order_invalid (test_replay_analysis.ReplayAuditTests) ... ok
+test_stop_retained (test_replay_analysis.ReplayAuditTests) ... ok
+test_unknown_clock (test_replay_analysis.ReplayAuditTests) ... ok
+test_unknown_stage (test_replay_analysis.ReplayAuditTests) ... ok
+test_unreceived_accounted (test_replay_analysis.ReplayAuditTests) ... ok
+test_unsent_accounted (test_replay_analysis.ReplayAuditTests) ... ok
+test_valid_is_only_local_evidence (test_replay_analysis.ReplayAuditTests) ... ok
+test_wrong_plan_kind (test_replay_analysis.ReplayAuditTests) ... ok
+test_wrong_protocol (test_replay_analysis.ReplayAuditTests) ... ok
+test_zoom_final_mismatch (test_replay_analysis.ReplayAuditTests) ... ok
+test_zoom_positive (test_replay_analysis.ReplayAuditTests) ... ok
+test_zoom_wrong_accumulation (test_replay_analysis.ReplayAuditTests) ... ok
+
+----------------------------------------------------------------------
+Ran 42 tests in 0.077s
+
+OK

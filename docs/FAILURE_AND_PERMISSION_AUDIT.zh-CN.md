@@ -1,21 +1,23 @@
 # 历史失败与权限审计
 
 <a id="d-performance-attribution-01-当前队列"></a>
-## 2026-10-18 D-PERFORMANCE-ATTRIBUTION-01 当前队列（Phase 2，仅调查）
+## 2026-10-19 D-PERFORMANCE-ATTRIBUTION-01 当前队列（Phase 2续办，仅调查）
 
-生产`9eae90e4adc4008c3894f09bcd07c71e23701045`不变；本轮报告起点`af5a2ce8b2766910209ca93b544e2aee76b74680`。[唯一当前调查入口](investigations/D-PERFORMANCE-ATTRIBUTION-01/phase-02/REPORT.zh-CN.md)。去敏报告/纯离线工具已按工作分支交付；没有正式修补、诊断产品改动推送、合并或部署。
+生产`9eae90e4adc4008c3894f09bcd07c71e23701045`不变；报告续接`0e662f0724b165724ad05789dcdd3539b6b93cf5`。[唯一当前调查入口](investigations/D-PERFORMANCE-ATTRIBUTION-01/phase-02/REPORT.zh-CN.md)。诊断产品源码/patch和原始证据只在外盘，去敏报告与纯离线方法按原分支交付；不修补产品、不合并/部署。
 
 |类别|当前事项|责任与最小下一步|
 |---|---|---|
-|CURRENT_REANALYZED|旧五段全线程/全部状态/时间切片/代表栈，30格假设，部分显示记录join|Agent完成；22离线方法exit0。不是新原生采样或FPS。NODE/PAN/ZOOM分别解释，玻璃GPU未排除。|
-|OPEN_DEFECT|平移与滚轮手感；实际延迟根因未定|没有修补或关闭声明，先完成独立复核与修改范围讨论。|
-|HUMAN_REQUIRED|未来B级完整App新合成目录的系统授权|准备到可操作诊断包时，本人仅在系统面板选择准确新UUID根。不得借旧B9FC书签/根、注入测试授权器；当前不要求重复手势或立即解锁。此项不阻塞已完成离线调查。|
-|NATIVE_BLOCKED：Agent|A事件投递/AX/屏幕捕获preflight false，无可核实可见/key目标；B未完成新root授权|不改变系统权限、不推测锁屏、不按名称启动副本。授权/目标成立后由Agent完成事件接收、状态、窗口/显示关联及三操作轮换。当前0新录制。|
-|ENGINEERING_PENDING：Agent|完整App固定墙钟诊断重放器、目标/失焦停止及输入到内容桥尚未实现|独立同源码优化包、合成Store项目已准备；不能把未实现归咎权限。下一次只在本地诊断树实现最小驱动，自检后再请求必要目录授权，不让用户找按钮/计时。|
-|ENGINEERING_PARTIAL：Agent|旧显示记录可按精确键部分join，但别名、主窗口、内容与输入未贯通|本轮保留未匹配/嵌套与超长lifetime；不从body/Metal/提示音推FPS。当前空间恢复，旧no-space不再作为阻塞理由；历史08仍无效，不丢弃失败。|
-|NOT_ESTABLISHED|具体Binding捕获、已访问隐藏页/历史规模、面积/节点量、材质GPU、可读性与工具扰动|三操作H表有各自证据/反证；优化构建成功不等于-Onone/-O性能比较，诊断降质不是交付。|
-|DECISION_PENDING|外部独立复核后决定下一个有限诊断/修补范围|D2关键路径未通过，不以717ms直接授权Binding修补；PAN/ZOOM各最多两条条件候选。|
-|PROTECTED|原App、会话、scheme、项目、模型与凭据|本轮没有启动D或写原会话；旧包10项摘要相同。诊断产物留本地，无普通App发布。|
+|HISTORICAL_REANALYZED|旧五段全线程/调度/时间切片/显示局部join|沿用已审G1，不重跑；22旧离线方法不算本轮新实跑。|
+|IMPLEMENTED_LOCAL_ONLY|完整App定时入口与专属合成项目、目标/退出/取消、收发状态、有效运动、复位及导出|Agent已实现并匹配编译；不是“重放器尚未实现”。最终共用时钟3情景C自检通过；42方法/43情景离线资格审计通过。|
+|NATIVE_QUALIFICATION_FAILED：Agent|两次NODE资格试录失败，尚无合格NODE/PAN/ZOOM重复|第一次投递前时钟晚到/backlog，第二次诊断回调线程断言；保留原始失败和修正。不是产品根因或权限解释。按既定重试限制，本轮不第三次试录；最终修正完整App回归仍待有界准入。|
+|HUMAN_COMPLETED|新合成UUID目录真实系统授权两次|用户已完成；不再要求找按钮、手势或统计。未来重启诊断包时系统可能仍需一次同目录授权，与AX/屏幕/事件权限分开。当前无需额外操作。|
+|ENVIRONMENT_LIMITED|本执行进程AX/系统事件投递/屏幕捕获preflight false|未改系统权限。B真实窗口可进入，但输入资格因上述工程失败未通过；桌面观察工具会另起无env副实例，已停用，不能按名称绑定。|
+|PREPARED_NOT_MEASURED|同源码-Onone/-O匹配产物、低开销/extended计数选择|无优化敏感性或观察扰动实测；统一debug-dylib包装后仅完成构建准备，不宣称Release或性能通过。|
+|DEFERRED：Agent|G3三次轮换、G4关键阶段/工具、G5单因素对照|须先验证最终完整App输入与轨迹；PAN/ZOOM分别最多两条，由实际延迟选择，不盲跑矩阵。GPU、最终呈现及ZOOM最终锚点未证实。|
+|OPEN_DEFECT|平移、缩放手感问题|没有修补/关闭声明，也没有足以选定正式修补范围的新证据。|
+|INCIDENT_BOUNDED|工具在目标崩溃后启动两份无env诊断副实例|持久标记拒绝服务，按精确PID正常退出请求成功，退出码未知、后续无D进程；不把副实例当目标证据。首轮误用旧review bundle已纠正；原review容器窗口元数据缺完整前置摘要，unknown，不推测回滚。|
+|PROTECTED|普通数据/模型/原App/项目/scheme|普通8项、原包10项和个人scheme摘要保持；未操作原B9FC项目或回滚索引。诊断仅自己的零模型合成项目；当前无D进程。|
+|DECISION_PENDING|外部独立顾问复审最终诊断方法与有限下一步|先审失败资格、全局旧画像、时钟修正和准入，再决定继续小试或后续修补讨论；不要求用户代做工程排错。|
 
 ## 2026-10-18 D-PERFORMANCE-ATTRIBUTION-01 Phase 1历史队列（已被上方Phase 2覆盖）
 
