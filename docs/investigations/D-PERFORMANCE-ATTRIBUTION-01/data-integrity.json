@@ -1,0 +1,77 @@
+[
+  {
+    "phase": "02-node-drag-repeat",
+    "trace_duration_s": 16.720272,
+    "selected_window_s": [
+      3.113751,
+      14.119936
+    ],
+    "main_scheduler_coverage_s": 11.006184999999999,
+    "expected_window_s": 11.006184999999999,
+    "coverage_delta_s": 0.0,
+    "time_profile_rows": 2496,
+    "main_running_samples": 1720,
+    "thermal": "Nominal in exported trace",
+    "note": "Coverage is not proof of exact input timing or complete frame association"
+  },
+  {
+    "phase": "03-pan",
+    "trace_duration_s": 16.730475,
+    "selected_window_s": [
+      3.856365,
+      14.864441
+    ],
+    "main_scheduler_coverage_s": 11.008076,
+    "expected_window_s": 11.008075999999999,
+    "coverage_delta_s": 1.7763568394002505e-15,
+    "time_profile_rows": 2246,
+    "main_running_samples": 1383,
+    "thermal": "Nominal in exported trace",
+    "note": "Coverage is not proof of exact input timing or complete frame association"
+  },
+  {
+    "phase": "05-wheel-zoom-repeat",
+    "trace_duration_s": 31.762287,
+    "selected_window_s": [
+      3.674945,
+      27.681206
+    ],
+    "main_scheduler_coverage_s": 24.006261000000002,
+    "expected_window_s": 24.006261,
+    "coverage_delta_s": 3.552713678800501e-15,
+    "time_profile_rows": 18212,
+    "main_running_samples": 13726,
+    "thermal": "Nominal in exported trace",
+    "note": "Coverage is not proof of exact input timing or complete frame association"
+  },
+  {
+    "phase": "06-idle-current",
+    "trace_duration_s": 12.773137,
+    "selected_window_s": [
+      2.0,
+      10.773137
+    ],
+    "main_scheduler_coverage_s": 8.773136999999998,
+    "expected_window_s": 8.773137,
+    "coverage_delta_s": -1.7763568394002505e-15,
+    "time_profile_rows": 13,
+    "main_running_samples": 1,
+    "thermal": "Nominal in exported trace",
+    "note": "Coverage is not proof of exact input timing or complete frame association"
+  },
+  {
+    "phase": "07-left-hidden-wheel",
+    "trace_duration_s": 31.719689,
+    "selected_window_s": [
+      3.601077,
+      27.604369
+    ],
+    "main_scheduler_coverage_s": 24.003292,
+    "expected_window_s": 24.003292,
+    "coverage_delta_s": 0.0,
+    "time_profile_rows": 19503,
+    "main_running_samples": 16636,
+    "thermal": "Nominal in exported trace",
+    "note": "Coverage is not proof of exact input timing or complete frame association"
+  }
+]

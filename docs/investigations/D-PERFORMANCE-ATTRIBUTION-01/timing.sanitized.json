@@ -1,0 +1,264 @@
+{
+  "note": "UTC and per-wrapper monotonic clocks; monotonic origins differ across phases. Cue events are not input event or presentation timestamps. Raw commands and notification identifiers omitted.",
+  "phases": {
+    "01-node-drag": [
+      {
+        "event": "command_start",
+        "utc": "2026-10-18T07:19:13.746632+00:00",
+        "monotonic_ns": 41235958
+      },
+      {
+        "event": "trace_started_notification_received",
+        "utc": "2026-10-18T07:19:15.849539+00:00",
+        "monotonic_ns": 2143841958
+      },
+      {
+        "event": "start_cue_begin",
+        "utc": "2026-10-18T07:19:15.850269+00:00",
+        "monotonic_ns": 2144538750
+      },
+      {
+        "event": "start_cue_end",
+        "utc": "2026-10-18T07:19:18.776067+00:00",
+        "monotonic_ns": 5070269000
+      },
+      {
+        "event": "stop_cue_begin",
+        "utc": "2026-10-18T07:19:30.782117+00:00",
+        "monotonic_ns": 17075952500
+      },
+      {
+        "event": "stop_cue_end",
+        "utc": "2026-10-18T07:19:32.422281+00:00",
+        "monotonic_ns": 18716070458
+      },
+      {
+        "event": "command_exit",
+        "utc": "2026-10-18T07:20:23.518102+00:00",
+        "monotonic_ns": 69810404666
+      }
+    ],
+    "02-node-drag-repeat": [
+      {
+        "event": "command_start",
+        "utc": "2026-10-18T07:23:05.508713+00:00",
+        "monotonic_ns": 42339083
+      },
+      {
+        "event": "trace_started_notification_received",
+        "utc": "2026-10-18T07:23:07.804911+00:00",
+        "monotonic_ns": 2338294750
+      },
+      {
+        "event": "start_cue_begin",
+        "utc": "2026-10-18T07:23:07.805304+00:00",
+        "monotonic_ns": 2338661958
+      },
+      {
+        "event": "start_cue_end",
+        "utc": "2026-10-18T07:23:09.699751+00:00",
+        "monotonic_ns": 4233124333
+      },
+      {
+        "event": "stop_cue_begin",
+        "utc": "2026-10-18T07:23:21.705936+00:00",
+        "monotonic_ns": 16238906541
+      },
+      {
+        "event": "stop_cue_end",
+        "utc": "2026-10-18T07:23:24.183164+00:00",
+        "monotonic_ns": 18716067750
+      },
+      {
+        "event": "command_exit",
+        "utc": "2026-10-18T07:24:40.412633+00:00",
+        "monotonic_ns": 94943282375
+      }
+    ],
+    "03-pan": [
+      {
+        "event": "command_start",
+        "utc": "2026-10-18T07:24:56.231653+00:00",
+        "monotonic_ns": 47131625
+      },
+      {
+        "event": "trace_started_notification_received",
+        "utc": "2026-10-18T07:24:59.090676+00:00",
+        "monotonic_ns": 2905807708
+      },
+      {
+        "event": "start_cue_begin",
+        "utc": "2026-10-18T07:24:59.091023+00:00",
+        "monotonic_ns": 2906134125
+      },
+      {
+        "event": "start_cue_end",
+        "utc": "2026-10-18T07:25:01.719365+00:00",
+        "monotonic_ns": 5534502125
+      },
+      {
+        "event": "stop_cue_begin",
+        "utc": "2026-10-18T07:25:13.727441+00:00",
+        "monotonic_ns": 17542124250
+      },
+      {
+        "event": "stop_cue_end",
+        "utc": "2026-10-18T07:25:14.878171+00:00",
+        "monotonic_ns": 18692844541
+      },
+      {
+        "event": "command_exit",
+        "utc": "2026-10-18T07:26:28.255013+00:00",
+        "monotonic_ns": 92067516833
+      }
+    ],
+    "04-wheel-zoom": [
+      {
+        "event": "command_start",
+        "utc": "2026-10-18T07:26:48.821287+00:00",
+        "monotonic_ns": 53632666
+      },
+      {
+        "event": "trace_started_notification_received",
+        "utc": "2026-10-18T07:26:51.652255+00:00",
+        "monotonic_ns": 2884259000
+      },
+      {
+        "event": "start_cue_begin",
+        "utc": "2026-10-18T07:26:51.652597+00:00",
+        "monotonic_ns": 2884577625
+      },
+      {
+        "event": "start_cue_end",
+        "utc": "2026-10-18T07:26:54.289677+00:00",
+        "monotonic_ns": 5521767666
+      },
+      {
+        "event": "stop_cue_begin",
+        "utc": "2026-10-18T07:27:06.296769+00:00",
+        "monotonic_ns": 17528336708
+      },
+      {
+        "event": "stop_cue_end",
+        "utc": "2026-10-18T07:27:07.493976+00:00",
+        "monotonic_ns": 18725523541
+      },
+      {
+        "event": "command_exit",
+        "utc": "2026-10-18T07:27:50.370249+00:00",
+        "monotonic_ns": 61601062583
+      }
+    ],
+    "05-wheel-zoom-repeat": [
+      {
+        "event": "command_start",
+        "utc": "2026-10-18T07:28:50.362570+00:00",
+        "monotonic_ns": 47388875
+      },
+      {
+        "event": "trace_started_notification_received",
+        "utc": "2026-10-18T07:28:53.323117+00:00",
+        "monotonic_ns": 3007634000
+      },
+      {
+        "event": "start_cue_begin",
+        "utc": "2026-10-18T07:28:53.323518+00:00",
+        "monotonic_ns": 3008015000
+      },
+      {
+        "event": "start_cue_end",
+        "utc": "2026-10-18T07:28:55.737945+00:00",
+        "monotonic_ns": 5422400166
+      },
+      {
+        "event": "stop_cue_begin",
+        "utc": "2026-10-18T07:29:20.744206+00:00",
+        "monotonic_ns": 30427892541
+      },
+      {
+        "event": "stop_cue_end",
+        "utc": "2026-10-18T07:29:22.383786+00:00",
+        "monotonic_ns": 32067452583
+      },
+      {
+        "event": "command_exit",
+        "utc": "2026-10-18T07:30:51.360845+00:00",
+        "monotonic_ns": 121075239125
+      }
+    ],
+    "07-left-hidden-wheel": [
+      {
+        "event": "command_start",
+        "utc": "2026-10-18T07:36:56.783956+00:00",
+        "monotonic_ns": 41754500
+      },
+      {
+        "event": "trace_started_notification_received",
+        "utc": "2026-10-18T07:36:58.911273+00:00",
+        "monotonic_ns": 2168730666
+      },
+      {
+        "event": "start_cue_begin",
+        "utc": "2026-10-18T07:36:58.911648+00:00",
+        "monotonic_ns": 2169083916
+      },
+      {
+        "event": "start_cue_end",
+        "utc": "2026-10-18T07:37:01.296077+00:00",
+        "monotonic_ns": 4553518833
+      },
+      {
+        "event": "stop_cue_begin",
+        "utc": "2026-10-18T07:37:26.299369+00:00",
+        "monotonic_ns": 29556609416
+      },
+      {
+        "event": "stop_cue_end",
+        "utc": "2026-10-18T07:37:27.434938+00:00",
+        "monotonic_ns": 30692142833
+      },
+      {
+        "event": "capture_error",
+        "utc": "2026-10-18T07:38:57.438327+00:00",
+        "monotonic_ns": 120694518583
+      }
+    ],
+    "08-left-restored-wheel": [
+      {
+        "event": "command_start",
+        "utc": "2026-10-18T07:41:00.288396+00:00",
+        "monotonic_ns": 50740041
+      },
+      {
+        "event": "trace_started_notification_received",
+        "utc": "2026-10-18T07:41:02.516116+00:00",
+        "monotonic_ns": 2278129500
+      },
+      {
+        "event": "start_cue_begin",
+        "utc": "2026-10-18T07:41:02.516442+00:00",
+        "monotonic_ns": 2278437583
+      },
+      {
+        "event": "start_cue_end",
+        "utc": "2026-10-18T07:41:05.161430+00:00",
+        "monotonic_ns": 4923563416
+      },
+      {
+        "event": "stop_cue_begin",
+        "utc": "2026-10-18T07:41:30.167644+00:00",
+        "monotonic_ns": 29929361125
+      },
+      {
+        "event": "stop_cue_end",
+        "utc": "2026-10-18T07:41:31.303101+00:00",
+        "monotonic_ns": 31064808291
+      },
+      {
+        "event": "command_exit",
+        "utc": "2026-10-18T07:44:05.342423+00:00",
+        "monotonic_ns": 185102472500
+      }
+    ]
+  }
+}

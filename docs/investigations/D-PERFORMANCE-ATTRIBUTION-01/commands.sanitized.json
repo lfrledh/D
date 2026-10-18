@@ -1,0 +1,376 @@
+{
+  "note": "Historical argv with private roots, PID and notification ID replaced by placeholders. Not a runnable launch recipe. 07 wrapper exit 1; underlying final exit unknown. 08 xctrace -6 / shell 250. See report for usability limits.",
+  "commands": [
+    {
+      "command_file": "00-idle.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "record",
+        "--template",
+        "Animation Hitches",
+        "--attach",
+        "<REVIEW_PID>",
+        "--time-limit",
+        "10s",
+        "--no-prompt",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/traces/00-idle.trace"
+      ],
+      "exit_code": 0,
+      "result_file": "00-idle.result.json"
+    },
+    {
+      "command_file": "01-node-drag.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "record",
+        "--template",
+        "Animation Hitches",
+        "--attach",
+        "<REVIEW_PID>",
+        "--time-limit",
+        "16s",
+        "--no-prompt",
+        "--notify-tracing-started",
+        "<UNIQUE_TRACE_NOTIFICATION>",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/traces/01-node-drag.trace"
+      ],
+      "exit_code": 0,
+      "result_file": "01-node-drag.result.json"
+    },
+    {
+      "command_file": "02-node-drag-repeat.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "record",
+        "--template",
+        "Animation Hitches",
+        "--attach",
+        "<REVIEW_PID>",
+        "--time-limit",
+        "16s",
+        "--no-prompt",
+        "--notify-tracing-started",
+        "<UNIQUE_TRACE_NOTIFICATION>",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/traces/02-node-drag-repeat.trace"
+      ],
+      "exit_code": 0,
+      "result_file": "02-node-drag-repeat.result.json"
+    },
+    {
+      "command_file": "03-pan.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "record",
+        "--template",
+        "Animation Hitches",
+        "--attach",
+        "<REVIEW_PID>",
+        "--time-limit",
+        "16s",
+        "--no-prompt",
+        "--notify-tracing-started",
+        "<UNIQUE_TRACE_NOTIFICATION>",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/traces/03-pan.trace"
+      ],
+      "exit_code": 0,
+      "result_file": "03-pan.result.json"
+    },
+    {
+      "command_file": "04-wheel-zoom.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "record",
+        "--template",
+        "Animation Hitches",
+        "--attach",
+        "<REVIEW_PID>",
+        "--time-limit",
+        "16s",
+        "--no-prompt",
+        "--notify-tracing-started",
+        "<UNIQUE_TRACE_NOTIFICATION>",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/traces/04-wheel-zoom.trace"
+      ],
+      "exit_code": 0,
+      "result_file": "04-wheel-zoom.result.json"
+    },
+    {
+      "command_file": "05-wheel-zoom-repeat.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "record",
+        "--template",
+        "Animation Hitches",
+        "--attach",
+        "<REVIEW_PID>",
+        "--time-limit",
+        "31s",
+        "--no-prompt",
+        "--notify-tracing-started",
+        "<UNIQUE_TRACE_NOTIFICATION>",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/traces/05-wheel-zoom-repeat.trace"
+      ],
+      "exit_code": 0,
+      "result_file": "05-wheel-zoom-repeat.result.json"
+    },
+    {
+      "command_file": "06-idle-current.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "record",
+        "--template",
+        "Animation Hitches",
+        "--attach",
+        "<REVIEW_PID>",
+        "--time-limit",
+        "12s",
+        "--no-prompt",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/traces/06-idle-current.trace"
+      ],
+      "exit_code": 0,
+      "result_file": "06-idle-current.result.json"
+    },
+    {
+      "command_file": "07-left-hidden-wheel.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "record",
+        "--template",
+        "Animation Hitches",
+        "--attach",
+        "<REVIEW_PID>",
+        "--time-limit",
+        "31s",
+        "--no-prompt",
+        "--notify-tracing-started",
+        "<UNIQUE_TRACE_NOTIFICATION>",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/traces/07-left-hidden-wheel.trace"
+      ],
+      "exit_code": "not recorded here; see timing/wrapper result",
+      "result_file": null
+    },
+    {
+      "command_file": "08-left-restored-wheel.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "record",
+        "--template",
+        "Animation Hitches",
+        "--attach",
+        "<REVIEW_PID>",
+        "--time-limit",
+        "31s",
+        "--no-prompt",
+        "--notify-tracing-started",
+        "<UNIQUE_TRACE_NOTIFICATION>",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/traces/08-left-restored-wheel.trace"
+      ],
+      "exit_code": -6,
+      "result_file": "08-left-restored-wheel.result.json"
+    },
+    {
+      "command_file": "exports/02-node-drag-repeat-data.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "export",
+        "--input",
+        "<LOCAL_EVIDENCE_ROOT>/traces/02-node-drag-repeat.trace",
+        "--xpath",
+        "/trace-toc/run[@number=\"1\"]/data/table[@schema=\"time-profile\" or @schema=\"thread-state\" or @schema=\"hitches-frame-lifetimes\" or @schema=\"hitches-updates\" or @schema=\"hitches-renders\" or @schema=\"hitches\" or @schema=\"displayed-surfaces-interval\" or @schema=\"display-surface-swap\" or @schema=\"metal-command-buffer-completed\" or @schema=\"device-thermal-state-intervals\" or @schema=\"thread-info\" or @schema=\"process-info\"]",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/exports/02-node-drag-repeat-data.xml"
+      ],
+      "exit_code": 0,
+      "result_file": "exports/02-node-drag-repeat-data.result.json"
+    },
+    {
+      "command_file": "exports/02-node-drag-repeat-toc.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "export",
+        "--input",
+        "<LOCAL_EVIDENCE_ROOT>/traces/02-node-drag-repeat.trace",
+        "--toc",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/exports/02-node-drag-repeat-toc.xml"
+      ],
+      "exit_code": 0,
+      "result_file": "exports/02-node-drag-repeat-toc.result.json"
+    },
+    {
+      "command_file": "exports/03-pan-data.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "export",
+        "--input",
+        "<LOCAL_EVIDENCE_ROOT>/traces/03-pan.trace",
+        "--xpath",
+        "/trace-toc/run[@number=\"1\"]/data/table[@schema=\"time-profile\" or @schema=\"thread-state\" or @schema=\"hitches-frame-lifetimes\" or @schema=\"hitches-updates\" or @schema=\"hitches-renders\" or @schema=\"hitches\" or @schema=\"displayed-surfaces-interval\" or @schema=\"display-surface-swap\" or @schema=\"metal-command-buffer-completed\" or @schema=\"device-thermal-state-intervals\" or @schema=\"thread-info\" or @schema=\"process-info\"]",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/exports/03-pan-data.xml"
+      ],
+      "exit_code": 0,
+      "result_file": "exports/03-pan-data.result.json"
+    },
+    {
+      "command_file": "exports/03-pan-toc.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "export",
+        "--input",
+        "<LOCAL_EVIDENCE_ROOT>/traces/03-pan.trace",
+        "--toc",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/exports/03-pan-toc.xml"
+      ],
+      "exit_code": 0,
+      "result_file": "exports/03-pan-toc.result.json"
+    },
+    {
+      "command_file": "exports/05-wheel-zoom-repeat-data.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "export",
+        "--input",
+        "<LOCAL_EVIDENCE_ROOT>/traces/05-wheel-zoom-repeat.trace",
+        "--xpath",
+        "/trace-toc/run[@number=\"1\"]/data/table[@schema=\"time-profile\" or @schema=\"thread-state\" or @schema=\"hitches-frame-lifetimes\" or @schema=\"hitches-updates\" or @schema=\"hitches-renders\" or @schema=\"hitches\" or @schema=\"displayed-surfaces-interval\" or @schema=\"display-surface-swap\" or @schema=\"metal-command-buffer-completed\" or @schema=\"device-thermal-state-intervals\" or @schema=\"thread-info\" or @schema=\"process-info\"]",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/exports/05-wheel-zoom-repeat-data.xml"
+      ],
+      "exit_code": 0,
+      "result_file": "exports/05-wheel-zoom-repeat-data.result.json"
+    },
+    {
+      "command_file": "exports/05-wheel-zoom-repeat-toc.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "export",
+        "--input",
+        "<LOCAL_EVIDENCE_ROOT>/traces/05-wheel-zoom-repeat.trace",
+        "--toc",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/exports/05-wheel-zoom-repeat-toc.xml"
+      ],
+      "exit_code": 0,
+      "result_file": "exports/05-wheel-zoom-repeat-toc.result.json"
+    },
+    {
+      "command_file": "exports/06-idle-current-data.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "export",
+        "--input",
+        "<LOCAL_EVIDENCE_ROOT>/traces/06-idle-current.trace",
+        "--xpath",
+        "/trace-toc/run[@number=\"1\"]/data/table[@schema=\"time-profile\" or @schema=\"thread-state\" or @schema=\"hitches-frame-lifetimes\" or @schema=\"hitches-updates\" or @schema=\"hitches-renders\" or @schema=\"hitches\" or @schema=\"displayed-surfaces-interval\" or @schema=\"display-surface-swap\" or @schema=\"metal-command-buffer-completed\" or @schema=\"device-thermal-state-intervals\" or @schema=\"thread-info\" or @schema=\"process-info\"]",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/exports/06-idle-current-data.xml"
+      ],
+      "exit_code": 0,
+      "result_file": "exports/06-idle-current-data.result.json"
+    },
+    {
+      "command_file": "exports/06-idle-current-toc.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "export",
+        "--input",
+        "<LOCAL_EVIDENCE_ROOT>/traces/06-idle-current.trace",
+        "--toc",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/exports/06-idle-current-toc.xml"
+      ],
+      "exit_code": 0,
+      "result_file": "exports/06-idle-current-toc.result.json"
+    },
+    {
+      "command_file": "exports/07-left-hidden-wheel-data.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "export",
+        "--input",
+        "<LOCAL_EVIDENCE_ROOT>/traces/07-left-hidden-wheel.trace",
+        "--xpath",
+        "/trace-toc/run[@number=\"1\"]/data/table[@schema=\"time-profile\" or @schema=\"thread-state\" or @schema=\"hitches-frame-lifetimes\" or @schema=\"hitches-updates\" or @schema=\"hitches-renders\" or @schema=\"hitches\" or @schema=\"displayed-surfaces-interval\" or @schema=\"display-surface-swap\" or @schema=\"metal-command-buffer-completed\" or @schema=\"device-thermal-state-intervals\" or @schema=\"thread-info\" or @schema=\"process-info\"]",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/exports/07-left-hidden-wheel-data.xml"
+      ],
+      "exit_code": 0,
+      "result_file": "exports/07-left-hidden-wheel-data.result.json"
+    },
+    {
+      "command_file": "exports/07-left-hidden-wheel-toc.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "export",
+        "--input",
+        "<LOCAL_EVIDENCE_ROOT>/traces/07-left-hidden-wheel.trace",
+        "--toc",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/exports/07-left-hidden-wheel-toc.xml"
+      ],
+      "exit_code": 0,
+      "result_file": "exports/07-left-hidden-wheel-toc.result.json"
+    },
+    {
+      "command_file": "exports/08-left-restored-wheel-data.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "export",
+        "--input",
+        "<LOCAL_EVIDENCE_ROOT>/traces/08-left-restored-wheel.trace",
+        "--xpath",
+        "/trace-toc/run[@number=\"1\"]/data/table[@schema=\"time-profile\" or @schema=\"thread-state\" or @schema=\"hitches-frame-lifetimes\" or @schema=\"hitches-updates\" or @schema=\"hitches-renders\" or @schema=\"hitches\" or @schema=\"displayed-surfaces-interval\" or @schema=\"display-surface-swap\" or @schema=\"metal-command-buffer-completed\" or @schema=\"device-thermal-state-intervals\" or @schema=\"thread-info\" or @schema=\"process-info\"]",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/exports/08-left-restored-wheel-data.xml"
+      ],
+      "exit_code": 10,
+      "result_file": "exports/08-left-restored-wheel-data.result.json"
+    },
+    {
+      "command_file": "exports/08-left-restored-wheel-toc.command.json",
+      "argv": [
+        "xcrun",
+        "xctrace",
+        "export",
+        "--input",
+        "<LOCAL_EVIDENCE_ROOT>/traces/08-left-restored-wheel.trace",
+        "--toc",
+        "--output",
+        "<LOCAL_EVIDENCE_ROOT>/exports/08-left-restored-wheel-toc.xml"
+      ],
+      "exit_code": 10,
+      "result_file": "exports/08-left-restored-wheel-toc.result.json"
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "matching": "case-sensitive substring of any frame; each category counted at most once per sample; categories overlap",
+  "patterns": {
+    "glass_background_cpu": [
+      "WorkbenchBackgroundNSView",
+      "WorkbenchGlassParameters",
+      "WorkbenchGlassDrawing",
+      "WorkbenchGlassFields",
+      "WorkbenchGlassField",
+      "WorkbenchContinuousGlass"
+    ],
+    "glass_controls": [
+      "WorkbenchGlassSegments",
+      "WorkbenchGlassButton"
+    ],
+    "language_resolution": [
+      "UILanguageStore.text",
+      "LanguagePackCodec.normalizedLocale"
+    ],
+    "library_entry_equality": [
+      "SharedLibraryBrowserEntry.__derived_struct_equals"
+    ],
+    "operation_tree": [
+      "WorkflowOperationTree.make"
+    ],
+    "readability": [
+      "WorkbenchReadability"
+    ],
+    "library": [
+      "SharedLibrary",
+      "libraryBrowser",
+      "workspaceAssetEntries",
+      "WorkflowHumanPresentation",
+      "WorkflowOutputsPresentation"
+    ],
+    "asset_projection": [
+      "workspaceAssetEntries"
+    ],
+    "history_output_projection": [
+      "WorkflowHumanPresentation",
+      "WorkflowOutputsPresentation"
+    ],
+    "node_body": [
+      "WorkflowNodeCard",
+      "WorkflowCanvasNodeView",
+      "nodeView(",
+      "nodeBody"
+    ],
+    "canvas_surface": [
+      "WorkflowGraphSurface",
+      "WorkflowCanvasView"
+    ],
+    "viewport_input": [
+      "WorkflowCanvasViewport",
+      "WorkflowCanvasScroll",
+      "WorkflowCanvasNodeDrag"
+    ],
+    "wire_hit": [
+      "wireHit",
+      "hitPath(",
+      "Path.subtracting",
+      "WorkflowWire"
+    ],
+    "wire_draw": [
+      "WorkflowConnectionDrawing",
+      "WorkflowConnectionPath",
+      "WorkflowNativeConnection"
+    ],
+    "menu_feature": [
+      "WorkbenchMenu",
+      "WorkbenchFeatures",
+      "WorkflowNodeCommand",
+      "WorkflowCommandMenu"
+    ],
+    "titlebar": [
+      "WorkbenchWindowTitlebar"
+    ],
+    "layout_ancestor": [
+      "layout",
+      "Layout",
+      "sizeThatFits",
+      "SizeThatFits"
+    ],
+    "swiftui_graph": [
+      "AttributeGraph",
+      "AG::",
+      "updateViewGraph",
+      "SwiftUI",
+      "SwiftUICore"
+    ],
+    "render_commit_ancestor": [
+      "CA::Transaction",
+      "CA::Layer",
+      "RenderBox",
+      "commit_transaction",
+      "renderDisplayList"
+    ]
+  }
+}

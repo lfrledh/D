@@ -1,6 +1,18 @@
 # 当前行动与接手点
 
-## 2026-10-17 D-RENDERING-WORKSPACE-01（当前）
+## 2026-10-18 D-PERFORMANCE-ATTRIBUTION-01（当前：调查文档归档，待审计）
+
+调查起点为 `e4aaea7159d2a975b4e3d0ef9b9fca0e72371dc4`，真实生产仍为 `9eae90e4adc4008c3894f09bcd07c71e23701045`。继续原隔离工作树和 `codex/rendering-workspace-20261017` 分支。采集阶段未改代码、未提交或推送；用户随后明确授权建立调查专属目录并将结果推送 GitHub。当前写入仅为去敏报告、小型证据摘要及既有导航/状态记录；不推送诊断代码，不进行性能修补、合并、部署或替换普通 D。提交身份以 Git 历史为准，不循环补写自身 SHA。
+
+调查入口：[docs/investigations/D-PERFORMANCE-ATTRIBUTION-01](investigations/D-PERFORMANCE-ATTRIBUTION-01/README.md)。今后非开发实施类调查、审计和研究按[归档约定](investigations/README.md)归类；旧材料保留原位。原始 trace/XML、用户相关信息与精确进程/包/路径/保护回执留在本地证据集 `D-PERFORMANCE-ATTRIBUTION-01/run-20261018-01`，未上传。
+
+已完成同包无改码的节点拖动、手掌平移、连续滚轮和空闲采样，以及左库收起的探索性对照。缩放主线程实际出现Binding location深入完整资料库Entry数组的比较、操作库树构造和语言解析；左栏收起仍采到操作库树。尚未锁定具体Binding，不能宣称所有隐藏页刷新、唯一根因或性能提升。节点/平移段前半活动少，倍率/面积/输入频率未知，不能据总样本量给出速度倍率。玻璃GPU、输入到呈现和完整D帧链未归属，**没有FPS结论**。
+
+07收起段录完后的保存等待超时，包装器exit1；底层最终exit未保留，但文件保存且两项导出exit0、分析窗调度覆盖完整，限定使用。08重新展开段用户操作完成，但xctrace保存exit-6、导出exit10（malformed），不算复归性能证据。同期间出现临时存储no-space错误，未证明是崩溃唯一原因；停止追加采样与Instruments导出，未清理用户或旧证据，不再要求重复手势。
+
+调查时已核实同一评审包、唯一进程及隔离服务根。用户新增节点、当前项目和未保存状态保留；原普通/旧隔离会话八项与包十项保护摘要前后一致，源树仅原个人scheme路径dirty，未操作。归档阶段不启动、退出或修改App。App仍用原任务本地交付中的 `review.py --launch`，无新版本。环境受阻与真人决策分列[现行集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#d-performance-attribution-01-当前队列)。原卡顿仍OPEN；停在报告审计及独立复核，下一修补范围待讨论。
+
+## 2026-10-17 D-RENDERING-WORKSPACE-01（历史交付与原生回执）
 
 实际起点 `3fa866fe3e5e5d3f41d66b0929a56fbbadec99eb`；旧受测生产 `fbbd6b116bd7568d42a60af4e159bd0f25274d3a`。已核对本地/远端候选、索引、源树个人 scheme 与普通服务保护摘要，在新隔离树 `D-Worktrees/D-RENDERING-WORKSPACE-20261017` / `codex/rendering-workspace-20261017` 由 Lead 单写。原候选、源树、普通 D、B9FC 评审会话保留，不合并、不部署。完整生产/最终 SHA、差分、原始命令退出码、分级计数及唯一 `review.py` 入口统一见 `D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/delivery/README.md`；不在文档中循环补自身 SHA。
 

@@ -18,6 +18,8 @@
 
 2026-09-24基础表、09-26增量及10-08展示路线完整保存在[整理前导航](https://github.com/lfrledh/D/blob/bb821f1fe31a263d33b1feeb33ee3cf3e7294d74/docs/REPOSITORY_MAP.zh-CN.md#L3-L33)。它们只解释当时的schema12/16、CLI/App与无图→有图变化；现行表不删除旧包、schema来源或兼容责任。固定历史与反向索引见[历史页](history/README.md#non-ui-20261011)。
 
+非开发实施类文档统一见 [调查、审计与研究目录](investigations/README.md)：每项调查按任务ID归档去敏报告、小型证据摘要与复核；不迁移旧历史，不替代当前行动或集中待办。
+
 ## 兼容、参考、研究与候选
 
 | 区域 | 分类 | D-CONTEXT-RESET-01历史保留决定及证据 |
