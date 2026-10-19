@@ -426,3 +426,36 @@ extension WorkbenchConsistencyTests {
         #expect(edits == 1 && next.superview == nil)
     }
 }
+
+
+extension WorkbenchConsistencyTests {
+    @Test func wireTrackingAreaSurvivesViewportChangesAndRepairsExternalRemoval() throws {
+        let w = window(); defer { w.close() }
+        let scroll = NSScrollView(frame: .init(x: 0, y: 0, width: 400, height: 300))
+        let document = NSView(frame: .init(x: 0, y: 0, width: 1200, height: 900))
+        scroll.documentView = document; w.contentView = scroll
+        let wire = WorkflowConnectionHitView(frame: document.bounds); document.addSubview(wire)
+        let path = CGPath(rect: .init(x: 40, y: 40, width: 300, height: 12), transform: nil)
+        wire.updateGeometry(path: path, midpoint: .init(x: 190, y: 46), cutAvailable: true)
+        wire.canDisconnect = true
+        wire.updateTrackingAreas()
+        let original = try #require(wire.trackingAreas.first)
+        #expect(original.options.contains(.inVisibleRect))
+        for i in 0..<120 {
+            scroll.contentView.scroll(to: .init(x: i % 12, y: i % 17))
+            wire.updateTrackingAreas()
+            #expect(wire.trackingAreas.count == 1 && wire.trackingAreas.first === original)
+        }
+        wire.bounds.size = .init(width: 600, height: 450)
+        wire.updateTrackingAreas()
+        #expect(wire.trackingAreas.first === original)
+        wire.updateHover(at: .init(x: 100, y: 46)); #expect(wire.hovering)
+        wire.isHidden = true; wire.viewDidHide(); #expect(!wire.hovering)
+        wire.isHidden = false; wire.updateTrackingAreas()
+        #expect(wire.trackingAreas.first === original)
+        wire.updateHover(at: .init(x: 100, y: 46)); #expect(wire.hovering)
+        wire.updateHover(at: .init(x: 100, y: 70)); #expect(!wire.hovering)
+        wire.removeTrackingArea(original); wire.updateTrackingAreas()
+        #expect(wire.trackingAreas.count == 1 && wire.trackingAreas.first !== original)
+    }
+}

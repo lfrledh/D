@@ -94,7 +94,9 @@ final class WorkflowConnectionHitView: NSView {
     }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let tracking { removeTrackingArea(tracking) }
+        // inVisibleRect follows clipping and zoom automatically. Reinstalling an
+        // identical area on each viewport update needlessly rebuilds tracking.
+        if let tracking, trackingAreas.contains(where: { $0 === tracking }) { return }
         let next = NSTrackingArea(rect: .zero,
             options: [.inVisibleRect, .activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited],
             owner: self, userInfo: nil)
