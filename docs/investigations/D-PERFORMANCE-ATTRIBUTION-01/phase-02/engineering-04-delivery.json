@@ -1,0 +1,192 @@
+{
+  "task": "D-PERFORMANCE-ATTRIBUTION-01",
+  "engineering_id": "engineering-04",
+  "report_base": "fa3253456cdff659845cd38d66535bc270e4900d",
+  "production_base": "9eae90e4adc4008c3894f09bcd07c71e23701045",
+  "final_production": "b217417220213ff2b9ba3ccb61d84a11b3e0fbd6",
+  "status": "finite component candidate; visible performance goal OPEN",
+  "native_capture_budget": {
+    "count": 18,
+    "seconds": 184.032903458,
+    "extra_groups": 3,
+    "maximum": [
+      18,
+      360,
+      4
+    ]
+  },
+  "commands": [
+    {
+      "id": "regression",
+      "exit_code": 1,
+      "private_command": "regression.command.json",
+      "private_log": "regression.log"
+    },
+    {
+      "id": "regression-02",
+      "exit_code": 1,
+      "private_command": "regression-02.command.json",
+      "private_log": "regression-02.log"
+    },
+    {
+      "id": "regression-03",
+      "exit_code": 0,
+      "private_command": "regression-03.command.json",
+      "private_log": "regression-03.log"
+    },
+    {
+      "id": "regression-04",
+      "exit_code": 1,
+      "private_command": "regression-04.command.json",
+      "private_log": "regression-04.log"
+    },
+    {
+      "id": "regression-final",
+      "exit_code": 0,
+      "private_command": "regression-final.command.json",
+      "private_log": "regression-final.log"
+    },
+    {
+      "id": "offline-final",
+      "exit_code": 0,
+      "private_command": "inline recorded command; see offline-final.log",
+      "private_log": "offline-final.log"
+    },
+    {
+      "id": "review-build",
+      "exit_code": 0,
+      "private_command": "review-build.command.json",
+      "private_log": "review-build.log"
+    },
+    {
+      "id": "baseline-onone-diagnostic-build",
+      "exit_code": 0,
+      "private_command": "baseline-onone-build.json"
+    },
+    {
+      "id": "baseline-optimized-diagnostic-build",
+      "exit_code": 0,
+      "private_command": "baseline-optimized-build.json"
+    },
+    {
+      "id": "candidate-onone-diagnostic-build",
+      "exit_code": 0,
+      "private_command": "candidate-onone-build.json"
+    },
+    {
+      "id": "normal-launcher-verify-only",
+      "exit_code": 0,
+      "private_log": "review-launcher-verify.log",
+      "no_App_or_server_started": true
+    }
+  ],
+  "regression": {
+    "final": {
+      "methods": 33,
+      "scenarios": 53,
+      "new": [
+        1,
+        1
+      ],
+      "existing_rerun": [
+        32,
+        52
+      ],
+      "exit_code": 0
+    },
+    "03": {
+      "explicit_pass": [
+        45,
+        70
+      ],
+      "outer_exit": 0,
+      "UI_complete": false,
+      "AX_skipped": [
+        1,
+        4
+      ]
+    },
+    "04": {
+      "pass": [
+        31,
+        49
+      ],
+      "failed_precondition": [
+        1,
+        1
+      ],
+      "exit_code": 1
+    },
+    "offline_qualifier": {
+      "methods": 73,
+      "scenarios": 89,
+      "new": [
+        14,
+        23
+      ],
+      "exit_code": 0
+    }
+  },
+  "diagnostic_patches_local_only": {
+    "baseline": "e6a1d627c4bde3167b39d5581b77fc6c5e6a743496813943c5ff59a6ebc0b353",
+    "combined": "3a587b9c752f95da59fcb8d53dbe0d360823db2f28d58242d5a7226dbb541059"
+  },
+  "not_pushed": [
+    "diagnostic product source",
+    "instrumentation patches",
+    "raw events and CPU samples",
+    "signed binaries",
+    "user data and private signing materials"
+  ],
+  "not_measured": [
+    "final tracking-only native performance",
+    "presented FPS",
+    "hardware-to-display latency",
+    "GPU inference coexistence",
+    "three same-condition independent repetitions"
+  ],
+  "private_evidence_root_alias": "D-PERFORMANCE-ATTRIBUTION-01/run-20261018-phase02-01/diagnostic-private/engineering-04",
+  "public_outputs_quantile": "nearest-rank ceil(p*N)-1 for P50 and P95",
+  "candidate_launch_entry_alias": "D-PERFORMANCE-ATTRIBUTION-01/run-20261018-phase02-01/delivery/engineering-04/review.py",
+  "final_build": {
+    "configuration": "Debug -Onone; DEBUG D_REVIEW_ONLY; ENABLE_DEBUG_DYLIB=NO; no diagnostic compilation",
+    "bundle": "first-test.D.review.D",
+    "marker": "isolated-download-v1",
+    "executable_uuid": "FD55E69C-42BD-398D-8EE1-48EABA070A7D",
+    "code_sha256": {
+      "Contents/Info.plist": "1ccaae514f51a6cdbd2c0aa5accfe6f806ca7a80a77eeffb0684a0eac603e0a0",
+      "Contents/MacOS/D": "1bbe6b795d6334b49cda4e553176f8ff5b8df80dd7c6c462f401fcb7eace37a2",
+      "Contents/Resources/UI_UI.bundle/Contents/Resources/en.json": "c948ee3c3d79cb2a69b89ae2b0f77689c44847a55430d9edce74444d2bb69f53",
+      "Contents/Resources/UI_UI.bundle/Contents/Resources/zh-Hans.json": "b68cc0b76675250d13a34a8813eb1d9bbbd1b63ed9dcfd35b7043d13cc0e4105",
+      "Contents/Resources/UI_UI.bundle/Contents/Resources/WorkbenchFeatureHelp.json": "498db0ff4d75d7fc478d462b4b980b48462dcd24195efdcf6970e1f14ae9e5ca",
+      "Contents/Resources/UI_UI.bundle/Contents/Resources/default.metallib": "8f5edaa8399afef404742ad5941ff0a2ff23abf6bec83c3634b4c0f9206026f2"
+    },
+    "signature": "Apple Development; deep strict verified; sandbox enabled",
+    "signature_exit": 0,
+    "diagnostic_symbols": [],
+    "diagnostic_symbol_scan_exit": 0,
+    "built_source_sha": "b217417220213ff2b9ba3ccb61d84a11b3e0fbd6",
+    "native_launch": "not launched; verify-only launcher check; no final performance capture",
+    "distribution": "not notarized/released; ordinary App not replaced",
+    "launcher_preflight_exit": 0,
+    "shader_matches_baseline": true
+  },
+  "protection": {
+    "ordinary_files": 8,
+    "original_app_code_files": 10,
+    "all_match": true,
+    "source_personal_scheme_matches": true,
+    "source_index_empty": true,
+    "D_processes_at_check": 0,
+    "synthetic_disk": "normal exit created revisions; canonical workflow content unchanged",
+    "historical_review_window_metadata": "unknown prior gap; not rolled back"
+  },
+  "independent_review": {
+    "raw_qualification": "06-09 and12-17 qualified;10-11 invalid full records/prefix retained",
+    "metrics_rows_checked": 96,
+    "timeline_rows_checked": 27898,
+    "matching_quantiles": "nearest-rank",
+    "production_scope_review": "tracking reuse only, no native performance claim",
+    "reviewer_reexecuted_product_tests": false
+  }
+}

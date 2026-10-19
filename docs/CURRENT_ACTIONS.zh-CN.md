@@ -1,6 +1,16 @@
 # 当前行动与接手点
 
-## 2026-10-19 D-PERFORMANCE-ATTRIBUTION-01 Phase 2（当前：工具资格后有界停止）
+## 2026-10-20 D 画布性能工程收尾（当前，有限候选；体验目标未关闭）
+
+本轮明确允许有限产品修补，继续 `codex/rendering-workspace-20261017`。实际起点 `fa3253456cdff659845cd38d66535bc270e4900d`，生产起点 `9eae90e4adc4008c3894f09bcd07c71e23701045`；最终生产 `b217417220213ff2b9ba3ccb61d84a11b3e0fbd6`，后续仅去敏证据/文档。Lead单写、非实施者先核原始数据资格再审解释与回归。唯一当前报告：[Phase 2](investigations/D-PERFORMANCE-ATTRIBUTION-01/phase-02/REPORT.zh-CN.md)。
+
+持续NODE/PAN/ZOOM、同源码-O及组合实验均已完整取得局部接收/状态证据；组合包ZOOM无实质改善，Binding改动与测试已撤回。仅保留连线可见跟踪区复用及外部移除后的重建保护。最终33方法/53情景组件回归exit0，离线73/89；组件减少重复安装不等于原生性能收益。组合实验不等于最终包，最终无专属原生性能采样；平移/缩放接近单节点的目标未完成，不宣称FPS。
+
+累计18/18采集单位、184.032903458/360秒、3/4额外对照组；失败和工具污染保留，不追加采集。旧G1分析/动作资格沿用。正常签名构建、完整SHA/差分、退出码、远端读回和唯一新 `review.py` 在 `D-Development/AgentTrials/D-PERFORMANCE-ATTRIBUTION-01/run-20261018-phase02-01/delivery/engineering-04/README.md`。原脚本/普通D/原项目/个人scheme不替换；诊断代码和私有trace留本地。
+
+当前无D进程，三份诊断包均完成停止/导出后按精确身份正常退出exit0。没有待用户完成的计时/手势/工具排错。余项统一见[集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#d-performance-attribution-01-当前队列)：区分用户观感、真实宿主/显示限制和未解决工程因果问题。停在独立复审和用户决定，不合并、不部署、不替换普通App。
+
+## 2026-10-19 D-PERFORMANCE-ATTRIBUTION-01 Phase 2（历史：工具资格后有界停止）
 
 从已审`dc772c8e18658b95790f53e6f09c37fe57a37c63`接续同线，生产仍为`9eae90e4adc4008c3894f09bcd07c71e23701045`。正式产品没有性能改动。唯一入口为[当前调查报告](investigations/D-PERFORMANCE-ATTRIBUTION-01/phase-02/REPORT.zh-CN.md)及[集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#d-performance-attribution-01-当前队列)。G1旧全线程/时间分段继续沿用，没有重跑。
 

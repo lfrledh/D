@@ -1,23 +1,25 @@
 # 历史失败与权限审计
 
 <a id="d-performance-attribution-01-当前队列"></a>
-## 2026-10-19 D-PERFORMANCE-ATTRIBUTION-01 当前队列（Phase 2，仅调查）
+## 2026-10-20 D-PERFORMANCE-ATTRIBUTION-01 当前队列（有限工程交付）
 
-报告续接`dc772c8e18658b95790f53e6f09c37fe57a37c63`，生产`9eae90e4adc4008c3894f09bcd07c71e23701045`保持。[唯一当前调查入口](investigations/D-PERFORMANCE-ATTRIBUTION-01/phase-02/REPORT.zh-CN.md)。前次两失败与副实例事件原证据保留；本轮不更改产品性能实现。
+当前授权已允许有限性能修补。实际起点fa325345，生产起点9eae90e4，最终生产 `b217417220213ff2b9ba3ccb61d84a11b3e0fbd6`；[唯一当前证据报告](investigations/D-PERFORMANCE-ATTRIBUTION-01/phase-02/REPORT.zh-CN.md)。三份诊断包均停止/导出后正常退出exit0，无普通D副实例。此次不再要求用户做手势、计时或诊断工具排错。
 
 |类别|当前事项|责任与下一步|
 |---|---|---|
-|HISTORICAL_REANALYZED|旧G1全线程、调度和时间切片|已审结果沿用，不重跑或重新扩写。|
-|IMPLEMENTED_AND_QUALIFIED_LOW_LOAD|D内开始、身份/坐标/接收/状态/停止导出及合成复位|一次获准修后机会，NODE/PAN/ZOOM 6/6/4条全部核验，非编写者审原始记录；不是硬件输入、连续负载或FPS通过。|
-|TOOL_CAPACITY_LIMIT：Agent|连续NODE首段被单个待主线程槽上限截断|6条实际接收，已开始拖动；29.006ms进入主线程等待，定时器最大晚到0.102ms。保留前缀；其余8段未启动。先讨论有限容量/最长等待/终态，不盲目放宽阈值或降频。|
-|OFFLINE_CORRECTED：Agent|原诊断最大单轴判断漏掉对角位移|向量5.305844已超过生产阈值；原始false flag保留，离线区分完整资格/局部运动/未观察终点。59方法/66情景exit0。没有借此宣布完整NODE通过。|
-|HUMAN_COMPLETED|同一专属合成根系统准入与D内开始|本轮无需聊天确认开始、手势或计时；采集已停并导出。当前没有需用户立即操作项。未来重启如系统再次要求授权须如实办理，不绕过。|
-|ENVIRONMENT_LIMITED|系统级事件/屏幕权限及最终显示指标|未改权限。此次B路径可用；不把其等同A硬件输入。仅精确PID/启动回执观察，getApp/按名称路径继续停用。|
-|PREPARED_NOT_MEASURED|Onone15/O08同源码优化配对|编译/签名/宏/资源/布局匹配已核；O未启动，敏感性及工具扰动未测。|
-|DEFERRED：Agent|G3完整3×3重复、G4/G5敏感性和因果实验|累计6/18段、39.792033417/360秒，0/4组；旧失败不抹。PAN/ZOOM仍仅低负载资格，不用NODE入口等待代替其性能解释。|
-|OPEN_DEFECT|平移/缩放体验|未修补、未关闭、未测FPS；玻璃/几何/跨页等候选未因本次结果排除。|
-|PROTECTED|普通App/用户数据/原项目/个人scheme|普通8项、原包10项、scheme及专属合成磁盘文件摘要一致；唯一诊断进程已停发送并保留，未另起普通副实例。旧review容器窗口元数据缺前置摘要仍unknown。|
-|DECISION_PENDING|独立顾问复核和用户决定|先审资格、原始时序与工具边界，再决定最小诊断续查。无正式产品修补授权，不合并/部署/替换普通D。|
+|COMPLETED_B_ROUTE|固定墙钟、有界64槽、租约、坐标/身份、真实接收/状态及复位|NODE/PAN/ZOOM持续完整动作资格通过；B进程内事件不是硬件输入。旧冷窗口坐标、崩溃及单槽反例保留。|
+|MEASURED_LIMITED|同源码-Onone/-O及组合实验|局部接收等待有构建敏感性；组合PAN下降、ZOOM未实质改善、NODE升高均保留。未完成三次同条件重复，不能确认总体因果。|
+|RETAINED_COMPONENT_FIX|连线跟踪区复用，外部移除后仍重建|最终33方法/53情景exit0；减少重复安装已验证，最终原生性能收益未知。无效Binding实验已撤回，未进正式候选。|
+|OPEN_ENGINEERING：Agent|ZOOM主要迟滞；PAN最终收益、NODE无退化|体验目标未完成。不是用户找热点任务。累计18/18、184.032903458/360秒、3/4组，停止新增采集；下一次工程需具体判别问题和新有限预算，不沿旧预算无限重试。|
+|HUMAN_EXPERIENCE：用户|最终候选的平移/缩放跟随感、清晰度、玻璃、光标及连线hover|仅集中主观验收；不声称现已通过。新唯一入口见外盘delivery/engineering-04/README.md；不替换普通D、不打开原会话。|
+|HUMAN_AUTH_IF_PROMPTED：用户|新独立评审根的系统目录准入|只在主动启动新候选、系统确实询问时授权预填UUID目录；不改系统权限，不重复催促。无需回复开始确认、计时或做测试矩阵。|
+|ENVIRONMENT_LIMITED|A系统输入/屏幕捕获与最终呈现指标；原生key-window端口测试|现有执行权限未取得A/像素路径；不猜锁屏。端口测试1方法/1情景停在isKeyWindow前置，不称业务失败或通过。原AX1方法/4情景跳过。|
+|UNRESOLVED_TEST：Agent|contextMenu(false)宿主测试无终结记录|regression-03外层exit0不是整组通过，只有45/70明确通过。原因尚未知，可能环境/测试/产品，不能擅自归因或弱化断言。最终确定性回归完整通过，不代替该路径。|
+|UNKNOWN_METRICS|真实FPS、硬件到显示、GPU及模型竞争、完整布局/提交时序|不根据回调、body、采样命中、handler时间推算。玻璃/布局/外围传播未被排除；新采样污染的前缀不充作完整对照。|
+|PROTECTED|普通8项、旧包10项、源个人scheme/索引|摘要核对保持；原review容器窗口元数据历史缺口仍unknown，不回滚。专属合成磁盘revision改变，规范工作流内容相同，单独记录。|
+|REVIEW_PENDING|独立顾问审计及用户决定|先审原始数据资格、有限改动、组合与最终差别及反证；不合并、不部署、不发行。正式候选无诊断设施。|
+
+此前2026-10-19工具资格队列已由本表更新；其失败与旧授权见报告历史段及Git父版本，不再作为当前停点。
 
 ## 2026-10-18 D-PERFORMANCE-ATTRIBUTION-01 Phase 1历史队列（已被上方Phase 2覆盖）
 

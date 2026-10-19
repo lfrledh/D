@@ -36,10 +36,10 @@ def expected_slots(interaction,seconds,profile='performance'):
  return out
 def analyze(report,plan,rows,completion=None):
  revision=report.get('protocolRevision',1);profile=plan.get('profile','performance');qualification=profile=='qualification-low-load-v1'
- stages_required=('intent','main-enter','post-begin','posted','received','handler-return-state') if revision==2 else STAGES
+ stages_required=(('intent','post-begin','posted','post-return','received','handler-return-state') if revision==3 else ('intent','main-enter','post-begin','posted','received','handler-return-state')) if revision>=2 else STAGES
  issues=[];
- if revision not in (1,2):issues.append('unsupported-protocol-revision')
- if revision==2 and (profile not in ('performance','qualification-low-load-v1') or report.get('profile')!=profile):issues.append('profile-mismatch')
+ if revision not in (1,2,3):issues.append('unsupported-protocol-revision')
+ if revision>=2 and (profile not in ('performance','qualification-low-load-v1') or report.get('profile')!=profile):issues.append('profile-mismatch')
  if qualification and revision!=2:issues.append('qualification-requires-revision-2')
  slots=plan.get('slots',[]);keys=[s.get('sequence') for s in slots]
  if not slots or any(not isinstance(k,int) or isinstance(k,bool) or k<0 for k in keys) or len(set(keys))!=len(keys):issues.append('invalid-plan-identities')
@@ -84,7 +84,7 @@ def analyze(report,plan,rows,completion=None):
  if issues and any(i in issues for i in ('invalid-plan-identities','invalid-plan-times','invalid-capture-times','unsupported-plan-protocol','invalid-plan-count','invalid-plan-payload')):
   return {'qualification':'INVALID','issues':sorted(set(issues)),'no_claims':['hardware input latency','presented FPS','GPU duration','causal attribution']}
  grouped={s['sequence']:{} for s in slots}; aux={'geometry-observed','stopped','sending-ended'}
- if revision==2:
+ if revision>=2:
   ended=[r for r in rows if r.get('stage')=='sending-ended']
   if len(ended)!=1:issues.append('sending-ended-missing-or-duplicate')
   if not isinstance(completion,dict):issues.append('missing-completion')
@@ -92,10 +92,12 @@ def analyze(report,plan,rows,completion=None):
    if completion.get('segment')!=report.get('segment') or completion.get('interaction')!=interaction:issues.append('completion-identity-mismatch')
    if completion.get('sendingStopped') is not True:issues.append('sending-not-stopped')
    if completion.get('resetGraphVerified') is not True:issues.append('reset-not-verified')
+   if revision==3 and completion.get('resetUndoVerified') is not True:issues.append('reset-undo-not-verified')
    if completion.get('reason'):issues.append('completion-failed:'+str(completion['reason']))
    if not finite(completion.get('time')) or completion['time']<finished:issues.append('invalid-completion-time')
   for row in rows:
    if row.get('stage')=='posted' and len(ended)==1 and finite(row.get('time')) and finite(ended[0].get('time')) and row['time']>ended[0]['time']:issues.append('post-after-sending-ended')
+   if revision==3 and row.get('stage')=='post-return' and len(ended)==1 and finite(row.get('time')) and finite(ended[0].get('time')) and row['time']>ended[0]['time']+1e-6:issues.append('post-return-after-sending-ended')
  for row in rows:
   seq=row.get('sequence');stage=row.get('stage');time=row.get('time')
   if not finite(time) or not start<=time<=finished+0.001:issues.append('invalid-or-out-of-window-time');continue
@@ -110,6 +112,7 @@ def analyze(report,plan,rows,completion=None):
   grouped[seq].setdefault(stage,[]).append(row)
  delays={k:[] for k in ('planned_to_intent','planned_to_posted','intent_to_posted','posted_to_received','received_to_handler_return')}
  if revision==2:delays.update({k:[] for k in ('intent_to_main_enter','main_enter_to_post_begin','post_begin_to_posted')})
+ if revision==3:delays.update({k:[] for k in ('intent_to_post_begin','post_begin_to_entry','post_entry_to_return')})
  posted=[];received=[];states=[];by_slot={s['sequence']:s for s in slots}
  for seq,stages in grouped.items():
   s=by_slot[seq];planned=epoch+s['seconds']
@@ -120,17 +123,17 @@ def analyze(report,plan,rows,completion=None):
   for stage, values in stages.items():
    for row in values:
     if stage in stages_required[:-1] and (not finite(row.get('planned')) or abs(row['planned']-planned)>1e-6):issues.append('planned-identity-mismatch')
-  for key,a,b in [('planned_to_intent','planned','intent'),('planned_to_posted','planned','posted'),('intent_to_posted','intent','posted'),('posted_to_received','posted','received'),('received_to_handler_return','received','handler-return-state')]+([('intent_to_main_enter','intent','main-enter'),('main_enter_to_post_begin','main-enter','post-begin'),('post_begin_to_posted','post-begin','posted')] if revision==2 else []):
+  for key,a,b in [('planned_to_intent','planned','intent'),('planned_to_posted','planned','posted'),('intent_to_posted','intent','posted'),('posted_to_received','posted','received'),('received_to_handler_return','received','handler-return-state')]+([('intent_to_main_enter','intent','main-enter'),('main_enter_to_post_begin','main-enter','post-begin'),('post_begin_to_posted','post-begin','posted')] if revision==2 else ([('intent_to_post_begin','intent','post-begin'),('post_begin_to_entry','post-begin','posted'),('post_entry_to_return','posted','post-return')] if revision==3 else [])):
    if finite(stamp[a]) and finite(stamp[b]):
     delta=stamp[b]-stamp[a];delays[key].append(delta)
-    if delta < -1e-6:issues.append('non-monotonic-stage')
-  if revision==2:
+    if delta < -(5e-6 if revision==3 and a=='planned' else 1e-6):issues.append('non-monotonic-stage')
+  if revision>=2:
    origin=report.get('inputWindowStart',{})
    for stage in ('posted','received'):
     for row in stages.get(stage,[]):
      for axis,delta in (('x',s['dx']),('y',s['dy'])):
       if not finite(origin.get(axis)) or not finite(row.get(axis)) or abs(row[axis]-(origin[axis]+delta))>=1:issues.append('coordinate-mismatch:'+stage)
-  if revision==2 and len(stages.get('posted',[]))==len(stages.get('received',[]))==1:
+  if revision>=2 and len(stages.get('posted',[]))==len(stages.get('received',[]))==1:
    a,b=stages['posted'][0],stages['received'][0]
    if not all(finite(x.get(axis)) for x in (a,b) for axis in ('x','y')) or math.hypot(a['x']-b['x'],a['y']-b['y'])>=1:issues.append('posted-received-coordinate-mismatch')
   if t('posted') is not None:posted.append(seq)
@@ -140,10 +143,14 @@ def analyze(report,plan,rows,completion=None):
  for stage in stages_required:
   ordered=[grouped[slot['sequence']].get(stage,[{}])[0].get('time') for slot in slots]
   if any(finite(a) and finite(b) and b<=a for a,b in zip(ordered,ordered[1:])):issues.append('cross-sequence-order:'+stage)
- if revision==2:
+ if revision>=2:
   posted_times=[grouped[s['sequence']].get('posted',[{}])[0].get('time') for s in slots]
   minimum=.125 if qualification else (.025 if interaction=='ZOOM' else 1/120)
   if any(finite(a) and finite(b) and b-a<minimum-1e-6 for a,b in zip(posted_times,posted_times[1:])):issues.append('posting-minimum-spacing-violated')
+ if revision==3:
+  for a,b in zip(slots,slots[1:]):
+   end=grouped[a['sequence']].get('post-return',[{}])[0].get('time');begin=grouped[b['sequence']].get('post-begin',[{}])[0].get('time')
+   if finite(end) and finite(begin) and end>begin+1e-6:issues.append('overlapping-background-posts')
  for a,b in zip(slots,slots[1:]):
   end=grouped[a['sequence']].get('handler-return-state',[{}])[0].get('time');begin=grouped[b['sequence']].get('received',[{}])[0].get('time')
   if finite(end) and finite(begin) and end>begin:issues.append('overlapping-handler-intervals')
@@ -161,10 +168,17 @@ def analyze(report,plan,rows,completion=None):
  # Recompute motion independently; caller's effectiveMotion is not evidence by itself.
  interaction=plan['interaction'];motion=False;trajectory=True;cumulative=0
  state_map={s['sequence']:s for s in states}
+ dragging=False
  for slot in slots:
   s=state_map.get(slot['sequence'])
   if interaction=='ZOOM':cumulative+=slot.get('wheel',0)
   if not s:trajectory=False;continue
+  if slot['kind']=='drag' and math.hypot(slot['dx'],slot['dy'])>=5:dragging=True
+  if revision==3 and interaction in ('NODE','PAN'):
+   dx,dy=(slot['dx'],slot['dy']) if dragging else (0,0)
+   expected=(dx,-dy) if interaction=='NODE' and slot['kind']!='up' else ((0,0) if interaction=='NODE' else (before['clipX']-dx,before['clipY']+dy))
+   actual=(s.get('nodeX'),s.get('nodeY')) if interaction=='NODE' else (s.get('x'),s.get('y'))
+   if not all(finite(v) for v in actual) or any(abs(a-b)>1e-6 for a,b in zip(actual,expected)):trajectory=False
   if interaction=='NODE':
    nx,ny=s.get('nodeX'),s.get('nodeY');motion |= finite(nx) and finite(ny) and math.hypot(nx,ny)>5
    expected=(0,0) if slot['kind'] in ('down','up') else (slot['dx'], -slot['dy'])
@@ -180,7 +194,7 @@ def analyze(report,plan,rows,completion=None):
    z=s.get('zoom');speed=before.get('canvasContext',{}).get('wheelSpeed')
    if not finite(z) or not finite(speed):trajectory=False;continue
    motion |= abs(z-1)>.01
-   if z<=.05 or z>=4 or abs(z-(1.1**(cumulative*speed)))>.02:trajectory=False
+   if z<=.05 or z>=4 or abs(z-(1.1**(cumulative*speed)))>(1e-9 if revision==3 else .02):trajectory=False
  if not motion:issues.append('no-effective-motion')
  elif report.get('effectiveMotion') is not True:issues.append('reported-motion-flag-conflict')
  if not trajectory:issues.append('trajectory-not-verified')
@@ -193,15 +207,18 @@ def analyze(report,plan,rows,completion=None):
     if not finite(after.get('clip'+axis)) or not finite(last.get(axis.lower())) or abs(after['clip'+axis]-last[axis.lower()])>.5:issues.append('final-viewport-mismatch')
  if interaction in ('NODE','PAN'):
   if any(not finite(v) or abs(v-before['zoom'])>.001 for v in [after.get('zoom')]+[s.get('zoom') for s in states]):issues.append('unexpected-zoom-during-nonzoom')
+ if revision==3 and interaction in ('PAN','ZOOM'):
+  for key in ('canUndo','canRedo'):
+   if type(before.get(key)) is not bool or type(after.get(key)) is not bool or before[key]!=after[key]:issues.append('navigation-undo-boundary:'+key)
  if interaction=='NODE':
   if not valid_uuid(before.get('targetNode')) or before.get('targetNode')!=after.get('targetNode'):issues.append('node-target-mismatch')
   if slots[-1]['sequence'] in state_map and not(before.get('canUndo') is False and before.get('canRedo') is True and after.get('canUndo') is True and after.get('canRedo') is False):issues.append('node-undo-boundary')
  observed_node_norms=[math.hypot(v['nodeX'],v['nodeY']) for v in states if finite(v.get('nodeX')) and finite(v.get('nodeY'))]
- return {'partial_state_observations':{'handler_states':len(states),'node_max_offset_norm':max(observed_node_norms,default=0),'node_any_nonzero_offset':any(v>1e-6 for v in observed_node_norms),'full_trajectory_verified':trajectory,'terminal_state_observed':slots[-1]['sequence'] in state_map,'reported_motion':report.get('effectiveMotion'),'motion_flag_disagrees':motion != report.get('effectiveMotion')},'interaction':interaction,'qualification':'INVALID' if issues else ('B_LOW_LOAD_ACTION_QUALIFIED' if qualification else 'B_LOCAL_STAGE_EVIDENCE'),
+ return {'planned_early_intents':{'count':sum(v<0 for v in delays['planned_to_intent']),'earliest_us':min(delays['planned_to_intent'],default=0)*1e6},'partial_state_observations':{'handler_states':len(states),'node_max_offset_norm':max(observed_node_norms,default=0),'node_any_nonzero_offset':any(v>1e-6 for v in observed_node_norms),'full_trajectory_verified':trajectory,'terminal_state_observed':slots[-1]['sequence'] in state_map,'reported_motion':report.get('effectiveMotion'),'motion_flag_disagrees':motion != report.get('effectiveMotion')},'interaction':interaction,'qualification':'INVALID' if issues else ('B_LOW_LOAD_ACTION_QUALIFIED' if qualification else 'B_LOCAL_STAGE_EVIDENCE'),
   'issues':sorted(set(issues)),'planned':len(slots),'posted':len(posted),'received':len(received),'unreceived':missing,'not_posted':unsent,
   'delays':{k:distribution(v) for k,v in delays.items()},'motion_recomputed':motion,'trajectory_verified':trajectory,
   'no_claims':['hardware input latency','presented FPS','GPU duration','causal attribution'],
-  'pilot':report.get('pilot'),'profile':profile,'protocolRevision':revision,'partial_delays_retained':bool(issues),'phase_meanings':'v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction','geometry_join':'unjoined callbacks; no layout-completion latency inferred','zoom_anchor':'not independently qualified by handler-return samples'}
+  'pilot':report.get('pilot'),'profile':profile,'protocolRevision':revision,'partial_delays_retained':bool(issues),'phase_meanings':'v3 posted is background postEvent entry; post-return may follow main receive; up to 5us planned-clock quantization retained. v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction','geometry_join':'unjoined callbacks; no layout-completion latency inferred','zoom_anchor':'not independently qualified by handler-return samples'}
 def main():
  p=argparse.ArgumentParser();p.add_argument('prefix',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();base=str(a.prefix)
  completion=Path(base+'-completion.json')

@@ -52,3 +52,24 @@ v2要求逐槽完整/唯一/顺序、实际最小post间距、计划/投递/出�
 截断段仍为INVALID完整计划，但保留已观察阶段的分布与`partial_state_observations`。运动采用生产一致的向量长度；原reported_motion另存，冲突不改写raw。缺失末槽表示terminal-state-unobserved，不生成虚假的最终视口/倍率不匹配或Undo错误。只在存在末槽时执行原终态比较；完整资格绝不因此放宽。纯合成测试59方法/66展开情景通过，含新增17/23；旧全线程/显示分析测试未无理由重跑。
 
 `qualification-03-timeline.csv`为去敏相对时序：相对每段预定epoch，保留停止、未投递及阶段间隔，不含实际PID、项目身份、路径或内容。绝对单调时钟/完整身份与原始事件留本地。CSV没有FPS、GPU或输入到显示换算。
+
+
+## 2026-10-20 engineering-04：v3局部阶段复算
+
+本轮只扩充现有离线资格器，不重算G1旧线程/调度表。使用Python标准库，不启动App、不访问网络。受控本地可复算：
+
+```sh
+python3 -B method/replay_analysis.py PRIVATE_ROOT/replay-17-ZOOM --output LOCAL_AUDIT.json
+python3 -B method/export_engineering.py PRIVATE_ROOT OUTPUT_DIRECTORY
+python3 -B -m unittest discover -s method -p test_replay_analysis.py
+```
+
+PRIVATE_ROOT是诊断专属scene目录，OUTPUT_DIRECTORY可用临时目录与已交付CSV比较。导出只允许capture编号、slot、stage、相对epoch时间、资格及统计；不含PID、墙钟、路径、项目/模型身份或用户正文。精确包/patch关联来自私有sealed launch回执，不能仅以raw source基线字段识别组合实验。
+
+v3六阶段为intent/post-begin/posted/post-return/received/handler-return-state；posted为后台进入公开postEvent调用，post-return可能晚于主线程接收，不能强加不成立的总序。每slot唯一性、全计划/窗口/构造及出队坐标、事件率/间距、5点生产拖动阈值、1e-6点NODE/PAN轨迹和1e-9倍率、终态/Undo/reset、停止之后无post与post返回屏障均核验。共用时钟的≤5µs量化误差保留计数/原值；不是容许毫秒迟到。旧v1/v2规则保留，未用新协议改写历史失败。
+
+全部公开分位统一nearest-rank：排序后下标ceil(p*N)-1；P50也用该定义，不取双中央平均。旧本地quick脚本floor(.95*N)仅临时观察，不作交付数字。以ZOOM17为例，公开P95=81.238875ms，旧quick值82.155875不混排。入口到接收不等于纯AppKit排队；handler返回状态不等于布局或呈现。
+
+每capture的时间线含前置、有效动作、末事件、sending-ended及停止；capture总长和首末posted差分别报告。截断样本保留partial分布但qualification=INVALID，不能只筛正常事件变成合格完整段。几何通知缺事件归属，不计算布局延迟。10/11采样器造成发送器污染，不能用前缀推全程产品性能。导出脚本不输出FPS。
+
+本轮离线73方法/89情景，新增14方法/23情景；失败对象、错误坐标/轨迹/Undo/复位/停止/协议等反例并列。这个计数不含产品组件33/53、C级桥接/租约程序或历史旧测试。统计口径由非作者独立核对。

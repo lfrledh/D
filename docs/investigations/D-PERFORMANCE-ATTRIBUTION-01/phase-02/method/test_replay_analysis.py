@@ -187,4 +187,79 @@ class ReplayQualificationV2Tests(unittest.TestCase):
   r['after'].update(canUndo=False,canRedo=True)
   a=analyze(r,p,rows,c);self.assertEqual(a['qualification'],'INVALID');self.assertIn('terminal-state-unobserved',a['issues']);self.assertNotIn('final-zoom-mismatch',a['issues']);self.assertNotIn('final-viewport-mismatch',a['issues']);self.assertNotIn('node-undo-boundary',a['issues'])
 
+
+
+class ContinuousV3Tests(unittest.TestCase):
+ def fixture(self,action='PAN'):
+  r,p,rows=ReplayAuditTests().fixture(action)
+  r.update(protocolRevision=3,profile='performance',segment=6,inputWindowStart={'x':210,'y':170})
+  p['profile']='performance';out=[];dragging=False
+  for slot in p['slots']:
+   if slot['kind']=='drag' and __import__('math').hypot(slot['dx'],slot['dy'])>=5:dragging=True
+   group=[x for x in rows if x['sequence']==slot['sequence']]
+   for x in group:
+    if x['stage'] in ('posted','received'):x.update(x=210+slot['dx'],y=170+slot['dy'])
+    if not dragging and x['stage']=='handler-return-state' and action!='ZOOM':x.update(x=100,y=100,nodeX=0,nodeY=0)
+   posted=next(x for x in group if x['stage']=='posted')
+   out += group+[dict(posted,stage='post-begin'),dict(posted,stage='post-return',time=posted['time']+.0001)]
+  out.append({'sequence':-1,'stage':'sending-ended','time':15.9})
+  c={'segment':6,'interaction':action,'sendingStopped':True,'resetGraphVerified':True,'resetUndoVerified':True,'reason':None,'time':16.1}
+  return r,p,out,c
+ def test_three_complete_trajectories(self):
+  for a in ('NODE','PAN','ZOOM'):
+   with self.subTest(action=a):self.assertEqual(analyze(*self.fixture(a))['qualification'],'B_LOCAL_STAGE_EVIDENCE')
+ def test_post_return_not_required_before_receiver(self):
+  r,p,rows,c=self.fixture();next(x for x in rows if x['stage']=='post-return')['time']=10.0025
+  self.assertEqual(analyze(r,p,rows,c)['issues'],[])
+ def test_bridge_return_must_follow_entry(self):
+  r,p,rows,c=self.fixture();next(x for x in rows if x['stage']=='post-return')['time']=10
+  self.assertIn('non-monotonic-stage',analyze(r,p,rows,c)['issues'])
+ def test_each_bridge_stage_required(self):
+  for stage in ('post-begin','post-return'):
+   with self.subTest(stage=stage):
+    r,p,rows,c=self.fixture();self.assertIn('missing-or-duplicate:'+stage,analyze(r,p,[x for x in rows if x['stage']!=stage],c)['issues'])
+ def test_five_microsecond_clock_boundary_retains_negative_distribution(self):
+  r,p,rows,c=self.fixture();next(x for x in rows if x['stage']=='intent')['time']=9.9999975
+  a=analyze(r,p,rows,c);self.assertEqual(a['issues'],[])
+  self.assertEqual(a['planned_early_intents']['count'],1)
+  self.assertAlmostEqual(a['planned_early_intents']['earliest_us'],-2.5,places=6)
+ def test_early_real_send_is_invalid(self):
+  r,p,rows,c=self.fixture();next(x for x in rows if x['stage']=='intent')['time']=9.99999
+  self.assertIn('non-monotonic-stage',analyze(r,p,rows,c)['issues'])
+ def test_small_wrong_motion_not_hidden_by_old_five_point_tolerance(self):
+  for action in ('NODE','PAN','ZOOM'):
+   with self.subTest(action=action):
+    r,p,rows,c=self.fixture(action);state=next(x for x in rows if x['stage']=='handler-return-state' and x['sequence']==20)
+    state['zoom' if action=='ZOOM' else 'nodeX' if action=='NODE' else 'x']+=.01
+    self.assertIn('trajectory-not-verified',analyze(r,p,rows,c)['issues'])
+ def test_duplicate_bridge_return_rejected(self):
+  r,p,rows,c=self.fixture();rows.append(next(x for x in rows if x['stage']=='post-return'))
+  self.assertIn('missing-or-duplicate:post-return',analyze(r,p,rows,c)['issues'])
+ def test_sender_contamination_retains_partial_statistics(self):
+  r,p,rows,c=self.fixture();r['reason']=c['reason']='sender-timer-coalesced'
+  a=analyze(r,p,rows,c);self.assertEqual(a['qualification'],'INVALID');self.assertGreater(a['delays']['posted_to_received']['n'],0)
+
+ def test_undo_reset_missing_or_failed_rejected(self):
+  for value in (None,False):
+   with self.subTest(reset=value):
+    r,p,rows,c=self.fixture();c['resetUndoVerified']=value
+    self.assertIn('reset-undo-not-verified',analyze(r,p,rows,c)['issues'])
+ def test_post_begin_cannot_follow_entry(self):
+  r,p,rows,c=self.fixture();next(x for x in rows if x['stage']=='post-begin')['time']=10.0015
+  self.assertIn('non-monotonic-stage',analyze(r,p,rows,c)['issues'])
+
+
+ def test_post_return_after_barrier_invalid(self):
+  r,p,rows,c=self.fixture();next(x for x in rows if x['stage']=='post-return')['time']=15.95
+  self.assertIn('post-return-after-sending-ended',analyze(r,p,rows,c)['issues'])
+ def test_background_calls_do_not_overlap(self):
+  r,p,rows,c=self.fixture();next(x for x in rows if x['stage']=='post-return')['time']=10.02
+  self.assertIn('overlapping-background-posts',analyze(r,p,rows,c)['issues'])
+ def test_navigation_must_not_add_or_remove_undo_redo(self):
+  for action in ('PAN','ZOOM'):
+   for key in ('canUndo','canRedo'):
+    with self.subTest(action=action,key=key):
+     r,p,rows,c=self.fixture(action);r['after'][key]=not r['before'][key]
+     self.assertIn('navigation-undo-boundary:'+key,analyze(r,p,rows,c)['issues'])
+
 if __name__=='__main__':unittest.main()

@@ -1,12 +1,12 @@
 {
   "task": "D-PERFORMANCE-ATTRIBUTION-01",
   "phase": 2,
-  "date": "2026-10-19",
+  "date": "2026-10-20",
   "timezone": "Asia/Tokyo",
-  "expected_report_commit": "dc772c8e18658b95790f53e6f09c37fe57a37c63",
+  "expected_report_commit": "fa3253456cdff659845cd38d66535bc270e4900d",
   "known_production_commit": "9eae90e4adc4008c3894f09bcd07c71e23701045",
-  "scope": "investigation_only",
-  "product_repairs_authorized": false,
+  "scope": "bounded_canvas_engineering_closeout",
+  "product_repairs_authorized": true,
   "diagnostic_patches": {
     "local_isolated_only": true,
     "may_instrument": true,
@@ -38,9 +38,10 @@
     "recorded_seconds_max": 360,
     "core_independent_repeats": 3,
     "extra_contrast_groups_max": 4,
-    "failure_retry_max_with_new_reason": 1,
     "additional_bounded_qualification_opportunities_authorized": 1,
-    "additional_bounded_qualification_opportunities_used": 1
+    "additional_bounded_qualification_opportunities_used": 1,
+    "historical_failure_retry_max_with_new_reason": 1,
+    "current_retry_rule": "User superseded per-diagnostic single-retry stop; cumulative 18/360/4 still binds and captures now exhausted"
   },
   "steps": [
     {
@@ -192,11 +193,14 @@
       "depends_on": [
         "G2.1"
       ],
-      "status": "LOW_LOAD_FULL_APP_QUALIFIED",
+      "status": "CONTINUOUS_B_QUALIFIED",
       "evidence": [
-        "build-qualification.json"
+        "REPORT.zh-CN.md",
+        "engineering-04-summary.json",
+        "engineering-04-delivery.json"
       ],
-      "reason": "NODE/PAN/ZOOM exact receive/state/graph/reset records passed; failure-injection matrix and continuous load remain limited"
+      "reason": "Current bounded engineering evidence; see report for qualification and unresolved performance limitations",
+      "historical_status": "LOW_LOAD_FULL_APP_QUALIFIED"
     },
     {
       "id": "G2.3",
@@ -206,11 +210,14 @@
       "depends_on": [
         "G2.2"
       ],
-      "status": "LOW_LOAD_FULL_APP_QUALIFIED",
+      "status": "CONTINUOUS_B_QUALIFIED",
       "evidence": [
-        "REPORT.zh-CN.md"
+        "REPORT.zh-CN.md",
+        "engineering-04-summary.json",
+        "engineering-04-delivery.json"
       ],
-      "reason": "NODE/PAN/ZOOM exact receive/state/graph/reset records passed; failure-injection matrix and continuous load remain limited"
+      "reason": "Current bounded engineering evidence; see report for qualification and unresolved performance limitations",
+      "historical_status": "LOW_LOAD_FULL_APP_QUALIFIED"
     },
     {
       "id": "G3.1",
@@ -220,11 +227,14 @@
       "depends_on": [
         "G2.3"
       ],
-      "status": "STARTED_TRUNCATED",
+      "status": "PARTIAL_REPEATS",
       "evidence": [
-        "REPORT.zh-CN.md"
+        "REPORT.zh-CN.md",
+        "engineering-04-summary.json",
+        "engineering-04-delivery.json"
       ],
-      "reason": "First NODE continuous segment only; 6 receives then main delivery guard; remaining 8 did not start"
+      "reason": "Current bounded engineering evidence; see report for qualification and unresolved performance limitations",
+      "historical_status": "STARTED_TRUNCATED"
     },
     {
       "id": "G3.2",
@@ -234,11 +244,14 @@
       "depends_on": [
         "G3.1"
       ],
-      "status": "PARTIAL",
+      "status": "LOCAL_STAGE_TIMELINES",
       "evidence": [
-        "PRESENTATION.md"
+        "REPORT.zh-CN.md",
+        "engineering-04-summary.json",
+        "engineering-04-delivery.json"
       ],
-      "reason": "29.006 ms intent to main-entry wait observed; after-post queue was below0.398 ms on6 received events; no display/GPU attribution"
+      "reason": "Current bounded engineering evidence; see report for qualification and unresolved performance limitations",
+      "historical_status": "PARTIAL"
     },
     {
       "id": "G4.1",
@@ -248,11 +261,14 @@
       "depends_on": [
         "G3.1"
       ],
-      "status": "PREPARED_NOT_MEASURED",
+      "status": "BUILD_SENSITIVITY_SINGLE_PAIR",
       "evidence": [
-        "build-qualification.json"
+        "REPORT.zh-CN.md",
+        "engineering-04-summary.json",
+        "engineering-04-delivery.json"
       ],
-      "reason": "New same-source Onone15/O08 pair; no sensitivity run after incomplete baseline"
+      "reason": "Current bounded engineering evidence; see report for qualification and unresolved performance limitations",
+      "historical_status": "PREPARED_NOT_MEASURED"
     },
     {
       "id": "G4.2",
@@ -263,13 +279,14 @@
         "G1.5",
         "G3.2"
       ],
-      "status": "DONE",
+      "status": "SAMPLER_CONTAMINATION_RETAINED",
       "evidence": [
         "REPORT.zh-CN.md",
-        "METHOD.md",
-        "hypothesis-coverage.json"
+        "engineering-04-summary.json",
+        "engineering-04-delivery.json"
       ],
-      "reason": "Offline evidence and source review completed; causal and native limits retained"
+      "reason": "Current bounded engineering evidence; see report for qualification and unresolved performance limitations",
+      "historical_status": "DONE"
     },
     {
       "id": "G5.1",
@@ -280,11 +297,14 @@
         "G4.1",
         "G4.2"
       ],
-      "status": "PARTIAL",
+      "status": "COMBINED_EXPERIMENT_LIMITED",
       "evidence": [
-        "experiments.csv"
+        "REPORT.zh-CN.md",
+        "engineering-04-summary.json",
+        "engineering-04-delivery.json"
       ],
-      "reason": "Conditional PAN/ZOOM candidates unchanged; no qualified delay to admit intervention"
+      "reason": "Current bounded engineering evidence; see report for qualification and unresolved performance limitations",
+      "historical_status": "PARTIAL"
     },
     {
       "id": "G5.2",
@@ -294,11 +314,14 @@
       "depends_on": [
         "G5.1"
       ],
-      "status": "NOT_RUN",
+      "status": "BINDING_WITHDRAWN_TRACKING_COMPONENT_ONLY",
       "evidence": [
-        "experiments.csv"
+        "REPORT.zh-CN.md",
+        "engineering-04-summary.json",
+        "engineering-04-delivery.json"
       ],
-      "reason": "No qualified G2/G3 baseline; zero intervention pairs or restoration claims"
+      "reason": "Current bounded engineering evidence; see report for qualification and unresolved performance limitations",
+      "historical_status": "NOT_RUN"
     },
     {
       "id": "G6.1",
@@ -308,27 +331,31 @@
       "depends_on": [
         "G4.2"
       ],
-      "status": "UPDATED",
+      "status": "NONAUTHOR_RAW_AND_SCOPE_REVIEWED",
       "evidence": [
         "REPORT.zh-CN.md",
-        "METHOD.md",
-        "hypothesis-coverage.json"
+        "engineering-04-summary.json",
+        "engineering-04-delivery.json"
       ],
-      "reason": "Non-author source/launcher review, raw qualification before explanation, continuous-prefix review, sanitized delivery"
+      "reason": "Current bounded engineering evidence; see report for qualification and unresolved performance limitations",
+      "historical_status": "UPDATED"
     },
     {
       "id": "G6.2",
       "kind": "DELIVERY",
       "title": "证据报告和去敏同步",
-      "output": "保持原会话；停止不修补",
+      "output": "有限候选及去敏证据；停独立复审/用户决定",
       "depends_on": [
         "G6.1"
       ],
-      "status": "UPDATED",
+      "status": "FINITE_CANDIDATE_GOAL_OPEN",
       "evidence": [
-        "REPORT.zh-CN.md"
+        "REPORT.zh-CN.md",
+        "engineering-04-summary.json",
+        "engineering-04-delivery.json"
       ],
-      "reason": "Non-author source/launcher review, raw qualification before explanation, continuous-prefix review, sanitized delivery"
+      "reason": "Current bounded engineering evidence; see report for qualification and unresolved performance limitations",
+      "historical_status": "UPDATED"
     }
   ],
   "experiment_ids": [
@@ -343,7 +370,10 @@
     "E09",
     "E10",
     "E11",
-    "E12"
+    "E12",
+    "E13",
+    "E14",
+    "E15"
   ],
   "hypothesis_ids": [
     "H01",
@@ -367,24 +397,24 @@
     "Keep failures and counterevidence",
     "No user data reset",
     "No security bypass",
-    "Not a repair task"
+    "Bounded production repair authorized; no merge/deploy/ordinary App replacement"
   ],
-  "note": "G1 reused; one newly authorized qualification opportunity passed low-load NODE/PAN/ZOOM; first continuous NODE truncated; other 8 core segments not started",
+  "note": "Final tracking-only component candidate; visible performance goal OPEN; no final-candidate native performance capture; original budget exhausted",
   "started_utc": "2026-10-18T13:35:38.182576+00:00",
-  "new_capture_count": 6,
-  "new_capture_seconds": 39.79203341666289,
+  "new_capture_count": 18,
+  "new_capture_seconds": 184.032903458,
   "diagnostic_product_changes": {
     "local_only": true,
-    "files": 9,
+    "files": 14,
     "patch_pushed": false,
-    "formal_repairs": false
+    "formal_repairs": "Only final tracking reuse plus test; diagnostic facility and Binding experiment remain local"
   },
   "deviations": [
-    "Earlier two failed native attempts retained; cumulative budget not reset.",
-    "User authorized one corrected native qualification opportunity; D-internal start avoids foreground/chat conflict.",
-    "Low-load B actions passed; continuous NODE stopped at bounded single-main-slot guard. No automatic retry/rate reduction.",
-    "No complete rotated performance repeat, no build/tool comparison and no causal intervention.",
-    "Original observed preflight/main timing boundary retained; no product cause inferred."
+    "Three same-condition independent repeats not completed; different builds never pooled as repeats.",
+    "CPU sampling contaminated two suffixes; full records invalid, prefixes and cancellation/reset retained.",
+    "Combined Binding and tracking experiment was not single-factor. Binding withdrawn, final tracking-only not natively measured.",
+    "Raw source field remains base; exact launch receipt and complete local patch identify modified experiments.",
+    "Synthetic disk revisions changed on normal termination; semantic graph unchanged, not byte-identical."
   ],
   "selection_policy": {
     "representative_seed": 20261018,
@@ -392,7 +422,7 @@
     "hypothesis_order": "global self/inclusive and scheduler before keyword categories",
     "new_capture_admission": "G1 complete + safe visible target and isolated root + input-receipt qualification; otherwise continue offline"
   },
-  "diagnostic_build": "Onone15 and O08 same local source/defines/resources/signing packaging; only Onone used; no performance sensitivity inference",
+  "diagnostic_build": "Onone18/O09 same source measured; combined Onone19 measured; final normal tracking-only candidate separate",
   "history": [
     {
       "date": "2026-10-18",
@@ -420,6 +450,21 @@
         "Observer opened unadmitted diagnostic side instances; refused and normally terminated; excluded from target evidence."
       ],
       "diagnostic_build": "local patched diagnostic pair, not a product candidate; final native qualification unverified"
+    },
+    {
+      "date": "2026-10-19",
+      "scope": "investigation_only",
+      "product_repairs_authorized": false,
+      "new_capture_count": 6,
+      "new_capture_seconds": 39.79203341666289,
+      "diagnostic_build": "Onone15 and O08 same local source/defines/resources/signing packaging; only Onone used; no performance sensitivity inference",
+      "deviations": [
+        "Earlier two failed native attempts retained; cumulative budget not reset.",
+        "User authorized one corrected native qualification opportunity; D-internal start avoids foreground/chat conflict.",
+        "Low-load B actions passed; continuous NODE stopped at bounded single-main-slot guard. No automatic retry/rate reduction.",
+        "No complete rotated performance repeat, no build/tool comparison and no causal intervention.",
+        "Original observed preflight/main timing boundary retained; no product cause inferred."
+      ]
     }
   ],
   "capture_accounting": [
@@ -484,6 +529,140 @@
       "planned_action_seconds": 8,
       "posted": 6,
       "received": 6
+    },
+    {
+      "capture": 6,
+      "interaction": "NODE",
+      "condition": "baseline-Onone",
+      "status": "B_LOCAL_STAGE_EVIDENCE",
+      "measured_capture_seconds": 12.016538374999072,
+      "charged_seconds": 12.016538374999072,
+      "planned_action_seconds": 8,
+      "posted": 482,
+      "received": 482
+    },
+    {
+      "capture": 7,
+      "interaction": "PAN",
+      "condition": "baseline-Onone",
+      "status": "B_LOCAL_STAGE_EVIDENCE",
+      "measured_capture_seconds": 12.009217291662935,
+      "charged_seconds": 12.009217291662935,
+      "planned_action_seconds": 8,
+      "posted": 482,
+      "received": 482
+    },
+    {
+      "capture": 8,
+      "interaction": "ZOOM",
+      "condition": "baseline-Onone",
+      "status": "B_LOCAL_STAGE_EVIDENCE",
+      "measured_capture_seconds": 12.014782083337195,
+      "charged_seconds": 12.014782083337195,
+      "planned_action_seconds": 8,
+      "posted": 160,
+      "received": 160
+    },
+    {
+      "capture": 9,
+      "interaction": "PAN",
+      "condition": "baseline-Onone",
+      "status": "B_LOCAL_STAGE_EVIDENCE",
+      "measured_capture_seconds": 12.008710416674148,
+      "charged_seconds": 12.008710416674148,
+      "planned_action_seconds": 8,
+      "posted": 482,
+      "received": 482
+    },
+    {
+      "capture": 10,
+      "interaction": "ZOOM",
+      "condition": "sampler-contaminated-Onone",
+      "status": "INVALID",
+      "measured_capture_seconds": 12.012264208329725,
+      "charged_seconds": 12.012264208329725,
+      "planned_action_seconds": 8,
+      "posted": 15,
+      "received": 15
+    },
+    {
+      "capture": 11,
+      "interaction": "PAN",
+      "condition": "sampler-contaminated-Onone",
+      "status": "INVALID",
+      "measured_capture_seconds": 12.015619166661054,
+      "charged_seconds": 12.015619166661054,
+      "planned_action_seconds": 8,
+      "posted": 302,
+      "received": 302
+    },
+    {
+      "capture": 12,
+      "interaction": "NODE",
+      "condition": "baseline-O",
+      "status": "B_LOCAL_STAGE_EVIDENCE",
+      "measured_capture_seconds": 12.052704250003444,
+      "charged_seconds": 12.052704250003444,
+      "planned_action_seconds": 8,
+      "posted": 482,
+      "received": 482
+    },
+    {
+      "capture": 13,
+      "interaction": "PAN",
+      "condition": "baseline-O",
+      "status": "B_LOCAL_STAGE_EVIDENCE",
+      "measured_capture_seconds": 12.01258866666467,
+      "charged_seconds": 12.01258866666467,
+      "planned_action_seconds": 8,
+      "posted": 482,
+      "received": 482
+    },
+    {
+      "capture": 14,
+      "interaction": "ZOOM",
+      "condition": "baseline-O",
+      "status": "B_LOCAL_STAGE_EVIDENCE",
+      "measured_capture_seconds": 12.007443541660905,
+      "charged_seconds": 12.007443541660905,
+      "planned_action_seconds": 8,
+      "posted": 160,
+      "received": 160
+    },
+    {
+      "capture": 15,
+      "interaction": "NODE",
+      "condition": "combined-experiment-Onone",
+      "status": "B_LOCAL_STAGE_EVIDENCE",
+      "measured_capture_seconds": 12.033875666660606,
+      "charged_seconds": 12.033875666660606,
+      "planned_action_seconds": 8,
+      "posted": 482,
+      "received": 482
+    },
+    {
+      "capture": 16,
+      "interaction": "PAN",
+      "condition": "combined-experiment-Onone",
+      "status": "B_LOCAL_STAGE_EVIDENCE",
+      "measured_capture_seconds": 12.050532541659777,
+      "charged_seconds": 12.050532541659777,
+      "planned_action_seconds": 8,
+      "posted": 482,
+      "received": 482
+    },
+    {
+      "capture": 17,
+      "interaction": "ZOOM",
+      "condition": "combined-experiment-Onone",
+      "status": "B_LOCAL_STAGE_EVIDENCE",
+      "measured_capture_seconds": 12.006593833328225,
+      "charged_seconds": 12.006593833328225,
+      "planned_action_seconds": 8,
+      "posted": 160,
+      "received": 160
     }
-  ]
+  ],
+  "final_product_commit": "b217417220213ff2b9ba3ccb61d84a11b3e0fbd6",
+  "extra_contrast_groups_used": 3
 }

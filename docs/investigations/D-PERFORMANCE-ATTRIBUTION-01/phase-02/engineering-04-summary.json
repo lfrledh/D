@@ -1,0 +1,1471 @@
+[
+  {
+    "planned_early_intents": {
+      "count": 0,
+      "earliest_us": 1.6666745068505406
+    },
+    "partial_state_observations": {
+      "handler_states": 482,
+      "node_max_offset_norm": 39.52605310891967,
+      "node_any_nonzero_offset": true,
+      "full_trajectory_verified": true,
+      "terminal_state_observed": true,
+      "reported_motion": true,
+      "motion_flag_disagrees": false
+    },
+    "interaction": "NODE",
+    "qualification": "B_LOCAL_STAGE_EVIDENCE",
+    "issues": [],
+    "planned": 482,
+    "posted": 482,
+    "received": 482,
+    "unreceived": [],
+    "not_posted": [],
+    "delays": {
+      "planned_to_intent": {
+        "n": 482,
+        "p50_ms": 0.034916665754280984,
+        "p95_ms": 0.05629165389109403,
+        "max_ms": 0.09370833868160844
+      },
+      "planned_to_posted": {
+        "n": 482,
+        "p50_ms": 0.038874990423209965,
+        "p95_ms": 0.061541664763353765,
+        "max_ms": 0.09779167885426432
+      },
+      "intent_to_posted": {
+        "n": 482,
+        "p50_ms": 0.003500012098811567,
+        "p95_ms": 0.00650000583846122,
+        "max_ms": 0.023833330487832427
+      },
+      "posted_to_received": {
+        "n": 482,
+        "p50_ms": 0.258625004789792,
+        "p95_ms": 0.4147500003455207,
+        "max_ms": 44.59783333004452
+      },
+      "received_to_handler_return": {
+        "n": 482,
+        "p50_ms": 0.07345833000726998,
+        "p95_ms": 0.10870833648368716,
+        "max_ms": 4.204124998068437
+      },
+      "intent_to_post_begin": {
+        "n": 482,
+        "p50_ms": 0.003500012098811567,
+        "p95_ms": 0.00650000583846122,
+        "max_ms": 0.023833330487832427
+      },
+      "post_begin_to_entry": {
+        "n": 482,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "max_ms": 0.0
+      },
+      "post_entry_to_return": {
+        "n": 482,
+        "p50_ms": 0.02112500078510493,
+        "p95_ms": 0.03274998744018376,
+        "max_ms": 0.17591666255611926
+      }
+    },
+    "motion_recomputed": true,
+    "trajectory_verified": true,
+    "no_claims": [
+      "hardware input latency",
+      "presented FPS",
+      "GPU duration",
+      "causal attribution"
+    ],
+    "pilot": false,
+    "profile": "performance",
+    "protocolRevision": 3,
+    "partial_delays_retained": false,
+    "phase_meanings": "v3 posted is background postEvent entry; post-return may follow main receive; up to 5us planned-clock quantization retained. v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+    "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+    "zoom_anchor": "not independently qualified by handler-return samples",
+    "capture": "replay-06-NODE",
+    "capture_seconds": 12.016538374999072,
+    "input_span_seconds": 8.016620624999632,
+    "condition": "baseline-Onone",
+    "stop_reason": null
+  },
+  {
+    "planned_early_intents": {
+      "count": 3,
+      "earliest_us": -2.5000044843181968
+    },
+    "partial_state_observations": {
+      "handler_states": 482,
+      "node_max_offset_norm": 0.0,
+      "node_any_nonzero_offset": false,
+      "full_trajectory_verified": true,
+      "terminal_state_observed": true,
+      "reported_motion": true,
+      "motion_flag_disagrees": false
+    },
+    "interaction": "PAN",
+    "qualification": "B_LOCAL_STAGE_EVIDENCE",
+    "issues": [],
+    "planned": 482,
+    "posted": 482,
+    "received": 482,
+    "unreceived": [],
+    "not_posted": [],
+    "delays": {
+      "planned_to_intent": {
+        "n": 482,
+        "p50_ms": 0.0239583314396441,
+        "p95_ms": 0.04829166573472321,
+        "max_ms": 0.11925000580959022
+      },
+      "planned_to_posted": {
+        "n": 482,
+        "p50_ms": 0.027458328986540437,
+        "p95_ms": 0.052416668040677905,
+        "max_ms": 0.12387499737087637
+      },
+      "intent_to_posted": {
+        "n": 482,
+        "p50_ms": 0.0027916685212403536,
+        "p95_ms": 0.005333335138857365,
+        "max_ms": 0.014249992091208696
+      },
+      "posted_to_received": {
+        "n": 482,
+        "p50_ms": 7.912833330919966,
+        "p95_ms": 7.9871666530380026,
+        "max_ms": 24.80729167291429
+      },
+      "received_to_handler_return": {
+        "n": 482,
+        "p50_ms": 0.19824999617412686,
+        "p95_ms": 0.2702916681300849,
+        "max_ms": 2.7400833350839093
+      },
+      "intent_to_post_begin": {
+        "n": 482,
+        "p50_ms": 0.0027916685212403536,
+        "p95_ms": 0.005333335138857365,
+        "max_ms": 0.014249992091208696
+      },
+      "post_begin_to_entry": {
+        "n": 482,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "max_ms": 0.0
+      },
+      "post_entry_to_return": {
+        "n": 482,
+        "p50_ms": 0.017083337297663093,
+        "p95_ms": 0.028875001589767635,
+        "max_ms": 0.05279167089611292
+      }
+    },
+    "motion_recomputed": true,
+    "trajectory_verified": true,
+    "no_claims": [
+      "hardware input latency",
+      "presented FPS",
+      "GPU duration",
+      "causal attribution"
+    ],
+    "pilot": false,
+    "profile": "performance",
+    "protocolRevision": 3,
+    "partial_delays_retained": false,
+    "phase_meanings": "v3 posted is background postEvent entry; post-return may follow main receive; up to 5us planned-clock quantization retained. v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+    "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+    "zoom_anchor": "not independently qualified by handler-return samples",
+    "capture": "replay-07-PAN",
+    "capture_seconds": 12.009217291662935,
+    "input_span_seconds": 8.016619708330836,
+    "condition": "baseline-Onone",
+    "stop_reason": null
+  },
+  {
+    "planned_early_intents": {
+      "count": 0,
+      "earliest_us": 18.70833511929959
+    },
+    "partial_state_observations": {
+      "handler_states": 160,
+      "node_max_offset_norm": 0.0,
+      "node_any_nonzero_offset": false,
+      "full_trajectory_verified": true,
+      "terminal_state_observed": true,
+      "reported_motion": true,
+      "motion_flag_disagrees": false
+    },
+    "interaction": "ZOOM",
+    "qualification": "B_LOCAL_STAGE_EVIDENCE",
+    "issues": [],
+    "planned": 160,
+    "posted": 160,
+    "received": 160,
+    "unreceived": [],
+    "not_posted": [],
+    "delays": {
+      "planned_to_intent": {
+        "n": 160,
+        "p50_ms": 0.03408333577681333,
+        "p95_ms": 0.04708333290182054,
+        "max_ms": 0.0862916640471667
+      },
+      "planned_to_posted": {
+        "n": 160,
+        "p50_ms": 0.03650000144261867,
+        "p95_ms": 0.04970833833795041,
+        "max_ms": 0.10004166688304394
+      },
+      "intent_to_posted": {
+        "n": 160,
+        "p50_ms": 0.0024583423510193825,
+        "p95_ms": 0.003249995643272996,
+        "max_ms": 0.01375000283587724
+      },
+      "posted_to_received": {
+        "n": 160,
+        "p50_ms": 40.00091666239314,
+        "p95_ms": 84.8907083272934,
+        "max_ms": 91.66420833207667
+      },
+      "received_to_handler_return": {
+        "n": 160,
+        "p50_ms": 0.5902083357796073,
+        "p95_ms": 0.7256666722241789,
+        "max_ms": 2.93633334513288
+      },
+      "intent_to_post_begin": {
+        "n": 160,
+        "p50_ms": 0.0024583423510193825,
+        "p95_ms": 0.003249995643272996,
+        "max_ms": 0.01375000283587724
+      },
+      "post_begin_to_entry": {
+        "n": 160,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "max_ms": 0.0
+      },
+      "post_entry_to_return": {
+        "n": 160,
+        "p50_ms": 0.013041673810221255,
+        "p95_ms": 0.017541664419695735,
+        "max_ms": 0.06562499038409442
+      }
+    },
+    "motion_recomputed": true,
+    "trajectory_verified": true,
+    "no_claims": [
+      "hardware input latency",
+      "presented FPS",
+      "GPU duration",
+      "causal attribution"
+    ],
+    "pilot": false,
+    "profile": "performance",
+    "protocolRevision": 3,
+    "partial_delays_retained": false,
+    "phase_meanings": "v3 posted is background postEvent entry; post-return may follow main receive; up to 5us planned-clock quantization retained. v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+    "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+    "zoom_anchor": "not independently qualified by handler-return samples",
+    "capture": "replay-08-ZOOM",
+    "capture_seconds": 12.014782083337195,
+    "input_span_seconds": 7.949947000000975,
+    "condition": "baseline-Onone",
+    "stop_reason": null
+  },
+  {
+    "planned_early_intents": {
+      "count": 2,
+      "earliest_us": -2.041662810370326
+    },
+    "partial_state_observations": {
+      "handler_states": 482,
+      "node_max_offset_norm": 0.0,
+      "node_any_nonzero_offset": false,
+      "full_trajectory_verified": true,
+      "terminal_state_observed": true,
+      "reported_motion": true,
+      "motion_flag_disagrees": false
+    },
+    "interaction": "PAN",
+    "qualification": "B_LOCAL_STAGE_EVIDENCE",
+    "issues": [],
+    "planned": 482,
+    "posted": 482,
+    "received": 482,
+    "unreceived": [],
+    "not_posted": [],
+    "delays": {
+      "planned_to_intent": {
+        "n": 482,
+        "p50_ms": 0.05579166463576257,
+        "p95_ms": 0.0884583278093487,
+        "max_ms": 0.11800001084338874
+      },
+      "planned_to_posted": {
+        "n": 482,
+        "p50_ms": 0.061874990933574736,
+        "p95_ms": 0.09608332766219974,
+        "max_ms": 0.12479166616685688
+      },
+      "intent_to_posted": {
+        "n": 482,
+        "p50_ms": 0.0050000089686363935,
+        "p95_ms": 0.0077500008046627045,
+        "max_ms": 0.0221250083995983
+      },
+      "posted_to_received": {
+        "n": 482,
+        "p50_ms": 7.0543750043725595,
+        "p95_ms": 7.15079165820498,
+        "max_ms": 24.077291673165746
+      },
+      "received_to_handler_return": {
+        "n": 482,
+        "p50_ms": 0.1990416640182957,
+        "p95_ms": 0.2844166592694819,
+        "max_ms": 4.929000002448447
+      },
+      "intent_to_post_begin": {
+        "n": 482,
+        "p50_ms": 0.0050000089686363935,
+        "p95_ms": 0.0077500008046627045,
+        "max_ms": 0.0221250083995983
+      },
+      "post_begin_to_entry": {
+        "n": 482,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "max_ms": 0.0
+      },
+      "post_entry_to_return": {
+        "n": 482,
+        "p50_ms": 0.028791662771254778,
+        "p95_ms": 0.04312499368097633,
+        "max_ms": 0.06370832852553576
+      }
+    },
+    "motion_recomputed": true,
+    "trajectory_verified": true,
+    "no_claims": [
+      "hardware input latency",
+      "presented FPS",
+      "GPU duration",
+      "causal attribution"
+    ],
+    "pilot": false,
+    "profile": "performance",
+    "protocolRevision": 3,
+    "partial_delays_retained": false,
+    "phase_meanings": "v3 posted is background postEvent entry; post-return may follow main receive; up to 5us planned-clock quantization retained. v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+    "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+    "zoom_anchor": "not independently qualified by handler-return samples",
+    "capture": "replay-09-PAN",
+    "capture_seconds": 12.008710416674148,
+    "input_span_seconds": 8.016611375001958,
+    "condition": "baseline-Onone",
+    "stop_reason": null
+  },
+  {
+    "planned_early_intents": {
+      "count": 0,
+      "earliest_us": 22.208347218111157
+    },
+    "partial_state_observations": {
+      "handler_states": 15,
+      "node_max_offset_norm": 0.0,
+      "node_any_nonzero_offset": false,
+      "full_trajectory_verified": false,
+      "terminal_state_observed": false,
+      "reported_motion": true,
+      "motion_flag_disagrees": false
+    },
+    "interaction": "ZOOM",
+    "qualification": "INVALID",
+    "issues": [
+      "cancelled-or-refused-slot",
+      "completion-failed:sender-timer-coalesced",
+      "missing-or-duplicate:handler-return-state",
+      "missing-or-duplicate:intent",
+      "missing-or-duplicate:post-begin",
+      "missing-or-duplicate:post-return",
+      "missing-or-duplicate:posted",
+      "missing-or-duplicate:received",
+      "segment-stopped:sender-timer-coalesced",
+      "stop-record:sender-timer-coalesced",
+      "terminal-state-unobserved",
+      "trajectory-not-verified"
+    ],
+    "planned": 160,
+    "posted": 15,
+    "received": 15,
+    "unreceived": [],
+    "not_posted": [
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63,
+      64,
+      65,
+      66,
+      67,
+      68,
+      69,
+      70,
+      71,
+      72,
+      73,
+      74,
+      75,
+      76,
+      77,
+      78,
+      79,
+      80,
+      81,
+      82,
+      83,
+      84,
+      85,
+      86,
+      87,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93,
+      94,
+      95,
+      96,
+      97,
+      98,
+      99,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119,
+      120,
+      121,
+      122,
+      123,
+      124,
+      125,
+      126,
+      127,
+      128,
+      129,
+      130,
+      131,
+      132,
+      133,
+      134,
+      135,
+      136,
+      137,
+      138,
+      139,
+      140,
+      141,
+      142,
+      143,
+      144,
+      145,
+      146,
+      147,
+      148,
+      149,
+      150,
+      151,
+      152,
+      153,
+      154,
+      155,
+      156,
+      157,
+      158,
+      159
+    ],
+    "delays": {
+      "planned_to_intent": {
+        "n": 16,
+        "p50_ms": 0.03795833617914468,
+        "p95_ms": 255.62804167566355,
+        "max_ms": 255.62804167566355
+      },
+      "planned_to_posted": {
+        "n": 15,
+        "p50_ms": 0.04029167757835239,
+        "p95_ms": 0.09841666906140745,
+        "max_ms": 0.09841666906140745
+      },
+      "intent_to_posted": {
+        "n": 15,
+        "p50_ms": 0.002458327799104154,
+        "p95_ms": 0.013374999980442226,
+        "max_ms": 0.013374999980442226
+      },
+      "posted_to_received": {
+        "n": 15,
+        "p50_ms": 41.96924999996554,
+        "p95_ms": 91.27674999763258,
+        "max_ms": 91.27674999763258
+      },
+      "received_to_handler_return": {
+        "n": 15,
+        "p50_ms": 0.6180833297548816,
+        "p95_ms": 2.925624998169951,
+        "max_ms": 2.925624998169951
+      },
+      "intent_to_post_begin": {
+        "n": 15,
+        "p50_ms": 0.002458327799104154,
+        "p95_ms": 0.013374999980442226,
+        "max_ms": 0.013374999980442226
+      },
+      "post_begin_to_entry": {
+        "n": 15,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "max_ms": 0.0
+      },
+      "post_entry_to_return": {
+        "n": 15,
+        "p50_ms": 0.012166667147539556,
+        "p95_ms": 0.0686249986756593,
+        "max_ms": 0.0686249986756593
+      }
+    },
+    "motion_recomputed": true,
+    "trajectory_verified": false,
+    "no_claims": [
+      "hardware input latency",
+      "presented FPS",
+      "GPU duration",
+      "causal attribution"
+    ],
+    "pilot": false,
+    "profile": "performance",
+    "protocolRevision": 3,
+    "partial_delays_retained": true,
+    "phase_meanings": "v3 posted is background postEvent entry; post-return may follow main receive; up to 5us planned-clock quantization retained. v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+    "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+    "zoom_anchor": "not independently qualified by handler-return samples",
+    "capture": "replay-10-ZOOM",
+    "capture_seconds": 12.012264208329725,
+    "input_span_seconds": 0.6999257083371049,
+    "condition": "sampler-contaminated-Onone",
+    "stop_reason": "sender-timer-coalesced"
+  },
+  {
+    "planned_early_intents": {
+      "count": 0,
+      "earliest_us": 6.833332008682191
+    },
+    "partial_state_observations": {
+      "handler_states": 302,
+      "node_max_offset_norm": 0.0,
+      "node_any_nonzero_offset": false,
+      "full_trajectory_verified": false,
+      "terminal_state_observed": false,
+      "reported_motion": true,
+      "motion_flag_disagrees": false
+    },
+    "interaction": "PAN",
+    "qualification": "INVALID",
+    "issues": [
+      "cancelled-or-refused-slot",
+      "completion-failed:sender-post-spacing-contaminated",
+      "missing-or-duplicate:handler-return-state",
+      "missing-or-duplicate:intent",
+      "missing-or-duplicate:post-begin",
+      "missing-or-duplicate:post-return",
+      "missing-or-duplicate:posted",
+      "missing-or-duplicate:received",
+      "segment-stopped:sender-post-spacing-contaminated",
+      "stop-record:sender-post-spacing-contaminated",
+      "terminal-state-unobserved",
+      "trajectory-not-verified"
+    ],
+    "planned": 482,
+    "posted": 302,
+    "received": 302,
+    "unreceived": [],
+    "not_posted": [
+      302,
+      303,
+      304,
+      305,
+      306,
+      307,
+      308,
+      309,
+      310,
+      311,
+      312,
+      313,
+      314,
+      315,
+      316,
+      317,
+      318,
+      319,
+      320,
+      321,
+      322,
+      323,
+      324,
+      325,
+      326,
+      327,
+      328,
+      329,
+      330,
+      331,
+      332,
+      333,
+      334,
+      335,
+      336,
+      337,
+      338,
+      339,
+      340,
+      341,
+      342,
+      343,
+      344,
+      345,
+      346,
+      347,
+      348,
+      349,
+      350,
+      351,
+      352,
+      353,
+      354,
+      355,
+      356,
+      357,
+      358,
+      359,
+      360,
+      361,
+      362,
+      363,
+      364,
+      365,
+      366,
+      367,
+      368,
+      369,
+      370,
+      371,
+      372,
+      373,
+      374,
+      375,
+      376,
+      377,
+      378,
+      379,
+      380,
+      381,
+      382,
+      383,
+      384,
+      385,
+      386,
+      387,
+      388,
+      389,
+      390,
+      391,
+      392,
+      393,
+      394,
+      395,
+      396,
+      397,
+      398,
+      399,
+      400,
+      401,
+      402,
+      403,
+      404,
+      405,
+      406,
+      407,
+      408,
+      409,
+      410,
+      411,
+      412,
+      413,
+      414,
+      415,
+      416,
+      417,
+      418,
+      419,
+      420,
+      421,
+      422,
+      423,
+      424,
+      425,
+      426,
+      427,
+      428,
+      429,
+      430,
+      431,
+      432,
+      433,
+      434,
+      435,
+      436,
+      437,
+      438,
+      439,
+      440,
+      441,
+      442,
+      443,
+      444,
+      445,
+      446,
+      447,
+      448,
+      449,
+      450,
+      451,
+      452,
+      453,
+      454,
+      455,
+      456,
+      457,
+      458,
+      459,
+      460,
+      461,
+      462,
+      463,
+      464,
+      465,
+      466,
+      467,
+      468,
+      469,
+      470,
+      471,
+      472,
+      473,
+      474,
+      475,
+      476,
+      477,
+      478,
+      479,
+      480,
+      481
+    ],
+    "delays": {
+      "planned_to_intent": {
+        "n": 303,
+        "p50_ms": 0.024916662368923426,
+        "p95_ms": 0.04033332515973598,
+        "max_ms": 13.499000007868744
+      },
+      "planned_to_posted": {
+        "n": 302,
+        "p50_ms": 0.02708334068302065,
+        "p95_ms": 0.04391666152514517,
+        "max_ms": 13.50250000541564
+      },
+      "intent_to_posted": {
+        "n": 302,
+        "p50_ms": 0.0022916647139936686,
+        "p95_ms": 0.003333334461785853,
+        "max_ms": 0.01583332777954638
+      },
+      "posted_to_received": {
+        "n": 302,
+        "p50_ms": 3.1444999913219362,
+        "p95_ms": 3.320375006296672,
+        "max_ms": 28.20512499602046
+      },
+      "received_to_handler_return": {
+        "n": 302,
+        "p50_ms": 0.2238333399873227,
+        "p95_ms": 0.32750000536907464,
+        "max_ms": 6.378666672389954
+      },
+      "intent_to_post_begin": {
+        "n": 303,
+        "p50_ms": 0.0022916647139936686,
+        "p95_ms": 0.003333334461785853,
+        "max_ms": 0.01583332777954638
+      },
+      "post_begin_to_entry": {
+        "n": 302,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "max_ms": 0.0
+      },
+      "post_entry_to_return": {
+        "n": 302,
+        "p50_ms": 0.013333337847143412,
+        "p95_ms": 0.01999999221879989,
+        "max_ms": 0.6712916656397283
+      }
+    },
+    "motion_recomputed": true,
+    "trajectory_verified": false,
+    "no_claims": [
+      "hardware input latency",
+      "presented FPS",
+      "GPU duration",
+      "causal attribution"
+    ],
+    "pilot": false,
+    "profile": "performance",
+    "protocolRevision": 3,
+    "partial_delays_retained": true,
+    "phase_meanings": "v3 posted is background postEvent entry; post-return may follow main receive; up to 5us planned-clock quantization retained. v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+    "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+    "zoom_anchor": "not independently qualified by handler-return samples",
+    "capture": "replay-11-PAN",
+    "capture_seconds": 12.015619166661054,
+    "input_span_seconds": 5.030086541664787,
+    "condition": "sampler-contaminated-Onone",
+    "stop_reason": "sender-post-spacing-contaminated"
+  },
+  {
+    "planned_early_intents": {
+      "count": 0,
+      "earliest_us": 8.45832983031869
+    },
+    "partial_state_observations": {
+      "handler_states": 482,
+      "node_max_offset_norm": 39.52605310891967,
+      "node_any_nonzero_offset": true,
+      "full_trajectory_verified": true,
+      "terminal_state_observed": true,
+      "reported_motion": true,
+      "motion_flag_disagrees": false
+    },
+    "interaction": "NODE",
+    "qualification": "B_LOCAL_STAGE_EVIDENCE",
+    "issues": [],
+    "planned": 482,
+    "posted": 482,
+    "received": 482,
+    "unreceived": [],
+    "not_posted": [],
+    "delays": {
+      "planned_to_intent": {
+        "n": 482,
+        "p50_ms": 0.045249995309859514,
+        "p95_ms": 0.07320832810364664,
+        "max_ms": 0.13458332978188992
+      },
+      "planned_to_posted": {
+        "n": 482,
+        "p50_ms": 0.04854166763834655,
+        "p95_ms": 0.07987499702721834,
+        "max_ms": 0.14029165322426707
+      },
+      "intent_to_posted": {
+        "n": 482,
+        "p50_ms": 0.0030833325581625104,
+        "p95_ms": 0.0050416565500199795,
+        "max_ms": 0.016791673260740936
+      },
+      "posted_to_received": {
+        "n": 482,
+        "p50_ms": 0.24829167523421347,
+        "p95_ms": 0.3413749946048483,
+        "max_ms": 40.51175000495277
+      },
+      "received_to_handler_return": {
+        "n": 482,
+        "p50_ms": 0.05970834172330797,
+        "p95_ms": 0.08679166785441339,
+        "max_ms": 4.866791656240821
+      },
+      "intent_to_post_begin": {
+        "n": 482,
+        "p50_ms": 0.0030833325581625104,
+        "p95_ms": 0.0050416565500199795,
+        "max_ms": 0.016791673260740936
+      },
+      "post_begin_to_entry": {
+        "n": 482,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "max_ms": 0.0
+      },
+      "post_entry_to_return": {
+        "n": 482,
+        "p50_ms": 0.013166660210117698,
+        "p95_ms": 0.024583336198702455,
+        "max_ms": 0.1367499935440719
+      }
+    },
+    "motion_recomputed": true,
+    "trajectory_verified": true,
+    "no_claims": [
+      "hardware input latency",
+      "presented FPS",
+      "GPU duration",
+      "causal attribution"
+    ],
+    "pilot": false,
+    "profile": "performance",
+    "protocolRevision": 3,
+    "partial_delays_retained": false,
+    "phase_meanings": "v3 posted is background postEvent entry; post-return may follow main receive; up to 5us planned-clock quantization retained. v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+    "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+    "zoom_anchor": "not independently qualified by handler-return samples",
+    "capture": "replay-12-NODE",
+    "capture_seconds": 12.052704250003444,
+    "input_span_seconds": 8.016615000000456,
+    "condition": "baseline-O",
+    "stop_reason": null
+  },
+  {
+    "planned_early_intents": {
+      "count": 0,
+      "earliest_us": 3.0833325581625104
+    },
+    "partial_state_observations": {
+      "handler_states": 482,
+      "node_max_offset_norm": 0.0,
+      "node_any_nonzero_offset": false,
+      "full_trajectory_verified": true,
+      "terminal_state_observed": true,
+      "reported_motion": true,
+      "motion_flag_disagrees": false
+    },
+    "interaction": "PAN",
+    "qualification": "B_LOCAL_STAGE_EVIDENCE",
+    "issues": [],
+    "planned": 482,
+    "posted": 482,
+    "received": 482,
+    "unreceived": [],
+    "not_posted": [],
+    "delays": {
+      "planned_to_intent": {
+        "n": 482,
+        "p50_ms": 0.02366666740272194,
+        "p95_ms": 0.11629167420323938,
+        "max_ms": 0.13787498755846173
+      },
+      "planned_to_posted": {
+        "n": 482,
+        "p50_ms": 0.02575000689830631,
+        "p95_ms": 0.1199583348352462,
+        "max_ms": 0.14124999870546162
+      },
+      "intent_to_posted": {
+        "n": 482,
+        "p50_ms": 0.0021666637621819973,
+        "p95_ms": 0.004208341124467552,
+        "max_ms": 0.009000010322779417
+      },
+      "posted_to_received": {
+        "n": 482,
+        "p50_ms": 4.882833338342607,
+        "p95_ms": 4.986833344446495,
+        "max_ms": 21.71879165689461
+      },
+      "received_to_handler_return": {
+        "n": 482,
+        "p50_ms": 0.2065416774712503,
+        "p95_ms": 0.2664166677277535,
+        "max_ms": 4.41129166574683
+      },
+      "intent_to_post_begin": {
+        "n": 482,
+        "p50_ms": 0.0021666637621819973,
+        "p95_ms": 0.004208341124467552,
+        "max_ms": 0.009000010322779417
+      },
+      "post_begin_to_entry": {
+        "n": 482,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "max_ms": 0.0
+      },
+      "post_entry_to_return": {
+        "n": 482,
+        "p50_ms": 0.007541675586253405,
+        "p95_ms": 0.017291662516072392,
+        "max_ms": 0.03179165651090443
+      }
+    },
+    "motion_recomputed": true,
+    "trajectory_verified": true,
+    "no_claims": [
+      "hardware input latency",
+      "presented FPS",
+      "GPU duration",
+      "causal attribution"
+    ],
+    "pilot": false,
+    "profile": "performance",
+    "protocolRevision": 3,
+    "partial_delays_retained": false,
+    "phase_meanings": "v3 posted is background postEvent entry; post-return may follow main receive; up to 5us planned-clock quantization retained. v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+    "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+    "zoom_anchor": "not independently qualified by handler-return samples",
+    "capture": "replay-13-PAN",
+    "capture_seconds": 12.01258866666467,
+    "input_span_seconds": 8.016617999994196,
+    "condition": "baseline-O",
+    "stop_reason": null
+  },
+  {
+    "planned_early_intents": {
+      "count": 0,
+      "earliest_us": 12.874996173195541
+    },
+    "partial_state_observations": {
+      "handler_states": 160,
+      "node_max_offset_norm": 0.0,
+      "node_any_nonzero_offset": false,
+      "full_trajectory_verified": true,
+      "terminal_state_observed": true,
+      "reported_motion": true,
+      "motion_flag_disagrees": false
+    },
+    "interaction": "ZOOM",
+    "qualification": "B_LOCAL_STAGE_EVIDENCE",
+    "issues": [],
+    "planned": 160,
+    "posted": 160,
+    "received": 160,
+    "unreceived": [],
+    "not_posted": [],
+    "delays": {
+      "planned_to_intent": {
+        "n": 160,
+        "p50_ms": 0.03245833795517683,
+        "p95_ms": 0.04541665839497,
+        "max_ms": 0.0749583268770948
+      },
+      "planned_to_posted": {
+        "n": 160,
+        "p50_ms": 0.03416666004341096,
+        "p95_ms": 0.04787500074598938,
+        "max_ms": 0.07949999417178333
+      },
+      "intent_to_posted": {
+        "n": 160,
+        "p50_ms": 0.001624997821636498,
+        "p95_ms": 0.003125009243376553,
+        "max_ms": 0.009958326700143516
+      },
+      "posted_to_received": {
+        "n": 160,
+        "p50_ms": 32.52541666734032,
+        "p95_ms": 71.49929166189395,
+        "max_ms": 76.73908333526924
+      },
+      "received_to_handler_return": {
+        "n": 160,
+        "p50_ms": 0.5933333304710686,
+        "p95_ms": 0.7389583333861083,
+        "max_ms": 2.2803333267802373
+      },
+      "intent_to_post_begin": {
+        "n": 160,
+        "p50_ms": 0.001624997821636498,
+        "p95_ms": 0.003125009243376553,
+        "max_ms": 0.009958326700143516
+      },
+      "post_begin_to_entry": {
+        "n": 160,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "max_ms": 0.0
+      },
+      "post_entry_to_return": {
+        "n": 160,
+        "p50_ms": 0.007208334864117205,
+        "p95_ms": 0.01529166183900088,
+        "max_ms": 0.03616666072048247
+      }
+    },
+    "motion_recomputed": true,
+    "trajectory_verified": true,
+    "no_claims": [
+      "hardware input latency",
+      "presented FPS",
+      "GPU duration",
+      "causal attribution"
+    ],
+    "pilot": false,
+    "profile": "performance",
+    "protocolRevision": 3,
+    "partial_delays_retained": false,
+    "phase_meanings": "v3 posted is background postEvent entry; post-return may follow main receive; up to 5us planned-clock quantization retained. v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+    "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+    "zoom_anchor": "not independently qualified by handler-return samples",
+    "capture": "replay-14-ZOOM",
+    "capture_seconds": 12.007443541660905,
+    "input_span_seconds": 7.949972249989514,
+    "condition": "baseline-O",
+    "stop_reason": null
+  },
+  {
+    "planned_early_intents": {
+      "count": 0,
+      "earliest_us": 2.874992787837982
+    },
+    "partial_state_observations": {
+      "handler_states": 482,
+      "node_max_offset_norm": 39.52605310891967,
+      "node_any_nonzero_offset": true,
+      "full_trajectory_verified": true,
+      "terminal_state_observed": true,
+      "reported_motion": true,
+      "motion_flag_disagrees": false
+    },
+    "interaction": "NODE",
+    "qualification": "B_LOCAL_STAGE_EVIDENCE",
+    "issues": [],
+    "planned": 482,
+    "posted": 482,
+    "received": 482,
+    "unreceived": [],
+    "not_posted": [],
+    "delays": {
+      "planned_to_intent": {
+        "n": 482,
+        "p50_ms": 0.029166651074774563,
+        "p95_ms": 0.05849999433849007,
+        "max_ms": 0.10116666089743376
+      },
+      "planned_to_posted": {
+        "n": 482,
+        "p50_ms": 0.03241666126996279,
+        "p95_ms": 0.0661249941913411,
+        "max_ms": 0.10483333608135581
+      },
+      "intent_to_posted": {
+        "n": 482,
+        "p50_ms": 0.0032916723284870386,
+        "p95_ms": 0.007333335815928876,
+        "max_ms": 0.02958333061542362
+      },
+      "posted_to_received": {
+        "n": 482,
+        "p50_ms": 1.490166672738269,
+        "p95_ms": 1.5571666590403765,
+        "max_ms": 48.69999999937136
+      },
+      "received_to_handler_return": {
+        "n": 482,
+        "p50_ms": 0.06783333083149046,
+        "p95_ms": 0.09270833106711507,
+        "max_ms": 5.379208334488794
+      },
+      "intent_to_post_begin": {
+        "n": 482,
+        "p50_ms": 0.0032916723284870386,
+        "p95_ms": 0.007333335815928876,
+        "max_ms": 0.02958333061542362
+      },
+      "post_begin_to_entry": {
+        "n": 482,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "max_ms": 0.0
+      },
+      "post_entry_to_return": {
+        "n": 482,
+        "p50_ms": 0.02366666740272194,
+        "p95_ms": 0.03754167119041085,
+        "max_ms": 0.24345832935068756
+      }
+    },
+    "motion_recomputed": true,
+    "trajectory_verified": true,
+    "no_claims": [
+      "hardware input latency",
+      "presented FPS",
+      "GPU duration",
+      "causal attribution"
+    ],
+    "pilot": false,
+    "profile": "performance",
+    "protocolRevision": 3,
+    "partial_delays_retained": false,
+    "phase_meanings": "v3 posted is background postEvent entry; post-return may follow main receive; up to 5us planned-clock quantization retained. v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+    "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+    "zoom_anchor": "not independently qualified by handler-return samples",
+    "capture": "replay-15-NODE",
+    "capture_seconds": 12.033875666660606,
+    "input_span_seconds": 8.01659108333115,
+    "condition": "combined-experiment-Onone",
+    "stop_reason": null
+  },
+  {
+    "planned_early_intents": {
+      "count": 2,
+      "earliest_us": -1.2916570995002985
+    },
+    "partial_state_observations": {
+      "handler_states": 482,
+      "node_max_offset_norm": 0.0,
+      "node_any_nonzero_offset": false,
+      "full_trajectory_verified": true,
+      "terminal_state_observed": true,
+      "reported_motion": true,
+      "motion_flag_disagrees": false
+    },
+    "interaction": "PAN",
+    "qualification": "B_LOCAL_STAGE_EVIDENCE",
+    "issues": [],
+    "planned": 482,
+    "posted": 482,
+    "received": 482,
+    "unreceived": [],
+    "not_posted": [],
+    "delays": {
+      "planned_to_intent": {
+        "n": 482,
+        "p50_ms": 0.02441665856167674,
+        "p95_ms": 0.0644999963697046,
+        "max_ms": 0.1653333310969174
+      },
+      "planned_to_posted": {
+        "n": 482,
+        "p50_ms": 0.02704166399780661,
+        "p95_ms": 0.07137500506360084,
+        "max_ms": 0.16933333245106041
+      },
+      "intent_to_posted": {
+        "n": 482,
+        "p50_ms": 0.003000008291564882,
+        "p95_ms": 0.006791669875383377,
+        "max_ms": 0.015624988009221852
+      },
+      "posted_to_received": {
+        "n": 482,
+        "p50_ms": 0.1597916561877355,
+        "p95_ms": 0.22591666493099183,
+        "max_ms": 24.55154167546425
+      },
+      "received_to_handler_return": {
+        "n": 482,
+        "p50_ms": 0.20345833036117256,
+        "p95_ms": 0.24812499759718776,
+        "max_ms": 4.939541657222435
+      },
+      "intent_to_post_begin": {
+        "n": 482,
+        "p50_ms": 0.003000008291564882,
+        "p95_ms": 0.006791669875383377,
+        "max_ms": 0.015624988009221852
+      },
+      "post_begin_to_entry": {
+        "n": 482,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "max_ms": 0.0
+      },
+      "post_entry_to_return": {
+        "n": 482,
+        "p50_ms": 0.019666666048578918,
+        "p95_ms": 0.039333332097157836,
+        "max_ms": 0.07320832810364664
+      }
+    },
+    "motion_recomputed": true,
+    "trajectory_verified": true,
+    "no_claims": [
+      "hardware input latency",
+      "presented FPS",
+      "GPU duration",
+      "causal attribution"
+    ],
+    "pilot": false,
+    "profile": "performance",
+    "protocolRevision": 3,
+    "partial_delays_retained": false,
+    "phase_meanings": "v3 posted is background postEvent entry; post-return may follow main receive; up to 5us planned-clock quantization retained. v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+    "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+    "zoom_anchor": "not independently qualified by handler-return samples",
+    "capture": "replay-16-PAN",
+    "capture_seconds": 12.050532541659777,
+    "input_span_seconds": 8.016570833337028,
+    "condition": "combined-experiment-Onone",
+    "stop_reason": null
+  },
+  {
+    "planned_early_intents": {
+      "count": 0,
+      "earliest_us": 19.666666048578918
+    },
+    "partial_state_observations": {
+      "handler_states": 160,
+      "node_max_offset_norm": 0.0,
+      "node_any_nonzero_offset": false,
+      "full_trajectory_verified": true,
+      "terminal_state_observed": true,
+      "reported_motion": true,
+      "motion_flag_disagrees": false
+    },
+    "interaction": "ZOOM",
+    "qualification": "B_LOCAL_STAGE_EVIDENCE",
+    "issues": [],
+    "planned": 160,
+    "posted": 160,
+    "received": 160,
+    "unreceived": [],
+    "not_posted": [],
+    "delays": {
+      "planned_to_intent": {
+        "n": 160,
+        "p50_ms": 0.034708340535871685,
+        "p95_ms": 0.04587500006891787,
+        "max_ms": 0.10716667748056352
+      },
+      "planned_to_posted": {
+        "n": 160,
+        "p50_ms": 0.03729166928678751,
+        "p95_ms": 0.04908333357889205,
+        "max_ms": 0.1166666770586744
+      },
+      "intent_to_posted": {
+        "n": 160,
+        "p50_ms": 0.002333326847292483,
+        "p95_ms": 0.004999994416721165,
+        "max_ms": 0.012791657354682684
+      },
+      "posted_to_received": {
+        "n": 160,
+        "p50_ms": 39.726041664835066,
+        "p95_ms": 81.23887500551064,
+        "max_ms": 115.72104167134967
+      },
+      "received_to_handler_return": {
+        "n": 160,
+        "p50_ms": 0.6150416738819331,
+        "p95_ms": 0.8625000045867637,
+        "max_ms": 3.4391249937471002
+      },
+      "intent_to_post_begin": {
+        "n": 160,
+        "p50_ms": 0.002333326847292483,
+        "p95_ms": 0.004999994416721165,
+        "max_ms": 0.012791657354682684
+      },
+      "post_begin_to_entry": {
+        "n": 160,
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "max_ms": 0.0
+      },
+      "post_entry_to_return": {
+        "n": 160,
+        "p50_ms": 0.013374999980442226,
+        "p95_ms": 0.02037500962615013,
+        "max_ms": 0.0711250031599775
+      }
+    },
+    "motion_recomputed": true,
+    "trajectory_verified": true,
+    "no_claims": [
+      "hardware input latency",
+      "presented FPS",
+      "GPU duration",
+      "causal attribution"
+    ],
+    "pilot": false,
+    "profile": "performance",
+    "protocolRevision": 3,
+    "partial_delays_retained": false,
+    "phase_meanings": "v3 posted is background postEvent entry; post-return may follow main receive; up to 5us planned-clock quantization retained. v2 posted immediately precedes NSApp.postEvent; v1 posted includes construction",
+    "geometry_join": "unjoined callbacks; no layout-completion latency inferred",
+    "zoom_anchor": "not independently qualified by handler-return samples",
+    "capture": "replay-17-ZOOM",
+    "capture_seconds": 12.006593833328225,
+    "input_span_seconds": 7.949937708341167,
+    "condition": "combined-experiment-Onone",
+    "stop_reason": null
+  }
+]
