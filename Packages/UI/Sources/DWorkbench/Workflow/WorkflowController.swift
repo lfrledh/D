@@ -1125,6 +1125,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         guard !closed, !closing, !isRunning, !isSaving, !toolPublicationBusy, readOnlyReason == nil,
               let si = batchStages.firstIndex(where: { $0.id == id }) else { return }
         let wasCancelled = batchStages[si].state == .cancelled
+        let recoveringAttemptIDs = Set(batchStages[si].attempts.filter {
+            [.savingBlocked, .dispatched].contains($0.state)
+        }.map(\.id))
         isRunning = true; defer { isRunning = false }
         do {
             for ai in batchStages[si].attempts.indices {
@@ -1171,7 +1174,15 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
                 }
             }
             errorMessage = nil; await onChange()
-        } catch { errorMessage = error.localizedDescription; batchStages[si].state = wasCancelled ? .cancelled : .savingBlocked }
+        } catch {
+            // A restored checkpoint may be durable before the final batch ledger is.
+            // Preserve the save-only entry without undoing output identity or cancellation.
+            for ai in batchStages[si].attempts.indices where recoveringAttemptIDs.contains(batchStages[si].attempts[ai].id) {
+                batchStages[si].attempts[ai].state = .savingBlocked
+            }
+            errorMessage = error.localizedDescription
+            batchStages[si].state = wasCancelled ? .cancelled : .savingBlocked
+        }
     }
 
     /// An uncertain/crashed or failed dispatch is retained; retry is a newly authorized attempt.

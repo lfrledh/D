@@ -2416,7 +2416,7 @@ extension WorkflowLifecycleTests {
         return .init(root: root, source: source, destination: destination, engine: engine, controller: c, probe: probe, nodeID: node)
     }
 
-    @Test(arguments: [false, true], [false, true]) func batchSaveOnlyRetainsImageIdentityAndNeverRunsAnotherAttempt(historyFailure: Bool, cancelRemaining: Bool) async throws {
+    @Test(arguments: ["none", "restore", "ledger"], [false, true]) func batchSaveOnlyRetainsImageIdentityAndNeverRunsAnotherAttempt(failurePoint: String, cancelRemaining: Bool) async throws {
         let f = try await imageRepairFixture(count: 1); let c = f.controller
         defer { try? f.restoreDestination() }
         let graph = try #require(c.graph)
@@ -2431,12 +2431,23 @@ extension WorkflowLifecycleTests {
         #expect(c.services.hasPendingSaves && c.batchStages.first?.state == (cancelRemaining ? .cancelled : .savingBlocked))
         #expect(await f.engine.requests.count == 1)
         try f.restoreDestination(); f.probe.modelAvailable = false
-        var failHistory = historyFailure
-        c.beforeHistorySave = { if failHistory { throw WorkflowIssue("save-only history failure") } }
+        var didFailHistory = false
+        c.beforeHistorySave = {
+            let reachedFailurePoint = failurePoint == "restore" ||
+                (failurePoint == "ledger" && c.batchStages.first?.attempts.first?.state == .completed)
+            if reachedFailurePoint && !didFailHistory {
+                didFailHistory = true
+                throw WorkflowIssue("save-only \(failurePoint) history failure")
+            }
+        }
         await c.retryBatchSaving(stage)
         #expect(await f.engine.requests.count == 1 && f.probe.resolutions == 1)
         #expect(!c.services.hasPendingSaves)
-        failHistory = false
+        if failurePoint != "none" {
+            #expect(didFailHistory && c.errorMessage != nil && c.hasPendingSaves)
+            #expect(c.batchStages.first?.attempts.first?.state == .savingBlocked)
+            #expect(c.batchStages.first?.state == (cancelRemaining ? .cancelled : .savingBlocked))
+        }
         await c.retryBatchSaving(stage)
         try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
         let recovered = try #require(c.runs.first?.steps.last?.outputs["output"]?.candidates.first)
@@ -2448,6 +2459,8 @@ extension WorkflowLifecycleTests {
         #expect(await f.engine.requests.count == 1 && f.probe.resolutions == 1)
         let saved = try #require(try await f.destination.workflowState().archive)
         #expect(saved.runs.first?.id == run.id)
+        #expect(saved.batchStages?.first?.state == (cancelRemaining ? .cancelled : .paused))
+        #expect(!c.hasPendingSaves)
         try await c.close(); try await f.destination.close(); try await f.source.close()
     }
 
