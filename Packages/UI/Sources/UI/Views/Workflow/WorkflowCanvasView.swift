@@ -128,6 +128,8 @@ public struct WorkflowCanvasView: View {
 
     @Environment(\.chatDisplayPreferences) private var displayPreferences
     @State private var narrowLibrary = false
+    @State private var requestedPanelWidths = WorkbenchPanelWidths(leading: 320, trailing: 320)
+    @State private var consoleHeight: CGFloat = 88
     @State private var overlayState = WorkbenchSidebarState(leading: true, trailing: true)
     private var showLibrary: Bool { get { overlayState.trailing } nonmutating set { overlayState.trailing = newValue } }
     @Environment(\.workflowViewerModel) private var viewerModel
@@ -223,6 +225,8 @@ public struct WorkflowCanvasView: View {
         }
         .frame(minWidth: WorkflowCanvasLayoutPolicy.minimumVisibleWidth,
                minHeight: WorkflowCanvasLayoutPolicy.minimumVisibleHeight)
+        .focusable()
+        .workflowKeyboardCommands(performKeyboardCommand)
         .environment(\.workbenchMenuContext, "canvas:\(ObjectIdentifier(controller)):\(controller.projectID):\(controller.projectInstanceID):\(controller.bodyPath):\(controller.rootGraph?.revision.uuidString ?? "none"):\(controller.rootGraph?.id.uuidString ?? "none"):\(controller.graph?.id.uuidString ?? "none"):\(controller.graph?.revision.uuidString ?? "none")")
         .alert(text("workflow.scope.rerunCall","重新运行具体调用"),isPresented:Binding(get:{pendingHistoryRetry != nil},set:{if !$0 { pendingHistoryRetry=nil }})) {
             Button(workspaceText(languageStore,"retryFrozen","按该调用的冻结输入重新计算","Recompute with this call's frozen inputs")) {
@@ -286,6 +290,31 @@ public struct WorkflowCanvasView: View {
         }
     }
 
+    private func performKeyboardCommand(_ command: WorkflowKeyboardCommand) -> Bool {
+        guard !toolsPresented, !interfacePresented else { return false }
+        switch command {
+        case .leftTools:
+            let tabs = WorkflowWorkspacePanels.Preparation.allCases
+            panelsState.selectPreparation(tabs[((tabs.firstIndex(of: panelsState.preparation) ?? 0) + 1) % tabs.count]); showInspector = true
+        case .rightTools:
+            let tabs = WorkflowResourceCategory.allCases
+            resourceCategory = tabs[((tabs.firstIndex(of: resourceCategory) ?? 0) + 1) % tabs.count]; showLibrary = true
+        case .activity: panelsState.output = .overview; activityVisible = true; workspaceDraft = nil
+        case .pointer: guard !viewportInteractionLocked else { return false }; canvasTool = .pointer
+        case .hand: guard !viewportInteractionLocked else { return false }; canvasTool = .hand
+        case .undo: guard controller.canEditCanvas, controller.canUndo else { return false }; controller.undo()
+        case .redo: guard controller.canEditCanvas, controller.canRedo else { return false }; controller.redo()
+        case .showAll:
+            guard let canvasViewport, !viewportInteractionLocked else { return false }
+            fitAllNodes(targetWidth: canvasViewport.clip.width)
+        case .runCheck:
+            guard controller.canEditCanvas, let target = validRunTarget else { return false }
+            presentWorkspacePlan(target.id, mode: runRange)
+        case .search, .tags, .preview: return false
+        }
+        return true
+    }
+
     private func revealInspector() {
         showInspector = true
         narrowLibrary = false
@@ -295,7 +324,8 @@ public struct WorkflowCanvasView: View {
     private func panels(height: CGFloat, width: CGFloat) -> some View {
         let shown = WorkflowCanvasLayoutPolicy.visiblePanels(width: width, library: showLibrary,
             inspector: showInspector, preferLibrary: narrowLibrary)
-        let panelWidths = WorkbenchSidebarLayout.widths(available: width)
+        let panelWidths = WorkbenchPanelWidths(leading: min(requestedPanelWidths.leading, max(260, width - 64)),
+            trailing: min(requestedPanelWidths.trailing, max(260, width - 64)))
         let targetCanvasWidth = max(1, width - 32) // Sidebars cover this fixed workspace; they never reserve canvas space.
         let fitReady = canvasViewport?.permitsFit(targetWidth: targetCanvasWidth) == true
         let inspectedNodeID = shown.inspector && panelsState.preparation == .configuration
@@ -366,17 +396,19 @@ public struct WorkflowCanvasView: View {
                     hostIdentifier: "canvas-inspector-host", toggle: {
                         showInspector = !shown.inspector; narrowLibrary = false
                     }) { preparationPanel }
+                    .overlay(alignment: .trailing) { if shown.inspector { panelResizeHandle(leading: true) } }
                     .frame(width: shown.inspector ? panelWidths.leading : 48, alignment: .leading)
                     .clipped().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(.bottom, 100).workbenchMorph(value: shown.inspector)
+                    .padding(.bottom, consoleHeight + 24).workbenchMorph(value: shown.inspector)
                 WorkbenchSidebar(leading: false, expanded: shown.library,
                     title: workspaceText(languageStore,"resources","素材库","Resources"), identifier: "canvas-library-toggle",
                     hostIdentifier: "canvas-library-host", toggle: {
                         showLibrary = !shown.library; narrowLibrary = true
                     }) { resourcePanel }
+                    .overlay(alignment: .leading) { if shown.library { panelResizeHandle(leading: false) } }
                     .frame(width: shown.library ? panelWidths.trailing : 48, alignment: .trailing)
                     .clipped().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(.bottom, 100).workbenchMorph(value: shown.library)
+                    .padding(.bottom, consoleHeight + 24).workbenchMorph(value: shown.library)
             }
             .padding(.horizontal, 16)
             VStack(spacing:8) {
@@ -387,23 +419,32 @@ public struct WorkflowCanvasView: View {
                     outputPanel.frame(height:min(420,max(230,height*0.55))).workbenchPanel(cornerRadius:18)
                 }
                 VStack(spacing:4) {
-                    if width > 1540 {
-                        HStack(spacing:8) {
-                            canvasTools(fitReady:fitReady,targetWidth:targetCanvasWidth)
-                            Divider().frame(height:28)
-                            executionBar
-                            activityToggle
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) {
+                            canvasTools(fitReady: fitReady, targetWidth: targetCanvasWidth).fixedSize(horizontal: true, vertical: false)
+                            Divider().frame(height: 28)
+                            executionBar.fixedSize(horizontal: true, vertical: false)
+                            activityToggle.fixedSize(horizontal: true, vertical: false)
                         }
-                        if controller.errorMessage != nil || controller.readOnlyReason != nil { statusStrip }
-                    } else {
-                        HStack { canvasTools(fitReady:fitReady,targetWidth:targetCanvasWidth); activityToggle }
-                        executionBar
-                        if controller.errorMessage != nil || controller.readOnlyReason != nil { statusStrip }
+                        VStack(spacing: 6) {
+                            HStack { canvasTools(fitReady: fitReady, targetWidth: targetCanvasWidth); activityToggle }
+                            executionBar
+                        }
                     }
+                    if controller.errorMessage != nil || controller.readOnlyReason != nil { statusStrip }
                     captureControls
                 }.padding(8).workbenchPanel(cornerRadius:22)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { value in
+                        if abs(consoleHeight - value) > 0.5 { consoleHeight = value }
+                    }
             }.padding(.horizontal,16).padding(.bottom,12)
         }.padding(.top, 8).environment(\.workbenchPanelWidths, panelWidths)
+    }
+
+    private func panelResizeHandle(leading: Bool) -> some View {
+        WorkflowPanelResizeHandle(width: Binding(
+            get: { leading ? requestedPanelWidths.leading : requestedPanelWidths.trailing },
+            set: { if leading { requestedPanelWidths.leading = $0 } else { requestedPanelWidths.trailing = $0 } }), leading: leading)
     }
 
     private var activityToggle:some View {
@@ -563,7 +604,8 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         VStack(spacing: 0) {
             WorkbenchSidebarTabs(title: workspaceText(languageStore,"activity","活动","Activity"), selection: $panelsState.output, choices: [
                 (WorkflowWorkspacePanels.Output.node, text("workspace.nodeResults", "节点结果")),
-                (.overview, text("workspace.runOverview", "运行总览"))], helpPrefix: "TAB-WORKFLOW-RIGHT-")
+                (.overview, text("workspace.runOverview", "运行总览")),
+                (.batches, workspaceText(languageStore, "batches", "批次与筛选", "Batches & review"))], helpPrefix: "TAB-WORKFLOW-RIGHT-")
             WorkbenchPicker(text("workspace.selectedRun", "所选运行"), selection: Binding(get: { panelsState.runID }, set: { panelsState.selectRun($0) })) {
                 WorkbenchChoice(text("workspace.chooseRun", "选择运行记录"), value:UUID?.none)
                 WorkbenchChoiceForEach(controller.runs.reversed()) { run in
@@ -575,6 +617,12 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     retained(resultsPanel, visible: panelsState.output == .node, id: "workflow-results-host")
                 }
                 retained(runOverview, visible: panelsState.output == .overview, id: "workflow-overview-host")
+                if panelsState.output == .batches {
+                    WorkflowBatchPanel(controller: controller) { run, record in
+                        panelsState.selectRun(run.id)
+                        panelsState.selectResult(node: record.step.node.id, call: .init(address: record.address, stepID: record.id))
+                    }
+                }
             }
         }
     }
@@ -610,8 +658,18 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                         HStack { Text(record.step.node.title).font(.headline);Spacer();WorkflowStatusBadge(status:record.step.status,stale:false) }
                         if let error=record.step.error { Label(error,systemImage:"exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled) }
                         if record.step.status == .waiting,let run=selectedResultRun {
-                            Button(workspaceText(languageStore,"viewDecision","查看并处理待确认内容","View and decide"),systemImage:"person.crop.circle.badge.checkmark") { openCall(run,record:record) }
+                            Button(workspaceText(languageStore,"viewReadonly","只读查看材料","View materials read only"),systemImage:"arrow.up.right.square") { openCall(run,record:record) }
                                 .disabled(viewerModel == nil)
+                            if let task = record.step.humanTask {
+                                WorkflowHumanTaskForm(task: task,
+                                    onSaveDraft: { controller.editHumanDraft(stepID: record.id, value: $0) },
+                                    onSubmit: { value in Task { await controller.decideHuman(stepID: record.id, value: value, expectedTask: task) } },
+                                    onReject: { Task { await controller.decideHuman(stepID: record.id, value: nil, reject: true, expectedTask: task) } })
+                                    .id(record.id).disabled(controller.isRunning || isReadOnly)
+                            } else {
+                                WorkflowWaitingDecision(controller: controller, step: record.step, readOnly: isReadOnly,
+                                    preview: controller.preview).id(record.id).disabled(controller.isRunning)
+                            }
                         }
                         ForEach(record.step.outputs.keys.sorted(),id:\.self) { port in
                             if let value=record.step.outputs[port] {
@@ -1117,6 +1175,7 @@ private struct WorkflowNodeInspector: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if !resultsOnly {
                     identity(node)
+                    WorkflowRegistrationView(node: node, controller: controller)
                     if node.operationID == "d.video.generate", let graph = controller.graph,
                        let target = WorkflowVideoPresetAction(node: node, graph: graph) {
                         videoPresets(target)

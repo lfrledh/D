@@ -551,7 +551,16 @@ struct WorkflowGraphSurface: View {
                             translation: update.translation, scope: scope)
                     case .cancelled:
                         nodeDrag.cancel(sessionID: update.sessionID); restoreMeasuredHits(); viewportInteractionLocked = false
-                    case .clicked: onInspect(id)
+                    case .clicked:
+                        let layout = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
+                            viewportSize: update.viewport, zoom: zoom, translation: geometry.translation)
+                        let raw = layout.rawPoint(screenPoint: update.startPoint, offset: update.startOffset)
+                        let displayY = raw.y + geometry.translation.height
+                        let center = geometry.displayPosition(id)
+                        let size = cardSizes[id] ?? CGSize(width: WorkflowCanvasLayoutPolicy.nodeWidth, height: 600)
+                        if !update.extendingSelection, !readOnly, displayY < center.y - size.height / 2 + 44 {
+                            controller.toggleCollapsed(id)
+                        } else { onInspect(id) }
                     }
                 case .blank:
                     let layout = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
@@ -1046,55 +1055,22 @@ private struct WorkflowNodeCard: View {
                         modelChoices: controller.modelChoices, assets: controller.availableAssets,
                         tools: controller.tools, language: languageStore)
                     Text(WorkflowHumanPresentation.name(node, in: controller.graph?.nodes ?? [node], language: languageStore)).font(.system(size: 13 * scale, weight: .bold)).lineLimit(2)
-                    if runTarget { Label(workflowText(languageStore, "semantics.nextRunTarget", fallback: "下次运行目标"), systemImage: "flag.fill").font(.system(size: 10 * scale)).foregroundStyle(.tint) }
-                    if let detail = identity.detail {
+                    if !collapsed && runTarget { Label(workflowText(languageStore, "semantics.nextRunTarget", fallback: "下次运行目标"), systemImage: "flag.fill").font(.system(size: 10 * scale)).foregroundStyle(.tint) }
+                    if !collapsed, let detail = identity.detail {
                         Text(detail).font(.system(size: 10 * scale, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
                     }
-                    if let annotation = identity.annotation, annotation != identity.title {
+                    if !collapsed, let annotation = identity.annotation, annotation != identity.title {
                         Text(annotation).font(.system(size: 11 * scale)).foregroundStyle(.secondary).lineLimit(2)
                     }
                 }
                 .allowsHitTesting(false)
                 Spacer(minLength: 6 * scale)
-                WorkbenchMenu { actions } label: {
-                    Image(systemName: "ellipsis").frame(width: 22 * scale, height: 22 * scale)
-                }.buttonStyle(WorkbenchIconButtonStyle(diameter: 22 * scale)).fixedSize()
-                    .workflowNodeControl(node.id)
-                    .accessibilityIdentifier("workflow-node-menu-" + node.id.uuidString)
-                Button { onInspect(node.id) } label: {
-                    Image(systemName: "slider.horizontal.3")
-                }
-                .buttonStyle(WorkflowNodeInspectButtonStyle(inspecting: inspecting, scale: scale))
-                .workflowNodeControl(node.id)
-                .help(workflowText(languageStore, "workflow.node.edit", fallback: "编辑节点"))
-                .accessibilityLabel(workflowText(languageStore, "workflow.node.edit", fallback: "编辑节点"))
-                .accessibilityIdentifier("workflow-node-inspect-" + node.id.uuidString)
-                .accessibilityAddTraits(inspecting ? [.isSelected] : [])
-                Button { controller.toggleCollapsed(node.id) } label: {
-                    Image(systemName: collapsed ? "chevron.down" : "chevron.up")
-                }
-                .buttonStyle(WorkbenchIconButtonStyle(diameter: 22 * scale))
-                .workflowNodeControl(node.id)
-                .help(collapsed
-                      ? workflowText(languageStore, "workflow.node.expand", fallback: "展开节点")
-                      : workflowText(languageStore, "workflow.node.collapse", fallback: "折叠节点"))
-                .disabled(readOnly)
-                Button {
-                    guard scope.isCurrent(in: controller), let target = controller.canvasInsertionTarget() else { return }
-                    controller.deleteNode(id: node.id, target: target)
-                } label: { Image(systemName: "trash") }
-                .buttonStyle(WorkbenchIconButtonStyle(diameter: 22 * scale))
-                .workflowNodeControl(node.id)
-                .help(workflowText(languageStore, "workflow.node.delete", fallback: "删除节点"))
-                .accessibilityLabel(workflowText(languageStore, "workflow.node.delete", fallback: "删除节点"))
-                .accessibilityIdentifier("workflow-node-delete-\(node.id.uuidString)")
-                .disabled(readOnly || !controller.canEditCanvas)
                 if let status = controller.presentationStatus(for: node.id) {
                     WorkflowStatusBadge(status: status.status, stale: status.stale, scale: scale)
                         .allowsHitTesting(false)
                 }
             }
-            if modelNotReady {
+            if !collapsed && modelNotReady {
                 VStack(alignment: .leading, spacing: 5 * scale) {
                     Label(workflowText(languageStore, "workflow.node.prepare.notReady", fallback: "模型未就绪"), systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange).font(.system(size: 11 * scale, weight: .semibold)).allowsHitTesting(false)
@@ -1121,18 +1097,11 @@ private struct WorkflowNodeCard: View {
                     }
                 }
             }
-            if collapsed {
-                Text(workflowText(
-                    languageStore,
-                    "workflow.node.collapsedDescription",
-                    fallback: "端口与参数保留；展开后连接"
-                )).font(.system(size: 11 * scale)).foregroundStyle(.secondary)
-                    .allowsHitTesting(false)
-            } else if let definition {
+            if !collapsed, let definition {
                 portRows(definition.inputs, input: true)
                 Rectangle().fill(.separator).frame(height: 1 * scale).allowsHitTesting(false)
                 portRows(definition.outputs, input: false)
-            } else {
+            } else if !collapsed {
                 Label(workflowText(
                     languageStore,
                     "workflow.node.unknownOperation",
@@ -1141,6 +1110,14 @@ private struct WorkflowNodeCard: View {
                     .font(.system(size: 11 * scale)).foregroundStyle(.orange)
                     .allowsHitTesting(false)
             }
+            if !collapsed {
+                WorkbenchMenu { actions } label: {
+                    Label(consistencyText(languageStore, "tabs.properties"), systemImage: "slider.horizontal.3")
+                        .font(.system(size: 11 * scale)).padding(4 * scale)
+                }.buttonStyle(WorkbenchGlassButtonStyle()).workflowNodeControl(node.id)
+                    .accessibilityIdentifier("workflow-node-menu-" + node.id.uuidString)
+            }
+
 
 
         }
@@ -1173,15 +1150,7 @@ private struct WorkflowNodeCard: View {
             }
             .background(WorkflowNodePlateReceiver(scale: scale)
                 .pointerStyle(tool == .hand ? (handPressed ? .grabActive : .grabIdle) : nil))
-            .background {
-                Group {
-                    if displayPreferences.resolvedAppearance.local == nil {
-                        RoundedRectangle(cornerRadius: 13 * scale, style: .continuous)
-                            .fill(displayPreferences.resolvedAppearance.palette(for: colorScheme).panelColor)
-                            .shadow(color: .black.opacity(0.12), radius: 8 * scale, y: 3 * scale)
-                    } else { Color.clear.workbenchPanel(cornerRadius: 13 * scale) }
-                }.allowsHitTesting(false).accessibilityHidden(true)
-            }
+            .workbenchPanel(cornerRadius: 13 * scale)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 13 * scale, style: .continuous)

@@ -56,6 +56,12 @@ public enum SharedLibraryBrowserScope: Hashable {
 @MainActor @Observable
 public final class SharedLibraryBrowserState {
     public var query: SharedLibraryQuery
+    public var draftText: String
+    public var operationPath: [String] = []
+    // Browser-owned, bounded navigation positions; dropped with this surface owner.
+    var navigationScrolls: [String: ScrollPosition] = [:]
+    var previewCache = WorkflowLibraryPreviewCache()
+    var thumbnailSize = 190.0
     public var scope: SharedLibraryBrowserScope
     public var selectedKeys: Set<String>
     var tagPresentation = SharedLibraryTagPresentation()
@@ -67,7 +73,7 @@ public final class SharedLibraryBrowserState {
         selectedKeys: Set<String> = [],
         focusedKey: String? = nil
     ) {
-        self.query = query
+        self.query = query; self.draftText = query.text
         self.scope = scope
         self.selectedKeys = selectedKeys
         self.focusedKey = focusedKey
@@ -76,7 +82,13 @@ public final class SharedLibraryBrowserState {
     /// Editing a named query creates a free filter draft, so its name never labels new rules.
     public func setDraftQuery(_ draft: SharedLibraryQuery) {
         if case .saved = scope, draft != query { scope = .all }
-        query = draft
+        query = draft; draftText = draft.text
+    }
+
+    public var hasUnsubmittedText: Bool { draftText != query.text }
+    public func submitSearch(hasMarkedText: Bool = false) {
+        guard !hasMarkedText else { return }
+        var next = query; next.text = String(draftText.prefix(256)); setDraftQuery(next)
     }
 
     public func selectScope(_ requested: SharedLibraryBrowserScope, using store: SharedLibraryStore) throws {
@@ -91,7 +103,7 @@ public final class SharedLibraryBrowserState {
             scope = requested
         case .saved(let id):
             guard let saved = store.metadata.savedQueries[id] else { throw SharedLibraryError.missingQuery }
-            query = saved.query
+            query = saved.query; draftText = saved.query.text
             scope = requested
         }
     }
@@ -108,7 +120,11 @@ public final class SharedLibraryBrowserState {
     public func reconcile(using store: SharedLibraryStore) {
         tagPresentation.observe(tags: store.metadata.tags, requested: query.allTagIDs.union(query.anyTagIDs))
         // Missing conditions and scopes remain explicit; never widen a query on deletion.
-        if case .saved(let id) = scope, let saved = store.metadata.savedQueries[id] { query = saved.query }
+        if case .saved(let id) = scope, let saved = store.metadata.savedQueries[id] {
+            let wasCommitted = draftText == query.text
+            query = saved.query
+            if wasCommitted { draftText = saved.query.text }
+        }
     }
 
     public func repairScope(using store: SharedLibraryStore) {
@@ -324,6 +340,8 @@ public struct SharedLibraryBrowser: View {
     private let onUse: (SharedLibraryBrowserEntry) -> Void
     private let onAdd: (SharedLibraryBrowserEntry) -> Void
     private let onPreview: (SharedLibraryBrowserEntry) -> Void
+    private let onExternalCopy: ((SharedLibraryBrowserEntry) -> Void)?
+    private let readPreview: (@MainActor @Sendable (SharedLibraryBrowserEntry) async throws -> ProjectReadOnlyContent)?
     private let onLocation: (SharedLibraryBrowserEntry) -> Void
     private let onPrepare: (SharedLibraryBrowserEntry) -> Void
     private let onImport: () -> Void
@@ -357,6 +375,9 @@ public struct SharedLibraryBrowser: View {
     @State private var renameDrafts = SharedLibraryBrowserRenameDrafts()
     @State private var selectedTagID: UUID?
     @State private var selectedFolderID: UUID?
+    @FocusState private var searchFocused: Bool
+    @State private var showTags = false
+    @State private var tagSearch = ""
     @State private var selectedQueryID: UUID?
     @State private var parentID: UUID?
 
@@ -366,6 +387,8 @@ public struct SharedLibraryBrowser: View {
         onUse: @escaping (SharedLibraryBrowserEntry) -> Void,
         onAdd: @escaping (SharedLibraryBrowserEntry) -> Void,
         onPreview: @escaping (SharedLibraryBrowserEntry) -> Void,
+        onExternalCopy: ((SharedLibraryBrowserEntry) -> Void)? = nil,
+        readPreview: (@MainActor @Sendable (SharedLibraryBrowserEntry) async throws -> ProjectReadOnlyContent)? = nil,
         onLocation: @escaping (SharedLibraryBrowserEntry) -> Void = { _ in },
         onPrepare: @escaping (SharedLibraryBrowserEntry) -> Void,
         onImport: @escaping () -> Void, onClose: @escaping () -> Void,
@@ -375,13 +398,19 @@ public struct SharedLibraryBrowser: View {
         self._state = State(initialValue: state ?? SharedLibraryBrowserState())
         self.canvasMode = canvasMode; self.entries = entries; self.store = store; self.compact = compact; self.allowsImport = allowsImport
         self.onUse = onUse; self.onAdd = onAdd; self.onPreview = onPreview; self.onLocation = onLocation
+        self.onExternalCopy = onExternalCopy; self.readPreview = readPreview
         self.onPrepare = onPrepare; self.onImport = onImport; self.onClose = onClose
         self.tagValidation = tagValidation; self.queryContext = queryContext; self.annotationSave = annotationSave
     }
 
     private var query: SharedLibraryQuery {
         get { state.effectiveQuery(using: store) }
-        nonmutating set { state.setDraftQuery(newValue) }
+        nonmutating set {
+            guard (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() != true else { return }
+            var next = newValue
+            if next.text == query.text { next.text = state.draftText }
+            state.setDraftQuery(next)
+        }
     }
     private var scope: SharedLibraryBrowserScope { state.scope }
     private var selectedKeys: Set<String> {
@@ -451,10 +480,21 @@ public struct SharedLibraryBrowser: View {
                 }
             }
         }
+        .focusable()
+        .workflowKeyboardCommands { command in
+            switch command {
+            case .search: searchFocused = true; return true
+            case .tags: showTags = true; return true
+            case .preview:
+                guard let entry = selectedEntry, visible.contains(where: { $0.id == entry.id }) else { return false }
+                dispatch(.preview, key: entry.id); return true
+            default: return false
+            }
+        }
         .environment(\.workbenchHelpStore, featureHelp)
         .sheet(item: $featureHelp.presentation) { WorkbenchFeatureGuide(presentation: $0, store: featureHelp).environment(\.dLanguageStore, language) }
         .environment(\.workbenchMenuContext, "library:\(ObjectIdentifier(store)):\(ObjectIdentifier(state)):\(queryContext.projectID?.uuidString ?? "none"):\(queryContext.instanceID?.uuidString ?? "none")")
-        .background { if !compact { Color.clear.workbenchPanel(cornerRadius: 12) } }
+        .modifier(LibraryPanelSurface(enabled: !compact))
         .sheet(item: $saveQueryRequest) { request in SharedLibrarySaveQuerySheet(request: request, store: store) { saveQueryRequest = nil } }
         .sheet(isPresented: $showOrganizer) { organizer }
         .sheet(item: $tagRequest) { request in
@@ -509,6 +549,14 @@ public struct SharedLibraryBrowser: View {
         }.buttonStyle(WorkbenchGlassButtonStyle()).padding(10)
     }
 
+    private var navigationScroll: Binding<ScrollPosition> {
+        let key = query.text.isEmpty ? state.operationPath.joined(separator: "/") : "search"
+        return Binding(get: { state.navigationScrolls[key] ?? ScrollPosition() }, set: { value in
+            if state.navigationScrolls[key] == nil, state.navigationScrolls.count >= 32,
+               let oldest = state.navigationScrolls.keys.sorted().first { state.navigationScrolls.removeValue(forKey: oldest) }
+            state.navigationScrolls[key] = value
+        })
+    }
     private var compactBody: some View {
         VStack(alignment: .leading, spacing: 7) {
             searchControls
@@ -516,16 +564,71 @@ public struct SharedLibraryBrowser: View {
             WorkbenchScrollView {
                 LazyVStack(spacing: 6) {
                     if (canvasMode == .nodes || canvasMode == .programs), query.text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
-                        OutlineGroup(WorkflowOperationTree.make(visible,models:canvasMode == .nodes,language:language),children:\.children) { node in
-                            if let entry=node.entry { entryRow(entry,compact:true) }
-                            else { Text(node.title).font(.callout.weight(.medium)).lineLimit(2) }
-                        }
-                        .disclosureGroupStyle(WorkflowOperationTreeDisclosureStyle())
-                    } else { ForEach(visible) { entry in entryRow(entry, compact: true) } }
+                        operationNavigation
+
+                    } else if canvasMode == .image || canvasMode == .video { resourceGrid }
+                    else { ForEach(visible) { entry in entryRow(entry, compact: true) } }
                 }.padding(.horizontal, 6)
-            }
+            }.scrollPosition(navigationScroll)
             searchFooter
         }.padding(7).frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var resourceGrid: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            WorkbenchPicker(word("thumbnailSize", "缩略图大小"), selection: $state.thumbnailSize) {
+                WorkbenchChoice("S", value: 150.0); WorkbenchChoice("M", value: 190.0); WorkbenchChoice("L", value: 240.0)
+            }
+            LazyVGrid(columns: [.init(.adaptive(minimum: state.thumbnailSize), spacing: 10)], spacing: 10) {
+                ForEach(visible) { entry in
+                    VStack(alignment: .leading, spacing: 5) {
+                        if let readPreview {
+                            WorkflowLibraryPreview(entry: entry, cache: state.previewCache, pixels: Int(state.thumbnailSize * 2), load: { try await readPreview(entry) })
+                                .frame(height: state.thumbnailSize * 0.68).frame(maxWidth: .infinity)
+                        }
+                        Text(entry.item.title).font(.callout.weight(.medium)).lineLimit(2)
+                        Text(readinessName(entry.item.readiness)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(selectedKeys.contains(entry.id) ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 12))
+                        .contentShape(RoundedRectangle(cornerRadius: 12))
+                        .onTapGesture(count: 2) { dispatch(.preview, key: entry.id) }
+                        .onTapGesture { selectedKeys = [entry.id]; focusedKey = entry.id }
+                        .focusable().onKeyPress(.space) { dispatch(.preview, key: entry.id); return .handled }
+                        .workbenchContextMenu { resourceActions(entry) }.onDrag { dragProvider(for: entry.id) }
+                        .accessibilityElement(children: .combine).accessibilityIdentifier("shared-library-entry-" + entry.id)
+                }
+            }
+        }
+    }
+
+    private var operationNavigation: some View {
+        let root = WorkflowOperationTree.make(visible, models: canvasMode == .nodes, language: language)
+        var children = root
+        var ancestors: [WorkflowOperationTree] = []
+        for id in state.operationPath {
+            guard let group = children.first(where: { $0.id == id && $0.children != nil }) else { break }
+            ancestors.append(group); children = group.children ?? []
+        }
+        return VStack(alignment: .leading, spacing: 10) {
+            ScrollView(.horizontal) {
+                HStack(spacing: 4) {
+                    Button(word("all", "全部")) { state.operationPath = [] }
+                    ForEach(Array(ancestors.enumerated()), id: \.element.id) { index, item in
+                        Image(systemName: "chevron.right").font(.caption2)
+                        Button(item.title) { state.operationPath = Array(ancestors.prefix(index + 1).map(\.id)) }
+                    }
+                }.buttonStyle(.plain).font(.caption).padding(.vertical, 3)
+            }.scrollIndicators(.hidden)
+            ForEach(children) { item in
+                if let entry = item.entry { entryRow(entry, compact: true) }
+                else {
+                    Button { state.operationPath = ancestors.map(\.id) + [item.id] } label: {
+                        HStack { Text(item.title); Spacer(); Image(systemName: "chevron.right") }
+                            .padding(10).frame(maxWidth: .infinity).contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                }
+            }
+        }
     }
 
     private var sidebar: some View {
@@ -579,6 +682,9 @@ public struct SharedLibraryBrowser: View {
             } else if visible.isEmpty {
                 ContentUnavailableView(word("empty", "没有符合条件的条目"), systemImage: "square.stack")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if query.contentKinds.count == 1 && (query.contentKinds.contains(.image) || query.contentKinds.contains(.video)) {
+                WorkbenchScrollView { resourceGrid }
+                    .accessibilityIdentifier("shared-library-results")
             } else {
                 List(selection: $state.selectedKeys) {
                     ForEach(visible) { entry in entryRow(entry, compact: false).tag(entry.id) }
@@ -609,8 +715,16 @@ public struct SharedLibraryBrowser: View {
     }
     private var searchControls: some View {
         VStack(alignment: .leading, spacing: 6) {
-            TextField(word("search", "搜索名称、说明或我的标签"), text: searchTextBinding)
-                .textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("shared-library-search").workbenchHelp("LIB-SEARCH")
+            HStack(spacing: 6) {
+                TextField(word("search", "搜索名称、说明或我的标签"), text: searchTextBinding)
+                    .textFieldStyle(.plain).focused($searchFocused).onSubmit { submitSearch() }
+                    .accessibilityIdentifier("shared-library-search").workbenchHelp("LIB-SEARCH")
+                Button { submitSearch() } label: { Image(systemName: "magnifyingglass").padding(6).contentShape(Rectangle()) }
+                    .buttonStyle(.plain).accessibilityLabel(word("searchNow", "搜索"))
+            }.padding(7).workbenchInputSurface()
+            if state.hasUnsubmittedText {
+                Text(word("searchPending", "待搜索 · 当前仍显示上次搜索结果")).font(.caption2).foregroundStyle(.secondary)
+            }
 
             HStack {
                 WorkbenchMenu(scopeTitle) {
@@ -636,16 +750,14 @@ public struct SharedLibraryBrowser: View {
                 if allowsImport {
                     Button(consistencyText(language, "LIB-ADD"), action: onImport).workbenchHelp("LIB-ADD")
                 }
-                WorkbenchMenu(consistencyText(language, "LIB-TAGS")) {
-                    WorkbenchMenuForEach(tags) { tag in
-                        WorkbenchMenuToggle(tag.name + " (\(countAddingTag(tag.id)))", isOn: setBinding(\.allTagIDs, tag.id))
-                    }
-                    if tags.isEmpty { WorkbenchMenuText(word("noTags", "尚无我的标签")) }
-                }.workbenchHelp("LIB-TAGS")
+                Button(consistencyText(language, "LIB-TAGS")) { showTags.toggle() }
+                    .popover(isPresented: $showTags, arrowEdge: .bottom) { queryTagPopover }
+                    .workbenchHelp("LIB-TAGS")
                 Button(word("filters", "筛选"), systemImage: "line.3.horizontal.decrease.circle") { showFilters.toggle() }.workbenchHelp("LIB-FILTER")
                     .popover(isPresented: $showFilters, arrowEdge: .bottom) { filterPopover }
             }.font(.caption)
             SharedLibraryPropertySummary(query: Binding(get: { query }, set: { query = $0 }), items: entries.map(\.item), context: queryContext, store: store, fixedScopeDescription: scopeTitle)
+            if query.textTagCombination == .any { Text(word("logicAnyBadge", "文字或标签任一符合")).font(.caption.weight(.semibold)).foregroundStyle(.tint) }
             if hasSearchTokens { ScrollView(.horizontal) {
                 HStack(spacing: 4) {
                     if scope != .all { token(scopeTitle) { selectScope(.all) } }
@@ -735,10 +847,13 @@ public struct SharedLibraryBrowser: View {
             Image(systemName: icon(entry.item.kind)).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.item.title).font(.callout.weight(.medium)).lineLimit(2)
-                Text(entry.item.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                if entry.item.kind == .asset, entry.item.contentKind == .text, let readPreview {
+                    WorkflowLibraryPreview(entry: entry, cache: state.previewCache, pixels: 160, load: { try await readPreview(entry) }).frame(height: 34)
+                } else { Text(entry.item.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
                 if entry.item.kind == .model {
                     if let descriptor = ModelNodeCatalog.entries.first(where: { $0.id == entry.item.key }) {
-                        Text(descriptor.precision).font(.system(size: 13)).lineLimit(2)
+                        Text(descriptor.precision).font(.system(size: 18, weight: .semibold)).lineLimit(3)
+                        Text(word("parameterCountUnrecorded", "参数量：未登记")).font(.caption).foregroundStyle(.secondary)
                     }
                     if case .operation(let id, _) = entry.selection, let definition = WorkflowRegistry.standard.operation(id)?.definition {
                         Text(WorkflowCanvasPresentation.operationDetail(definition, language: language)).font(.caption).lineLimit(2)
@@ -792,10 +907,10 @@ public struct SharedLibraryBrowser: View {
         }
         .accessibilityIdentifier("shared-library-entry-" + entry.id)
         VStack(alignment: .leading, spacing: 4) {
-            row.onDrag { dragProvider(for: entry.id) }
-                .onTapGesture(count:2) { if canvasMode?.resourceCategory != nil,canPreview(entry) { dispatch(.preview,key:entry.id) } }
-                .focusable(canvasMode?.resourceCategory != nil)
-                .onKeyPress(.space) { guard canvasMode?.resourceCategory != nil,canPreview(entry) else { return .ignored }; dispatch(.preview,key:entry.id);return .handled }
+            row.workbenchContextMenu { resourceActions(entry) }.onDrag { dragProvider(for: entry.id) }
+                .onTapGesture(count:2) { if entry.item.kind == .asset,canPreview(entry) { dispatch(.preview,key:entry.id) } }
+                .focusable(entry.item.kind == .asset)
+                .onKeyPress(.space) { guard entry.item.kind == .asset,canPreview(entry) else { return .ignored }; dispatch(.preview,key:entry.id);return .handled }
             if let ids = store.metadata.tagAssignments[entry.item.key], !ids.isEmpty {
                 HStack {
                     ForEach(tags.filter { ids.contains($0.id) }) { tag in
@@ -805,6 +920,19 @@ public struct SharedLibraryBrowser: View {
                 }.font(.caption).padding(.horizontal, 6)
             }
         }
+    }
+
+    @WorkbenchMenuBuilder private func resourceActions(_ entry: SharedLibraryBrowserEntry) -> WorkbenchMenuRows {
+        if canPreview(entry) { WorkbenchMenuAction(word("viewReadOnly", "在 D 内只读查看")) { dispatch(.preview, key: entry.id) } }
+        WorkbenchMenuAction(word("detailsAndTags", "详情、名称与标签…")) { focusedKey = entry.id; compactDetailKey = compact ? entry.id : nil }
+        if entry.item.kind == .asset, entry.runtimeValue == nil || entry.runtimeValue?.reference != nil, let onExternalCopy {
+            WorkbenchMenuAction(word("openExternalCopy", "用外部应用打开独立副本…")) {
+                guard let current = SharedLibraryBrowserLogic.currentEntry(key: entry.id, entries: entries, action: .preview), current.selection == entry.selection else { return }
+                onExternalCopy(current)
+            }
+        }
+        if SharedLibraryBrowserLogic.allows(.location, entry: entry) { WorkbenchMenuAction(word("location", "在访达显示来源")) { dispatch(.location, key: entry.id) } }
+        if SharedLibraryBrowserLogic.allows(.add, entry: entry) { WorkbenchMenuAction(word("addCanvas", "添加画布")) { dispatch(.add, key: entry.id) }.disabled(!canAdd(entry)) }
     }
 
     private var detailPane: some View {
@@ -924,8 +1052,49 @@ public struct SharedLibraryBrowser: View {
         }
     }
 
+    private func submitSearch() {
+        let composing = (NSApp.keyWindow?.firstResponder as? NSTextInputClient)?.hasMarkedText() == true
+        state.submitSearch(hasMarkedText: composing)
+    }
+
+    private var queryTagPopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                TextField(word("tagSearch", "搜索或新建标签"), text: $tagSearch)
+                Button(word("newTag", "新建标签")) {
+                    perform {
+                        let id = try store.createTags([tagSearch]).first!
+                        query.allTagIDs.insert(id); tagSearch = ""
+                    }
+                }.disabled(tagSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            WorkbenchScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(word("systemTags", "预置条件")).font(.headline)
+                    ForEach(WorkflowDataKind.allCases, id: \.self) { kind in
+                        if tagSearch.isEmpty || dataName(kind).localizedStandardContains(tagSearch) {
+                            Toggle(word("inputs", "输入能力") + ": " + dataName(kind), isOn: setBinding(\.inputs, kind))
+                            Toggle(word("outputs", "输出能力") + ": " + dataName(kind), isOn: setBinding(\.outputs, kind))
+                        }
+                    }
+                    Divider()
+                    Text(word("myTags", "我的标签")).font(.headline)
+                    ForEach(tags.filter { tagSearch.isEmpty || $0.name.localizedStandardContains(tagSearch) }) { tag in
+                        Toggle(tag.name, isOn: setBinding(\.allTagIDs, tag.id))
+                    }
+                    if tags.isEmpty { Text(word("noTags", "尚无我的标签")).foregroundStyle(.secondary) }
+                }
+            }.frame(maxHeight: 340)
+            Picker(word("textTagLogic", "文字与标签"), selection: Binding(get: { query.textTagCombination ?? .all }, set: { query.textTagCombination = $0 })) {
+                Text(word("logicAll", "全部符合")).tag(SharedLibrarySearchCombination.all)
+                Text(word("logicAny", "任一符合")).tag(SharedLibrarySearchCombination.any)
+            }
+            Text(word("queryOnly", "此处只修改搜索条件，不给结果添加标签。")).font(.caption).foregroundStyle(.secondary)
+        }.padding(14).frame(width: 320).workbenchPresentation()
+    }
+
     private var searchTextBinding: Binding<String> {
-        Binding(get: { query.text }, set: { query.text = String($0.prefix(256)) })
+        Binding(get: { state.draftText }, set: { state.draftText = String($0.prefix(256)) })
     }
 
     private func setBinding<Value: Hashable>(
@@ -1298,5 +1467,12 @@ public struct SharedLibraryBrowser: View {
         case .pitch: fallback = "音高"
         }
         return word("data." + kind.rawValue, fallback)
+    }
+}
+
+private struct LibraryPanelSurface: ViewModifier {
+    let enabled: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if enabled { content.workbenchPanel(cornerRadius: 12) } else { content }
     }
 }

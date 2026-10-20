@@ -58,8 +58,12 @@ public struct SharedLibraryItem: Sendable, Equatable, Identifiable {
     }
 }
 
+public enum SharedLibrarySearchCombination: String, Codable, Sendable { case all, any }
+
 public struct SharedLibraryQuery: Codable, Sendable, Equatable {
     public var text: String
+    /// Absent in old saved searches: retain intersection semantics.
+    public var textTagCombination: SharedLibrarySearchCombination?
     public var kinds: Set<SharedLibraryItemKind>
     public var roles: Set<String>
     public var inputs: Set<WorkflowDataKind>
@@ -76,11 +80,11 @@ public struct SharedLibraryQuery: Codable, Sendable, Equatable {
                 inputs: Set<WorkflowDataKind> = [], outputs: Set<WorkflowDataKind> = [],
                 contentKinds: Set<WorkflowDataKind> = [], readiness: Set<SharedLibraryReadiness> = [],
                 compatibility: Set<SharedLibraryCompatibility> = [], allTagIDs: Set<UUID> = [],
-                anyTagIDs: Set<UUID> = [], scope: SharedLibraryQueryScope? = nil, properties: SharedLibraryPropertyQuery? = nil) {
+                anyTagIDs: Set<UUID> = [], scope: SharedLibraryQueryScope? = nil, properties: SharedLibraryPropertyQuery? = nil, textTagCombination: SharedLibrarySearchCombination? = nil) {
         self.text = text; self.kinds = kinds; self.roles = roles; self.inputs = inputs
         self.outputs = outputs; self.contentKinds = contentKinds; self.readiness = readiness
         self.compatibility = compatibility; self.allTagIDs = allTagIDs; self.anyTagIDs = anyTagIDs
-        self.scope = scope; self.properties = properties
+        self.scope = scope; self.properties = properties; self.textTagCombination = textTagCombination
     }
 
     public static func == (lhs: Self, rhs: Self) -> Bool {
@@ -90,6 +94,7 @@ public struct SharedLibraryQuery: Codable, Sendable, Equatable {
             && lhs.contentKinds == rhs.contentKinds && lhs.readiness == rhs.readiness
             && lhs.compatibility == rhs.compatibility && lhs.allTagIDs == rhs.allTagIDs
             && lhs.anyTagIDs == rhs.anyTagIDs && lhs.scope == rhs.scope && lhs.properties == rhs.properties
+            && lhs.textTagCombination == rhs.textTagCombination
     }
 }
 
@@ -237,20 +242,27 @@ public final class SharedLibraryStore {
         if query.scope != nil || query.properties?.isEmpty == false {
             guard item.assetFacts?.matches(scope: query.scope, properties: query.properties, context: context) == true else { return false }
         }
+        // Scope/permission/property checks above are never branches of the OR.
+        guard query.allTagIDs.union(query.anyTagIDs).isSubset(of: Set(metadata.tags.keys)) else { return false }
         let ids = metadata.tagAssignments[item.key] ?? []
-        if !query.kinds.isEmpty && !query.kinds.contains(item.kind) { return false }
-        if !query.roles.isEmpty && !query.roles.contains(item.role) { return false }
-        if !query.inputs.isEmpty && query.inputs.isDisjoint(with: item.inputs) { return false }
-        if !query.outputs.isEmpty && query.outputs.isDisjoint(with: item.outputs) { return false }
-        if !query.contentKinds.isEmpty && (item.contentKind.map { !query.contentKinds.contains($0) } ?? true) { return false }
-        if !query.readiness.isEmpty && !query.readiness.contains(item.readiness) { return false }
-        if !query.compatibility.isEmpty && !query.compatibility.contains(SharedLibraryCompatibility(item.compatible)) { return false }
-        if !query.allTagIDs.isSubset(of: ids) { return false }
-        if !query.anyTagIDs.isEmpty && query.anyTagIDs.isDisjoint(with: ids) { return false }
+        let hasTags = !query.kinds.isEmpty || !query.roles.isEmpty || !query.inputs.isEmpty || !query.outputs.isEmpty
+            || !query.contentKinds.isEmpty || !query.readiness.isEmpty || !query.compatibility.isEmpty
+            || !query.allTagIDs.isEmpty || !query.anyTagIDs.isEmpty
+        let tagMatch = (query.kinds.isEmpty || query.kinds.contains(item.kind))
+            && (query.roles.isEmpty || query.roles.contains(item.role))
+            && (query.inputs.isEmpty || !query.inputs.isDisjoint(with: item.inputs))
+            && (query.outputs.isEmpty || !query.outputs.isDisjoint(with: item.outputs))
+            && (query.contentKinds.isEmpty || item.contentKind.map(query.contentKinds.contains) == true)
+            && (query.readiness.isEmpty || query.readiness.contains(item.readiness))
+            && (query.compatibility.isEmpty || query.compatibility.contains(SharedLibraryCompatibility(item.compatible)))
+            && query.allTagIDs.isSubset(of: ids)
+            && (query.anyTagIDs.isEmpty || !query.anyTagIDs.isDisjoint(with: ids))
+        let words = query.text.split(whereSeparator: \.isWhitespace)
         let haystack = ([item.title, item.detail, item.assetFacts?.note ?? ""] + ids.compactMap { metadata.tags[$0]?.name }).joined(separator: " ")
-        return query.text.split(whereSeparator: \.isWhitespace).allSatisfy {
-            haystack.localizedStandardContains(String($0))
-        }
+        let textMatch = words.allSatisfy { haystack.localizedStandardContains(String($0)) }
+        if query.textTagCombination == .any, !words.isEmpty, hasTags { return textMatch || tagMatch }
+        // Empty branches are ignored; with zero conditions the legal scope stays visible.
+        return textMatch && tagMatch
     }
 
     public func filter(_ items: [SharedLibraryItem], query: SharedLibraryQuery, context: SharedLibraryQueryContext = .init()) -> [SharedLibraryItem] {
@@ -559,7 +571,7 @@ public final class SharedLibraryStore {
                 }
                 try checkFields(fields, allowed: ["id", "name", "query"])
                 try checkFields(query, allowed: Set(["text", "kinds", "roles", "inputs", "outputs",
-                                                 "contentKinds", "readiness", "compatibility", "allTagIDs", "anyTagIDs"]).union(schema == 2 ? ["scope", "properties"] : []))
+                                                 "contentKinds", "readiness", "compatibility", "allTagIDs", "anyTagIDs"]).union(schema == 2 ? ["scope", "properties", "textTagCombination"] : []))
                 if let scope = query["scope"] as? [String: Any] {
                     try checkFields(scope, allowed: ["mode", "projectID", "instanceID", "runID", "nodeID", "stepID"])
                 }

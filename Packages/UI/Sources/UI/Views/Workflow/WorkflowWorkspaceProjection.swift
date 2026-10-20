@@ -18,7 +18,7 @@ enum WorkflowResourceCategory: String, CaseIterable, Hashable {
         case .image: workspaceText(language,"image","图像","Images")
         case .video: workspaceText(language,"video","视频","Video")
         case .audio: workspaceText(language,"audio","音频","Audio")
-        case .data: workspaceText(language,"data","数据","Data")
+        case .data: workspaceText(language,"otherResources","其他","Other")
         }
     }
     func contains(_ kind: WorkflowDataKind?) -> Bool {

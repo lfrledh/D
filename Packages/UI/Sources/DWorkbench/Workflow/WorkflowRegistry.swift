@@ -53,8 +53,8 @@ public struct WorkflowRegistry: Sendable {
         if case .invoke(let reference) = node.control,
            let tool = tools.first(where: { $0.id == reference.id && $0.version == reference.version }),
            let interface = tool.graph.interface {
-            result.inputs = interface.inputs.map { .init($0.name, $0.name, kinds: $0.type.portKinds, required: $0.required) }
-            result.outputs = interface.outputs.map { .init($0.name, $0.name, kinds: $0.schema.portKinds) }
+            result.inputs = interface.inputs.map { .init($0.name, tool.registration?.inputLabels[$0.name] ?? $0.name, kinds: $0.type.portKinds, required: $0.required) }
+            result.outputs = interface.outputs.map { .init($0.name, tool.registration?.outputLabels[$0.name] ?? $0.name, kinds: $0.schema.portKinds) }
         }
         return result
     }

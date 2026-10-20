@@ -129,6 +129,8 @@ public struct WorkbenchSettingsView: View {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 16) {
                                 Text(title(.assistance)).font(.headline)
+                                WorkflowKeyboardSettings(state: model.chatDisplaySettings)
+                                Divider()
                                 WorkbenchPicker(text("sendShortcut", "Send shortcut", "发送快捷键"), selection: Binding(
                                     get: { model.chatDisplaySettings.preferences.sendShortcut },
                                     set: { value in var next = model.chatDisplaySettings.preferences; next.sendShortcut = value; model.chatDisplaySettings.update(next) })) {

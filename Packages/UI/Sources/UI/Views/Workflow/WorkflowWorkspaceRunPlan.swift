@@ -10,6 +10,8 @@ import SwiftUI
     @Environment(\.dLanguageStore) private var language
     @Environment(\.workbenchModelReadiness) private var readiness
     @State private var choices:[String:WorkflowCallReference]=[:]
+    @State private var batch = false
+    @State private var repetitions = 1
     private func text(_ key:String,_ zh:String,_ en:String)->String { workspaceText(language,key,zh,en) }
     private func key(_ boundary:WorkflowScopeBoundary)->String { boundary.destinationNodeID.uuidString+":"+boundary.destinationPort }
     private var current:Bool { draft.isCurrent(in:controller) }
@@ -28,9 +30,16 @@ import SwiftUI
                 Button(text("close","关闭计划","Close plan"),systemImage:"xmark",action:close)
             }
             if !current { Label(text("stalePlan","流程、模型或历史输入已变化，请关闭后重新检查。","Workflow, models or historical inputs changed. Close and review again."),systemImage:"exclamationmark.triangle").foregroundStyle(.orange) }
+            HStack {
+                Toggle(text("batchGenerate", "批量生成", "Generate a batch"), isOn: $batch)
+                if batch {
+                    Stepper(text("stageCount", "本阶段次数", "Attempts this stage") + " \(repetitions)", value: $repetitions, in: 1...64)
+                    Text(text("batchSeed", "串行执行至人工关卡；使用固定配方中的种子，结果可能相同。", "Run serially to review gates. Retain configured seeds; results may match.")).font(.caption)
+                }
+            }
             WorkbenchScrollView {
                 VStack(alignment:.leading,spacing:10) {
-                    Text(draft.mode == 0 ? text("reuseNote","范围内的节点仍可能按原规则复用；提交时再校验。","In-scope steps may reuse results under existing rules; admission revalidates them.") : draft.mode == 1 ? text("singleNote","只重新计算所选节点；上游输入由原单步运行入口在提交时解析，当前尚未固定。","Recompute only this node. The existing single-step command resolves reusable upstream inputs at submission; they are not pinned yet.") : text("boundaryNote","只计算范围内节点；每个外部输入都要选择明确的历史调用，不自动替换为最新结果。","Compute only in-scope nodes. Choose an exact historical call for every external input; no automatic latest-result substitution."))
+                    Text(batch ? text("batchFresh", "每次尝试独立计算所选范围；范围外输入固定为明确选择的历史结果。", "Each attempt computes the selected range independently; external inputs remain pinned to the chosen historical results.") : draft.mode == 0 ? text("reuseNote","范围内的节点仍可能按原规则复用；提交时再校验。","In-scope steps may reuse results under existing rules; admission revalidates them.") : draft.mode == 1 ? text("singleNote","只重新计算所选节点；上游输入由原单步运行入口在提交时解析，当前尚未固定。","Recompute only this node. The existing single-step command resolves reusable upstream inputs at submission; they are not pinned yet.") : text("boundaryNote","只计算范围内节点；每个外部输入都要选择明确的历史调用，不自动替换为最新结果。","Compute only in-scope nodes. Choose an exact historical call for every external input; no automatic latest-result substitution."))
                         .font(.callout).foregroundStyle(.secondary)
                     let layers=WorkflowWorkspaceRunDraft.layers(draft.slice.plan)
                     ForEach(layers.indices,id:\.self) { index in
@@ -50,7 +59,7 @@ import SwiftUI
                             }
                         }.padding(8).frame(maxWidth:.infinity,alignment:.leading)
                     }
-                    if draft.mode >= 2 {
+                    if draft.mode >= 2 || batch {
                         ForEach(Array(draft.slice.boundaries.enumerated()),id:\.offset) { _,boundary in boundaryPicker(boundary) }
                     } else if !draft.slice.boundaries.isEmpty {
                         ForEach(Array(draft.slice.boundaries.enumerated()),id:\.offset) { _,boundary in
@@ -66,18 +75,24 @@ import SwiftUI
             HStack {
                 Text(text("noComputePreview","查看计划不会运行或修改流程。","Reviewing a plan does not run or edit the workflow.")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button(text("submit","明确提交运行","Submit run"),systemImage:"play.fill") {
+                Button(batch ? text("batchStart", "开始本阶段生成", "Start this stage") + " ×\(repetitions)" : text("submit","明确提交运行","Submit run"),systemImage:"play.fill") {
                     guard current else { return }
-                    let inputs=pins
-                    guard draft.mode < 2 || inputs.count == draft.slice.boundaries.count else { return }
+                    let inputs=pins, isBatch=batch, count=repetitions
+                    guard (!batch && draft.mode < 2) || inputs.count == draft.slice.boundaries.count else { return }
                     close()
                     Task {
                         guard draft.isCurrent(in:controller) else { controller.errorMessage=text("stalePlan","计划已改变，请重新检查。","Plan changed; review again.");return }
-                        if draft.mode < 2 { await controller.run(target:draft.target,only:draft.mode == 1) }
+                        if isBatch {
+                            do {
+                                let id = try await controller.createBatchStage(selection: draft.selection, pins: inputs,
+                                    repetitions: count, expectedGraphID: draft.graph.id, expectedRevision: draft.graph.revision)
+                                await controller.runBatchStage(id)
+                            } catch { controller.errorMessage = error.localizedDescription }
+                        } else if draft.mode < 2 { await controller.run(target:draft.target,only:draft.mode == 1) }
                         else { await controller.runScoped(draft.selection,pins:inputs,expectedGraphID:draft.graph.id,expectedRevision:draft.graph.revision) }
                     }
                 }.buttonStyle(WorkbenchPrimaryButtonStyle())
-                    .disabled(!current || !controller.canEditCanvas || controller.isRunning || (draft.mode >= 2 && pins.count != draft.slice.boundaries.count))
+                    .disabled(!current || !controller.canEditCanvas || controller.isRunning || ((draft.mode >= 2 || batch) && pins.count != draft.slice.boundaries.count))
                     .accessibilityIdentifier("workflow-run-preview-submit")
             }
         }.padding(14)

@@ -8,7 +8,8 @@ import SwiftUI
 struct WorkflowViewerTarget {
     let title: String
     let subtitle: String
-    let value: WorkflowValue
+    var value: WorkflowValue? = nil
+    var resource: ProjectReadOnlyAsset? = nil
     var call: WorkflowCallReference? = nil
 }
 
@@ -44,6 +45,7 @@ struct WorkflowViewerCallIdentity:Hashable {
     let audio = AudioTransport(recordingEnabled:false)
     var library:SharedLibraryStore?
     @ObservationIgnored private var task: Task<Void,Never>?
+    @ObservationIgnored private var temporaryMedia: URL?
     @ObservationIgnored private let readSnapshot:(WorkflowAssetReference) async throws -> ProjectAssetMetadataSnapshot
     @ObservationIgnored private let readText:(WorkflowAssetReference) async throws -> String
     @ObservationIgnored private let writeAnnotations:(ProjectAssetEditBaseline,String?,String?,Bool?) async throws -> Void
@@ -85,7 +87,14 @@ struct WorkflowViewerCallIdentity:Hashable {
     private func read(_ target:WorkflowViewerTarget,request:UUID) async {
         do {
             guard current(request) else { return }
-            guard let reference=target.value.asset else { loading=false;return }
+            if let token = target.resource {
+                let content = try await store.readOnlyAsset(token)
+                guard current(request) else { return }
+                try await readContent(content, request: request)
+                guard current(request) else { return }
+                metadata = content.metadata; loading = false; return
+            }
+            guard let reference=target.value?.asset else { loading=false;return }
             let snapshot=try await readSnapshot(reference)
             guard current(request) else { return }
             switch reference.kind {
@@ -93,8 +102,12 @@ struct WorkflowViewerCallIdentity:Hashable {
                 let result=try await readText(reference);guard current(request) else { return };text=result
             case .image:
                 let data=try await store.workflowData(reference);guard current(request) else { return }
-                guard let source=CGImageSourceCreateWithData(data as CFData,nil), let decoded=CGImageSourceCreateImageAtIndex(source,0,nil) else { throw WorkflowIssue("Image cannot be decoded / 图像无法解码。") }
-                image=decoded
+                let decoded = try await WorkflowReadOnlyImageDecoder.shared.decode(data)
+                guard current(request) else { return }; image = decoded
+            case .document:
+                let content = try await store.readOnlyAsset(id: reference.assetID, reference: reference)
+                guard current(request) else { return }
+                try await readContent(content, request: request)
             case .video:
                 let (url,_)=try await store.workflowMedia(reference);guard current(request) else { return };mediaURL=url
             case .audio:
@@ -118,12 +131,41 @@ struct WorkflowViewerCallIdentity:Hashable {
             video.stopAndClear();audio.shutdown();failure=error.localizedDescription;loading=false
         }
     }
+    private func readContent(_ content: ProjectReadOnlyContent, request: UUID) async throws {
+        switch content.token.kind {
+        case .text:
+            guard let value = content.text else { throw WorkflowIssue("文字不是完整 UTF-8。") }; text = value
+        case .image:
+            let image = try await WorkflowReadOnlyImageDecoder.shared.decode(content.data)
+            guard current(request) else { return }; self.image = image
+        case .document:
+            let result = try await WorkflowReadOnlyImageDecoder.shared.document(content.data, name: content.metadata.asset.relativePath)
+            guard current(request) else { return }; text = result
+        case .audio, .video:
+            let suffix = content.token.kind == .video ? "mp4" : (content.token.mediaType == "audio/x-caf" ? "caf" : "wav")
+            let file = try await WorkflowReadOnlyImageDecoder.shared.media(content.data, suffix: suffix)
+            guard current(request) else { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()); return }
+            temporaryMedia = file
+            if content.token.kind == .video { mediaURL = file }
+            else {
+                let policy = try await store.readOnlyAudioPolicy(content.token)
+                guard current(request) else { return }
+                guard let format = content.metadata.asset.metadata.audio?.format else { throw WorkflowIssue("音频规格未登记。") }
+                try audio.preparePlayback(url: file, format: format, policy: policy); audioFormat = format
+            }
+        default:
+            // Structured content is represented by its real typed data or readable source.
+            if let datum = try? JSONDecoder().decode(WorkflowDatum.self, from: content.data) {
+                try datum.validate(); target.value = .data(datum)
+            } else if let source = String(data: content.data, encoding: .utf8) { text = source }
+        }
+    }
     func validateMetadata() throws {
         guard ownerIsCurrent,let owner,owner.canEditLibraryMetadata,!suspended else { throw WorkflowIssue("Metadata owner changed / 元数据所有者已改变。") }
     }
     func saveMetadata(_ expected:ProjectAssetEditBaseline,_ name:String?,_ note:String?,_ favorite:Bool?) async throws {
         try validateMetadata()
-        guard let ref=target.value.asset, expected.projectID == projectID,
+        guard let ref=target.value?.asset, expected.projectID == projectID,
               expected.instanceID == instanceID,expected.assetID == ref.assetID else {
             throw WorkflowIssue("Metadata target changed / 元数据目标已改变。")
         }
@@ -132,12 +174,12 @@ struct WorkflowViewerCallIdentity:Hashable {
             try await writeAnnotations(expected,name,note,favorite)
             // A completed save belongs to its original asset. Reusing the
             // window must not publish its metadata or error into a new target.
-            guard current(request),target.value.asset == ref else { return }
+            guard current(request),target.value?.asset == ref else { return }
             let snapshot=try await readSnapshot(ref)
-            guard current(request),target.value.asset == ref else { return }
+            guard current(request),target.value?.asset == ref else { return }
             metadata=snapshot
         } catch {
-            guard current(request),target.value.asset == ref else { return }
+            guard current(request),target.value?.asset == ref else { return }
             throw error
         }
     }
@@ -147,6 +189,7 @@ struct WorkflowViewerCallIdentity:Hashable {
     }
     func stop() {
         generation=UUID();task?.cancel();task=nil;video.stopAndClear();audio.shutdown();loading=false
+        if let temporaryMedia { try? FileManager.default.removeItem(at: temporaryMedia.deletingLastPathComponent()); self.temporaryMedia = nil }
     }
     func suspend() { stop();suspended=true }
     func reconcile() {
@@ -243,23 +286,20 @@ extension EnvironmentValues {
             } else if let error=session.failure { Text(error).foregroundStyle(.red).textSelection(.enabled) }
             else if session.loading { ProgressView(text("loading","正在读取固定内容…","Reading fixed content…")) }
             else { content.frame(maxWidth:.infinity,maxHeight:.infinity) }
-            if session.canRead, !session.suspended, let record=session.exactRecord,let controller=session.controller {
-                if record.step.status == .waiting {
-                    WorkbenchScrollView {
-                        if let task=record.step.humanTask {
-                            WorkflowHumanTaskForm(task:task,onSaveDraft:{ controller.editHumanDraft(stepID:record.id,value:$0) },
-                                onSubmit:{ value in Task { await controller.decideHuman(stepID:record.id,value:value,expectedTask:task) } },
-                                onReject:{ Task { await controller.decideHuman(stepID:record.id,value:nil,reject:true,expectedTask:task) } })
-                        } else { WorkflowWaitingDecision(controller:controller,step:record.step,readOnly:controller.readOnlyReason != nil,preview:controller.preview) }
-                    }.id(WorkflowViewerCallIdentity(controller:ObjectIdentifier(controller),project:session.projectID,instance:session.instanceID,address:record.address,step:record.id)).frame(maxHeight:260).disabled(controller.isRunning || controller.readOnlyReason != nil)
-                }
+            if session.exactRecord?.step.status == .waiting {
+                Text(text("readonlyGate", "只读查看；请在工作面的活动栏保存人工决定。", "Read only. Save review decisions in the workspace Activity panel.")).font(.caption).foregroundStyle(.secondary)
             }
             if showInfo {
                 WorkbenchScrollView {
                     VStack(alignment:.leading,spacing:8) {
                         Text(session.target.subtitle).font(.callout)
-                        if let metadata=session.metadata { SharedAssetMetadataPanel(snapshot:metadata,library:session.library,validate:session.validateMetadata,save:session.saveMetadata) }
-                        Text(session.target.value.asset != nil ? text("saved","已保存资产","Saved asset") : text("runValue","运行内数据","Run value"))
+                        if let metadata=session.metadata {
+                            Text(metadata.asset.name).font(.headline).textSelection(.enabled)
+                            Text(metadata.asset.note).textSelection(.enabled)
+                            Text(metadata.asset.mediaType).font(.caption).textSelection(.enabled)
+                            Text(text("readonlyMetadata", "名称与标签请在素材库的详情中编辑。", "Edit names and tags in the resource details.")).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Text((session.target.value?.asset != nil || session.target.resource != nil) ? text("saved","已保存资产","Saved asset") : text("runValue","运行内数据","Run value"))
                         if let record=session.exactRecord {
                             Text(text("frozenConfig","此调用的固定配置","Frozen configuration of this call")).font(.headline)
                             ForEach(record.step.node.parameters.keys.sorted(),id:\.self) { key in
@@ -310,7 +350,7 @@ extension EnvironmentValues {
                 if let controller=session.controller {
                     WorkbenchScrollView { ForEach(values) { WorkflowCandidatePreview(controller:controller,candidate:$0,selected:false,onSelect:nil) } }
                 }
-            case .asset: Text(text("unsupportedViewer","原件已保留，此类型暂无可视预览。","Original preserved; no visual preview for this type."))
+            case .asset, nil: Text(text("unsupportedViewer","原件已保留，此类型暂无可视预览。","Original preserved; no visual preview for this type."))
             }
         }
     }
@@ -358,4 +398,28 @@ struct WorkflowViewerText:NSViewRepresentable {
         if found.location != NSNotFound { context.coordinator.last=found;view.setSelectedRange(found);view.scrollRangeToVisible(found) }
     }
     func sizeThatFits(_ proposal:ProposedViewSize,nsView:NSScrollView,context:Context)->CGSize? { .init(width:proposal.width ?? 400,height:proposal.height ?? 300) }
+}
+
+private actor WorkflowReadOnlyImageDecoder {
+    static let shared = WorkflowReadOnlyImageDecoder()
+    func document(_ data: Data, name: String) async throws -> String {
+        try Task.checkCancellation()
+        return try await DocumentTextExtractor.extract(data: data, fileName: name, ocr: false).text
+    }
+    func media(_ data: Data, suffix: String) throws -> URL {
+        try Task.checkCancellation()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("D-Viewer-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        let file = directory.appendingPathComponent("preview." + suffix)
+        do {
+            try data.write(to: file, options: .withoutOverwriting)
+            try Task.checkCancellation(); return file
+        } catch { try? FileManager.default.removeItem(at: directory); throw error }
+    }
+    func decode(_ data: Data) throws -> CGImage {
+        try Task.checkCancellation()
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw WorkflowIssue("图像无法解码。") }
+        return image
+    }
 }

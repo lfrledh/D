@@ -4,6 +4,28 @@ import Testing
 
 @Suite("Workflow library and project asset tags")
 struct WorkflowLibraryMetadataTests {
+    @Test func readOnlyLegacyAssetAndIndependentCopyDoNotRegisterOrRewriteOriginal() async throws {
+        try await withFixture { fixture in
+            let store = try await ProjectStore.create(at: fixture.project, name: "Read-only fixture")
+            let (_, asset, original, bytes) = try await completedAsset(in: fixture, store: store)
+            let before = await store.snapshot()
+            let history = try await store.workflowState()
+            let content = try await store.readOnlyAsset(id: asset.id)
+            #expect(content.data == bytes && content.token.registeredReference == nil)
+            #expect(await store.snapshot() == before)
+            #expect(try await store.workflowState().archive == history.archive)
+            let copy = fixture.project.deletingLastPathComponent().appendingPathComponent("external-copy.png")
+            try await store.exportReadOnlyCopy(content.token, to: copy)
+            #expect(try Data(contentsOf: copy) == bytes)
+            try Data("external edit".utf8).write(to: copy)
+            #expect(try Data(contentsOf: original) == bytes)
+            await #expect(throws: (any Error).self) { try await store.exportReadOnlyCopy(content.token, to: copy) }
+            #expect(try Data(contentsOf: copy) == Data("external edit".utf8))
+            #expect(await store.snapshot() == before)
+            try await store.close()
+        }
+    }
+
     @Test func validationEnforcesBoundsAndPreservesUnicodeBytes() throws {
         let decomposed = "e\u{301} 🎨"
         let result = try LibraryTags.validate(["  \(decomposed)  ", String(repeating: "界", count: 32)])

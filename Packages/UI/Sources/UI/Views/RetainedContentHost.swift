@@ -11,7 +11,7 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
     var fallbackSize = CGSize(width: 240, height: 640)
 
     func makeNSView(context: Context) -> NSHostingView<RetainedContentRoot<Content>> {
-        let host = NSHostingView(rootView: RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, featureHelp: context.environment.workbenchHelpStore))
+        let host = NSHostingView(rootView: RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, featureHelp: context.environment.workbenchHelpStore, contentVisible: visible && context.environment.workbenchContentVisible))
         host.sizingOptions = []
         host.setAccessibilityIdentifier(identifier)
         host.isHidden = !visible
@@ -21,7 +21,7 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
         #if DEBUG
         WorkbenchCategoryUpdateProbe.retainedUpdate?()
         #endif
-        host.rootView = RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, featureHelp: context.environment.workbenchHelpStore)
+        host.rootView = RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, featureHelp: context.environment.workbenchHelpStore, contentVisible: visible && context.environment.workbenchContentVisible)
         // Only an actual close/open changes native visibility. Hiding can release
         // the first responder; a layout change must not transiently hide an editor.
         if host.isHidden != !visible { host.isHidden = !visible }
@@ -45,8 +45,10 @@ struct RetainedContentRoot<Content: View>: View {
     var menuContext = "window"
     var modelReadiness: [String: SharedLibraryReadiness] = [:]
     var featureHelp: WorkbenchHelpStore? = nil
+    var contentVisible = true
     var body: some View {
         content.environment(\.metadataEditorLifecycle, lifecycle)
+            .environment(\.workbenchContentVisible, contentVisible)
             .environment(\.workbenchBackground, background)
             .environment(\.workbenchAppearanceState, appearance)
             .environment(\.dLanguageStore, language)
@@ -59,5 +61,13 @@ struct RetainedContentRoot<Content: View>: View {
             .buttonStyle(WorkbenchGlassButtonStyle())
             .menuStyle(WorkbenchGlassMenuStyle())
             .textFieldStyle(WorkbenchGlassTextFieldStyle())
+    }
+}
+
+private struct WorkbenchContentVisibleKey: EnvironmentKey { static let defaultValue = true }
+extension EnvironmentValues {
+    var workbenchContentVisible: Bool {
+        get { self[WorkbenchContentVisibleKey.self] }
+        set { self[WorkbenchContentVisibleKey.self] = newValue }
     }
 }

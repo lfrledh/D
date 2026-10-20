@@ -44,9 +44,10 @@ public enum WorkflowToolEditing {
 
     public static func extract(_ graph: WorkflowGraph, selected: Set<UUID>, name: String,
                                inputs: [WorkflowToolInputBinding], outputs: [WorkflowNamedOutput],
-                               tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard) throws -> WorkflowToolExtraction {
+                               tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard,
+                               registration: WorkflowToolRegistration? = nil) throws -> WorkflowToolExtraction {
         let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty, title.utf8.count <= 256, !tools.contains(where: { $0.name == title }),
+        guard !title.isEmpty, title.utf8.count <= 256,
               !selected.isEmpty, selected.isSubset(of: Set(graph.nodes.map(\.id))),
               Set(inputs.map(\.name)).count == inputs.count, Set(outputs.map(\.name)).count == outputs.count,
               !outputs.isEmpty else { throw WorkflowIssue("封装需要不重复的工具名、选区与公开接口。") }
@@ -81,7 +82,7 @@ public enum WorkflowToolEditing {
             }
         }
         body.interface = .init(inputs: fields, outputs: outputs)
-        let tool = WorkflowToolDefinition(name: title, graph: body)
+        let tool = WorkflowToolDefinition(name: title, graph: body, registration: registration)
         let available = tools + [tool]
         _ = try WorkflowPlanCompiler(registry: registry).compile(body, tools: available)
         guard let definition = registry.operation("d.control.invoke")?.definition else { throw WorkflowIssue("工具调用操作未注册。") }

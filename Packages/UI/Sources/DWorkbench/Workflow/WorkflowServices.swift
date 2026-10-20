@@ -56,6 +56,41 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         let parents: [WorkflowAssetReference]; let request: InferenceRequest?; let details: [String: String]
     }
     private var pending: [UUID: Publication] = [:]
+    private var publicationContexts: [UUID: WorkflowExecutionContext] = [:]
+    public func retainedPublicationContext(stepID: UUID) -> WorkflowExecutionContext? { publicationContexts[stepID] }
+    public func hasPendingPublication(stepID: UUID) -> Bool {
+        pending[stepID] != nil || candidateProgress[stepID]?.contains { pending[$0.attemptID] != nil } == true
+    }
+    public func acknowledgePublication(stepID: UUID) {
+        guard !hasPendingPublication(stepID: stepID) else { return }
+        publicationContexts.removeValue(forKey: stepID)
+        candidateProgress.removeValue(forKey: stepID); imageCallOwners.removeValue(forKey: stepID)
+    }
+    /// Publish retained bytes for the exact original Call. Never resolve a model or execute an operation.
+    public func retryWorkflowPublications(_ context: WorkflowExecutionContext) async throws -> [String: WorkflowValue] {
+        guard let original = publicationContexts[context.stepID], original.node == context.node,
+              original.inputs == context.inputs, original.address == context.address, original.graphID == context.graphID,
+              context.address != nil, context.graphID != nil, hasPendingPublication(stepID: context.stepID),
+              let definition = registry.operation(context.node.operationID)?.definition else {
+            throw WorkflowIssue("没有属于此冻结调用的待保存内容。")
+        }
+        if WorkflowModelRoutes.isImage(context.node.operationID) {
+            let project = await store.snapshot()
+            guard let owner = imageCallOwners[context.stepID], owner.projectID == project.id,
+                  owner.instanceID == project.effectiveInstanceID, owner.node == context.node,
+                  owner.inputs == context.inputs, owner.address == context.address, owner.graphID == context.graphID,
+                  candidateProgress[context.stepID]?.allSatisfy({ pending[$0.attemptID] == nil || imageCandidateParents[$0.attemptID] == context.stepID }) == true else {
+                throw WorkflowIssue("候选保存所有者已改变。")
+            }
+            return try await retryQuickPublications(context)
+        }
+        if WorkflowModelRoutes.isLanguage(context.node.operationID) || context.node.operationID == "d.music.pitch" {
+            return try await retryQuickPublications(context)
+        }
+        guard definition.outputs.count == 1, definition.outputs[0].id == "output",
+              definition.interaction != .textReview else { throw WorkflowIssue("此调用没有已登记的单输出保存映射。") }
+        return ["output": .asset(try await publish(context))]
+    }
     private var candidateProgress: [UUID: [WorkflowCandidate]] = [:]
     /// In-memory recovery belongs to the original Call, not merely a candidate UUID.
     private struct ImageCallOwner: Equatable {
@@ -164,7 +199,11 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         try registry.validate(context.node)
         try registry.validateInputs(context.inputs, node: context.node, connectedPorts: Set(context.inputs.keys))
         languageCallActive = true
-        defer { languageCallActive = false; activeOperation = nil }
+        publicationContexts[context.stepID] = context
+        defer {
+            languageCallActive = false; activeOperation = nil
+            if !hasPendingPublication(stepID: context.stepID) { publicationContexts.removeValue(forKey: context.stepID) }
+        }
         do {
             // Image publications use candidate attempt IDs. Their service restores all
             // retained bytes before lazily acquiring a model for any missing candidate.

@@ -180,11 +180,8 @@ struct WorkbenchSidebar<Content: View>: View {
             let visible = expanded && revealed
             let palette = preferences.resolvedAppearance.palette(for: scheme)
             ZStack(alignment: alignment) {
-                WorkbenchSidebarPlate(progress: expanded ? 1 : 0, expandedWidth: width,
-                    expandedHeight: geometry.size.height, leading: leading)
-                    .workbenchMorph(value: expanded)
-                    .allowsHitTesting(false)
-
+                WorkbenchSidebarMaterial(progress: expanded ? 1 : 0, expandedWidth: width,
+                    expandedHeight: geometry.size.height, leading: leading) {
                 VStack(spacing: 0) {
                     Text(title).font(.headline).lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: leading ? .trailing : .leading)
@@ -209,6 +206,7 @@ struct WorkbenchSidebar<Content: View>: View {
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .contentShape(.interaction, RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .allowsHitTesting(visible && isEnabled)
+                }.workbenchMorph(value: expanded)
 
                 Button(action: toggle) {
                     Image(systemName: leading ? "sidebar.left" : "sidebar.right")
@@ -242,6 +240,28 @@ struct WorkbenchSidebar<Content: View>: View {
             guard !Task.isCancelled else { return }
             revealed = true
         }
+    }
+}
+
+/// The retained foreground stays full-sized; only its containing material interpolates.
+private struct WorkbenchSidebarMaterial<Content: View>: View, Animatable {
+    nonisolated var progress: CGFloat
+    let expandedWidth: CGFloat
+    let expandedHeight: CGFloat
+    let leading: Bool
+    @ViewBuilder let content: () -> Content
+    nonisolated var animatableData: CGFloat { get { progress } set { progress = newValue } }
+    var body: some View {
+        let size = WorkbenchSidebarPlate.size(progress: progress, width: expandedWidth, height: expandedHeight)
+        let shape = RoundedRectangle(cornerRadius: min(22, min(size.width, size.height) / 2), style: .continuous)
+        content()
+            .frame(width: expandedWidth, height: expandedHeight)
+            .frame(width: size.width, height: size.height, alignment: leading ? .topLeading : .topTrailing)
+            .clipShape(shape)
+            .workbenchPanel(in: shape)
+            .offset(x: WorkbenchSidebarPlate.origin(progress: progress, size: size, leading: leading).x,
+                    y: WorkbenchSidebarPlate.origin(progress: progress, size: size, leading: leading).y)
+            .opacity(min(1, max(0, progress * 6)))
     }
 }
 
@@ -297,6 +317,7 @@ struct WorkbenchCategoryLensTrack: View, Animatable {
     }
     var body: some View {
         let decorated = !preferences.resolvedAppearance.lightweight && !reduceTransparency && contrast != .increased
+        let native = decorated && preferences.resolvedAppearance.local?.material == .glass
         let lift = preferences.resolvedAppearance.lightweight || reduceMotion || preferences.resolvedAppearance.motion == 0
             ? 0 : min(1, max(0, engagement))
         let width = WorkbenchCategoryDragView.itemWidth * (1 + 0.06 * lift)
@@ -313,12 +334,30 @@ struct WorkbenchCategoryLensTrack: View, Animatable {
             }
         }
         .frame(width: 256, height: 36)
-        .modifier(WorkbenchCategoryRefraction(origin: x, enabled: decorated,
+        .mask {
+            if native {
+                Rectangle().overlay(alignment: .topLeading) {
+                    Capsule().frame(width: width, height: height).offset(x: x, y: y).blendMode(.destinationOut)
+                }.compositingGroup()
+            } else { Rectangle() }
+        }
+        .modifier(WorkbenchCategoryRefraction(origin: x, enabled: decorated && !native,
             verticalOrigin: y, size: CGSize(width: width, height: height)))
         .overlay(alignment: .topLeading) {
+            if native {
+                HStack(spacing: 2) {
+                    ForEach(titles.indices, id: \.self) { index in
+                        WorkbenchCategoryInk(title: titles[index], hovered: hovered == index, pressed: pressed == index)
+                            .frame(maxWidth: .infinity).frame(height: 36)
+                    }
+                }.frame(width: 256, height: 36).offset(x: -x, y: -y)
+                    .frame(width: width, height: height, alignment: .topLeading).clipShape(Capsule())
+                    .glassEffect(.regular, in: Capsule()).offset(x: x, y: y)
+            } else {
             Capsule()
                 .strokeBorder(ink.opacity(decorated ? 0.22 : 1), lineWidth: decorated ? 0.6 : 1.5)
                 .frame(width: width, height: height).offset(x: x, y: y)
+            }
         }
         .frame(width: 256, height: 36)
         .allowsHitTesting(false).accessibilityHidden(true)

@@ -2355,12 +2355,13 @@ enum ProjectFiles {
         return descriptor
     }
 
-    static func read(relative: String, in root: Int32, limit: Int) throws -> Data {
+    static func read(relative: String, in root: Int32, limit: Int, cancellable: Bool = false) throws -> Data {
         let descriptor = try openRelativeFile(relative, in: root)
         defer { Darwin.close(descriptor) }
         var result = Data()
         var buffer = [UInt8](repeating: 0, count: 64 * 1_024)
         while true {
+            if cancellable { try Task.checkCancellation() }
             let count = Darwin.read(descriptor, &buffer, buffer.count)
             if count == 0 { return result }
             if count < 0 {
@@ -3268,7 +3269,7 @@ extension ProjectStore {
         struct Header: Decodable { let version: Int }
         let decoder = JSONDecoder()
         guard let header = try? decoder.decode(Header.self, from: data) else { throw WorkflowIssue("流程快照已损坏，原件已保留。") }
-        guard [1, 2].contains(header.version) else {
+        guard [1, 2, 3].contains(header.version) else {
             return .init(archive: nil, readOnlyReason: "流程格式 v\(header.version) 尚不支持；原始数据与连接已保留，只读。", originalBytes: data)
         }
         if let identity = try WorkflowArchiveInspection.unknownOperation(in: data) {
@@ -3337,18 +3338,20 @@ extension ProjectStore {
     }
 
     /// Draft configuration and execution history are saved together; Store retains all published asset records.
-    public func saveWorkflow(graphs: [WorkflowGraph], runs: [WorkflowRun], expectedRevision: UUID, tools: [WorkflowToolDefinition]? = nil) throws -> WorkflowArchive {
+    public func saveWorkflow(graphs: [WorkflowGraph], runs: [WorkflowRun], expectedRevision: UUID, tools: [WorkflowToolDefinition]? = nil, batchStages: [WorkflowBatchStage]? = nil) throws -> WorkflowArchive {
         var archive = try editableWorkflow()
         guard archive.revision == expectedRevision else { throw WorkflowIssue("流程已被另一操作修改，请重新读取后保存。") }
         archive.graphs = graphs; archive.runs = runs; archive.revision = UUID()
         if let tools { archive.tools = tools }
-        if archive.requiresLanguageVersion { archive.version = 2 }
+        if let batchStages { archive.batchStages = batchStages }
+        if archive.batchStages != nil || archive.runs.contains(where: { $0.batchParent != nil }) { archive.version = 3 }
+        else if archive.requiresLanguageVersion { archive.version = 2 }
         try commitWorkflow(archive, assets: manifest.assets)
         return archive
     }
 
     private func validateWorkflowArchive(_ archive: WorkflowArchive, assets: [ProjectAsset]) throws {
-        guard [1, 2].contains(archive.version), archive.graphs.count <= 256, archive.runs.count <= 4_096,
+        guard [1, 2, 3].contains(archive.version), archive.graphs.count <= 256, archive.runs.count <= 4_096,
               archive.assets.count <= 32_768, Set(archive.graphs.map(\.id)).count == archive.graphs.count,
               Set(archive.runs.map(\.id)).count == archive.runs.count,
               Set(archive.assets.map { $0.reference.assetID }).count == archive.assets.count else {
@@ -3426,7 +3429,8 @@ extension ProjectStore {
     private func commitWorkflow(_ archive: WorkflowArchive, assets: [ProjectAsset],
                                 checkpoint: (@Sendable (WorkflowStoreCheckpoint) throws -> Void)? = nil) throws {
         var archive = archive
-        if archive.requiresLanguageVersion { archive.version = 2 }
+        if archive.batchStages != nil || archive.runs.contains(where: { $0.batchParent != nil }) { archive.version = 3 }
+        else if archive.requiresLanguageVersion { archive.version = 2 }
         try validateWorkflowArchive(archive, assets: assets)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         let data = try encoder.encode(archive)
@@ -3628,6 +3632,48 @@ extension ProjectStore {
         let data = try readAssetData(asset, limit: format.maximumBytes)
         guard Self.workflowHash(data) == ref.sha256 else { throw WorkflowIssue("原始资产已改变；停止执行，未重新绑定新内容。") }
         return data
+    }
+
+    /// Browsing a legacy asset must not pin it, write a workflow generation or copy an input.
+    public func readOnlyAsset(id: UUID, reference: WorkflowAssetReference? = nil) throws -> ProjectReadOnlyContent {
+        try Task.checkCancellation()
+        try checkLocation(); try verifyUnchangedManifest()
+        let snapshot = try assetMetadataSnapshot(id: id, reference: reference)
+        guard let format = WorkflowMediaFormat.descriptor(snapshot.asset.mediaType) else { throw WorkflowIssue("此素材格式尚不支持只读查看。") }
+        let bytes = try readAssetData(snapshot.asset, limit: format.maximumBytes, cancellable: true)
+        try Task.checkCancellation()
+        let digest = Self.workflowHash(bytes)
+        let expected = reference?.sha256 ?? snapshot.record?.reference.sha256 ?? snapshot.asset.metadata.imageContentSHA256
+            ?? snapshot.asset.metadata.audio?.contentSHA256 ?? snapshot.asset.metadata.video?.contentSHA256 ?? snapshot.asset.metadata.pitch?.contentSHA256
+        guard expected == nil || expected == digest else { throw WorkflowIssue("素材内容与固定版本不符；未登记或替换内容。") }
+        try Task.checkCancellation()
+        return .init(token: .init(snapshot: snapshot, sha256: digest, kind: format.kind), metadata: snapshot, data: bytes)
+    }
+
+    public func readOnlyAsset(_ token: ProjectReadOnlyAsset) throws -> ProjectReadOnlyContent {
+        guard token.projectID == manifest.id, token.instanceID == manifest.effectiveInstanceID else { throw WorkflowIssue("只读素材所属实例已改变。") }
+        let result = try readOnlyAsset(id: token.assetID, reference: token.registeredReference)
+        guard result.token == token else { throw WorkflowIssue("只读素材版本已改变；没有改用最新文件。") }
+        return result
+    }
+
+    public func readOnlyAudioPolicy(_ token: ProjectReadOnlyAsset) throws -> AudioInspectionPolicy {
+        let content = try readOnlyAsset(token)
+        guard token.kind == .audio else { throw WorkflowIssue("不是音频素材。") }
+        return try audioInspectionPolicy(for: content.metadata.asset)
+    }
+
+    /// A regular independent file, atomically published without replacing another file.
+    public func exportReadOnlyCopy(_ token: ProjectReadOnlyAsset, to destination: URL) throws {
+        let content = try readOnlyAsset(token)
+        guard destination.isFileURL, destination.path.hasPrefix("/"), !destination.lastPathComponent.isEmpty else {
+            throw ProjectStoreError.unsafePath(destination.path)
+        }
+        let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: nil) { fd in
+            try content.data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: fd) }
+        }
     }
 
     public func workflowText(_ reference: WorkflowAssetReference) throws -> String {
@@ -4510,16 +4556,18 @@ extension ProjectStore {
     }
 
     /// All readers keep the published digest; a mutable file can never redefine a version.
-    private func readAssetData(_ asset: ProjectAsset, limit: Int) throws -> Data {
-        guard let placements = asset.fileLocations else { return try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: limit) }
+    private func readAssetData(_ asset: ProjectAsset, limit: Int, cancellable: Bool = false) throws -> Data {
+        if cancellable { try Task.checkCancellation() }
+        guard let placements = asset.fileLocations else { return try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: limit, cancellable: cancellable) }
         try placements.validate()
         guard let location = placements.locations.first(where: { $0.id == placements.preferredLocationID }) else { throw ProjectStoreError.missingAsset }
         let data: Data
         if location.role == .projectCopy {
-            data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: limit)
+            data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: limit, cancellable: cancellable)
         } else {
             data = try AssetLocationFiles.withResolved(location) { try AssetLocationFiles.read($0, maximum: limit).data }
         }
+        if cancellable { try Task.checkCancellation() }
         guard data.count == placements.byteCount, AssetLocationFiles.hash(data) == placements.sha256 else { throw ProjectStoreError.externalModification }
         return data
     }

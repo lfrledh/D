@@ -13,6 +13,10 @@ public struct WorkflowPlanCompiler {
         self.registry = registry
     }
 
+    public static func registeredEffect(for node: WorkflowNode, registry: WorkflowRegistry = .standard) throws -> WorkflowEffect {
+        try CompilerState.effect(for: node, registry: registry)
+    }
+
     public static func digest(_ tool: WorkflowToolDefinition) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -55,6 +59,7 @@ private struct CompilerState {
             // may retain the same title. Invocation always uses id/version/digest.
             let key = WorkflowToolKey(id: tool.id, version: tool.version)
             guard table[key] == nil else { throw WorkflowIssue("工具身份和版本重复：\(tool.id) v\(tool.version)。") }
+            try tool.registration?.validate(interface: tool.graph.interface ?? .init())
             try Self.validateInterface(tool.graph.interface ?? .init(), graph: tool.graph)
             table[key] = tool
         }
@@ -163,7 +168,7 @@ private struct CompilerState {
                     throw WorkflowIssue("结构化控制节点缺少对应 control。", nodeID: node.id)
                 }
                 kind = .call
-                stepEffect = try effect(for: node)
+                stepEffect = try Self.effect(for: node, registry: registry)
             }
             var planned = WorkflowPlannedStep(node: node, inputs: inputs, kind: kind, effect: stepEffect)
             planned.sourceSignature = try registry.signature(node.id, in: graph, tools: Array(tools.values))
@@ -278,7 +283,7 @@ private struct CompilerState {
         return validation.order.filter { included.contains($0) }
     }
 
-    private func effect(for node: WorkflowNode) throws -> WorkflowEffect {
+    static func effect(for node: WorkflowNode, registry: WorkflowRegistry) throws -> WorkflowEffect {
         guard let definition = registry.definition(for: node) else {
             throw WorkflowIssue("未知操作：\(node.operationID)。", nodeID: node.id)
         }

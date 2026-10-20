@@ -1,6 +1,7 @@
 import AppKit
 import DWorkbench
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Two peers share real services and assets; navigation does not own inference.
 public struct DualWorkbenchView: View {
@@ -709,6 +710,7 @@ public struct DualWorkbenchView: View {
                 state: canvasMode.flatMap { canvasLibraryStates[$0] } ?? (compact ? compactLibraryState : fullLibraryState),
                 onUse: useLibraryEntry, onAdd: { value in beginAddingLibraryEntry(value, at: point) },
                 onPreview: { value in Task { await previewLibraryEntry(value) } },
+                onExternalCopy: { value in Task { await openExternalLibraryCopy(value) } }, readPreview: readLibraryPreview,
                 onLocation: { value in Task { await showAssetLocation(value) } },
                 onPrepare: { value in Task { await prepareModel(value) } },
                 onImport: { Task { await importLibraryAsset(forCanvas: canvasMode != nil) } }, onClose: { if let onBack { onBack() } else { libraryVisible = false } }, tagValidation: libraryTagValidation,
@@ -940,28 +942,14 @@ public struct DualWorkbenchView: View {
             !Task.isCancelled && navigationIntent == intent && previewNavigationRequest == request &&
                 owner.currentStore === source && owner.navigationEpoch == epoch && owner.canEditLibraryMetadata
         }
-        let target = entry == .quick && quick.category == .text && quick.textPresentation == .chat ? chat : nil
-        let targetSession = target?.state.selectedSessionID
         do {
             guard current() else { return }
-            let ref: WorkflowAssetReference
-            if let recorded = value.metadataSnapshot?.record?.reference { ref = recorded }
-            else {
-                if entry == .workflow && !allowPin { pendingLegacyPreview=value;return }
-                ref = try await source.pinWorkflowAsset(identity.2)
-            } // Only explicit legacy registration may publish a reference.
-            let manifest = await source.snapshot()
-            guard current(), manifest.id == identity.0, identity.1 == nil || manifest.effectiveInstanceID == identity.1 else { return }
-            if entry == .workflow {
-                guard let owningModel=[model,automaticQuickModel].first(where: { $0.projectSession === owner }) else { return }
-                owningModel.viewers.library=metadata
-                try owningModel.viewers.open(.init(title:value.item.title,subtitle:value.item.detail,value:.asset(ref)),model:owningModel,language:language)
-                return
-            }
-            let choice = [.text, .image, .video, .document].contains(ref.kind)
-                ? ChatProjectAttachmentChoice(name: value.item.title, reference: ref, instanceID: manifest.effectiveInstanceID) : nil
-            presentLibraryDestination(.asset(.init(store: source, reference: ref,
-                chatTarget: target, chatSessionID: targetSession, chatChoice: choice)))
+            let content = try await source.readOnlyAsset(id: identity.2, reference: value.metadataSnapshot?.record?.reference)
+            guard current(), content.token.projectID == identity.0,
+                  identity.1 == nil || content.token.instanceID == identity.1 else { return }
+            guard let owningModel = [model,automaticQuickModel].first(where: { $0.projectSession === owner }) else { return }
+            owningModel.viewers.library = metadata
+            try owningModel.viewers.open(.init(title:value.item.title, subtitle:value.item.detail, resource:content.token), model:owningModel, language:language)
         } catch {
             guard current() else { return }
             let snapshot = await source.snapshot()
@@ -971,6 +959,41 @@ public struct DualWorkbenchView: View {
             }
             issue = error.localizedDescription
         }
+    }
+    private func readLibraryPreview(_ value: SharedLibraryBrowserEntry) async throws -> ProjectReadOnlyContent {
+        if let runtime = value.runtimeValue {
+            guard let controller = canvasModel.projectSession.workflow, runtime.isCurrent(in: controller),
+                  let reference = runtime.reference else { throw WorkflowIssue("此运行值没有独立文件；请在 D 内查看。") }
+            let source = try await store(for: runtime.projectID, instanceID: runtime.instanceID)
+            let result = try await source.readOnlyAsset(id: reference.assetID, reference: reference)
+            guard runtime.isCurrent(in: controller), canvasModel.projectSession.workflow === controller else { throw WorkflowIssue("运行结果身份已改变。") }
+            try Task.checkCancellation(); return result
+        }
+        guard let identity = assetIdentity(value.selection) else { throw WorkflowIssue("此运行值没有文件预览。") }
+        let source = try await store(for: identity.0, instanceID: identity.1)
+        let result = try await source.readOnlyAsset(id: identity.2, reference: value.metadataSnapshot?.record?.reference)
+        _ = try await store(for: result.token.projectID, instanceID: result.token.instanceID)
+        try Task.checkCancellation()
+        return result
+    }
+    private func openExternalLibraryCopy(_ value: SharedLibraryBrowserEntry) async {
+        do {
+            let content = try await readLibraryPreview(value)
+            let source = try await store(for: content.token.projectID, instanceID: content.token.instanceID)
+            let extensions = ["text/plain":"txt", "text/markdown":"md", "image/png":"png", "image/jpeg":"jpg",
+                "video/mp4":"mp4", "audio/wav":"wav", "audio/x-caf":"caf", "application/pdf":"pdf",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document":"docx"]
+            guard let suffix = extensions[content.token.mediaType] else {
+                throw WorkflowIssue("此结构化格式尚无适配的外部打开格式；仍可在 D 内查看原始内容。")
+            }
+            let panel = NSSavePanel(); panel.title = workspaceText(language,"externalCopy","保存独立副本并用外部应用打开","Save an independent copy and open externally")
+            panel.nameFieldStringValue = content.metadata.asset.name + "." + suffix
+            if let type = UTType(filenameExtension: suffix) { panel.allowedContentTypes = [type] }
+            guard await panel.begin() == .OK, let destination = panel.url else { return }
+            _ = try await store(for: content.token.projectID, instanceID: content.token.instanceID)
+            try await source.exportReadOnlyCopy(content.token, to: destination)
+            guard NSWorkspace.shared.open(destination) else { throw WorkflowIssue("副本已保存，但外部应用未能打开；文件保留在：" + destination.path) }
+        } catch { issue = error.localizedDescription }
     }
     private func showAssetLocation(_ value: SharedLibraryBrowserEntry) async {
         guard let identity = assetIdentity(value.selection) else { return }

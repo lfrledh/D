@@ -5,7 +5,7 @@ import Foundation
 /// insertion, Undo and dragging, so it must never be used as a navigation event.
 struct WorkflowWorkspacePanels: Equatable {
     enum Preparation: String, CaseIterable { case models, programs, configuration }
-    enum Output: String, CaseIterable { case node, overview }
+    enum Output: String, CaseIterable { case node, overview, batches }
     var preparation: Preparation = .models
     var lastResource: Preparation = .models
     var output: Output = .overview

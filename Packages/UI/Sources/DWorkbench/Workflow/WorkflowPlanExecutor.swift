@@ -26,6 +26,15 @@ import Foundation
     public func requestPause() { pauseRequested = true }
     public func requestStop() { stopRequested = true }
 
+    /// Persist held results and derive their state without entering executePlan or a Call.
+    public func saveOnly(_ supplied: WorkflowPlanCheckpoint) async throws -> WorkflowPlanCheckpoint {
+        guard !executing else { throw WorkflowIssue("运行期间不能并发恢复保存。") }
+        checkpoint = supplied
+        if supplied.state == .saving { try await retrySavingCheckpoint() }
+        else { try await persist() }
+        return try currentCheckpoint()
+    }
+
     public func execute(_ supplied: WorkflowPlanCheckpoint) async throws -> WorkflowPlanCheckpoint {
         guard !executing else { throw WorkflowIssue("结构化计划已有一次执行正在进行。") }
         executing = true
@@ -108,22 +117,64 @@ import Foundation
         checkpoint = supplied
         try validateCheckpoint(); try validateSubmittedWaitingDecisions()
         guard let record = supplied.records.first(where: { $0.step.id == stepID }), record.step.status == .waiting else { throw WorkflowIssue("等待点不存在。") }
-        func find(_ plan: WorkflowPlan, path: ArraySlice<WorkflowAddressComponent>) -> WorkflowPlannedStep? {
-            guard case .node(let id) = path.first, let step = plan.steps.first(where: { $0.id == id }) else { return nil }
-            if path.count == 1 { return step }
-            let rest = path.dropFirst()
-            switch (step.kind, rest.first) {
-            case (.branch(_, let yes, let no), .branch(let value)): return find(value ? yes : no, path: rest.dropFirst())
-            case (.map(let body, _), .item): return find(body, path: rest.dropFirst())
-            case (.loop(let body, _, _, _), .iteration): return find(body, path: rest.dropFirst())
-            case (.invoke(let reference, let body), .tool(let selected)) where reference == selected: return find(body, path: rest.dropFirst())
-            default: return nil
-            }
-        }
-        guard let planned = find(supplied.plan, path: record.address.path[...]) else { throw WorkflowIssue("等待地址不属于计划。") }
+        guard let planned = plannedStep(supplied.plan, path: record.address.path[...]) else { throw WorkflowIssue("等待地址不属于计划。") }
         do { _ = try await resumeWaiting(at: record.address, planned: planned) }
         catch PlanSuspension.stopped { }
         catch PlanSuspension.waiting { }
+        return try currentCheckpoint()
+    }
+
+    private func plannedStep(_ plan: WorkflowPlan, path: ArraySlice<WorkflowAddressComponent>) -> WorkflowPlannedStep? {
+        guard case .node(let id) = path.first, let step = plan.steps.first(where: { $0.id == id }) else { return nil }
+        if path.count == 1 { return step }
+        let rest = path.dropFirst()
+        switch (step.kind, rest.first) {
+        case (.branch(_, let yes, let no), .branch(let value)): return plannedStep(value ? yes : no, path: rest.dropFirst())
+        case (.map(let body, _), .item): return plannedStep(body, path: rest.dropFirst())
+        case (.loop(let body, _, _, _), .iteration): return plannedStep(body, path: rest.dropFirst())
+        case (.invoke(let reference, let body), .tool(let selected)) where reference == selected: return plannedStep(body, path: rest.dropFirst())
+        default: return nil
+        }
+    }
+
+    /// Admit already-produced outputs into one existing Call without traversing downstream.
+    public func restorePublication(_ supplied: WorkflowPlanCheckpoint, stepID: UUID,
+                                   outputs: [String: WorkflowValue]) async throws -> WorkflowPlanCheckpoint {
+        guard !executing, let record = supplied.records.first(where: { $0.id == stepID }),
+              record.step.status == .saving, record.step.node.control == nil,
+              let planned = plannedStep(supplied.plan, path: record.address.path[...]) else { throw WorkflowIssue("待保存调用不可恢复。") }
+        checkpoint = supplied
+        try validateCheckpoint()
+        _ = try await finish(planned, outputs: outputs, address: record.address)
+        var result = try currentCheckpoint()
+        result.state = derivedState(result)
+        if result.state == .completed {
+            result.outputs = try collectOutputs(result.plan, base: .init(runID: result.runID))
+        }
+        if result.state == .running { result.state = .ready }
+        result.error = derivedError(result, state: result.state)
+        checkpoint = result; try await persist()
+        return try currentCheckpoint()
+    }
+
+    /// A published raw result that failed validation is a failed call, never a new inference request.
+    func restorePublicationFailure(_ supplied: WorkflowPlanCheckpoint, stepID: UUID,
+                                   failure: WorkflowOutputValidationFailure) async throws -> WorkflowPlanCheckpoint {
+        guard !executing, let record = supplied.records.first(where: { $0.id == stepID }), record.step.status == .saving else {
+            throw WorkflowIssue("待保存失败不属于原调用。")
+        }
+        checkpoint = supplied; try validateCheckpoint()
+        try updateRecord(at: record.address) {
+            $0.step.status = .failed; $0.step.error = failure.localizedDescription
+            $0.step.outputs["raw"] = .asset(failure.raw)
+        }
+        // Preserve the leaf's exact raw asset; enclosing unfinished controls settle as failed.
+        for ancestor in supplied.records where ancestor.step.node.control != nil &&
+            ancestor.address.path.count < record.address.path.count && record.address.path.starts(with: ancestor.address.path) {
+            try updateRecord(at: ancestor.address) { $0.step.status = .failed; $0.step.error = failure.localizedDescription }
+        }
+        checkpoint?.state = .failed; checkpoint?.error = failure.localizedDescription
+        try await persist()
         return try currentCheckpoint()
     }
 

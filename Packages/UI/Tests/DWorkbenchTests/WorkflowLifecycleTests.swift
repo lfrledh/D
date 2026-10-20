@@ -17,6 +17,197 @@ private actor WorkflowSubmitGate {
 @MainActor private final class WorkflowSaveSwitch { var fails = true }
 
 extension WorkflowLifecycleTests {
+    @Test(arguments: [false, true])
+    func batchFourAttemptsContinueTwoByThreeWithoutReplayingPrefix(nested: Bool) async throws {
+        let (_, store, engine, c) = try await fixture()
+        var input = try #require(c.registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("fixed input"))
+        let first = try #require(c.registry.operation("d.control.human")).definition.makeNode()
+        let second = try #require(c.registry.operation("d.control.human")).definition.makeNode()
+        let output = try #require(c.registry.operation("d.value.return")).definition.makeNode()
+        var graph = WorkflowGraph(nodes: [input, first, second, output], connections: [
+            .init(sourceNode: input.id, targetNode: first.id), .init(sourceNode: first.id, targetNode: second.id),
+            .init(sourceNode: second.id, targetNode: output.id)])
+        var tools: [WorkflowToolDefinition] = []
+        if nested {
+            var body = WorkflowGraph(nodes: [input, first], connections: [.init(sourceNode: input.id, targetNode: first.id)])
+            body.interface = .init(outputs: [.init(name: "output", nodeID: first.id, schema: .text)])
+            let tool = WorkflowToolDefinition(name: "inner gate", graph: body); tools = [tool]
+            var invoke = try #require(c.registry.operation("d.control.invoke")).definition.makeNode()
+            invoke.control = .invoke(.init(id: tool.id, version: 1, digest: try WorkflowPlanCompiler.digest(tool)))
+            graph = .init(nodes: [invoke, second, output], connections: [
+                .init(sourceNode: invoke.id, targetNode: second.id), .init(sourceNode: second.id, targetNode: output.id)])
+        }
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision, tools: tools)
+        await c.load()
+        let stage = try await c.createBatchStage(selection: .through(output.id), pins: [], repetitions: 4,
+            expectedGraphID: graph.id, expectedRevision: graph.revision)
+        #expect(c.runs.count == 4 && c.runs.allSatisfy { $0.planCheckpoint?.records.isEmpty == true })
+        await c.runBatchStage(stage)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        #expect(c.batchStages.first?.attempts.map(\.state) == [.waiting, .waiting, .waiting, .waiting])
+        let parents = [c.runs[0].id, c.runs[2].id]
+        for (i, id) in parents.enumerated() {
+            let record = try #require(c.callRecords(runID: id).first { $0.step.node.id == first.id })
+            #expect(record.address.path.count == (nested ? 3 : 1))
+            await c.decideHuman(stepID: record.id, value: .text("selected-\(i)"), expectedTask: try #require(record.step.humanTask))
+            try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        }
+        let frozenParents = c.runs
+        let next = try await c.createNextBatchStage(parentRunIDs: parents, repetitions: 3)
+        #expect(c.runs.count == 10)
+        await c.runBatchStage(next)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        #expect(Array(c.runs.prefix(4)) == frozenParents)
+        #expect(c.batchStages.last?.attempts.allSatisfy { $0.state == .waiting } == true)
+        for child in c.runs.suffix(6) {
+            let prefix = try #require(child.planCheckpoint?.records.first { $0.step.node.id == first.id })
+            let parent = try #require(frozenParents.first { $0.id == child.batchParent?.runID })
+            let old = try #require(parent.planCheckpoint?.records.first { $0.step.node.id == first.id })
+            #expect(prefix.id != old.id && prefix.step.humanTask?.id == prefix.id)
+            #expect(prefix.step.outputs == old.step.outputs)
+            let waiting = try #require(child.planCheckpoint?.records.first { $0.step.node.id == second.id })
+            #expect(waiting.step.status == .waiting && waiting.step.inputs["input"] == prefix.step.outputs["output"])
+        }
+        #expect(await engine.requests.isEmpty) // CPU control-flow evidence, no model claim.
+        let saved = try #require(try await store.workflowState().archive)
+        #expect(saved.version == 3 && saved.batchStages == c.batchStages)
+        try await c.close()
+        let finalSaved = try #require(try await store.workflowState().archive)
+        try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        let cold = try #require(try await reopened.workflowState().archive)
+        #expect(cold == finalSaved)
+        try await reopened.close()
+    }
+
+    @Test(arguments: ["map", "loop"])
+    func batchNestedDynamicGateKeepsFullAddressAndContinuesOtherAttempts(kind: String) async throws {
+        let (_, store, engine, c) = try await fixture()
+        var input = try #require(c.registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: kind == "map" ? .list(element: .text, items: [.init(id: "first", value: .text("start")), .init(id: "second", value: .text("later"))]) : .text("start"))
+        var argument = try #require(c.registry.operation("d.value.input")).definition.makeNode()
+        let publicName = kind == "map" ? "item" : "state"
+        argument.parameters["publicName"] = .text(publicName); argument.dataConfiguration = .init(value: .text("unused"), schema: .text)
+        let human = try #require(c.registry.operation("d.control.human")).definition.makeNode()
+        var body = WorkflowGraph(nodes: [argument, human], connections: [.init(sourceNode: argument.id, targetNode: human.id)])
+        body.interface = .init(inputs: [.init(publicName, .text)], outputs: [.init(name: "output", nodeID: human.id, schema: .text)])
+        var control = try #require(c.registry.operation("d.control." + kind)).definition.makeNode()
+        control.control = kind == "map" ? .map(body: body, continueOnFailure: false) : .loop(body: body, stateSchema: .text, maximumIterations: 3, until: .init(comparison: .equals, value: .text("stop")))
+        let after = try #require(c.registry.operation("d.control.human")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [input, control, after], connections: [.init(sourceNode: input.id, targetNode: control.id), .init(sourceNode: control.id, targetNode: after.id)])
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
+        await c.load()
+        let stage = try await c.createBatchStage(selection: .through(after.id), pins: [], repetitions: 2, expectedGraphID: graph.id, expectedRevision: graph.revision)
+        await c.runBatchStage(stage)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        #expect(c.batchStages.first?.attempts.allSatisfy { $0.state == .waiting } == true)
+        let parent = try #require(c.runs.first)
+        let gate = try #require(parent.planCheckpoint?.records.first { $0.step.node.id == human.id })
+        #expect(gate.address.path.count == 3)
+        await c.decideHuman(stepID: gate.id, value: .text("stop"), expectedTask: try #require(gate.step.humanTask))
+        let next = try await c.createNextBatchStage(parentRunIDs: [parent.id], repetitions: 2)
+        await c.runBatchStage(next)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        for child in c.runs.suffix(2) {
+            let cp = try #require(child.planCheckpoint)
+            let inherited = try #require(cp.records.first { $0.address.path == gate.address.path })
+            #expect(inherited.step.outputs["output"] == .data(.text("stop")))
+            let waiting = try #require(cp.records.first { $0.step.status == .waiting })
+            #expect(waiting.step.node.id == (kind == "map" ? human.id : after.id))
+            #expect(waiting.address.path != inherited.address.path)
+        }
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+
+    @Test func batchSaveOnlyKeepsInvalidStructuredRawAsFailure() async throws {
+        let (root, store, engine, c) = try await fixture()
+        var node = try #require(c.registry.operation("d.model.language")).definition.makeNode()
+        node.parameters["outputMode"] = .text("json"); node.dataConfiguration = .init(schema: .record([.init("required", .text)]))
+        let graph = WorkflowGraph(nodes: [node]); let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
+        await c.load()
+        let stage = try await c.createBatchStage(selection: .through(node.id), pins: [], repetitions: 2, expectedGraphID: graph.id, expectedRevision: graph.revision)
+        let moved = root.appendingPathComponent("temporarily-unavailable.dproject")
+        let gate = WorkflowSubmitGate(); await engine.suspend(using: gate)
+        let work = Task { await c.runBatchStage(stage) }
+        try await waitForRepairGate(gate)
+        try FileManager.default.moveItem(at: store.rootURL, to: moved)
+        await gate.open(); await work.value
+        try FileManager.default.moveItem(at: moved, to: store.rootURL)
+        #expect(c.services.hasPendingSaves)
+        await c.retryBatchSaving(stage)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        #expect(c.batchStages.first?.attempts.map(\.state) == [.failed, .queued])
+        let raw = try #require(c.runs.first?.steps.first?.outputs["raw"]?.asset)
+        #expect(!(try await store.workflowText(raw)).isEmpty)
+        #expect(await engine.requests.count == 1)
+        #expect(c.runs[1].planCheckpoint?.records.isEmpty == true)
+        try await c.close(); try await store.close()
+    }
+
+    @Test(arguments: [false, true])
+    func batchColdLoadReconcilesDurableCheckpointBeforeLedger(waiting: Bool) async throws {
+        let (_, store, _, c) = try await fixture()
+        var input = try #require(c.registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("fixed"))
+        let human = try #require(c.registry.operation("d.control.human")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: waiting ? [input, human] : [input], connections: waiting ? [.init(sourceNode: input.id, targetNode: human.id)] : [])
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
+        await c.load()
+        let stage = try await c.createBatchStage(selection: .through(waiting ? human.id : input.id), pins: [], repetitions: 1,
+            expectedGraphID: graph.id, expectedRevision: graph.revision)
+        await c.runBatchStage(stage)
+        var archive = try #require(try await store.workflowState().archive)
+        archive.batchStages![0].attempts[0].state = .dispatched; archive.batchStages![0].state = .running
+        _ = try await store.saveWorkflow(graphs: archive.graphs, runs: archive.runs, expectedRevision: archive.revision, tools: archive.tools, batchStages: archive.batchStages)
+        c.deactivateAfterClose()
+        let next = WorkflowController(services: c.services); await next.load()
+        #expect(next.readOnlyReason == nil)
+        #expect(next.batchStages.first?.attempts.first?.state == (waiting ? .waiting : .completed))
+        #expect(next.batchStages.first?.state == .finished && !next.isRunning)
+        try await next.close(); try await store.close()
+    }
+
+    @Test func graphToolPublicationIsAtomicVersionedAndKeepsOldInstance() async throws {
+        let (_, store, _, c) = try await fixture()
+        var input = try #require(c.registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("unchanged"))
+        var graph = WorkflowGraph(nodes: [input])
+        graph.interface = .init(outputs: [.init(name: "output", nodeID: input.id, schema: .text)])
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
+        await c.load()
+        let registration = WorkflowToolRegistration(purpose: "fixed text", outputLabels: ["output": "Result"])
+        try await c.publishGraphTool(name: "Named tool", registration: registration, expectedGraphID: graph.id, expectedRevision: graph.revision)
+        let first = try #require(c.tools.first)
+        c.addTool(first); let instance = try #require(c.graph?.nodes.last)
+        let reference = WorkflowToolReference(id: first.id, version: first.version, digest: try WorkflowPlanCompiler.digest(first))
+        c.openToolCopy(reference)
+        let copy = try #require(c.graph)
+        #expect(copy.toolSource == reference)
+        c.beforeHistorySave = { throw WorkflowIssue("publication failure") }
+        await #expect(throws: (any Error).self) {
+            try await c.publishGraphTool(name: "Named tool", registration: registration, expectedGraphID: copy.id, expectedRevision: copy.revision)
+        }
+        #expect(c.tools == [first] && c.graph == copy)
+        c.beforeHistorySave = {}
+        try await c.publishGraphTool(name: "Named tool", registration: registration, expectedGraphID: copy.id, expectedRevision: copy.revision)
+        #expect(c.tools.count == 2 && c.tools[1].id == first.id && c.tools[1].version == 2)
+        #expect(c.tools[0] == first && c.graphs.flatMap(\.nodes).contains(instance))
+        #expect(c.registry.definition(for: instance, tools: c.tools)?.outputs.first?.title == "Result")
+        c.undo(); #expect(c.tools == [first]); c.redo(); #expect(c.tools.count == 2)
+        try await c.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        let cold = try #require(try await reopened.workflowState().archive)
+        #expect(cold.tools?.count == 2 && cold.graphs.first(where: { $0.id == copy.id })?.toolSource == reference)
+        try await reopened.close()
+    }
+
     @Test func groupMoveIsOneUndoAndDoesNotChangeRequestsOrAcceptStaleTargets() async throws {
         let (_, store, _, c) = try await fixture()
         c.addExample("text")
@@ -395,6 +586,43 @@ struct WorkflowLifecycleTests {
         #expect(archive.tools == savedTools)
         #expect(archive.runs == savedRuns)
         for (asset, text) in results { #expect(try await reopened.workflowText(asset) == text) }
+        #expect(await engine.requests.isEmpty)
+        try await reopened.close()
+    }
+
+    @Test func registeredToolPublicationIsAtomicAndUndoIncludesDefinition() async throws {
+        let (_, store, engine, c) = try await fixture()
+        c.addBlankGraph(name: "registration")
+        c.addNode(operationID: "d.value.input")
+        let input = try #require(c.selectedNodeID)
+        c.setDataConfiguration(nodeID: input, value: .init(value: .text("kept")))
+        c.addNode(operationID: "d.value.return")
+        let output = try #require(c.selectedNodeID)
+        c.connect(source: input, sourcePort: "output", target: output, targetPort: "input")
+        try await c.saveExplicitEdits()
+        let before = try #require(c.graph)
+        c.selectedNodeIDs = [output]
+        let registration = WorkflowToolRegistration(purpose: "Return the exact input", inputLabels: ["input": "Content"], outputLabels: ["answer": "Result"])
+        let inputs: [WorkflowToolInputBinding] = [.init(name: "input", schema: .text, sourceNode: input, sourcePort: "output")]
+        let outputs: [WorkflowNamedOutput] = [.init(name: "answer", nodeID: output, schema: .text)]
+        c.beforeHistorySave = { throw WorkflowIssue("controlled publication failure") }
+        do { try await c.publishSelection(name: "Tool", registration: registration, inputs: inputs, outputs: outputs, expectedGraphID: before.id, expectedRevision: before.revision); Issue.record("Expected save failure") }
+        catch { #expect(error.localizedDescription.contains("controlled publication failure")) }
+        #expect(c.graph == before && c.tools.isEmpty && !c.isSaving)
+        #expect(try await store.workflowState().archive?.graphs == [before])
+        c.beforeHistorySave = {}
+        try await c.publishSelection(name: "Tool", registration: registration, inputs: inputs, outputs: outputs, expectedGraphID: before.id, expectedRevision: before.revision)
+        let after = c.graph, tool = try #require(c.tools.first)
+        #expect(tool.registration == registration)
+        #expect(tool.graph.interface?.inputs.map(\.name) == ["input"])
+        #expect(try await store.workflowState().archive?.tools == [tool])
+        c.undo(); #expect(c.graph == before && c.tools.isEmpty)
+        try await c.saveExplicitEdits()
+        #expect(try await store.workflowState().archive?.tools == [])
+        c.redo(); #expect(c.graph == after && c.tools == [tool])
+        try await c.saveExplicitEdits(); try await c.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await reopened.workflowState().archive?.tools == [tool])
         #expect(await engine.requests.isEmpty)
         try await reopened.close()
     }
@@ -2186,6 +2414,41 @@ extension WorkflowLifecycleTests {
         c.setParameter(nodeID: node, key: "promptText", value: .text("frozen image prompt"))
         c.setParameter(nodeID: node, key: "count", value: .integer(count))
         return .init(root: root, source: source, destination: destination, engine: engine, controller: c, probe: probe, nodeID: node)
+    }
+
+    @Test(arguments: [false, true], [false, true]) func batchSaveOnlyRetainsImageIdentityAndNeverRunsAnotherAttempt(historyFailure: Bool, cancelRemaining: Bool) async throws {
+        let f = try await imageRepairFixture(count: 1); let c = f.controller
+        defer { try? f.restoreDestination() }
+        let graph = try #require(c.graph)
+        let stage = try await c.createBatchStage(selection: .through(f.nodeID), pins: [], repetitions: 2,
+            expectedGraphID: graph.id, expectedRevision: graph.revision)
+        await f.engine.configure(action: { try FileManager.default.moveItem(at: f.destination.rootURL, to: f.moved) })
+        c.onChange = { if cancelRemaining && c.isRunning && c.services.hasPendingSaves { await c.cancel() } }
+        await c.runBatchStage(stage)
+        c.onChange = {}
+        let run = try #require(c.runs.first), step = try #require(run.steps.last)
+        let pending = try #require(c.services.retainedCandidates(stepID: step.id)?.first)
+        #expect(c.services.hasPendingSaves && c.batchStages.first?.state == (cancelRemaining ? .cancelled : .savingBlocked))
+        #expect(await f.engine.requests.count == 1)
+        try f.restoreDestination(); f.probe.modelAvailable = false
+        var failHistory = historyFailure
+        c.beforeHistorySave = { if failHistory { throw WorkflowIssue("save-only history failure") } }
+        await c.retryBatchSaving(stage)
+        #expect(await f.engine.requests.count == 1 && f.probe.resolutions == 1)
+        #expect(!c.services.hasPendingSaves)
+        failHistory = false
+        await c.retryBatchSaving(stage)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        let recovered = try #require(c.runs.first?.steps.last?.outputs["output"]?.candidates.first)
+        #expect(recovered.id == pending.id && recovered.attemptID == pending.attemptID)
+        #expect(recovered.asset != nil)
+        #expect(c.runs[1].planCheckpoint?.records.isEmpty == true)
+        #expect(c.batchStages.first?.attempts.map(\.state) == [.completed, cancelRemaining ? .cancelled : .queued])
+        #expect(c.batchStages.first?.state == (cancelRemaining ? .cancelled : .paused))
+        #expect(await f.engine.requests.count == 1 && f.probe.resolutions == 1)
+        let saved = try #require(try await f.destination.workflowState().archive)
+        #expect(saved.runs.first?.id == run.id)
+        try await c.close(); try await f.destination.close(); try await f.source.close()
     }
 
     @Test func imageControllerResumePublishesRetainedPNGWithoutModelAndColdReadsExactBytes() async throws {

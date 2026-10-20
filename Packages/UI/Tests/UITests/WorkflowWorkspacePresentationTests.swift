@@ -742,7 +742,7 @@ extension WorkflowWorkspacePresentationTests {
         fresh.suspend();old.suspend();try await f.close()
     }
 
-    @Test func viewerWaitingCallSwitchRecreatesDraftAndNestedNavigationKeepsOtherReader() async throws {
+    @Test func viewerWaitingCallIsReadOnlyAndSwitchKeepsTaskDraftsAndOtherReader() async throws {
         let f=try await RenderingWorkspaceFixture.make(),c=f.controller
         c.addExample("template");let graph=try #require(c.graph),target=graph.nodes[3].id
         await c.run(target:target,only:false)
@@ -761,13 +761,13 @@ extension WorkflowWorkspacePresentationTests {
         func descendants(_ v:NSView)->[NSView] { [v]+v.subviews.flatMap(descendants) }
         func editor()->NSTextView? { descendants(host).compactMap { $0 as? NSTextView }.first { $0.accessibilityIdentifier() == "workflow-review-text" } }
         for _ in 0..<40 { host.layoutSubtreeIfNeeded();try await Task.sleep(for:.milliseconds(10)) }
-        let first=try #require(editor());#expect(first.string == "draft A")
+        #expect(editor() == nil) // Review drafts belong to the activity task form, never the read-only Viewer.
         let coordinator=WorkflowViewerCoordinator()
         let second=f.viewer(.init(title:"independent",subtitle:"",value:av));await second.load()?.value
         let secondGeneration=second.generation
         coordinator.navigate(.init(title:"B",subtitle:"",value:bv,call:.init(address:b.address,stepID:b.id)),in:viewer)
         for _ in 0..<40 { host.layoutSubtreeIfNeeded();try await Task.sleep(for:.milliseconds(10)) }
-        let next=try #require(editor());#expect(next !== first && next.string == "draft B")
+        #expect(editor() == nil)
         #expect(viewer.exactRecord?.id == b.id && second.generation == secondGeneration && second.target.title == "independent")
         #expect(c.runs.flatMap { WorkflowWorkspacePanels.records(in:$0) }.first { $0.id == a.id }?.step.reviewTextDraft == "draft A")
         viewer.suspend();second.suspend();host.removeFromSuperview();try await f.close()

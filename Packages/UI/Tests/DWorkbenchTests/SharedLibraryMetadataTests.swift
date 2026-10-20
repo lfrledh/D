@@ -6,6 +6,31 @@ import Testing
 @Suite("Shared library metadata", .serialized)
 @MainActor
 struct SharedLibraryMetadataTests {
+    @Test func textTagUnionIgnoresEmptyBranchesAndSurvivesSavedQuery() throws {
+        let directory = try temporaryDirectory(), file = directory.appendingPathComponent("metadata.json")
+        let store = try SharedLibraryStore(fileURL: file)
+        let tag = try #require(store.createTags(["chosen"]).first)
+        let a = item("alpha", outputs: [.text]), b = item("beta", outputs: [.image])
+        try store.addTags([tag], to: [b.key])
+        var query = SharedLibraryQuery(text: "alpha", allTagIDs: [tag], textTagCombination: .any)
+        #expect(store.filter([a,b], query: query).map(\.key) == [a.key,b.key])
+        query.text = ""; #expect(store.filter([a,b], query: query).map(\.key) == [b.key])
+        query.allTagIDs = []; query.text = "alpha"
+        #expect(store.filter([a,b], query: query).map(\.key) == [a.key])
+        query.text = ""; #expect(store.filter([a,b], query: query).count == 2)
+        query.allTagIDs = [UUID()]; query.text = "alpha"
+        #expect(store.filter([a,b], query: query).isEmpty)
+        query.allTagIDs = [tag]; query.textTagCombination = nil
+        #expect(store.filter([a,b], query: query).isEmpty)
+        query.textTagCombination = .any
+        let id = try store.createSavedQuery(name: "union", query: query)
+        let opened = try SharedLibraryStore(fileURL: file)
+        #expect(opened.metadata.savedQueries[id]?.query.textTagCombination == .any)
+        #expect(try opened.filter([a,b], savedQueryID: id).count == 2)
+        query.scope = .init(mode: .currentProject)
+        #expect(store.filter([a,b], query: query).isEmpty)
+    }
+
     @Test func representativeIndexObservations() throws {
         let memoryBefore = residentBytes()
         let directory = try temporaryDirectory()

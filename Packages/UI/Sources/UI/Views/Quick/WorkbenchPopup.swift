@@ -26,6 +26,7 @@ import SwiftUI
     let drawsGlass: Bool
     let legacyFill: NSColor?
     let readability: WorkbenchReadabilitySettings
+    var nativeGlass = false
     var foreground: NSColor { NSColor(palette.foregroundColor) }
 }
 @MainActor private final class WorkbenchPopupEntry {
@@ -95,6 +96,9 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
 @MainActor private final class WorkbenchPopupPane: NSView {
     let entries: [WorkbenchPopupEntry]
     let glass = WorkbenchBackgroundNSView()
+    let nativeGlass = NSGlassEffectView()
+    let foreground = WorkbenchPopupDocument()
+    private var usesNativeGlass = false
     let scroll = NSScrollView()
     let document = WorkbenchPopupDocument()
     var rows: [WorkbenchPopupRow?] = []
@@ -103,11 +107,14 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
     weak var parentRow: WorkbenchPopupRow?
     init(entries: [WorkbenchPopupEntry], depth: Int, style: WorkbenchPopupStyle, popup: WorkbenchPopupOverlay) {
         self.entries = entries; super.init(frame: .zero)
-        wantsLayer = true; layer?.cornerRadius = 11; layer?.masksToBounds = true; layer?.borderWidth = 0.6
+        wantsLayer = true; layer?.cornerRadius = 11; layer?.masksToBounds = false; layer?.borderWidth = 0.6
         setAccessibilityElement(false); glass.setAccessibilityElement(false); addSubview(glass)
+        nativeGlass.cornerRadius = 11; nativeGlass.style = .regular
+        nativeGlass.setAccessibilityElement(false); foreground.setAccessibilityElement(false)
+        addSubview(nativeGlass); nativeGlass.contentView = foreground
         scroll.drawsBackground = false; scroll.contentView.drawsBackground = false; scroll.borderType = .noBorder
         scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.documentView = document
-        document.setAccessibilityElement(false); addSubview(scroll)
+        document.setAccessibilityElement(false); foreground.addSubview(scroll)
         for (i,entry) in entries.enumerated() {
             if entry.captured.separator { let line = NSBox(); line.boxType = .separator; document.addSubview(line); separators[i] = line; rows.append(nil) }
             else { let row = WorkbenchPopupRow(entry: entry, depth: depth, index: i); row.popup = popup; document.addSubview(row); rows.append(row) }
@@ -121,19 +128,28 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
         min(420, max(220, entries.map { ( ($0.display.title + ($0.display.shortcut ?? "")) as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13)]).width + ($0.display.symbol == nil ? 64 : 84) }.max() ?? 220))
     }
     func apply(_ style: WorkbenchPopupStyle) {
-        if glass.owner !== style.owner { detach() }
-        glass.owner = style.owner; glass.palette = style.palette; glass.strength = style.strength; glass.drawsGlass = style.drawsGlass
-        glass.isCanvas = false; glass.surfaceRole = .popup; glass.surfaceGroup = "popup-\(ObjectIdentifier(self))"; glass.readability = style.readability
-        glass.contour = { rect, inset in CGPath(roundedRect: rect.insetBy(dx: inset, dy: inset), cornerWidth: max(0,11-inset), cornerHeight: max(0,11-inset), transform: nil) }
-        glass.isHidden = style.legacyFill != nil; layer?.backgroundColor = style.legacyFill?.cgColor
-        layer?.borderColor = style.foreground.withAlphaComponent(0.22).cgColor
-        style.owner?.surfaces.add(glass)
+        if glass.owner !== style.owner || usesNativeGlass != style.nativeGlass { detach() }
+        usesNativeGlass = style.nativeGlass
+        layer?.masksToBounds = !usesNativeGlass
+        nativeGlass.isHidden = !usesNativeGlass
+        if usesNativeGlass {
+            if nativeGlass.contentView !== foreground { nativeGlass.contentView = foreground }
+            glass.isHidden = true; layer?.backgroundColor = nil; layer?.borderWidth = 0
+        } else {
+            if foreground.superview !== self { nativeGlass.contentView = nil; addSubview(foreground) }
+            glass.owner = style.owner; glass.palette = style.palette; glass.strength = style.strength; glass.drawsGlass = style.drawsGlass
+            glass.isCanvas = false; glass.surfaceRole = .popup; glass.surfaceGroup = "popup-\(ObjectIdentifier(self))"; glass.readability = style.readability
+            glass.contour = { rect, inset in CGPath(roundedRect: rect.insetBy(dx: inset, dy: inset), cornerWidth: max(0,11-inset), cornerHeight: max(0,11-inset), transform: nil) }
+            glass.isHidden = style.legacyFill != nil; layer?.backgroundColor = style.legacyFill?.cgColor
+            layer?.borderWidth = 0.6; layer?.borderColor = style.foreground.withAlphaComponent(0.22).cgColor
+            style.owner?.surfaces.add(glass); glass.needsDisplay = true
+        }
         for row in rows.compactMap({ $0 }) { row.foreground = style.foreground; row.refresh() }
-        glass.needsDisplay = true; needsLayout = true
+        needsLayout = true
     }
     func detach() { glass.owner?.readability.remove(glass); glass.owner?.surfaces.remove(glass); glass.owner = nil }
     override func layout() {
-        super.layout(); glass.frame = bounds; scroll.frame = bounds.insetBy(dx: 6, dy: 6)
+        super.layout(); glass.frame = bounds; nativeGlass.frame = bounds; foreground.frame = bounds; scroll.frame = bounds.insetBy(dx: 6, dy: 6)
         let width = scroll.contentSize.width; document.frame = .init(x: 0, y: 0, width: width, height: documentHeight)
         var y: CGFloat = 0
         for i in entries.indices {

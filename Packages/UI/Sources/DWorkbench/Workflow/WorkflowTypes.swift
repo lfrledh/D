@@ -99,6 +99,7 @@ public struct WorkflowGraph: Codable, Sendable, Equatable, Identifiable {
     public var revision: UUID
     public var name: String
     public var interface: WorkflowGraphInterface?
+    public var toolSource: WorkflowToolReference? = nil
     public var nodes: [WorkflowNode]
     public var connections: [WorkflowConnection]
     public var layout: [WorkflowLayout]
@@ -148,6 +149,7 @@ public struct WorkflowStepRun: Codable, Sendable, Equatable, Identifiable {
     }
 }
 public struct WorkflowRun: Codable, Sendable, Equatable, Identifiable {
+    public var batchParent: WorkflowBatchParent?
     public var id: UUID
     public var graph: WorkflowGraph
     public var planCheckpoint: WorkflowPlanCheckpoint?
@@ -175,6 +177,7 @@ public struct WorkflowAssetRecord: Codable, Sendable, Equatable {
     }
 }
 public struct WorkflowArchive: Codable, Sendable, Equatable {
+    public var batchStages: [WorkflowBatchStage]?
     public var tools: [WorkflowToolDefinition]?
     public var version = 1
     public var revision: UUID

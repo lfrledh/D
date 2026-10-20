@@ -261,19 +261,21 @@ struct ChatDisplayPreferencesPanel: View {
                 Text(wording("Your previous canvas color blend is preserved until you choose a new material.", "选择新材质前，保留原来的画布底色混合效果。"))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Text(consistencyText(language, "SETTINGS-TRANSPARENCY"))
+            Text(wording("Glass tint", "玻璃底色浓度"))
             WorkbenchValueSlider(value: state.preferences.resolvedAppearance.local?.strength ?? 0.55,
-                label: consistencyText(language, "SETTINGS-TRANSPARENCY"), preview: { glassStrength = $0 },
+                label: wording("Glass clarity (tint)", "玻璃通透度（底色浓度）"), preview: { glassStrength = $0 },
                 commit: { value in changeLocal { $0.strength = value } }).workbenchHelp("SETTINGS-TRANSPARENCY").frame(height: 24)
                 .disabled(state.preferences.appearance?.local?.material != .glass)
-            Button(wording("Reset transparency", "恢复默认透明度")) { glassStrength = nil; changeLocal { $0.strength = 0.55 } }
+            Button(wording("Reset glass tint", "恢复默认玻璃底色")) { glassStrength = nil; changeLocal { $0.strength = 0.55 } }
             Toggle(consistencyText(language, "SETTINGS-READABILITY"), isOn: Binding(
                 get: { state.preferences.resolvedAppearance.resolvedReadability.enabled },
                 set: { enabled in change { candidate in
                     var appearance = candidate.resolvedAppearance
                     var settings = appearance.resolvedReadability; settings.enabled = enabled
                     appearance.readability = settings; candidate.appearance = appearance
-                } })).workbenchHelp("SETTINGS-READABILITY")
+                } })).workbenchHelp("SETTINGS-READABILITY").disabled(state.preferences.resolvedAppearance.local?.material == .glass)
+            Text(wording("Native Liquid Glass manages refraction and foreground adaptation. This slider adjusts its tint; optical strength is not exposed by the public API. Enhancement settings below apply to the fallback surface.", "原生 Liquid Glass 管理折射和前景适配。滑条调整玻璃底色浓度；公开接口不提供光学强度。下方增强设置仅用于备用表面。"))
+                .font(.caption).foregroundStyle(.secondary)
             Text(consistencyText(language, "copy.readabilityHelp")).font(.caption).foregroundStyle(.secondary)
             Text(consistencyText(language, "SETTINGS-AMOUNT"))
             WorkbenchValueSlider(value: state.preferences.resolvedAppearance.resolvedReadability.amount,
@@ -283,7 +285,7 @@ struct ChatDisplayPreferencesPanel: View {
                     var settings = appearance.resolvedReadability; settings.amount = value
                     appearance.readability = settings; candidate.appearance = appearance
                 } }).workbenchHelp("SETTINGS-AMOUNT").frame(height: 24)
-                .disabled(!state.preferences.resolvedAppearance.resolvedReadability.enabled)
+                .disabled(!state.preferences.resolvedAppearance.resolvedReadability.enabled || state.preferences.resolvedAppearance.local?.material == .glass)
             appearancePreview.environment(\.chatDisplayPreferences, previewPreferences)
             Text(wording("Panels sample only D’s canvas, never your desktop. Images are bounded sRGB appearance copies; original artwork and previews are unchanged.", "面板只映出 D 的画布，不透出系统桌面。背景使用有界 sRGB 外观副本，原作品和预览保持不变。"))
                 .font(.caption).foregroundStyle(.secondary)

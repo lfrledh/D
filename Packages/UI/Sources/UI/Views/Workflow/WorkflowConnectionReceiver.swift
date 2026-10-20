@@ -28,7 +28,8 @@ struct WorkflowConnectionReceiver: NSViewRepresentable {
         return .init(owner: background, palette: palette, strength: appearance.local?.strength ?? 0,
             drawsGlass: effects.usesCanvasBlend && appearance.local?.material == .glass,
             legacyFill: appearance.local == nil ? NSColor(palette.panelFill(canvasBlend: effects.usesCanvasBlend ? appearance.backgroundTransparency : 0)) : nil,
-            readability: effects.usesCanvasBlend ? appearance.resolvedReadability : .init())
+            readability: effects.usesCanvasBlend ? appearance.resolvedReadability : .init(),
+            nativeGlass: effects.usesCanvasBlend && appearance.local?.material == .glass)
     }
     static func dismantleNSView(_ view: WorkflowConnectionHitView, coordinator: ()) { view.closePopup() }
     func makeNSView(context: Context) -> WorkflowConnectionHitView { WorkflowConnectionHitView() }

@@ -21,6 +21,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
 /// Coordinates compiled structured workflows; all expensive model work is still admitted by the shared InferenceRuntime.
 @MainActor @Observable public final class WorkflowController {
     public let registry: WorkflowRegistry
+    public private(set) var batchStages: [WorkflowBatchStage] = []
+    @ObservationIgnored private var batchPauseRequested = false
+    @ObservationIgnored private var activeBatchID: UUID?
     public private(set) var graphs: [WorkflowGraph] = [] {
         didSet { emptyInsertionRevision = UUID(); displayGraphGeneration &+= 1 }
     }
@@ -43,7 +46,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public private(set) var assetReferences: [UUID: WorkflowAssetReference] = [:]
     public var canEditLibraryMetadata: Bool { !closed && !closing && !externalOperationBusy() }
     public var canEditCanvas: Bool {
-        !closed && !closing && !externalOperationBusy() && readOnlyReason == nil &&
+        !closed && !closing && !toolPublicationBusy && !externalOperationBusy() && readOnlyReason == nil &&
         (!isRunning || editingOriginalID != nil) && (graphs.isEmpty || graph != nil)
     }
     public var selectedGraphID: UUID? { didSet { if oldValue != selectedGraphID { bodyPath = []; selectedNodeIDs = [] } } }
@@ -79,8 +82,11 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public var canRedo: Bool { canEditCanvas && redoStack.last.map(historyPreservesOriginal) == true }
     public var hasPendingSaves: Bool { services.hasPendingSaves || persistenceFailed }
     @ObservationIgnored public let services: WorkflowServices
-    @ObservationIgnored private var undoStack: [[WorkflowGraph]] = []
-    @ObservationIgnored private var redoStack: [[WorkflowGraph]] = []
+    private struct EditSnapshot { var graphs: [WorkflowGraph]; var tools: [WorkflowToolDefinition] }
+    private var editSnapshot: EditSnapshot { .init(graphs: graphs, tools: tools) }
+    private var toolPublicationBusy = false
+    @ObservationIgnored private var undoStack: [EditSnapshot] = []
+    @ObservationIgnored private var redoStack: [EditSnapshot] = []
     @ObservationIgnored private var persistenceFailed = false
     @ObservationIgnored private var cancelled = false
     @ObservationIgnored private var activeRunID: UUID?
@@ -119,10 +125,33 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             let state = try await services.store.workflowState()
             readOnlyReason = state.readOnlyReason
             guard let archive = state.archive else { return }
-            graphs = archive.graphs; runs = archive.runs; tools = archive.tools ?? []
+            graphs = archive.graphs; runs = archive.runs; tools = archive.tools ?? []; batchStages = archive.batchStages ?? []
+            let batchRunIDs = Set(batchStages.flatMap(\.attempts).map(\.runID))
+            for ri in runs.indices where batchRunIDs.contains(runs[ri].id) {
+                guard var cp = runs[ri].planCheckpoint, cp.state == .saving,
+                      cp.records.contains(where: { $0.step.status == .saving && $0.step.node.control == nil }) else { continue }
+                // In-memory unpublished bytes cannot be reconstructed after a process exit.
+                // Preserve partial evidence and require a newly authorized attempt.
+                cp.state = .interrupted; cp.error = "上次未发布的结果不可恢复；原记录保留，未重新计算。"
+                for ci in cp.records.indices where cp.records[ci].step.status == .saving {
+                    cp.records[ci].step.status = .interrupted; cp.records[ci].step.error = cp.error
+                }
+                capture(cp, runIndex: ri)
+            }
+            for si in batchStages.indices {
+                if batchStages[si].state == .running { batchStages[si].state = .paused }
+                for ai in batchStages[si].attempts.indices where [.dispatched, .savingBlocked].contains(batchStages[si].attempts[ai].state) {
+                    guard let run = runs.first(where: { $0.id == batchStages[si].attempts[ai].runID }) else { continue }
+                    let state = batchAttemptState(run)
+                    batchStages[si].attempts[ai].state = state == .queued ? .interrupted : state
+                }
+                if batchStages[si].attempts.contains(where: { $0.state == .savingBlocked }), batchStages[si].state != .cancelled { batchStages[si].state = .savingBlocked }
+                else if !batchStages[si].attempts.contains(where: { [.queued, .dispatched, .interrupted].contains($0.state) }), batchStages[si].state != .cancelled { batchStages[si].state = .finished }
+            }
             await refreshAssets()
             // Interrupted processes are never silently restarted. Waiting decisions remain valid.
-            for i in runs.indices where [.running, .queued, .cancelling].contains(runs[i].status) {
+            let unstartedBatchRuns = Set(batchStages.flatMap(\.attempts).filter { $0.state == .queued }.map(\.runID))
+            for i in runs.indices where [.running, .queued, .cancelling].contains(runs[i].status) && !unstartedBatchRuns.contains(runs[i].id) {
                 runs[i].status = .interrupted
                 if var checkpoint = runs[i].planCheckpoint {
                     checkpoint.state = .interrupted
@@ -141,7 +170,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         } catch { readOnlyReason = error.localizedDescription; errorMessage = error.localizedDescription }
     }
     public func prepareForClose() async throws {
-        guard !isRunning, !services.hasPendingSaves else { throw WorkflowIssue("请先取消运行或恢复待保存结果。") }
+        guard !isRunning, !toolPublicationBusy, !services.hasPendingSaves else { throw WorkflowIssue("请先取消运行或恢复待保存结果。") }
         closing = true
         do { if readOnlyReason == nil { try await persist() } }
         catch { closing = false; throw error }
@@ -254,7 +283,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     private func edit(_ action: (inout WorkflowGraph) throws -> Void, changesConfiguration: Bool = true) -> Bool {
         guard canEditCanvas, let selectedIndex = graphs.firstIndex(where: { $0.id == selectedGraphID }) else { return false }
         do {
-            let before = graphs
+            let before = editSnapshot
             let originalID = graphs[selectedIndex].id
             let forksOriginal = isRunning && editingOriginalID == originalID
             let path = bodyPath, selection = selectedNodeIDs
@@ -294,12 +323,16 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         } catch { errorMessage = error.localizedDescription; return false }
     }
 
-    private func historyPreservesOriginal(_ candidate: [WorkflowGraph]) -> Bool {
+    private func historyPreservesOriginal(_ candidate: EditSnapshot) -> Bool {
         guard isRunning, let id = editingOriginalID else { return true }
-        let original = graphs.filter { $0.id == id }, proposed = candidate.filter { $0.id == id }
+        let original = graphs.filter { $0.id == id }, proposed = candidate.graphs.filter { $0.id == id }
         return original.count == 1 && proposed == original
     }
-    private func applyHistory(_ value: [WorkflowGraph]) {
+    private func applyHistory(_ snapshot: EditSnapshot) {
+        let value = snapshot.graphs
+        // Published runs keep their immutable definitions even when an edit is undone.
+        let retained = WorkflowToolRegistration.referencedTools(in: value + runs.map(\.graph), tools: tools)
+        tools = snapshot.tools + retained.filter { tool in !snapshot.tools.contains { $0.id == tool.id && $0.version == tool.version } }
         let previous = selectedGraphID, path = bodyPath
         graphs = value
         if let original = editingOriginalID, previous == original, let copy = editingCopies[original], value.contains(where: { $0.id == copy }) {
@@ -349,16 +382,72 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         edit { $0.interface = interface }
     }
     public func extractSelection(name: String, inputs: [WorkflowToolInputBinding], outputs: [WorkflowNamedOutput], expectedGraphID: UUID, expectedRevision: UUID) {
-        guard canEditCanvas, !isRunning, let graph,
+        guard canEditCanvas, !isRunning, !toolPublicationBusy, let graph,
               graph.id == expectedGraphID, graph.revision == expectedRevision else { errorMessage = "封装期间原图已改变；请重新检查边界。"; return }
         do {
             let result = try WorkflowToolEditing.extract(graph, selected: selectedNodeIDs, name: name, inputs: inputs, outputs: outputs, tools: tools, registry: registry)
-            let oldTools = tools; tools.append(result.tool)
+            let oldTools = tools; let before = editSnapshot; tools.append(result.tool)
             edit { $0 = result.graph }
             if self.graph?.nodes.contains(where: { $0.id == result.invocationID }) != true { tools = oldTools; return }
+            if !undoStack.isEmpty { undoStack[undoStack.count - 1] = before }
             selectedNodeID = result.invocationID; selectedNodeIDs = []
         } catch { errorMessage = error.localizedDescription }
     }
+    public func publishSelection(name: String, registration: WorkflowToolRegistration,
+                                 inputs: [WorkflowToolInputBinding], outputs: [WorkflowNamedOutput],
+                                 expectedGraphID: UUID, expectedRevision: UUID) async throws {
+        guard canEditCanvas, !isRunning, !isSaving, !hasPendingSaves, let body = graph,
+              body.id == expectedGraphID, body.revision == expectedRevision, let root = rootGraph,
+              let index = graphs.firstIndex(where: { $0.id == root.id }) else {
+            throw WorkflowIssue("封装目标已改变或正在保存；草稿保留，请重新检查边界。")
+        }
+        let result = try WorkflowToolEditing.extract(body, selected: selectedNodeIDs, name: name,
+            inputs: inputs, outputs: outputs, tools: tools, registry: registry, registration: registration)
+        let path = bodyPath
+        var next = graphs
+        next[index] = try WorkflowGraphEditing.replacingBody(in: root, path: path, with: result.graph)
+        try await commitToolPublication(graphs: next, tools: tools + [result.tool])
+        if selectedGraphID == root.id, bodyPath == path { selectedNodeID = result.invocationID; selectedNodeIDs = [] }
+        errorMessage = nil; progressMessage = "自定义节点和公开接口已保存。"
+        await onChange()
+    }
+
+    private func commitToolPublication(graphs next: [WorkflowGraph], tools nextTools: [WorkflowToolDefinition]) async throws {
+        let before = editSnapshot, capturedRuns = runs, batches = batchStages
+        toolPublicationBusy = true; isSaving = true
+        defer { toolPublicationBusy = false; isSaving = false }
+        if let writeTail { try await writeTail.value }
+        let state = try await services.store.workflowState()
+        guard let archive = state.archive else { throw WorkflowIssue(state.readOnlyReason ?? "项目只读。") }
+        try beforeHistorySave()
+        _ = try await services.store.saveWorkflow(graphs: next, runs: capturedRuns,
+            expectedRevision: archive.revision, tools: nextTools, batchStages: batches.isEmpty ? nil : batches)
+        undoStack.append(before); if undoStack.count > 100 { undoStack.removeFirst() }; redoStack = []
+        tools = nextTools; graphs = next
+    }
+
+    public func publishGraphTool(name: String, registration: WorkflowToolRegistration,
+                                 expectedGraphID: UUID, expectedRevision: UUID) async throws {
+        guard canEditCanvas, !isRunning, !isSaving, !hasPendingSaves, let current = graph,
+              current.id == expectedGraphID, current.revision == expectedRevision,
+              let interface = current.interface, !interface.outputs.isEmpty else { throw WorkflowIssue("流程或公开接口已改变；草稿保留。") }
+        let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title.utf8.count <= 256 else { throw WorkflowIssue("名称不能为空或过长。") }
+        try registration.validate(interface: interface)
+        var body = current; body.toolSource = nil
+        var tool = WorkflowToolDefinition(name: title, graph: body, registration: registration)
+        if let source = current.toolSource {
+            guard let original = tools.first(where: { $0.id == source.id && $0.version == source.version }),
+                  try WorkflowPlanCompiler.digest(original) == source.digest else { throw WorkflowIssue("原工具版本或摘要已改变。") }
+            let latest = tools.filter { $0.id == source.id }.map(\.version).max() ?? source.version
+            guard latest < 1_000_000 else { throw WorkflowIssue("工具版本超过预算。") }
+            tool.id = source.id; tool.version = latest + 1
+        }
+        _ = try WorkflowPlanCompiler(registry: registry).compile(body, tools: tools + [tool])
+        try await commitToolPublication(graphs: graphs, tools: tools + [tool])
+        errorMessage = nil; progressMessage = "自定义节点版本已保存；旧实例保持原版本。"; await onChange()
+    }
+
     public func addTool(_ tool: WorkflowToolDefinition, x: Double = 160, y: Double = 160) {
         guard canEditCanvas, x.isFinite, y.isFinite,
               let definition = registry.operation("d.control.invoke")?.definition else { return }
@@ -377,28 +466,28 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         } catch { errorMessage = error.localizedDescription }
     }
     public func openToolCopy(_ reference: WorkflowToolReference) {
-        guard canEditCanvas, !isRunning,
+        guard canEditCanvas, !isRunning, !toolPublicationBusy,
               let tool = tools.first(where: { $0.id == reference.id && $0.version == reference.version }) else { return }
         do {
             guard try WorkflowPlanCompiler.digest(tool) == reference.digest else { throw WorkflowIssue("工具内容与引用不一致。") }
-            let draft = WorkflowToolEditing.editableCopy(of: tool)
-            undoStack.append(graphs); redoStack = []; graphs.append(draft); selectedGraphID = draft.id; selectedNodeID = draft.nodes.first?.id
+            var draft = WorkflowToolEditing.editableCopy(of: tool); draft.toolSource = reference
+            undoStack.append(editSnapshot); redoStack = []; graphs.append(draft); selectedGraphID = draft.id; selectedNodeID = draft.nodes.first?.id
         } catch { errorMessage = error.localizedDescription }
     }
     public func saveGraphAsTool(name: String) {
-        guard canEditCanvas, !isRunning, let graph else { return }
+        guard canEditCanvas, !isRunning, !toolPublicationBusy, let graph else { return }
         do {
             let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !title.isEmpty, title.utf8.count <= 256, !tools.contains(where: { $0.name == title }), graph.interface?.outputs.isEmpty == false else { throw WorkflowIssue("请填写唯一名称，并在公开接口中指定输出。") }
             let tool = WorkflowToolDefinition(name: title, graph: graph)
             _ = try WorkflowPlanCompiler(registry: registry).compile(graph, tools: tools + [tool])
-            tools.append(tool); progressMessage = "工具已加入项目工具箱；保存项目后可重开。"
+            undoStack.append(editSnapshot); redoStack = []; tools.append(tool); progressMessage = "工具已加入项目工具箱；保存项目后可重开。"
         } catch { errorMessage = error.localizedDescription }
     }
     public func addBlankGraph(name: String = "新流程") {
         guard canEditCanvas else { return }
         let next = WorkflowGraph(name: name)
-        undoStack.append(graphs); redoStack = []; graphs.append(next)
+        undoStack.append(editSnapshot); redoStack = []; graphs.append(next)
         selectedGraphID = next.id; selectedNodeID = nil
     }
     public func addNode(operationID: String, modelID: String? = nil, x: Double? = nil, y: Double? = nil) {
@@ -471,7 +560,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             let next = WorkflowGraph(name: "新流程", nodes: [node],
                 layout: [.init(nodeID: node.id, x: x, y: y)])
             try registry.validate(next, tools: tools)
-            undoStack.append(graphs); redoStack = []; graphs.append(next)
+            undoStack.append(editSnapshot); redoStack = []; graphs.append(next)
             selectedGraphID = next.id
         } else {
             edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: x, y: y)) }
@@ -625,14 +714,14 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         edit { $0.connections.append(.init(sourceNode: source, sourcePort: sourcePort, targetNode: target, targetPort: targetPort)) }
     }
     public func disconnect(_ connectionID: UUID) { edit { $0.connections.removeAll { $0.id == connectionID } } }
-    public func undo() { guard canUndo, let value = undoStack.popLast() else { return }; redoStack.append(graphs); applyHistory(value) }
-    public func redo() { guard canRedo, let value = redoStack.popLast() else { return }; undoStack.append(graphs); applyHistory(value) }
+    public func undo() { guard canUndo, let value = undoStack.popLast() else { return }; redoStack.append(editSnapshot); applyHistory(value) }
+    public func redo() { guard canRedo, let value = redoStack.popLast() else { return }; undoStack.append(editSnapshot); applyHistory(value) }
     public func addExample(_ name: String) {
         guard canEditCanvas else { return }
         let next: WorkflowGraph
         switch name { case "image": next = WorkflowExamples.image(); case "file": next = WorkflowExamples.file()
         case "template": next = WorkflowExamples.template(); default: next = WorkflowExamples.text() }
-        undoStack.append(graphs); redoStack = []; graphs.append(next); selectedGraphID = next.id; selectedNodeID = next.nodes.first?.id
+        undoStack.append(editSnapshot); redoStack = []; graphs.append(next); selectedGraphID = next.id; selectedNodeID = next.nodes.first?.id
     }
     public func addLanguageExample(_ choice: WorkflowLanguageExample) {
         guard canEditCanvas else { return }
@@ -642,7 +731,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             // digest remain fixed for existing instances; never overwrite them.
             let combined = tools + bundle.tools
             _ = try WorkflowPlanCompiler(registry: registry).compile(bundle.graph, tools: combined)
-            undoStack.append(graphs); redoStack = []
+            undoStack.append(editSnapshot); redoStack = []
             tools = combined; graphs.append(bundle.graph); selectedGraphID = bundle.graph.id
             selectedNodeID = bundle.graph.nodes.first?.id; errorMessage = nil
         } catch { errorMessage = error.localizedDescription }
@@ -865,15 +954,15 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     }
 
     private func persist() async throws {
-        guard !closed, readOnlyReason == nil else { throw WorkflowIssue(readOnlyReason ?? "项目已关闭。") }
+        guard !closed, !toolPublicationBusy, readOnlyReason == nil else { throw WorkflowIssue(readOnlyReason ?? "项目已关闭或节点正在保存。") }
         // Chain the complete transaction, including its read, so actor reentrancy cannot lose another save.
-        let preceding = writeTail, store = services.store, capturedGraphs = graphs, capturedRuns = runs, capturedTools = tools
+        let preceding = writeTail, store = services.store, capturedGraphs = graphs, capturedRuns = runs, capturedTools = tools, capturedBatches = batchStages
         let task = Task { @MainActor in
             if let preceding { _ = try? await preceding.value }
             let state = try await store.workflowState()
             guard let archive = state.archive else { throw WorkflowIssue(state.readOnlyReason ?? "流程只读。") }
             try self.beforeHistorySave()
-            _ = try await store.saveWorkflow(graphs: capturedGraphs, runs: capturedRuns, expectedRevision: archive.revision, tools: capturedTools.isEmpty ? nil : capturedTools)
+            _ = try await store.saveWorkflow(graphs: capturedGraphs, runs: capturedRuns, expectedRevision: archive.revision, tools: capturedTools, batchStages: capturedBatches.isEmpty ? nil : capturedBatches)
         }
         writeTail = task; isSaving = true
         do { try await task.value; persistenceFailed = false; isSaving = false; await refreshAssets() }
@@ -884,10 +973,236 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         catch { errorMessage = error.localizedDescription }
     }
     public func saveExplicitEdits() async throws { try await persist(); await onChange() }
+
+    /// Freeze and authorize a finite stage. No inference happens until its ledger is durable.
+    @discardableResult public func createBatchStage(
+        selection: WorkflowGraphSelection, pins: [WorkflowHistoricalInput], repetitions: Int,
+        expectedGraphID: UUID, expectedRevision: UUID
+    ) async throws -> UUID {
+        guard canEditCanvas, !isRunning, !isSaving, !hasPendingSaves, bodyPath.isEmpty,
+              let original = rootGraph, original.id == expectedGraphID, original.revision == expectedRevision,
+              (1...64).contains(repetitions), runs.count + repetitions <= 4_096 else {
+            throw WorkflowIssue("批次范围已改变、次数超限或仍有未完成保存。")
+        }
+        isRunning = true; defer { isRunning = false }
+        let frozen = services.freezeModels(in: original), defaults = services.capturedModelDefaults()
+        let plan = try WorkflowScopePlanner.rebuild(graph: frozen, selection: selection, modelDefaults: defaults, tools: tools, registry: registry)
+        let arguments = try publicArguments(plan, graph: frozen)
+        let sourceIDs = Set(pins.map { $0.sourceCall.address.runID })
+        let sources = try runs.filter { sourceIDs.contains($0.id) }.map { try WorkflowArchiveInspection.scopeSource($0, tools: tools, registry: registry) }
+        let target: UUID
+        switch selection { case .through(let id), .only(let id), .downstream(let id, _): target = id }
+        var additions: [WorkflowRun] = []
+        for _ in 0..<repetitions {
+            var cp = WorkflowPlanCheckpoint(plan: plan, arguments: arguments); cp.modelDefaults = defaults
+            cp.externalInputs = try WorkflowScopePlanner.resolveHistoricalInputs(pins,
+                destination: .init(graph: frozen, selection: selection, checkpoint: cp),
+                sources: sources, tools: tools, registry: registry)
+            var run = WorkflowRun(id: cp.runID, graph: frozen, targetNodeID: target)
+            run.planCheckpoint = cp
+            run.scope = .init(selection: selection, historicalInputs: pins, recomputeSelected: true)
+            additions.append(run)
+        }
+        return try await registerBatchStage(name: original.name, repetitions: repetitions, parents: [], additions: additions)
+    }
+
+    /// Each selected, settled attempt is one typed bundle, including list values and all join inputs.
+    public func batchContinuationIssue(_ runID: UUID) -> String? {
+        guard let run = runs.first(where: { $0.id == runID }) else { return "原尝试已不可访问。" }
+        do { _ = try WorkflowBatchValidation.acceptedPrefix(run); return nil }
+        catch { return error.localizedDescription }
+    }
+
+    @discardableResult public func createNextBatchStage(parentRunIDs: [UUID], repetitions: Int) async throws -> UUID {
+        guard !closed, !closing, !isRunning, !isSaving, !hasPendingSaves, !externalOperationBusy(),
+              readOnlyReason == nil, !toolPublicationBusy, (1...64).contains(repetitions),
+              !parentRunIDs.isEmpty, Set(parentRunIDs).count == parentRunIDs.count,
+              parentRunIDs.count <= 256 / repetitions, runs.count + parentRunIDs.count * repetitions <= 4_096 else {
+            throw WorkflowIssue("请选择已采用的尝试；每项 1—64 次、单阶段最多 256 次，且先完成保存。")
+        }
+        isRunning = true; defer { isRunning = false }
+        let known = Set(batchStages.flatMap(\.attempts).map(\.runID))
+        var additions: [WorkflowRun] = []
+        for id in parentRunIDs {
+            guard known.contains(id), let parent = runs.first(where: { $0.id == id }) else { throw WorkflowIssue("父尝试不属于已保存批次。") }
+            try WorkflowArchiveInspection.validateRun(parent, tools: tools, registry: registry)
+            for _ in 0..<repetitions { additions.append(try WorkflowBatchValidation.continuation(of: parent)) }
+        }
+        return try await registerBatchStage(name: "继续所选", repetitions: repetitions, parents: parentRunIDs, additions: additions)
+    }
+
+    private func registerBatchStage(name: String, repetitions: Int, parents: [UUID], additions: [WorkflowRun]) async throws -> UUID {
+        let stage = WorkflowBatchStage(name: name, repetitions: repetitions, parentRunIDs: parents,
+            attempts: additions.enumerated().map { .init(ordinal: $0.offset + 1, runID: $0.element.id) })
+        try WorkflowArchiveInspection.validateScopeHistory(runs + additions, tools: tools, registry: registry)
+        try WorkflowBatchValidation.validate(batchStages + [stage], runs: runs + additions)
+        runs.append(contentsOf: additions); batchStages.append(stage)
+        do { try await persist() }
+        catch {
+            // Retain the exact dispatch IDs for save-only recovery; no computation has run.
+            batchStages[batchStages.count - 1].state = .savingBlocked
+            errorMessage = error.localizedDescription
+            throw error
+        }
+        await onChange()
+        return stage.id
+    }
+
+    public func runBatchStage(_ id: UUID) async {
+        guard !closed, !closing, !isRunning, !toolPublicationBusy, !externalOperationBusy(),
+              readOnlyReason == nil, !hasPendingSaves,
+              let si = batchStages.firstIndex(where: { $0.id == id }),
+              ![.finished, .cancelled].contains(batchStages[si].state) else { return }
+        isRunning = true; activeBatchID = id; cancelled = false; batchPauseRequested = false; errorMessage = nil
+        defer {
+            isRunning = false; activeBatchID = nil; activeRunID = nil; activeExecutor = nil
+            editingOriginalID = nil; editingCopies = [:]; streamingText = ""; streamingStepID = nil
+        }
+        do {
+            try WorkflowBatchValidation.validate(batchStages, runs: runs)
+            batchStages[si].state = .running; try await persist()
+            for ai in batchStages[si].attempts.indices {
+                if cancelled || batchPauseRequested { break }
+                guard batchStages[si].attempts[ai].state == .queued else { continue }
+                let runID = batchStages[si].attempts[ai].runID
+                guard let ri = runs.firstIndex(where: { $0.id == runID }), let cp = runs[ri].planCheckpoint,
+                      cp.state == .ready else { throw WorkflowIssue("排队恢复点不是未派发状态；没有自动重算。") }
+                activeRunID = runID; editingOriginalID = editingRootID(for: runs[ri]); editingCopies = [:]
+                batchStages[si].attempts[ai].state = .dispatched
+                batchStages[si].attempts[ai].startedAt = Date()
+                try await persist() // Dispatch claim before any model admission.
+                let clock = ContinuousClock(), start = ContinuousClock.now
+                var failure: (any Error)?
+                do { try await executePlan(runID: runID) } catch { failure = error }
+                await finishExecution(failure) // Includes release/drain before the next dispatch.
+                let elapsed = start.duration(to: clock.now).components
+                batchStages[si].attempts[ai].activeSeconds = Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
+                activeExecutor = nil
+                batchStages[si].attempts[ai].state = batchAttemptState(runs[ri])
+                if hasPendingSaves || runs[ri].status == .saving {
+                    batchStages[si].attempts[ai].state = .savingBlocked
+                    batchStages[si].state = .savingBlocked
+                    break
+                }
+                try await persist() // A durable waiting/completed result permits the next attempt.
+                if failure != nil || runs[ri].planCheckpoint?.state == .paused {
+                    batchPauseRequested = true; break
+                }
+            }
+            if cancelled {
+                for ai in batchStages[si].attempts.indices where batchStages[si].attempts[ai].state == .queued {
+                    batchStages[si].attempts[ai].state = .cancelled
+                    if let ri = runs.firstIndex(where: { $0.id == batchStages[si].attempts[ai].runID }) {
+                        runs[ri].status = .cancelled; runs[ri].planCheckpoint?.state = .cancelled
+                    }
+                }
+                batchStages[si].state = .cancelled
+            } else if batchStages[si].state != .savingBlocked {
+                let unfinished: Set<WorkflowBatchAttempt.State> = [.queued, .dispatched, .interrupted, .savingBlocked]
+                batchStages[si].state = batchStages[si].attempts.contains { unfinished.contains($0.state) } ? .paused : .finished
+            }
+            if !hasPendingSaves { try await persist() }
+        } catch {
+            batchStages[si].state = cancelled ? .cancelled : (hasPendingSaves ? .savingBlocked : .paused)
+            errorMessage = error.localizedDescription
+        }
+        await onChange()
+    }
+
+    private func batchAttemptState(_ run: WorkflowRun) -> WorkflowBatchAttempt.State {
+        switch run.status {
+        case .completed, .partial: .completed
+        case .waiting: .waiting
+        case .failed: .failed
+        case .cancelled, .rejected: .cancelled
+        case .saving: .savingBlocked
+        case .queued: .queued
+        default: .interrupted
+        }
+    }
+
+    public func retryBatchSaving(_ id: UUID) async {
+        guard !closed, !closing, !isRunning, !isSaving, !toolPublicationBusy, readOnlyReason == nil,
+              let si = batchStages.firstIndex(where: { $0.id == id }) else { return }
+        let wasCancelled = batchStages[si].state == .cancelled
+        isRunning = true; defer { isRunning = false }
+        do {
+            for ai in batchStages[si].attempts.indices {
+                guard let ri = runs.firstIndex(where: { $0.id == batchStages[si].attempts[ai].runID }),
+                      var cp = runs[ri].planCheckpoint else { throw WorkflowIssue("批次恢复点不存在。") }
+                for record in cp.records where services.hasPendingPublication(stepID: record.id) {
+                    guard record.step.status == .saving else {
+                        throw WorkflowIssue("此内容来自尚未保存的人工决定。请在原关卡再次保存决定；队列未计算或自动采用。")
+                    }
+                    guard let context = services.retainedPublicationContext(stepID: record.id),
+                          context.node == record.step.node, context.inputs == record.step.inputs,
+                          context.address == record.address else { throw WorkflowIssue("待保存内容与冻结调用不符。") }
+                    let saver = WorkflowPlanExecutor(registry: registry, executeCall: { _ in throw WorkflowIssue("保存恢复禁止计算。") },
+                        save: { [unowned self] value in self.capture(value, runIndex: ri); try await self.persist() })
+                    do {
+                        do {
+                            let outputs = try await services.retryWorkflowPublications(context)
+                            cp = try await saver.restorePublication(cp, stepID: record.id, outputs: outputs)
+                        } catch let failure as WorkflowOutputValidationFailure {
+                            cp = try await saver.restorePublicationFailure(cp, stepID: record.id, failure: failure)
+                        }
+                    } catch { if let latest = saver.checkpoint { capture(latest, runIndex: ri) }; throw error }
+                    capture(cp, runIndex: ri); services.acknowledgePublication(stepID: record.id)
+                }
+                if cp.state == .saving {
+                    let saver = WorkflowPlanExecutor(registry: registry, executeCall: { _ in throw WorkflowIssue("恢复保存不能执行节点。") },
+                        save: { [unowned self] value in self.capture(value, runIndex: ri); try await self.persist() })
+                    var saved = try await saver.saveOnly(cp)
+                    if saved.state == .running { saved.state = .ready }
+                    capture(saved, runIndex: ri)
+                }
+                if [.savingBlocked, .dispatched].contains(batchStages[si].attempts[ai].state) {
+                    batchStages[si].attempts[ai].state = batchAttemptState(runs[ri])
+                }
+            }
+            batchStages[si].state = wasCancelled ? .cancelled : .paused
+            try await persist()
+            // A previous publication may already be in the checkpoint when its history save failed.
+            // Release retained bookkeeping only after this durable retry has succeeded.
+            for attempt in batchStages[si].attempts {
+                for record in runs.first(where: { $0.id == attempt.runID })?.planCheckpoint?.records ?? []
+                    where [.completed, .partial, .failed].contains(record.step.status) && !services.hasPendingPublication(stepID: record.id) {
+                    services.acknowledgePublication(stepID: record.id)
+                }
+            }
+            errorMessage = nil; await onChange()
+        } catch { errorMessage = error.localizedDescription; batchStages[si].state = wasCancelled ? .cancelled : .savingBlocked }
+    }
+
+    /// An uncertain/crashed or failed dispatch is retained; retry is a newly authorized attempt.
+    @discardableResult public func retryBatchAttempt(_ runID: UUID) async throws -> UUID {
+        guard !closed, !closing, !isRunning, !isSaving, !hasPendingSaves, !externalOperationBusy(),
+              readOnlyReason == nil, !toolPublicationBusy,
+              batchStages.flatMap(\.attempts).contains(where: { $0.runID == runID && [.failed, .interrupted].contains($0.state) }),
+              let old = runs.first(where: { $0.id == runID }), var cp = old.planCheckpoint else {
+            throw WorkflowIssue("此尝试不能重算，或仍需恢复保存。")
+        }
+        isRunning = true; defer { isRunning = false }
+        var replacement: WorkflowRun
+        let parents: [UUID]
+        if let source = old.batchParent {
+            guard let parent = runs.first(where: { $0.id == source.runID }),
+                  let parentCP = parent.planCheckpoint, try WorkflowBatchValidation.digest(parentCP) == source.checkpointDigest else {
+                throw WorkflowIssue("原阶段输入已改变；没有使用最新结果替代。")
+            }
+            replacement = try WorkflowBatchValidation.continuation(of: parent); parents = [parent.id]
+        } else {
+            cp.runID = UUID(); cp.records = []; cp.outputs = [:]; cp.state = .ready; cp.error = nil
+            replacement = WorkflowRun(id: cp.runID, graph: old.graph, targetNodeID: old.targetNodeID)
+            replacement.scope = old.scope; replacement.planCheckpoint = cp; parents = []
+        }
+        return try await registerBatchStage(name: "明确重试计算", repetitions: 1, parents: parents, additions: [replacement])
+    }
+
     public func run(target: UUID, only: Bool) async {
         guard !externalOperationBusy() else { errorMessage = "请先结束录音或恢复保存，再运行流程。"; return }
         guard bodyPath.isEmpty else { errorMessage = "请返回外层运行；不能把局部模板当作独立调用。"; return }
-        guard !closed, !closing, !isRunning, readOnlyReason == nil, let original = graph else { return }
+        guard !closed, !closing, !isRunning, !toolPublicationBusy, readOnlyReason == nil, let original = graph else { return }
         guard !hasPendingSaves else { errorMessage = "请先恢复保存，避免重复计算。"; return }
         editingOriginalID = original.id; editingCopies = [:]
         isRunning = true; cancelled = false; errorMessage = nil
@@ -991,7 +1306,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
 
     public func runScoped(_ selection: WorkflowGraphSelection, pins: [WorkflowHistoricalInput],
                           expectedGraphID: UUID, expectedRevision: UUID) async {
-        guard !externalOperationBusy(), !closed, !closing, !isRunning, readOnlyReason == nil,
+        guard !externalOperationBusy(), !closed, !closing, !isRunning, !toolPublicationBusy, readOnlyReason == nil,
               !hasPendingSaves, bodyPath.isEmpty, let original = rootGraph,
               original.id == expectedGraphID, original.revision == expectedRevision else {
             errorMessage = "运行范围或原图已改变，或当前有未完成操作；请重新确认。"; return
@@ -1032,7 +1347,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     /// A selected concrete call becomes a new run on its frozen local graph.
     /// It does not mutate or resume the original Map item, Loop iteration or waiting task.
     public func rerunCall(_ reference: WorkflowCallReference) async {
-        guard !externalOperationBusy(), !closed, !closing, !isRunning, readOnlyReason == nil, !hasPendingSaves else { return }
+        guard !externalOperationBusy(), !closed, !closing, !isRunning, !toolPublicationBusy, readOnlyReason == nil, !hasPendingSaves else { return }
         editingOriginalID = runs.first(where: { $0.id == reference.address.runID }).flatMap { editingRootID(for: $0) }; editingCopies = [:]
         isRunning = true; cancelled = false; errorMessage = nil
         defer { editingOriginalID = nil; editingCopies = [:]; isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
@@ -1141,7 +1456,11 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         checkpoint.state = run.status == .saving ? .saving : .ready
         return try WorkflowPlanExecutor.preparingRetry(checkpoint)
     }
-    public func pause() { activeExecutor?.requestPause(); progressMessage = "等待当前步骤结束并释放资源后暂停。" }
+    public func pause() {
+        batchPauseRequested = true
+        if activeBatchID == nil { activeExecutor?.requestPause() }
+        progressMessage = activeBatchID == nil ? "等待当前步骤结束并释放资源后暂停。" : "本次尝试到关卡并保存后暂停；其余已授权次数保留。"
+    }
 
     /// A cancellation is terminal only after the operation drained and its model leases were released.
     private func finishExecution(_ failure: (any Error)?) async {
@@ -1174,8 +1493,8 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public func cancel() async {
         guard isRunning else { return }
         if let id = activeRunID, let i = runs.firstIndex(where: { $0.id == id }) {
-            guard [.running, .queued, .cancelling].contains(runs[i].status) else { return }
-            runs[i].status = .cancelling
+            if [.running, .queued, .cancelling].contains(runs[i].status) { runs[i].status = .cancelling }
+            else if activeBatchID == nil { return }
         }
         cancelled = true
         progressMessage = "正在取消，等待计算停止并释放资源。"
@@ -1183,7 +1502,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         await services.cancel()
     }
     public func editHumanDraft(stepID: UUID, value: WorkflowDatum?) {
-        guard !closed, !closing, readOnlyReason == nil, !isRunning,
+        guard !closed, !closing, readOnlyReason == nil, !isRunning, !toolPublicationBusy,
               let ri = runs.firstIndex(where: { $0.planCheckpoint?.records.contains { $0.step.id == stepID } == true }),
               let ci = runs[ri].planCheckpoint?.records.firstIndex(where: { $0.step.id == stepID }),
               runs[ri].planCheckpoint?.records[ci].step.status == .waiting,
@@ -1195,7 +1514,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         } catch { errorMessage = error.localizedDescription }
     }
     public func decideHuman(stepID: UUID, value: WorkflowDatum?, reject: Bool = false, expectedTask: WorkflowHumanTask) async {
-        guard !closed, !closing, readOnlyReason == nil, !isRunning else { return }
+        guard !closed, !closing, readOnlyReason == nil, !isRunning, !toolPublicationBusy else { return }
         isRunning = true; defer { isRunning = false }
         do {
             guard let ri = runs.firstIndex(where: { $0.planCheckpoint?.records.contains { $0.step.id == stepID } == true }),
@@ -1227,10 +1546,14 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         runs.first { $0.id == runID }?.planCheckpoint?.records ?? []
     }
     private func waitingSnapshotIsCurrent(_ run: WorkflowRun) -> Bool {
+        if batchStages.contains(where: { $0.attempts.contains(where: { $0.runID == run.id }) }) {
+            return (try? WorkflowArchiveInspection.validateRun(run, tools: tools, registry: registry)) != nil && (try? WorkflowBatchValidation.validateParents(runs)) != nil
+        }
         if run.scope?.originCall != nil { return belongsToSelectedWorkflow(run) }
         return rootGraph?.id == run.graph.id && rootGraph?.revision == run.graph.revision
     }
     private func canDecide(_ step: WorkflowStepRun, in run: WorkflowRun) -> Bool {
+        if batchStages.contains(where: { $0.attempts.contains(where: { $0.runID == run.id }) }) { return waitingSnapshotIsCurrent(run) }
         if run.scope?.originCall != nil || !run.steps.contains(where: { $0.id == step.id }) { return waitingSnapshotIsCurrent(run) }
         if let scope = run.scope, !scope.historicalInputs.isEmpty {
             // An explicit historical boundary is not the latest upstream value.
@@ -1246,7 +1569,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         return belongsToSelectedWorkflow(run) && !isStale(step)
     }
     public func decide(stepID: UUID, accept: Bool, text: String?, candidateID: UUID?, acceptPartial: Bool) async {
-        guard !closed, !closing, !isRunning, readOnlyReason == nil else { return }
+        guard !closed, !closing, !isRunning, !toolPublicationBusy, readOnlyReason == nil else { return }
         isRunning = true
         defer { isRunning = false }
         do {
@@ -1294,8 +1617,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         } catch { errorMessage = error.localizedDescription }
     }
     public func resume(runID: UUID) async {
+        guard !batchStages.contains(where: { $0.attempts.contains(where: { $0.runID == runID }) }) else { errorMessage = "批次尝试保留固定结果；请使用继续所选，明确下一阶段次数。"; return }
         guard !externalOperationBusy() else { errorMessage = "请先结束录音或恢复保存，再恢复流程。"; return }
-        guard !closed, !closing, !isRunning, readOnlyReason == nil, let i = runs.firstIndex(where: { $0.id == runID }) else { return }
+        guard !closed, !closing, !isRunning, !toolPublicationBusy, readOnlyReason == nil, let i = runs.firstIndex(where: { $0.id == runID }) else { return }
         if runs[i].scope?.originCall != nil {
             guard belongsToSelectedWorkflow(runs[i]) else { errorMessage = "请在原调用所属流程中恢复。"; return }
         } else {
@@ -1327,7 +1651,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     }
     public func retryFailedCandidates(stepID: UUID) async {
         guard !externalOperationBusy() else { errorMessage = "请先结束录音或恢复保存，再重试候选。"; return }
-        guard !closed, !closing, !isRunning, readOnlyReason == nil,
+        guard !closed, !closing, !isRunning, !toolPublicationBusy, readOnlyReason == nil,
               let ri = runs.firstIndex(where: { $0.steps.contains { $0.id == stepID } }),
               let si = runs[ri].steps.firstIndex(where: { $0.id == stepID }),
               registry.operation(runs[ri].steps[si].node.operationID)?.definition.modelKind == .image else { return }

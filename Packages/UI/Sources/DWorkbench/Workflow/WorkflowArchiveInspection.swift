@@ -82,6 +82,7 @@ enum WorkflowArchiveInspection {
     @discardableResult
     static func validateScopeHistory(_ runs: [WorkflowRun], tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard) throws -> Int {
         guard Set(runs.map(\.id)).count == runs.count else { throw WorkflowIssue("重复运行身份。") }
+        try WorkflowBatchValidation.validateParents(runs)
         let byID = Dictionary(uniqueKeysWithValues: runs.map { ($0.id, $0) })
         var validated: [UUID: WorkflowScopeSource] = [:]
         func source(_ run: WorkflowRun) throws -> WorkflowScopeSource {
@@ -186,9 +187,11 @@ enum WorkflowArchiveInspection {
     }
 
     static func validateStructure(_ archive: WorkflowArchive) throws {
-        guard archive.version == 2 || !archive.requiresLanguageVersion else {
+        guard archive.version >= 2 || !archive.requiresLanguageVersion else {
             throw WorkflowIssue("新语言数据必须使用流程格式 v2；不能写入旧格式。")
         }
+        guard archive.version == 3 || (archive.batchStages == nil && !archive.runs.contains(where: { $0.batchParent != nil })) else { throw WorkflowIssue("批次需要流程格式 v3。") }
+        try WorkflowBatchValidation.validate(archive.batchStages ?? [], runs: archive.runs)
         let tools = archive.tools ?? []
         guard tools.count <= 256, Set(tools.map { "\($0.id):\($0.version)" }).count == tools.count else {
             throw WorkflowIssue("工具版本重复或数量超限。")
@@ -197,6 +200,12 @@ enum WorkflowArchiveInspection {
         func graph(_ value: WorkflowGraph, depth: Int) throws {
             guard depth <= 16 else { throw WorkflowIssue("局部流程超过 16 层。") }
             try WorkflowRegistry.standard.validate(value, tools: tools)
+            if let source = value.toolSource {
+                guard let exact = tools.first(where: { $0.id == source.id && $0.version == source.version }),
+                      try WorkflowPlanCompiler.digest(exact) == source.digest else {
+                    throw WorkflowIssue("编辑副本的来源工具版本已缺失或改变。")
+                }
+            }
             count += value.nodes.count
             guard count <= 65_536 else { throw WorkflowIssue("流程存储节点总数超过预算。") }
             if let interface = value.interface {
@@ -239,6 +248,7 @@ enum WorkflowArchiveInspection {
         }
         for item in archive.graphs + archive.runs.map(\.graph) + tools.map(\.graph) { try graph(item, depth: 0) }
         for tool in tools {
+            try tool.registration?.validate(interface: tool.graph.interface ?? .init())
             guard tool.version > 0, !tool.name.isEmpty, tool.graph.interface != nil else { throw WorkflowIssue("工具缺少版本或接口。") }
         }
     }

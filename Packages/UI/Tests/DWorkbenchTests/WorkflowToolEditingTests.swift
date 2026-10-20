@@ -20,6 +20,21 @@ struct WorkflowToolEditingTests {
         #expect(copy.id != extracted.tool.graph.id); #expect(copy.nodes == extracted.tool.graph.nodes)
         #expect(throws: WorkflowIssue.self) { try WorkflowToolEditing.extract(graph, selected: [middle.id], name: "bad", inputs: [], outputs: [.init(name: "answer", nodeID: middle.id, schema: .text)], tools: []) }
     }
+    @Test func registrationPreservesOldEncodingAndRejectsInventedPortLabels() throws {
+        var graph = WorkflowGraph(name: "old"); graph.interface = .init()
+        let original = WorkflowToolDefinition(name: "old", graph: graph)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let bytes = try encoder.encode(original)
+        let object = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        #expect(object["registration"] == nil)
+        let decoded = try JSONDecoder().decode(WorkflowToolDefinition.self, from: bytes)
+        #expect(try WorkflowPlanCompiler.digest(decoded) == WorkflowPlanCompiler.digest(original))
+        let invalid = WorkflowToolRegistration(purpose: "Purpose", inputLabels: ["invented": "Name"])
+        #expect(throws: WorkflowIssue.self) { try invalid.validate(interface: .init()) }
+        var future = WorkflowToolRegistration(purpose: "Purpose"); future.version = 2
+        #expect(throws: WorkflowIssue.self) { try future.validate(interface: .init()) }
+    }
+
     @Test func candidateAdapterKeepsFailuresAndExactLargeSeed() throws {
         let asset = WorkflowAssetReference(projectID: UUID(), assetID: UUID(), kind: .image, sha256: String(repeating: "a", count: 64))
         let first = WorkflowCandidate(asset: asset, seed: String(UInt64.max)), failure = WorkflowCandidate(error: "controlled failure", seed: "0")

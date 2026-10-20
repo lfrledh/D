@@ -7,6 +7,24 @@ import Testing
 
 @Suite("Workbench appearance preferences")
 @MainActor struct WorkbenchAppearanceTests {
+    @Test func finiteKeyboardBindingsRejectConflictsReservedKeysAndRoundTrip() throws {
+        var keys = WorkflowKeyboardPreferences()
+        #expect(keys.isValid)
+        let original = keys.binding(.hand)
+        #expect(keys.conflict(original, for: .pointer) == .hand)
+        keys.overrides[.pointer] = original
+        #expect(!keys.isValid)
+        keys.overrides[.pointer] = .init(key: "b", command: true, option: true)
+        #expect(keys.isValid)
+        #expect(WorkflowKeyBinding(key: "z", option: false).reserved)
+        #expect(!WorkflowKeyBinding(key: "z", command: false, option: false).valid)
+        var prefs = ChatDisplayPreferences(); prefs.workflowKeyboard = keys
+        let decoded = try JSONDecoder().decode(ChatDisplayPreferences.self, from: JSONEncoder().encode(prefs))
+        #expect(decoded == prefs && decoded.isValid)
+        keys.overrides = [:]
+        #expect(keys.binding(.pointer).key == WorkflowKeyboardCommand.pointer.defaultKey)
+    }
+
     @Test func morphHasFiniteShortDurationAndNonlinearVelocity() throws {
         for strength in [0.01, 0.5, 1.0] {
             var appearance = WorkbenchAppearance(); appearance.motion = strength

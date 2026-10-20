@@ -27,8 +27,10 @@ public struct WorkflowToolDefinition: Codable, Sendable, Equatable, Identifiable
     public var name: String
     public var graph: WorkflowGraph
     public var isOfficial: Bool
-    public init(id: UUID = UUID(), version: Int = 1, name: String, graph: WorkflowGraph, isOfficial: Bool = false) {
-        self.id = id; self.version = version; self.name = name; self.graph = graph; self.isOfficial = isOfficial
+    /// Optional so old definitions keep exactly the same canonical digest.
+    public var registration: WorkflowToolRegistration?
+    public init(id: UUID = UUID(), version: Int = 1, name: String, graph: WorkflowGraph, isOfficial: Bool = false, registration: WorkflowToolRegistration? = nil) {
+        self.id = id; self.version = version; self.name = name; self.graph = graph; self.isOfficial = isOfficial; self.registration = registration
     }
 }
 public indirect enum WorkflowControlBlock: Codable, Sendable, Equatable {

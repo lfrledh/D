@@ -234,12 +234,14 @@ private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
         let effects = WorkbenchEffectsPolicy(
             appearance: appearance, reduceMotion: reduceMotion,
             reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased)
+        let native = effects.usesCanvasBlend && appearance.local?.material == .glass
         content
             .environment(\.workbenchSurfaceGroup, inheritedGroup ?? group)
             .foregroundStyle(palette.foregroundColor)
             .background {
                 Group {
-                    if let local = appearance.local {
+                    if native { Color.clear }
+                    else if let local = appearance.local {
                         WorkbenchLocalSurface(owner: background, palette: palette, strength: local.strength,
                             drawsGlass: effects.usesCanvasBlend && local.material == .glass,
                             surfaceGroup: inheritedGroup ?? group, surfaceRole: role,
@@ -253,6 +255,7 @@ private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
                 }
                     .accessibilityHidden(true)
                     .overlay {
+                        if !native {
                         // Thin curved rim, like the category lens. No light wash
                         // over the interior or any filtering of the content layer.
                         shape.strokeBorder(palette.foregroundColor.opacity(
@@ -261,10 +264,12 @@ private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
                             shape.inset(by: 1).strokeBorder(palette.canvasColor.opacity(0.30), lineWidth: 0.6)
                         }
                     }
-                    .shadow(color: effects.usesCanvasBlend ? .black.opacity(0.10) : .clear,
+                    }
+                    .shadow(color: !native && effects.usesCanvasBlend ? .black.opacity(0.10) : .clear,
                             radius: effects.usesCanvasBlend ? 8 : 0, y: effects.usesCanvasBlend ? 2 : 0)
                     .allowsHitTesting(false)
             }
+            .glassEffect(native ? .regular.tint(palette.canvasColor.opacity((1 - (appearance.local?.strength ?? 0.55)) * 0.35)) : .identity, in: shape)
             .animation(effects.duration.map { .easeInOut(duration: $0) }, value: palette)
     }
 }
@@ -351,8 +356,8 @@ private struct WorkbenchGlassButtonBody: View {
         configuration.label
             .padding(.horizontal, compact ? 0 : size == .mini || size == .small ? 7 : 12)
             .padding(.vertical, compact ? 0 : size == .mini || size == .small ? 3 : 6)
-            .background { Color.clear.workbenchPanel(in: Capsule()) }
             .foregroundStyle(ink)
+            .workbenchPanel(in: Capsule())
             .overlay { Capsule().strokeBorder(ink.opacity(prominent ? 0.5 : 0), lineWidth: 1).allowsHitTesting(false) }
             .modifier(WorkbenchButtonFeedback(shape: Capsule(), isPressed: configuration.isPressed, ink: ink))
             .opacity(isEnabled ? 1 : 0.45)
@@ -429,7 +434,7 @@ struct WorkbenchGlassMenuStyle: MenuStyle {
     func makeBody(configuration: Configuration) -> some View {
         Menu(configuration).menuStyle(.borderlessButton)
             .padding(.horizontal, 8).padding(.vertical, 5)
-            .background { Color.clear.workbenchPanel(in: Capsule()) }
+            .workbenchPanel(in: Capsule())
     }
 }
 struct WorkbenchPrimaryButtonStyle: ButtonStyle {
@@ -447,7 +452,7 @@ struct WorkbenchIconButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.frame(width: diameter, height: diameter)
-            .background { Color.clear.workbenchPanel(in: Circle()) }
+            .workbenchPanel(in: Circle())
         .modifier(WorkbenchButtonFeedback(shape: Circle(), isPressed: configuration.isPressed))
         .opacity(isEnabled ? 1 : 0.45)
     }
@@ -473,7 +478,7 @@ struct WorkbenchRowButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background { Color.clear.workbenchPanel(cornerRadius: cornerRadius) }
+            .workbenchPanel(cornerRadius: cornerRadius)
             .modifier(WorkbenchButtonFeedback(shape: RoundedRectangle(cornerRadius: cornerRadius),
                 isPressed: configuration.isPressed))
             .opacity(isEnabled ? 1 : 0.45)
