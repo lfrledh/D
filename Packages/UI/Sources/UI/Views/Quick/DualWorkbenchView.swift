@@ -731,13 +731,7 @@ public struct DualWorkbenchView: View {
         let saved=entries.filter { $0.item.kind == .asset }
         guard let controller=canvasModel.projectSession.workflow else { return saved }
         let references=Set(saved.compactMap { $0.metadataSnapshot?.record?.reference })
-        let projected=WorkflowLibraryValue.entries(controller,language:language).filter { entry in
-            guard let projected=entry.runtimeValue, let reference=projected.reference else { return true }
-            let waiting=controller.runs.first { $0.id == projected.call.address.runID }.map { run in
-                WorkflowWorkspacePanels.records(in:run).contains { $0.address == projected.call.address && $0.id == projected.call.stepID && $0.step.status == .waiting }
-            } ?? false
-            return waiting || !references.contains(reference)
-        }
+        let projected=WorkflowLibraryValue.entries(controller,language:language,excludingSaved:references)
         return saved+projected
     }
     private func libraryTagValidation(_ value: SharedLibraryBrowserEntry) -> () throws -> Void {
@@ -922,7 +916,7 @@ public struct DualWorkbenchView: View {
     private func previewLibraryEntry(_ value: SharedLibraryBrowserEntry, allowPin:Bool=false) async {
         if let runtime=value.runtimeValue {
             guard let controller=canvasModel.projectSession.workflow,runtime.isCurrent(in:controller) else { issue="Run content is no longer available / 运行内容已不可访问。";return }
-            do { canvasModel.viewers.library=metadata;try canvasModel.viewers.open(.init(title:value.item.title,subtitle:value.item.detail,value:runtime.value,call:runtime.call),model:canvasModel,language:language) }
+            do { canvasModel.viewers.library=metadata;try canvasModel.viewers.open(.init(title:value.item.title,subtitle:value.item.detail,value:runtime.value,call:runtime.call,port:runtime.port),model:canvasModel,language:language) }
             catch { issue=error.localizedDescription }
             return
         }

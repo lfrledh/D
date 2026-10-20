@@ -28,6 +28,8 @@ public struct AudioEditRegion: Codable, Sendable, Equatable {
 }
 
 public struct AudioRequest: Codable, Sendable, Equatable {
+    public static let mrt2MaximumSeed = UInt64(UInt32.max)
+    public static let aceMaximumSeed = UInt64(UInt32.max)
     public let operation: AudioOperation
     public let prompt: String
     public let durationSeconds: Double
@@ -116,7 +118,7 @@ public struct AudioRequest: Codable, Sendable, Equatable {
         if let sequence = noteSequence {
             try sequence.validate()
             guard operation == .generate, source == nil, editRegion == nil,
-                  durationSeconds == sequence.durationSeconds, seed <= UInt64(UInt32.max),
+                  durationSeconds == sequence.durationSeconds, seed <= Self.mrt2MaximumSeed,
                   !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   prompt.utf8.count <= 4096 else {
                 throw InferenceFailure.invalidRequest("Invalid MRT2 generation parameters.")
@@ -125,7 +127,7 @@ public struct AudioRequest: Codable, Sendable, Equatable {
         }
         if let ace {
             try ace.validate()
-            guard seed <= UInt32.max else {
+            guard seed <= Self.aceMaximumSeed else {
                 throw InferenceFailure.invalidRequest("ACE seed exceeds UInt32.")
             }
             if let source { try ACERequest.validateReference(source) }

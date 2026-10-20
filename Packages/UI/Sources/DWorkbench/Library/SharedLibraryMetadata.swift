@@ -37,14 +37,15 @@ public struct SharedLibraryItem: Sendable, Equatable, Identifiable {
     public let readiness: SharedLibraryReadiness
     public let compatible: Bool?
     public let assetFacts: SharedLibraryAssetFacts?
+    public let facts: SharedLibraryFactConditions
 
     public init(key: String, title: String, detail: String = "", kind: SharedLibraryItemKind,
                 role: String = "", inputs: Set<WorkflowDataKind> = [],
                 outputs: Set<WorkflowDataKind> = [], contentKind: WorkflowDataKind? = nil,
-                readiness: SharedLibraryReadiness = .unknown, compatible: Bool? = nil, assetFacts: SharedLibraryAssetFacts? = nil) {
+                readiness: SharedLibraryReadiness = .unknown, compatible: Bool? = nil, assetFacts: SharedLibraryAssetFacts? = nil, facts: SharedLibraryFactConditions = .init()) {
         self.key = key; self.title = title; self.detail = detail; self.kind = kind
         self.role = role; self.inputs = inputs; self.outputs = outputs
-        self.contentKind = contentKind; self.readiness = readiness; self.compatible = compatible; self.assetFacts = assetFacts
+        self.contentKind = contentKind; self.readiness = readiness; self.compatible = compatible; self.assetFacts = assetFacts; self.facts = facts
     }
 
     public static func == (lhs: Self, rhs: Self) -> Bool {
@@ -54,7 +55,7 @@ public struct SharedLibraryItem: Sendable, Equatable, Identifiable {
             && lhs.role.utf8.elementsEqual(rhs.role.utf8)
             && lhs.kind == rhs.kind && lhs.inputs == rhs.inputs && lhs.outputs == rhs.outputs
             && lhs.contentKind == rhs.contentKind && lhs.readiness == rhs.readiness
-            && lhs.compatible == rhs.compatible && lhs.assetFacts == rhs.assetFacts
+            && lhs.compatible == rhs.compatible && lhs.assetFacts == rhs.assetFacts && lhs.facts == rhs.facts
     }
 }
 
@@ -75,16 +76,17 @@ public struct SharedLibraryQuery: Codable, Sendable, Equatable {
     public var anyTagIDs: Set<UUID>
     public var scope: SharedLibraryQueryScope?
     public var properties: SharedLibraryPropertyQuery?
+    public var facts: SharedLibraryFactConditions?
 
     public init(text: String = "", kinds: Set<SharedLibraryItemKind> = [], roles: Set<String> = [],
                 inputs: Set<WorkflowDataKind> = [], outputs: Set<WorkflowDataKind> = [],
                 contentKinds: Set<WorkflowDataKind> = [], readiness: Set<SharedLibraryReadiness> = [],
                 compatibility: Set<SharedLibraryCompatibility> = [], allTagIDs: Set<UUID> = [],
-                anyTagIDs: Set<UUID> = [], scope: SharedLibraryQueryScope? = nil, properties: SharedLibraryPropertyQuery? = nil, textTagCombination: SharedLibrarySearchCombination? = nil) {
+                anyTagIDs: Set<UUID> = [], scope: SharedLibraryQueryScope? = nil, properties: SharedLibraryPropertyQuery? = nil, textTagCombination: SharedLibrarySearchCombination? = nil, facts: SharedLibraryFactConditions? = nil) {
         self.text = text; self.kinds = kinds; self.roles = roles; self.inputs = inputs
         self.outputs = outputs; self.contentKinds = contentKinds; self.readiness = readiness
         self.compatibility = compatibility; self.allTagIDs = allTagIDs; self.anyTagIDs = anyTagIDs
-        self.scope = scope; self.properties = properties; self.textTagCombination = textTagCombination
+        self.scope = scope; self.properties = properties; self.textTagCombination = textTagCombination; self.facts = facts
     }
 
     public static func == (lhs: Self, rhs: Self) -> Bool {
@@ -94,7 +96,7 @@ public struct SharedLibraryQuery: Codable, Sendable, Equatable {
             && lhs.contentKinds == rhs.contentKinds && lhs.readiness == rhs.readiness
             && lhs.compatibility == rhs.compatibility && lhs.allTagIDs == rhs.allTagIDs
             && lhs.anyTagIDs == rhs.anyTagIDs && lhs.scope == rhs.scope && lhs.properties == rhs.properties
-            && lhs.textTagCombination == rhs.textTagCombination
+            && lhs.textTagCombination == rhs.textTagCombination && lhs.facts == rhs.facts
     }
 }
 
@@ -238,7 +240,8 @@ public final class SharedLibraryStore {
     /// Text words must all match title, detail, or current user-tag names.
     public func matches(_ item: SharedLibraryItem, query: SharedLibraryQuery, context: SharedLibraryQueryContext = .init()) -> Bool {
         guard (try? query.scope?.validate()) != nil || query.scope == nil,
-              (try? query.properties?.validate()) != nil || query.properties == nil else { return false }
+              (try? query.properties?.validate()) != nil || query.properties == nil,
+              (try? query.facts?.validate()) != nil || query.facts == nil else { return false }
         if query.scope != nil || query.properties?.isEmpty == false {
             guard item.assetFacts?.matches(scope: query.scope, properties: query.properties, context: context) == true else { return false }
         }
@@ -247,8 +250,8 @@ public final class SharedLibraryStore {
         let ids = metadata.tagAssignments[item.key] ?? []
         let hasTags = !query.kinds.isEmpty || !query.roles.isEmpty || !query.inputs.isEmpty || !query.outputs.isEmpty
             || !query.contentKinds.isEmpty || !query.readiness.isEmpty || !query.compatibility.isEmpty
-            || !query.allTagIDs.isEmpty || !query.anyTagIDs.isEmpty
-        let tagMatch = (query.kinds.isEmpty || query.kinds.contains(item.kind))
+            || !query.allTagIDs.isEmpty || !query.anyTagIDs.isEmpty || query.facts?.isEmpty == false
+        let tagMatch = (query.facts?.matches(item.facts) ?? true) && (query.kinds.isEmpty || query.kinds.contains(item.kind))
             && (query.roles.isEmpty || query.roles.contains(item.role))
             && (query.inputs.isEmpty || !query.inputs.isDisjoint(with: item.inputs))
             && (query.outputs.isEmpty || !query.outputs.isDisjoint(with: item.outputs))
@@ -571,7 +574,8 @@ public final class SharedLibraryStore {
                 }
                 try checkFields(fields, allowed: ["id", "name", "query"])
                 try checkFields(query, allowed: Set(["text", "kinds", "roles", "inputs", "outputs",
-                                                 "contentKinds", "readiness", "compatibility", "allTagIDs", "anyTagIDs"]).union(schema == 2 ? ["scope", "properties", "textTagCombination"] : []))
+                                                 "contentKinds", "readiness", "compatibility", "allTagIDs", "anyTagIDs"]).union(schema == 2 ? ["scope", "properties", "textTagCombination", "facts"] : []))
+                if let facts = query["facts"] as? [String: Any] { try checkFields(facts, allowed: ["concepts", "producers", "consumers", "formats"]) }
                 if let scope = query["scope"] as? [String: Any] {
                     try checkFields(scope, allowed: ["mode", "projectID", "instanceID", "runID", "nodeID", "stepID"])
                 }
@@ -624,7 +628,8 @@ public final class SharedLibraryStore {
         for folder in value.folders.values { objects += folder.memberKeys.count }
         for saved in value.savedQueries.values {
             let query = saved.query
-            try query.scope?.validate(); try query.properties?.validate()
+            try query.scope?.validate(); try query.properties?.validate(); try query.facts?.validate()
+            if let facts = query.facts { objects += facts.concepts.count + facts.producers.count + facts.consumers.count + facts.formats.count }
             objects += (query.scope == nil ? 0 : 6) + (query.properties == nil ? 0 : 16)
             objects += query.kinds.count + query.roles.count + query.inputs.count + query.outputs.count
                 + query.contentKinds.count + query.readiness.count + query.compatibility.count

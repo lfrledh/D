@@ -413,7 +413,7 @@ public struct WorkflowCanvasView: View {
             .padding(.horizontal, 16)
             VStack(spacing:8) {
                 if let draft=workspaceDraft {
-                    WorkflowWorkspaceRunPlan(controller:controller,draft:draft,close:{workspaceDraft=nil},inputsChanged:{planInputLabels=$0},preview:openValue)
+                    WorkflowWorkspaceRunPlan(controller:controller,draft:draft,close:{workspaceDraft=nil},inputsChanged:{planInputLabels=$0},preview: { value, call, title, port in openValue(value, call, title, port: port) })
                         .frame(height:min(440,max(240,height*0.58))).workbenchPanel(cornerRadius:18)
                 } else if activityVisible {
                     outputPanel.frame(height:min(420,max(230,height*0.55))).workbenchPanel(cornerRadius:18)
@@ -675,7 +675,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                             if let value=record.step.outputs[port] {
                                 HStack {
                                     Button(WorkflowCanvasPresentation.portTitle(operationID:record.step.node.operationID,portID:port,fallback:port,input:false,language:languageStore),systemImage:"arrow.up.right.square") {
-                                        openValue(value,.init(address:record.address,stepID:record.id),record.step.node.title)
+                                        openValue(value,.init(address:record.address,stepID:record.id),record.step.node.title, port: port)
                                     }
                                     if let ref=value.asset,ref.kind == .text {
                                         Button(text("workflow.action.returnText","返回文稿")) { guarded { onReturnText(ref) }() }.disabled(isReadOnly)
@@ -693,7 +693,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                         DisclosureGroup(text("workspace.recordedDetails","当时的输入与参数")) {
                             ForEach(record.step.inputs.keys.sorted(),id:\.self) { port in
                                 if let value=record.step.inputs[port] {
-                                    Button(port,systemImage:"arrow.up.right.square") { openValue(value,.init(address:record.address,stepID:record.id),record.step.node.title+" · "+port) }
+                                    Button(port,systemImage:"arrow.up.right.square") { openValue(value,.init(address:record.address,stepID:record.id),record.step.node.title+" · "+port, port: port, side: .input) }
                                 }
                             }
                             Text(String(describing:record.step.node.parameters)).font(.caption).textSelection(.enabled)
@@ -725,7 +725,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     DisclosureGroup(text("workspace.runAssets", "此运行的已保存结果")) {
                         ForEach(WorkflowHumanPresentation.outputs(run)) { output in
                             Button(WorkflowHumanPresentation.name(output.call.step.node,in:WorkflowHumanPresentation.nodes(in:run),language:languageStore)+" · "+output.port,systemImage:"arrow.up.right.square") {
-                                openValue(output.value,.init(address:output.call.address,stepID:output.call.id),output.call.step.node.title)
+                                openValue(output.value,.init(address:output.call.address,stepID:output.call.id),output.call.step.node.title, port: output.port)
                             }
                         }
                     }
@@ -1124,14 +1124,15 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         do { planInputLabels=[:];workspaceDraft=try .init(controller:controller,target:node,mode:mode);activityVisible=false }
         catch { controller.errorMessage=error.localizedDescription }
     }
-    private func openValue(_ value:WorkflowValue,_ call:WorkflowCallReference,_ title:String) {
+    private func openValue(_ value:WorkflowValue,_ call:WorkflowCallReference,_ title:String, port: String? = nil, side: WorkflowViewerValueSide = .output) {
         guard let viewerModel,viewerModel.projectSession.workflow === controller else { return }
-        do { try viewerModel.viewers.open(.init(title:title,subtitle:controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0,in:controller.runs,language:languageStore) } ?? "",value:value,call:call),model:viewerModel,language:languageStore) }
+        do { try viewerModel.viewers.open(.init(title:title,subtitle:controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0,in:controller.runs,language:languageStore) } ?? "",value:value,call:call,port:port,side:side),model:viewerModel,language:languageStore) }
         catch { controller.errorMessage=error.localizedDescription }
     }
     private func openCall(_ run:WorkflowRun,record:WorkflowPlanCallRecord) {
-        let value=record.step.outputs.keys.sorted().first.flatMap { record.step.outputs[$0] } ?? record.step.humanTask.map { WorkflowValue.data($0.materials) } ?? .data(.text(""))
-        openValue(value,.init(address:record.address,stepID:record.id),WorkflowHumanPresentation.name(record.step.node,in:WorkflowHumanPresentation.nodes(in:run),language:languageStore))
+        let port=record.step.outputs.keys.sorted().first
+        let value=port.flatMap { record.step.outputs[$0] } ?? record.step.humanTask.map { WorkflowValue.data($0.materials) } ?? .data(.text(""))
+        openValue(value,.init(address:record.address,stepID:record.id),WorkflowHumanPresentation.name(record.step.node,in:WorkflowHumanPresentation.nodes(in:run),language:languageStore), port: port, side: port == nil ? .materials : .output)
     }
 
 }

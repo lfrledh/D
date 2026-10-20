@@ -56,11 +56,13 @@ private struct CheckpointValidator {
 
     let checkpoint: WorkflowPlanCheckpoint
     let registry: WorkflowRegistry
+    let seedLookup: WorkflowBatchSeedLookup
     private var recordsByAddress: [WorkflowExecutionAddress: WorkflowPlanCallRecord] = [:]
 
     init(checkpoint: WorkflowPlanCheckpoint, registry: WorkflowRegistry) {
         self.checkpoint = checkpoint
         self.registry = registry
+        seedLookup = WorkflowBatchSeedLookup(checkpoint.batchSeeds)
     }
 
     mutating func validate() throws {
@@ -73,6 +75,7 @@ private struct CheckpointValidator {
         try validatePlan(checkpoint.plan, depth: 0, staticStepCount: &staticStepCount)
         try validateArguments(checkpoint.arguments, for: checkpoint.plan, allowExtra: false)
         try validateExternalInputs()
+        try checkpoint.batchSeeds?.validate(in: checkpoint, registry: registry)
 
         var stepIDs = Set<UUID>()
         for record in checkpoint.records {
@@ -485,11 +488,12 @@ private struct CheckpointValidator {
 
     private func validate(_ record: WorkflowPlanCallRecord, resolved: ResolvedRecord) throws {
         let step = resolved.step
-        let runtimeNode = try nodeForArguments(
+        let argumentNode = try nodeForArguments(
             step.node,
             arguments: resolved.arguments,
             interface: resolved.plan.interface
         )
+        let runtimeNode = seedLookup.applying(to: argumentNode, at: record.address)
         guard record.step.node == runtimeNode else {
             throw WorkflowIssue("A call record changed static node fields or an invalid public input value.", nodeID: step.node.id)
         }

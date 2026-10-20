@@ -12,6 +12,7 @@ import Foundation
     private var pauseRequested = false
     private var stopRequested = false
     private var executing = false
+    private var seedLookup = WorkflowBatchSeedLookup(nil)
 
     public init(
         registry: WorkflowRegistry = .standard,
@@ -52,6 +53,7 @@ import Foundation
             if let held = checkpoint, held.runID == supplied.runID {
                 guard held.plan == supplied.plan,
                       held.arguments == supplied.arguments,
+                      held.batchSeeds == supplied.batchSeeds,
                       held.externalInputs == supplied.externalInputs else {
                     throw WorkflowIssue("运行开始后的计划、参数和外部输入不可变。")
                 }
@@ -65,6 +67,7 @@ import Foundation
         stopRequested = false
         pauseAvailabilityChanged(true)
         try validateCheckpoint()
+        seedLookup = WorkflowBatchSeedLookup(checkpoint?.batchSeeds)
         try validateExternalInputs()
         try validateSubmittedWaitingDecisions()
         guard var value = checkpoint else { throw WorkflowIssue("计划恢复点不存在。") }
@@ -242,7 +245,8 @@ import Foundation
             }
         }
 
-        let runtimeNode = try nodeForArguments(planned.node, arguments: arguments, interface: plan.interface)
+        let argumentNode = try nodeForArguments(planned.node, arguments: arguments, interface: plan.interface)
+        let runtimeNode = seedLookup.applying(to: argumentNode, at: address)
         if record(at: address) == nil {
             let signature = planned.sourceSignature ?? "\(plan.graphID.uuidString.lowercased()):\(plan.graphRevision.uuidString.lowercased())"
             let run = WorkflowStepRun(node: runtimeNode, signature: signature)
@@ -741,6 +745,7 @@ import Foundation
 
     private func validateCheckpoint() throws {
         guard let checkpoint else { throw WorkflowIssue("计划恢复点不存在。") }
+        try checkpoint.batchSeeds?.validate(in: checkpoint, registry: registry)
         guard checkpoint.plan.version == 1 else { throw WorkflowIssue("不支持的结构化计划版本。") }
         guard Set(checkpoint.plan.steps.map(\.node.id)).count == checkpoint.plan.steps.count else {
             throw WorkflowIssue("顶层计划节点身份重复。")

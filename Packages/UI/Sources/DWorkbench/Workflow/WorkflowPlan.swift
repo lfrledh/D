@@ -103,6 +103,8 @@ public struct WorkflowPlanCheckpoint: Codable, Sendable, Equatable {
     public var plan: WorkflowPlan
     public var arguments: [String: WorkflowDatum]
     public var modelDefaults: [String: String]?
+    /// Optional for old archives. Allocated once before dispatch, never on resume.
+    public var batchSeeds: WorkflowBatchSeedSchedule?
     public var records: [WorkflowPlanCallRecord]
     public var state: WorkflowPlanState
     public var outputs: [String: WorkflowValue]

@@ -1070,6 +1070,8 @@ private struct WorkflowNodeCard: View {
                         .allowsHitTesting(false)
                 }
             }
+            WorkflowNodeActivityView(state: controller.services.activity, nodeID: node.id, graphID: graph.id, scale: scale)
+            if !collapsed { WorkflowModelPreparationView(identity: modelIdentity, scale: scale) }
             if !collapsed && modelNotReady {
                 VStack(alignment: .leading, spacing: 5 * scale) {
                     Label(workflowText(languageStore, "workflow.node.prepare.notReady", fallback: "模型未就绪"), systemImage: "exclamationmark.triangle.fill")

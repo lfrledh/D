@@ -39,6 +39,8 @@ struct WorkflowHostView: View {
                     .environment(\.workflowViewerModel,model)
                     .environment(\.workflowPrepareNode, preparationAction(controller: controller))
                     .environment(\.workflowPreparingModels, library?.preparingNodeIdentities ?? [])
+                    .environment(\.workflowModelPreparation, library?.nodePreparationPresentation)
+                    .environment(\.workflowModelInstallations, installations)
                     .onAppear { model.viewers.library=metadata }
                     .onChange(of:controller.mediaPreviewReference) { _,reference in
                         guard let reference,model.projectSession.workflow === controller else { return }
@@ -51,6 +53,11 @@ struct WorkflowHostView: View {
         }
         .environment(\.workbenchModelReadiness, model.projectSession.explicitModelReadiness)
         .task(id: model.manifest?.effectiveInstanceID) { await model.projectSession.openWorkflow() }
+    }
+    private var installations: [String: ModelID] {
+        Dictionary(model.projectSession.explicitModelChoices.compactMap { choice in
+            model.projectSession.workflowInstallationID(for: choice.id).map { (choice.id, $0) }
+        }, uniquingKeysWith: { first, _ in first })
     }
     private var captureControls:some View {
         VStack(spacing:4) {

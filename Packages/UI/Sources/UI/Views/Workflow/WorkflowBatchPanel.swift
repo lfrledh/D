@@ -7,6 +7,7 @@ import SwiftUI
     @Environment(\.dLanguageStore) private var language
     @State private var selected: Set<UUID> = []
     @State private var repetitions = 1
+    @State private var seedStrategy: WorkflowBatchSeedStrategy = .fixed
     @State private var showPlan = false
     private func text(_ key: String, _ zh: String, _ en: String) -> String { workspaceText(language, key, zh, en) }
     var body: some View {
@@ -57,7 +58,11 @@ import SwiftUI
                     Stepper(text("perSelected", "每项再生成", "Attempts per selected item") + " \(repetitions)", value: $repetitions, in: 1...64)
                     Text("\(selected.count) × \(repetitions) = \(selected.count * repetitions)")
                     Text(text("fixedPrefix", "已采用输入保持固定，不重算上游。列表视为一个输入包。下一人工关卡再次停止。", "Accepted inputs remain fixed; upstream is not rerun. A list is one input bundle. Stop at the next human gate.")).font(.callout)
-                    Text(text("batchSeed", "串行执行至人工关卡；使用固定配方中的种子，结果可能相同。", "Run serially to review gates. Retain configured seeds; results may match.")).font(.caption)
+                    WorkbenchPicker(text("seedStrategy", "每次尝试的种子", "Seeds per attempt"), selection: $seedStrategy) {
+                        WorkbenchChoice(text("seedFixed", "固定配方", "Keep configured seeds"), value: WorkflowBatchSeedStrategy.fixed)
+                        WorkbenchChoice(text("seedAutomatic", "自动变化", "Vary automatically"), value: WorkflowBatchSeedStrategy.automatic)
+                    }
+                    Text(text("seedEffect", "固定模式保留已填种子，留空值在提交时固定一次。仅影响支持种子的后续生成；未提供种子接口的功能不变，已采用前缀不变。实际种子在执行前保存，恢复时复用；不同种子不保证不同内容。", "Fixed mode preserves configured seeds and assigns an empty seed once at submission. Operations without seed support stay unchanged; only later generation with seed support varies. Accepted inputs stay fixed. Seeds are saved before dispatch and reused on recovery; different seeds do not guarantee different content.")).font(.caption)
                     HStack {
                         Button(text("cancel", "取消", "Cancel")) { showPlan = false }
                         Spacer()
@@ -65,7 +70,7 @@ import SwiftUI
                             let ids = controller.runs.filter { selected.contains($0.id) }.map(\.id), count = repetitions
                             Task {
                                 do {
-                                    let stage = try await controller.createNextBatchStage(parentRunIDs: ids, repetitions: count)
+                                    let stage = try await controller.createNextBatchStage(parentRunIDs: ids, repetitions: count, seedStrategy: seedStrategy)
                                     showPlan = false; selected = []
                                     await controller.runBatchStage(stage)
                                 } catch { controller.errorMessage = error.localizedDescription }
@@ -85,7 +90,17 @@ import SwiftUI
             }.disabled(reason != nil || controller.isRunning).help(reason ?? "")
             VStack(alignment: .leading) {
                 Text(WorkflowCanvasPresentation.statusTitle(run.status, language: language))
-                if let parent = run.batchParent { Text(text("fixedParent", "固定父尝试", "Fixed parent") + " " + parent.runID.uuidString.prefix(8)).font(.caption) }
+                if let parent = run.batchParent, let parentRun = controller.runs.first(where: { $0.id == parent.runID }) {
+                    Text(text("fixedParent", "采用自", "Accepted from") + " " + WorkflowHumanPresentation.run(parentRun, in: controller.runs, language: language)).font(.caption)
+                }
+                if let schedule = run.planCheckpoint?.batchSeeds {
+                    DisclosureGroup(text("actualSeeds", "已保存的种子", "Saved seeds")) {
+                        ForEach(Array(schedule.assignments.enumerated()), id: \.offset) { index, item in
+                            Text("\(index + 1) · \(item.value)").font(.caption.monospaced()).textSelection(.enabled)
+                        }
+                        Text(text("seedInherited", "已执行部分沿用父尝试种子。", "Executed calls retain their parent seeds.")).font(.caption)
+                    }
+                }
                 if let seconds = attempt.activeSeconds {
                     Text(text("activeTime", "本阶段执行用时", "Stage execution time") + String(format: " %.2f s", seconds)).font(.caption)
                 } else { Text(text("timeUnrecorded", "执行用时未记录", "Execution time not recorded")).font(.caption) }

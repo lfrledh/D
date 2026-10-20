@@ -467,49 +467,7 @@ public enum WorkflowScopePlanner {
         guard let step = plan.steps.first(where: { $0.node.id == nodeID }) else {
             throw WorkflowIssue("历史输入目标不在局部计划中。", nodeID: nodeID, port: port)
         }
-        let kinds: [WorkflowDataKind]
-        let schema: WorkflowDataSchema?
-        if case .invoke(_, let body) = step.kind,
-           let field = body.interface.inputs.first(where: { $0.name == port }) {
-            kinds = field.type.portKinds
-            schema = field.type
-        } else {
-            guard let definition = registry.definition(for: step.node, tools: tools),
-                  let input = definition.inputs.first(where: { $0.id == port }) else {
-                throw WorkflowIssue("历史输入目标端口不存在。", nodeID: nodeID, port: port)
-            }
-            kinds = input.kinds
-            if case .loop(_, let stateSchema, _, _) = step.kind, port == "input" {
-                schema = stateSchema
-            } else {
-                schema = step.node.dataConfiguration?.fields.first(where: { $0.name == port })?.type
-            }
-        }
-        guard kinds.contains(value.kind) else {
-            throw WorkflowIssue("历史输入类型与目标端口不兼容。", nodeID: nodeID, port: port)
-        }
-        if let schema {
-            guard let datum = value.datum else {
-                throw WorkflowIssue("历史输入不能表示为目标端口要求的数据结构。", nodeID: nodeID, port: port)
-            }
-            try datum.validate(as: schema)
-        }
-        switch value {
-        case .data(let datum):
-            try datum.validate()
-        case .asset(let reference):
-            guard reference.sha256.count == 64, reference.sha256.allSatisfy({ $0.isHexDigit }) else {
-                throw WorkflowIssue("历史资产摘要无效。", nodeID: nodeID, port: port)
-            }
-        case .collection(let candidates):
-            guard Set(candidates.map(\.id)).count == candidates.count else {
-                throw WorkflowIssue("历史候选身份重复。", nodeID: nodeID, port: port)
-            }
-        case .receipt(let receipt):
-            guard receipt.names.count == receipt.hashes.count else {
-                throw WorkflowIssue("历史导出回执结构无效。", nodeID: nodeID, port: port)
-            }
-        }
+        try WorkflowInputContract(step: step, portID: port, tools: tools, registry: registry).validate(value)
     }
 
     private static func boundaryOrder(_ lhs: WorkflowScopeBoundary, _ rhs: WorkflowScopeBoundary) -> Bool {

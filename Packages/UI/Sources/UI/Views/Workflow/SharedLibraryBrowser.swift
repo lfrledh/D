@@ -719,6 +719,9 @@ public struct SharedLibraryBrowser: View {
                 TextField(word("search", "搜索名称、说明或我的标签"), text: searchTextBinding)
                     .textFieldStyle(.plain).focused($searchFocused).onSubmit { submitSearch() }
                     .accessibilityIdentifier("shared-library-search").workbenchHelp("LIB-SEARCH")
+                Button { showTags.toggle() } label: { Image(systemName: "tag").padding(6).contentShape(Rectangle()) }
+                    .buttonStyle(.plain).accessibilityLabel(word("conditions", "条件"))
+                    .popover(isPresented: $showTags, arrowEdge: .bottom) { queryTagPopover }
                 Button { submitSearch() } label: { Image(systemName: "magnifyingglass").padding(6).contentShape(Rectangle()) }
                     .buttonStyle(.plain).accessibilityLabel(word("searchNow", "搜索"))
             }.padding(7).workbenchInputSurface()
@@ -733,9 +736,11 @@ public struct SharedLibraryBrowser: View {
                     WorkbenchMenuForEach(folders) { folder in WorkbenchMenuAction(folder.name) { selectScope(.folder(folder.id)) } }
                     WorkbenchMenuForEach(saved) { saved in WorkbenchMenuAction(saved.name) { selectScope(.saved(saved.id)) } }
                 }.font(.caption)
-                if compact {
+                Group {
                     Spacer(minLength: 0)
                     WorkbenchMenu {
+                        if allowsImport { WorkbenchMenuAction(consistencyText(language, "LIB-ADD"), action: onImport) }
+                        WorkbenchMenuAction(word("advancedConditions", "高级条件")) { showFilters = true }
                         WorkbenchSubmenu(consistencyText(language, "menu.library.saved")) { WorkbenchMenuForEach(saved) { item in WorkbenchMenuAction(item.name) { selectScope(.saved(item.id)) } } }
                         WorkbenchMenuAction(consistencyText(language, "menu.library.manage")) { showOrganizer = true }
                         WorkbenchMenuDivider()
@@ -746,17 +751,9 @@ public struct SharedLibraryBrowser: View {
                         .accessibilityIdentifier("shared-library-more")
                 }
             }
-            HStack {
-                if allowsImport {
-                    Button(consistencyText(language, "LIB-ADD"), action: onImport).workbenchHelp("LIB-ADD")
-                }
-                Button(consistencyText(language, "LIB-TAGS")) { showTags.toggle() }
-                    .popover(isPresented: $showTags, arrowEdge: .bottom) { queryTagPopover }
-                    .workbenchHelp("LIB-TAGS")
-                Button(word("filters", "筛选"), systemImage: "line.3.horizontal.decrease.circle") { showFilters.toggle() }.workbenchHelp("LIB-FILTER")
-                    .popover(isPresented: $showFilters, arrowEdge: .bottom) { filterPopover }
-            }.font(.caption)
-            SharedLibraryPropertySummary(query: Binding(get: { query }, set: { query = $0 }), items: entries.map(\.item), context: queryContext, store: store, fixedScopeDescription: scopeTitle)
+            if query.scope != nil || query.properties?.isEmpty == false {
+                SharedLibraryPropertySummary(query: Binding(get: { query }, set: { query = $0 }), items: entries.map(\.item), context: queryContext, store: store, fixedScopeDescription: scopeTitle)
+            }
             if query.textTagCombination == .any { Text(word("logicAnyBadge", "文字或标签任一符合")).font(.caption.weight(.semibold)).foregroundStyle(.tint) }
             if hasSearchTokens { ScrollView(.horizontal) {
                 HStack(spacing: 4) {
@@ -771,12 +768,14 @@ public struct SharedLibraryBrowser: View {
                     dimensionTokens(query.contentKinds, path: \.contentKinds, label: dataName)
                     dimensionTokens(query.readiness, path: \.readiness, label: readinessName)
                     dimensionTokens(query.compatibility, path: \.compatibility, label: compatibilityName)
+                    factTokens(\.concepts); factTokens(\.producers); factTokens(\.consumers); factTokens(\.formats)
                 }
             }.scrollIndicators(.hidden) }
             if !query.allTagIDs.union(query.anyTagIDs).filter({ store.metadata.tags[$0] == nil }).isEmpty {
                 WorkflowTechnicalDetails(value: query.allTagIDs.union(query.anyTagIDs).filter { store.metadata.tags[$0] == nil }.sorted { $0.uuidString < $1.uuidString }.map { state.tagPresentation.title($0, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag")) + ": " + $0.uuidString }.joined(separator: "\n"))
             }
-        }.workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge)
+        }.popover(isPresented: $showFilters, arrowEdge: .bottom) { filterPopover }
+            .workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge)
     }
     private var searchFooter: some View {
             HStack {
@@ -791,7 +790,7 @@ public struct SharedLibraryBrowser: View {
             }
     }
     private var hasSearchTokens: Bool {
-        scope != .all || !query.text.isEmpty || !query.allTagIDs.isEmpty || !query.anyTagIDs.isEmpty
+        query.facts?.isEmpty == false || scope != .all || !query.text.isEmpty || !query.allTagIDs.isEmpty || !query.anyTagIDs.isEmpty
             || !query.kinds.isEmpty || !query.roles.isEmpty || !query.inputs.isEmpty || !query.outputs.isEmpty
             || !query.contentKinds.isEmpty || !query.readiness.isEmpty || !query.compatibility.isEmpty
     }
@@ -852,8 +851,7 @@ public struct SharedLibraryBrowser: View {
                 } else { Text(entry.item.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
                 if entry.item.kind == .model {
                     if let descriptor = ModelNodeCatalog.entries.first(where: { $0.id == entry.item.key }) {
-                        Text(descriptor.precision).font(.system(size: 18, weight: .semibold)).lineLimit(3)
-                        Text(word("parameterCountUnrecorded", "参数量：未登记")).font(.caption).foregroundStyle(.secondary)
+                        ModelSpecificationSummary(descriptor: descriptor)
                     }
                     if case .operation(let id, _) = entry.selection, let definition = WorkflowRegistry.standard.operation(id)?.definition {
                         Text(WorkflowCanvasPresentation.operationDetail(definition, language: language)).font(.caption).lineLimit(2)
@@ -1071,11 +1069,18 @@ public struct SharedLibraryBrowser: View {
             WorkbenchScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(word("systemTags", "预置条件")).font(.headline)
-                    ForEach(WorkflowDataKind.allCases, id: \.self) { kind in
-                        if tagSearch.isEmpty || dataName(kind).localizedStandardContains(tagSearch) {
-                            Toggle(word("inputs", "输入能力") + ": " + dataName(kind), isOn: setBinding(\.inputs, kind))
-                            Toggle(word("outputs", "输出能力") + ": " + dataName(kind), isOn: setBinding(\.outputs, kind))
-                        }
+                    if canvasMode?.resourceCategory != nil || scope == .kind(.asset) || canvasMode == nil {
+                        contentConditionGroup(word("content", "素材内容"), path: \.contentKinds)
+                        factConditions(word("concept", "内容用途"), path: \.concepts)
+                        factConditions(word("producer", "生产方"), path: \.producers)
+                        factConditions(word("consumer", "候选接收方 · 结构另验"), path: \.consumers)
+                        factConditions(word("format", "实际格式"), path: \.formats)
+                    }
+                    if canvasMode?.resourceCategory == nil && scope != .kind(.asset) {
+                        contentConditionGroup(word("inputs", "可接收"), path: \.inputs)
+                        contentConditionGroup(word("outputs", "可输出"), path: \.outputs)
+                        factConditions(word("purpose", "用途"), path: \.concepts)
+                        factConditions(word("model", "模型 / 实现"), path: \.producers)
                     }
                     Divider()
                     Text(word("myTags", "我的标签")).font(.headline)
@@ -1085,12 +1090,55 @@ public struct SharedLibraryBrowser: View {
                     if tags.isEmpty { Text(word("noTags", "尚无我的标签")).foregroundStyle(.secondary) }
                 }
             }.frame(maxHeight: 340)
+            DisclosureGroup(word("searchLogic", "匹配方式")) {
             Picker(word("textTagLogic", "文字与标签"), selection: Binding(get: { query.textTagCombination ?? .all }, set: { query.textTagCombination = $0 })) {
                 Text(word("logicAll", "全部符合")).tag(SharedLibrarySearchCombination.all)
                 Text(word("logicAny", "任一符合")).tag(SharedLibrarySearchCombination.any)
             }
+            }
             Text(word("queryOnly", "此处只修改搜索条件，不给结果添加标签。")).font(.caption).foregroundStyle(.secondary)
         }.padding(14).frame(width: 320).workbenchPresentation()
+    }
+
+    private func contentConditionGroup(_ title: String, path: WritableKeyPath<SharedLibraryQuery, Set<WorkflowDataKind>>) -> some View {
+        DisclosureGroup(title) {
+            ForEach(SharedLibraryContentGroup.allCases, id: \.self) { group in
+                let label = word("contentGroup." + group.rawValue, ["text":"文字与文档", "image":"图像", "video":"视频", "audio":"音频", "other":"其他"] [group.rawValue] ?? "其他")
+                if tagSearch.isEmpty || label.localizedStandardContains(tagSearch) {
+                    Toggle(label, isOn: Binding(get: { group.kinds.isSubset(of: query[keyPath: path]) }, set: { enabled in
+                        if enabled { query[keyPath: path].formUnion(group.kinds) }
+                        else { query[keyPath: path].subtract(group.kinds) }
+                    }))
+                }
+            }
+        }
+    }
+    private func factConditions(_ title: String, path: WritableKeyPath<SharedLibraryFactConditions, Set<String>>) -> some View {
+        let known = Set(entries.flatMap { $0.item.facts[keyPath: path] })
+        let selected = (query.facts ?? .init())[keyPath: path]
+        return DisclosureGroup(title) {
+            ForEach(known.union(selected).sorted(), id: \.self) { value in
+                if tagSearch.isEmpty || value.localizedStandardContains(tagSearch) || factLabel(value).localizedStandardContains(tagSearch) {
+                    Toggle(factLabel(value) + (known.contains(value) ? "" : " · " + word("unknownCondition", "当前范围未记录")), isOn: Binding(get: { selected.contains(value) }, set: { included in
+                        var facts = query.facts ?? .init()
+                        if included { facts[keyPath: path].insert(value) } else { facts[keyPath: path].remove(value) }
+                        query.facts = facts.isEmpty ? nil : facts
+                    }))
+                }
+            }
+            if known.isEmpty && selected.isEmpty { Text(word("factUnrecorded", "当前范围尚未记录此项事实")).font(.caption).foregroundStyle(.secondary) }
+        }
+    }
+    private func factLabel(_ value: String) -> String {
+        if value.hasPrefix("content."), let kind = WorkflowDataKind(rawValue: String(value.dropFirst(8))) { return WorkflowCanvasPresentation.kind(kind, language: language) }
+        if let definition = WorkflowRegistry.standard.operation(value)?.definition { return WorkflowCanvasPresentation.operationTitle(definition, language: language) }
+        if let descriptor = ModelNodeCatalog.entries.first(where: { $0.modelIdentity == value }) { return descriptor.title }
+        return value
+    }
+    private func factTokens(_ path: WritableKeyPath<SharedLibraryFactConditions, Set<String>>) -> some View {
+        ForEach((query.facts ?? .init())[keyPath: path].sorted(), id: \.self) { value in
+            token(factLabel(value)) { var facts = query.facts ?? .init(); facts[keyPath: path].remove(value); query.facts = facts.isEmpty ? nil : facts }
+        }
     }
 
     private var searchTextBinding: Binding<String> {

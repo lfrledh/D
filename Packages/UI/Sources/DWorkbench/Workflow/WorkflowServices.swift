@@ -48,6 +48,26 @@ struct WorkflowImageHistoryFailure: LocalizedError {
     public var streamedTextCharacterCount: Int { textSession?.partialText.count ?? languagePreview.count }
     public private(set) var cancelled = false
     public var progress: @MainActor (String) -> Void = { _ in }
+    public let activity = WorkflowCallActivityState()
+    private func reportProgress(_ text: String) { activity.update(progress: text); progress(text) }
+    private func activityBridge() -> Task<Void, Never> {
+        Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let request = self.activeRun?.id ?? self.textSession?.activeRequestID
+                let call = self.activity.current?.stepID
+                let status = await self.session.status()
+                guard !Task.isCancelled else { return }
+                guard call == self.activity.current?.stepID,
+                      request == (self.activeRun?.id ?? self.textSession?.activeRequestID) else { continue }
+                let draining = ["cancelling", "releasing"].contains(self.activity.current?.phase ?? "")
+                let phase = draining ? nil : request.flatMap { status.phase(for: $0) }
+                if let phase, phase != self.activity.current?.phase { self.progress(phase) }
+                self.activity.update(requestID: request, phase: phase)
+                do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+            }
+        }
+    }
     public var languagePreviewChanged: @MainActor (UUID, String) -> Void = { _, _ in }
     public var candidatesChanged: @MainActor (UUID, [WorkflowCandidate]) async throws -> Void = { _, _ in }
     public var destination: URL?
@@ -155,10 +175,12 @@ struct WorkflowImageHistoryFailure: LocalizedError {
     }
     public func finish() async {
         let captured = bindings; bindings = [:]
+        if !captured.isEmpty { activity.update(phase: "releasing") }
         for binding in captured.values { await binding.release() }
     }
     public func cancel() async {
         cancelled = true
+        activity.update(phase: "cancelling")
         activeOperation?.cancel()
         if let textSession { await textSession.cancel() }
         if let activeRun { await activeRun.cancel(); _ = await activeRun.outcome() }
@@ -199,6 +221,9 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         try registry.validate(context.node)
         try registry.validateInputs(context.inputs, node: context.node, connectedPorts: Set(context.inputs.keys))
         languageCallActive = true
+        activity.begin(context)
+        let activityTask = activityBridge()
+        defer { activityTask.cancel() }
         publicationContexts[context.stepID] = context
         defer {
             languageCallActive = false; activeOperation = nil
@@ -219,10 +244,14 @@ struct WorkflowImageHistoryFailure: LocalizedError {
             activeOperation = child
             let result = try await withTaskCancellationHandler { try await child.value } onCancel: { child.cancel() }
             await finish()
+            switch result {
+            case .outputs: activity.end(phase: "completed")
+            case .reviewText, .choose, .humanTask: activity.end(phase: "waiting")
+            }
             // A published result survives cancellation during lease release. The interpreter
             // persists it before honoring stop, so a later resume cannot generate it twice.
             return result
-        } catch { await finish(); throw error }
+        } catch { await finish(); activity.end(phase: error is CancellationError ? "cancelled" : "failed"); throw error }
     }
     public func transformAudio(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }
@@ -265,6 +294,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         try request.validate(); try checkCancellation()
         let run = try await session.engine.submit(request, backendID: binding.backendID)
         activeRun = run
+        activity.update(requestID: request.id, phase: "preparing")
         if cancelled || Task.isCancelled { await run.cancel() }
         let limit = binding.textCapability?.profile == TextExecutionCapability.qwen35VLMProfile
             ? WorkflowTextResponseFile.maximumBytes : 1_048_576
@@ -276,14 +306,12 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         let collectionStarted = ContinuousClock.now
         let display = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                let status = await self?.session.status()
-                let phase = status.flatMap { $0.phase(for: request.id) }
                 let snapshot = await collector.snapshot()
                 // Stage is observable before the first event; numeric progress is
                 // still meaningful for image/audio/video calls using this bridge.
-                let progressText = [phase, snapshot.progress].compactMap { $0 }.joined(separator: " · ")
-                if let self, !self.cancelled, !progressText.isEmpty, progressText != displayedProgress {
-                    displayedProgress = progressText; self.progress(progressText)
+                let progressText = snapshot.progress ?? ""
+                if let self, !progressText.isEmpty, progressText != displayedProgress {
+                    displayedProgress = progressText; self.reportProgress(progressText)
                 }
                 if snapshot.revision != displayedRevision, let self {
                     displayedRevision = snapshot.revision
@@ -333,7 +361,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
     public func generateLanguage(task: String, content: String?, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }
         let binding = try model(for: context)
-        progress("Preparing context / 正在准备上下文")
+        reportProgress("Preparing context / 正在准备上下文")
         let request = try await languageRequest(task: task, content: content, context: context, binding: binding)
         languagePreview = ""
         languagePreviewChanged(context.stepID, "")
@@ -542,7 +570,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
 
     private func publish(_ context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         guard let content = pending[context.stepID] else { throw WorkflowIssue("没有待保存结果。") }
-        progress("Saving result / 正在保存结果")
+        reportProgress("Saving result / 正在保存结果")
         do {
             let result: WorkflowPublishedAsset
             if let request = content.request, case .video(let expected) = request.input {
@@ -592,7 +620,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         defer { textSession = nil }
         let selection = try editor.selection(inUTF16: NSRange(location: 0, length: text.utf16.count))
         try checkCancellation()
-        progress("正在改写；流式文字是预览，尚未发布为流程输入")
+        reportProgress("正在改写；流式文字是预览，尚未发布为流程输入")
         try await editor.requestRewrite(selection: selection, instruction: p["instruction"]?.string ?? "",
             model: binding.reference, temperature: Float(p["temperature"]?.decimal ?? 0.7), topP: Float(p["topP"]?.decimal ?? 0.95))
         try checkCancellation()
@@ -647,7 +675,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         for i in items.indices {
             if items[i].asset != nil { continue }
             try checkCancellation()
-            progress("生成候选 \(i + 1)/\(count)；等待本次计算及释放完成")
+            reportProgress("生成候选 \(i + 1)/\(count)；等待本次计算及释放完成")
             let old = items[i]
             let attempt = pending[old.attemptID] == nil && old.error != nil ? UUID() : old.attemptID
             let itemContext = WorkflowExecutionContext(node: context.node, stepID: attempt, inputs: context.inputs)
@@ -679,12 +707,13 @@ struct WorkflowImageHistoryFailure: LocalizedError {
                     try checkCancellation()
                     let run = try await session.engine.submit(request, backendID: binding.backendID)
                     activeRun = run
+                    activity.update(requestID: request.id, phase: "preparing")
                     if cancelled { await run.cancel() }
                     var streamFailure: Error?
                     do {
                         for try await event in run.events {
                             if cancelled || Task.isCancelled { await run.cancel() }
-                            if case .progress(let completed, let total) = event { progress("候选 \(i + 1)/\(count) · \(completed)/\(total)") }
+                            if case .progress(let completed, let total) = event { reportProgress("候选 \(i + 1)/\(count) · \(completed)/\(total)") }
                         }
                     } catch { streamFailure = error; await run.cancel() }
                     let outcome = await run.outcome(); activeRun = nil

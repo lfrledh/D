@@ -57,7 +57,7 @@ struct SharedLibraryBrowserTests {
             try await settle()
             path = try #require(path.children?.first)
         }
-        #expect(origins.count == 4)
+        #expect(origins.count == 2) // Modality → registered family; specifications live on the model card.
         for pair in zip(origins, origins.dropFirst()) { #expect(abs(pair.1 - pair.0 - 12) < 1) }
         let leaf = try #require(accessible().first { $0.accessibilityIdentifier() == "shared-library-entry-" + model.id })
         #expect(abs(leaf.accessibilityFrame().minX - (try #require(origins.last)) - 12) < 1)
@@ -91,7 +91,7 @@ struct SharedLibraryBrowserTests {
         }
         try await settle()
         let labels = try groups.map { try frame($0.id) }
-        #expect(labels.count == 4)
+        #expect(labels.count == 2) // Current two-level operation library, not the retired four-level tree.
         for pair in zip(labels, labels.dropFirst()) { #expect(abs(pair.1.minX - pair.0.minX - 12) < 1) }
         let leaf = try frame(model.id)
         // Group labels follow a 12 pt chevron plus a 6 pt gap. Leaves have no chevron.

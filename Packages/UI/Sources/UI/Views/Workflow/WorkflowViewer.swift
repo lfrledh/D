@@ -5,12 +5,16 @@ import DWorkbench
 import Observation
 import SwiftUI
 
+enum WorkflowViewerValueSide { case input, output, materials }
+
 struct WorkflowViewerTarget {
     let title: String
     let subtitle: String
     var value: WorkflowValue? = nil
     var resource: ProjectReadOnlyAsset? = nil
     var call: WorkflowCallReference? = nil
+    var port: String? = nil
+    var side: WorkflowViewerValueSide = .output
 }
 
 struct WorkflowViewerCallIdentity:Hashable {
@@ -37,6 +41,9 @@ struct WorkflowViewerCallIdentity:Hashable {
     private(set) var mediaURL: URL?
     private(set) var audioFormat: DWorkbench.AudioFormatInfo?
     private(set) var metadata: ProjectAssetMetadataSnapshot?
+    private(set) var consumers: [WorkflowConsumerMatch] = []
+    private(set) var concept: String?
+    private(set) var displayedValue: WorkflowValue?
     private(set) var provenance: String?
     private(set) var failure: String?
     private(set) var loading = false
@@ -76,6 +83,8 @@ struct WorkflowViewerCallIdentity:Hashable {
     @discardableResult func load() -> Task<Void,Never>? {
         guard canRead else { suspend();return nil }
         stop(); suspended=false;loading=true;text=nil;image=nil;mediaURL=nil;audioFormat=nil;metadata=nil;provenance=nil;failure=nil
+        consumers = []; concept = nil; displayedValue = target.value
+        if let value = target.value { inspectCompatibility(value) }
         let request=generation, target=self.target
         task=Task { [weak self] in
             guard let self else { return }
@@ -116,7 +125,11 @@ struct WorkflowViewerCallIdentity:Hashable {
                 guard let format=asset.metadata.audio?.format else { throw WorkflowIssue("Audio format is unavailable / 音频格式不可访问。") }
                 try audio.preparePlayback(url:url,format:format,policy:policy);audioFormat=format
             default:
-                _ = try await store.workflowData(reference);guard current(request) else { return }
+                let bytes = try await store.workflowData(reference);guard current(request) else { return }
+                if [.notes, .chords, .tempo].contains(reference.kind) {
+                    let datum = try JSONDecoder().decode(WorkflowDatum.self, from: bytes)
+                    try datum.validate(); displayedValue = .data(datum); inspectCompatibility(target.value ?? .data(datum), decodedAsset: datum)
+                }
             }
             guard current(request) else { return }
             metadata=snapshot
@@ -156,9 +169,18 @@ struct WorkflowViewerCallIdentity:Hashable {
         default:
             // Structured content is represented by its real typed data or readable source.
             if let datum = try? JSONDecoder().decode(WorkflowDatum.self, from: content.data) {
-                try datum.validate(); target.value = .data(datum)
+                try datum.validate(); displayedValue = .data(datum)
+                concept = WorkflowInputContract.concept(of: datum)
+                consumers = WorkflowValueCompatibility.registeredAssetConsumers(content.token.registeredReference, decoded: datum,
+                    plans: controller?.runs.compactMap(\.planCheckpoint).map(\.plan) ?? [], tools: controller?.tools ?? [], language: nil)
             } else if let source = String(data: content.data, encoding: .utf8) { text = source }
         }
+    }
+    private func inspectCompatibility(_ value: WorkflowValue, decodedAsset: WorkflowDatum? = nil) {
+        concept = (decodedAsset ?? value.datum).flatMap(WorkflowInputContract.concept)
+        let frozen = controller?.runs.compactMap(\.planCheckpoint).map(\.plan) ?? []
+        consumers = WorkflowValueCompatibility.concreteConsumers(value, decodedAsset: decodedAsset, plans: frozen, tools: controller?.tools ?? [], language: nil)
+            + WorkflowValueCompatibility.consumers(value, decodedAsset: decodedAsset, language: nil)
     }
     func validateMetadata() throws {
         guard ownerIsCurrent,let owner,owner.canEditLibraryMetadata,!suspended else { throw WorkflowIssue("Metadata owner changed / 元数据所有者已改变。") }
@@ -198,7 +220,14 @@ struct WorkflowViewerCallIdentity:Hashable {
     var exactRecord: WorkflowPlanCallRecord? {
         guard canRead, !suspended, let controller, let call=target.call,
               let run=controller.runs.first(where: { $0.id == call.address.runID }) else { return nil }
-        return WorkflowWorkspacePanels.records(in:run).first { $0.address == call.address && $0.id == call.stepID }
+        guard let record = WorkflowWorkspacePanels.records(in:run).first(where: { $0.address == call.address && $0.id == call.stepID }) else { return nil }
+        if let port = target.port {
+            let expected = target.side == .input ? record.step.inputs[port] : record.step.outputs[port]
+            guard expected == target.value else { return nil }
+        } else if target.side == .materials {
+            guard record.step.humanTask.map({ WorkflowValue.data($0.materials) }) == target.value else { return nil }
+        } else { return nil }
+        return record
     }
 }
 
@@ -238,7 +267,7 @@ struct WorkflowViewerCallIdentity:Hashable {
             catch { model.errorMessage=error.localizedDescription }
         }).environment(\.workflowViewerOpenAsset, { [weak self,weak session] ref in
             guard let self,let session,session.canRead,!session.suspended else { return }
-            let target=WorkflowViewerTarget(title:session.target.title,subtitle:session.target.subtitle,value:.asset(ref),call:session.target.call)
+            let target=WorkflowViewerTarget(title:session.target.title,subtitle:session.target.subtitle,value:.asset(ref))
             self.navigate(target,in:session)
         }).environment(\.dLanguageStore,language).environment(\.workflowViewerModel,model)
             .workbenchPresentation(state:model.chatDisplaySettings)
@@ -300,6 +329,27 @@ extension EnvironmentValues {
                             Text(text("readonlyMetadata", "名称与标签请在素材库的详情中编辑。", "Edit names and tags in the resource details.")).font(.caption).foregroundStyle(.secondary)
                         }
                         Text((session.target.value?.asset != nil || session.target.resource != nil) ? text("saved","已保存资产","Saved asset") : text("runValue","运行内数据","Run value"))
+                        if let concept = session.concept { Text(concept).font(.headline) }
+                        if let record = session.exactRecord {
+                            let label = session.target.side == .input ? "消费方" : session.target.side == .materials ? "审核材料所属调用" : "生产方"
+                            Text(label + " · " + (session.controller?.registry.operation(record.step.node.operationID)?.definition.title ?? record.step.node.title)).font(.callout)
+                        } else if let operation = session.metadata?.record?.operationID {
+                            Text("登记生产方 · " + (WorkflowRegistry.standard.operation(operation)?.definition.title ?? operation)).font(.callout)
+                        }
+                        DisclosureGroup(text("receivers", "接收功能与兼容性", "Receiving functions & compatibility")) {
+                            ForEach(session.consumers) { match in
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(match.title + " · " + match.portTitle).font(.callout)
+                                    Text(["direct":"直接兼容", "conversion":"转换后可用", "unverified":"待验证", "incompatible":"不兼容"][match.result.status.rawValue] ?? "待验证").font(.caption.weight(.semibold))
+                                    Text(match.result.reason).font(.caption)
+                                    if let kind = match.modelKind {
+                                        let choices = session.controller?.modelChoices.filter { $0.kind == kind && (WorkflowModelRoutes.operation(for: $0) ?? (kind == .music ? "d.music.generate" : kind == .image ? "d.image.generate" : kind == .text ? "d.model.language" : "")) == match.operationID } ?? []
+                                        Text(choices.isEmpty ? "未登记此模型；结构兼容不代表已安装" : choices.map(\.displayName).joined(separator: "、") + " · 已登记，运行前校验").font(.caption)
+                                    }
+                                }
+                            }
+                            if session.consumers.isEmpty { Text(session.target.resource?.registeredReference == nil && session.target.resource != nil ? "此素材尚未登记固定版本，接收兼容性待验证；浏览不会自动登记。" : "尚无可核验的接收方记录").font(.caption) }
+                        }
                         if let record=session.exactRecord {
                             Text(text("frozenConfig","此调用的固定配置","Frozen configuration of this call")).font(.headline)
                             ForEach(record.step.node.parameters.keys.sorted(),id:\.self) { key in
@@ -342,7 +392,7 @@ extension EnvironmentValues {
                 if let error=session.audio.errorMessage { Text(error).foregroundStyle(.red) }
             }
         } else {
-            switch session.target.value {
+            switch session.displayedValue {
             case .data(.text(let value)): textContent(value)
             case .data(let value): WorkbenchScrollView { WorkflowDatumSnapshotView(value:value) }
             case .receipt(let receipt): WorkbenchScrollView { Text(receipt.names.joined(separator:"\n")).textSelection(.enabled) }

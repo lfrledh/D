@@ -17,6 +17,7 @@ public final class TextDraftSession {
     private let backendID: String
     private var activeRun: InferenceRun?
     private var activeOperationID: UUID?
+    public var activeRequestID: UUID? { activeOperationID }
     private var cancellationRequested = false
     private var cancellationSent = false
     private var completionWaiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]

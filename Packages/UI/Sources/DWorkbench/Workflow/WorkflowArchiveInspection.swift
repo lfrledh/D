@@ -82,7 +82,7 @@ enum WorkflowArchiveInspection {
     @discardableResult
     static func validateScopeHistory(_ runs: [WorkflowRun], tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard) throws -> Int {
         guard Set(runs.map(\.id)).count == runs.count else { throw WorkflowIssue("重复运行身份。") }
-        try WorkflowBatchValidation.validateParents(runs)
+        try WorkflowBatchValidation.validateParents(runs, registry: registry)
         let byID = Dictionary(uniqueKeysWithValues: runs.map { ($0.id, $0) })
         var validated: [UUID: WorkflowScopeSource] = [:]
         func source(_ run: WorkflowRun) throws -> WorkflowScopeSource {

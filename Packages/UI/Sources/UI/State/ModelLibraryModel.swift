@@ -59,6 +59,7 @@ public final class ModelLibraryModel {
     @ObservationIgnored private var reconcilingNodePreparations = false
     @ObservationIgnored private var nodePreparationRevocations: [ModelResourceID: UInt64] = [:]
     private(set) var preparingNodeIdentities: Set<String> = []
+    let nodePreparationPresentation = WorkflowModelPreparationState()
 
     @ObservationIgnored public let library: ModelLibrary
     @ObservationIgnored private var preparation: Task<Void, Never>?
@@ -189,7 +190,29 @@ public final class ModelLibraryModel {
         // Keep native menu tracking intact while idle. Compare all visible values,
         // including transient copy progress, so real readiness changes still publish.
         if snapshot != updated { snapshot = updated }
+        updateNodePreparationPresentation(updated)
         await reconcileNodePreparations(updated)
+    }
+
+    private func updateNodePreparationPresentation(_ snapshot: ModelLibrarySnapshot) {
+        let resources = Dictionary(grouping: snapshot.resources, by: { $0.record.catalogID + "@" + $0.record.revision })
+        let tasks = Dictionary(grouping: snapshot.downloads, by: \.resourceID)
+        var values: [String: WorkflowModelPreparation] = [:]
+        var byResource: [ModelID: WorkflowModelPreparation] = [:]
+        for entry in snapshot.catalog {
+            guard let identity = entry.workflowIdentity else { continue }
+            let candidates = resources[entry.id + "@" + entry.revision] ?? []
+            for resource in candidates {
+                byResource[resource.record.id] = .make(record: resource.record, control: resource.control,
+                    task: tasks[resource.id]?.last, requiresPreparation: entry.preparation != .none)
+            }
+            if let requested = nodePreparations[identity]?.resource {
+                values[identity] = byResource[requested.modelID] ?? .init(resource: requested, taskID: nil, attemptID: nil,
+                    phase: "原准备副本已不可访问；未改用其他副本", completed: nil, total: nil, issue: nil)
+            } else if candidates.count == 1, let resource = candidates.first { values[identity] = byResource[resource.record.id] }
+            else if candidates.count > 1 { values[identity] = .init(resource: nil, taskID: nil, attemptID: nil, phase: "存在多个模型副本；请在模型与下载中确认", completed: nil, total: nil, issue: nil) }
+        }
+        nodePreparationPresentation.replace(values, resources: byResource)
     }
 
     public func clearError() { errorMessage = nil }

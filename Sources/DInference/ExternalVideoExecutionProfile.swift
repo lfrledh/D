@@ -7,6 +7,8 @@ public enum ExternalVideoExecutionProfile: String, Sendable, Codable, CaseIterab
     case ltx23Q8GemmaQ4 = "ltx-2.3-dev-q8-gemma3-q4-test-v1"
     case ltx25BF16Full = "ltx-2.5-dev-bf16-full-v1"
 
+    public var maximumSeed: UInt64 { self == .h3BF16Full ? UInt64.max : UInt64(UInt32.max) }
+
     public var reference: ExecutionProfileReference {
         ExecutionProfileReference(identifier: rawValue, revision: 1)
     }
@@ -42,7 +44,7 @@ public enum ExternalVideoExecutionProfile: String, Sendable, Codable, CaseIterab
             }
             guard request.width % 32 == 0, request.height % 32 == 0,
                   (request.frameCount - 1) % 8 == 0,
-                  request.seed <= UInt64(UInt32.max),
+                  request.seed <= maximumSeed,
                   request.scheduleShift == 1,
                   spatiotemporalGuidance.isFinite, spatiotemporalGuidance >= 0 else {
                 throw InferenceFailure.invalidRequest("Request does not match the full LTX recipe.")

@@ -78,7 +78,7 @@ import Foundation
             let descriptor = descriptor(for: choice)
             result.append(.init(item: .init(key: modelKey(choice), title: descriptor?.title ?? choice.displayName,
                 detail: WorkflowCanvasPresentation.operationTitle(definition, language: language), kind: .model, role: "primary-model",
-                inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: readiness[choice.id] ?? .unknown),
+                inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: readiness[choice.id] ?? .unknown, facts: .init(concepts: [definition.title], producers: descriptor.map { [$0.modelIdentity] } ?? [])),
                 selection: .operation(id: definition.id, modelID: choice.id),
                 facts: [choice.id, descriptor?.precision ?? "", descriptor?.engine ?? "", consistencyText(language, "copy.verifyBeforeRun")].filter { !$0.isEmpty }))
         }
@@ -88,7 +88,7 @@ import Foundation
                 let identity = identity(descriptor, kind: kind)
                 result.append(.init(item: .init(key: descriptor.id, title: descriptor.title,
                     detail: WorkflowCanvasPresentation.operationTitle(definition, language: language), kind: .model, role: "primary-model",
-                    inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: .unprepared),
+                    inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: .unprepared, facts: .init(concepts: [definition.title], producers: [descriptor.modelIdentity])),
                     selection: .operation(id: definition.id, modelID: identity), facts: [descriptor.modelIdentity, descriptor.revision, descriptor.precision, descriptor.deploymentNote]))
             } else {
                 // Reviewed legacy adapters remain discoverable without claiming a new executable node route.
@@ -106,7 +106,7 @@ import Foundation
                 title: WorkflowCanvasPresentation.operationTitle(definition, language: language),
                 detail: WorkflowCanvasPresentation.operationDetail(definition, language: language), kind: .program, role: "program",
                 inputs: Set(definition.inputs.flatMap { $0.kinds.count == WorkflowDataKind.allCases.count ? [] : $0.kinds }),
-                outputs: outputs(definition), readiness: .available), selection: .operation(id: definition.id, modelID: nil),
+                outputs: outputs(definition), readiness: .available, facts: .init(concepts: [definition.title], producers: [definition.id])), selection: .operation(id: definition.id, modelID: nil),
                 facts: [definition.id, "v\(definition.version)"]))
         }
         for tool in tools {
@@ -124,9 +124,16 @@ import Foundation
                 let activityID = "asset-instance:" + project.effectiveInstanceID.uuidString + ":" + asset.id.uuidString
                 let snapshot = metadata[activityID] ?? ProjectAssetMetadataSnapshot(project: project, asset: asset, record: nil,
                     job: nil, occurrences: nil, sourceIssue: "Source index unavailable / 来源尚未索引。")
+                let receivers = Set(registry.definitions.filter { definition in
+                    guard let kind else { return false }
+                    return definition.inputs.contains { $0.kinds.contains(kind) }
+                }.map(\.id))
+                let concepts: Set<String> = kind.map { ["content." + $0.rawValue] } ?? []
+                let facts = SharedLibraryFactConditions(concepts: concepts, producers: snapshot.record.map { [$0.operationID] } ?? [], consumers: receivers, formats: [asset.mediaType])
                 result.append(.init(item: .init(key: "asset:" + project.id.uuidString + ":" + asset.id.uuidString,
                     title: asset.name, detail: project.name, kind: .asset, role: asset.role.rawValue,
-                    contentKind: kind, readiness: .unknown, assetFacts: snapshot.facts), selection: .assetInstance(projectID: project.id,
+                    contentKind: kind, readiness: .unknown, assetFacts: snapshot.facts,
+                    facts: facts), selection: .assetInstance(projectID: project.id,
                         instanceID: project.effectiveInstanceID, assetID: asset.id),
                     facts: [asset.mediaType, consistencyText(language, "copy.verifyAssetAccess")],
                     activityID: activityID, legacyTags: asset.tags, metadataSnapshot: snapshot))

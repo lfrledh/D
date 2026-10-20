@@ -102,6 +102,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     @ObservationIgnored private var writeTail: Task<Void, Error>?
     // Internal fault injection at the actual history transaction, used only by CPU tests.
     @ObservationIgnored var beforeHistorySave: () throws -> Void = {}
+    @ObservationIgnored var batchSeedSource: () -> UInt64 = { UInt64.random(in: UInt64.min...UInt64.max) }
     // Controlled suspension/failure at the real asset-to-graph handoff in CPU tests.
     @ObservationIgnored var afterTextPublication: () async throws -> Void = {}
     @ObservationIgnored public var onChange: @MainActor () async -> Void = {}
@@ -977,7 +978,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     /// Freeze and authorize a finite stage. No inference happens until its ledger is durable.
     @discardableResult public func createBatchStage(
         selection: WorkflowGraphSelection, pins: [WorkflowHistoricalInput], repetitions: Int,
-        expectedGraphID: UUID, expectedRevision: UUID
+        expectedGraphID: UUID, expectedRevision: UUID, seedStrategy: WorkflowBatchSeedStrategy = .fixed
     ) async throws -> UUID {
         guard canEditCanvas, !isRunning, !isSaving, !hasPendingSaves, bodyPath.isEmpty,
               let original = rootGraph, original.id == expectedGraphID, original.revision == expectedRevision,
@@ -993,8 +994,11 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         let target: UUID
         switch selection { case .through(let id), .only(let id), .downstream(let id, _): target = id }
         var additions: [WorkflowRun] = []
-        for _ in 0..<repetitions {
+        let seeds = try WorkflowBatchSeedSchedule.allocate(plan: plan, strategy: seedStrategy,
+            count: repetitions, registry: registry, nextSeed: batchSeedSource)
+        for index in 0..<repetitions {
             var cp = WorkflowPlanCheckpoint(plan: plan, arguments: arguments); cp.modelDefaults = defaults
+            cp.batchSeeds = seeds[index]
             cp.externalInputs = try WorkflowScopePlanner.resolveHistoricalInputs(pins,
                 destination: .init(graph: frozen, selection: selection, checkpoint: cp),
                 sources: sources, tools: tools, registry: registry)
@@ -1003,7 +1007,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             run.scope = .init(selection: selection, historicalInputs: pins, recomputeSelected: true)
             additions.append(run)
         }
-        return try await registerBatchStage(name: original.name, repetitions: repetitions, parents: [], additions: additions)
+        return try await registerBatchStage(name: original.name, repetitions: repetitions, parents: [], additions: additions, seedStrategy: seedStrategy)
     }
 
     /// Each selected, settled attempt is one typed bundle, including list values and all join inputs.
@@ -1013,7 +1017,8 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         catch { return error.localizedDescription }
     }
 
-    @discardableResult public func createNextBatchStage(parentRunIDs: [UUID], repetitions: Int) async throws -> UUID {
+    @discardableResult public func createNextBatchStage(parentRunIDs: [UUID], repetitions: Int,
+                                                       seedStrategy: WorkflowBatchSeedStrategy = .fixed) async throws -> UUID {
         guard !closed, !closing, !isRunning, !isSaving, !hasPendingSaves, !externalOperationBusy(),
               readOnlyReason == nil, !toolPublicationBusy, (1...64).contains(repetitions),
               !parentRunIDs.isEmpty, Set(parentRunIDs).count == parentRunIDs.count,
@@ -1026,16 +1031,24 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         for id in parentRunIDs {
             guard known.contains(id), let parent = runs.first(where: { $0.id == id }) else { throw WorkflowIssue("父尝试不属于已保存批次。") }
             try WorkflowArchiveInspection.validateRun(parent, tools: tools, registry: registry)
-            for _ in 0..<repetitions { additions.append(try WorkflowBatchValidation.continuation(of: parent)) }
+            let cp = try WorkflowBatchValidation.acceptedPrefix(parent)
+            let seeds = try WorkflowBatchSeedSchedule.allocate(plan: cp.plan, parent: cp, strategy: seedStrategy,
+                count: repetitions, registry: registry, nextSeed: batchSeedSource)
+            for index in 0..<repetitions {
+                var child = try WorkflowBatchValidation.continuation(of: parent)
+                child.planCheckpoint?.batchSeeds = seeds[index]
+                additions.append(child)
+            }
         }
-        return try await registerBatchStage(name: "继续所选", repetitions: repetitions, parents: parentRunIDs, additions: additions)
+        return try await registerBatchStage(name: "继续所选", repetitions: repetitions, parents: parentRunIDs, additions: additions, seedStrategy: seedStrategy)
     }
 
-    private func registerBatchStage(name: String, repetitions: Int, parents: [UUID], additions: [WorkflowRun]) async throws -> UUID {
+    private func registerBatchStage(name: String, repetitions: Int, parents: [UUID], additions: [WorkflowRun],
+                                    seedStrategy: WorkflowBatchSeedStrategy = .fixed) async throws -> UUID {
         let stage = WorkflowBatchStage(name: name, repetitions: repetitions, parentRunIDs: parents,
-            attempts: additions.enumerated().map { .init(ordinal: $0.offset + 1, runID: $0.element.id) })
+            attempts: additions.enumerated().map { .init(ordinal: $0.offset + 1, runID: $0.element.id) }, seedStrategy: seedStrategy)
         try WorkflowArchiveInspection.validateScopeHistory(runs + additions, tools: tools, registry: registry)
-        try WorkflowBatchValidation.validate(batchStages + [stage], runs: runs + additions)
+        try WorkflowBatchValidation.validate(batchStages + [stage], runs: runs + additions, registry: registry)
         runs.append(contentsOf: additions); batchStages.append(stage)
         do { try await persist() }
         catch {
@@ -1059,7 +1072,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             editingOriginalID = nil; editingCopies = [:]; streamingText = ""; streamingStepID = nil
         }
         do {
-            try WorkflowBatchValidation.validate(batchStages, runs: runs)
+            try WorkflowBatchValidation.validate(batchStages, runs: runs, registry: registry)
             batchStages[si].state = .running; try await persist()
             for ai in batchStages[si].attempts.indices {
                 if cancelled || batchPauseRequested { break }
@@ -1196,18 +1209,23 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         isRunning = true; defer { isRunning = false }
         var replacement: WorkflowRun
         let parents: [UUID]
+        let strategy = batchStages.first(where: { $0.attempts.contains(where: { $0.runID == runID }) })?.seedStrategy ?? .fixed
+        var parentCheckpoint: WorkflowPlanCheckpoint?
         if let source = old.batchParent {
             guard let parent = runs.first(where: { $0.id == source.runID }),
                   let parentCP = parent.planCheckpoint, try WorkflowBatchValidation.digest(parentCP) == source.checkpointDigest else {
                 throw WorkflowIssue("原阶段输入已改变；没有使用最新结果替代。")
             }
             replacement = try WorkflowBatchValidation.continuation(of: parent); parents = [parent.id]
+            parentCheckpoint = parentCP
         } else {
             cp.runID = UUID(); cp.records = []; cp.outputs = [:]; cp.state = .ready; cp.error = nil
             replacement = WorkflowRun(id: cp.runID, graph: old.graph, targetNodeID: old.targetNodeID)
             replacement.scope = old.scope; replacement.planCheckpoint = cp; parents = []
         }
-        return try await registerBatchStage(name: "明确重试计算", repetitions: 1, parents: parents, additions: [replacement])
+        replacement.planCheckpoint?.batchSeeds = try WorkflowBatchSeedSchedule.allocate(plan: cp.plan, parent: parentCheckpoint,
+            strategy: strategy, count: 1, registry: registry, nextSeed: batchSeedSource)[0]
+        return try await registerBatchStage(name: "明确重试计算", repetitions: 1, parents: parents, additions: [replacement], seedStrategy: strategy)
     }
 
     public func run(target: UUID, only: Bool) async {
@@ -1558,7 +1576,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     }
     private func waitingSnapshotIsCurrent(_ run: WorkflowRun) -> Bool {
         if batchStages.contains(where: { $0.attempts.contains(where: { $0.runID == run.id }) }) {
-            return (try? WorkflowArchiveInspection.validateRun(run, tools: tools, registry: registry)) != nil && (try? WorkflowBatchValidation.validateParents(runs)) != nil
+            return (try? WorkflowArchiveInspection.validateRun(run, tools: tools, registry: registry)) != nil && (try? WorkflowBatchValidation.validateParents(runs, registry: registry)) != nil
         }
         if run.scope?.originCall != nil { return belongsToSelectedWorkflow(run) }
         return rootGraph?.id == run.graph.id && rootGraph?.revision == run.graph.revision

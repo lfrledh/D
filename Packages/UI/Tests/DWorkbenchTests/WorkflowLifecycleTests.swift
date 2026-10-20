@@ -750,10 +750,12 @@ struct WorkflowLifecycleTests {
         let work = Task { await c.run(target: target, only: false) }
         for _ in 0..<2000 { if await release.entered { break }; try await Task.sleep(for: .milliseconds(1)) }
         #expect(await release.entered)
+        #expect(c.services.activity.current?.phase == "releasing" && c.services.activity.current?.finished == false)
         await c.cancel(); await release.open(); await work.value
         #expect(c.runs.last?.status == .cancelled)
         #expect(c.runs.last?.steps.last?.outputs["output"]?.asset != nil)
         #expect(c.runs.last?.steps.last?.status == .completed)
+        #expect(c.services.activity.current?.phase == "completed" && c.services.activity.current?.finished == true)
         #expect(await engine.requests.count == 1)
         await c.resume(runID: try #require(c.runs.last?.id))
         #expect(c.runs.last?.status == .completed)
@@ -1761,6 +1763,7 @@ struct WorkflowLanguageServicesTests {
         do { _ = try await service.executeCall(.init(node: node, stepID: UUID(), inputs: [:])); Issue.record("Integrity lost") }
         catch { #expect(error as? InferenceFailure == .inputIntegrityChanged("controlled protected input change")) }
         #expect(released == 1)
+        #expect(service.activity.current?.phase == "failed" && service.activity.current?.finished == true)
         #expect(await store.snapshot().assets.isEmpty)
         try await store.close()
     }
@@ -1779,6 +1782,7 @@ struct WorkflowLanguageServicesTests {
         do { _ = try await service.executeCall(.init(node: node, stepID: UUID(), inputs: [:])); Issue.record("Cleanup uncertainty hidden") }
         catch { #expect(error as? InferenceFailure == .resourceCleanupUnconfirmed("controlled process group uncertainty")) }
         #expect(released == 1)
+        #expect(service.activity.current?.phase == "failed" && service.activity.current?.finished == true)
         #expect(await store.snapshot().assets.isEmpty)
         try await store.close()
     }
@@ -2420,8 +2424,12 @@ extension WorkflowLifecycleTests {
         let f = try await imageRepairFixture(count: 1); let c = f.controller
         defer { try? f.restoreDestination() }
         let graph = try #require(c.graph)
+        var allocations = 0
+        c.batchSeedSource = { allocations += 1; return UInt64.max }
         let stage = try await c.createBatchStage(selection: .through(f.nodeID), pins: [], repetitions: 2,
-            expectedGraphID: graph.id, expectedRevision: graph.revision)
+            expectedGraphID: graph.id, expectedRevision: graph.revision, seedStrategy: .automatic)
+        let seeds = c.runs.map { $0.planCheckpoint?.batchSeeds }
+        #expect(allocations == 1)
         await f.engine.configure(action: { try FileManager.default.moveItem(at: f.destination.rootURL, to: f.moved) })
         c.onChange = { if cancelRemaining && c.isRunning && c.services.hasPendingSaves { await c.cancel() } }
         await c.runBatchStage(stage)
@@ -2461,6 +2469,8 @@ extension WorkflowLifecycleTests {
         #expect(saved.runs.first?.id == run.id)
         #expect(saved.batchStages?.first?.state == (cancelRemaining ? .cancelled : .paused))
         #expect(!c.hasPendingSaves)
+        #expect(allocations == 1 && c.runs.map { $0.planCheckpoint?.batchSeeds } == seeds)
+        #expect(recovered.seed == String(UInt64.max))
         try await c.close(); try await f.destination.close(); try await f.source.close()
     }
 
@@ -3019,5 +3029,64 @@ extension WorkflowLifecycleTests {
         let cold = try await ProjectStore.open(at: f.destination.rootURL)
         #expect(try await cold.workflowState().archive?.runs.last == saved)
         try await cold.close(); try await f.source.close()
+    }
+}
+
+
+extension WorkflowLifecycleTests {
+    @Test(arguments: [WorkflowBatchSeedStrategy.fixed, .automatic])
+    func batchSeedsPersistBeforeDispatchAndColdRecovery(strategy: WorkflowBatchSeedStrategy) async throws {
+        let (_, store, engine, c) = try await fixture()
+        var generate = try #require(c.registry.operation("d.image.generate")).definition.makeNode()
+        generate.parameters["promptText"] = .text("synthetic seed fixture")
+        generate.parameters["count"] = .integer(1)
+        generate.parameters["seed"] = .text("18446744073709551615")
+        var gate = try #require(c.registry.operation("d.control.human")).definition.makeNode()
+        gate.dataConfiguration = .init(schema: .text)
+        let list = try #require(c.registry.operation("d.value.candidates")).definition.makeNode()
+        var laterList = list; laterList.id = UUID()
+        let after = try #require(c.registry.operation("d.control.human")).definition.makeNode()
+        var later = generate; later.id = UUID()
+        let graph = WorkflowGraph(nodes: [generate, list, gate, later, laterList, after], connections: [
+            .init(sourceNode: generate.id, targetNode: list.id), .init(sourceNode: list.id, targetNode: gate.id), .init(sourceNode: gate.id, targetNode: later.id, targetPort: "prompt"), .init(sourceNode: later.id, targetNode: laterList.id), .init(sourceNode: laterList.id, targetNode: after.id)])
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
+        await c.load()
+        var allocations = 0
+        c.batchSeedSource = { allocations += 1; return UInt64.max }
+        let stage = try await c.createBatchStage(selection: .through(after.id), pins: [], repetitions: 2,
+            expectedGraphID: graph.id, expectedRevision: graph.revision, seedStrategy: strategy)
+        let allocated = try #require(try await store.workflowState().archive)
+        #expect(await engine.requests.isEmpty)
+        #expect(allocations == (strategy == .automatic ? 2 : 0))
+        #expect(allocated.runs.allSatisfy { $0.graph == c.services.freezeModels(in: graph) })
+        if strategy == .automatic {
+            #expect(allocated.runs.compactMap { $0.planCheckpoint?.batchSeeds?.assignments.first?.value } == [String(UInt64.max), "0"])
+        }
+        await c.load() // disk reload must not allocate again
+        await c.runBatchStage(stage)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        #expect(await engine.requests.count == 2)
+        #expect(allocations == (strategy == .automatic ? 2 : 0))
+        let parentIndex = strategy == .automatic ? 1 : 0
+        let parent = c.runs[parentIndex], record = try #require(parent.planCheckpoint?.records.first { $0.step.node.id == gate.id })
+        await c.decideHuman(stepID: record.id, value: .text("accepted"), expectedTask: try #require(record.step.humanTask))
+        let frozenParent = c.runs[parentIndex]
+        let next = try await c.createNextBatchStage(parentRunIDs: [parent.id], repetitions: 2,
+            seedStrategy: strategy == .automatic ? .fixed : .automatic)
+        let scheduled = Array(c.runs.suffix(2))
+        await c.runBatchStage(next)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        #expect(c.runs[parentIndex] == frozenParent)
+        #expect(await engine.requests.count == 4)
+        #expect(c.runs.suffix(2).allSatisfy { $0.steps.first(where: { $0.node.id == generate.id })?.node.parameters["seed"] == .text(strategy == .automatic ? "0" : String(UInt64.max)) })
+        for (child, queued) in zip(c.runs.suffix(2), scheduled) {
+            let expected = queued.planCheckpoint?.batchSeeds?.assignments.first { $0.path == [.node(later.id)] }?.value ?? String(UInt64.max)
+            #expect(child.steps.first { $0.node.id == later.id }?.node.parameters["seed"] == .text(expected))
+        }
+        try await c.close(); let saved = try #require(try await store.workflowState().archive); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await reopened.workflowState().archive == saved)
+        try await reopened.close()
     }
 }

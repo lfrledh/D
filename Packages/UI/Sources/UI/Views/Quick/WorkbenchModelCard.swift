@@ -27,9 +27,7 @@ struct WorkbenchModelCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(name).workbenchHelp("MODEL-CARD").font(.system(size: 15, weight: .semibold)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
-            if let precision = descriptor?.precision, !precision.isEmpty {
-                Text(precision).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
-            }
+            if let descriptor { ModelSpecificationSummary(descriptor: descriptor) }
             Text(WorkflowCanvasPresentation.operationDetail(definition, language: language)).workbenchHelp("MODEL-PURPOSE")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 4) {

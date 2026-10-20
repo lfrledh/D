@@ -57,10 +57,11 @@ struct WorkflowLibraryValue: Equatable {
               let record = WorkflowWorkspacePanels.records(in: run).first(where: { $0.address == call.address && $0.id == call.stepID }) else { return false }
         return record.step.outputs[port] == value
     }
-    @MainActor static func entries(_ controller: WorkflowController, language: UILanguageStore?) -> [SharedLibraryBrowserEntry] {
+    @MainActor static func entries(_ controller: WorkflowController, language: UILanguageStore?, excludingSaved: Set<WorkflowAssetReference> = []) -> [SharedLibraryBrowserEntry] {
         guard let project = controller.projectID, let instance = controller.projectInstanceID else { return [] }
         return controller.runs.flatMap { run in
-            WorkflowHumanPresentation.outputs(run).map { output in
+            WorkflowHumanPresentation.outputs(run).compactMap { output -> SharedLibraryBrowserEntry? in
+                if output.call.step.status != .waiting, let reference = output.value.asset, excludingSaved.contains(reference) { return nil }
                 let snapshot = Self(projectID:project,instanceID:instance,call:.init(address:output.call.address,stepID:output.call.id),port:output.port,value:output.value,createdAt:run.createdAt)
                 let state: String = output.call.step.status == .waiting
                     ? workspaceText(language,"candidate","待确认候选","Awaiting decision")
@@ -72,7 +73,8 @@ struct WorkflowLibraryValue: Equatable {
                 var entry = SharedLibraryBrowserEntry(item:.init(key:id,title:title,
                     detail:state + " · " + run.createdAt.formatted(date:.abbreviated,time:.shortened),kind:.asset,role:"run-value",contentKind:snapshot.kind,readiness:.available,
                     assetFacts:.init(projectID:project,instanceID:instance,registeredAt:run.createdAt,
-                        occurrences:[.init(runID:run.id,nodeID:output.call.step.node.id,stepID:output.call.id,address:output.call.address)])),
+                        occurrences:[.init(runID:run.id,nodeID:output.call.step.node.id,stepID:output.call.id,address:output.call.address)]),
+                    facts: WorkflowValueCompatibility.facts(output.value, producer: output.call.step.node.operationID)),
                     selection:.unavailable(state),facts:[WorkflowHumanPresentation.run(run,in:controller.runs,language:language),WorkflowHumanPresentation.call(output.call,in:WorkflowWorkspacePanels.records(in:run),language:language)],activityID:id)
                 entry.runtimeValue = snapshot
                 return entry

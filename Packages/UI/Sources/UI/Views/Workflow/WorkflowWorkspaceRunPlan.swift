@@ -6,12 +6,13 @@ import SwiftUI
     let draft:WorkflowWorkspaceRunDraft
     let close:() -> Void
     var inputsChanged:([UUID:String])->Void = { _ in }
-    let preview:(WorkflowValue,WorkflowCallReference,String) -> Void
+    let preview:(WorkflowValue,WorkflowCallReference,String,String) -> Void
     @Environment(\.dLanguageStore) private var language
     @Environment(\.workbenchModelReadiness) private var readiness
     @State private var choices:[String:WorkflowCallReference]=[:]
     @State private var batch = false
     @State private var repetitions = 1
+    @State private var seedStrategy: WorkflowBatchSeedStrategy = .fixed
     private func text(_ key:String,_ zh:String,_ en:String)->String { workspaceText(language,key,zh,en) }
     private func key(_ boundary:WorkflowScopeBoundary)->String { boundary.destinationNodeID.uuidString+":"+boundary.destinationPort }
     private var current:Bool { draft.isCurrent(in:controller) }
@@ -34,7 +35,11 @@ import SwiftUI
                 Toggle(text("batchGenerate", "批量生成", "Generate a batch"), isOn: $batch)
                 if batch {
                     Stepper(text("stageCount", "本阶段次数", "Attempts this stage") + " \(repetitions)", value: $repetitions, in: 1...64)
-                    Text(text("batchSeed", "串行执行至人工关卡；使用固定配方中的种子，结果可能相同。", "Run serially to review gates. Retain configured seeds; results may match.")).font(.caption)
+                    WorkbenchPicker(text("seedStrategy", "每次尝试的种子", "Seeds per attempt"), selection: $seedStrategy) {
+                        WorkbenchChoice(text("seedFixed", "固定配方", "Keep configured seeds"), value: WorkflowBatchSeedStrategy.fixed)
+                        WorkbenchChoice(text("seedAutomatic", "自动变化", "Vary automatically"), value: WorkflowBatchSeedStrategy.automatic)
+                    }
+                    Text(text("seedEffect", "固定模式保留已填种子，留空值在提交时固定一次。仅影响支持种子的后续生成；未提供种子接口的功能不变，已采用前缀不变。实际种子在执行前保存，恢复时复用；不同种子不保证不同内容。", "Fixed mode preserves configured seeds and assigns an empty seed once at submission. Operations without seed support stay unchanged; only later generation with seed support varies. Accepted inputs stay fixed. Seeds are saved before dispatch and reused on recovery; different seeds do not guarantee different content.")).font(.caption)
                 }
             }
             WorkbenchScrollView {
@@ -85,7 +90,7 @@ import SwiftUI
                         if isBatch {
                             do {
                                 let id = try await controller.createBatchStage(selection: draft.selection, pins: inputs,
-                                    repetitions: count, expectedGraphID: draft.graph.id, expectedRevision: draft.graph.revision)
+                                    repetitions: count, expectedGraphID: draft.graph.id, expectedRevision: draft.graph.revision, seedStrategy: seedStrategy)
                                 await controller.runBatchStage(id)
                             } catch { controller.errorMessage = error.localizedDescription }
                         } else if draft.mode < 2 { await controller.run(target:draft.target,only:draft.mode == 1) }
@@ -120,7 +125,7 @@ import SwiftUI
                 }
             }.disabled(!current)
             if let choice=choices[key(boundary)],let call=records.first(where:{$0.address == choice.address && $0.id == choice.stepID}),let value=call.step.outputs[boundary.sourcePort] {
-                Button(text("previewInput","查看所选输入","Preview chosen input"),systemImage:"arrow.up.right.square") { preview(value,choice,name(boundary.sourceNodeID)) }
+                Button(text("previewInput","查看所选输入","Preview chosen input"),systemImage:"arrow.up.right.square") { preview(value,choice,name(boundary.sourceNodeID),boundary.sourcePort) }
             }
         }.padding(8)
     }

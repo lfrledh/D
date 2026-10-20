@@ -11,9 +11,11 @@ public struct WorkflowBatchStage: Codable, Sendable, Equatable, Identifiable {
     public var parentRunIDs: [UUID]
     public var attempts: [WorkflowBatchAttempt]
     public var state: State
-    public init(name: String, repetitions: Int, parentRunIDs: [UUID] = [], attempts: [WorkflowBatchAttempt]) {
+    public var seedStrategy: WorkflowBatchSeedStrategy?
+    public init(name: String, repetitions: Int, parentRunIDs: [UUID] = [], attempts: [WorkflowBatchAttempt],
+                seedStrategy: WorkflowBatchSeedStrategy = .fixed) {
         id = UUID(); createdAt = Date(); self.name = name; self.repetitions = repetitions
-        self.parentRunIDs = parentRunIDs; self.attempts = attempts; state = .queued
+        self.parentRunIDs = parentRunIDs; self.attempts = attempts; state = .queued; self.seedStrategy = seedStrategy
     }
 }
 
@@ -102,7 +104,7 @@ enum WorkflowBatchValidation {
         return result
     }
 
-    static func validateParents(_ runs: [WorkflowRun]) throws {
+    static func validateParents(_ runs: [WorkflowRun], registry: WorkflowRegistry = .standard) throws {
         let byID = Dictionary(uniqueKeysWithValues: runs.map { ($0.id, $0) })
         for run in runs {
             guard let parent = run.batchParent else { continue }
@@ -117,6 +119,10 @@ enum WorkflowBatchValidation {
                 throw WorkflowIssue("批次的固定父输入、计划或派生身份不匹配。")
             }
             _ = try acceptedPrefix(source)
+            let expectedSeeds = WorkflowBatchSeedSchedule.inheritedAssignments(from: sourceCP, registry: registry)
+            guard (cp.batchSeeds?.inherited ?? []) == expectedSeeds || (cp.batchSeeds == nil && sourceCP.batchSeeds == nil) else {
+                throw WorkflowIssue("下一阶段丢失或改写了前缀的精确种子。")
+            }
             let inherited = try remap(sourceCP, runID: run.id, stepIDs: parent.stepIDs)
             for old in inherited.records {
                 guard let record = cp.records.first(where: { $0.address == old.address }), record.id == old.id else {
@@ -140,7 +146,7 @@ enum WorkflowBatchValidation {
         }
     }
 
-    static func validate(_ stages: [WorkflowBatchStage], runs: [WorkflowRun]) throws {
+    static func validate(_ stages: [WorkflowBatchStage], runs: [WorkflowRun], registry: WorkflowRegistry = .standard) throws {
         guard stages.count <= 256, Set(stages.map(\.id)).count == stages.count else { throw WorkflowIssue("批次数量或身份无效。") }
         let byID = Dictionary(uniqueKeysWithValues: runs.map { ($0.id, $0) })
         var dispatched = Set<UUID>(), owned = Set<UUID>()
@@ -173,9 +179,17 @@ enum WorkflowBatchValidation {
                       (stage.parentRunIDs.isEmpty ? run.batchParent == nil : stage.parentRunIDs.contains(run.batchParent?.runID ?? UUID())) else {
                     throw WorkflowIssue("批次派发身份、运行来源或耗时无效。")
                 }
+                let seeds = run.planCheckpoint?.batchSeeds
+                guard (seeds?.strategy ?? .fixed) == (stage.seedStrategy ?? .fixed),
+                      !stage.parentRunIDs.isEmpty || seeds?.inherited.isEmpty != false else {
+                    throw WorkflowIssue("批次种子策略或继承来源与阶段不一致。")
+                }
             }
         }
         guard runs.filter({ $0.batchParent != nil }).allSatisfy({ owned.contains($0.id) }) else { throw WorkflowIssue("派生尝试缺少唯一阶段所有者。") }
-        try validateParents(runs)
+        guard runs.filter({ $0.planCheckpoint?.batchSeeds != nil }).allSatisfy({ owned.contains($0.id) }) else {
+            throw WorkflowIssue("种子调度必须属于明确授权的批次。")
+        }
+        try validateParents(runs, registry: registry)
     }
 }

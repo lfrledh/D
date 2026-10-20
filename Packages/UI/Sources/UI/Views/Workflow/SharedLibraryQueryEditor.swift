@@ -8,7 +8,7 @@ struct SharedLibraryQueryDraft {
     init(query: SharedLibraryQuery, context: String) { original = query; self.query = query; self.context = context }
     func validated(current: SharedLibraryQuery, context: String) throws -> SharedLibraryQuery {
         guard current == original, context == self.context else { throw WorkflowIssue("The filter context changed. Reopen the filter editor.") }
-        try query.scope?.validate(); try query.properties?.validate()
+        try query.scope?.validate(); try query.properties?.validate(); try query.facts?.validate()
         return query
     }
 }

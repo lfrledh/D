@@ -600,13 +600,27 @@ extension WorkflowWorkspacePresentationTests {
         #expect(!SharedLibraryBrowserLogic.allows(.location,entry:waiting))
         #expect(SharedLibraryBrowserLogic.allows(.preview,entry:waiting))
         let before=await f.store.snapshot()
-        let viewer=f.viewer(.init(title:waiting.item.title,subtitle:waiting.item.detail,value:projected.value,call:projected.call))
+        let viewer=f.viewer(.init(title:waiting.item.title,subtitle:waiting.item.detail,value:projected.value,call:projected.call,port:projected.port))
         await viewer.load()?.value
         #expect(viewer.exactRecord?.step.status == .waiting)
+        #expect(c.services.activity.current?.phase == "waiting" && c.services.activity.current?.finished == true)
         #expect(viewer.text == "Describe a moonlit garden in a restrained editorial tone.")
         c.selectedNodeID=graph.nodes[0].id
         #expect(viewer.target.call == projected.call && viewer.exactRecord?.step.status == .waiting)
+        let wrongPort = f.viewer(.init(title: "same visible value", subtitle: "", value: projected.value, call: projected.call, port: "nonexistent"))
+        await wrongPort.load()?.value
+        #expect(wrongPort.exactRecord == nil)
+        wrongPort.suspend()
+
         #expect((await f.store.snapshot()).revision == before.revision)
+        let all = WorkflowLibraryValue.entries(f.controller, language: nil)
+        let references = Set(all.compactMap { $0.runtimeValue?.reference })
+        let deduplicated = WorkflowLibraryValue.entries(f.controller, language: nil, excludingSaved: references)
+        let expected = all.filter { entry in
+            guard let runtime = entry.runtimeValue, runtime.reference != nil else { return true }
+            return f.controller.callRecords(runID: runtime.call.address.runID).first { $0.id == runtime.call.stepID && $0.address == runtime.call.address }?.step.status == .waiting
+        }
+        #expect(deduplicated.map(\.id) == expected.map(\.id))
         viewer.stop();try await f.close()
     }
 
@@ -755,7 +769,7 @@ extension WorkflowWorkspacePresentationTests {
         c.editReviewText(stepID:b.id,text:"draft B")
         let av=try #require(a.step.outputs.values.first),bv=try #require(b.step.outputs.values.first)
         #expect(a.id != b.id && av == bv)
-        let viewer=f.viewer(.init(title:"A",subtitle:"",value:av,call:.init(address:a.address,stepID:a.id)))
+        let viewer=f.viewer(.init(title:"A",subtitle:"",value:av,call:.init(address:a.address,stepID:a.id),port:a.step.outputs.keys.sorted().first))
         await viewer.load()?.value
         let host=NSHostingView(rootView:WorkflowViewerContent(session:viewer,reopen:{}));host.frame = .init(x:0,y:0,width:800,height:640)
         func descendants(_ v:NSView)->[NSView] { [v]+v.subviews.flatMap(descendants) }
@@ -765,7 +779,7 @@ extension WorkflowWorkspacePresentationTests {
         let coordinator=WorkflowViewerCoordinator()
         let second=f.viewer(.init(title:"independent",subtitle:"",value:av));await second.load()?.value
         let secondGeneration=second.generation
-        coordinator.navigate(.init(title:"B",subtitle:"",value:bv,call:.init(address:b.address,stepID:b.id)),in:viewer)
+        coordinator.navigate(.init(title:"B",subtitle:"",value:bv,call:.init(address:b.address,stepID:b.id),port:b.step.outputs.keys.sorted().first),in:viewer)
         for _ in 0..<40 { host.layoutSubtreeIfNeeded();try await Task.sleep(for:.milliseconds(10)) }
         #expect(editor() == nil)
         #expect(viewer.exactRecord?.id == b.id && second.generation == secondGeneration && second.target.title == "independent")
