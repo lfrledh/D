@@ -414,7 +414,14 @@ extension EnvironmentValues {
             if oldValue !== owner { oldValue?.readability.remove(self); owner?.readability.configure(self) }
         }
     }
-    var isCanvas = false
+    var isCanvas = false {
+        didSet {
+            // The opaque canvas draws independently of SwiftUI's foreground.
+            // Give its invalidations a backing store of their own; otherwise
+            // a native redraw can overwrite the hosting view's shared store.
+            if isCanvas && !wantsLayer { wantsLayer = true }
+        }
+    }
     var isGeometryOnly = false
     var palette = WorkbenchPalette.defaultLight
     var strength = 0.55
