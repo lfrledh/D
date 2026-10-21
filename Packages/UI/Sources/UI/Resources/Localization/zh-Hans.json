@@ -306,6 +306,7 @@
     "language.settings": "显示语言",
     "common.done": "完成",
     "command.project.new": "新建项目…",
+    "command.window.close": "关闭窗口",
     "command.project.open": "打开项目…",
     "command.asset.export": "导出当前作品…",
     "command.text.save": "保存文字稿",

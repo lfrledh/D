@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import DWorkbench
 import SwiftUI
@@ -55,5 +56,15 @@ public extension FocusedValues {
     var workbenchSave: WorkbenchGenerationCommand? {
         get { self[WorkbenchSaveKey.self] }
         set { self[WorkbenchSaveKey.self] = newValue }
+    }
+}
+
+/// Route the standard close command to its captured native window. Delegates
+/// retain ownership of unsaved work, annotation drafts and asynchronous drains.
+@MainActor public enum WorkbenchWindowCloseCommand {
+    public static func perform(on window: NSWindow?) {
+        guard let window, window.styleMask.contains(.closable),
+              window.sheetParent == nil, window.attachedSheet == nil else { return }
+        window.performClose(nil)
     }
 }

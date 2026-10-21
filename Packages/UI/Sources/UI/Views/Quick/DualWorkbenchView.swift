@@ -987,7 +987,7 @@ public struct DualWorkbenchView: View {
                 throw WorkflowIssue(t("externalUnsupported"))
             }
             let panel = NSSavePanel(); panel.title = workspaceText(language, "externalCopy")
-            panel.nameFieldStringValue = content.metadata.asset.name + "." + suffix
+            panel.nameFieldStringValue = suggestedExternalCopyName(content.metadata.asset.name, suffix: suffix)
             if let type = UTType(filenameExtension: suffix) { panel.allowedContentTypes = [type] }
             guard await panel.begin() == .OK, let destination = panel.url else { return }
             _ = try await store(for: content.token.projectID, instanceID: content.token.instanceID)
@@ -1197,4 +1197,14 @@ public struct DualWorkbenchView: View {
             navigate(to: .workflow)
         } catch { issue = error.localizedDescription }
     }
+}
+
+/// Preserve display names, including dotted version labels. Only avoid adding
+/// a format suffix that is already present (or has an equivalent UTType).
+func suggestedExternalCopyName(_ name: String, suffix: String) -> String {
+    let existing = (name as NSString).pathExtension
+    if existing.caseInsensitiveCompare(suffix) == .orderedSame { return name }
+    if let current = UTType(filenameExtension: existing), let expected = UTType(filenameExtension: suffix),
+       current == expected { return name }
+    return name + "." + suffix
 }

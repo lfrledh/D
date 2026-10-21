@@ -140,6 +140,10 @@ private struct WorkbenchCommands: Commands {
             .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model == nil || bootstrap.model?.isChangingProject == true)
         }
         CommandGroup(replacing: .saveItem) {
+            Button(label("command.window.close", "关闭窗口")) {
+                WorkbenchWindowCloseCommand.perform(on: NSApp.keyWindow)
+            }.keyboardShortcut("w")
+                .disabled(bootstrap.isTerminating)
             Button(saveCommand?.title ?? label("consistency.menu.file.save", "保存更改")) { saveCommand?.action() }
                 .keyboardShortcut("s")
                 .disabled(modalResourceOperation || bootstrap.isTerminating || saveCommand?.isEnabled != true)

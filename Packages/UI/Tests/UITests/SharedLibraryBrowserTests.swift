@@ -11,6 +11,18 @@ import UniformTypeIdentifiers
 
 @Suite @MainActor
 struct SharedLibraryBrowserTests {
+    @Test(arguments: [
+        ("Read-only sample.txt", "txt", "Read-only sample.txt"),
+        ("Read-only sample.TXT", "txt", "Read-only sample.TXT"),
+        ("Read-only sample", "txt", "Read-only sample.txt"),
+        ("报告.v2", "txt", "报告.v2.txt"),
+        ("photo.jpeg", "jpg", "photo.jpeg"),
+        ("photo.source", "png", "photo.source.png")
+    ])
+    func externalCopySuggestionPreservesNamesWithoutRepeatingFormat(value: (String, String, String)) {
+        #expect(suggestedExternalCopyName(value.0, suffix: value.1) == value.2)
+    }
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["D_NATIVE_TREE_AX"] == "1", "Requires a visible AX host; hidden native geometry is checked separately"), arguments: [260.0, 360.0], ["zh-Hans", "en"])
     func nativeCompactOperationTreeIndentsEveryExpandedLevel(width: Double, locale: String) async throws {
         let language = UILanguageStore(preferredLanguages: [locale])

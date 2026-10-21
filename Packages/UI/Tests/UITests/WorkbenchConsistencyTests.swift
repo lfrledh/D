@@ -25,6 +25,38 @@ import Testing
         try #require(views(root).compactMap { $0 as? NSButton }.first { $0.accessibilityIdentifier() == id })
     }
 
+    @Test(arguments: [false, true])
+    func closeCommandRetainsNativeDelegateDecision(approved: Bool) throws {
+        let target = CloseCommandTestWindow(contentRect: .init(x: 0, y: 0, width: 200, height: 100),
+            styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        target.isReleasedWhenClosed = false
+        let gate = CloseCommandTestDelegate(approved: approved); target.delegate = gate
+        let editor = NSTextView(); editor.isEditable = false; target.contentView = editor
+        try #require(target.makeFirstResponder(editor))
+        WorkbenchWindowCloseCommand.perform(on: target)
+        #expect(gate.requests == 1 && target.closeCalls == (approved ? 1 : 0))
+        #expect(target.firstResponder === editor)
+        target.delegate = nil; target.contentView = nil
+    }
+
+    @Test func closeCommandRejectsOwnSheetsAndNeverFallsBackToAnotherWindow() {
+        let target = CloseCommandTestWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        let other = CloseCommandTestWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        target.isReleasedWhenClosed = false; other.isReleasedWhenClosed = false
+        let gate = CloseCommandTestDelegate(approved: true); target.delegate = gate
+        target.testSheetParent = other
+        WorkbenchWindowCloseCommand.perform(on: target)
+        target.testSheetParent = nil; target.testAttachedSheet = other
+        WorkbenchWindowCloseCommand.perform(on: target)
+        #expect(gate.requests == 0 && target.closeCalls == 0 && other.closeCalls == 0)
+        target.testAttachedSheet = nil; other.testAttachedSheet = target
+        WorkbenchWindowCloseCommand.perform(on: nil)
+        #expect(gate.requests == 0 && other.closeCalls == 0)
+        WorkbenchWindowCloseCommand.perform(on: target)
+        #expect(gate.requests == 1 && target.closeCalls == 1 && other.closeCalls == 0)
+        other.testAttachedSheet = nil; target.delegate = nil
+    }
+
     @Test func nativeGlassPopupPreservesHostingEditorAndCommandOwnership() async throws {
         let w = window(); defer { w.contentView = nil; w.close() }
         let state = ChatDisplayPreferencesState()
@@ -567,4 +599,19 @@ extension WorkbenchConsistencyTests {
         wire.removeTrackingArea(original); wire.updateTrackingAreas()
         #expect(wire.trackingAreas.count == 1 && wire.trackingAreas.first !== original)
     }
+}
+
+@MainActor private final class CloseCommandTestWindow: NSWindow {
+    var closeCalls = 0
+    var testSheetParent: NSWindow?
+    var testAttachedSheet: NSWindow?
+    override var sheetParent: NSWindow? { testSheetParent }
+    override var attachedSheet: NSWindow? { testAttachedSheet }
+    override func close() { closeCalls += 1 }
+}
+@MainActor private final class CloseCommandTestDelegate: NSObject, NSWindowDelegate {
+    let approved: Bool
+    var requests = 0
+    init(approved: Bool) { self.approved = approved }
+    func windowShouldClose(_ sender: NSWindow) -> Bool { requests += 1; return approved }
 }

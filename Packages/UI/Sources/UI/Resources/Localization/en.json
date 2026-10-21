@@ -304,6 +304,7 @@
     "language.settings": "Display Language",
     "common.done": "Done",
     "command.project.new": "New Project…",
+    "command.window.close": "Close Window",
     "command.project.open": "Open Project…",
     "command.asset.export": "Export Current Asset…",
     "command.text.save": "Save Draft",
