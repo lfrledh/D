@@ -55,7 +55,7 @@ public struct WorkbenchSettingsView: View {
     @ViewBuilder private func settingsPage(_ section: Section) -> some View {
         switch section {
                     case .appearance:
-                        ScrollView { ChatDisplayPreferencesPanel(state: model.chatDisplaySettings).padding(16) }
+                        ChatDisplayPreferencesPanel(state: model.chatDisplaySettings)
                             .accessibilityIdentifier("settings-appearance-scroll")
                     case .language: LanguageSettingsView(store: language).workbenchHelp("SETTINGS-LANGUAGE")
                     case .files:

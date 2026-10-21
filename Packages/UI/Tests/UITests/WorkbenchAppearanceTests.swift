@@ -462,7 +462,8 @@ import Testing
 
     /// The real settings form must preview one palette across every sample card.
     /// This checks environment propagation, not native glass pixels.
-    @Test func appearancePreviewKeepsCardPaletteTogetherInOppositeHostScheme() throws {
+    @Test(arguments: [CGFloat(458), CGFloat(760)])
+    func appearancePreviewKeepsCardPaletteTogetherInOppositeHostScheme(width: CGFloat) throws {
         let suite = "appearance-preview-\(UUID().uuidString)"
         let settings = try #require(UserDefaults(suiteName: suite))
         defer { settings.removePersistentDomain(forName: suite) }
@@ -476,8 +477,9 @@ import Testing
         let before = settings.data(forKey: ChatDisplayPreferences.storageKey)
         let host = NSHostingView(rootView: AnyView(ChatDisplayPreferencesPanel(state: state)
             .environment(\.chatDisplayPreferences, preferences)
-            .environment(\.colorScheme, .dark).frame(width: 760, height: 1800)))
-        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 760, height: 1800),
+            .environment(\.dLanguageStore, UILanguageStore(preferredLanguages: ["en"]))
+            .environment(\.colorScheme, .dark).frame(width: width, height: 1800)))
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: width, height: 1800),
             styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host
         window.orderFront(nil)
@@ -496,7 +498,7 @@ import Testing
         // preview heading is the only full-width, tall custom plate in this form.
         let plates = descendants(host).compactMap { $0 as? WorkbenchBackgroundNSView }
             .filter { !$0.isCanvas }
-        let headingCards = plates.filter { $0.bounds.width > 500 && $0.bounds.height > 60 }
+        let headingCards = plates.filter { $0.bounds.width > width * 0.75 && $0.bounds.height > 60 }
         try #require(!headingCards.isEmpty,
             "Missing heading plate; hosted plate sizes: \(plates.map { $0.bounds.size })")
         #expect(headingCards.allSatisfy { $0.palette == preferences.resolvedAppearance.light },
@@ -504,6 +506,11 @@ import Testing
         let nodeCards = plates.filter { $0.bounds.width >= 140 && $0.bounds.width <= 170 && $0.bounds.height >= 76 }
         try #require(nodeCards.count >= 2)
         #expect(nodeCards.allSatisfy { $0.palette == preferences.resolvedAppearance.light })
+        for plate in plates {
+            let frame = host.convert(plate.bounds, from: plate)
+            #expect(frame.minX >= -1 && frame.maxX <= width + 1,
+                "Visible control/sample plate must stay in the settings column: \(frame)")
+        }
         #expect(state.preferences == preferences)
         #expect(settings.data(forKey: ChatDisplayPreferences.storageKey) == before)
     }

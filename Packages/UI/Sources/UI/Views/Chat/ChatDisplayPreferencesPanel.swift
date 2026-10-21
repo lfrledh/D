@@ -409,6 +409,7 @@ struct ChatDisplayPreferencesPanel: View {
 
             }
         }
+        .formStyle(.grouped)
         .onAppear { if state.preferences.theme == .dark { editingScheme = .dark } }
         .onDisappear {
             selectionTicket = UUID(); selectionTask?.cancel(); selectionTask = nil
