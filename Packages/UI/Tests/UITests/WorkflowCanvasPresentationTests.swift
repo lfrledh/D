@@ -132,21 +132,33 @@ struct WorkflowCanvasPresentationTests {
         #expect(WorkflowCanvasPresentation.portSummary(required, language: nil) == "文字/图像 · 必选")
     }
 
-    @Test func connectionLabelsResolvePublishedToolPortNames() throws {
-        let body = try WorkflowControlFormSupport.makeBody(name: "工具", inputs: [WorkflowRecordField("提示", .text)],
-            passthrough: "提示", outputName: "展示结果")
-        let tool = WorkflowToolDefinition(id: UUID(), version: 1, name: "固定工具", graph: body)
-        let initial = try #require(WorkflowRegistry.standard.operation("d.control.invoke")).definition.makeNode()
-        let draft = try WorkflowControlFormSupport.selecting(tool: tool, in: .init(node: initial))
-        var invoke = initial
-        invoke.control = draft.control
-        invoke.dataConfiguration = draft.dataConfiguration
-        let target = try #require(WorkflowRegistry.standard.operation("d.value.return")).definition.makeNode()
-        let graph = WorkflowGraph(nodes: [invoke, target])
-        let connection = WorkflowConnection(sourceNode: invoke.id, sourcePort: "展示结果", targetNode: target.id, targetPort: "input")
-        let title = WorkflowConnectionPresentation.title(connection, graph: graph, registry: .standard, tools: [tool], language: nil)
-        #expect(title.contains("展示结果"))
-        #expect(!title.contains(" · input"))
+    @Test(arguments: ["zh-Hans", "en"])
+    func connectionLabelsResolvePublishedToolPortNames(locale: String) throws {
+        let language = UILanguageStore(preferredLanguages: [locale]); try language.select(locale)
+        let body = try WorkflowControlFormSupport.makeBody(name: "工具", inputs: [WorkflowRecordField("input", .text)],
+            passthrough: "input", outputName: "output")
+        let first = WorkflowToolDefinition(id: UUID(), version: 1, name: "固定工具", graph: body,
+            registration: .init(purpose: "Purpose", inputLabels: ["input": "用户提示一"], outputLabels: ["output": "成品一"]))
+        var second = first; second.version = 2
+        second.registration = .init(purpose: "Purpose", inputLabels: ["input": "用户提示二"], outputLabels: ["output": "成品二"])
+        let tools = [second, first]
+        for (tool, inputName, outputName, excluded) in [(first, "用户提示一", "成品一", "成品二"), (second, "用户提示二", "成品二", "成品一")] {
+            var invoke = try #require(WorkflowRegistry.standard.operation("d.control.invoke")).definition.makeNode()
+            let draft = try WorkflowControlFormSupport.selecting(tool: tool, in: .init(node: invoke))
+            invoke.control = draft.control; invoke.dataConfiguration = draft.dataConfiguration
+            let definition = try #require(WorkflowRegistry.standard.definition(for: invoke, tools: tools))
+            #expect(definition.inputs.first?.title == inputName && definition.outputs.first?.title == outputName)
+            #expect(WorkflowCanvasPresentation.portTitle(operationID: invoke.operationID, port: definition.inputs[0], input: true, language: language) == inputName)
+            #expect(WorkflowCanvasPresentation.portTitle(operationID: invoke.operationID, port: definition.outputs[0], input: false, language: language) == outputName)
+            let target = try #require(WorkflowRegistry.standard.operation("d.value.return")).definition.makeNode()
+            let graph = WorkflowGraph(nodes: [invoke, target])
+            let outgoing = WorkflowConnection(sourceNode: invoke.id, sourcePort: "output", targetNode: target.id, targetPort: "input")
+            let incoming = WorkflowConnection(sourceNode: target.id, sourcePort: "output", targetNode: invoke.id, targetPort: "input")
+            let outgoingTitle = WorkflowConnectionPresentation.title(outgoing, graph: graph, registry: .standard, tools: tools, language: language)
+            let incomingTitle = WorkflowConnectionPresentation.title(incoming, graph: graph, registry: .standard, tools: tools, language: language)
+            #expect(outgoingTitle.contains(outputName) && !outgoingTitle.contains(excluded))
+            #expect(incomingTitle.contains(inputName))
+        }
     }
 
     @Test

@@ -904,7 +904,7 @@ private struct WorkflowConnectionLayer: View {
                     WorkflowConnectionInteraction(connection: connection, geometry: geometry,
                         portCenters: centers, controlBounds: controlBounds, nodeFrames: frames, canDisconnect: canDisconnect,
                         label: WorkflowConnectionPresentation.title(connection, graph: graph,
-                            registry: registry, tools: tools, language: language),
+                            registry: registry, tools: tools, language: language, disambiguateNodeNames: false),
                         onSelect: { onSelect(connection.id) }, onDisconnect: { onDisconnect(connection) })
                 }
             }

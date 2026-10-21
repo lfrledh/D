@@ -1887,10 +1887,18 @@ struct WorkflowConnectionSnapshot: Identifiable {
     let call: WorkflowPlanCallRecord
 }
 enum WorkflowConnectionPresentation {
-    @MainActor static func title(_ connection: WorkflowConnection, graph: WorkflowGraph?, registry: WorkflowRegistry, tools: [WorkflowToolDefinition], language: UILanguageStore?) -> String {
+    @MainActor static func title(_ connection: WorkflowConnection, graph: WorkflowGraph?, registry: WorkflowRegistry, tools: [WorkflowToolDefinition], language: UILanguageStore?, disambiguateNodeNames: Bool = true) -> String {
         func endpoint(_ id: UUID, _ port: String, input: Bool) -> String {
             guard let node = graph?.nodes.first(where: { $0.id == id }) else { return metadataText(language, "unavailableNode", "节点不可访问", "Node unavailable") }
-            return WorkflowHumanPresentation.name(node, in: graph?.nodes ?? [node], language: language) + " · " + WorkflowCanvasPresentation.portTitle(operationID: node.operationID, portID: port, fallback: (input ? registry.definition(for: node, tools: tools)?.inputs : registry.definition(for: node, tools: tools)?.outputs)?.first(where: { $0.id == port })?.title ?? port, input: input, language: language)
+            let definition = registry.definition(for: node, tools: tools)
+            let portName = (input ? definition?.inputs : definition?.outputs)?.first(where: { $0.id == port })?.title ?? port
+            // Canvas geometry changes must not sort every same-name node per wire.
+            // The inspector retains the full collection's disambiguated aliases.
+            let nodeName = disambiguateNodeNames
+                ? WorkflowHumanPresentation.name(node, in: graph?.nodes ?? [node], language: language)
+                : (node.title.isEmpty ? definition.map { WorkflowCanvasPresentation.operationTitle($0, language: language) } ?? node.operationID : node.title)
+            return nodeName + " · " + WorkflowCanvasPresentation.portTitle(operationID: node.operationID,
+                portID: port, fallback: portName, input: input, language: language)
         }
         return endpoint(connection.sourceNode, connection.sourcePort, input: false) + " → " + endpoint(connection.targetNode, connection.targetPort, input: true)
     }
@@ -1996,9 +2004,9 @@ private struct WorkflowCanvasConnectionInspector: View {
                     let targetName = WorkflowNodeIdentity.resolve(node: target, definition: targetDefinition,
                         modelChoices: controller.modelChoices, assets: controller.availableAssets,
                         tools: controller.tools, language: language).title
-                    Text(sourceName + " · " + WorkflowCanvasPresentation.portTitle(operationID: source.operationID, portID: connection.sourcePort, fallback: connection.sourcePort, input: false, language: language))
+                    Text(sourceName + " · " + WorkflowCanvasPresentation.portTitle(operationID: source.operationID, portID: connection.sourcePort, fallback: sourceDefinition?.outputs.first(where: { $0.id == connection.sourcePort })?.title ?? connection.sourcePort, input: false, language: language))
                     Image(systemName: "arrow.down").foregroundStyle(.secondary)
-                    Text(targetName + " · " + WorkflowCanvasPresentation.portTitle(operationID: target.operationID, portID: connection.targetPort, fallback: connection.targetPort, input: true, language: language))
+                    Text(targetName + " · " + WorkflowCanvasPresentation.portTitle(operationID: target.operationID, portID: connection.targetPort, fallback: targetDefinition?.inputs.first(where: { $0.id == connection.targetPort })?.title ?? connection.targetPort, input: true, language: language))
                     if let port = sourceDefinition?.outputs.first(where: { $0.id == connection.sourcePort }) {
                         Text(WorkflowCanvasPresentation.portDetail(port, language: language))
                             .font(.caption).foregroundStyle(.secondary)
@@ -2790,6 +2798,9 @@ enum WorkflowCanvasPresentation {
         input: Bool,
         language: UILanguageStore?
     ) -> String {
+        // A published tool's ports belong to its exact version's interface.
+        // Common IDs such as "input" must not overwrite its registered labels.
+        if operationID == "d.control.invoke" { return fallback }
         let direction = input ? "input" : "output"
         return workflowText(
             language,
