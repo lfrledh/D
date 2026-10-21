@@ -460,6 +460,54 @@ import Testing
         #expect(preferences.isValid)
     }
 
+    /// The real settings form must preview one palette across every sample card.
+    /// This checks environment propagation, not native glass pixels.
+    @Test func appearancePreviewKeepsCardPaletteTogetherInOppositeHostScheme() throws {
+        let suite = "appearance-preview-\(UUID().uuidString)"
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        let state = ChatDisplayPreferencesState(settings: settings)
+        var preferences = state.preferences
+        var appearance = preferences.resolvedAppearance
+        var local = appearance.local ?? WorkbenchLocalAppearance()
+        local.material = .solid; appearance.local = local
+        preferences.appearance = appearance; preferences.theme = .system
+        try #require(state.update(preferences))
+        let before = settings.data(forKey: ChatDisplayPreferences.storageKey)
+        let host = NSHostingView(rootView: AnyView(ChatDisplayPreferencesPanel(state: state)
+            .environment(\.chatDisplayPreferences, preferences)
+            .environment(\.colorScheme, .dark).frame(width: 760, height: 1800)))
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 760, height: 1800),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        window.orderFront(nil)
+        defer {
+            host.rootView = AnyView(EmptyView()); host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+            window.contentView = nil; window.close()
+        }
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))
+        host.layoutSubtreeIfNeeded()
+        func descendants(_ view: NSView) -> [NSView] {
+            view.subviews.flatMap { [$0] + descendants($0) }
+        }
+        // Form's accessibility children can be absent in a component host. The
+        // preview heading is the only full-width, tall custom plate in this form.
+        let plates = descendants(host).compactMap { $0 as? WorkbenchBackgroundNSView }
+            .filter { !$0.isCanvas }
+        let headingCards = plates.filter { $0.bounds.width > 500 && $0.bounds.height > 60 }
+        try #require(!headingCards.isEmpty,
+            "Missing heading plate; hosted plate sizes: \(plates.map { $0.bounds.size })")
+        #expect(headingCards.allSatisfy { $0.palette == preferences.resolvedAppearance.light },
+            "The full-width heading must use the preview palette, not the dark host palette")
+        let nodeCards = plates.filter { $0.bounds.width >= 140 && $0.bounds.width <= 170 && $0.bounds.height >= 76 }
+        try #require(nodeCards.count >= 2)
+        #expect(nodeCards.allSatisfy { $0.palette == preferences.resolvedAppearance.light })
+        #expect(state.preferences == preferences)
+        #expect(settings.data(forKey: ChatDisplayPreferences.storageKey) == before)
+    }
+
     @Test func damagedAppearanceRecordIsProtectedFromOverwrite() throws {
         let suiteName = "appearance-damaged-\(UUID().uuidString)"
         let settings = try #require(UserDefaults(suiteName: suiteName))

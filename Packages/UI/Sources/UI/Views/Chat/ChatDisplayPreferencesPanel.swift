@@ -189,9 +189,9 @@ struct ChatDisplayPreferencesPanel: View {
                     }.frame(height: 70)
                 }.environment(\.workbenchSurfaceGroup, previewGroup + ":scroll")
             }
-            .environment(\.chatDisplayPreferences, previewPreferences)
-            .environment(\.colorScheme, editingScheme)
         }
+        .environment(\.chatDisplayPreferences, previewPreferences)
+        .environment(\.colorScheme, editingScheme)
         .padding(12)
         .background(palette.canvasColor, in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .contain)
