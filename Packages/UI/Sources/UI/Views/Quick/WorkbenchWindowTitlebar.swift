@@ -100,6 +100,13 @@ import SwiftUI
 /// belongs to the real content host. AppKit still owns all native interactions.
 @MainActor final class WorkbenchTitlebarSurface: NSView {
     weak var canvas: WorkbenchBackgroundNSView?
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        // This opaque continuation owns only the reserved titlebar strip.
+        // AppKit otherwise allows its visible drawing region to span the host.
+        clipsToBounds = true
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:)") }
     #if DEBUG
     private var recordedDraw = false
     #endif

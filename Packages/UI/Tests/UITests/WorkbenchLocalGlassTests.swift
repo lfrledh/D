@@ -142,6 +142,9 @@ private actor LocalGlassNoInference: InferenceEngine {
         #expect(zip(buttons, [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton]).allSatisfy { $0 === window.standardWindowButton($1) })
         try #require(owner.image != nil && owner.blurred != nil)
         func checkGeometry() throws {
+            try #require(!chrome.surface.visibleRect.isEmpty)
+            #expect(chrome.surface.bounds.contains(chrome.surface.visibleRect),
+                "Opaque titlebar drawing cannot cover the SwiftUI workbench")
             let band = chrome.frame(in: canvas)
             #expect(!band.isEmpty && !band.isNull)
             let nativeBand = canvas.convert(band, to: nil)
@@ -188,6 +191,9 @@ private actor LocalGlassNoInference: InferenceEngine {
         let chrome = try #require(canvas.titlebar)
         #expect(chrome.frame(in: canvas).isEmpty || chrome.frame(in: canvas).isNull)
         #expect(chrome.surface.superview === host && chrome.surface.frame.height > 0 && !chrome.surface.isHidden)
+        try #require(!chrome.surface.visibleRect.isEmpty)
+        #expect(chrome.surface.bounds.contains(chrome.surface.visibleRect),
+            "The opaque titlebar continuation must not claim the workbench below its narrow strip")
         #expect(chrome.surface.convert(chrome.surface.bounds, to: nil).minY == window.contentLayoutRect.maxY)
         #expect(chrome.surface.hitTest(.zero) == nil && owner.coordinateRoot(in: window) === host)
         #expect(!host.isFlipped)
