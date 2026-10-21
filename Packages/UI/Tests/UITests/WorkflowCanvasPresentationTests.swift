@@ -124,6 +124,29 @@ struct WorkflowCanvasPresentationTests {
         #expect(WorkflowCanvasPresentation.portDetail(optional) == "图像 · 可选")
         #expect(WorkflowCanvasPresentation.kind(.images) == "图像集合")
         #expect(WorkflowCanvasPresentation.kind(.receipt) == "导出回执")
+        let universal = WorkflowPortDefinition("input", "材料", kinds: WorkflowDataKind.allCases)
+        #expect(WorkflowCanvasPresentation.portSummary(universal, language: nil) == "所有已支持类型 · 必选")
+        #expect(WorkflowCanvasPresentation.portDetail(universal).contains("图像集合"))
+        let several = WorkflowPortDefinition("input", "材料", kinds: [.text, .image, .video, .audio], required: false)
+        #expect(WorkflowCanvasPresentation.portSummary(several, language: nil) == "4 种类型 · 可选")
+        #expect(WorkflowCanvasPresentation.portSummary(required, language: nil) == "文字/图像 · 必选")
+    }
+
+    @Test func connectionLabelsResolvePublishedToolPortNames() throws {
+        let body = try WorkflowControlFormSupport.makeBody(name: "工具", inputs: [WorkflowRecordField("提示", .text)],
+            passthrough: "提示", outputName: "展示结果")
+        let tool = WorkflowToolDefinition(id: UUID(), version: 1, name: "固定工具", graph: body)
+        let initial = try #require(WorkflowRegistry.standard.operation("d.control.invoke")).definition.makeNode()
+        let draft = try WorkflowControlFormSupport.selecting(tool: tool, in: .init(node: initial))
+        var invoke = initial
+        invoke.control = draft.control
+        invoke.dataConfiguration = draft.dataConfiguration
+        let target = try #require(WorkflowRegistry.standard.operation("d.value.return")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [invoke, target])
+        let connection = WorkflowConnection(sourceNode: invoke.id, sourcePort: "展示结果", targetNode: target.id, targetPort: "input")
+        let title = WorkflowConnectionPresentation.title(connection, graph: graph, registry: .standard, tools: [tool], language: nil)
+        #expect(title.contains("展示结果"))
+        #expect(!title.contains(" · input"))
     }
 
     @Test

@@ -25,6 +25,37 @@ import Testing
         try #require(views(root).compactMap { $0 as? NSButton }.first { $0.accessibilityIdentifier() == id })
     }
 
+    @Test func nativeGlassPopupPreservesHostingEditorAndCommandOwnership() async throws {
+        let w = window(); defer { w.close() }
+        let host = NSHostingView(rootView: VStack {
+            Text("Visible workbench foreground")
+            TextSourcesQuestionEditor(value: "保留输入", editEpoch: 0, isEditable: true, onEdit: { _ in })
+        })
+        w.contentView = host; host.frame = .init(x: 0, y: 0, width: 800, height: 600)
+        try await settle(host)
+        let editor = try #require(views(host).compactMap { $0 as? NSTextView }.first)
+        try #require(w.makeFirstResponder(editor))
+        var calls = 0
+        var native = style(); native.nativeGlass = true
+        let popup = try #require(WorkbenchPopupOverlay.present(from: editor, contextID: "exact-owner", title: "Menu",
+            items: [.init(id: "parent", title: "Parent", children: [
+                .init(id: "child", title: "Child", action: { calls += 1 })])],
+            style: native, validContext: { true }))
+        try await settle(host)
+        #expect(w.contentView === host && editor.window === w && !editor.isHiddenOrHasHiddenAncestor)
+        #expect(editor.string == "保留输入")
+        popup.keyDown(with: try key(124))
+        let child = try button("child", in: popup)
+        #expect(child.window === w)
+        child.performClick(nil); child.performClick(nil)
+        await Task.yield(); try await Task.sleep(for: .milliseconds(10))
+        #expect(calls == 1 && popup.superview == nil)
+        #expect(editor.window === w && editor.string == "保留输入")
+        // Structural/command coverage only. Native pixels must also prove that
+        // the hosting foreground remains visible below the transparent overlay,
+        // and the real key window must verify focus restoration separately.
+    }
+
     @Test func popupUsesCapturedCommandWhileLanguageRefreshesItsLabel() async throws {
         let w = window(); defer { w.close() }
         let anchor = NSView(frame: .init(x: 20,y: 20,width: 40,height: 30)); w.contentView?.addSubview(anchor)

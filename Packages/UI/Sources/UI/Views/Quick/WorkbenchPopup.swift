@@ -185,10 +185,17 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
     private var typedAt: TimeInterval = 0
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
+    override var isOpaque: Bool { false }
     private init(trigger: NSView, contextID: AnyHashable, title: String, items: [WorkbenchPopupItem], style: WorkbenchPopupStyle, validContext: @escaping () -> Bool, restoreTrigger: @escaping () -> Void, didClose: @escaping () -> Void) {
         self.trigger = trigger; self.contextID = contextID; entries = items.map(WorkbenchPopupEntry.init)
         self.style = style; self.validContext = validContext; self.didClose = didClose; self.restoreTrigger = restoreTrigger
-        super.init(frame: .zero); setAccessibilityRole(.menu); setAccessibilityLabel(title)
+        super.init(frame: .zero)
+        // A separate transparent compositing layer is required when this overlay
+        // is attached above a SwiftUI hosting view. The glass panes must not turn
+        // the full-window event receiver into a drawing surface for their parent.
+        wantsLayer = true; layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.masksToBounds = false
+        setAccessibilityRole(.menu); setAccessibilityLabel(title)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:)") }
     private static func unique(_ items: [WorkbenchPopupItem]) -> Bool { Set(items.map(\.id)).count == items.count && items.allSatisfy { unique($0.children) } }

@@ -185,6 +185,8 @@
     "workflow.port.notConnected": "Not Connected",
     "workflow.port.notProvided": "Not Provided",
     "workflow.port.required": "Required",
+    "workflow.port.anySupported": "Any supported type",
+    "workflow.port.typeCount": "{count} types",
     "workflow.port.optional": "Optional",
     "workflow.port.detail": "{kinds} · {requirement}",
     "workflow.port.accessibility": "{direction} port, {title}, {detail}",

@@ -220,6 +220,40 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         try await chat.flush(); try await close(store, root: root)
     }
 
+    @Test func sidebarMorphKeepsRetainedForegroundOutsideAnimationUpdates() async throws {
+        var builds = 0, updates = 0
+        WorkbenchCategoryUpdateProbe.retainedUpdate = { updates += 1 }
+        defer { WorkbenchCategoryUpdateProbe.retainedUpdate = nil }
+        func pane(open: Bool) -> some View {
+            WorkbenchSidebar(leading: true, expanded: open, title: "Fixture", identifier: "fixture-toggle",
+                hostIdentifier: "fixture-host", toggle: {}) {
+                    let _ = { builds += 1 }()
+                    TextSourcesQuestionEditor(value: "保留输入", editEpoch: 0, isEditable: true, onEdit: { _ in })
+                }
+        }
+        let host = NSHostingView(rootView: pane(open: true))
+        host.frame = .init(x: 0, y: 0, width: 320, height: 650)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
+        defer { window.close() }
+        func settle() async throws {
+            for _ in 0..<35 {
+                host.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        try await settle()
+        let editor = try #require(descendants(host).compactMap { $0 as? NSTextView }.first)
+        builds = 0; updates = 0
+        host.rootView = pane(open: false); try await settle()
+        #expect(editor.isHiddenOrHasHiddenAncestor)
+        host.rootView = pane(open: true); try await settle()
+        #expect(descendants(host).contains { $0 === editor })
+        #expect(!editor.isHiddenOrHasHiddenAncestor && editor.string == "保留输入")
+        print("SIDEBAR_MORPH builds=\(builds) retainedUpdates=\(updates) transitions=2 visibleFrames=NOT_MEASURED")
+        #expect(builds <= 6 && updates <= 6, "Only endpoint/reveal updates may reach the retained foreground")
+    }
+
     @Test func sidebarRevealCancellationAndOwnerDisableHideNativeReceiver() async throws {
         try #require(!NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         func pane(open: Bool, enabled: Bool = true) -> some View {

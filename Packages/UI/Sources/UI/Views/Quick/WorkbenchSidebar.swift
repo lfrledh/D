@@ -181,7 +181,12 @@ struct WorkbenchSidebar<Content: View>: View {
             let palette = preferences.resolvedAppearance.palette(for: scheme)
             ZStack(alignment: alignment) {
                 WorkbenchSidebarMaterial(progress: expanded ? 1 : 0, expandedWidth: width,
-                    expandedHeight: geometry.size.height, leading: leading) {
+                    expandedHeight: geometry.size.height, leading: leading)
+                    .workbenchMorph(value: expanded)
+                    .allowsHitTesting(false)
+                // Keep the retained editor/list outside the animatable material.
+                // Its geometry and identity change only at an endpoint or resize;
+                // evaluating a glass frame must not rebuild the entire foreground.
                 VStack(spacing: 0) {
                     Text(title).font(.headline).lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: leading ? .trailing : .leading)
@@ -202,11 +207,12 @@ struct WorkbenchSidebar<Content: View>: View {
                         .allowsHitTesting(visible && isEnabled)
                         .accessibilityHidden(!visible || !isEnabled)
                 }
+                .foregroundStyle(palette.foregroundColor, palette.secondaryColor)
                 .frame(width: width, height: geometry.size.height)
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .contentShape(.interaction, RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .allowsHitTesting(visible && isEnabled)
-                }.workbenchMorph(value: expanded)
+                .transaction { $0.animation = nil }
 
                 Button(action: toggle) {
                     Image(systemName: leading ? "sidebar.left" : "sidebar.right")
@@ -243,21 +249,18 @@ struct WorkbenchSidebar<Content: View>: View {
     }
 }
 
-/// The retained foreground stays full-sized; only its containing material interpolates.
-private struct WorkbenchSidebarMaterial<Content: View>: View, Animatable {
+/// Only the material interpolates. The retained foreground is a stable sibling.
+private struct WorkbenchSidebarMaterial: View, Animatable {
     nonisolated var progress: CGFloat
     let expandedWidth: CGFloat
     let expandedHeight: CGFloat
     let leading: Bool
-    @ViewBuilder let content: () -> Content
     nonisolated var animatableData: CGFloat { get { progress } set { progress = newValue } }
     var body: some View {
         let size = WorkbenchSidebarPlate.size(progress: progress, width: expandedWidth, height: expandedHeight)
         let shape = RoundedRectangle(cornerRadius: min(22, min(size.width, size.height) / 2), style: .continuous)
-        content()
-            .frame(width: expandedWidth, height: expandedHeight)
-            .frame(width: size.width, height: size.height, alignment: leading ? .topLeading : .topTrailing)
-            .clipShape(shape)
+        Color.clear
+            .frame(width: size.width, height: size.height)
             .workbenchPanel(in: shape)
             .offset(x: WorkbenchSidebarPlate.origin(progress: progress, size: size, leading: leading).x,
                     y: WorkbenchSidebarPlate.origin(progress: progress, size: size, leading: leading).y)

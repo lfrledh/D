@@ -398,8 +398,10 @@ public struct WorkflowCanvasView: View {
                     }) { preparationPanel }
                     .overlay(alignment: .trailing) { if shown.inspector { panelResizeHandle(leading: true) } }
                     .frame(width: shown.inspector ? panelWidths.leading : 48, alignment: .leading)
-                    .clipped().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(.bottom, consoleHeight + 24).workbenchMorph(value: shown.inspector)
+                    // The sidebar clips its own content; this layout slot must
+                    // neither crop the glass shadow nor animate across the button.
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(.bottom, consoleHeight + 24)
                 WorkbenchSidebar(leading: false, expanded: shown.library,
                     title: workspaceText(languageStore,"resources","素材库","Resources"), identifier: "canvas-library-toggle",
                     hostIdentifier: "canvas-library-host", toggle: {
@@ -407,8 +409,8 @@ public struct WorkflowCanvasView: View {
                     }) { resourcePanel }
                     .overlay(alignment: .leading) { if shown.library { panelResizeHandle(leading: false) } }
                     .frame(width: shown.library ? panelWidths.trailing : 48, alignment: .trailing)
-                    .clipped().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(.bottom, consoleHeight + 24).workbenchMorph(value: shown.library)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.bottom, consoleHeight + 24)
             }
             .padding(.horizontal, 16)
             VStack(spacing:8) {
@@ -1510,7 +1512,8 @@ private struct WorkflowNodeInspector: View {
                         Text(WorkflowCanvasPresentation.portTitle(
                             operationID: node.operationID, port: port, input: true, language: languageStore
                         )).font(.callout.weight(.medium))
-                        Text(WorkflowCanvasPresentation.portDetail(port, language: languageStore))
+                        Text(WorkflowCanvasPresentation.portSummary(port, language: languageStore))
+                            .help(WorkflowCanvasPresentation.portDetail(port, language: languageStore))
                             .font(.caption).foregroundStyle(.secondary)
                         if incoming.isEmpty {
                             Text(port.required
@@ -1549,7 +1552,8 @@ private struct WorkflowNodeInspector: View {
                             operationID: node.operationID, port: port, input: false, language: languageStore
                         ))
                         Spacer()
-                        Text(WorkflowCanvasPresentation.portDetail(port, language: languageStore))
+                        Text(WorkflowCanvasPresentation.portSummary(port, language: languageStore))
+                            .help(WorkflowCanvasPresentation.portDetail(port, language: languageStore))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -1886,7 +1890,7 @@ enum WorkflowConnectionPresentation {
     @MainActor static func title(_ connection: WorkflowConnection, graph: WorkflowGraph?, registry: WorkflowRegistry, tools: [WorkflowToolDefinition], language: UILanguageStore?) -> String {
         func endpoint(_ id: UUID, _ port: String, input: Bool) -> String {
             guard let node = graph?.nodes.first(where: { $0.id == id }) else { return metadataText(language, "unavailableNode", "节点不可访问", "Node unavailable") }
-            return WorkflowHumanPresentation.name(node, in: graph?.nodes ?? [node], language: language) + " · " + WorkflowCanvasPresentation.portTitle(operationID: node.operationID, portID: port, fallback: port, input: input, language: language)
+            return WorkflowHumanPresentation.name(node, in: graph?.nodes ?? [node], language: language) + " · " + WorkflowCanvasPresentation.portTitle(operationID: node.operationID, portID: port, fallback: (input ? registry.definition(for: node, tools: tools)?.inputs : registry.definition(for: node, tools: tools)?.outputs)?.first(where: { $0.id == port })?.title ?? port, input: input, language: language)
         }
         return endpoint(connection.sourceNode, connection.sourcePort, input: false) + " → " + endpoint(connection.targetNode, connection.targetPort, input: true)
     }
@@ -2701,6 +2705,21 @@ enum WorkflowCanvasPresentation {
 
     @MainActor static func kind(_ kind: WorkflowDataKind, language: UILanguageStore?) -> String {
         workflowText(language, "workflow.kind.\(kind.rawValue)", fallback: self.kind(kind))
+    }
+
+    /// A readable summary only; the full kinds remain the compatibility contract.
+    @MainActor static func portSummary(_ port: WorkflowPortDefinition, language: UILanguageStore?) -> String {
+        let count = Set(port.kinds).count
+        let types: String
+        if Set(port.kinds) == Set(WorkflowDataKind.allCases) {
+            types = workflowText(language, "workflow.port.anySupported", fallback: "所有已支持类型")
+        } else if count > 3 {
+            types = workflowText(language, "workflow.port.typeCount", fallback: "{count} 种类型", arguments: ["count": String(count)])
+        } else {
+            return portDetail(port, language: language)
+        }
+        let requirement = workflowText(language, port.required ? "workflow.port.required" : "workflow.port.optional", fallback: port.required ? "必选" : "可选")
+        return workflowText(language, "workflow.port.detail", fallback: "{kinds} · {requirement}", arguments: ["kinds": types, "requirement": requirement])
     }
 
     static func portDetail(_ port: WorkflowPortDefinition) -> String {

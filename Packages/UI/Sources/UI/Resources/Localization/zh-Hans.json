@@ -187,6 +187,8 @@
     "workflow.port.notConnected": "尚未连接",
     "workflow.port.notProvided": "未提供",
     "workflow.port.required": "必选",
+    "workflow.port.anySupported": "所有已支持类型",
+    "workflow.port.typeCount": "{count} 种类型",
     "workflow.port.optional": "可选",
     "workflow.port.detail": "{kinds} · {requirement}",
     "workflow.port.accessibility": "{direction}端口，{title}，{detail}",

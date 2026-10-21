@@ -903,9 +903,8 @@ private struct WorkflowConnectionLayer: View {
                 ForEach(graph.connections) { connection in
                     WorkflowConnectionInteraction(connection: connection, geometry: geometry,
                         portCenters: centers, controlBounds: controlBounds, nodeFrames: frames, canDisconnect: canDisconnect,
-                        label: workflowText(language, "refinement.canvas.connectionLabel", fallback: "{type} connection from {source} to {target}",
-                            arguments: ["type": WorkflowPortStyle.label(for: sourcePort(connection), language: language),
-                                        "source": connection.sourcePort, "target": connection.targetPort]),
+                        label: WorkflowConnectionPresentation.title(connection, graph: graph,
+                            registry: registry, tools: tools, language: language),
                         onSelect: { onSelect(connection.id) }, onDisconnect: { onDisconnect(connection) })
                 }
             }
@@ -1230,7 +1229,7 @@ private struct WorkflowNodeCard: View {
                 Text(WorkflowCanvasPresentation.portTitle(
                     operationID: node.operationID, port: port, input: input, language: languageStore
                 )).font(.system(size: 11 * scale, weight: .medium)).lineLimit(1)
-                Text(WorkflowCanvasPresentation.portDetail(port, language: languageStore))
+                Text(WorkflowCanvasPresentation.portSummary(port, language: languageStore))
                     .font(.system(size: 10 * scale)).foregroundStyle(.secondary).lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: input ? .leading : .trailing)
@@ -1257,7 +1256,7 @@ private struct WorkflowNodeCard: View {
                     : workflowText(languageStore, "workflow.port.output", fallback: "输出"),
                 "title": WorkflowCanvasPresentation.portTitle(operationID: node.operationID,
                     port: port, input: input, language: languageStore),
-                "detail": WorkflowCanvasPresentation.portDetail(port, language: languageStore)]))
+                "detail": WorkflowCanvasPresentation.portSummary(port, language: languageStore)]))
         .overlay {
             WorkflowPortDragReceiver(port: identity, scope: scope,
                 enabled: !readOnly && tool == .pointer && controller.canEditCanvas,
