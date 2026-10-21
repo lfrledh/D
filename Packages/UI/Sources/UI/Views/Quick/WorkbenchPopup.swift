@@ -190,9 +190,7 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
         self.trigger = trigger; self.contextID = contextID; entries = items.map(WorkbenchPopupEntry.init)
         self.style = style; self.validContext = validContext; self.didClose = didClose; self.restoreTrigger = restoreTrigger
         super.init(frame: .zero)
-        // A separate transparent compositing layer is required when this overlay
-        // is attached above a SwiftUI hosting view. The glass panes must not turn
-        // the full-window event receiver into a drawing surface for their parent.
+        // The event receiver is transparent; only individual panes draw glass.
         wantsLayer = true; layer?.backgroundColor = NSColor.clear.cgColor
         layer?.masksToBounds = false
         setAccessibilityRole(.menu); setAccessibilityLabel(title)
@@ -200,13 +198,19 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
     required init?(coder: NSCoder) { fatalError("init(coder:)") }
     private static func unique(_ items: [WorkbenchPopupItem]) -> Bool { Set(items.map(\.id)).count == items.count && items.allSatisfy { unique($0.children) } }
     static func present(from trigger: NSView, contextID: AnyHashable, title: String, items: [WorkbenchPopupItem], style: WorkbenchPopupStyle, validContext: @escaping () -> Bool, restoreTrigger: @escaping () -> Void = {}, didClose: @escaping () -> Void = {}) -> WorkbenchPopupOverlay? {
-        guard validContext(), unique(items), !items.isEmpty, let window = trigger.window, let content = window.contentView, !trigger.isHiddenOrHasHiddenAncestor else { return nil }
+        guard validContext(), unique(items), !items.isEmpty, let window = trigger.window,
+              let content = window.contentView, let container = content.superview,
+              !trigger.isHiddenOrHasHiddenAncestor else { return nil }
         if let owner = style.owner { guard owner.root?.window === window else { return nil } }
         opened.object(forKey: window)?.cancel(restoreFocus: false)
         let popup = WorkbenchPopupOverlay(trigger: trigger, contextID: contextID, title: title, items: items, style: style, validContext: validContext, restoreTrigger: restoreTrigger, didClose: didClose)
         popup.presentationWindow = window; popup.previousResponder = window.firstResponder
         popup.previousEditorDelegate = (window.firstResponder as? NSTextView)?.delegate
-        popup.frame = content.bounds; popup.autoresizingMask = [.width,.height]; content.addSubview(popup, positioned: .above, relativeTo: nil)
+        // NSHostingView owns its generated rendering children. Keep AppKit's
+        // popup outside that managed subtree, in the same window above content.
+        popup.frame = content.convert(content.bounds, to: container)
+        popup.autoresizingMask = [.width, .height]
+        container.addSubview(popup, positioned: .above, relativeTo: content)
         opened.setObject(popup, forKey: window); popup.addPane(popup.entries, parent: nil)
         guard window.makeFirstResponder(popup) else { popup.cancel(restoreFocus: false); return nil }
         for name in [NSWindow.didResignKeyNotification, NSWindow.willCloseNotification] { NotificationCenter.default.addObserver(popup, selector: #selector(windowUnavailable), name: name, object: window) }

@@ -206,7 +206,8 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             target.setAccessibilityFrame(window.convertToScreen(host.convert(rect, to: nil)))
             try #require(HostingControlClick.send(to: target, in: host), "Hosted action trigger delivery unavailable")
             try await settle()
-            let popup = try #require(views(host).compactMap { $0 as? WorkbenchPopupOverlay }.first)
+            let popupContainer = try #require(host.superview)
+            let popup = try #require(views(popupContainer).compactMap { $0 as? WorkbenchPopupOverlay }.first)
             defer { popup.cancel(restoreFocus: false) }
             let button = try #require(views(popup).compactMap { $0 as? NSButton }.first { $0.accessibilityIdentifier() == "generate" })
             return button.isEnabled

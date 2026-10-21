@@ -43,7 +43,11 @@ import Testing
             style: native, validContext: { true }))
         try await settle(host)
         #expect(w.contentView === host && editor.window === w && !editor.isHiddenOrHasHiddenAncestor)
+        #expect(popup.superview === host.superview && popup.superview !== host)
+        #expect(popup.convert(popup.bounds, to: nil) == host.convert(host.bounds, to: nil))
         #expect(editor.string == "保留输入")
+        w.setContentSize(.init(width: 920, height: 720)); try await settle(host)
+        #expect(popup.convert(popup.bounds, to: nil) == host.convert(host.bounds, to: nil))
         popup.keyDown(with: try key(124))
         let child = try button("child", in: popup)
         #expect(child.window === w)
@@ -350,7 +354,7 @@ extension WorkbenchConsistencyTests {
         host.frame = .init(x:0,y:0,width:360,height:300);w.contentView=host;try await settle(host)
         let point=target.convert(CGPoint(x:target.bounds.midX,y:target.bounds.midY),to:nil)
         try consistencyMousePair(in:w,at:point,modifiers:control ? [.control]:[]);try await settle(host)
-        let popups=views(host).compactMap{$0 as? WorkbenchPopupOverlay};defer{popups.forEach{$0.cancel(restoreFocus:false)}}
+        let popups=views(try #require(host.superview)).compactMap{$0 as? WorkbenchPopupOverlay};defer{popups.forEach{$0.cancel(restoreFocus:false)}}
         if control {#expect(popups.count==1);#expect(target.downs==0 && target.ups==0);#expect(try button("inspect",in:#require(popups.first)).isEnabled)}
         else {#expect(popups.isEmpty);#expect(target.downs==1 && target.ups==1)}
         #expect(commands==0)
@@ -444,7 +448,8 @@ extension WorkbenchConsistencyTests {
         let point = wire.convert(CGPoint(x: 220, y: 106), to: nil)
         let event = try #require(NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: w.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
         wire.rightMouseDown(with: event)
-        let popup = try #require(views(root).compactMap { $0 as? WorkbenchPopupOverlay }.first)
+        let popupContainer = try #require(root.superview)
+        let popup = try #require(views(popupContainer).compactMap { $0 as? WorkbenchPopupOverlay }.first)
         let action = try button("disconnect", in: popup)
         #expect(action.isEnabled)
         wire.updatePopup(context: "replacement-graph:wire", style: style())
@@ -452,7 +457,7 @@ extension WorkbenchConsistencyTests {
         action.performClick(nil); await Task.yield()
         #expect(edits == 0)
         wire.rightMouseDown(with: event)
-        let next = try #require(views(root).compactMap { $0 as? WorkbenchPopupOverlay }.first)
+        let next = try #require(views(popupContainer).compactMap { $0 as? WorkbenchPopupOverlay }.first)
         try button("disconnect", in: next).performClick(nil); await Task.yield()
         #expect(edits == 1 && next.superview == nil)
     }
