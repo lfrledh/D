@@ -20,6 +20,11 @@ private actor LocalGlassNoInference: InferenceEngine {
     override var isFlipped: Bool { flipsY }
 }
 
+@MainActor private final class TitlebarLayoutWindow: NSWindow {
+    var testLayout: CGRect?
+    override var contentLayoutRect: NSRect { testLayout ?? super.contentLayoutRect }
+}
+
 @Suite("D-owned local glass", .serialized)
 @MainActor struct WorkbenchLocalGlassTests {
     private func temporary() throws -> URL {
@@ -56,7 +61,7 @@ private actor LocalGlassNoInference: InferenceEngine {
     }
     private func titlebarPixel(_ canvas: WorkbenchBackgroundNSView, external: CGColor) throws -> [UInt8] {
         let surface = try #require(canvas.titlebar?.surface)
-        try #require(surface.superview === canvas.window?.contentView && !surface.isHidden)
+        try #require(surface.superview === canvas.window?.contentView?.superview && !surface.isHidden)
         #expect(surface.subviews.isEmpty, "Native chrome floats over the root background, without a glass strip")
         let c = try #require(WorkbenchLocalRenderer.bitmap(width: Int(surface.bounds.width), height: Int(surface.bounds.height)))
         c.setFillColor(external); c.fill(surface.bounds)
@@ -190,7 +195,7 @@ private actor LocalGlassNoInference: InferenceEngine {
         canvas.synchronizeTitlebar()
         let chrome = try #require(canvas.titlebar)
         #expect(chrome.frame(in: canvas).isEmpty || chrome.frame(in: canvas).isNull)
-        #expect(chrome.surface.superview === host && chrome.surface.frame.height > 0 && !chrome.surface.isHidden)
+        #expect(chrome.surface.superview === host.superview && chrome.surface.frame.height > 0 && !chrome.surface.isHidden)
         try #require(!chrome.surface.visibleRect.isEmpty)
         #expect(chrome.surface.bounds.contains(chrome.surface.visibleRect),
             "The opaque titlebar continuation must not claim the workbench below its narrow strip")
@@ -208,6 +213,29 @@ private actor LocalGlassNoInference: InferenceEngine {
         let pixel = try titlebarPixel(canvas, external: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
         #expect(pixel[3] == 255)
         canvas.releaseTitlebar(); #expect(chrome.surface.superview == nil)
+    }
+
+    @Test func invalidTitlebarLayoutCannotBecomeAnOpaqueWholeWindow() throws {
+        let window = TitlebarLayoutWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 400),
+            styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.contentView = nil; window.close() }
+        let host = NSView(frame: .init(x: 0, y: 0, width: 640, height: 400)); window.contentView = host
+        let canvas = WorkbenchBackgroundNSView(frame: host.bounds)
+        canvas.isCanvas = true; canvas.stylesWindowTitlebar = true; host.addSubview(canvas)
+        canvas.synchronizeTitlebar()
+        let chrome = try #require(canvas.titlebar)
+        let normal = chrome.surface.frame
+        try #require(normal.height > 0 && normal.height < host.bounds.height)
+        for invalid in [CGRect.zero, .init(x: 0, y: 0, width: 640, height: CGFloat.infinity),
+                        .init(x: 0, y: -500, width: 640, height: 10)] {
+            window.testLayout = invalid; canvas.synchronizeTitlebar()
+            #expect(chrome.surface.isHidden)
+            #expect(chrome.surface.frame == normal)
+        }
+        window.testLayout = nil; canvas.synchronizeTitlebar()
+        #expect(!chrome.surface.isHidden && chrome.surface.frame == normal)
+        canvas.releaseTitlebar()
     }
 
     @Test func titlebarOwnershipIsLocalAndRestoresOnlyChrome() {

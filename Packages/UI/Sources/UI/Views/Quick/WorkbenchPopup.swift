@@ -197,31 +197,11 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
     }
     required init?(coder: NSCoder) { fatalError("init(coder:)") }
     private static func unique(_ items: [WorkbenchPopupItem]) -> Bool { Set(items.map(\.id)).count == items.count && items.allSatisfy { unique($0.children) } }
-    #if DEBUG
-    private static func recordComposition(_ phase: String, window: NSWindow) {
-        guard UUID(uuidString: ProcessInfo.processInfo.environment["D_UI_TEST_SESSION"] ?? "") != nil,
-              let content = window.contentView else { return }
-        func describe(_ view: NSView) -> String {
-            "\(type(of: view)) frame=\(view.frame) bounds=\(view.bounds) visible=\(view.visibleRect) layer=\(view.wantsLayer) opaque=\(view.isOpaque)"
-        }
-        func surfaces(_ view: NSView) -> [NSView] {
-            view.subviews.flatMap { child in
-                (child is WorkbenchTitlebarSurface || child is WorkbenchBackgroundNSView ? [child] : []) + surfaces(child)
-            }
-        }
-        let rows = ["D_POPUP_COMPOSITION phase=\(phase) layout=\(window.contentLayoutRect)", describe(content)]
-            + surfaces(content).map(describe)
-        FileHandle.standardOutput.write(Data((rows.joined(separator: "\n") + "\n").utf8))
-    }
-    #endif
     static func present(from trigger: NSView, contextID: AnyHashable, title: String, items: [WorkbenchPopupItem], style: WorkbenchPopupStyle, validContext: @escaping () -> Bool, restoreTrigger: @escaping () -> Void = {}, didClose: @escaping () -> Void = {}) -> WorkbenchPopupOverlay? {
         guard validContext(), unique(items), !items.isEmpty, let window = trigger.window,
               let content = window.contentView, let container = content.superview,
               !trigger.isHiddenOrHasHiddenAncestor else { return nil }
         if let owner = style.owner { guard owner.root?.window === window else { return nil } }
-        #if DEBUG
-        recordComposition("before", window: window)
-        #endif
         opened.object(forKey: window)?.cancel(restoreFocus: false)
         let popup = WorkbenchPopupOverlay(trigger: trigger, contextID: contextID, title: title, items: items, style: style, validContext: validContext, restoreTrigger: restoreTrigger, didClose: didClose)
         popup.presentationWindow = window; popup.previousResponder = window.firstResponder
@@ -232,16 +212,7 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
         popup.autoresizingMask = [.width, .height]
         container.addSubview(popup, positioned: .above, relativeTo: content)
         opened.setObject(popup, forKey: window); popup.addPane(popup.entries, parent: nil)
-        #if DEBUG
-        recordComposition("after-pane", window: window)
-        #endif
         guard window.makeFirstResponder(popup) else { popup.cancel(restoreFocus: false); return nil }
-        #if DEBUG
-        recordComposition("after-focus", window: window)
-        DispatchQueue.main.async { [weak window] in
-            if let window { recordComposition("next-turn", window: window) }
-        }
-        #endif
         for name in [NSWindow.didResignKeyNotification, NSWindow.willCloseNotification] { NotificationCenter.default.addObserver(popup, selector: #selector(windowUnavailable), name: name, object: window) }
         NotificationCenter.default.addObserver(popup, selector: #selector(windowUnavailable), name: NSApplication.didResignActiveNotification, object: NSApp)
         popup.focusInitial(depth: 0); return popup

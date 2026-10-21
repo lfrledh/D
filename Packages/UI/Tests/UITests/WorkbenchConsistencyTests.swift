@@ -26,27 +26,48 @@ import Testing
     }
 
     @Test func nativeGlassPopupPreservesHostingEditorAndCommandOwnership() async throws {
-        let w = window(); defer { w.close() }
-        let host = NSHostingView(rootView: VStack {
-            Text("Visible workbench foreground")
-            TextSourcesQuestionEditor(value: "保留输入", editEpoch: 0, isEditable: true, onEdit: { _ in })
-        })
+        let w = window(); defer { w.contentView = nil; w.close() }
+        let state = ChatDisplayPreferencesState()
+        func content(_ heading: String) -> some View {
+            VStack {
+                Text(heading)
+                TextSourcesQuestionEditor(value: "保留输入", editEpoch: 0, isEditable: true, onEdit: { _ in })
+            }.modifier(WorkbenchCanvasModifier(state: state, stylesWindowTitlebar: true))
+        }
+        let host = NSHostingView(rootView: content("Visible workbench foreground"))
         w.contentView = host; host.frame = .init(x: 0, y: 0, width: 800, height: 600)
         try await settle(host)
         let editor = try #require(views(host).compactMap { $0 as? NSTextView }.first)
         try #require(w.makeFirstResponder(editor))
+        let canvas = try #require(views(host).compactMap { $0 as? WorkbenchBackgroundNSView }.first { $0.isCanvas })
+        let chrome = try #require(canvas.titlebar)
+        func checkTitlebar() {
+            #expect(chrome.surface.superview === host.superview && chrome.surface.superview !== host)
+            let strip = chrome.surface.convert(chrome.surface.bounds, to: nil)
+            #expect(abs(strip.minY - w.contentLayoutRect.maxY) < 1)
+            #expect(abs(strip.maxY - host.convert(host.bounds, to: nil).maxY) < 1)
+            #expect(strip.height > 0 && strip.height < host.bounds.height)
+            #expect(chrome.surface.bounds.contains(chrome.surface.visibleRect))
+            #expect(chrome.surface.hitTest(.zero) == nil)
+        }
+        checkTitlebar()
         var calls = 0
-        var native = style(); native.nativeGlass = true
+        var native = style(canvas.owner); native.nativeGlass = true
         let popup = try #require(WorkbenchPopupOverlay.present(from: editor, contextID: "exact-owner", title: "Menu",
             items: [.init(id: "parent", title: "Parent", children: [
                 .init(id: "child", title: "Child", action: { calls += 1 })])],
             style: native, validContext: { true }))
         try await settle(host)
+        checkTitlebar()
         #expect(w.contentView === host && editor.window === w && !editor.isHiddenOrHasHiddenAncestor)
         #expect(popup.superview === host.superview && popup.superview !== host)
         #expect(popup.convert(popup.bounds, to: nil) == host.convert(host.bounds, to: nil))
         #expect(editor.string == "保留输入")
+        host.rootView = content("Updated workbench foreground"); try await settle(host)
+        checkTitlebar()
+        #expect(views(host).contains { $0 === editor } && w.firstResponder === popup)
         w.setContentSize(.init(width: 920, height: 720)); try await settle(host)
+        checkTitlebar()
         #expect(popup.convert(popup.bounds, to: nil) == host.convert(host.bounds, to: nil))
         popup.keyDown(with: try key(124))
         let child = try button("child", in: popup)
@@ -54,6 +75,7 @@ import Testing
         child.performClick(nil); child.performClick(nil)
         await Task.yield(); try await Task.sleep(for: .milliseconds(10))
         #expect(calls == 1 && popup.superview == nil)
+        checkTitlebar()
         #expect(editor.window === w && editor.string == "保留输入")
         // Structural/command coverage only. Native pixels must also prove that
         // the hosting foreground remains visible below the transparent overlay,

@@ -58,12 +58,15 @@ import SwiftUI
         if !window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = true }
         if window.titlebarSeparatorStyle != .none { window.titlebarSeparatorStyle = .none }
         if !window.isOpaque { window.isOpaque = true }
-        guard let content = window.contentView else { return }
-        if surface.superview !== content {
+        guard let content = window.contentView, let container = content.superview else { return }
+        // NSHostingView relays layout to its children and can expand an added
+        // native view to its whole bounds. Keep this opaque strip outside that
+        // managed subtree and draw only the reserved titlebar strip.
+        if surface.superview !== container {
             surface.removeFromSuperview()
-            content.addSubview(surface, positioned: .above, relativeTo: nil)
+            container.addSubview(surface, positioned: .above, relativeTo: content)
         }
-        let band = frame(in: content)
+        let band = frame(in: container)
         surface.isHidden = band.isEmpty || band.isNull
         if !surface.isHidden && surface.frame != band { surface.frame = band }
         surface.needsDisplay = true
@@ -75,6 +78,9 @@ import SwiftUI
         guard let window, view.window === window, let content = window.contentView else { return .zero }
         let full = content.convert(content.bounds, to: nil)
         let layout = window.contentLayoutRect
+        guard !full.isEmpty, !layout.isEmpty,
+              [full.minX, full.minY, full.width, full.height, layout.minY, layout.maxY].allSatisfy(\.isFinite),
+              layout.maxY > full.minY, layout.maxY <= full.maxY else { return .zero }
         let strip = CGRect(x: full.minX, y: max(full.minY, layout.maxY), width: full.width,
                            height: max(0, full.maxY - max(full.minY, layout.maxY)))
         return view.convert(strip, from: nil).intersection(view.bounds)
@@ -97,7 +103,7 @@ import SwiftUI
 /// Continue D's root background behind the native floating controls. This is
 /// not a glass plate: no separate tint, blur, refraction or sampled child host.
 /// The shallow canvas may be clipped below the titlebar, so the continuation
-/// belongs to the real content host. AppKit still owns all native interactions.
+/// belongs beside the real content host. AppKit still owns all native interactions.
 @MainActor final class WorkbenchTitlebarSurface: NSView {
     weak var canvas: WorkbenchBackgroundNSView?
     override init(frame frameRect: NSRect) {
