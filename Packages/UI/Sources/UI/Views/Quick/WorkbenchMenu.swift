@@ -131,7 +131,8 @@ struct WorkbenchSelectionMenu<Value: Hashable>: View {
             drawsGlass:effects.usesCanvasBlend && appearance.local?.material == .glass,
             legacyFill:appearance.local == nil ? NSColor(palette.panelFill(canvasBlend:effects.usesCanvasBlend ? appearance.backgroundTransparency : 0)) : nil,
             readability:effects.usesCanvasBlend ? appearance.resolvedReadability : .init(),
-            nativeGlass: effects.usesCanvasBlend && appearance.local?.material == .glass)
+            nativeGlass: effects.usesCanvasBlend && appearance.local?.material == .glass,
+            colorScheme: scheme, increasedContrast: contrast == .increased)
     }
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeNSView(context:Context) -> WorkbenchMenuAnchorView { let view = WorkbenchMenuAnchorView();view.setAccessibilityElement(false);return view }

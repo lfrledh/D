@@ -82,6 +82,57 @@ import Testing
         // and the real key window must verify focus restoration separately.
     }
 
+    @Test(arguments: [false, true], [false, true])
+    func nativePopupKeepsSourceAppearanceAcrossSubmenusAndRefresh(dark: Bool, highContrast: Bool) async throws {
+        let w = window(); defer { w.close() }
+        let windowAppearance: NSAppearance.Name = dark ? .aqua : .darkAqua
+        w.appearance = NSAppearance(named: windowAppearance)
+        let anchor = NSView(frame: .init(x: 20, y: 20, width: 40, height: 30))
+        w.contentView?.addSubview(anchor)
+        var originalCalls = 0, replacementCalls = 0
+        func items(_ action: @escaping () -> Void) -> [WorkbenchPopupItem] {
+            [.init(id: "parent", title: "Parent", children: [.init(id: "child", title: "Child", action: action)])]
+        }
+        func localStyle(dark: Bool) -> WorkbenchPopupStyle {
+            .init(owner: nil, palette: dark ? .defaultDark : .defaultLight,
+                strength: 0.55, drawsGlass: true, legacyFill: nil, readability: .init(), nativeGlass: true,
+                colorScheme: dark ? .dark : .light, increasedContrast: highContrast)
+        }
+        var local = localStyle(dark: dark)
+        let popup = try #require(WorkbenchPopupOverlay.present(from: anchor, contextID: "source", title: "Menu",
+            items: items { originalCalls += 1 }, style: local, validContext: { true }))
+        popup.keyDown(with: try key(124))
+        try await settle(popup)
+        let glass = views(popup).compactMap { $0 as? NSGlassEffectView }
+        #expect(glass.count == 2)
+        let expected: NSAppearance.Name = highContrast
+            ? (dark ? .accessibilityHighContrastDarkAqua : .accessibilityHighContrastAqua)
+            : (dark ? .darkAqua : .aqua)
+        // AppKit may normalize a requested high-contrast appearance to Aqua
+        // when that system mode is off. Check the requested contract separately
+        // from the effective appearance returned by this host; do not change it.
+        #expect(local.appearanceName == expected)
+        let resolved = try #require(NSAppearance(named: expected)).name
+        #expect(glass.allSatisfy { $0.effectiveAppearance.name == resolved })
+        #expect(w.appearance?.name == windowAppearance)
+        let identities = glass.map(ObjectIdentifier.init)
+        local = localStyle(dark: !dark)
+        popup.update(contextID: "source", title: "Updated", items: items { replacementCalls += 1 }, style: local)
+        try await settle(popup)
+        let nextExpected: NSAppearance.Name = highContrast
+            ? (dark ? .accessibilityHighContrastAqua : .accessibilityHighContrastDarkAqua)
+            : (dark ? .aqua : .darkAqua)
+        #expect(local.appearanceName == nextExpected)
+        let nextResolved = try #require(NSAppearance(named: nextExpected)).name
+        #expect(glass.allSatisfy { $0.effectiveAppearance.name == nextResolved })
+        #expect(views(popup).compactMap { $0 as? NSGlassEffectView }.map(ObjectIdentifier.init) == identities)
+        let child = try button("child", in: popup)
+        child.performClick(nil); child.performClick(nil)
+        await Task.yield(); try await Task.sleep(for: .milliseconds(10))
+        #expect(originalCalls == 1 && replacementCalls == 0 && popup.superview == nil)
+        #expect(w.appearance?.name == windowAppearance)
+    }
+
     @Test func popupUsesCapturedCommandWhileLanguageRefreshesItsLabel() async throws {
         let w = window(); defer { w.close() }
         let anchor = NSView(frame: .init(x: 20,y: 20,width: 40,height: 30)); w.contentView?.addSubview(anchor)

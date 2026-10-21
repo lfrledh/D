@@ -27,6 +27,14 @@ import SwiftUI
     let legacyFill: NSColor?
     let readability: WorkbenchReadabilitySettings
     var nativeGlass = false
+    var colorScheme: ColorScheme = .light
+    var increasedContrast = false
+    var appearanceName: NSAppearance.Name {
+        if increasedContrast {
+            return colorScheme == .dark ? .accessibilityHighContrastDarkAqua : .accessibilityHighContrastAqua
+        }
+        return colorScheme == .dark ? .darkAqua : .aqua
+    }
     var foreground: NSColor { NSColor(palette.foregroundColor) }
 }
 @MainActor private final class WorkbenchPopupEntry {
@@ -190,6 +198,9 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
         self.trigger = trigger; self.contextID = contextID; entries = items.map(WorkbenchPopupEntry.init)
         self.style = style; self.validContext = validContext; self.didClose = didClose; self.restoreTrigger = restoreTrigger
         super.init(frame: .zero)
+        // This sibling leaves the SwiftUI environment; carry its source appearance
+        // with the text palette, without changing the window or other content.
+        appearance = NSAppearance(named: style.appearanceName)
         // The event receiver is transparent; only individual panes draw glass.
         wantsLayer = true; layer?.backgroundColor = NSColor.clear.cgColor
         layer?.masksToBounds = false
@@ -220,7 +231,7 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
     func update(contextID: AnyHashable, title: String, items: [WorkbenchPopupItem], style next: WorkbenchPopupStyle) {
         guard !closed else { return }
         guard self.contextID == contextID, validContext(), style.owner === next.owner, Self.unique(items) else { cancel(); return }
-        style = next; setAccessibilityLabel(title)
+        style = next; appearance = NSAppearance(named: next.appearanceName); setAccessibilityLabel(title)
         let fresh = Dictionary(uniqueKeysWithValues: items.map { ($0.id,$0) }); entries.forEach { $0.refresh(fresh[$0.captured.id]) }
         if let invalid = panes.indices.dropFirst().first(where: { panes[$0].parentRow?.entry.eligible != true }) { trim(to: invalid) }
         for pane in panes { pane.apply(next); if let i = pane.focused, !pane.entries[i].eligible { pane.focus(nil) } }
