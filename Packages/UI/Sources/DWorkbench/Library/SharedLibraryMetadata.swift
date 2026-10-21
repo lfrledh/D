@@ -141,11 +141,22 @@ public struct SharedLibraryMetadata: Codable, Sendable, Equatable {
     public var savedQueries: [UUID: SharedLibrarySavedQuery] = [:]
     public var tagAssignments: [String: Set<UUID>] = [:]
     public var importedLegacyKeys: Set<String> = []
+    public var runtimeAnnotations: [String: WorkflowValueAnnotation] = [:]
     public init() {}
+    private enum CodingKeys: String, CodingKey { case tags, folders, savedQueries, tagAssignments, importedLegacyKeys, runtimeAnnotations }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        tags = try c.decode([UUID: SharedLibraryTag].self, forKey: .tags)
+        folders = try c.decode([UUID: SharedLibraryFolder].self, forKey: .folders)
+        savedQueries = try c.decode([UUID: SharedLibrarySavedQuery].self, forKey: .savedQueries)
+        tagAssignments = try c.decode([String: Set<UUID>].self, forKey: .tagAssignments)
+        importedLegacyKeys = try c.decode(Set<String>.self, forKey: .importedLegacyKeys)
+        runtimeAnnotations = try c.decodeIfPresent([String: WorkflowValueAnnotation].self, forKey: .runtimeAnnotations) ?? [:]
+    }
     public static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.tags == rhs.tags && lhs.folders == rhs.folders
             && lhs.savedQueries == rhs.savedQueries && lhs.tagAssignments == rhs.tagAssignments
-            && lhs.importedLegacyKeys == rhs.importedLegacyKeys
+            && lhs.importedLegacyKeys == rhs.importedLegacyKeys && lhs.runtimeAnnotations == rhs.runtimeAnnotations
     }
 }
 
@@ -165,7 +176,7 @@ public enum SharedLibraryError: Error, LocalizedError, Equatable {
     case invalidName, duplicateName(String), missingTag, missingFolder, missingQuery
     case invalidKey, invalidReference, folderCycle, folderDepth, invalidMembership, tagInSavedQuery
     case limitExceeded(String), unsupportedSchema(Int), corruptedMetadata(String)
-    case invalidFileURL, externalChange, staleTagEdit, invalidProperty
+    case invalidFileURL, externalChange, staleTagEdit, staleAnnotation, invalidProperty
 
     public var errorDescription: String? {
         switch self {
@@ -186,6 +197,7 @@ public enum SharedLibraryError: Error, LocalizedError, Equatable {
         case .invalidProperty: "Invalid typed query or scope. Missing values are not zero. / 属性条件或范围无效。"
         case .invalidFileURL: "Library metadata requires a local file URL."
         case .externalChange: "Library metadata changed on disk. Reopen or recover before editing."
+        case .staleAnnotation: "This result information changed while editing. Your draft is retained; reopen to compare the current values."
         case .staleTagEdit: "These tags changed while editing. Your draft is retained; reopen to compare the current values."
         }
     }
@@ -204,7 +216,8 @@ public final class SharedLibraryStore {
     @ObservationIgnored private let fileURL: URL?
     /// Exact bytes read at open or written by this instance; nil means the file was absent.
     @ObservationIgnored private var diskBaseline: Data?
-    @ObservationIgnored private var diskSchema = 2
+    @ObservationIgnored private var diskSchema = 3
+    public static func schemaTwoBackupURL(for url: URL) -> URL { url.appendingPathExtension("schema2-backup") }
     public static func schemaOneBackupURL(for url: URL) -> URL { url.appendingPathExtension("schema1-backup") }
     private var undoStack: [SharedLibraryMetadata] = []
     private var redoStack: [SharedLibraryMetadata] = []
@@ -226,7 +239,7 @@ public final class SharedLibraryStore {
         let header: SharedLibraryHeader
         do { header = try JSONDecoder().decode(SharedLibraryHeader.self, from: data) }
         catch { throw SharedLibraryError.corruptedMetadata(error.localizedDescription) }
-        guard [1, 2].contains(header.schema) else { throw SharedLibraryError.unsupportedSchema(header.schema) }
+        guard [1, 2, 3].contains(header.schema) else { throw SharedLibraryError.unsupportedSchema(header.schema) }
         try Self.rejectUnknownFields(data, schema: header.schema)
         let envelope: SharedLibraryEnvelope
         do { envelope = try JSONDecoder().decode(SharedLibraryEnvelope.self, from: data) }
@@ -476,6 +489,16 @@ public final class SharedLibraryStore {
         }
     }
 
+    /// One explicit save, one durable write and one Undo. The caller validates its
+    /// captured live owner immediately before this synchronous transaction.
+    public func saveRuntimeAnnotation(identity: WorkflowValueIdentity, expected: WorkflowValueAnnotation?, value: WorkflowValueAnnotation) throws {
+        try value.validate()
+        try change { metadata in
+            guard metadata.runtimeAnnotations[identity.storageKey] == expected else { throw SharedLibraryError.staleAnnotation }
+            metadata.runtimeAnnotations[identity.storageKey] = value
+        }
+    }
+
     public func undo() throws {
         guard let prior = undoStack.last else { return }
         try persist(prior)
@@ -505,22 +528,22 @@ public final class SharedLibraryStore {
     }
 
     private func persist(_ value: SharedLibraryMetadata) throws {
-        let data = try JSONEncoder().encode(SharedLibraryEnvelope(schema: 2, metadata: value))
+        let data = try JSONEncoder().encode(SharedLibraryEnvelope(schema: 3, metadata: value))
         guard data.count <= 8 * 1_024 * 1_024 else {
             throw SharedLibraryError.limitExceeded("file exceeds 8 MiB")
         }
         guard let fileURL else { return }
         let current = try Self.readDisk(fileURL)
         guard current == diskBaseline else { throw SharedLibraryError.externalChange }
-        if diskSchema == 1, let original = diskBaseline {
-            let backup = Self.schemaOneBackupURL(for: fileURL)
+        if diskSchema < 3, let original = diskBaseline {
+            let backup = diskSchema == 1 ? Self.schemaOneBackupURL(for: fileURL) : Self.schemaTwoBackupURL(for: fileURL)
             if let existing = try Self.readDisk(backup) {
                 guard existing == original else { throw SharedLibraryError.externalChange }
             } else { try original.write(to: backup, options: .withoutOverwriting) }
             guard try Self.readDisk(fileURL) == original else { throw SharedLibraryError.externalChange }
         }
         try data.write(to: fileURL, options: .atomic)
-        diskBaseline = data; diskSchema = 2
+        diskBaseline = data; diskSchema = 3
     }
 
     private static func readDisk(_ fileURL: URL) throws -> Data? {
@@ -554,7 +577,13 @@ public final class SharedLibraryStore {
             throw SharedLibraryError.corruptedMetadata("invalid envelope")
         }
         try checkFields(root, allowed: ["schema", "metadata"])
-        try checkFields(body, allowed: ["tags", "folders", "savedQueries", "tagAssignments", "importedLegacyKeys"])
+        try checkFields(body, allowed: Set(["tags", "folders", "savedQueries", "tagAssignments", "importedLegacyKeys"]).union(schema >= 3 ? ["runtimeAnnotations"] : []))
+        if let annotations = body["runtimeAnnotations"] {
+            for annotation in try encodedValues(annotations) {
+                guard let fields = annotation as? [String: Any] else { throw SharedLibraryError.corruptedMetadata("invalid runtime annotation") }
+                try checkFields(fields, allowed: ["name", "note", "favorite"])
+            }
+        }
         if let tags = body["tags"] {
             for tag in try encodedValues(tags) {
                 guard let fields = tag as? [String: Any] else { throw SharedLibraryError.corruptedMetadata("invalid tag") }
@@ -574,7 +603,7 @@ public final class SharedLibraryStore {
                 }
                 try checkFields(fields, allowed: ["id", "name", "query"])
                 try checkFields(query, allowed: Set(["text", "kinds", "roles", "inputs", "outputs",
-                                                 "contentKinds", "readiness", "compatibility", "allTagIDs", "anyTagIDs"]).union(schema == 2 ? ["scope", "properties", "textTagCombination", "facts"] : []))
+                                                 "contentKinds", "readiness", "compatibility", "allTagIDs", "anyTagIDs"]).union(schema >= 2 ? ["scope", "properties", "textTagCombination", "facts"] : []))
                 if let facts = query["facts"] as? [String: Any] { try checkFields(facts, allowed: ["concepts", "producers", "consumers", "formats"]) }
                 if let scope = query["scope"] as? [String: Any] {
                     try checkFields(scope, allowed: ["mode", "projectID", "instanceID", "runID", "nodeID", "stepID"])
@@ -623,7 +652,7 @@ public final class SharedLibraryStore {
 
     private static func validate(_ value: SharedLibraryMetadata) throws {
         var objects = value.tags.count + value.folders.count + value.savedQueries.count
-            + value.tagAssignments.count + value.importedLegacyKeys.count
+            + value.tagAssignments.count + value.importedLegacyKeys.count + value.runtimeAnnotations.count
         for ids in value.tagAssignments.values { objects += ids.count }
         for folder in value.folders.values { objects += folder.memberKeys.count }
         for saved in value.savedQueries.values {
@@ -636,6 +665,10 @@ public final class SharedLibraryStore {
                 + query.allTagIDs.count + query.anyTagIDs.count
         }
         guard objects <= 10_000 else { throw SharedLibraryError.limitExceeded("10,000 metadata objects and relations") }
+        for (key, annotation) in value.runtimeAnnotations {
+            guard WorkflowValueIdentity.isStorageKey(key) else { throw SharedLibraryError.invalidKey }
+            try annotation.validate()
+        }
         var tagNames: Set<Data> = []
         for (id, tag) in value.tags {
             guard id == tag.id else { throw SharedLibraryError.corruptedMetadata("tag ID mismatch") }

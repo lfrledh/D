@@ -209,15 +209,12 @@ struct ChatArtifactEditor: View {
         _state = State(initialValue: ChatArtifactEditorState(content: content))
     }
 
-    private func wording(_ en: String, _ zh: String) -> String {
-        language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? zh : en
-    }
 
     private func kindName(_ kind: ChatArtifactContent.Kind) -> String {
         switch kind {
-        case .plainText: wording("Plain text", "纯文本")
+        case .plainText: workflowText(language, "chat.artifactEditor.plainText")
         case .markdown: "Markdown"
-        case .code: wording("Code", "代码")
+        case .code: workflowText(language, "chat.artifactEditor.code")
         case .csv: "CSV"
         case .html: "HTML"
         case .svg: "SVG"
@@ -229,22 +226,22 @@ struct ChatArtifactEditor: View {
         ScrollView {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(wording("Artifact", "成果")).font(.title2)
+                Text(workflowText(language, "chat.artifactEditor.artifact")).font(.title2)
                 Spacer()
-                Text(wording("Revision \(state.baseline.revision)", "版本 \(state.baseline.revision)"))
+                Text(workflowText(language, "chat.artifactEditor.revision", arguments: ["revision": String(state.baseline.revision)]))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            TextField(wording("Title", "标题"), text: Binding(
+            TextField(workflowText(language, "chat.artifactEditor.title"), text: Binding(
                 get: { state.draft.title }, set: { state.updateTitle($0) }))
                 .accessibilityIdentifier("chat-artifact-title")
-            WorkbenchPicker(wording("Format", "格式"), selection: Binding(
+            WorkbenchPicker(workflowText(language, "workflow.operation.d.image.convert.field.format"), selection: Binding(
                 get: { state.draft.kind }, set: { state.updateKind($0) })) {
                 WorkbenchChoiceForEach(ChatArtifactContent.Kind.allCases, id: \.self) { kind in
                     WorkbenchChoice(kindName(kind), value:kind)
                 }
             }.accessibilityIdentifier("chat-artifact-kind")
             HStack {
-                Text(wording("Source", "源内容"))
+                Text(workflowText(language, "chat.artifactEditor.source"))
                 Spacer()
                 Text("\(state.draft.text.utf8.count) / \(ChatArtifactContent.maximumSourceBytes) UTF-8")
                     .font(.caption).foregroundStyle(.secondary)
@@ -253,32 +250,31 @@ struct ChatArtifactEditor: View {
                 accessibilityIdentifier: "chat-artifact-source", onEdit: { state.updateText($0) })
                 .frame(height: 240).workbenchInputSurface()
             HStack {
-                Toggle(wording("Preview", "预览"), isOn: Binding(
+                Toggle(workflowText(language, "baseline02.library.preview"), isOn: Binding(
                     get: { state.isPreviewing },
                     set: { _ in state.togglePreview(mermaidDocument: mermaidDocument) }))
                     .toggleStyle(.checkbox)
                     .accessibilityIdentifier("chat-artifact-preview-toggle")
                 if state.isPreviewing {
-                    Button(wording("Refresh preview", "刷新预览")) {
+                    Button(workflowText(language, "chat.artifactEditor.refreshPreview")) {
                         state.refreshPreview(mermaidDocument: mermaidDocument)
                     }.accessibilityIdentifier("chat-artifact-preview-refresh")
                     if state.previewNeedsRefresh {
-                        Text(wording("Source changed; refresh to preview.", "源内容已更改；刷新后预览。"))
+                        Text(workflowText(language, "chat.artifactEditor.sourceChangedRefreshToPreview"))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
             }
             if state.isPreviewing && (state.draft.kind == .html || state.draft.kind == .svg) {
-                Toggle(wording("Allow local JavaScript for this preview", "允许本次预览运行本地 JavaScript"),
+                Toggle(workflowText(language, "chat.artifactEditor.allowLocalJavaScriptForThisPreview"),
                        isOn: Binding(get: { state.javaScriptEnabled },
                                      set: { state.setJavaScriptEnabled($0) }))
                     .toggleStyle(.checkbox)
                     .accessibilityIdentifier("chat-artifact-javascript")
             }
             if state.isPreviewing && (state.draft.kind == .html || state.draft.kind == .svg || state.draft.kind == .mermaid) {
-                Text(wording("Local preview only. Network and file access are not allowed. Mermaid uses the supplied local renderer and runs its JavaScript on explicit preview.",
-                             "仅限本地预览；不允许网络与文件访问。Mermaid 使用提供的本地渲染器，并在明确预览时运行其 JavaScript。"))
+                Text(workflowText(language, "chat.artifactEditor.localPreviewOnlyNetworkAndFileAccessAreNotAllowed"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             if state.isPreviewing {
@@ -299,11 +295,11 @@ struct ChatArtifactEditor: View {
             }
             HStack {
                 Spacer()
-                Button(wording("Close", "关闭")) { state.requestClose(onClose) }
+                Button(workflowText(language, "workflow.action.close")) { state.requestClose(onClose) }
                     .keyboardShortcut(.cancelAction)
                     .disabled(state.isSaving)
                     .accessibilityIdentifier("chat-artifact-close")
-                Button(wording("Save new version", "保存新版本")) {
+                Button(workflowText(language, "chat.artifactEditor.saveNewVersion")) {
                     Task { await state.save(using: onSave) }
                 }
                 .keyboardShortcut("s", modifiers: .command)
@@ -315,12 +311,12 @@ struct ChatArtifactEditor: View {
         }
         .frame(minWidth: 640, minHeight: 560)
         .interactiveDismissDisabled(state.isDirty || state.isSaving)
-        .confirmationDialog(wording("Discard unsaved edits?", "放弃未保存的修改？"),
+        .confirmationDialog(workflowText(language, "chat.artifactEditor.discardUnsavedEdits"),
                             isPresented: $state.asksToDiscard) {
-            Button(wording("Discard edits", "放弃修改"), role: .destructive) {
+            Button(workflowText(language, "chat.artifactEditor.discardEdits"), role: .destructive) {
                 state.discardAndClose(onClose)
             }
-            Button(wording("Keep editing", "继续编辑"), role: .cancel) {}
+            Button(workflowText(language, "chat.artifactEditor.keepEditing"), role: .cancel) {}
         }
     }
 

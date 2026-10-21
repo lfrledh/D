@@ -101,6 +101,7 @@ public final class ProjectSession {
     public var errorMessage: String?
     public private(set) var isChangingProject = false
     public private(set) var phases: [UUID: String] = [:]
+    public private(set) var phaseCodes: [UUID: String] = [:]
     public private(set) var progress: [UUID: Double] = [:]
     public private(set) var liveStates: [UUID: JobState] = [:]
     public private(set) var assetURLs: [UUID: URL] = [:]
@@ -143,7 +144,7 @@ public final class ProjectSession {
               let audio else { return }
         let contextID = audio.contextID
         let id = UUID(); let preceding = admissionTail
-        activeJobIDs.insert(id); liveStates[id] = .preparing; phases[id] = "正在准备原声音高分析"
+        activeJobIDs.insert(id); liveStates[id] = .preparing; phases[id] = "正在准备原声音高分析"; phaseCodes[id] = "preparingPitch"
         pitchStatus = nil
         audio.transport.stopPlayback(); stopVideoPreview(); startPolling()
         let admission = Task { [self] in
@@ -162,7 +163,7 @@ public final class ProjectSession {
                             session: session, backendID: backendID)
             } catch {
                 let cancelled = error is CancellationError
-                await removeActive(id); phases.removeValue(forKey: id); liveStates.removeValue(forKey: id)
+                await removeActive(id); phases.removeValue(forKey: id); phaseCodes.removeValue(forKey: id); liveStates.removeValue(forKey: id)
                 pitchStatus = cancelled ? "识别已取消，原声保持不变。" : "识别未开始：" + error.localizedDescription
                 if !cancelled { report(error, context: "音高分析未提交，原声保持不变") }
             }
@@ -746,7 +747,7 @@ public final class ProjectSession {
             for (id, outcome) in pendingSaves {
                 try await persist(id: id, outcome: outcome, store: relocated)
                 pendingSaves.removeValue(forKey: id)
-                phases.removeValue(forKey: id)
+                phases.removeValue(forKey: id); phaseCodes.removeValue(forKey: id)
                 liveStates.removeValue(forKey: id)
             }
             applyManifest(try await relocated.recoverPublishedArtifacts())
@@ -1796,7 +1797,7 @@ public final class ProjectSession {
         let legacyReference = modelLease.map { ModelReference(directory: $0.url) }
         activeJobIDs.insert(id)
         liveStates[id] = .queued
-        phases[id] = "正在保存任务"
+        phases[id] = "正在保存任务"; phaseCodes[id] = "savingTask"
         startPolling()
         let preceding = admissionTail
         let admission = Task { [self] in
@@ -1831,7 +1832,7 @@ public final class ProjectSession {
             } catch {
                 let cancelled = error is CancellationError && cancellationRequests.contains(id)
                 await removeActive(id)
-                phases.removeValue(forKey: id)
+                phases.removeValue(forKey: id); phaseCodes.removeValue(forKey: id)
                 liveStates.removeValue(forKey: id)
                 if !cancelled { report(error, context: "任务准备失败；草稿和参考原件已保留") }
             }
@@ -1865,6 +1866,7 @@ public final class ProjectSession {
             let run = try await session.engine.submit(request, backendID: backendID ?? session.backendID)
             handles[run.id] = run
             phases[run.id] = cancellationRequests.contains(run.id) ? "正在取消" : "排队中"
+            phaseCodes[run.id] = cancellationRequests.contains(run.id) ? "cancelling" : "queued"
             // This task belongs to the workbench, not to a SwiftUI view's lifetime.
             workers[run.id] = Task { [self] in
                 do {
@@ -1891,7 +1893,7 @@ public final class ProjectSession {
                 await finish(id: request.id, outcome: .failed(failure), store: store)
             } else {
                 await removeActive(request.id)
-                phases.removeValue(forKey: request.id)
+                phases.removeValue(forKey: request.id); phaseCodes.removeValue(forKey: request.id)
                 liveStates.removeValue(forKey: request.id)
                 report(error, context: "任务未能保存，因此没有开始生成")
             }
@@ -1906,23 +1908,23 @@ public final class ProjectSession {
         videoAdmissions[id]?.cancel()
         pitchAdmissions[id]?.cancel()
         liveStates[id] = .cancelling
-        phases[id] = "正在取消，等待计算结束并释放资源"
+        phases[id] = "正在取消，等待计算结束并释放资源"; phaseCodes[id] = "cancellingDrain"
         if let run = handles[id] { await run.cancel() }
     }
 
     private func finish(id: UUID, outcome: RunOutcome, store: ProjectStore) async {
         liveStates[id] = .saving
-        phases[id] = "正在保存作品与记录"
+        phases[id] = "正在保存作品与记录"; phaseCodes[id] = "saving"
         do {
             try await persist(id: id, outcome: outcome, store: store)
             pendingSaves.removeValue(forKey: id)
         } catch {
             pendingSaves[id] = outcome
-            phases[id] = "保存未完成，请连接磁盘后重试恢复"
+            phases[id] = "保存未完成，请连接磁盘后重试恢复"; phaseCodes[id] = "saveRecovery"
             report(error, context: "计算已结束，但记录尚未保存。作品文件会保留；请使用“恢复作品”重试")
         }
         await removeActive(id)
-        if pendingSaves[id] == nil { phases.removeValue(forKey: id); liveStates.removeValue(forKey: id) }
+        if pendingSaves[id] == nil { phases.removeValue(forKey: id); phaseCodes.removeValue(forKey: id); liveStates.removeValue(forKey: id) }
         await refreshAssets()
         await refreshPitchAnalysis()
     }
@@ -1972,11 +1974,13 @@ public final class ProjectSession {
                 for id in snapshot.queuedRunIDs where self.activeJobIDs.contains(id)
                     && !self.cancellationRequests.contains(id) && self.liveStates[id] != .saving {
                     self.phases[id] = "排队中"
+                    self.phaseCodes[id] = "queued"
                     self.liveStates[id] = .queued
                 }
                 if let id = snapshot.activeRunID, self.activeJobIDs.contains(id), self.liveStates[id] != .saving {
                     self.phases[id] = self.cancellationRequests.contains(id)
                         ? "正在取消，等待计算结束并释放资源" : (snapshot.phase ?? "正在生成")
+                    self.phaseCodes[id] = self.cancellationRequests.contains(id) ? "cancellingDrain" : snapshot.phaseCode(for: id)
                     self.liveStates[id] = self.cancellationRequests.contains(id) ? .cancelling : (snapshot.state ?? .generating)
                 }
                 do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
@@ -1993,7 +1997,7 @@ public final class ProjectSession {
             for (id, outcome) in pendingSaves {
                 try await persist(id: id, outcome: outcome, store: store)
                 pendingSaves.removeValue(forKey: id)
-                phases.removeValue(forKey: id)
+                phases.removeValue(forKey: id); phaseCodes.removeValue(forKey: id)
                 liveStates.removeValue(forKey: id)
             }
             if let owner = session?.artifactStore, owner !== store {
@@ -2816,7 +2820,7 @@ public final class ProjectSession {
             projectURL = nil
             selectedAssetID = nil
             assetURLs = [:]
-            phases = [:]
+            phases = [:]; phaseCodes = [:]
             progress = [:]
             liveStates = [:]
             return true
@@ -3143,7 +3147,7 @@ public final class ProjectSession {
         let saved = queueAudioCreationSave(value, documentID: documentID, store: store)
         activeJobIDs.insert(id)
         liveStates[id] = .queued
-        phases[id] = "正在保存声音任务"
+        phases[id] = "正在保存声音任务"; phaseCodes[id] = "savingAudioTask"
         audioCreationTransport.stopPlayback()
         stopVideoPreview()
         startPolling()
@@ -3172,7 +3176,7 @@ public final class ProjectSession {
                             session: session, backendID: backendID)
             } catch {
                 await removeActive(id)
-                phases.removeValue(forKey: id)
+                phases.removeValue(forKey: id); phaseCodes.removeValue(forKey: id)
                 liveStates.removeValue(forKey: id)
                 report(error, context: "声音任务未提交，原声和已有候选没有改变")
             }
@@ -3401,7 +3405,7 @@ public final class ProjectSession {
         let saved = queueVideoCreationSave(value, documentID: documentID, store: store)
         activeJobIDs.insert(id)
         liveStates[id] = .queued
-        phases[id] = "正在保存视频任务"
+        phases[id] = "正在保存视频任务"; phaseCodes[id] = "savingVideoTask"
         stopVideoPreview()
         audioCreationTransport.stopPlayback()
         audio?.transport.stopPlayback()
@@ -3425,7 +3429,7 @@ public final class ProjectSession {
                             session: session, backendID: backendID)
             } catch {
                 await removeActive(id)
-                phases.removeValue(forKey: id)
+                phases.removeValue(forKey: id); phaseCodes.removeValue(forKey: id)
                 liveStates.removeValue(forKey: id)
                 report(error, context: "视频任务未提交，原输入和已有候选没有改变")
             }

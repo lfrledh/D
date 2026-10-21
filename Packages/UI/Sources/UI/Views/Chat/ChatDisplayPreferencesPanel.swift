@@ -80,7 +80,7 @@ struct ChatDisplayPreferencesPanel: View {
         default: return issue
         }
         return workflowText(language, "refinement.appearance.contrast.pair",
-                            fallback: wording("{ink} on {background}", "{ink}位于{background}上"),
+                            fallback: workflowText(language, "refinement.appearance.contrast.pair"),
                             arguments: ["ink": ink, "background": background])
     }
 
@@ -224,7 +224,7 @@ struct ChatDisplayPreferencesPanel: View {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.png, .jpeg]; panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.message = wording("Choose a static image for D’s canvas. Your original stays unchanged.", "为 D 的画布选择一张静态图片，原图保持不变。")
+        panel.message = workflowText(language, "chat.displayPreferencesPanel.chooseAStaticImageForDSCanvasYourOriginal")
         wallpaperPanel = panel
         selectionTask = Task { @MainActor in
             defer { if selectionTicket == ticket { choosingWallpaper = false; wallpaperPanel = nil; selectionTask = nil } }
@@ -235,38 +235,38 @@ struct ChatDisplayPreferencesPanel: View {
     }
 
     private var canvasSettings: some View {
-        Section(wording("Canvas and panels", "画布与面板")) {
-            LabeledContent(wording("Canvas background", "画布背景"),
+        Section(workflowText(language, "chat.displayPreferencesPanel.canvasAndPanels")) {
+            LabeledContent(workflowText(language, "refinement.appearance.palette.canvas"),
                 value: state.preferences.appearance?.local?.wallpaper == nil
-                    ? wording("Solid color", "纯色") : wording("Local image", "本地图像"))
-            Text(wording("The canvas defaults to a solid color. You can choose your own PNG or JPEG image.", "画布默认使用纯色，也可以选择自己的 PNG 或 JPEG 背景图片。"))
+                    ? workflowText(language, "chat.displayPreferencesPanel.solidColor") : workflowText(language, "chat.displayPreferencesPanel.localImage"))
+            Text(workflowText(language, "chat.displayPreferencesPanel.theCanvasDefaultsToASolidColorYouCanChoose"))
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
-                Button(wording("Choose background image…", "选择背景图片…"), action: chooseWallpaper).workbenchHelp("SETTINGS-WALLPAPER")
+                Button(workflowText(language, "chat.displayPreferencesPanel.chooseBackgroundImage"), action: chooseWallpaper).workbenchHelp("SETTINGS-WALLPAPER")
                     .disabled(choosingWallpaper || state.wallpaperPreparing || state.appearanceDirectory == nil)
-                Button(wording("Restore solid color", "恢复纯色")) { state.restoreSolidCanvas() }.workbenchHelp("SETTINGS-SOLID")
+                Button(workflowText(language, "chat.displayPreferencesPanel.restoreSolidColor")) { state.restoreSolidCanvas() }.workbenchHelp("SETTINGS-SOLID")
             }
             if state.wallpaperPreparing { ProgressView().controlSize(.small) }
             if state.wallpaperIssue {
-                Text(wording("The canvas image could not be prepared or read. Your previous choice is kept; a solid background is used when unavailable.", "画布图片未能准备或读取。原选择保留；无法读取时使用纯色背景。"))
+                Text(workflowText(language, "chat.displayPreferencesPanel.theCanvasImageCouldNotBePreparedOrReadYour"))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            WorkbenchPicker(wording("Panel material", "面板材质"), selection: Binding(
+            WorkbenchPicker(workflowText(language, "chat.displayPreferencesPanel.panelMaterial"), selection: Binding(
                 get: { state.preferences.appearance?.local?.material ?? .solid },
                 set: { value in changeLocal { $0.material = value } })) {
-                    WorkbenchChoice(wording("App-local glass", "应用内玻璃"), value:WorkbenchLocalAppearance.Material.glass)
-                    WorkbenchChoice(wording("Solid", "实色"), value:WorkbenchLocalAppearance.Material.solid)
+                    WorkbenchChoice(workflowText(language, "chat.displayPreferencesPanel.appLocalGlass"), value:WorkbenchLocalAppearance.Material.glass)
+                    WorkbenchChoice(workflowText(language, "chat.displayPreferencesPanel.solid"), value:WorkbenchLocalAppearance.Material.solid)
                 }.workbenchHelp("SETTINGS-MATERIAL")
             if state.preferences.appearance?.local == nil {
-                Text(wording("Your previous canvas color blend is preserved until you choose a new material.", "选择新材质前，保留原来的画布底色混合效果。"))
+                Text(workflowText(language, "chat.displayPreferencesPanel.yourPreviousCanvasColorBlendIsPreservedUntilYouChoose"))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Text(wording("Glass tint", "玻璃底色浓度"))
+            Text(workflowText(language, "chat.displayPreferencesPanel.glassTint"))
             WorkbenchValueSlider(value: state.preferences.resolvedAppearance.local?.strength ?? 0.55,
-                label: wording("Glass clarity (tint)", "玻璃通透度（底色浓度）"), preview: { glassStrength = $0 },
+                label: workflowText(language, "chat.displayPreferencesPanel.glassClarityTint"), preview: { glassStrength = $0 },
                 commit: { value in changeLocal { $0.strength = value } }).workbenchHelp("SETTINGS-TRANSPARENCY").frame(height: 24)
                 .disabled(state.preferences.appearance?.local?.material != .glass)
-            Button(wording("Reset glass tint", "恢复默认玻璃底色")) { glassStrength = nil; changeLocal { $0.strength = 0.55 } }
+            Button(workflowText(language, "chat.displayPreferencesPanel.resetGlassTint")) { glassStrength = nil; changeLocal { $0.strength = 0.55 } }
             Toggle(consistencyText(language, "SETTINGS-READABILITY"), isOn: Binding(
                 get: { state.preferences.resolvedAppearance.resolvedReadability.enabled },
                 set: { enabled in change { candidate in
@@ -274,7 +274,7 @@ struct ChatDisplayPreferencesPanel: View {
                     var settings = appearance.resolvedReadability; settings.enabled = enabled
                     appearance.readability = settings; candidate.appearance = appearance
                 } })).workbenchHelp("SETTINGS-READABILITY").disabled(state.preferences.resolvedAppearance.local?.material == .glass)
-            Text(wording("Native Liquid Glass manages refraction and foreground adaptation. This slider adjusts its tint; optical strength is not exposed by the public API. Enhancement settings below apply to the fallback surface.", "原生 Liquid Glass 管理折射和前景适配。滑条调整玻璃底色浓度；公开接口不提供光学强度。下方增强设置仅用于备用表面。"))
+            Text(workflowText(language, "chat.displayPreferencesPanel.nativeLiquidGlassManagesRefractionAndForegroundAdaptationThisSlider"))
                 .font(.caption).foregroundStyle(.secondary)
             Text(consistencyText(language, "copy.readabilityHelp")).font(.caption).foregroundStyle(.secondary)
             Text(consistencyText(language, "SETTINGS-AMOUNT"))
@@ -287,7 +287,7 @@ struct ChatDisplayPreferencesPanel: View {
                 } }).workbenchHelp("SETTINGS-AMOUNT").frame(height: 24)
                 .disabled(!state.preferences.resolvedAppearance.resolvedReadability.enabled || state.preferences.resolvedAppearance.local?.material == .glass)
             appearancePreview.environment(\.chatDisplayPreferences, previewPreferences)
-            Text(wording("Panels sample only D’s canvas, never your desktop. Images are bounded sRGB appearance copies; original artwork and previews are unchanged.", "面板只映出 D 的画布，不透出系统桌面。背景使用有界 sRGB 外观副本，原作品和预览保持不变。"))
+            Text(workflowText(language, "chat.displayPreferencesPanel.panelsSampleOnlyDSCanvasNeverYourDesktopImages"))
                 .font(.caption).foregroundStyle(.secondary)
         }.disabled(state.hasInvalidStoredRecord)
     }

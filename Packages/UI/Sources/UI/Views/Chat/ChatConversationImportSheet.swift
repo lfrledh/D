@@ -16,34 +16,30 @@ struct ChatConversationImportSheet: View {
     @State private var saving = false
     @State private var issue: String?
 
-    private func text(_ en: String, _ zh: String) -> String {
-        language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? zh : en
-    }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(text("Import conversation", "导入会话")).font(.headline)
+            Text(workflowText(language, "chat.conversationImportSheet.importConversation")).font(.headline)
             Text(title)
-            Text(text("Open WebUI history (D mapping v1), or D role/content wrapper v1. Creates a new conversation without running a model or tool. Unfinished history trees are rejected; the source file is unchanged.",
-                      "Open WebUI 历史（D 映射 v1），或 D role/content 封装 v1。创建新会话，不运行模型或工具。含未完成消息的历史树会被拒绝；原文件保持不变。"))
+            Text(workflowText(language, "chat.conversationImportSheet.openWebUIHistoryDMappingV1OrDRoleContent"))
                 .font(.caption).foregroundStyle(.secondary)
             if choices.count > 1 {
-                WorkbenchPicker(text("Conversation", "选择会话"), selection: $selectedIndex) {
-                    WorkbenchChoice(text("Choose a conversation…", "请选择会话…"), value:-1)
+                WorkbenchPicker(workflowText(language, "chat.conversationImportSheet.conversation"), selection: $selectedIndex) {
+                    WorkbenchChoice(workflowText(language, "chat.conversationImportSheet.chooseAConversation"), value:-1)
                     WorkbenchChoiceForEach(choices, id: \.index) { item in WorkbenchChoice(item.title, value:item.index) }
                 }.disabled(saving).accessibilityIdentifier("chat-import-conversation-choice")
             }
             if let preview {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        if !preview.systemPrompt.isEmpty { Text("System\n" + preview.systemPrompt).textSelection(.enabled) }
+                        if !preview.systemPrompt.isEmpty { Text(workflowText(language, "chat.role.system") + "\n" + preview.systemPrompt).textSelection(.enabled) }
                         ForEach(preview.messages.indices, id: \.self) { index in
                             VStack(alignment: .leading) {
-                                Text(preview.messages[index].role.rawValue).font(.caption.bold())
+                                Text(workflowText(language, "chat.role." + preview.messages[index].role.rawValue)).font(.caption.bold())
                                 Text(preview.messages[index].text).textSelection(.enabled)
                             }
                         }
                         if !preview.losses.isEmpty {
-                            Text(text("Fields that cannot be imported", "无法导入的字段")).font(.headline)
+                            Text(workflowText(language, "chat.conversationImportSheet.fieldsThatCannotBeImported")).font(.headline)
                             ForEach(preview.losses.indices, id: \.self) { index in
                                 Text(preview.losses[index].location + ": " + preview.losses[index].reason).font(.caption)
                             }
@@ -51,14 +47,14 @@ struct ChatConversationImportSheet: View {
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if !preview.losses.isEmpty {
-                    Toggle(text("I accept these losses; keep the source unchanged", "接受上述信息损失；原文件保持不变"), isOn: $acceptLosses).disabled(saving)
+                    Toggle(workflowText(language, "chat.conversationImportSheet.iAcceptTheseLossesKeepTheSourceUnchanged"), isOn: $acceptLosses).disabled(saving)
                 }
             } else { Spacer() }
             if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
-                Button(text("Cancel", "取消"), action: onCancel).disabled(saving)
+                Button(workflowText(language, "workflow.action.cancel"), action: onCancel).disabled(saving)
                 Spacer()
-                Button(text("Create imported conversation", "创建导入会话")) {
+                Button(workflowText(language, "chat.conversationImportSheet.createImportedConversation")) {
                     guard let preview else { return }
                     saving = true
                     Task { @MainActor in

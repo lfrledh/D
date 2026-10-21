@@ -8,20 +8,17 @@ struct ChatRunFeedbackView: View {
     @State private var expanded = false
     @State private var reading = ChatRunFeedbackReading()
     @Environment(\.dLanguageStore) private var language
-    private func wording(_ en: String, _ zh: String) -> String {
-        language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? zh : en
-    }
     var body: some View {
-        DisclosureGroup(wording("Measured usage and loading", "实际用量与加载方式"), isExpanded: $expanded) {
+        DisclosureGroup(workflowText(language, "chat.runFeedbackView.measuredUsageAndLoading"), isExpanded: $expanded) {
             if expanded {
                 VStack(alignment: .leading, spacing: 5) {
                     if let feedback = reading.feedback {
-                        row("Prompt tokens", "输入token", feedback.promptTokens.map(String.init))
-                        row("Generated tokens", "生成token", feedback.generationTokens.map(String.init))
-                        row("Application elapsed, including queue/load/release", "应用耗时（含排队/加载/释放）", feedback.applicationSeconds.map { String(format: "%.3f s", $0) })
-                        row("Backend generation elapsed", "后端生成耗时", feedback.generationSeconds.map { String(format: "%.3f s", $0) })
-                        row("Actual loading", "实际加载", feedback.loadingStrategy)
-                    } else { Text(reading.issue ?? wording("Reading…", "正在读取…")) }
+                        row("chat.runFeedbackView.promptTokens", feedback.promptTokens.map(String.init))
+                        row("chat.runFeedbackView.generationTokens", feedback.generationTokens.map(String.init))
+                        row("chat.runFeedbackView.applicationElapsed", feedback.applicationSeconds.map { String(format: "%.3f s", $0) })
+                        row("chat.runFeedbackView.backendElapsed", feedback.generationSeconds.map { String(format: "%.3f s", $0) })
+                        row("chat.runFeedbackView.actualLoading", feedback.loadingStrategy)
+                    } else { Text(reading.issue ?? workflowText(language, "chat.runFeedbackView.reading")) }
                 }.font(.caption).textSelection(.enabled)
                     .task(id: attempt.output) {
                         await reading.load { try await chat.runFeedback(for: attempt) }
@@ -29,8 +26,8 @@ struct ChatRunFeedbackView: View {
             }
         }
     }
-    private func row(_ en: String, _ zh: String, _ value: String?) -> some View {
-        Text(wording(en, zh) + ": " + (value ?? wording("Unknown / not recorded", "未知／未记录")))
+    private func row(_ key: String, _ value: String?) -> some View {
+        Text(workflowText(language, key) + ": " + (value ?? workflowText(language, "chat.runFeedbackView.unknownNotRecorded")))
     }
 }
 

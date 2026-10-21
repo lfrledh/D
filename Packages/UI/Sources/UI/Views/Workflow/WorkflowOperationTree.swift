@@ -18,8 +18,8 @@ struct WorkflowOperationTreeDisclosureStyle: DisclosureGroupStyle {
             }
             .buttonStyle(.plain)
             .accessibilityValue(configuration.isExpanded
-                ? workspaceText(language, "treeExpanded", "已展开", "Expanded")
-                : workspaceText(language, "treeCollapsed", "已收起", "Collapsed"))
+                ? workspaceText(language, "treeExpanded")
+                : workspaceText(language, "treeCollapsed"))
             if configuration.isExpanded {
                 configuration.content
                     .disclosureGroupStyle(WorkflowOperationTreeDisclosureStyle())
@@ -41,13 +41,13 @@ struct WorkflowOperationTree: Identifiable {
         func path(_ entry: SharedLibraryBrowserEntry) -> [Segment] {
             if models {
                 guard let descriptor = ModelNodeCatalog.entries.first(where: { $0.id == entry.item.key }) else {
-                    return [("other-model", workspaceText(language,"otherModel","其他已登记模型","Other registered models"))]
+                    return [("other-model", workspaceText(language, "otherModel"))]
                 }
                 let mode: String = switch descriptor.modality {
-                case .text: workspaceText(language,"text","文字","Text")
-                case .image: workspaceText(language,"image","图像","Images")
-                case .video: workspaceText(language,"video","视频","Video")
-                case .audio: workspaceText(language,"audio","音频","Audio")
+                case .text: workspaceText(language, "text")
+                case .image: workspaceText(language, "image")
+                case .video: workspaceText(language, "video")
+                case .audio: workspaceText(language, "audio")
                 }
                 // These are explicitly registered engines, not guesses from a localized title.
                 let engine = descriptor.engine.components(separatedBy: " · ").first ?? descriptor.engine
@@ -61,16 +61,16 @@ struct WorkflowOperationTree: Identifiable {
                 let family = registeredFamilies[descriptor.id] ?? families[engine] ?? engine
                 return [("mode:" + descriptor.modality.rawValue, mode), ("family:" + family, family)]
             }
-            if entry.item.kind == .tool { return [("custom", workspaceText(language,"custom","自定义","Custom"))] }
+            if entry.item.kind == .tool { return [("custom", workspaceText(language, "custom"))] }
             guard case .operation(let id,_) = entry.selection, let definition = WorkflowRegistry.standard.operation(id)?.definition else {
-                return [("other-program", workspaceText(language,"otherProgram","其他程序","Other programs"))]
+                return [("other-program", workspaceText(language, "otherProgram"))]
             }
-            if definition.interaction != .none || id == "d.control.human" { return [("human", workspaceText(language,"humanPrograms","人工检查","Human review"))] }
-            if id.hasPrefix("d.control.") { return [("control", workspaceText(language,"controlPrograms","流程控制","Flow control"))] }
+            if definition.interaction != .none || id == "d.control.human" { return [("human", workspaceText(language, "humanPrograms"))] }
+            if id.hasPrefix("d.control.") { return [("control", workspaceText(language, "controlPrograms"))] }
             if definition.inputs.isEmpty || definition.outputs.isEmpty || id.hasPrefix("d.input.") || id.hasPrefix("d.export.") {
-                return [("io", workspaceText(language,"ioPrograms","输入与输出","Inputs & outputs"))]
+                return [("io", workspaceText(language, "ioPrograms"))]
             }
-            return [("transform", workspaceText(language,"conversionPrograms","转换与处理","Transform & process"))]
+            return [("transform", workspaceText(language, "conversionPrograms"))]
         }
 
         func build(_ values:[(SharedLibraryBrowserEntry,[Segment])],prefix:String)->[Self] {

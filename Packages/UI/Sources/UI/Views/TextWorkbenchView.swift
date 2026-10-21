@@ -99,9 +99,9 @@ public struct TextWorkbenchView: View {
         ScrollViewReader { reader in
          ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(isQuestionParameters ? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.101", fallback: "Question and Answer Settings") : workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.102", fallback: "Rewrite Settings")).font(.headline)
+                Text(isQuestionParameters ? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.101") : workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.102")).font(.headline)
                 Text(modelStatus).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("text-model-status")
-                Button(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.103", fallback: "Choose Text Model…"), action: onChooseModel).accessibilityIdentifier("text-model-select")
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.103"), action: onChooseModel).accessibilityIdentifier("text-model-select")
                 if isQuestionParameters { generationSettingsControls }
                 else { rewriteControls }
             }.padding(16)
@@ -145,7 +145,7 @@ public struct TextWorkbenchView: View {
             : AnyLayout(HStackLayout(spacing: 10))
         return arrangement {
             VStack(alignment: .leading, spacing: 2) {
-                Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.104", fallback: "Text Draft")).font(.headline)
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.104")).font(.headline)
                 if presentation == .complete {
                     Text(modelStatus).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                         .accessibilityIdentifier("text-model-status")
@@ -154,12 +154,12 @@ public struct TextWorkbenchView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 10) {
                 if presentation == .complete {
-                    Button(action: onChooseModel) { Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.105", fallback: "Choose Model"), systemImage: "cube.transparent") }
+                    Button(action: onChooseModel) { Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.105"), systemImage: "cube.transparent") }
                         .buttonStyle(WorkbenchGlassButtonStyle()).accessibilityIdentifier("text-model-select")
                 }
-                Button(action: onUndo) { Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.106", fallback: "Undo"), systemImage: "arrow.uturn.backward") }
+                Button(action: onUndo) { Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.106"), systemImage: "arrow.uturn.backward") }
                     .disabled(!canUndo).accessibilityIdentifier("text-undo")
-                Button(action: onSave) { Label(isSaving ? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.107", fallback: "Saving") : workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.54", fallback: "Save"), systemImage: "square.and.arrow.down") }
+                Button(action: onSave) { Label(isSaving ? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.107") : workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.54"), systemImage: "square.and.arrow.down") }
                     .disabled(isSaving).accessibilityIdentifier("text-save")
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -170,7 +170,7 @@ public struct TextWorkbenchView: View {
 
     private var editorPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.108", fallback: "Original")).font(.headline)
+            Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.108")).font(.headline)
             TextSelectionEditor(document: session.document, selection: selection, onEdit: onEdit, onSelection: onSelection)
                 .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                 .accessibilityIdentifier("text-draft-editor")
@@ -185,16 +185,16 @@ public struct TextWorkbenchView: View {
     private var rewriteControls: some View {
         VStack(alignment: .leading, spacing: 12) {
             generationSettingsControls
-            Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.109", fallback: "Select text, then describe the changes you want")).font(.caption).foregroundStyle(.secondary)
-            TextField(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.110", fallback: "Rewrite Instructions"), text: $instruction, axis: .vertical)
+            Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.109")).font(.caption).foregroundStyle(.secondary)
+            TextField(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.110"), text: $instruction, axis: .vertical)
                 .lineLimit(2...5).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .accessibilityIdentifier("text-instruction")
             HStack {
-                Button(action: generate) { Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.111", fallback: "Rewrite"), systemImage: "sparkles") }
+                Button(action: generate) { Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.111"), systemImage: "sparkles") }
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(!canGenerate || session.isRunning)
                     .accessibilityIdentifier("text-rewrite")
-                Button(action: onCancel) { Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.33", fallback: "Cancel"), systemImage: "xmark") }
+                Button(action: onCancel) { Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.33"), systemImage: "xmark") }
                     .disabled(!session.isRunning || session.isCancelling)
                     .accessibilityIdentifier("text-cancel")
                 Spacer()
@@ -207,23 +207,23 @@ public struct TextWorkbenchView: View {
     @ViewBuilder private var generationSettingsControls: some View {
         if let capability = generationCapability {
             VStack(alignment: .leading, spacing: 8) {
-                Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.112", fallback: "Generation Limits")).font(.subheadline.weight(.semibold))
-                Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.113", fallback: "Input Token Limit")).font(.caption).foregroundStyle(.secondary)
-                TextField(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.113", fallback: "Input Token Limit"), text: promptTokenLimit)
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.112")).font(.subheadline.weight(.semibold))
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.113")).font(.caption).foregroundStyle(.secondary)
+                TextField(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.113"), text: promptTokenLimit)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle())
-                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.113", fallback: "Input Token Limit"))
+                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.113"))
                     .accessibilityIdentifier("text-input-limit")
                     .textParameterMeasured("text-input-limit", probe: parameterLayoutProbe)
-                Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.114", fallback: "Output Token Limit")).font(.caption).foregroundStyle(.secondary)
-                TextField(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.114", fallback: "Output Token Limit"), text: outputTokenLimit)
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.114")).font(.caption).foregroundStyle(.secondary)
+                TextField(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.114"), text: outputTokenLimit)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle())
-                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.114", fallback: "Output Token Limit"))
+                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.114"))
                     .accessibilityIdentifier("text-output-limit")
                     .textParameterMeasured("text-output-limit", probe: parameterLayoutProbe)
                     .id("text-output-scroll-target")
                 Text(isQuestionParameters
-                    ? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.115", fallback: "Tokens are not characters or words. Input includes the question, all selected excerpts and the template. Exceeding the limit produces an error; sources are not truncated.")
-                    : workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.116", fallback: "Tokens are not characters or words. Input includes rewrite instructions and the template. Exceeding the limit produces an error; the original text is not truncated."))
+                    ? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.115")
+                    : workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.116"))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(consistencyText(legacyLanguage, "copy.TextWorkbenchView.0", arguments: ["v0": String(describing: capability.maximumPromptTokens), "v1": String(describing: capability.maximumOutputTokens)]))
@@ -234,7 +234,7 @@ public struct TextWorkbenchView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if capability.maximumPromptTokens >= 2048, capability.maximumOutputTokens >= 256 {
-                    Button(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.117", fallback: "Reset to Short Text Preset (2048 / 256)")) {
+                    Button(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.117")) {
                         applyShortTextPreset(capability)
                     }
                     .controlSize(.small)
@@ -279,8 +279,8 @@ public struct TextWorkbenchView: View {
         let current = session.document.generationSettings
         let promptText = rawPromptTokenLimit ?? String(current.maximumPromptTokens)
         let outputText = rawOutputTokenLimit ?? String(current.maximumOutputTokens)
-        if let error = Self.numericEditingError(promptText, label: workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.113", fallback: "Input Token Limit"), language: legacyLanguage)
-            ?? Self.numericEditingError(outputText, label: workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.114", fallback: "Output Token Limit"), language: legacyLanguage) {
+        if let error = Self.numericEditingError(promptText, label: workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.113"), language: legacyLanguage)
+            ?? Self.numericEditingError(outputText, label: workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.114"), language: legacyLanguage) {
             Self.reportEditingError(error, to: onGenerationEditingError)
             return
         }
@@ -319,13 +319,13 @@ public struct TextWorkbenchView: View {
 
     private var comparisonPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.118", fallback: "Selection and Candidate")).font(.headline)
+            Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.118")).font(.headline)
             GroupBox(comparisonSourceLabel) {
                 ScrollView {
                     Text(comparisonSourceText).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
                 }.frame(minHeight: 44, maxHeight: 90)
             }
-            GroupBox(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.119", fallback: "Replacement Candidate")) {
+            GroupBox(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.119")) {
                 ScrollView {
                     candidateContent.frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
                 }
@@ -334,12 +334,12 @@ public struct TextWorkbenchView: View {
             }
             .layoutPriority(1)
             if session.candidate != nil && !canAccept {
-                Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.120", fallback: "The original text or selection has changed. This candidate cannot be accepted."), systemImage: "exclamationmark.triangle")
+                Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.120"), systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
             }
             HStack {
-                Button(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.121", fallback: "Accept"), action: onAccept).disabled(!canAccept).accessibilityIdentifier("text-accept")
-                Button(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.122", fallback: "Reject"), action: onReject).disabled(session.candidate == nil).accessibilityIdentifier("text-reject")
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.121"), action: onAccept).disabled(!canAccept).accessibilityIdentifier("text-accept")
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.122"), action: onReject).disabled(session.candidate == nil).accessibilityIdentifier("text-reject")
             }
         }
         .padding(16)
@@ -349,19 +349,19 @@ public struct TextWorkbenchView: View {
     private var currentSelectedText: String {
         guard (try? TextRewriteSelection(document: session.document, range: selection)) != nil,
               let range = Range(selection, in: session.document.text) else {
-            return workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.123", fallback: "Select the text you want to rewrite in the original.")
+            return workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.123")
         }
         return String(session.document.text[range])
     }
 
     private var comparisonSourceText: String {
         if let candidate = session.candidate { return candidate.selection.selectedText }
-        return session.isRunning ? (session.runningSelection?.selectedText ?? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.124", fallback: "The original selection is fixed while generation is in progress.")) : currentSelectedText
+        return session.isRunning ? (session.runningSelection?.selectedText ?? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.124")) : currentSelectedText
     }
 
     private var comparisonSourceLabel: String {
-        if session.candidate != nil { return workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.125", fallback: "Original Selection for This Candidate") }
-        return session.isRunning ? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.126", fallback: "Original Selection Being Rewritten") : workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.127", fallback: "Original Selection")
+        if session.candidate != nil { return workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.125") }
+        return session.isRunning ? workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.126") : workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.127")
     }
 
     private func generate() {
@@ -371,11 +371,11 @@ public struct TextWorkbenchView: View {
     @ViewBuilder private var candidateContent: some View {
         if session.isRunning {
             if session.partialText.isEmpty {
-                Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.128", fallback: "Generating candidate…"), systemImage: "ellipsis")
+                Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.128"), systemImage: "ellipsis")
                     .foregroundStyle(.secondary)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.128", fallback: "Generating candidate…"), systemImage: "ellipsis")
+                    Label(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.128"), systemImage: "ellipsis")
                         .font(.caption).foregroundStyle(.secondary)
                     Text(session.partialText)
                 }
@@ -383,7 +383,7 @@ public struct TextWorkbenchView: View {
         } else if let candidate = session.candidate {
             Text(candidate.replacement)
         } else {
-            Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.129", fallback: "No candidate yet. The rewrite will appear here. The original is not replaced automatically."))
+            Text(workflowText(legacyLanguage, "consistency.legacy.TextWorkbenchView.129"))
                 .foregroundStyle(.secondary)
         }
     }

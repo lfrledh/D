@@ -106,10 +106,6 @@ struct WorkflowLocalizationTests {
             for port in definition.inputs { inventory[prefix + ".input." + port.id] = port.title }
             for port in definition.outputs { inventory[prefix + ".output." + port.id] = port.title }
         }
-        if let directory = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] {
-            let data = try JSONSerialization.data(withJSONObject: inventory, options: [.prettyPrinted, .sortedKeys])
-            try data.write(to: URL(fileURLWithPath: directory).appendingPathComponent("operation-display-keys.json"), options: .withoutOverwriting)
-        }
         for locale in ["en", "zh-Hans"] {
             let store = UILanguageStore(preferredLanguages: [locale]); try store.select(locale)
             let missing = inventory.keys.filter { store.text($0, fallback: "__missing__") == "__missing__" }.sorted()

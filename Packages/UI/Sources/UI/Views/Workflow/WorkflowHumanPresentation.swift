@@ -9,7 +9,7 @@ enum WorkflowHumanPresentation {
         func base(_ value: WorkflowNode) -> String {
             if !value.title.isEmpty { return value.title }
             return WorkflowRegistry.standard.definition(for: value).map { WorkflowCanvasPresentation.operationTitle($0, language: language) }
-                ?? metadataText(language, "unnamedNode", "未命名节点", "Untitled node")
+                ?? metadataText(language, "unnamedNode")
         }
         let title = base(node)
         let peers = nodes.filter { base($0) == title }.sorted { $0.id.uuidString < $1.id.uuidString }
@@ -31,22 +31,22 @@ enum WorkflowHumanPresentation {
         var parts: [String] = []
         for (offset, component) in call.address.path.enumerated() {
             switch component {
-            case .iteration(let number): parts.append(metadataText(language, "iteration", "循环", "Iteration") + " \(number)")
-            case .branch(let selected): parts.append(metadataText(language, "branch", "分支", "Branch") + " · " + (selected ? "true" : "false"))
+            case .iteration(let number): parts.append(metadataText(language, "iteration") + " \(number)")
+            case .branch(let selected): parts.append(metadataText(language, "branch") + " · " + (selected ? "true" : "false"))
             case .item(let id):
                 let parentPath = Array(call.address.path.prefix(offset))
                 let parent = records.first { $0.address.runID == call.address.runID && $0.address.path == parentPath }
                 if case .data(.list(_, let items)) = parent?.step.inputs["input"], let index = items.firstIndex(where: { $0.id == id }) {
-                    parts.append(metadataText(language, "batchIndex", "批次项", "Batch item") + " \(index + 1)")
-                } else { parts.append(metadataText(language, "batchUnknown", "批次项（顺序未记录）", "Batch item (order not recorded)")) }
-            case .tool(let tool): parts.append(metadataText(language, "fixedToolCall", "固定工具调用", "Fixed tool call") + " · v\(tool.version)")
+                    parts.append(metadataText(language, "batchIndex") + " \(index + 1)")
+                } else { parts.append(metadataText(language, "batchUnknown")) }
+            case .tool(let tool): parts.append(metadataText(language, "fixedToolCall") + " · v\(tool.version)")
             case .node: break
             }
         }
-        if parts.isEmpty { parts.append(metadataText(language, "rootCall", "本次节点执行", "Node execution")) }
+        if parts.isEmpty { parts.append(metadataText(language, "rootCall")) }
         let peers = records.filter { $0.step.node.id == call.step.node.id }.sorted { $0.id.uuidString < $1.id.uuidString }
         if peers.count > 1, let index = peers.firstIndex(where: { $0.id == call.id }) {
-            parts.append(metadataText(language, "callAlias", "调用别名", "Call alias") + " \(index + 1)")
+            parts.append(metadataText(language, "callAlias") + " \(index + 1)")
         }
         return parts.joined(separator: " · ")
     }
@@ -78,9 +78,9 @@ struct WorkflowTechnicalDetails: View {
     let value: String
     @Environment(\.dLanguageStore) private var language
     var body: some View {
-        DisclosureGroup(metadataText(language, "technicalDetails", "技术详情与完整身份", "Technical details & full identity")) {
+        DisclosureGroup(metadataText(language, "technicalDetails")) {
             Text(value).font(.caption2.monospaced()).textSelection(.enabled)
-            Button(metadataText(language, "copyDetails", "复制完整详情", "Copy full details")) {
+            Button(metadataText(language, "copyDetails")) {
                 NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string)
             }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
         }.font(.caption)

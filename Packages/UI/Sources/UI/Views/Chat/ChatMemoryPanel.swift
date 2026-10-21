@@ -40,6 +40,7 @@ struct ChatMemoryPanel: View {
     @Environment(\.colorScheme) private var colorScheme
     let chat: ChatController
     let session: ChatSession
+    @Environment(\.dLanguageStore) private var copyLanguage
     let wording: (String, String) -> String
     @State private var summaryText = ""
     @State private var memoryText = ""
@@ -55,32 +56,32 @@ struct ChatMemoryPanel: View {
             .compactMap { $0.max { $0.revision < $1.revision } }.sorted { $0.createdAt < $1.createdAt }
     }
     var body: some View {
-        DisclosureGroup(wording("Summaries and memory", "摘要与记忆")) {
+        DisclosureGroup(workflowText(copyLanguage, "chat.memoryPanel.summariesAndMemory")) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(wording("Summaries replace only reviewed context. Originals remain. Memory is off until explicitly enabled.", "摘要仅替代经过确认的上下文，原文保留。记忆须显式启用。"))
+                Text(workflowText(copyLanguage, "chat.memoryPanel.summariesReplaceOnlyReviewedContextOriginalsRemainMemoryIsOff"))
                     .font(.caption).foregroundStyle(.secondary)
                 ChatAssistancePanel(chat: chat, session: session, section: .summary, wording: wording)
                 ForEach(summaries) { summary in
                     let provenance = ChatProvenancePresentation(summary: summary)
-                    Toggle(wording("Summary revision ", "摘要版本 ") + String(provenance.revision), isOn: Binding(get: { summary.enabled }, set: { value in
+                    Toggle(workflowText(copyLanguage, "chat.memoryPanel.summaryRevision") + String(provenance.revision), isOn: Binding(get: { summary.enabled }, set: { value in
                         change { try chat.setSummaryEnabled(summary.id, enabled: value, sessionID: session.id) }
                     }))
                     provenanceDetails(provenance)
                     Text(summary.text).lineLimit(4).font(.caption).textSelection(.enabled)
-                    Button(wording("Edit a new revision", "编辑为新版本")) { summaryText = summary.text; editingSummary = summary.id }
+                    Button(workflowText(copyLanguage, "chat.memoryPanel.editANewRevision")) { summaryText = summary.text; editingSummary = summary.id }
                 }
                 TextSourcesQuestionEditor(value: summaryText, editEpoch: 0, isEditable: true,
                     accessibilityIdentifier: "chat-summary-editor", onEdit: { summaryText = $0 },
                     transparentBackground: true, foregroundColor: NSColor(preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor))
                     .frame(minHeight: 65).padding(8).workbenchPanel(cornerRadius: 10)
-                Button(editingSummary == nil ? wording("Save reviewed summary", "保存人工整理的摘要") : wording("Save summary revision", "保存摘要新版本")) {
+                Button(editingSummary == nil ? workflowText(copyLanguage, "chat.memoryPanel.saveReviewedSummary") : workflowText(copyLanguage, "chat.memoryPanel.saveSummaryRevision")) {
                     change { try chat.writeSummary(text: summaryText, sessionID: session.id, replacingID: editingSummary); summaryText = ""; editingSummary = nil }
                 }.disabled(summaryText.isEmpty || chat.isRunning)
                 Divider()
                 if !chat.isTemporary {
                 ChatAssistancePanel(chat: chat, session: session, section: .memory, wording: wording)
-                Toggle(wording("Use personal memories", "使用个人记忆"), isOn: scopeBinding(.personal))
-                if let id = chat.projectIdentity { Toggle(wording("Use this project's memories", "使用本项目记忆"), isOn: scopeBinding(.project(id))) }
+                Toggle(workflowText(copyLanguage, "chat.memoryPanel.usePersonalMemories"), isOn: scopeBinding(.personal))
+                if let id = chat.projectIdentity { Toggle(workflowText(copyLanguage, "chat.memoryPanel.useThisProjectSMemories"), isOn: scopeBinding(.project(id))) }
                 ForEach(memories) { entry in
                     let provenance = ChatProvenancePresentation(memory: entry)
                     VStack(alignment: .leading) {
@@ -89,58 +90,57 @@ struct ChatMemoryPanel: View {
                         provenanceDetails(provenance)
                         if entry.forgottenAt == nil {
                             HStack {
-                                Toggle(wording("Enabled", "启用"), isOn: Binding(get: { entry.enabled }, set: { value in
+                                Toggle(workflowText(copyLanguage, "chat.memoryPanel.enabled"), isOn: Binding(get: { entry.enabled }, set: { value in
                                     write { try entry.settingEnabled(value) }
                                 })).disabled(entry.acceptance != .accepted)
                                 if entry.acceptance == .suggested {
-                                    Button(wording("Accept", "采用")) { write { try entry.approved() } }
+                                    Button(workflowText(copyLanguage, "consistency.legacy.TextSourcesView.145")) { write { try entry.approved() } }
                                 }
-                                Button(wording("Edit", "编辑")) { editingMemory = entry; memoryText = entry.text; personal = entry.scope == .personal }
-                                Button(wording("Forget", "忘记"), role: .destructive) { write { try entry.forgotten() } }
+                                Button(workflowText(copyLanguage, "chat.edit")) { editingMemory = entry; memoryText = entry.text; personal = entry.scope == .personal }
+                                Button(workflowText(copyLanguage, "chat.memoryPanel.forget"), role: .destructive) { write { try entry.forgotten() } }
                             }
-                        } else { Text(wording("Forgotten · retained only as history", "已忘记 · 仅保留历史" )).font(.caption).foregroundStyle(.secondary) }
+                        } else { Text(workflowText(copyLanguage, "chat.MemoryPanel.Forgottenretainedonlyashistory")).font(.caption).foregroundStyle(.secondary) }
                     }
                 }
-                Toggle(wording("New memory is personal", "新增为个人记忆"), isOn: $personal).disabled(editingMemory != nil)
+                Toggle(workflowText(copyLanguage, "chat.memoryPanel.newMemoryIsPersonal"), isOn: $personal).disabled(editingMemory != nil)
                 TextSourcesQuestionEditor(value: memoryText, editEpoch: 0, isEditable: true,
                     accessibilityIdentifier: "chat-memory-editor", onEdit: { memoryText = $0 },
                     transparentBackground: true, foregroundColor: NSColor(preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor))
                     .frame(minHeight: 65).padding(8).workbenchPanel(cornerRadius: 10)
-                Button(wording("Save memory", "保存记忆")) {
+                Button(workflowText(copyLanguage, "chat.memoryPanel.saveMemory")) {
                     write(clearEditor: true) {
                         if let editingMemory { return try editingMemory.edited(text: memoryText) }
                         guard let projectID = chat.projectIdentity else { throw WorkflowIssue("项目尚未准备。") }
                         return try .manual(text: memoryText, scope: personal ? .personal : .project(projectID))
                     }
                 }.disabled(memoryText.isEmpty)
-                } else { Text(wording("Temporary chat does not read or write long-term memory.", "临时会话不读写长期记忆。")).font(.caption) }
+                } else { Text(workflowText(copyLanguage, "chat.memoryPanel.temporaryChatDoesNotReadOrWriteLongTermMemory")).font(.caption) }
                 if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
             }.padding(.top, 6)
         }
     }
     @ViewBuilder private func provenanceDetails(_ value: ChatProvenancePresentation) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(wording("Revision", "版本") + " \(value.revision)")
+            Text(workflowText(copyLanguage, "chat.memoryPanel.revision") + " \(value.revision)")
             if let scope = value.scope {
                 switch scope {
-                case .personal: Text(wording("Scope: personal", "范围：个人"))
-                case .project(let id): Text(wording("Scope: project ", "范围：项目 ") + id.uuidString)
+                case .personal: Text(workflowText(copyLanguage, "chat.memoryPanel.scopePersonal"))
+                case .project(let id): Text(workflowText(copyLanguage, "chat.memoryPanel.scopeProject") + id.uuidString)
                 }
             }
             switch value.origin {
-            case .manual: Text(wording("Origin: manual", "来源：人工"))
-            case .auxiliary(let id): Text(wording("Origin: auxiliary attempt ", "来源：辅助尝试 ") + id.uuidString)
-            case .chat: Text(wording("Origin: source chat", "来源：源聊天"))
+            case .manual: Text(workflowText(copyLanguage, "chat.memoryPanel.originManual"))
+            case .auxiliary(let id): Text(workflowText(copyLanguage, "chat.memoryPanel.originAuxiliaryAttempt") + id.uuidString)
+            case .chat: Text(workflowText(copyLanguage, "chat.memoryPanel.originSourceChat"))
             }
             if let source = value.source {
-                Text(wording("Source chat: ", "源聊天：") + source.sessionID.uuidString)
-                Text(wording("Source leaf: ", "来源末消息：") + source.selectedLeafID.uuidString)
+                Text(workflowText(copyLanguage, "chat.memoryPanel.sourceChat") + source.sessionID.uuidString)
+                Text(workflowText(copyLanguage, "chat.memoryPanel.sourceLeaf") + source.selectedLeafID.uuidString)
                 if let first = source.coveredMessageIDs.first,
                    let last = source.coveredMessageIDs.last {
-                    Text(wording("Covered range: ", "覆盖范围：") + first.uuidString + " … " + last.uuidString)
+                    Text(workflowText(copyLanguage, "chat.memoryPanel.coveredRange") + first.uuidString + " … " + last.uuidString)
                 }
-                DisclosureGroup(wording("Covered message IDs (\(source.coveredMessageIDs.count))",
-                                        "覆盖消息 ID（\(source.coveredMessageIDs.count)）")) {
+                DisclosureGroup(workflowText(copyLanguage, "chat.memoryPanel.coveredMessageIDs", arguments: ["count": String(source.coveredMessageIDs.count)])) {
                     ForEach(source.coveredMessageIDs, id: \.self) { id in
                         Text(id.uuidString).textSelection(.enabled)
                     }

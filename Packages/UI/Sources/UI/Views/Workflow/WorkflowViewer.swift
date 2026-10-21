@@ -15,6 +15,7 @@ struct WorkflowViewerTarget {
     var call: WorkflowCallReference? = nil
     var port: String? = nil
     var side: WorkflowViewerValueSide = .output
+    var usesCallTitle = false
 }
 
 struct WorkflowViewerCallIdentity:Hashable {
@@ -48,6 +49,18 @@ struct WorkflowViewerCallIdentity:Hashable {
     private(set) var failure: String?
     private(set) var loading = false
     private(set) var suspended = false
+    private(set) var editingAnnotations = false
+    @ObservationIgnored private weak var editingModel: WorkbenchModel?
+    @ObservationIgnored private var editingRuntimeTarget: WorkflowLibraryValue?
+    func beginAnnotationEditing(model: WorkbenchModel) {
+        guard !editingAnnotations else { return }
+        editingRuntimeTarget = runtimeAnnotationTarget
+        editingAnnotations = true; editingModel = model; model.beginEditing()
+    }
+    func endAnnotationEditing() {
+        guard editingAnnotations else { return }
+        editingAnnotations = false; editingModel?.endEditing(); editingModel = nil; editingRuntimeTarget = nil
+    }
     let video = VideoPreview.Session()
     let audio = AudioTransport(recordingEnabled:false)
     var library:SharedLibraryStore?
@@ -74,13 +87,36 @@ struct WorkflowViewerCallIdentity:Hashable {
         return owner.currentStore === store && owner.manifest?.id == projectID && owner.manifest?.effectiveInstanceID == instanceID
             && (controller == nil || (owner.workflow === controller && controller?.canReadLibraryMetadata == true))
     }
+    func displayTitle(_ language: UILanguageStore?) -> String {
+        if let metadata { return metadata.asset.name }
+        if let key = runtimeAnnotationTarget?.annotationIdentity?.storageKey, let name = library?.metadata.runtimeAnnotations[key]?.name { return name }
+        guard target.usesCallTitle, let record = exactRecord else { return target.title }
+        let title = record.step.node.title
+        guard let port = target.port else { return title }
+        return title + " · " + WorkflowCanvasPresentation.portTitle(operationID: record.step.node.operationID, portID: port, fallback: port, input: target.side == .input, language: language)
+    }
+    func displaySubtitle(_ language: UILanguageStore?) -> String {
+        if let call = target.call, let controller, let run = controller.runs.first(where: { $0.id == call.address.runID }) {
+            return WorkflowHumanPresentation.run(run, in: controller.runs, language: language)
+        }
+        if let metadata { return metadata.asset.mediaType + " · " + metadata.asset.createdAt.formatted(date: .abbreviated, time: .shortened) }
+        return target.subtitle
+    }
+    var runtimeAnnotationTarget: WorkflowLibraryValue? {
+        if editingAnnotations { return editingRuntimeTarget }
+        guard target.side == .output, let call = target.call, let port = target.port,
+              let value = target.value, value.asset == nil, exactRecord != nil else { return nil }
+        return .init(projectID: projectID, instanceID: instanceID, call: call, port: port, value: value, createdAt: controller?.runs.first { $0.id == call.address.runID }?.createdAt ?? Date(timeIntervalSince1970: 0))
+    }
     var canRead: Bool {
         ownerIsCurrent && owner?.canEditLibraryMetadata == true
     }
     func replace(_ target:WorkflowViewerTarget) {
+        guard !editingAnnotations else { return }
         stop();self.target=target;load()
     }
     @discardableResult func load() -> Task<Void,Never>? {
+        guard !editingAnnotations else { return nil }
         guard canRead else { suspend();return nil }
         stop(); suspended=false;loading=true;text=nil;image=nil;mediaURL=nil;audioFormat=nil;metadata=nil;provenance=nil;failure=nil
         consumers = []; concept = nil; displayedValue = target.value
@@ -187,24 +223,26 @@ struct WorkflowViewerCallIdentity:Hashable {
     }
     func saveMetadata(_ expected:ProjectAssetEditBaseline,_ name:String?,_ note:String?,_ favorite:Bool?) async throws {
         try validateMetadata()
-        guard let ref=target.value?.asset, expected.projectID == projectID,
-              expected.instanceID == instanceID,expected.assetID == ref.assetID else {
-            throw WorkflowIssue("Metadata target changed / 元数据目标已改变。")
-        }
-        let request=generation
+        let resource = target.resource, ref = target.value?.asset
+        guard let assetID = resource?.assetID ?? ref?.assetID, expected.projectID == projectID,
+              expected.instanceID == instanceID, expected.assetID == assetID else { throw SharedLibraryError.staleAnnotation }
+        let request = generation
         do {
-            try await writeAnnotations(expected,name,note,favorite)
-            // A completed save belongs to its original asset. Reusing the
-            // window must not publish its metadata or error into a new target.
-            guard current(request),target.value?.asset == ref else { return }
-            let snapshot=try await readSnapshot(ref)
-            guard current(request),target.value?.asset == ref else { return }
-            metadata=snapshot
+            try await writeAnnotations(expected, name, note, favorite)
+            guard current(request) else { return }
+            let snapshot: ProjectAssetMetadataSnapshot
+            if let resource { snapshot = try await store.readOnlyAsset(resource).metadata }
+            else if let ref { snapshot = try await readSnapshot(ref) }
+            else { throw SharedLibraryError.staleAnnotation }
+            guard current(request) else { return }
+            metadata = snapshot
         } catch {
-            guard current(request),target.value?.asset == ref else { return }
+            // The captured editor must retain its draft even after its owner or
+            // view generation changes. Suppressing a failed write is not success.
             throw error
         }
     }
+
     func audioAction(_ action:() throws -> Void) {
         guard canRead,!suspended else { suspend();return }
         do { try action() } catch { failure=error.localizedDescription }
@@ -244,6 +282,7 @@ struct WorkflowViewerCallIdentity:Hashable {
             window.title=session.target.title;window.center()
         }
         func windowWillClose(_ notification:Notification) { session.stop();window.contentView=nil;didClose?() }
+        func windowShouldClose(_ sender: NSWindow) -> Bool { !session.editingAnnotations }
     }
     var library:SharedLibraryStore?
     private var windows:[UUID:Window]=[:]
@@ -255,13 +294,15 @@ struct WorkflowViewerCallIdentity:Hashable {
         guard owner.canEditLibraryMetadata,let store=owner.currentStore, let project=owner.manifest?.id,let instance=owner.manifest?.effectiveInstanceID else { throw WorkflowIssue("Source instance unavailable / 所属项目实例不可访问。") }
         reconcile()
         if !newWindow,let primary,let existing=windows[primary],existing.session.owner === owner,
-           existing.session.store === store,existing.session.canRead {
+           existing.session.store === store,existing.session.canRead,!existing.session.editingAnnotations {
             existing.session.replace(target);existing.window.title=target.title;existing.window.makeKeyAndOrderFront(nil);return
         }
         guard windows.count < Self.limit else { throw WorkflowIssue("Close a viewer before opening another (limit 4) / 请先关闭一个查看窗口，最多同时打开 4 个。") }
         let session=WorkflowViewerSession(owner:owner,store:store,projectID:project,instanceID:instance,target:target)
         session.library=library
-        let content=WorkflowViewerContent(session:session,reopen:{ [weak self,weak model] in
+        let content=WorkflowViewerContent(session:session,titleChanged: { [weak self, weak session] title in
+            if let session { self?.windows[session.id]?.window.title = title }
+        },reopen:{ [weak self,weak model] in
             guard let self,let model,session.canRead else { return }
             do { try self.open(session.target,model:model,language:language,newWindow:true) }
             catch { model.errorMessage=error.localizedDescription }
@@ -270,6 +311,9 @@ struct WorkflowViewerCallIdentity:Hashable {
             let target=WorkflowViewerTarget(title:session.target.title,subtitle:session.target.subtitle,value:.asset(ref))
             self.navigate(target,in:session)
         }).environment(\.dLanguageStore,language).environment(\.workflowViewerModel,model)
+            .environment(\.metadataEditorLifecycle, MetadataEditorLifecycle(begin: { [weak session, weak model] in
+                if let model { session?.beginAnnotationEditing(model: model) }
+            }, end: { [weak session] in session?.endAnnotationEditing() }))
             .workbenchPresentation(state:model.chatDisplaySettings)
         let window=Window(session:session,content:AnyView(content))
         windows[session.id]=window;if !newWindow { primary=session.id }
@@ -277,7 +321,7 @@ struct WorkflowViewerCallIdentity:Hashable {
         session.load();window.window.makeKeyAndOrderFront(nil)
     }
     func navigate(_ target:WorkflowViewerTarget,in session:WorkflowViewerSession) {
-        guard session.canRead,!session.suspended else { return }
+        guard session.canRead,!session.suspended,!session.editingAnnotations else { return }
         session.replace(target)
         windows[session.id]?.window.title=target.title
     }
@@ -294,101 +338,111 @@ extension EnvironmentValues {
 
 @MainActor struct WorkflowViewerContent:View {
     let session:WorkflowViewerSession
+    var titleChanged: (String) -> Void = { _ in }
     let reopen:() -> Void
     @Environment(\.dLanguageStore) private var language
     @State private var showInfo=false
     @State private var search=""
     @State private var findNext=0
     @State private var zoom:ArtworkZoom = .fit
-    private func text(_ key:String,_ zh:String,_ en:String)->String { workspaceText(language,key,zh,en) }
+    private func text(_ key: String) -> String { workspaceText(language, key) }
     var body:some View {
         VStack(spacing:10) {
             HStack {
-                VStack(alignment:.leading) { Text(session.target.title).font(.headline).lineLimit(2);Text(session.target.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+                VStack(alignment:.leading) { Text(session.displayTitle(language)).font(.headline).lineLimit(2);Text(session.displaySubtitle(language)).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
                 Spacer()
-                Button(text("newViewer","新窗口查看","Open another window"),systemImage:"rectangle.on.rectangle",action:reopen).workbenchHelp("WORKSPACE-VIEWER-NEW").disabled(!session.canRead || session.suspended)
-                Button(text("info","信息","Information"),systemImage:"info.circle") { showInfo.toggle() }.workbenchHelp("WORKSPACE-VIEWER-INFO")
+                Button(text("newViewer"),systemImage:"rectangle.on.rectangle",action:reopen).workbenchHelp("WORKSPACE-VIEWER-NEW").disabled(!session.canRead || session.suspended)
+                Button(text("info"),systemImage:"info.circle") { showInfo.toggle() }.workbenchHelp("WORKSPACE-VIEWER-INFO").disabled(session.editingAnnotations)
             }
             if !session.canRead || session.suspended {
-                ContentUnavailableView(text("sourceClosed","来源暂不可访问","Source unavailable"),systemImage:"externaldrive.badge.exclamationmark")
-                if session.canRead { Button(text("reload","重新读取固定内容","Reload fixed content")) { session.load() } }
+                ContentUnavailableView(text("sourceClosed"),systemImage:"externaldrive.badge.exclamationmark")
+                if session.canRead { Button(text("reload")) { session.load() } }
             } else if let error=session.failure { Text(error).foregroundStyle(.red).textSelection(.enabled) }
-            else if session.loading { ProgressView(text("loading","正在读取固定内容…","Reading fixed content…")) }
+            else if session.loading { ProgressView(text("loading")) }
             else { content.frame(maxWidth:.infinity,maxHeight:.infinity) }
             if session.exactRecord?.step.status == .waiting {
-                Text(text("readonlyGate", "只读查看；请在工作面的活动栏保存人工决定。", "Read only. Save review decisions in the workspace Activity panel.")).font(.caption).foregroundStyle(.secondary)
+                Text(text("readonlyGate")).font(.caption).foregroundStyle(.secondary)
             }
             if showInfo {
                 WorkbenchScrollView {
                     VStack(alignment:.leading,spacing:8) {
-                        Text(session.target.subtitle).font(.callout)
+                        Text(session.displaySubtitle(language)).font(.callout)
                         if let metadata=session.metadata {
-                            Text(metadata.asset.name).font(.headline).textSelection(.enabled)
-                            Text(metadata.asset.note).textSelection(.enabled)
-                            Text(metadata.asset.mediaType).font(.caption).textSelection(.enabled)
-                            Text(text("readonlyMetadata", "名称与标签请在素材库的详情中编辑。", "Edit names and tags in the resource details.")).font(.caption).foregroundStyle(.secondary)
+                            SharedAssetMetadataPanel(snapshot: metadata, library: session.library, validate: {
+                                guard session.canRead else { throw SharedLibraryError.staleAnnotation }
+                            }, save: { expected, name, note, favorite in
+                                try await session.saveMetadata(expected, name, note, favorite)
+                            })
                         }
-                        Text((session.target.value?.asset != nil || session.target.resource != nil) ? text("saved","已保存资产","Saved asset") : text("runValue","运行内数据","Run value"))
-                        if let concept = session.concept { Text(concept).font(.headline) }
+                        if let runtime = session.runtimeAnnotationTarget, let identity = runtime.annotationIdentity, let library = session.library {
+                            RuntimeValueMetadataPanel(value: runtime, identity: identity, title: session.displayTitle(language), library: library, validate: {
+                                guard session.canRead, let controller = session.controller, runtime.isCurrent(in: controller) else { throw SharedLibraryError.staleAnnotation }
+                            })
+                        }
+                        Text((session.target.value?.asset != nil || session.target.resource != nil) ? text("saved") : text("runValue"))
+                        if let concept = session.concept { Text(WorkflowValueCompatibility.conceptTitle(concept, language: language)).font(.headline) }
                         if let record = session.exactRecord {
-                            let label = session.target.side == .input ? "消费方" : session.target.side == .materials ? "审核材料所属调用" : "生产方"
-                            Text(label + " · " + (session.controller?.registry.operation(record.step.node.operationID)?.definition.title ?? record.step.node.title)).font(.callout)
+                            let label = workflowText(language, "workflow.compatibility." + (session.target.side == .input ? "consumer" : session.target.side == .materials ? "materials" : "producer"))
+                            Text(label + " · " + (session.controller?.registry.operation(record.step.node.operationID).map { WorkflowCanvasPresentation.operationTitle($0.definition, language: language) } ?? record.step.node.title)).font(.callout)
                         } else if let operation = session.metadata?.record?.operationID {
-                            Text("登记生产方 · " + (WorkflowRegistry.standard.operation(operation)?.definition.title ?? operation)).font(.callout)
+                            Text(workflowText(language, "workflow.compatibility.registeredProducer") + " · " + (WorkflowRegistry.standard.operation(operation).map { WorkflowCanvasPresentation.operationTitle($0.definition, language: language) } ?? operation)).font(.callout)
                         }
-                        DisclosureGroup(text("receivers", "接收功能与兼容性", "Receiving functions & compatibility")) {
+                        DisclosureGroup(text("receivers")) {
                             ForEach(session.consumers) { match in
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(match.title + " · " + match.portTitle).font(.callout)
-                                    Text(["direct":"直接兼容", "conversion":"转换后可用", "unverified":"待验证", "incompatible":"不兼容"][match.result.status.rawValue] ?? "待验证").font(.caption.weight(.semibold))
-                                    Text(match.result.reason).font(.caption)
+                                    Text(match.displayTitle(language) + " · " + match.displayPort(language)).font(.callout)
+                                    Text(workflowText(language, "workflow.compatibility.status." + match.result.status.rawValue)).font(.caption.weight(.semibold))
+                                    if match.result.reasonCode != "diagnostic" { Text(workflowText(language, "workflow.compatibility.reason." + match.result.reasonCode)).font(.caption) }
+                                    else { Text(match.result.reason).font(.caption).textSelection(.enabled) }
                                     if let kind = match.modelKind {
                                         let choices = session.controller?.modelChoices.filter { $0.kind == kind && (WorkflowModelRoutes.operation(for: $0) ?? (kind == .music ? "d.music.generate" : kind == .image ? "d.image.generate" : kind == .text ? "d.model.language" : "")) == match.operationID } ?? []
-                                        Text(choices.isEmpty ? "未登记此模型；结构兼容不代表已安装" : choices.map(\.displayName).joined(separator: "、") + " · 已登记，运行前校验").font(.caption)
+                                        Text(choices.isEmpty ? workflowText(language, "workflow.compatibility.notInstalled") : workflowText(language, "workflow.compatibility.registeredModels", arguments: ["models": choices.map(\.displayName).joined(separator: " · ")])).font(.caption)
                                     }
                                 }
                             }
-                            if session.consumers.isEmpty { Text(session.target.resource?.registeredReference == nil && session.target.resource != nil ? "此素材尚未登记固定版本，接收兼容性待验证；浏览不会自动登记。" : "尚无可核验的接收方记录").font(.caption) }
+                            if session.consumers.isEmpty { Text(workflowText(language, "workflow.compatibility." + (session.target.resource?.registeredReference == nil && session.target.resource != nil ? "unregisteredAsset" : "noReceivers"))).font(.caption) }
                         }
                         if let record=session.exactRecord {
-                            Text(text("frozenConfig","此调用的固定配置","Frozen configuration of this call")).font(.headline)
+                            Text(text("frozenConfig")).font(.headline)
                             ForEach(record.step.node.parameters.keys.sorted(),id:\.self) { key in
                                 HStack(alignment:.top) {
                                     Text(session.controller?.registry.definition(for:record.step.node,tools:session.controller?.tools ?? [])?.fields.first { $0.id == key }.map { WorkflowCanvasPresentation.fieldTitle(operationID:record.step.node.operationID,field:$0,language:language) } ?? key)
                                     Spacer()
                                     if key == "modelID" {
-                                        Text(session.controller?.modelChoices.first { $0.id == record.step.node.parameters[key]?.string }?.displayName ?? text("modelNameUnrecorded","模型名称未记录","Model name not recorded"))
+                                        Text(session.controller?.modelChoices.first { $0.id == record.step.node.parameters[key]?.string }?.displayName ?? text("modelNameUnrecorded"))
                                             .textSelection(.enabled)
                                     } else { Text(scalarText(record.step.node.parameters[key]!)).textSelection(.enabled) }
                                 }.font(.caption)
                             }
-                            Text(text("frozenInputs","输入绑定保存在技术详情中；不会改用当前节点配置。","Input bindings are retained in technical details; current node settings are never substituted.")).font(.caption)
+                            Text(text("frozenInputs")).font(.caption)
                             WorkflowTechnicalDetails(value:String(describing:record.step.node.parameters)+"\n"+String(describing:record.step.inputs))
                         }
                         if let provenance=session.provenance { WorkflowTechnicalDetails(value:provenance) }
                         WorkflowTechnicalDetails(value:String(describing:session.target.value) + "\n" + String(describing:session.target.call))
                     }.frame(maxWidth:.infinity,alignment:.leading)
+                        .disabled((!session.canRead || session.suspended) && !session.editingAnnotations)
                 }.frame(maxHeight:210)
             }
         }.padding(16).frame(minWidth:480,minHeight:360)
+            .onChange(of: session.displayTitle(language), initial: true) { _, title in titleChanged(title) }
             .onChange(of:session.generation) { _,_ in search="";zoom = .fit }
             .onChange(of:session.canRead) { _,_ in session.reconcile() }
     }
     @ViewBuilder private var content:some View {
         if let image=session.image {
-            WorkbenchGlassSegments(title:text("imageZoom","图像比例","Image scale"),selection:$zoom,choices:[(.fit,text("fit","适合窗口","Fit")),(.actual,"1:1"),(.double,"200%"),(.quadruple,"400%")])
+            WorkbenchGlassSegments(title:text("imageZoom"),selection:$zoom,choices:[(.fit,text("fit")),(.actual,"1:1"),(.double,"200%"),(.quadruple,"400%")])
             PixelCanvas(image:image,zoom:zoom)
         } else if let value=session.text { textContent(value) }
         else if let url=session.mediaURL { VideoPreview(url:url,identity:session.generation,session:session.video) }
         else if let format=session.audioFormat {
             VStack {
                 HStack {
-                    Button(text("play","播放","Play"),systemImage:"play.fill") { session.audioAction { try session.audio.play() } }
-                    Button(text("pause","暂停","Pause"),systemImage:"pause.fill") { session.audio.pause() }
+                    Button(text("play"),systemImage:"play.fill") { session.audioAction { try session.audio.play() } }
+                    Button(text("pause"),systemImage:"pause.fill") { session.audio.pause() }
                     Text(String(format:"%.1f / %.1f s",Double(session.audio.positionFrame)/format.sampleRate,Double(format.frameCount)/format.sampleRate)).monospacedDigit()
                 }
                 Slider(value:Binding(get:{Double(session.audio.positionFrame)},set:{ value in session.audioAction { try session.audio.seek(toFrame:Int64(value)) } }),in:0...Double(max(1,format.frameCount-1)))
-                    .accessibilityLabel(text("seek","播放位置","Playback position"))
+                    .accessibilityLabel(text("seek"))
                 if let error=session.audio.errorMessage { Text(error).foregroundStyle(.red) }
             }
         } else {
@@ -400,18 +454,18 @@ extension EnvironmentValues {
                 if let controller=session.controller {
                     WorkbenchScrollView { ForEach(values) { WorkflowCandidatePreview(controller:controller,candidate:$0,selected:false,onSelect:nil) } }
                 }
-            case .asset, nil: Text(text("unsupportedViewer","原件已保留，此类型暂无可视预览。","Original preserved; no visual preview for this type."))
+            case .asset, nil: Text(text("unsupportedViewer"))
             }
         }
     }
     private func scalarText(_ value:WorkflowScalar)->String {
-        switch value { case .text(let value):value;case .integer(let value):String(value);case .decimal(let value):String(value);case .flag(let value):value ? text("yes","是","Yes"):text("no","否","No") }
+        switch value { case .text(let value):value;case .integer(let value):String(value);case .decimal(let value):String(value);case .flag(let value):value ? text("yes"):text("no") }
     }
     private func textContent(_ value:String)->some View {
         VStack {
             HStack {
-                TextField(text("find","查找文本","Find text"),text:$search).workbenchInputSurface().onSubmit { findNext += 1 }
-                Button(text("findNext","下一个","Next")) { findNext += 1 }.disabled(search.isEmpty)
+                TextField(text("find"),text:$search).workbenchInputSurface().onSubmit { findNext += 1 }
+                Button(text("findNext")) { findNext += 1 }.disabled(search.isEmpty)
             }
             WorkflowViewerText(text:value,query:search,next:findNext)
         }

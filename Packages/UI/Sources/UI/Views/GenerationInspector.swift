@@ -29,9 +29,9 @@ struct GenerationInspector: View {
         guard let library else { return model.modelStatus }
         if let record = selectedLibraryRecord { return library.status(for: record) }
         if model.selectedModelID != nil, library.snapshot != nil {
-            return workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.56", fallback: "This model is no longer in the library. Choose it again. Your work and generation history will be kept.")
+            return workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.56")
         }
-        return workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.57", fallback: "Choose a verified model from the model library.")
+        return workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.57")
     }
 
     private var hasAvailableSelection: Bool {
@@ -44,8 +44,8 @@ struct GenerationInspector: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(model.activeDocument?.name ?? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.58", fallback: "Creation")).font(.title2.weight(.semibold))
-                    Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.59", fallback: "Bring Your Idea to Life"))
+                    Text(model.activeDocument?.name ?? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.58")).font(.title2.weight(.semibold))
+                    Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.59"))
                         .font(.callout).foregroundStyle(.secondary)
                 }
 
@@ -93,11 +93,11 @@ struct GenerationInspector: View {
 
     private var modelSection: some View {
         VStack(alignment: .leading, spacing: 9) {
-            sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.60", fallback: "Model"), systemImage: "cube.transparent")
+            sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.60"), systemImage: "cube.transparent")
             if let name = model.modelName {
                 Text(name).font(.callout.weight(.medium)).textSelection(.enabled)
             } else {
-                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.61", fallback: "Choose an Installed Model")).font(.callout.weight(.medium))
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.61")).font(.callout.weight(.medium))
             }
             Text(displayedModelStatus).font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -115,17 +115,17 @@ struct GenerationInspector: View {
                 }
                 else { Task { await model.registerModel() } }
             } label: {
-                Label(library != nil ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.62", fallback: "Choose from Model Library…") : (model.modelName == nil ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.63", fallback: "Choose Model Folder…") : workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.64", fallback: "Change or Grant Access Again…")),
+                Label(library != nil ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.62") : (model.modelName == nil ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.63") : workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.64")),
                       systemImage: library != nil ? "cube.transparent" : "folder.badge.plus")
             }
             .accessibilityIdentifier(library != nil ? "choose-project-model" : "register-model")
             .disabled(library == nil && model.isBusy)
-            .help(library != nil ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.65", fallback: "Install, add and select a model for the current project") : workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.66", fallback: "Choose the local FLUX.2 Klein 4B q8 model folder"))
+            .help(library != nil ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.65") : workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.66"))
             if let library, library.hasActiveWork {
                 Label(consistencyText(legacyLanguage, "copy.GenerationInspector.0", arguments: ["v0": String(describing: library.activityCount)]), systemImage: "arrow.down.circle")
                     .font(.caption).foregroundStyle(.secondary)
             } else if let library, library.failedCount > 0 {
-                Label(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.67", fallback: "The model library has unfinished operations. Open it to review them."), systemImage: "exclamationmark.circle")
+                Label(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.67"), systemImage: "exclamationmark.circle")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -133,7 +133,7 @@ struct GenerationInspector: View {
 
     private var promptSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.68", fallback: "Image Description"), systemImage: "text.alignleft")
+            sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.68"), systemImage: "text.alignleft")
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $model.prompt)
                     .font(.body)
@@ -141,10 +141,10 @@ struct GenerationInspector: View {
                     .padding(5)
                     .frame(minHeight: 145)
                     .focused($promptFocused)
-                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.68", fallback: "Image Description"))
+                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.68"))
                     .accessibilityIdentifier("prompt-editor")
                 if model.prompt.isEmpty {
-                    Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.69", fallback: "Describe the subject, setting, lighting and style…"))
+                    Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.69"))
                         .font(.body).foregroundStyle(.tertiary)
                         .padding(.horizontal, 10).padding(.top, 13)
                         .allowsHitTesting(false)
@@ -154,7 +154,7 @@ struct GenerationInspector: View {
             .workbenchInputSurface()
             .overlay(RoundedRectangle(cornerRadius: 10)
                 .stroke(promptFocused ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: 1))
-            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.70", fallback: "Editing the draft does not change tasks already in the queue."))
+            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.70"))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -162,22 +162,22 @@ struct GenerationInspector: View {
     private var seedSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.71", fallback: "Random Seed"), systemImage: "dice")
+                sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.71"), systemImage: "dice")
                 Spacer()
-                Toggle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.72", fallback: "Random"), isOn: $model.randomSeed)
+                Toggle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.72"), isOn: $model.randomSeed)
                     .toggleStyle(.checkbox)
                     .accessibilityIdentifier("random-seed")
             }
             if model.randomSeed {
-                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.73", fallback: "Each generation uses a new seed, which is saved with the work."))
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.73"))
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 TextField("0", text: $model.seedText)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .monospacedDigit()
-                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.74", fallback: "Fixed Seed"))
+                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.74"))
                     .accessibilityIdentifier("seed-field")
-                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.75", fallback: "Use the same seed and generation settings to generate again. Zero is also a valid seed."))
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.75"))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -185,21 +185,21 @@ struct GenerationInspector: View {
 
     private var generationSettings: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.76", fallback: "Generation Settings"), systemImage: "slider.horizontal.3")
+            sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.76"), systemImage: "slider.horizontal.3")
             VStack(alignment: .leading, spacing: 8) {
-                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.77", fallback: "Width (Pixels)")).font(.caption).foregroundStyle(.secondary)
-                TextField(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.77", fallback: "Width (Pixels)"), text: imageWidth)
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.77")).font(.caption).foregroundStyle(.secondary)
+                TextField(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.77"), text: imageWidth)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle())
-                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.77", fallback: "Width (Pixels)"))
+                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.77"))
                     .accessibilityIdentifier("image-width")
-                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.78", fallback: "Height (Pixels)")).font(.caption).foregroundStyle(.secondary)
-                TextField(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.78", fallback: "Height (Pixels)"), text: imageHeight)
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.78")).font(.caption).foregroundStyle(.secondary)
+                TextField(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.78"), text: imageHeight)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle())
-                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.78", fallback: "Height (Pixels)"))
+                    .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.78"))
                     .accessibilityIdentifier("image-height")
             }
             HStack(spacing: 18) {
-                settingValue(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.79", fallback: "Steps"), value: "\(model.imageCapability.steps)")
+                settingValue(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.79"), value: "\(model.imageCapability.steps)")
                 settingValue("Guidance", value: model.imageCapability.guidanceScale.formatted())
             }
             Text(consistencyText(legacyLanguage, "copy.GenerationInspector.1", arguments: ["v0": String(describing: model.imageCapability.minimumWidth), "v1": String(describing: model.imageCapability.maximumWidth), "v2": String(describing: model.imageCapability.minimumHeight), "v3": String(describing: model.imageCapability.maximumHeight), "v4": String(describing: model.imageCapability.dimensionMultiple)]))
@@ -238,13 +238,13 @@ struct GenerationInspector: View {
     @ViewBuilder private var presetButtons: some View {
         let sizes = [512, 768, 1024].filter { accepts(width: $0, height: $0) }
         if !sizes.isEmpty {
-            WorkbenchMenu(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.80", fallback: "Size Presets")) {
+            WorkbenchMenu(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.80")) {
                 WorkbenchMenuForEach(sizes, id: \.self) { size in
                     WorkbenchMenuAction("\(size) × \(size)") { applyImagePreset(width: size, height: size) }
                 }
             }
             .controlSize(.small)
-            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.81", fallback: "Selecting a preset applies a currently supported generation configuration."))
+            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.81"))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -258,8 +258,8 @@ struct GenerationInspector: View {
     private func publishImageEditIfComplete() {
         let widthText = rawImageWidth ?? String(model.imageSettings.width)
         let heightText = rawImageHeight ?? String(model.imageSettings.height)
-        if let error = numericEditingError(widthText, label: workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.82", fallback: "Width"))
-            ?? numericEditingError(heightText, label: workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.83", fallback: "Height")) {
+        if let error = numericEditingError(widthText, label: workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.82"))
+            ?? numericEditingError(heightText, label: workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.83")) {
             setImageEditingError(error)
             return
         }
@@ -310,7 +310,7 @@ struct GenerationInspector: View {
         Button {
             Task { await model.generate() }
         } label: {
-            Label(model.isBusy ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.84", fallback: "Add to Generation Queue") : workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.85", fallback: "Generate Image"), systemImage: "sparkles")
+            Label(model.isBusy ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.84") : workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.85"), systemImage: "sparkles")
                 .font(.body.weight(.semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 5)
@@ -319,16 +319,16 @@ struct GenerationInspector: View {
         .disabled(!model.canGenerate || !hasAvailableSelection)
         .keyboardShortcut(.return, modifiers: .command)
         .accessibilityIdentifier("generate")
-        .help(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.86", fallback: "Generate and automatically save the work (⌘ Return)"))
+        .help(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.86"))
     }
 
     private func savedConditions(job: ProjectJob, image: ImageRequest) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.87", fallback: "Selected Work"), systemImage: "info.circle")
+            sectionTitle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.87"), systemImage: "info.circle")
             Text(image.prompt).font(.caption).lineLimit(5).textSelection(.enabled)
-            LabeledContent("Seed", value: String(image.seed))
+            LabeledContent(workflowText(legacyLanguage, "workbench.field.seed"), value: String(image.seed))
                 .font(.caption).monospacedDigit().textSelection(.enabled)
-            LabeledContent(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.88", fallback: "Generated"), value: job.createdAt.formatted(date: .abbreviated, time: .shortened))
+            LabeledContent(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.88"), value: job.createdAt.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption)
             if let provenance = ImageReferenceSection.submittedReferenceText(job: job, manifest: model.manifest, language: legacyLanguage) {
                 Text(provenance)
@@ -336,7 +336,7 @@ struct GenerationInspector: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("submitted-image-reference")
             } else {
-                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.89", fallback: "No reference image was submitted with this task. The current draft's reference settings do not change this record."))
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.89"))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("submitted-image-reference-none")
@@ -344,10 +344,10 @@ struct GenerationInspector: View {
             Button {
                 Task { await model.copySettings(from: job.id) }
             } label: {
-                Label(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.12", fallback: "Create from These Settings"), systemImage: "arrow.branch")
+                Label(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.12"), systemImage: "arrow.branch")
             }
             .accessibilityIdentifier("copy-settings-inspector")
-            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.90", fallback: "Copies the submitted prompt and seed, preserving reference images used in that request. The image being viewed is not automatically used as input."))
+            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.90"))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -374,32 +374,32 @@ private struct CandidateDetails: View {
     let edit: () -> Void
     private var ownerID: UUID? { model.manifest?.jobs.first(where: { $0.id == asset.jobID })?.documentID }
     private var ownerName: String {
-        model.documents.first(where: { $0.id == ownerID })?.name ?? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.91", fallback: "Source Creation")
+        model.documents.first(where: { $0.id == ownerID })?.name ?? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.91")
     }
     private var adoptionActionTitle: String {
         if model.documents.contains(where: { $0.adoptedAssetID == asset.id }) {
-            return ownerID == model.activeDocumentID ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.92", fallback: "Stop Using This Result") : "取消「\(ownerName)」的采用"
+            return ownerID == model.activeDocumentID ? workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.92") : "取消「\(ownerName)」的采用"
         }
         return "采用为「\(ownerName)」的方案"
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.93", fallback: "Organize Candidates")).font(.subheadline.weight(.semibold))
+            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.93")).font(.subheadline.weight(.semibold))
             Text(asset.name).font(.callout.weight(.medium))
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(asset.name)
                 .accessibilityIdentifier("candidate-saved-name")
             if !asset.note.isEmpty { Text(asset.note).font(.caption).textSelection(.enabled) }
-            Toggle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.94", fallback: "Favorite"), isOn: Binding(get: { asset.isFavorite }, set: { value in
+            Toggle(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.94"), isOn: Binding(get: { asset.isFavorite }, set: { value in
                 guard let owner = model.projectSession.currentStore, let project = model.manifest else { return }
                 let baseline = ProjectAssetEditBaseline(project: project, asset: asset)
                 Task {
                     do { try await model.projectSession.saveAssetAnnotations(owner: owner, expected: baseline, isFavorite: value) }
-                    catch { if model.projectSession.currentStore === owner { model.errorMessage = workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.95", fallback: "Could not save favorite: ") + error.localizedDescription } }
+                    catch { if model.projectSession.currentStore === owner { model.errorMessage = workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.95") + error.localizedDescription } }
                 }
             })).accessibilityIdentifier("candidate-favorite")
-            Button(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.96", fallback: "Edit Name and Notes…"), action: edit)
+            Button(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.96"), action: edit)
                 .accessibilityIdentifier("edit-candidate")
             Button {
                 Task {
@@ -411,7 +411,7 @@ private struct CandidateDetails: View {
                 Label(adoptionActionTitle, systemImage: "checkmark.seal")
             }
             .accessibilityIdentifier("adopt-candidate")
-            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.97", fallback: "Each creation has one chosen result. Other candidates are kept."))
+            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.97"))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -446,20 +446,20 @@ private struct CandidateMetadataEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.98", fallback: "Edit Candidate Info")).font(.headline)
-            TextField(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.99", fallback: "Work Name"), text: $name).textFieldStyle(WorkbenchGlassTextFieldStyle())
+            Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.98")).font(.headline)
+            TextField(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.99"), text: $name).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .accessibilityIdentifier("candidate-name")
-            TextField(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.100", fallback: "Notes"), text: $note, axis: .vertical).lineLimit(4...8)
+            TextField(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.100"), text: $note, axis: .vertical).lineLimit(4...8)
                 .textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("candidate-note")
             if let saveError { WorkbenchIssueText(raw: saveError).font(.caption).foregroundStyle(.red) }
             if model.editorCloseAttempted {
-                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.53", fallback: "Save or cancel your edits before closing the project or quitting D."))
+                Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.53"))
                     .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("pending-editor-close")
             }
             HStack {
                 Spacer()
-                Button(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.33", fallback: "Cancel"), role: .cancel) { isPresented = false }.keyboardShortcut(.cancelAction)
-                Button(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.54", fallback: "Save")) {
+                Button(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.33"), role: .cancel) { isPresented = false }.keyboardShortcut(.cancelAction)
+                Button(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.54")) {
                     saving = true
                     Task {
                         defer { saving = false }

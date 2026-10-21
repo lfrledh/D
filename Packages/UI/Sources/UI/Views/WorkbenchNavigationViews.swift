@@ -47,9 +47,9 @@ public struct ProjectChooserView: View {
                         .font(.system(size: 46, weight: .light))
                         .foregroundStyle(.tint)
                         .accessibilityHidden(true)
-                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.222", fallback: "Choose a Project"))
+                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.222"))
                         .font(.largeTitle.weight(.semibold))
-                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.223", fallback: "Continue an existing project or start creating on your Mac."))
+                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.223"))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -57,7 +57,7 @@ public struct ProjectChooserView: View {
                 chooserActions
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.224", fallback: "Recent Projects"))
+                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.224"))
                         .font(.headline)
                         .accessibilityAddTraits(.isHeader)
                     if recentProjects.isEmpty {
@@ -65,9 +65,9 @@ public struct ProjectChooserView: View {
                             Image(systemName: "clock")
                                 .font(.title2)
                                 .foregroundStyle(.secondary)
-                            Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.225", fallback: "No Recent Projects"))
+                            Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.225"))
                                 .font(.headline)
-                            Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.226", fallback: "Projects you open or create will appear here."))
+                            Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.226"))
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         }
@@ -124,7 +124,7 @@ public struct ProjectChooserView: View {
         .disabled(isBusy)
         .overlay(alignment: .topTrailing) {
             if isBusy {
-                ProgressView(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.1", fallback: "Preparing project…"))
+                ProgressView(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.1"))
                     .controlSize(.small)
                     .padding(16)
                     .accessibilityIdentifier("project-chooser-progress")
@@ -137,21 +137,21 @@ public struct ProjectChooserView: View {
     private var chooserActions: some View {
         let buttons = HStack(spacing: 14) {
             Button(action: onNew) {
-                Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.227", fallback: "New Project…"), systemImage: "plus")
+                Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.227"), systemImage: "plus")
                     .padding(.horizontal, 6)
             }
             .accessibilityIdentifier("new-project")
             .navigationMeasured("new-project", probe: layoutProbe)
 
             Button(action: onOpen) {
-                Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.228", fallback: "Open Project…"), systemImage: "folder")
+                Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.228"), systemImage: "folder")
                     .padding(.horizontal, 6)
             }
             .accessibilityIdentifier("open-project")
             .navigationMeasured("open-project", probe: layoutProbe)
 
             Button(action: onModels) {
-                Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.229", fallback: "Model Library"), systemImage: "cube.transparent")
+                Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.229"), systemImage: "cube.transparent")
                     .padding(.horizontal, 6)
             }
             .accessibilityIdentifier("open-model-library")
@@ -257,7 +257,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
         navigationSurface {
             HStack(spacing: 8) {
                 shellButton(
-                    title: workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.230", fallback: "Back to Projects"),
+                    title: workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.230"),
                     symbol: "chevron.left",
                     compact: presentation.compactToolbar,
                     action: onBack
@@ -280,7 +280,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
                 }
 
                 shellButton(
-                    title: taskCount > 0 ? "项目任务 \(taskCount)" : workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.5", fallback: "Project Tasks"),
+                    title: taskCount > 0 ? "项目任务 \(taskCount)" : workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.5"),
                     symbol: "list.bullet.rectangle",
                     compact: presentation.compactToolbar,
                     badge: taskCount > 0 ? taskCount : nil,
@@ -290,7 +290,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
                 .navigationMeasured("open-project-tasks", probe: layoutProbe)
 
                 shellButton(
-                    title: workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.229", fallback: "Model Library"),
+                    title: workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.229"),
                     symbol: "cube.transparent",
                     compact: presentation.compactToolbar,
                     action: onModels
@@ -373,7 +373,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
         } label: {
             Image(systemName: "sidebar.left")
         }
-        .accessibilityLabel(presentation.sidebarUsesPopover ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.231", fallback: "Open Creation List") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.232", fallback: "Show or Hide Creation List"))
+        .accessibilityLabel(presentation.sidebarUsesPopover ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.231") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.232"))
         .accessibilityIdentifier("toggle-creations")
         .accessibilityAddTraits((showsSidebarColumn && !presentation.sidebarUsesPopover) || showsSidebarPopover
                                 ? .isSelected : [])
@@ -397,7 +397,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
         } label: {
             Image(systemName: "sidebar.right")
         }
-        .accessibilityLabel(presentation.inspectorUsesPopover ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.233", fallback: "Open Creation Settings") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.234", fallback: "Show or Hide Creation Settings"))
+        .accessibilityLabel(presentation.inspectorUsesPopover ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.233") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.234"))
         .accessibilityIdentifier("toggle-inspector")
         .accessibilityAddTraits((showsInspectorColumn && !presentation.inspectorUsesPopover) || showsInspectorPopover
                                 ? .isSelected : [])
@@ -516,7 +516,7 @@ public struct ModalityDocumentList: View {
                         .foregroundStyle(.secondary)
                     Text(consistencyText(legacyLanguage, "copy.WorkbenchNavigationViews.2", arguments: ["v0": String(describing: consistencyText(legacyLanguage, "mode." + mode.rawValue))]))
                         .font(.callout.weight(.medium))
-                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.235", fallback: "Switching modes does not create content automatically."))
+                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchNavigationViews.235"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

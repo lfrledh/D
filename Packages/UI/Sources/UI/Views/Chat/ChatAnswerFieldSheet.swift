@@ -4,6 +4,7 @@ import SwiftUI
 struct ChatAnswerFieldSheet: View {
     @Environment(\.dLanguageStore) private var language
     let choices: [ChatAnswerField]
+    @Environment(\.dLanguageStore) private var copyLanguage
     let wording: (String, String) -> String
     let onSave: (ChatAnswerField, UUID, Bool) async throws -> Void
     let onClose: () -> Void
@@ -14,15 +15,15 @@ struct ChatAnswerFieldSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(wording("Structured answer fields", "结构化回答字段")).font(.headline)
+                Text(workflowText(copyLanguage, "chat.answerFieldSheet.structuredAnswerFields")).font(.headline)
                 Spacer()
-                Button(wording("Close", "关闭")) { task?.cancel(); onClose() }
+                Button(workflowText(copyLanguage, "workflow.action.close")) { task?.cancel(); onClose() }
             }
-            Text(wording("Saves the selected answer version and typed field. Workflow receives a record with value, source, and path; nothing runs automatically. Use Extract field → value for the value alone.", "保存所采用的回答版本和字段类型。工作流收到 value（值）、source（来源）及 path（路径）记录，不自动运行；需要纯值时用“提取字段 → value”。"))
+            Text(workflowText(copyLanguage, "chat.answerFieldSheet.savesTheSelectedAnswerVersionAndTypedFieldWorkflowReceives"))
                 .font(.caption).foregroundStyle(.secondary)
-            WorkbenchPicker(wording("Field", "字段"), selection: $selected) {
+            WorkbenchPicker(workflowText(copyLanguage, "workflow.operation.d.value.field.title"), selection: $selected) {
                 WorkbenchChoiceForEach(choices.indices, id: \.self) { index in
-                    WorkbenchChoice(choices[index].path.isEmpty ? wording("Entire structure", "整个结构") : pathLabel(choices[index].path), value:index)
+                    WorkbenchChoice(choices[index].path.isEmpty ? workflowText(copyLanguage, "chat.answerFieldSheet.entireStructure") : pathLabel(choices[index].path), value:index)
                 }
             }.onChange(of: selected) { _, _ in publication = UUID(); issue = nil }
             if choices.indices.contains(selected) {
@@ -32,8 +33,8 @@ struct ChatAnswerFieldSheet: View {
             }
             if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
-                Button(wording("Save field", "保存字段")) { save(false) }
-                Button(wording("Save and send to workflow", "保存并交给工作流")) { save(true) }
+                Button(workflowText(copyLanguage, "chat.answerFieldSheet.saveField")) { save(false) }
+                Button(workflowText(copyLanguage, "chat.answerFieldSheet.saveAndSendToWorkflow")) { save(true) }
                 if task != nil { ProgressView().controlSize(.small) }
             }.disabled(task != nil || !choices.indices.contains(selected))
         }.padding(20).frame(minWidth: 560, idealWidth: 740, minHeight: 360)

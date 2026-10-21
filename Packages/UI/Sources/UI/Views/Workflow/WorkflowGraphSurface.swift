@@ -171,11 +171,9 @@ struct WorkflowGraphSurface: View {
                         }
                         if self.graph == nil {
                             ContentUnavailableView(
-                                workflowText(languageStore, "workflow.canvas.empty", fallback: "选择或添加流程"),
+                                workflowText(languageStore, "workflow.canvas.empty"),
                                 systemImage: "point.3.connected.trianglepath.dotted",
-                                description: Text(workflowText(languageStore,
-                                    "workflow.canvas.emptyDescription",
-                                    fallback: "流程只会在明确保存或运行时提交。"))
+                                description: Text(workflowText(languageStore, "workflow.canvas.emptyDescription"))
                             )
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .allowsHitTesting(false)
@@ -400,7 +398,7 @@ struct WorkflowGraphSurface: View {
                                 fallback: pendingConnection.input ? "已选择输入 {port}，请选择来源输出" : "已选择输出 {port}，请选择目标输入",
                                 arguments: ["port": pendingConnection.port]
                             ), systemImage: "link")
-                            Button(workflowText(languageStore, "workflow.connection.cancel", fallback: "取消连接")) {
+                            Button(workflowText(languageStore, "workflow.connection.cancel")) {
                                 clearConnection()
                             }
                                 .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
@@ -1054,7 +1052,7 @@ private struct WorkflowNodeCard: View {
                         modelChoices: controller.modelChoices, assets: controller.availableAssets,
                         tools: controller.tools, language: languageStore)
                     Text(WorkflowHumanPresentation.name(node, in: controller.graph?.nodes ?? [node], language: languageStore)).font(.system(size: 13 * scale, weight: .bold)).lineLimit(2)
-                    if !collapsed && runTarget { Label(workflowText(languageStore, "semantics.nextRunTarget", fallback: "下次运行目标"), systemImage: "flag.fill").font(.system(size: 10 * scale)).foregroundStyle(.tint) }
+                    if !collapsed && runTarget { Label(workflowText(languageStore, "semantics.nextRunTarget"), systemImage: "flag.fill").font(.system(size: 10 * scale)).foregroundStyle(.tint) }
                     if !collapsed, let detail = identity.detail {
                         Text(detail).font(.system(size: 10 * scale, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
                     }
@@ -1073,7 +1071,7 @@ private struct WorkflowNodeCard: View {
             if !collapsed { WorkflowModelPreparationView(identity: modelIdentity, scale: scale) }
             if !collapsed && modelNotReady {
                 VStack(alignment: .leading, spacing: 5 * scale) {
-                    Label(workflowText(languageStore, "workflow.node.prepare.notReady", fallback: "模型未就绪"), systemImage: "exclamationmark.triangle.fill")
+                    Label(workflowText(languageStore, "workflow.node.prepare.notReady"), systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange).font(.system(size: 11 * scale, weight: .semibold)).allowsHitTesting(false)
                     if let entry = downloadEntry, let prepareNode {
                         Button {
@@ -1089,11 +1087,11 @@ private struct WorkflowNodeCard: View {
                         .disabled(readOnly || !controller.canEditCanvas || preparingModels.contains(modelIdentity))
                         .accessibilityIdentifier("workflow-node-prepare-" + node.id.uuidString)
                         Text(entry.preparation == .none
-                            ? workflowText(languageStore, "workflow.node.prepare.noRun", fallback: "仅准备模型，不运行节点")
-                            : workflowText(languageStore, "workflow.node.prepare.raw", fallback: "下载后仍需准备执行包"))
+                            ? workflowText(languageStore, "workflow.node.prepare.noRun")
+                            : workflowText(languageStore, "workflow.node.prepare.raw"))
                             .font(.system(size: 10 * scale)).foregroundStyle(.secondary).allowsHitTesting(false)
                     } else {
-                        Text(workflowText(languageStore, "workflow.node.prepare.localOnly", fallback: "此配置暂无内置下载；请在属性中登记已有模型。"))
+                        Text(workflowText(languageStore, "workflow.node.prepare.localOnly"))
                             .font(.system(size: 10 * scale)).foregroundStyle(.secondary).allowsHitTesting(false)
                     }
                 }
@@ -1191,7 +1189,7 @@ private struct WorkflowNodeCard: View {
             WorkbenchMenuAction(consistencyText(languageStore, "menu.node.from"), id: "node.from") { if scope.isCurrent(in: controller) { onPlanRange?(node.id, 2) } }.featureHelp("MENU-NODE-FROM", language: languageStore).disabled(readOnly || definition == nil || onPlanRange == nil || !controller.bodyPath.isEmpty)
             WorkbenchMenuAction(consistencyText(languageStore, "menu.node.after"), id: "node.after") { if scope.isCurrent(in: controller) { onPlanRange?(node.id, 3) } }.featureHelp("MENU-NODE-AFTER", language: languageStore).disabled(readOnly || definition == nil || onPlanRange == nil || !controller.bodyPath.isEmpty)
         }.featureHelp("MENU-NODE-SCOPE", language: languageStore)
-        WorkbenchMenuAction(workflowText(languageStore, "workflow.run.setTarget", fallback: "设为运行终点"), id: "node.target") {
+        WorkbenchMenuAction(workflowText(languageStore, "workflow.run.setTarget"), id: "node.target") {
             if scope.isCurrent(in: controller) { onSetRunTarget(node.id) }
         }.disabled(readOnly || definition == nil)
         WorkbenchMenuAction(workflowText(languageStore, controller.selectedNodeIDs.contains(node.id) ? "workflow.selection.remove" : "workflow.language.selection", fallback: controller.selectedNodeIDs.contains(node.id) ? "移出当前选择" : "加入当前选择"), id: "node.select") {
@@ -1211,8 +1209,8 @@ private struct WorkflowNodeCard: View {
     private func portRows(_ ports: [WorkflowPortDefinition], input: Bool) -> some View {
         if ports.isEmpty {
             Text(input
-                 ? workflowText(languageStore, "workflow.port.noInputs", fallback: "无输入")
-                 : workflowText(languageStore, "workflow.port.noOutputs", fallback: "无输出"))
+                 ? workflowText(languageStore, "workflow.port.noInputs")
+                 : workflowText(languageStore, "workflow.port.noOutputs"))
                 .font(.system(size: 11 * scale)).foregroundStyle(.tertiary)
                 .allowsHitTesting(false)
         } else {
@@ -1250,10 +1248,9 @@ private struct WorkflowNodeCard: View {
         .help(WorkflowCanvasPresentation.portTitle(operationID: node.operationID,
             port: port, input: input, language: languageStore) + " — "
             + WorkflowCanvasPresentation.portDetail(port, language: languageStore))
-        .accessibilityLabel(workflowText(languageStore, "workflow.port.accessibility",
-            fallback: "{direction}端口，{title}，{detail}", arguments: [
-                "direction": input ? workflowText(languageStore, "workflow.port.input", fallback: "输入")
-                    : workflowText(languageStore, "workflow.port.output", fallback: "输出"),
+        .accessibilityLabel(workflowText(languageStore, "workflow.port.accessibility", arguments: [
+                "direction": input ? workflowText(languageStore, "workflow.port.input")
+                    : workflowText(languageStore, "workflow.port.output"),
                 "title": WorkflowCanvasPresentation.portTitle(operationID: node.operationID,
                     port: port, input: input, language: languageStore),
                 "detail": WorkflowCanvasPresentation.portSummary(port, language: languageStore)]))

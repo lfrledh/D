@@ -9,6 +9,7 @@ struct SharedLibraryTagTarget: Identifiable {
     var legacyFailure: String? = nil
     var activityID: String? = nil
     var id: String { activityID ?? key }
+    var isRuntime: Bool { WorkflowValueIdentity.isStorageKey(key) }
     static func legacy(_ state: ModelNodeTagReadState) -> (names: [String], failure: String?) {
         switch state {
         case .valid(let names): (names, nil)
@@ -55,7 +56,8 @@ struct SharedLibraryTagEditor: View {
     @State private var selectedLegacy: [String: Set<Int>]
     @State private var name = ""
     @State private var names: [String] = []
-    @State private var error: String?
+    @State private var error: (any Error)?
+    @State private var invalidName = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.metadataEditorLifecycle) private var lifecycle
     @Environment(\.dLanguageStore) private var language
@@ -76,8 +78,8 @@ struct SharedLibraryTagEditor: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(text("edit", "编辑标签…")).font(.headline)
             Text(targets.map(\.title).joined(separator: " · ")).lineLimit(3)
-            Text(text("storage", "共享资料库标签按逻辑项目/资产共享；恢复实例共用标签。标签不随现有项目备份或媒体导出包交换。"))
-                .font(.caption).foregroundStyle(.secondary)
+            if targets.contains(where: { !$0.isRuntime }) { Text(text("storage", "")).font(.caption).foregroundStyle(.secondary) }
+            if targets.contains(where: \.isRuntime) { Text(text("runtimeStorage", "")).font(.caption).foregroundStyle(.secondary) }
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(orderedTags) { tag in
@@ -112,19 +114,21 @@ struct SharedLibraryTagEditor: View {
                 TextField(text("new", "创建标签并添加到这些对象"), text: $name).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 Button(text("stage", "加入待保存")) {
                     let next = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !next.isEmpty, next.count <= 32 else { error = text("invalidName", "标签名称需要 1–32 个字符。"); return }
+                    guard !next.isEmpty, next.count <= 32 else { invalidName = true; return }
+                    invalidName = false
                     if !names.contains(where: { $0.utf8.elementsEqual(next.utf8) }) { names.append(next) }
                     name = ""
                 }
             }
-            if let error { Text(error).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
+            if invalidName { Text(text("invalidName", "")).foregroundStyle(.red).font(.caption) }
+            if let error { Text(sharedLibraryErrorText(error, language: language)).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
             HStack {
                 Button(text("cancel", "取消")) { dismiss() }
                 Spacer()
-                Button(baseline.integratedKeys.isSuperset(of: Set(targets.map(\.key))) ? text("saveOnly", "保存标签") : text("save", "确认整合并保存标签")) {
+                Button(baseline.integratedKeys.isSuperset(of: Set(targets.filter { !$0.isRuntime }.map(\.key))) ? text("saveOnly", "保存标签") : text("save", "确认整合并保存标签")) {
                     do {
                         try validateTarget()
-                        let keys = Set(targets.map(\.key)).subtracting(baseline.integratedKeys)
+                        let keys = Set(targets.filter { !$0.isRuntime }.map(\.key)).subtracting(baseline.integratedKeys)
                         var legacy: [String: [String]] = [:]
                         for target in targets where keys.contains(target.key) {
                             for index in target.legacy.indices where selectedLegacy[target.id]?.contains(index) == true {
@@ -135,7 +139,7 @@ struct SharedLibraryTagEditor: View {
                         try store.editOrganizationTags(expected: baseline, add: add, remove: remove, createNames: names,
                             selectedLegacyNames: legacy, confirmIntegration: keys)
                         dismiss()
-                    } catch { self.error = error.localizedDescription }
+                    } catch { self.error = error }
                 }.buttonStyle(WorkbenchPrimaryButtonStyle()).disabled(targets.isEmpty || targets.contains { $0.legacyFailure != nil && !baseline.integratedKeys.contains($0.key) } || !name.isEmpty)
             }
         }.padding(18).frame(width: 460, height: 520).interactiveDismissDisabled()
@@ -154,7 +158,7 @@ struct WorkflowAssetOrganization: View {
     var onQuery: ((SharedLibraryPropertyQuery) -> Void)? = nil
     var onEdit: ((AssetAnnotationRequest) -> Void)? = nil
     var body: some View {
-        DisclosureGroup(metadataText(language, "resultInformation", "结果信息", "Result information") + " · " + (controller.availableAssets.first(where: { $0.id == reference.assetID })?.name ?? metadataText(language, "unnamedResult", "未命名结果", "Untitled result")), isExpanded: $expanded) {
+        DisclosureGroup(metadataText(language, "resultInformation") + " · " + (controller.availableAssets.first(where: { $0.id == reference.assetID })?.name ?? metadataText(language, "unnamedResult")), isExpanded: $expanded) {
             if expanded { WorkflowAssetMetadataHost(controller: controller, reference: reference, metadata: metadata, onQuery: onQuery, onEdit: onEdit) }
         }
     }
@@ -195,7 +199,7 @@ struct WorkflowAssetMetadataHost: View {
     private var identity: WorkflowAssetPreviewState.Identity { .init(controller: controller, reference: target) }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if source != nil { Button(metadataText(language, "backResult", "返回结果", "Back to result")) { source = nil } }
+            if source != nil { Button(metadataText(language, "backResult")) { source = nil } }
             if state.identity == identity, let failure = state.failure {
                 Text(failure).font(.caption).foregroundStyle(.orange)
             }

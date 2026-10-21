@@ -10,16 +10,13 @@ struct ChatOutputFormatPanel: View {
     @State private var schemaText = ""
     @State private var issue: String?
     @State private var loaded = false
-    private func wording(_ en: String, _ zh: String) -> String {
-        language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? zh : en
-    }
     private func name(_ kind: ChatOutputFormat.Kind) -> String {
         switch kind {
-        case .automatic: wording("Automatic", "自动")
-        case .plainText: wording("Plain text", "纯文本")
+        case .automatic: workflowText(language, "consistency.remaining.7eb336e42cb5")
+        case .plainText: workflowText(language, "chat.artifactEditor.plainText")
         case .markdown: "Markdown"
         case .json: "JSON"
-        case .schema: wording("D structured schema", "D 结构定义")
+        case .schema: workflowText(language, "chat.outputFormatPanel.dStructuredSchema")
         }
     }
     private var saved: ChatOutputFormat { chat.state.sessions.first { $0.id == sessionID }?.outputFormat ?? .init() }
@@ -37,31 +34,31 @@ struct ChatOutputFormatPanel: View {
     }
     private func load() { kind = saved.kind; schemaText = encodedSchema(saved); issue = nil }
     var body: some View {
-        DisclosureGroup(wording("Response format", "回答格式")) {
+        DisclosureGroup(workflowText(language, "chat.outputFormatPanel.responseFormat")) {
             VStack(alignment: .leading, spacing: 8) {
-                WorkbenchPicker(wording("Format", "格式"), selection: $kind) {
+                WorkbenchPicker(workflowText(language, "workflow.operation.d.image.convert.field.format"), selection: $kind) {
                     WorkbenchChoiceForEach([ChatOutputFormat.Kind.automatic, .plainText, .markdown, .json, .schema], id: \.self) { value in
                         WorkbenchChoice(name(value), value:value)
                     }
                 }.accessibilityIdentifier("chat-output-format-kind")
                 if kind == .schema {
-                    Text(wording("D WorkflowDataSchema Codable JSON, not general JSON Schema. Example: a record with a title.", "填写 D WorkflowDataSchema 的 JSON，并非通用 JSON Schema。示例是带标题的记录。"))
+                    Text(workflowText(language, "chat.outputFormatPanel.dWorkflowDataSchemaCodableJSONNotGeneralJSONSchemaExampleA"))
                         .font(.caption).foregroundStyle(.secondary)
                     TextSourcesQuestionEditor(value: schemaText, editEpoch: 0, isEditable: true,
                         accessibilityIdentifier: "chat-output-schema-" + sessionID.uuidString, onEdit: { schemaText = $0 })
                         .frame(height: 120).workbenchInputSurface()
-                    Button(wording("Insert record example", "填入记录示例")) {
+                    Button(workflowText(language, "chat.outputFormatPanel.insertRecordExample")) {
                         let schema = WorkflowDataSchema.record([.init("title", .text), .init("tags", .list(.text), required: false)])
                         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                         schemaText = (try? encoder.encode(schema)).map { String(decoding: $0, as: UTF8.self) } ?? ""
                     }
                 }
-                Text(wording("Explicit format instructions are added to future requests. JSON is checked after generation; this does not force valid output. Invalid output stays available.", "显式格式要求加入之后的请求；JSON 在生成后检查，不保证模型一定遵守。未通过的原文仍保留。"))
+                Text(workflowText(language, "chat.outputFormatPanel.explicitFormatInstructionsAreAddedToFutureRequestsJSONIs"))
                     .font(.caption).foregroundStyle(.secondary)
-                Text(hasChanges ? wording("Changes are not applied", "修改尚未应用") : wording("Showing saved format", "当前为已保存的格式"))
+                Text(hasChanges ? workflowText(language, "chat.outputFormatPanel.changesAreNotApplied") : workflowText(language, "chat.outputFormatPanel.showingSavedFormat"))
                     .font(.caption).foregroundStyle(.secondary)
-                Button(wording("Discard format edits", "放弃格式修改")) { load() }.disabled(!hasChanges)
-                Button(wording("Apply to future answers", "应用到之后的回答")) {
+                Button(workflowText(language, "chat.outputFormatPanel.discardFormatEdits")) { load() }.disabled(!hasChanges)
+                Button(workflowText(language, "chat.outputFormatPanel.applyToFutureAnswers")) {
                     do {
                         let schema: WorkflowDataSchema?
                         if kind == .schema {

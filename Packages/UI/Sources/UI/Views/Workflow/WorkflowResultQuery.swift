@@ -103,45 +103,45 @@ struct WorkflowResultQueryControls: View {
     @State private var filters = false
     @State private var saveRequest: SharedLibrarySaveQueryRequest?
     @Environment(\.dLanguageStore) private var language
-    private func t(_ key: String, _ zh: String, _ en: String) -> String { metadataText(language, key, zh, en) }
+    private func t(_ key: String, _ zh: String = "", _ en: String = "") -> String { metadataText(language, key, zh, en) }
     private var query: Binding<SharedLibraryQuery> { Binding(get: { state.query }, set: { var value = $0; value.scope = nil; state.query = value }) }
     private var token: String { String(describing: state.identity) + String(describing: scope) + String(describing: ObjectIdentifier(store)) }
     private var scopeTitle: String {
-        scopeDescription ?? scope.map { SharedLibraryScopeSummary.readable($0, text: t) } ?? t("displayedResults", "当前显示的输出范围", "Currently displayed outputs")
+        scopeDescription ?? scope.map { SharedLibraryScopeSummary.readable($0, text: t) } ?? t("displayedResults")
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            DisclosureGroup(t("resultFilters", "筛选此范围的结果", "Filter results in this scope"), isExpanded: $expanded) {
+            DisclosureGroup(t("resultFilters"), isExpanded: $expanded) {
                 Text(scopeTitle).font(.caption)
-                Text(t("localResults", "只筛选已保存资产；其他值、运行状态与待处理事项保持可见", "Filters saved assets only; other values, run status and pending decisions stay visible")).font(.caption2)
-                TextField(t("searchResults", "搜索结果名称、说明和标签", "Search result names, notes & tags"), text: $state.query.text).textFieldStyle(WorkbenchGlassTextFieldStyle())
+                Text(t("localResults")).font(.caption2)
+                TextField(t("searchResults"), text: $state.query.text).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 HStack {
-                    Button(t("filters", "筛选条件…", "Filter conditions…")) { filters = true }
-                    Button(t("saveQuery", "保存此检索", "Save this query")) {
+                    Button(t("filters")) { filters = true }
+                    Button(t("saveQuery")) {
                         guard let scope else { return }
                         var captured = state.query; captured.scope = scope
-                        saveRequest = .init(query: captured, scopeTitle: scopeTitle, tagTitles: Dictionary(uniqueKeysWithValues: captured.allTagIDs.union(captured.anyTagIDs).map { ($0, state.tagPresentation.title($0, tags: store.metadata.tags, missing: t("deletedTagCondition", "已删除的标签", "Deleted tag"))) }))
+                        saveRequest = .init(query: captured, scopeTitle: scopeTitle, tagTitles: Dictionary(uniqueKeysWithValues: captured.allTagIDs.union(captured.anyTagIDs).map { ($0, state.tagPresentation.title($0, tags: store.metadata.tags, missing: t("deletedTagCondition"))) }))
                     }.disabled(scope == nil)
                 }
             }
             if !state.query.text.isEmpty {
                 Button { state.query.text = "" } label: { Label(state.query.text, systemImage: "xmark.circle") }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
             }
-            tagConditions(state.query.allTagIDs, path: \.allTagIDs, title: t("allTags", "同时包含标签", "Contains all tags"))
-            tagConditions(state.query.anyTagIDs, path: \.anyTagIDs, title: t("anyTags", "至少包含一个标签", "Contains any tag"))
+            tagConditions(state.query.allTagIDs, path: \.allTagIDs, title: t("allTags"))
+            tagConditions(state.query.anyTagIDs, path: \.anyTagIDs, title: t("anyTags"))
             SharedLibraryQuerySummary(query: state.query, remove: { state.query = $0 })
             if state.query.properties != nil && !state.isLoading && state.failure == nil {
                 SharedLibraryPropertySummary(query: query, items: Array(state.items.values), context: .init(), store: store, fixedScopeDescription: scopeTitle)
             }
-            if state.isLoading { Text(t("indexing", "正在读取当前结果的登记信息…", "Reading registered facts for these results…")) }
+            if state.isLoading { Text(t("indexing")) }
             else if let issue = state.failure { Text(issue).foregroundStyle(.orange) }
             else if state.identity == nil || state.items.count < (state.identity?.references.count ?? 0) {
-                Text(t("incompleteIndex", "登记信息尚不完整；不把未知当作无结果。", "Registration information is incomplete; unknown does not mean no results."))
+                Text(t("incompleteIndex"))
             } else {
-                Text(t("uniqueAssets", "独立素材", "Distinct assets") + " \((state.identity?.references ?? []).filter { state.matches($0, store: store) }.count)/\(state.identity?.references.count ?? 0)")
+                Text(t("uniqueAssets") + " \((state.identity?.references ?? []).filter { state.matches($0, store: store) }.count)/\(state.identity?.references.count ?? 0)")
             }
             if state.query != SharedLibraryQuery() {
-                Button(t("clearQuery", "清除检索条件", "Clear query conditions")) { state.query = .init() }
+                Button(t("clearQuery")) { state.query = .init() }
             }
         }.font(.caption)
         .onAppear { rememberTags() }
@@ -155,9 +155,9 @@ struct WorkflowResultQueryControls: View {
     }
     private func rememberTags() { state.tagPresentation.observe(tags: store.metadata.tags, requested: state.query.allTagIDs.union(state.query.anyTagIDs)) }
     private func tagConditions(_ ids: Set<UUID>, path: WritableKeyPath<SharedLibraryQuery, Set<UUID>>, title: String) -> some View {
-        ForEach(WorkflowResultQueryState.tagConditions(ids, store: store, missingLabel: t("deletedTagCondition", "已删除的标签", "Deleted tag")), id: \.id) { condition in
+        ForEach(WorkflowResultQueryState.tagConditions(ids, store: store, missingLabel: t("deletedTagCondition")), id: \.id) { condition in
             HStack {
-                Button { state.query[keyPath: path].remove(condition.id) } label: { Label(title + ": " + state.tagPresentation.title(condition.id, tags: store.metadata.tags, missing: t("deletedTagCondition", "已删除的标签", "Deleted tag")), systemImage: "xmark.circle") }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
+                Button { state.query[keyPath: path].remove(condition.id) } label: { Label(title + ": " + state.tagPresentation.title(condition.id, tags: store.metadata.tags, missing: t("deletedTagCondition")), systemImage: "xmark.circle") }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                 if store.metadata.tags[condition.id] == nil { WorkflowTechnicalDetails(value: condition.id.uuidString) }
             }
         }

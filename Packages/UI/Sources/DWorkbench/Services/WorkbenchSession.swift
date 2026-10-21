@@ -102,17 +102,27 @@ public struct WorkbenchRuntimeStatus: Sendable {
     public let activeRunID: UUID?
     public let phase: String?
     public let state: JobState?
+    /// D-owned display identity, separate from a backend's original phase text.
+    public let phaseCode: String?
     public let queuedRunIDs: [UUID]
 
-    public init(activeRunID: UUID?, phase: String?, queuedRunIDs: [UUID], state: JobState? = nil) {
+    public init(activeRunID: UUID?, phase: String?, queuedRunIDs: [UUID], state: JobState? = nil, phaseCode: String? = nil) {
         self.activeRunID = activeRunID
         self.phase = phase
         self.state = state
+        self.phaseCode = phaseCode
         self.queuedRunIDs = queuedRunIDs
     }
 }
 
 public extension WorkbenchRuntimeStatus {
+    func phaseCode(for runID: UUID) -> String? {
+        if activeRunID == runID {
+            if let phaseCode { return phaseCode }
+            return state.map { $0 == .generating ? "running" : $0.rawValue }
+        }
+        return queuedRunIDs.contains(runID) ? "queued" : nil
+    }
     /// A different active request must never label the inspected/queued request.
     func phase(for runID: UUID) -> String? {
         if activeRunID == runID { return phase }

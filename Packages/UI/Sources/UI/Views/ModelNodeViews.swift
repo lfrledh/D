@@ -28,9 +28,9 @@ public struct ModelNodeList: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 8) {
                 if entries.isEmpty {
-                    ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.147", fallback: "No Model Nodes Are Listed for This Mode Yet"),
+                    ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.147"),
                                            systemImage: "cube.transparent",
-                                           description: Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.148", fallback: "Viewing a model node does not download, install or create a task.")))
+                                           description: Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.148")))
                         .accessibilityIdentifier("model-node-list-empty")
                         .padding(.vertical, 28)
                 } else {
@@ -109,36 +109,36 @@ public struct ModelNodeDetail: View {
     }
 
     private var identityAndExecution: some View {
-        ModelNodeSection(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.149", fallback: "Identity and Execution"), identifier: "identity") {
+        ModelNodeSection(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.149"), identifier: "identity") {
             Text(displayNode.title).font(.title2.weight(.semibold))
             Text(displayNode.summary).foregroundStyle(.secondary)
-            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.150", fallback: "Model ID"), value: node.modelIdentity)
-            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.151", fallback: "Version"), value: node.revision)
-            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.152", fallback: "Engine"), value: displayNode.engine)
-            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.153", fallback: "Device"), value: displayNode.device)
-            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.154", fallback: "Precision"), value: displayNode.precision)
-            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.155", fallback: "Availability"), value: ModelNodeUILocalization.availability(node.availability, language: legacyLanguage))
-            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.156", fallback: "Deployment and Verification"), value: displayNode.deploymentNote)
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.150"), value: node.modelIdentity)
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.151"), value: node.revision)
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.152"), value: displayNode.engine)
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.153"), value: displayNode.device)
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.154"), value: displayNode.precision)
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.155"), value: ModelNodeUILocalization.availability(node.availability, language: legacyLanguage))
+            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.156"), value: displayNode.deploymentNote)
             if !displayNode.notes.isEmpty {
-                ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.157", fallback: "Limits and Notes"), value: displayNode.notes.joined(separator: "\n"))
+                ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.157"), value: displayNode.notes.joined(separator: "\n"))
             }
             if !node.evidencePaths.isEmpty {
-                ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.158", fallback: "Evidence"), value: node.evidencePaths.joined(separator: "\n"))
+                ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.158"), value: node.evidencePaths.joined(separator: "\n"))
             }
         }
     }
 
     private var tagsSection: some View {
-        ModelNodeSection(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.159", fallback: "Your Tags"), identifier: "tags") {
-            Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.160", fallback: "Tags are stored locally for organization. They do not change model capabilities, licensing or generation settings."))
+        ModelNodeSection(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.159"), identifier: "tags") {
+            Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.160"))
                 .font(.caption).foregroundStyle(.secondary)
             if !tagEditor.isEditable {
-                Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.161", fallback: "The tag record could not be read. Existing data has been kept, and editing is temporarily unavailable."))
+                Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.161"))
                     .font(.caption).foregroundStyle(.red)
                     .accessibilityIdentifier("model-node-tags-corrupt-\(node.id)")
                     .modelNodeMeasured("model-node-tags-corrupt-\(node.id)", probe: layoutProbe)
             } else if tagEditor.tags.isEmpty {
-                Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.162", fallback: "No Tags Yet")).foregroundStyle(.secondary)
+                Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.162")).foregroundStyle(.secondary)
                     .accessibilityIdentifier("model-node-tags-empty")
                     .modelNodeMeasured("model-node-tags-empty-\(node.id)", probe: layoutProbe)
             } else {
@@ -147,7 +147,7 @@ public struct ModelNodeDetail: View {
                         HStack(spacing: 8) {
                             Text(tag).fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 4)
-                            Button(workflowText(legacyLanguage, "consistency.copy.removeNamed", fallback: "Remove {name}", arguments: ["name": tag]), systemImage: "xmark") { remove(tag) }
+                            Button(workflowText(legacyLanguage, "consistency.copy.removeNamed", arguments: ["name": tag]), systemImage: "xmark") { remove(tag) }
                                 .labelStyle(.iconOnly)
                                 .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                                 .accessibilityIdentifier("model-node-tag-remove-\(node.id)-\(tag)")
@@ -160,13 +160,13 @@ public struct ModelNodeDetail: View {
                 .accessibilityIdentifier("model-node-tags")
             }
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                TextField(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.163", fallback: "Add Tag"), text: $tagEditor.draft)
+                TextField(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.163"), text: $tagEditor.draft)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .disabled(!tagEditor.isEditable)
                     .accessibilityIdentifier("model-node-tag-draft-\(node.id)")
                     .onSubmit(addDraft)
                     .modelNodeMeasured("model-node-tag-draft-\(node.id)", probe: layoutProbe)
-                Button(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.164", fallback: "Add"), action: addDraft)
+                Button(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.164"), action: addDraft)
                     .buttonStyle(WorkbenchGlassButtonStyle())
                     .disabled(!tagEditor.isEditable)
                     .accessibilityIdentifier("model-node-tag-add-\(node.id)")
@@ -180,21 +180,21 @@ public struct ModelNodeDetail: View {
     }
 
     private var operationsSection: some View {
-        ModelNodeSection(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.165", fallback: "Operations and Ports"), identifier: "operations") {
+        ModelNodeSection(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.165"), identifier: "operations") {
             if displayNode.operations.isEmpty {
-                Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.166", fallback: "No operation information was recorded.")).foregroundStyle(.secondary)
+                Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.166")).foregroundStyle(.secondary)
             }
             ForEach(displayNode.operations) { operation in
                 VStack(alignment: .leading, spacing: 10) {
                     Text(operation.title).font(.headline)
                     Text(operation.summary).foregroundStyle(.secondary)
                     ModelNodePortGroup(title: consistencyText(legacyLanguage, "copy.input"), isInput: true, ports: operation.inputs,
-                                       emptyText: workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.167", fallback: "This operation has no input ports."))
+                                       emptyText: workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.167"))
                         .modelNodeMeasured("model-node-ports-\(node.id)-\(operation.id)-inputs", probe: layoutProbe)
                     ModelNodePortGroup(title: consistencyText(legacyLanguage, "copy.output"), isInput: false, ports: operation.outputs,
-                                       emptyText: workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.168", fallback: "This operation has no output ports."))
+                                       emptyText: workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.168"))
                         .modelNodeMeasured("model-node-ports-\(node.id)-\(operation.id)-outputs", probe: layoutProbe)
-                    Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.169", fallback: "Outputs describe results that a successful operation always or may produce. They are not selectable inputs."))
+                    Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.169"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .padding(14)
@@ -205,12 +205,12 @@ public struct ModelNodeDetail: View {
     }
 
     private var parametersSection: some View {
-        ModelNodeSection(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.170", fallback: "Parameters"), identifier: "parameters") {
-            Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.171", fallback: "These parameters describe backend specifications for inspection. They are not controls for a generation request."))
+        ModelNodeSection(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.170"), identifier: "parameters") {
+            Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.171"))
                 .font(.caption).foregroundStyle(.secondary)
             let parameters = displayNode.operations.flatMap(\.parameters)
             if parameters.isEmpty {
-                Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.172", fallback: "No parameter information was recorded.")).foregroundStyle(.secondary)
+                Text(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.172")).foregroundStyle(.secondary)
             }
             ForEach(displayNode.operations) { operation in
                 if !operation.parameters.isEmpty {
@@ -220,12 +220,12 @@ public struct ModelNodeDetail: View {
                             HStack(alignment: .firstTextBaseline) {
                                 Text(parameter.title).font(.callout.weight(.semibold))
                                 Spacer(minLength: 8)
-                                Text(ModelNodeUILocalization.usesRegistry(node) ? ModelNodeUILocalization.owned("请求参数", language: legacyLanguage) : parameter.isAdjustable ? workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.173", fallback: "Adjustable by Backend") : workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.174", fallback: "Fixed"))
+                                Text(ModelNodeUILocalization.usesRegistry(node) ? ModelNodeUILocalization.owned("请求参数", language: legacyLanguage) : parameter.isAdjustable ? workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.173") : workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.174"))
                                     .font(.caption).foregroundStyle(.secondary)
                             }
-                            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.175", fallback: "Default"), value: parameter.defaultValue)
-                            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.176", fallback: "Allowed Values and Constraints"), value: parameter.acceptedValues)
-                            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.177", fallback: "Description"), value: parameter.detail)
+                            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.175"), value: parameter.defaultValue)
+                            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.176"), value: parameter.acceptedValues)
+                            ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.177"), value: parameter.detail)
                         }
                         .padding(12)
                         .background(.background, in: RoundedRectangle(cornerRadius: 10))

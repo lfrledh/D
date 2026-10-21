@@ -224,7 +224,7 @@ struct SharedLibraryBrowserRenameDrafts {
     }
 
     static func tagEditEntries(_ ids: Set<String>, in entries: [SharedLibraryBrowserEntry]) -> [SharedLibraryBrowserEntry] {
-        entries.filter { ids.contains($0.id) && $0.runtimeValue == nil }
+        entries.filter { ids.contains($0.id) && ($0.runtimeValue == nil || $0.runtimeValue?.annotationIdentity != nil) }
     }
 
     static func validatedDropKeys(_ candidates: [String], entries: [SharedLibraryBrowserEntry]) -> Set<String>? {
@@ -316,13 +316,13 @@ struct SharedLibraryBrowserRenameDrafts {
                                          controller: WorkflowController?, language: UILanguageStore?) -> String? {
         guard let controller else { return nil } // Existing explicit Add opens the target first.
         if !controller.canEditCanvas {
-            return metadataText(language, "canvasUnavailable", "当前流程不可编辑，暂时不能添加到画布。", "This workflow cannot currently be edited. Items cannot be added to the canvas.")
+            return metadataText(language, "canvasUnavailable")
         }
         guard case .operation(let id, let modelID) = entry.selection, let modelID else { return nil }
         guard let definition = controller.registry.operation(id)?.definition, definition.modelKind != nil,
               (controller.modelChoices.contains(where: { $0.id == modelID && $0.kind == definition.modelKind })
                 || WorkflowModelRoutes.draftChoice(operationID: id, modelID: modelID)?.kind == definition.modelKind) else {
-            return metadataText(language, "modelIdentityBeforeAdd", "此模型身份与操作不匹配，且不是受支持的目录草稿。", "This model identity does not match the operation or a supported catalog draft.")
+            return metadataText(language, "modelIdentityBeforeAdd")
         }
         return nil
     }
@@ -440,12 +440,16 @@ public struct SharedLibraryBrowser: View {
     }
     private var saved: [SharedLibrarySavedQuery] { store.metadata.savedQueries.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } }
     private var validSelection: Set<String> { selectedKeys.intersection(Set(entries.map(\.id))) }
+    private var selectedTagKeys: Set<String> { Set(SharedLibraryBrowserLogic.tagEditEntries(validSelection, in: entries).map { $0.item.key }) }
     private var selectedMetadataKeys: Set<String> { Set(entries.filter { validSelection.contains($0.id) && $0.runtimeValue == nil }.map { $0.item.key }) }
     private var selectedEntry: SharedLibraryBrowserEntry? {
         entries.first { $0.id == focusedKey } ?? entries.first { validSelection.contains($0.id) }
     }
     private var visibleResult: Result<[SharedLibraryBrowserEntry], Error> {
-        Result { try SharedLibraryBrowserLogic.visibleEntries(entries.filter { workflowContext?.includes($0) ?? true }, store: store, query: query, scope: scope, context: queryContext) }
+        Result { try SharedLibraryBrowserLogic.visibleEntries(entries.filter { entry in
+            guard let workflowContext else { return true }
+            return insertionController.map { workflowContext.isCurrent(in: $0) } == true && workflowContext.includes(entry)
+        }, store: store, query: query, scope: scope, context: queryContext) }
     }
     private var visible: [SharedLibraryBrowserEntry] { (try? visibleResult.get()) ?? [] }
 
@@ -462,7 +466,10 @@ public struct SharedLibraryBrowser: View {
                     .accessibilityIdentifier("shared-library-error")
             }
             if case .failure(let error) = visibleResult {
-                Text(error.localizedDescription).foregroundStyle(.red).padding(8)
+                Text(sharedLibraryErrorText(error, language: language)).foregroundStyle(.red).padding(8)
+            }
+            if workflowContext != nil, visible.isEmpty {
+                Text(workspaceText(language, "locationEmpty")).font(.caption).foregroundStyle(.secondary).padding(8)
             }
             if compact {
                 compactBody
@@ -759,8 +766,8 @@ public struct SharedLibraryBrowser: View {
                 HStack(spacing: 4) {
                     if scope != .all { token(scopeTitle) { selectScope(.all) } }
                     if !query.text.isEmpty { token(query.text) { query.text = "" } }
-                    ForEach(WorkflowResultQueryState.tagConditions(query.allTagIDs, store: store, missingLabel: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag")), id: \.id) { tag in token(word("allTags", "同时包含标签") + ": " + state.tagPresentation.title(tag.id, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag"))) { query.allTagIDs.remove(tag.id) } }
-                    ForEach(WorkflowResultQueryState.tagConditions(query.anyTagIDs, store: store, missingLabel: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag")), id: \.id) { tag in token(word("anyTags", "至少一个标签") + ": " + state.tagPresentation.title(tag.id, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag"))) { query.anyTagIDs.remove(tag.id) } }
+                    ForEach(WorkflowResultQueryState.tagConditions(query.allTagIDs, store: store, missingLabel: metadataText(language, "deletedTagCondition")), id: \.id) { tag in token(word("allTags", "同时包含标签") + ": " + state.tagPresentation.title(tag.id, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition"))) { query.allTagIDs.remove(tag.id) } }
+                    ForEach(WorkflowResultQueryState.tagConditions(query.anyTagIDs, store: store, missingLabel: metadataText(language, "deletedTagCondition")), id: \.id) { tag in token(word("anyTags", "至少一个标签") + ": " + state.tagPresentation.title(tag.id, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition"))) { query.anyTagIDs.remove(tag.id) } }
                     dimensionTokens(query.kinds, path: \.kinds, label: kindName)
                     dimensionTokens(query.roles, path: \.roles, label: { $0 })
                     dimensionTokens(query.inputs, path: \.inputs, label: { word("inputs", "输入能力") + ": " + dataName($0) })
@@ -772,7 +779,7 @@ public struct SharedLibraryBrowser: View {
                 }
             }.scrollIndicators(.hidden) }
             if !query.allTagIDs.union(query.anyTagIDs).filter({ store.metadata.tags[$0] == nil }).isEmpty {
-                WorkflowTechnicalDetails(value: query.allTagIDs.union(query.anyTagIDs).filter { store.metadata.tags[$0] == nil }.sorted { $0.uuidString < $1.uuidString }.map { state.tagPresentation.title($0, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag")) + ": " + $0.uuidString }.joined(separator: "\n"))
+                WorkflowTechnicalDetails(value: query.allTagIDs.union(query.anyTagIDs).filter { store.metadata.tags[$0] == nil }.sorted { $0.uuidString < $1.uuidString }.map { state.tagPresentation.title($0, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition")) + ": " + $0.uuidString }.joined(separator: "\n"))
             }
         }.popover(isPresented: $showFilters, arrowEdge: .bottom) { filterPopover }
             .workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge)
@@ -780,7 +787,7 @@ public struct SharedLibraryBrowser: View {
     private var searchFooter: some View {
             HStack {
                 if case .failure = visibleResult {
-                    Text(metadataText(language, "countUnavailable", "当前范围数量不可用", "Count unavailable for this scope")).font(.caption2)
+                    Text(metadataText(language, "countUnavailable")).font(.caption2)
                 } else {
                     Text("\(visible.count)/\(entries.count) " + word("locations", "结果位置")).font(.caption2).foregroundStyle(.secondary)
                 }
@@ -824,7 +831,7 @@ public struct SharedLibraryBrowser: View {
                 }
                 if tags.isEmpty { WorkbenchMenuText(word("noTags", "尚无我的标签")) }
             } label: { Label(word("bulkTags", "批量标签"), systemImage: "tag") }
-                .disabled(selectedMetadataKeys.isEmpty)
+                .disabled(selectedTagKeys.isEmpty)
             WorkbenchMenu {
                 WorkbenchMenuForEach(folders) { folder in
                     WorkbenchMenuAction(word("addToFolder", "加入分类") + " · " + folder.name) {
@@ -913,7 +920,7 @@ public struct SharedLibraryBrowser: View {
                 HStack {
                     ForEach(tags.filter { ids.contains($0.id) }) { tag in
                         Button(tag.name) { query.allTagIDs.insert(tag.id) }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
-                            .help(metadataText(language, "tagFiltersOnly", "仅按此标签筛选", "Filter by this tag only"))
+                            .help(metadataText(language, "tagFiltersOnly"))
                     }
                 }.font(.caption).padding(.horizontal, 6)
             }
@@ -943,7 +950,7 @@ public struct SharedLibraryBrowser: View {
     private func details(_ entry: SharedLibraryBrowserEntry) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             if !visible.contains(where: { $0.id == entry.id }) {
-                Text(metadataText(language, "filteredSelection", "此对象已不匹配当前条件；详情仍绑定原对象。", "This item no longer matches; details remain bound to the same item.")).font(.caption).foregroundStyle(.orange)
+                Text(metadataText(language, "filteredSelection")).font(.caption).foregroundStyle(.orange)
             }
             Text(entry.item.title).font(.headline).textSelection(.enabled)
             Text(entry.item.detail).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
@@ -995,8 +1002,10 @@ public struct SharedLibraryBrowser: View {
                         let sameInstance = matches.filter { $0.metadataSnapshot?.instanceID == snapshot.instanceID }
                         if let target = sameInstance.first ?? (matches.count == 1 ? matches.first : nil) {
                             focusedKey = target.id; compactDetailKey = compact ? target.id : nil
-                        } else { errorMessage = metadataText(language, "sourceMissing", "此精确来源不在当前已登记范围，或存在多个实例。", "This exact source is outside the registered scope, or has multiple instances.") }
+                        } else { errorMessage = metadataText(language, "sourceMissing") }
                     })
+            } else if let runtime = entry.runtimeValue, let identity = runtime.annotationIdentity {
+                RuntimeValueMetadataPanel(value: runtime, identity: identity, title: entry.item.title, library: store, validate: tagValidation(entry))
             } else if entry.runtimeValue == nil {
                 SharedLibraryTagSection(store: store, target: tagTarget(entry), validateTarget: tagValidation(entry))
             }
@@ -1029,13 +1038,13 @@ public struct SharedLibraryBrowser: View {
     }
     private func openSaveQuery() {
         guard workflowContext == nil else {
-            errorMessage=workspaceText(language,"relatedSaveScope","关联节点是临时条件；请先移除它再保存检索。原检索已保留。","Related-node filtering is temporary. Remove it before saving a query. Your existing query is retained.")
+            errorMessage=workspaceText(language, "relatedSaveScope")
             return
         }
         do {
             let captured = try SharedLibraryBrowserLogic.queryForSaving(query, scope: scope, store: store)
-            saveQueryRequest = .init(query: captured, scopeTitle: scopeTitle, tagTitles: Dictionary(uniqueKeysWithValues: captured.allTagIDs.union(captured.anyTagIDs).map { ($0, state.tagPresentation.title($0, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition", "已删除的标签", "Deleted tag"))) }))
-        } catch { errorMessage = error.localizedDescription }
+            saveQueryRequest = .init(query: captured, scopeTitle: scopeTitle, tagTitles: Dictionary(uniqueKeysWithValues: captured.allTagIDs.union(captured.anyTagIDs).map { ($0, state.tagPresentation.title($0, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition"))) }))
+        } catch { errorMessage = sharedLibraryErrorText(error, language: language) }
     }
 
     private func filterGroup<Value: Hashable>(
@@ -1240,7 +1249,7 @@ public struct SharedLibraryBrowser: View {
                     Button(word("removeSelected", "从已选条目移除")) {
                         openTagEditor(activityIDs: validSelection, remove: [id])
                     }
-                }.disabled(selectedMetadataKeys.isEmpty)
+                }.disabled(selectedTagKeys.isEmpty)
             }
         }
     }
@@ -1382,7 +1391,7 @@ public struct SharedLibraryBrowser: View {
                     errorMessage = word("conflictingScope", "当前类别与筛选条件冲突，无法保存。")
                 }
             } else {
-                errorMessage = error.localizedDescription
+                errorMessage = sharedLibraryErrorText(error, language: language)
             }
             return false
         }
@@ -1401,7 +1410,7 @@ public struct SharedLibraryBrowser: View {
             errorMessage = nil
             return true
         }
-        catch { errorMessage = error.localizedDescription; return false }
+        catch { errorMessage = sharedLibraryErrorText(error, language: language); return false }
     }
     private func dispatch(_ action: SharedLibraryBrowserAction, key: String) {
         guard let current = SharedLibraryBrowserLogic.currentEntry(

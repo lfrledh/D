@@ -3,21 +3,24 @@ import AppKit
 import CryptoKit
 import Foundation
 import SwiftUI
+import UI
 
 /// Development-only deployment gate. It does not configure or enable the audio engine.
 struct AudioDeploymentCheck: View {
+    let language: UILanguageStore
+    private func text(_ key: String) -> String { language.text("diagnostic.audioDeployment." + key, fallback: "—") }
     let expectedExecutable: String
     let expectedDigest: String
     @State private var running = false
-    @State private var result = "检查既有 Python 的普通沙盒执行与依赖发现；不加载模型、不录音。"
+    @State private var result: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("音频引擎部署检查").font(.title)
-            Text("请选择已准备的 Python 执行文件；只检查明确指定的文件，不扫描其他目录。")
-            Button("选择并检查既有引擎…") { Task { await check() } }
+            Text(text("title")).font(.title)
+            Text(text("instructions"))
+            Button(text("choose")) { Task { await check() } }
                 .disabled(running).accessibilityIdentifier("audio-deployment-check")
-            ScrollView { Text(result).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
+            ScrollView { Text(result ?? text("initial")).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
                 .accessibilityIdentifier("audio-deployment-result")
         }.padding(24).frame(minWidth: 700, minHeight: 480)
     }

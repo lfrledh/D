@@ -93,6 +93,7 @@ struct WorkflowLibraryPreview: View {
     let pixels: Int
     let load: @MainActor @Sendable () async throws -> ProjectReadOnlyContent
     @Environment(\.workbenchContentVisible) private var visible
+    @Environment(\.dLanguageStore) private var language
     @State private var preview: WorkflowLibraryPreviewCache.Preview?
     @State private var failure: String?
     @State private var retry = 0
@@ -118,7 +119,7 @@ struct WorkflowLibraryPreview: View {
                 }
             } else if let excerpt = preview?.excerpt { Text(excerpt).font(.caption).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading) }
             else if failure != nil {
-                Button { retry += 1 } label: { Label("重试预览 / Retry preview", systemImage: "arrow.clockwise") }.font(.caption).help(failure ?? "")
+                Button { retry += 1 } label: { Label(workflowText(language, "workflow.preview.retry"), systemImage: "arrow.clockwise") }.font(.caption).help(failure ?? "")
             } else { Image(systemName: entry.item.contentKind == .video ? "film" : entry.item.contentKind == .text ? "text.alignleft" : "photo").foregroundStyle(.secondary) }
         }
         .task(id: identity) {

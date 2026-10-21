@@ -8,10 +8,10 @@ public struct ModelParameterScale: Equatable, Sendable {
     public let scope: Scope
     public let sourceURLs: [String]
     public let checkedAt: String
-    public let note: String?
-    public init(publishedBillions: String, activeBillions: String?, scope: Scope, sourceURLs: [String], checkedAt: String, note: String? = nil) {
+    public let noteKey: String?
+    public init(publishedBillions: String, activeBillions: String?, scope: Scope, sourceURLs: [String], checkedAt: String, noteKey: String? = nil) {
         self.publishedBillions = publishedBillions; self.activeBillions = activeBillions; self.scope = scope
-        self.sourceURLs = sourceURLs; self.checkedAt = checkedAt; self.note = note
+        self.sourceURLs = sourceURLs; self.checkedAt = checkedAt; self.noteKey = noteKey
     }
 }
 public extension ModelNodeDescriptor {
@@ -20,26 +20,26 @@ public extension ModelNodeDescriptor {
         if let value = ModelNodeCatalog.weightSummaries[modelIdentity + "@" + revision] { return value }
         guard ModelNodeCatalog.entries.contains(where: { $0.id == id && $0.modelIdentity == modelIdentity && $0.revision == revision }) else { return nil }
         switch id {
-        case "flux2-klein-4b-q8": return "Q8 · BF16 计算组件"
+        case "flux2-klein-4b-q8": return "model.spec.weight.q8Compute"
         case "flux2-klein-4b-bf16", "flux2-dev-bf16": return "BF16"
         case "sm-music", "sm-sfx", "medium": return "FP16 · codec FP32"
-        case "wan21-t2v-1.3b-bf16-v1": return "BF16 · 子组件 FP32"
+        case "wan21-t2v-1.3b-bf16-v1": return "model.spec.weight.wanMixed"
         case "ace-step-1.5-xl-sft-f32-no-lm": return "F32 · XL SFT"
-        case "audio.singing.qixuan": return "声学模型与声码器 FP32"
-        case "mrt2-small-export-v1": return "图内权重精度未记录"
-        case "swift-f0-0.1.2-cpu-v1": return "权重精度未记录 · 输入 FP32"
+        case "audio.singing.qixuan": return "model.spec.weight.acoustic"
+        case "mrt2-small-export-v1": return "model.spec.weight.graphUnknown"
+        case "swift-f0-0.1.2-cpu-v1": return "model.spec.weight.inputOnly"
         case "video.model.minimax-h3-fl2va-bf16-full-v1", "video.model.ltx-2.3-dev-bf16-full-v1", "video.model.ltx-2.5-dev-bf16-full-v1": return "BF16"
-        case "video.model.ltx-2.3-dev-q8-gemma3-q4-test-v1": return "生成主干 Q8 · 文本塔 Q4"
+        case "video.model.ltx-2.3-dev-q8-gemma3-q4-test-v1": return "model.spec.weight.ltxMixed"
         default: return nil
         }
     }
-    var unrecordedScaleReason: String? {
+    var unrecordedScaleReasonKey: String? {
         guard ModelNodeCatalog.entries.contains(where: { $0.id == id && $0.modelIdentity == modelIdentity && $0.revision == revision }) else { return nil }
         switch id {
-        case "flux2-klein-4b-q8": return "固定转换包未给出可追溯逻辑参数统计；量化文件元素数量不能当作参数量。"
-        case "sm-music", "sm-sfx": return "官方论文与仓库分别给出 459M 和 433M DiT；当前固定包没有对应统计，暂不选取其中一个作为精确规模。"
-        case "swift-f0-0.1.2-cpu-v1": return "作者旧版论文为 95,842 参数，但未直接绑定当前 ONNX 摘要；0.2.0 的 14,386 不适用于当前 0.1.2。"
-        case "video.model.ltx-2.5-dev-bf16-full-v1": return "固定执行包未取得参数规模说明，不从 22b 名称推算。"
+        case "flux2-klein-4b-q8": return "model.spec.unknown.convertedCount"
+        case "sm-music", "sm-sfx": return "model.spec.unknown.stableAudioConflict"
+        case "swift-f0-0.1.2-cpu-v1": return "model.spec.unknown.swiftVersion"
+        case "video.model.ltx-2.5-dev-bf16-full-v1": return "model.spec.unknown.ltx25"
         default: return nil
         }
     }
@@ -74,21 +74,21 @@ public extension ModelNodeCatalog {
             return .init(publishedBillions: "32", activeBillions: nil, scope: .transformer,
                 sourceURLs: ["https://huggingface.co/black-forest-labs/FLUX.2-dev"], checkedAt: "2026-10-21")
         case ("google/magenta-realtime-2 · mrt2_small", "010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc"):
-            return .init(publishedBillions: "0.23", activeBillions: nil, scope: .transformer, sourceURLs: ["https://huggingface.co/google/magenta-realtime-2/blob/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/README.md"], checkedAt: "2026-10-21", note: "仅音频 token decoder；不含 MusicCoCa 与 SpectroStream。")
+            return .init(publishedBillions: "0.23", activeBillions: nil, scope: .transformer, sourceURLs: ["https://huggingface.co/google/magenta-realtime-2/blob/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/README.md"], checkedAt: "2026-10-21", noteKey: "model.spec.note.mrt2")
         case ("ACE-Step/acestep-v15-xl-sft", "d06de46b4622f781cf07f4a013a67d591ca52819"):
-            return .init(publishedBillions: "4", activeBillions: nil, scope: .transformer, sourceURLs: ["https://huggingface.co/ACE-Step/acestep-v15-xl-sft/blob/d06de46b4622f781cf07f4a013a67d591ca52819/README.md"], checkedAt: "2026-10-21", note: "官方约 4B DiT；当前 no-LM 配方不包含可选语言模型。")
+            return .init(publishedBillions: "4", activeBillions: nil, scope: .transformer, sourceURLs: ["https://huggingface.co/ACE-Step/acestep-v15-xl-sft/blob/d06de46b4622f781cf07f4a013a67d591ca52819/README.md"], checkedAt: "2026-10-21", noteKey: "model.spec.note.ace")
         case ("Wan-AI/Wan2.1-T2V-1.3B", "37ec512624d61f7aa208f7ea8140a131f93afc9a"):
-            return .init(publishedBillions: "1.3", activeBillions: nil, scope: .transformer, sourceURLs: ["https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B/blob/37ec512624d61f7aa208f7ea8140a131f93afc9a/README.md"], checkedAt: "2026-10-21", note: "扩散模型；不含 T5 与 VAE。")
+            return .init(publishedBillions: "1.3", activeBillions: nil, scope: .transformer, sourceURLs: ["https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B/blob/37ec512624d61f7aa208f7ea8140a131f93afc9a/README.md"], checkedAt: "2026-10-21", noteKey: "model.spec.note.wan")
         case ("MiniMaxAI/MiniMax-H3 · FL2VA", "42ed227ee7df40d41602854ae760620d6eb651fe"):
-            return .init(publishedBillions: "33", activeBillions: nil, scope: .transformer, sourceURLs: ["https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/42ed227ee7df40d41602854ae760620d6eb651fe/README.md"], checkedAt: "2026-10-21", note: "稠密 Omni-Transformer；约 13B 为可预计算 AdaLN，不是 MoE 激活量。另有 Qwen3-VL-32B 编码器；公开 Base 经 CFG 蒸馏。")
+            return .init(publishedBillions: "33", activeBillions: nil, scope: .transformer, sourceURLs: ["https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/42ed227ee7df40d41602854ae760620d6eb651fe/README.md"], checkedAt: "2026-10-21", noteKey: "model.spec.note.minimax")
         case ("Qixuan 绮萱 2.7.0 DiffSinger/OpenUtau ONNX + nvidia/bigvgan_v2_44khz_128band_512x", "BigVGAN 95a9d1dcb12906c03edd938d77b9333d6ded7dfb · Qixuan 2.7.0 fixture-bound"):
-            return .init(publishedBillions: "0.122", activeBillions: nil, scope: .vocoder, sourceURLs: ["https://huggingface.co/nvidia/bigvgan_v2_44khz_128band_512x/raw/95a9d1dcb12906c03edd938d77b9333d6ded7dfb/README.md"], checkedAt: "2026-10-21", note: "仅 BigVGAN 512x 声码器；Qixuan 声学模型规模未记录。")
+            return .init(publishedBillions: "0.122", activeBillions: nil, scope: .vocoder, sourceURLs: ["https://huggingface.co/nvidia/bigvgan_v2_44khz_128band_512x/raw/95a9d1dcb12906c03edd938d77b9333d6ded7dfb/README.md"], checkedAt: "2026-10-21", noteKey: "model.spec.note.qixuan")
         case ("stabilityai/stable-audio-3-optimized / medium", "da6edc54ddba10bfd79a077102ded687f80e882b"):
-            return .init(publishedBillions: "1.4", activeBillions: nil, scope: .transformer, sourceURLs: ["https://arxiv.org/html/2605.17991v1"], checkedAt: "2026-10-21", note: "官方论文约 1.4B DiT，非转换包张量计数；另有 SAME-L 0.852B，T5Gemma 不包含在主干数字中。")
+            return .init(publishedBillions: "1.4", activeBillions: nil, scope: .transformer, sourceURLs: ["https://arxiv.org/html/2605.17991v1"], checkedAt: "2026-10-21", noteKey: "model.spec.note.stableAudio")
         case ("Lightricks/LTX · dev", "cfc837526e56abf8657823a0ae192eec3a40177d"):
-            return .init(publishedBillions: "20.9", activeBillions: nil, scope: .officialPublished, sourceURLs: ["https://ltx.io/newsroom/ltx-2-3-offers-creative-intelligence-without-the-cloud-costs"], checkedAt: "2026-10-21", note: "LTX2.3 官方发布口径约 20.9B，其他官方页面用 22B 口径；当前执行包为 dgrauet/ltx-2.3-mlx，非本地张量计数。")
+            return .init(publishedBillions: "20.9", activeBillions: nil, scope: .officialPublished, sourceURLs: ["https://ltx.io/newsroom/ltx-2-3-offers-creative-intelligence-without-the-cloud-costs"], checkedAt: "2026-10-21", noteKey: "model.spec.note.ltx23")
         case ("Lightricks/LTX · dev", "6671a7572a530862d1d60ce393b5d93491e3f76b"):
-            return .init(publishedBillions: "20.9", activeBillions: nil, scope: .officialPublished, sourceURLs: ["https://ltx.io/newsroom/ltx-2-3-offers-creative-intelligence-without-the-cloud-costs"], checkedAt: "2026-10-21", note: "LTX2.3 官方发布口径约 20.9B，其他官方页面用 22B 口径；当前执行包为 dgrauet/ltx-2.3-mlx-q8，非量化文件元素统计。")
+            return .init(publishedBillions: "20.9", activeBillions: nil, scope: .officialPublished, sourceURLs: ["https://ltx.io/newsroom/ltx-2-3-offers-creative-intelligence-without-the-cloud-costs"], checkedAt: "2026-10-21", noteKey: "model.spec.note.ltx23q8")
         default: return nil
         }
     }

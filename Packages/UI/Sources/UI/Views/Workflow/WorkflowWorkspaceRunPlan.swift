@@ -13,7 +13,7 @@ import SwiftUI
     @State private var batch = false
     @State private var repetitions = 1
     @State private var seedStrategy: WorkflowBatchSeedStrategy = .fixed
-    private func text(_ key:String,_ zh:String,_ en:String)->String { workspaceText(language,key,zh,en) }
+    private func text(_ key: String) -> String { workspaceText(language, key) }
     private func key(_ boundary:WorkflowScopeBoundary)->String { boundary.destinationNodeID.uuidString+":"+boundary.destinationPort }
     private var current:Bool { draft.isCurrent(in:controller) }
     private var pins:[WorkflowHistoricalInput] {
@@ -25,31 +25,31 @@ import SwiftUI
     var body:some View {
         VStack(alignment:.leading,spacing:8) {
             HStack {
-                Text(text("plan","运行计划","Run plan")).font(.headline)
-                Text(draft.graph.nodes.first { $0.id == draft.target }?.title ?? text("missing","不可访问","Unavailable")).lineLimit(2)
+                Text(text("plan")).font(.headline)
+                Text(draft.graph.nodes.first { $0.id == draft.target }?.title ?? text("missing")).lineLimit(2)
                 Spacer()
-                Button(text("close","关闭计划","Close plan"),systemImage:"xmark",action:close)
+                Button(text("close"),systemImage:"xmark",action:close)
             }
-            if !current { Label(text("stalePlan","流程、模型或历史输入已变化，请关闭后重新检查。","Workflow, models or historical inputs changed. Close and review again."),systemImage:"exclamationmark.triangle").foregroundStyle(.orange) }
+            if !current { Label(text("stalePlan"),systemImage:"exclamationmark.triangle").foregroundStyle(.orange) }
             HStack {
-                Toggle(text("batchGenerate", "批量生成", "Generate a batch"), isOn: $batch)
+                Toggle(text("batchGenerate"), isOn: $batch)
                 if batch {
-                    Stepper(text("stageCount", "本阶段次数", "Attempts this stage") + " \(repetitions)", value: $repetitions, in: 1...64)
-                    WorkbenchPicker(text("seedStrategy", "每次尝试的种子", "Seeds per attempt"), selection: $seedStrategy) {
-                        WorkbenchChoice(text("seedFixed", "固定配方", "Keep configured seeds"), value: WorkflowBatchSeedStrategy.fixed)
-                        WorkbenchChoice(text("seedAutomatic", "自动变化", "Vary automatically"), value: WorkflowBatchSeedStrategy.automatic)
+                    Stepper(text("stageCount") + " \(repetitions)", value: $repetitions, in: 1...64)
+                    WorkbenchPicker(text("seedStrategy"), selection: $seedStrategy) {
+                        WorkbenchChoice(text("seedFixed"), value: WorkflowBatchSeedStrategy.fixed)
+                        WorkbenchChoice(text("seedAutomatic"), value: WorkflowBatchSeedStrategy.automatic)
                     }
-                    Text(text("seedEffect", "固定模式保留已填种子，留空值在提交时固定一次。仅影响支持种子的后续生成；未提供种子接口的功能不变，已采用前缀不变。实际种子在执行前保存，恢复时复用；不同种子不保证不同内容。", "Fixed mode preserves configured seeds and assigns an empty seed once at submission. Operations without seed support stay unchanged; only later generation with seed support varies. Accepted inputs stay fixed. Seeds are saved before dispatch and reused on recovery; different seeds do not guarantee different content.")).font(.caption)
+                    Text(text("seedEffect")).font(.caption)
                 }
             }
             WorkbenchScrollView {
                 VStack(alignment:.leading,spacing:10) {
-                    Text(batch ? text("batchFresh", "每次尝试独立计算所选范围；范围外输入固定为明确选择的历史结果。", "Each attempt computes the selected range independently; external inputs remain pinned to the chosen historical results.") : draft.mode == 0 ? text("reuseNote","范围内的节点仍可能按原规则复用；提交时再校验。","In-scope steps may reuse results under existing rules; admission revalidates them.") : draft.mode == 1 ? text("singleNote","只重新计算所选节点；上游输入由原单步运行入口在提交时解析，当前尚未固定。","Recompute only this node. The existing single-step command resolves reusable upstream inputs at submission; they are not pinned yet.") : text("boundaryNote","只计算范围内节点；每个外部输入都要选择明确的历史调用，不自动替换为最新结果。","Compute only in-scope nodes. Choose an exact historical call for every external input; no automatic latest-result substitution."))
+                    Text(batch ? text("batchFresh") : draft.mode == 0 ? text("reuseNote") : draft.mode == 1 ? text("singleNote") : text("boundaryNote"))
                         .font(.callout).foregroundStyle(.secondary)
                     let layers=WorkflowWorkspaceRunDraft.layers(draft.slice.plan)
                     ForEach(layers.indices,id:\.self) { index in
                         VStack(alignment:.leading,spacing:5) {
-                            Text(text("frontier","依赖层","Dependency layer")+" \(index+1)").font(.caption.weight(.semibold))
+                            Text(text("frontier")+" \(index+1)").font(.caption.weight(.semibold))
                             ForEach(layers[index]) { step in
                                 HStack {
                                     let mark=draft.marks[step.id]!
@@ -72,21 +72,21 @@ import SwiftUI
                                 .font(.caption).textSelection(.enabled)
                         }
                     }
-                    DisclosureGroup(text("planIdentity","固定计划身份","Fixed plan identity")) {
+                    DisclosureGroup(text("planIdentity")) {
                         WorkflowTechnicalDetails(value:"\(draft.project) / \(draft.instance)\n\(draft.graph.id) / \(draft.graph.revision)\n\(draft.target)")
                     }
                 }.frame(maxWidth:.infinity,alignment:.leading)
             }
             HStack {
-                Text(text("noComputePreview","查看计划不会运行或修改流程。","Reviewing a plan does not run or edit the workflow.")).font(.caption).foregroundStyle(.secondary)
+                Text(text("noComputePreview")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button(batch ? text("batchStart", "开始本阶段生成", "Start this stage") + " ×\(repetitions)" : text("submit","明确提交运行","Submit run"),systemImage:"play.fill") {
+                Button(batch ? text("batchStart") + " ×\(repetitions)" : text("submit"),systemImage:"play.fill") {
                     guard current else { return }
                     let inputs=pins, isBatch=batch, count=repetitions
                     guard (!batch && draft.mode < 2) || inputs.count == draft.slice.boundaries.count else { return }
                     close()
                     Task {
-                        guard draft.isCurrent(in:controller) else { controller.errorMessage=text("stalePlan","计划已改变，请重新检查。","Plan changed; review again.");return }
+                        guard draft.isCurrent(in:controller) else { controller.errorMessage=text("stalePlan");return }
                         if isBatch {
                             do {
                                 let id = try await controller.createBatchStage(selection: draft.selection, pins: inputs,
@@ -111,21 +111,21 @@ import SwiftUI
                 inputsChanged(labels)
             }
     }
-    private func name(_ id:UUID)->String { draft.graph.nodes.first { $0.id == id }.map { WorkflowHumanPresentation.name($0,in:draft.graph.nodes,language:language) } ?? text("missing","不可访问","Unavailable") }
+    private func name(_ id:UUID)->String { draft.graph.nodes.first { $0.id == id }.map { WorkflowHumanPresentation.name($0,in:draft.graph.nodes,language:language) } ?? text("missing") }
     private func boundaryPicker(_ boundary:WorkflowScopeBoundary)->some View {
         let records=controller.historicalCalls(for:boundary)
         return VStack(alignment:.leading,spacing:6) {
             Text(name(boundary.sourceNodeID)+" · "+boundary.sourcePort+" → "+name(boundary.destinationNodeID)+" · "+boundary.destinationPort).font(.subheadline)
-            WorkbenchPicker(text("chooseInput","选择历史输入","Choose historical input"),selection:Binding<UUID?>(get:{choices[key(boundary)]?.stepID},set:{ id in
+            WorkbenchPicker(text("chooseInput"),selection:Binding<UUID?>(get:{choices[key(boundary)]?.stepID},set:{ id in
                 choices[key(boundary)]=records.first { $0.id == id }.map { .init(address:$0.address,stepID:$0.id) }
             })) {
-                WorkbenchChoice(text("none","请选择具体调用","Choose an exact call"),value:UUID?.none)
+                WorkbenchChoice(text("none"),value:UUID?.none)
                 WorkbenchChoiceForEach(records) { call in
-                    WorkbenchChoice((controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0,in:controller.runs,language:language) } ?? text("missing","不可访问","Unavailable"))+" · "+WorkflowHumanPresentation.call(call,in:records,language:language),value:Optional(call.id))
+                    WorkbenchChoice((controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0,in:controller.runs,language:language) } ?? text("missing"))+" · "+WorkflowHumanPresentation.call(call,in:records,language:language),value:Optional(call.id))
                 }
             }.disabled(!current)
             if let choice=choices[key(boundary)],let call=records.first(where:{$0.address == choice.address && $0.id == choice.stepID}),let value=call.step.outputs[boundary.sourcePort] {
-                Button(text("previewInput","查看所选输入","Preview chosen input"),systemImage:"arrow.up.right.square") { preview(value,choice,name(boundary.sourceNodeID),boundary.sourcePort) }
+                Button(text("previewInput"),systemImage:"arrow.up.right.square") { preview(value,choice,name(boundary.sourceNodeID),boundary.sourcePort) }
             }
         }.padding(8)
     }

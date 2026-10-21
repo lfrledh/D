@@ -50,11 +50,11 @@ struct WorkbenchTasks: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(prompt(for: job)).font(.callout).lineLimit(1)
                     Spacer(minLength: 8)
-                    Text(model.phases[job.id] ?? state.title)
+                    Text(model.projectSession.phaseCodes[job.id].map { workspaceText(consistencyLanguage, "phase." + $0) } ?? model.phases[job.id] ?? workflowText(consistencyLanguage, "workflow.jobStatus." + state.rawValue))
                         .font(.caption.weight(.medium))
                         .foregroundStyle(color(for: state))
                         .lineLimit(1)
-                        .help(model.phases[job.id] ?? state.title)
+                        .help(model.projectSession.phaseCodes[job.id].map { workspaceText(consistencyLanguage, "phase." + $0) } ?? model.phases[job.id] ?? workflowText(consistencyLanguage, "workflow.jobStatus." + state.rawValue))
                         .accessibilityIdentifier("task-state-\(job.id.uuidString)")
                 }
                 if let error = job.error {
@@ -64,7 +64,7 @@ struct WorkbenchTasks: View {
                     HStack(spacing: 8) {
                         Text(job.createdAt.formatted(date: .omitted, time: .shortened))
                         if case .image(let image) = job.request.input {
-                            Text("Seed \(String(image.seed))").monospacedDigit()
+                            Text(workflowText(consistencyLanguage, "workbench.seedValue", arguments: ["seed": String(image.seed)])).monospacedDigit()
                         }
                         if state == .cancelling || state == .releasing {
                             Text(consistencyText(consistencyLanguage, "remaining.4db1b71be31b"))

@@ -25,12 +25,14 @@ enum WorkflowCanvasAssetIdentity {
 func workflowText(
     _ store: UILanguageStore?,
     _ key: String,
-    fallback: String,
+    fallback: String = "",
     arguments: [String: String] = [:]
 ) -> String {
-    store?.text(key, fallback: fallback, arguments: arguments)
-        ?? LanguagePackCodec.render(fallback, arguments: arguments)
+    let language = store ?? WorkflowLanguageDefaults.chinese
+    return language.text(key, fallback: language.sourceFallback(key, fallback: fallback.isEmpty ? "—" : fallback), arguments: arguments)
 }
+
+@MainActor private enum WorkflowLanguageDefaults { static let chinese = UILanguageStore(preferredLanguages: ["zh-Hans"]) }
 
 // These are display-only projections of the two existing terminal-failure
 // messages. Unknown progress and the diagnostic payload remain unchanged.
@@ -61,7 +63,7 @@ func workflowRecoveryErrorText(_ value: String, runs: [WorkflowRun], language: U
     // No inferred delimiter: verify it against the stored primary diagnostic and
     // exact run/checkpoint identity. Ambiguous histories remain unmodified.
     guard boundaries.count == 1, let boundary = boundaries.first else { return value }
-    let title = workflowText(language, "workflow.failureRecord.saveError", fallback: "失败记录保存错误：")
+    let title = workflowText(language, "workflow.failureRecord.saveError")
     return String(decoding: bytes.prefix(boundary), as: UTF8.self) + "\n" + title
         + String(decoding: bytes.dropFirst(boundary + separator.utf8.count), as: UTF8.self)
 }
@@ -137,6 +139,7 @@ public struct WorkflowCanvasView: View {
     @State private var planInputLabels:[UUID:String]=[:]
     @State private var visitedResources:Set<WorkflowResourceCategory>=[.all]
     @State private var resourceContext:WorkflowLibraryContext?
+    @State private var returnResourceCategory: WorkflowResourceCategory?
     @State private var activityVisible=false
     @State private var workspaceDraft:WorkflowWorkspaceRunDraft?
     @State private var pendingHistoryRetry:WorkflowCallReference?
@@ -229,21 +232,21 @@ public struct WorkflowCanvasView: View {
         .workflowKeyboardCommands(performKeyboardCommand)
         .environment(\.workbenchMenuContext, "canvas:\(ObjectIdentifier(controller)):\(controller.projectID):\(controller.projectInstanceID):\(controller.bodyPath):\(controller.rootGraph?.revision.uuidString ?? "none"):\(controller.rootGraph?.id.uuidString ?? "none"):\(controller.graph?.id.uuidString ?? "none"):\(controller.graph?.revision.uuidString ?? "none")")
         .alert(text("workflow.scope.rerunCall","重新运行具体调用"),isPresented:Binding(get:{pendingHistoryRetry != nil},set:{if !$0 { pendingHistoryRetry=nil }})) {
-            Button(workspaceText(languageStore,"retryFrozen","按该调用的冻结输入重新计算","Recompute with this call's frozen inputs")) {
+            Button(workspaceText(languageStore, "retryFrozen")) {
                 if let call=pendingHistoryRetry { pendingHistoryRetry=nil;Task { await controller.rerunCall(call) } }
             }
-            Button(workspaceText(languageStore,"cancel","取消","Cancel"),role:.cancel) { pendingHistoryRetry=nil }
-        } message: { Text(workspaceText(languageStore,"retryHistoryExplanation","这会创建新运行，使用所选历史调用的输入与参数；不会继续或覆盖原运行。","Creates a new run from the selected call's frozen inputs and parameters; it does not resume or overwrite the original run.")) }
+            Button(workspaceText(languageStore, "cancel"),role:.cancel) { pendingHistoryRetry=nil }
+        } message: { Text(workspaceText(languageStore, "retryHistoryExplanation")) }
         .sheet(isPresented: $toolsPresented) {
             VStack(alignment: .leading) {
-                Button(workflowText(languageStore, "baseline02.ui.label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left") { toolsPresented = false }.padding([.top, .leading])
+                Button(workflowText(languageStore, "baseline02.ui.label.572cf45ba436"), systemImage: "chevron.left") { toolsPresented = false }.padding([.top, .leading])
                 WorkflowToolPanel(controller: controller, selectionOnly: extractSelection)
             }.workbenchPresentation()
         }
         .sheet(isPresented: $interfacePresented) {
             if let graph = controller.graph {
                 VStack(alignment: .leading) {
-                    Button(workflowText(languageStore, "baseline02.ui.label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left") { interfacePresented = false }.padding([.top, .leading])
+                    Button(workflowText(languageStore, "baseline02.ui.label.572cf45ba436"), systemImage: "chevron.left") { interfacePresented = false }.padding([.top, .leading])
                     WorkbenchScrollView { WorkflowGraphInterfaceEditor(graph: Binding(get: { controller.graph?.id == graph.id ? controller.graph! : graph }, set: { controller.updateInterface($0.interface, in: graph.id) }), registry: controller.registry, tools: controller.tools).padding() }
                 }
                     .frame(minWidth: 640, minHeight: 500).workbenchPresentation()
@@ -257,7 +260,7 @@ public struct WorkflowCanvasView: View {
         .onChange(of: runContext) { _, _ in
             runTarget = nil; runPreview = nil; scopePresentation = nil
         }
-        .onChange(of: ObjectIdentifier(controller)) { _, _ in panelsState = .init(); workspaceDraft=nil;resourceContext=nil }
+        .onChange(of: ObjectIdentifier(controller)) { _, _ in panelsState = .init(); workspaceDraft=nil;resourceContext=nil;returnResourceCategory=nil }
         .onChange(of: panelsState.preparation) { _, tab in visitedPreparation.insert(tab) }
         .onChange(of: panelsState.output) { _, tab in visitedOutput.insert(tab) }
         .onChange(of: resourceCategory) { _,tab in visitedResources.insert(tab) }
@@ -348,7 +351,7 @@ public struct WorkflowCanvasView: View {
                         setRunTarget(id); runRange = mode; presentWorkspacePlan(id,mode:mode)
                     }, onViewResults: { id in
                         guard let node=controller.graph?.nodes.first(where:{$0.id == id}) else { return }
-                        resourceContext = .init(project:controller.projectID,instance:controller.projectInstanceID,node:id,name:node.title);showLibrary=true
+                        revealLibrary(.init(controller: controller, source: .node(id), name: node.title))
                     }, nodeSizeObserver: { id, size in
                         measuredCardSizes[id] = size
                         nodeSizeObserver?(id, size)
@@ -392,7 +395,7 @@ public struct WorkflowCanvasView: View {
                 .transaction { $0.animation = nil }
                     .frame(maxWidth: .infinity).clipped()
                 WorkbenchSidebar(leading: true, expanded: shown.inspector,
-                    title: workspaceText(languageStore,"operations","操作库","Operations"), identifier: "canvas-inspector-toggle",
+                    title: workspaceText(languageStore, "operations"), identifier: "canvas-inspector-toggle",
                     hostIdentifier: "canvas-inspector-host", toggle: {
                         showInspector = !shown.inspector; narrowLibrary = false
                     }) { preparationPanel }
@@ -403,7 +406,7 @@ public struct WorkflowCanvasView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(.bottom, consoleHeight + 24)
                 WorkbenchSidebar(leading: false, expanded: shown.library,
-                    title: workspaceText(languageStore,"resources","素材库","Resources"), identifier: "canvas-library-toggle",
+                    title: workspaceText(languageStore, "resources"), identifier: "canvas-library-toggle",
                     hostIdentifier: "canvas-library-host", toggle: {
                         showLibrary = !shown.library; narrowLibrary = true
                     }) { resourcePanel }
@@ -452,9 +455,9 @@ public struct WorkflowCanvasView: View {
     private var activityToggle:some View {
         VStack(alignment:.trailing,spacing:3) {
             let pending=controller.runs.reduce(0) { $0+WorkflowWorkspacePanels.records(in:$1).filter { $0.step.status == .waiting }.count }
-            Text(controller.isRunning ? workspaceText(languageStore,"running","正在运行","Running") : pending > 0 ? workspaceText(languageStore,"waitingCount","等待确认","Awaiting decision")+" · \(pending)" : controller.isSaving || controller.hasPendingSaves ? workspaceText(languageStore,"savingPending","保存待处理","Saving needs attention") : workspaceText(languageStore,"ready","就绪","Ready"))
+            Text(controller.isRunning ? workspaceText(languageStore, "running") : pending > 0 ? workspaceText(languageStore, "waitingCount")+" · \(pending)" : controller.isSaving || controller.hasPendingSaves ? workspaceText(languageStore, "savingPending") : workspaceText(languageStore, "ready"))
                 .font(.caption).foregroundStyle(.secondary)
-            Button(workspaceText(languageStore,"activity","活动","Activity"),systemImage:activityVisible ? "chevron.down" : "chevron.up") {
+            Button(workspaceText(languageStore, "activity"),systemImage:activityVisible ? "chevron.down" : "chevron.up") {
                 activityVisible.toggle();workspaceDraft=nil
             }.accessibilityIdentifier("workflow-activity-toggle").workbenchHelp("WORKSPACE-ACTIVITY")
         }
@@ -497,7 +500,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 onOpenTool: { reference in
                     rememberViewContext()
                     controller.openToolCopy(reference)
-                })
+                }, revealLibrary: revealLibrary)
         } else {
             WorkbenchScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -532,10 +535,10 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
     private var preparationPanel: some View {
         VStack(spacing: 0) {
-            WorkbenchSidebarTabs(title: workspaceText(languageStore,"operations","操作库","Operations"),
+            WorkbenchSidebarTabs(title: workspaceText(languageStore, "operations"),
                 selection: Binding(get: { panelsState.preparation }, set: { panelsState.selectPreparation($0) }), choices: [
-                    (WorkflowWorkspacePanels.Preparation.models, workspaceText(languageStore,"models","模型节点","Model nodes")),
-                    (.programs, workspaceText(languageStore,"programs","程序节点","Program nodes")), (.configuration, consistencyText(languageStore, "tabs.properties"))], helpPrefix: "TAB-WORKFLOW-LEFT-")
+                    (WorkflowWorkspacePanels.Preparation.models, workspaceText(languageStore, "models")),
+                    (.programs, workspaceText(languageStore, "programs")), (.configuration, consistencyText(languageStore, "tabs.properties"))], helpPrefix: "TAB-WORKFLOW-LEFT-")
             ZStack {
                 ForEach(WorkflowWorkspacePanels.Preparation.allCases, id: \.self) { tab in
                     if visitedPreparation.contains(tab) || panelsState.preparation == tab {
@@ -568,13 +571,23 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             }
         }
     }
+    private func revealLibrary(_ context: WorkflowLibraryContext) {
+        if resourceContext == nil { returnResourceCategory = resourceCategory }
+        resourceContext = context; resourceCategory = .all; showLibrary = true
+    }
+    private func clearLibraryLocation() {
+        resourceContext = nil
+        if let original = returnResourceCategory { resourceCategory = original }
+        returnResourceCategory = nil
+    }
     private var resourcePanel:some View {
         VStack(spacing:6) {
-            WorkbenchSidebarTabs(title:workspaceText(languageStore,"resources","素材库","Resources"),selection:$resourceCategory,
+            WorkbenchSidebarTabs(title:workspaceText(languageStore, "resources"),selection:$resourceCategory,
                 choices:WorkflowResourceCategory.allCases.map { ($0,$0.title(languageStore)) },helpPrefix:"WORKSPACE-RESOURCE-")
             if let context=resourceContext {
-                Button { resourceContext=nil } label: { Label(context.name,systemImage:"xmark.circle") }
-                    .help(workspaceText(languageStore,"removeRelated","移除关联素材条件；保留原检索。","Remove related-content filter; keep the existing query."))
+                Button { clearLibraryLocation() } label: { Label(context.displayName(in: controller, language: languageStore),systemImage:"xmark.circle") }
+                    .help(workspaceText(languageStore, "removeRelated"))
+                Text(workspaceText(languageStore, context.isCurrent(in: controller) ? "locationQuery" : "locationUnavailable", "", "")).font(.caption).foregroundStyle(.secondary)
             }
             ZStack {
                 ForEach(WorkflowResourceCategory.allCases,id:\.self) { tab in
@@ -604,10 +617,10 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
     private var outputPanel: some View {
         VStack(spacing: 0) {
-            WorkbenchSidebarTabs(title: workspaceText(languageStore,"activity","活动","Activity"), selection: $panelsState.output, choices: [
+            WorkbenchSidebarTabs(title: workspaceText(languageStore, "activity"), selection: $panelsState.output, choices: [
                 (WorkflowWorkspacePanels.Output.node, text("workspace.nodeResults", "节点结果")),
                 (.overview, text("workspace.runOverview", "运行总览")),
-                (.batches, workspaceText(languageStore, "batches", "批次与筛选", "Batches & review"))], helpPrefix: "TAB-WORKFLOW-RIGHT-")
+                (.batches, workspaceText(languageStore, "batches"))], helpPrefix: "TAB-WORKFLOW-RIGHT-")
             WorkbenchPicker(text("workspace.selectedRun", "所选运行"), selection: Binding(get: { panelsState.runID }, set: { panelsState.selectRun($0) })) {
                 WorkbenchChoice(text("workspace.chooseRun", "选择运行记录"), value:UUID?.none)
                 WorkbenchChoiceForEach(controller.runs.reversed()) { run in
@@ -620,7 +633,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 }
                 retained(runOverview, visible: panelsState.output == .overview, id: "workflow-overview-host")
                 if panelsState.output == .batches {
-                    WorkflowBatchPanel(controller: controller) { run, record in
+                    WorkflowBatchPanel(controller: controller, revealLibrary: revealLibrary) { run, record in
                         panelsState.selectRun(run.id)
                         panelsState.selectResult(node: record.step.node.id, call: .init(address: record.address, stepID: record.id))
                     }
@@ -657,10 +670,13 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             if let record = selectedResultRecord {
                 WorkbenchScrollView {
                     VStack(alignment:.leading,spacing:10) {
+                        Button(workspaceText(languageStore, "locateResults", "", ""), systemImage: "tray.full") {
+                            revealLibrary(.init(controller: controller, source: .call(.init(address: record.address, stepID: record.id)), name: record.step.node.title + " · " + WorkflowHumanPresentation.call(record, in: selectedResultRun.map(WorkflowWorkspacePanels.records) ?? [], language: languageStore)))
+                        }.accessibilityIdentifier("call-locate-results")
                         HStack { Text(record.step.node.title).font(.headline);Spacer();WorkflowStatusBadge(status:record.step.status,stale:false) }
                         if let error=record.step.error { Label(error,systemImage:"exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled) }
                         if record.step.status == .waiting,let run=selectedResultRun {
-                            Button(workspaceText(languageStore,"viewReadonly","只读查看材料","View materials read only"),systemImage:"arrow.up.right.square") { openCall(run,record:record) }
+                            Button(workspaceText(languageStore, "viewReadonly"),systemImage:"arrow.up.right.square") { openCall(run,record:record) }
                                 .disabled(viewerModel == nil)
                             if let task = record.step.humanTask {
                                 WorkflowHumanTaskForm(task: task,
@@ -713,6 +729,9 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         WorkbenchScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 if let run = selectedResultRun {
+                    Button(workspaceText(languageStore, "locateResults", "", ""), systemImage: "tray.full") {
+                        revealLibrary(.init(controller: controller, source: .run(run.id), name: WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore)))
+                    }.accessibilityIdentifier("run-locate-results")
                     Text(run.graph.name).font(.headline)
                     Text(WorkflowCanvasPresentation.statusTitle(run.status, language: languageStore)).font(.title3)
                     Text(run.graph.nodes.first(where: { $0.id == run.targetNodeID })?.title ?? text("workspace.unavailableTarget", "目标已不可访问")).font(.callout)
@@ -721,7 +740,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                         recoveryActions(run)
                     }
                     if controller.isRunning && controller.activePresentationRun?.id == run.id && !controller.visibleStreamingText.isEmpty {
-                        Text(workspaceText(languageStore,"streaming","正在生成 · 临时预览","Generating · temporary preview")).font(.caption)
+                        Text(workspaceText(languageStore, "streaming")).font(.caption)
                         Text(controller.visibleStreamingText).lineLimit(4).textSelection(.enabled)
                     }
                     DisclosureGroup(text("workspace.runAssets", "此运行的已保存结果")) {
@@ -984,7 +1003,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 }.disabled(!controller.canEditCanvas || selectedNodes.isEmpty)
                     .accessibilityIdentifier("workflow-canvas-extract-selection")
             }
-            Button(workflowText(languageStore, "refinement.workflow.typeLegend", fallback: "类型图例"), systemImage: "paintpalette") { portLegendPresented.toggle() }
+            Button(workflowText(languageStore, "refinement.workflow.typeLegend"), systemImage: "paintpalette") { portLegendPresented.toggle() }
                 .popover(isPresented: $portLegendPresented) {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(WorkflowPortStyle.legend.indices, id: \.self) { index in
@@ -1022,14 +1041,14 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             }
             if controller.isSaving {
                 ProgressView().controlSize(.small)
-                Text(workflowText(languageStore, "workflow.status.savingNow", fallback: "正在保存"))
+                Text(workflowText(languageStore, "workflow.status.savingNow"))
             } else if controller.isRunning {
                 ProgressView().controlSize(.small)
-                Text(controller.progressMessage.isEmpty
-                     ? workflowText(languageStore, "workflow.status.runningNow", fallback: "正在运行")
-                     : workflowRecoveryProgressText(controller.progressMessage, language: languageStore))
-            } else if !controller.progressMessage.isEmpty {
-                Text(workflowRecoveryProgressText(controller.progressMessage, language: languageStore)).foregroundStyle(.secondary)
+                Text(controller.progressMessage.isEmpty && controller.progressPresentation == nil
+                     ? workflowText(languageStore, "workflow.status.runningNow")
+                     : controller.progressPresentation.map { workflowProgressText($0, language: languageStore) } ?? workflowRecoveryProgressText(controller.progressMessage, language: languageStore))
+            } else if !controller.progressMessage.isEmpty || controller.progressPresentation != nil {
+                Text(controller.progressPresentation.map { workflowProgressText($0, language: languageStore) } ?? workflowRecoveryProgressText(controller.progressMessage, language: languageStore)).foregroundStyle(.secondary)
             }
             Spacer()
             if let rawError = controller.errorMessage {
@@ -1040,7 +1059,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     .lineLimit(2)
                     .help(error)
                     .accessibilityIdentifier("workflow-error")
-                Button(workflowText(languageStore, "workflow.action.close", fallback: "关闭"),
+                Button(workflowText(languageStore, "workflow.action.close"),
                        systemImage: "xmark") { controller.errorMessage = nil }
                     .labelStyle(.iconOnly)
             }
@@ -1128,7 +1147,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
     private func openValue(_ value:WorkflowValue,_ call:WorkflowCallReference,_ title:String, port: String? = nil, side: WorkflowViewerValueSide = .output) {
         guard let viewerModel,viewerModel.projectSession.workflow === controller else { return }
-        do { try viewerModel.viewers.open(.init(title:title,subtitle:controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0,in:controller.runs,language:languageStore) } ?? "",value:value,call:call,port:port,side:side),model:viewerModel,language:languageStore) }
+        do { try viewerModel.viewers.open(.init(title:title,subtitle:controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0,in:controller.runs,language:languageStore) } ?? "",value:value,call:call,port:port,side:side,usesCallTitle: true),model:viewerModel,language:languageStore) }
         catch { controller.errorMessage=error.localizedDescription }
     }
     private func openCall(_ run:WorkflowRun,record:WorkflowPlanCallRecord) {
@@ -1160,6 +1179,7 @@ private struct WorkflowNodeInspector: View {
     let onQuickUse: ((WorkflowNode) -> Void)?
     let onOpenBody: (UUID, String) -> Void
     let onOpenTool: (WorkflowToolReference) -> Void
+    var revealLibrary: ((WorkflowLibraryContext) -> Void)? = nil
     var resultsOnly = false
     var resultRunID: UUID? = nil
     var exactResult = false
@@ -1204,13 +1224,13 @@ private struct WorkflowNodeInspector: View {
                     } else {
                     execution(node)
                     if let record = resultRecord, controller.canRerunCall(record) {
-                        Button(workflowText(languageStore, "workflow.scope.rerunCall", fallback: "重新运行具体调用")) {
+                        Button(workflowText(languageStore, "workflow.scope.rerunCall")) {
                             pendingCall = .init(address: record.address, stepID: record.id)
                         }.disabled(readOnly || controller.isRunning || controller.hasPendingSaves)
                     }
                     if !exactResult {
                         DisclosureGroup(isExpanded: $showHistory) { history(node) } label: {
-                            Text(workflowText(languageStore, "workflow.section.history", fallback: "运行历史"))
+                            Text(workflowText(languageStore, "workflow.section.history"))
                         }
                     }
                     }
@@ -1218,7 +1238,7 @@ private struct WorkflowNodeInspector: View {
                 .padding(14)
             } else {
                 ContentUnavailableView(
-                    workflowText(languageStore, "workflow.inspector.empty", fallback: "选择节点"),
+                    workflowText(languageStore, "workflow.inspector.empty"),
                     systemImage: "sidebar.right",
                     description: Text(workflowText(
                         languageStore,
@@ -1243,15 +1263,15 @@ private struct WorkflowNodeInspector: View {
                     onOpenTool(request.reference)
                 })
         }
-        .alert(workflowText(languageStore, "workflow.scope.rerunCall", fallback: "重新运行具体调用"),
+        .alert(workflowText(languageStore, "workflow.scope.rerunCall"),
                isPresented: Binding(get: { pendingCall != nil }, set: { if !$0 { pendingCall = nil } })) {
-            Button(workflowText(languageStore, "workflow.scope.run", fallback: "运行所选范围")) {
+            Button(workflowText(languageStore, "workflow.scope.run")) {
                 if let reference = pendingCall { Task { await controller.rerunCall(reference) } }
                 pendingCall = nil
             }
-            Button(workflowText(languageStore, "workflow.scope.cancel", fallback: "取消"), role: .cancel) { pendingCall = nil }
+            Button(workflowText(languageStore, "workflow.scope.cancel"), role: .cancel) { pendingCall = nil }
         } message: {
-            Text(workflowText(languageStore, "workflow.scope.callExplanation", fallback: "使用这次调用冻结的参数与输入，创建新的运行。不会改写或继续原有循环；模型调用可能耗时。"))
+            Text(workflowText(languageStore, "workflow.scope.callExplanation"))
         }
     }
 
@@ -1359,7 +1379,7 @@ private struct WorkflowNodeInspector: View {
         WorkflowNodeIdentity.modelIdentity(node: node, definition: definition, defaults: controller.services.capturedModelDefaults())
     }
     private func identity(_ node: WorkflowNode) -> some View {
-        WorkflowInspectorSection(workflowText(languageStore, "workflow.section.node", fallback: "节点")) {
+        WorkflowInspectorSection(workflowText(languageStore, "workflow.section.node")) {
             let resolved = WorkflowNodeIdentity.resolve(node: node,
                 definition: controller.registry.definition(for: node, tools: controller.tools),
                 modelChoices: controller.modelChoices, assets: controller.availableAssets,
@@ -1384,13 +1404,13 @@ private struct WorkflowNodeInspector: View {
                     bodyPath: controller.bodyPath, projectID: controller.projectID, instanceID: controller.projectInstanceID)
             } }
             let commandIsCurrent = { commandScope?.isCurrent(in: controller) == true && controller.graph?.nodes.contains(node) == true && controller.canEditCanvas && !readOnly }
-            WorkbenchMenu(workflowText(languageStore, "semantics.nodePlan", fallback: "查看计划并运行…")) {
-                WorkbenchMenuAction(workflowText(languageStore, "workflow.action.runToHere", fallback: "运行到此节点")) { if commandIsCurrent() { onPlan(node.id, false) } }
-                WorkbenchMenuAction(workflowText(languageStore, "workflow.action.rerunOnly", fallback: "只重跑此节点")) { if commandIsCurrent() { onPlan(node.id, true) } }
-                WorkbenchMenuAction(workflowText(languageStore, "workflow.scope.from", fallback: "从这里重新运行（含此节点）")) {
+            WorkbenchMenu(workflowText(languageStore, "semantics.nodePlan")) {
+                WorkbenchMenuAction(workflowText(languageStore, "workflow.action.runToHere")) { if commandIsCurrent() { onPlan(node.id, false) } }
+                WorkbenchMenuAction(workflowText(languageStore, "workflow.action.rerunOnly")) { if commandIsCurrent() { onPlan(node.id, true) } }
+                WorkbenchMenuAction(workflowText(languageStore, "workflow.scope.from")) {
                     if commandIsCurrent() { onPlanRange(node.id,2) }
                 }
-                WorkbenchMenuAction(workflowText(languageStore, "workflow.scope.after", fallback: "从其输出继续（不重算此节点）")) {
+                WorkbenchMenuAction(workflowText(languageStore, "workflow.scope.after")) {
                     if commandIsCurrent() { onPlanRange(node.id,3) }
                 }
             }.disabled(readOnly || !controller.canEditCanvas || !controller.bodyPath.isEmpty)
@@ -1401,7 +1421,7 @@ private struct WorkflowNodeInspector: View {
                 .accessibilityIdentifier("canvas-quick-use-" + node.id.uuidString)
             }
             if case .invoke(let reference) = node.control {
-                Button(workflowText(languageStore, "canvas.tool.fixedTitle", fallback: "查看固定工具")) {
+                Button(workflowText(languageStore, "canvas.tool.fixedTitle")) {
                     fixedToolPresentation = .init(reference: reference)
                 }
                 .accessibilityIdentifier("canvas-view-fixed-tool-" + node.id.uuidString)
@@ -1417,18 +1437,18 @@ private struct WorkflowNodeInspector: View {
             .accessibilityIdentifier("canvas-technical-toggle")
             if showTechnical {
                 WorkflowTechnicalDetails(value: node.id.uuidString + "\n" + node.operationID + "\n" + String(node.definitionVersion) + "\n" + String(describing: node.parameters) + "\n" + String(describing: node.assetReference) + "\n" + String(describing: node.control))
-                WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.operation", fallback: "操作"),
+                WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.operation"),
                                     node.operationID)
-                WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.definitionVersion", fallback: "定义版本"),
+                WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.definitionVersion"),
                                     String(node.definitionVersion))
             }
             HStack {
-                Button(workflowText(languageStore, "workflow.action.copy", fallback: "复制"),
+                Button(workflowText(languageStore, "workflow.action.copy"),
                        systemImage: "doc.on.doc") {
                     guard controller.graph?.nodes.contains(node) == true else { return }
                     controller.selectedNodeID = node.id; controller.copySelected()
                 }
-                Button(workflowText(languageStore, "workflow.action.delete", fallback: "删除"),
+                Button(workflowText(languageStore, "workflow.action.delete"),
                        systemImage: "trash", role: .destructive) {
                     guard let target = controller.canvasInsertionTarget(), controller.graph?.nodes.contains(node) == true else { return }
                     controller.deleteNode(id: node.id, target: target)
@@ -1436,14 +1456,14 @@ private struct WorkflowNodeInspector: View {
             }
             .disabled(readOnly || !controller.canEditCanvas)
             if controller.registry.operation(node.operationID)?.definition.interaction == .assetInput {
-                WorkbenchMenu(workflowText(languageStore, "workflow.asset.referenceExisting", fallback: "引用项目已有素材")) {
+                WorkbenchMenu(workflowText(languageStore, "workflow.asset.referenceExisting")) {
                     WorkbenchMenuForEach(controller.availableAssets) { asset in
                         WorkbenchMenuAction(asset.name + " · " + asset.mediaType) {
                             Task { await controller.bindExistingAsset(asset.id, nodeID: node.id) }
                         }
                     }
                 }.disabled(readOnly || !controller.canEditCanvas || controller.availableAssets.isEmpty)
-                Button(workflowText(languageStore, "workflow.asset.chooseImport", fallback: "选择导入资产"),
+                Button(workflowText(languageStore, "workflow.asset.chooseImport"),
                        systemImage: "square.and.arrow.down") { onImport(node.id) }
                     .disabled(readOnly || !controller.canEditCanvas)
                     .accessibilityIdentifier("workflow-import-\(node.id.uuidString)")
@@ -1459,10 +1479,10 @@ private struct WorkflowNodeInspector: View {
 
     @ViewBuilder
     private func parameters(_ node: WorkflowNode) -> some View {
-        WorkflowInspectorSection(workflowText(languageStore, "workspace.commonSettings", fallback: "常用设置 · 后续运行")) {
+        WorkflowInspectorSection(workflowText(languageStore, "workspace.commonSettings")) {
             if let definition = controller.registry.definition(for: node, tools: controller.tools) {
                 if definition.fields.isEmpty {
-                    Text(workflowText(languageStore, "workflow.parameters.none", fallback: "此操作没有参数。"))
+                    Text(workflowText(languageStore, "workflow.parameters.none"))
                         .foregroundStyle(.secondary)
                 }
                 ForEach(definition.fields.filter { !WorkflowParameterPresentation.advanced.contains($0.id) }) { field in
@@ -1470,7 +1490,7 @@ private struct WorkflowNodeInspector: View {
                 }
                 let advanced = definition.fields.filter { WorkflowParameterPresentation.advanced.contains($0.id) }
                 if !advanced.isEmpty {
-                    DisclosureGroup(workflowText(languageStore, "workspace.advanced", fallback: "进阶控制")) {
+                    DisclosureGroup(workflowText(languageStore, "workspace.advanced")) {
                         ForEach(advanced) { field in fieldEditor(field, node: node, definition: definition) }
                     }.workbenchHelp("MODEL-ADVANCED")
                 }
@@ -1496,12 +1516,12 @@ private struct WorkflowNodeInspector: View {
 
     @ViewBuilder
     private func ports(_ node: WorkflowNode) -> some View {
-        WorkflowInspectorSection(workflowText(languageStore, "workflow.section.ports", fallback: "输入与输出")) {
+        WorkflowInspectorSection(workflowText(languageStore, "workflow.section.ports")) {
             if let definition = controller.registry.definition(for: node, tools: controller.tools) {
-                Text(workflowText(languageStore, "workflow.port.inputs", fallback: "输入"))
+                Text(workflowText(languageStore, "workflow.port.inputs"))
                     .font(.subheadline.weight(.semibold))
                 if definition.inputs.isEmpty {
-                    Text(workflowText(languageStore, "workflow.port.noInputs", fallback: "无输入"))
+                    Text(workflowText(languageStore, "workflow.port.noInputs"))
                         .foregroundStyle(.secondary)
                 }
                 ForEach(definition.inputs) { port in
@@ -1517,8 +1537,8 @@ private struct WorkflowNodeInspector: View {
                             .font(.caption).foregroundStyle(.secondary)
                         if incoming.isEmpty {
                             Text(port.required
-                                 ? workflowText(languageStore, "workflow.port.notConnected", fallback: "尚未连接")
-                                 : workflowText(languageStore, "workflow.port.notProvided", fallback: "未提供"))
+                                 ? workflowText(languageStore, "workflow.port.notConnected")
+                                 : workflowText(languageStore, "workflow.port.notProvided"))
                                 .font(.caption)
                                 .foregroundStyle(port.required ? Color.orange : Color.secondary)
                         }
@@ -1527,7 +1547,7 @@ private struct WorkflowNodeInspector: View {
                                 Text(WorkflowConnectionPresentation.title(connection, graph: controller.graph, registry: controller.registry, tools: controller.tools, language: languageStore))
                                     .font(.caption.monospaced()).lineLimit(1)
                                 Spacer()
-                                Button(workflowText(languageStore, "workflow.action.disconnect", fallback: "断开"),
+                                Button(workflowText(languageStore, "workflow.action.disconnect"),
                                        systemImage: "link.badge.minus") {
                                     controller.disconnect(connection.id)
                                 }
@@ -1540,10 +1560,10 @@ private struct WorkflowNodeInspector: View {
                     .padding(8)
                     .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
                 }
-                Text(workflowText(languageStore, "workflow.port.outputs", fallback: "输出"))
+                Text(workflowText(languageStore, "workflow.port.outputs"))
                     .font(.subheadline.weight(.semibold)).padding(.top, 4)
                 if definition.outputs.isEmpty {
-                    Text(workflowText(languageStore, "workflow.port.noOutputs", fallback: "无输出"))
+                    Text(workflowText(languageStore, "workflow.port.noOutputs"))
                         .foregroundStyle(.secondary)
                 }
                 ForEach(definition.outputs) { port in
@@ -1563,7 +1583,7 @@ private struct WorkflowNodeInspector: View {
 
     @ViewBuilder
     private func execution(_ node: WorkflowNode) -> some View {
-        WorkflowInspectorSection(workflowText(languageStore, "workflow.section.execution", fallback: "运行与结果")) {
+        WorkflowInspectorSection(workflowText(languageStore, "workflow.section.execution")) {
 
             if let step = exactResult ? resultRecord?.step : controller.presentationStep(nodeID: node.id, runID: resultRunID) {
                 HStack {
@@ -1585,7 +1605,7 @@ private struct WorkflowNodeInspector: View {
                     }
                 }
                 if step.status != .waiting {
-                WorkflowStepValues(title: workflowText(languageStore, "workflow.port.outputs", fallback: "输出"),
+                WorkflowStepValues(title: workflowText(languageStore, "workflow.port.outputs"),
                                    values: step.outputs, operationID: node.operationID, portsAreInputs: false,
                                    controller: controller, onReturnText: onReturnText,
                                    allowsReturn: !readOnly, metadata: metadata,
@@ -1597,22 +1617,22 @@ private struct WorkflowNodeInspector: View {
                 }
                 WorkflowTechnicalDetails(value: "Run: " + (resultRunID?.uuidString ?? "—") + "\nCall: " + step.id.uuidString + "\nNode: " + step.node.id.uuidString + "\n" + String(describing: resultRecord?.address))
                 if step.status == .partial {
-                    Button(workflowText(languageStore, "workflow.action.retryFailedCandidates", fallback: "重试失败候选"),
+                    Button(workflowText(languageStore, "workflow.action.retryFailedCandidates"),
                            systemImage: "arrow.clockwise") {
                         Task { await controller.retryFailedCandidates(stepID: step.id) }
                     }
                     .disabled(readOnly)
                 }
-                DisclosureGroup(workflowText(languageStore, "workspace.recordedDetails", fallback: "当时的输入与参数")) {
+                DisclosureGroup(workflowText(languageStore, "workspace.recordedDetails")) {
                 WorkflowStepValues(
-                                   title: workflowText(languageStore, "workflow.execution.inputSnapshot", fallback: "输入快照"),
+                                   title: workflowText(languageStore, "workflow.execution.inputSnapshot"),
                                    values: step.inputs, operationID: node.operationID, portsAreInputs: true,
                                    controller: controller, onReturnText: onReturnText,
                                    allowsReturn: false, metadata: metadata)
                     Text(String(describing: step.node.parameters)).font(.caption.monospaced()).textSelection(.enabled)
                 }
             } else {
-                Text(workflowText(languageStore, "workflow.execution.noRuns", fallback: "此节点尚无运行记录。"))
+                Text(workflowText(languageStore, "workflow.execution.noRuns"))
                     .foregroundStyle(.secondary)
             }
         }
@@ -1620,10 +1640,10 @@ private struct WorkflowNodeInspector: View {
 
     @ViewBuilder
     private func history(_ node: WorkflowNode) -> some View {
-        WorkflowInspectorSection(workflowText(languageStore, "workflow.section.history", fallback: "运行历史")) {
+        WorkflowInspectorSection(workflowText(languageStore, "workflow.section.history")) {
             let related = controller.history(for: node.id).filter { resultRunID == nil || $0.id == resultRunID }
             if related.isEmpty {
-                Text(workflowText(languageStore, "workflow.history.none", fallback: "没有历史运行。"))
+                Text(workflowText(languageStore, "workflow.history.none"))
                     .foregroundStyle(.secondary)
             }
             ForEach(related.reversed()) { run in
@@ -1635,15 +1655,20 @@ private struct WorkflowNodeInspector: View {
                             .foregroundStyle(.secondary)
                     }
                     WorkflowTechnicalDetails(value: run.id.uuidString)
-                    ForEach(controller.callRecords(runID: run.id)) { call in
+                    ForEach(WorkflowWorkspacePanels.records(in: run)) { call in
                         DisclosureGroup(call.step.node.title + " · " + WorkflowCanvasPresentation.statusTitle(call.step.status, language: languageStore)) {
+                            if let revealLibrary {
+                                Button(workspaceText(languageStore, "locateResults", "", "")) {
+                                    revealLibrary(.init(controller: controller, source: .call(.init(address: call.address, stepID: call.id)), name: WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore) + " · " + WorkflowHumanPresentation.call(call, in: WorkflowWorkspacePanels.records(in: run), language: languageStore)))
+                                }
+                            }
                             WorkflowTechnicalDetails(value: String(describing: call.address) + "\n" + call.id.uuidString)
                             if controller.canRerunCall(call) {
-                                Button(workflowText(languageStore, "workflow.scope.rerunCall", fallback: "重新运行具体调用")) {
+                                Button(workflowText(languageStore, "workflow.scope.rerunCall")) {
                                     pendingCall = .init(address: call.address, stepID: call.step.id)
                                 }.disabled(readOnly)
                             }
-                            WorkflowStepValues(title: workflowText(languageStore, "workflow.port.outputs", fallback: "输出"), values: call.step.outputs, operationID: call.step.node.operationID, portsAreInputs: false, controller: controller, onReturnText: onReturnText, allowsReturn: !readOnly, metadata: metadata)
+                            WorkflowStepValues(title: workflowText(languageStore, "workflow.port.outputs"), values: call.step.outputs, operationID: call.step.node.operationID, portsAreInputs: false, controller: controller, onReturnText: onReturnText, allowsReturn: !readOnly, metadata: metadata)
                             if call.step.id != controller.presentationStep(nodeID: node.id, runID: resultRunID)?.id, call.step.status == .waiting {
                                 if let task = call.step.humanTask {
                                     WorkflowHumanTaskForm(task: task, onSaveDraft: { controller.editHumanDraft(stepID: call.id, value: $0) },
@@ -1692,8 +1717,8 @@ private struct WorkflowFixedToolSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Button(workflowText(language, "baseline02.ui.label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left") { onClose() }
-                Text(workflowText(language, "canvas.tool.fixedTitle", fallback: "查看固定工具"))
+                Button(workflowText(language, "baseline02.ui.label.572cf45ba436"), systemImage: "chevron.left") { onClose() }
+                Text(workflowText(language, "canvas.tool.fixedTitle"))
                     .font(.title2.weight(.semibold))
                 Spacer()
             }
@@ -1705,14 +1730,14 @@ private struct WorkflowFixedToolSheet: View {
                     VStack(alignment: .leading, spacing: 15) {
                         WorkflowInspectorSection(workflowText(language, "canvas.tool.interface", fallback: "公开端口")) {
                             if let interface = tool.graph.interface {
-                                Text(workflowText(language, "workflow.port.inputs", fallback: "输入"))
+                                Text(workflowText(language, "workflow.port.inputs"))
                                     .font(.subheadline.weight(.semibold))
                                 ForEach(interface.inputs) { input in
                                     Text(input.name + " · " + String(describing: input.type)
                                         + (input.required ? " · 必选" : " · 可选"))
                                         .font(.callout)
                                 }
-                                Text(workflowText(language, "workflow.port.outputs", fallback: "输出"))
+                                Text(workflowText(language, "workflow.port.outputs"))
                                     .font(.subheadline.weight(.semibold))
                                 ForEach(interface.outputs) { output in
                                     Text(output.name + " · " + output.port + " · "
@@ -1755,7 +1780,7 @@ private struct WorkflowFixedToolSheet: View {
                 }
                 HStack {
                     Spacer()
-                    Button(workflowText(language, "canvas.tool.copy", fallback: "复制为可编辑流程"), action: onCopy)
+                    Button(workflowText(language, "canvas.tool.copy"), action: onCopy)
                         .disabled(!controller.canEditCanvas)
                 }
             } else {
@@ -1815,12 +1840,12 @@ private struct WorkflowFieldEditor: View {
                         .font(.system(size: 13, weight: .medium))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    WorkbenchMenu(workflowText(languageStore, "workflow.action.chooseModel", fallback: "选择模型")) {
+                    WorkbenchMenu(workflowText(languageStore, "workflow.action.chooseModel")) {
                         WorkbenchMenuForEach(modelChoices) { choice in
                             WorkbenchMenuAction(choice.displayName) { onChange(.text(choice.id)) }
                         }
                         if !modelChoices.isEmpty { WorkbenchMenuDivider() }
-                        WorkbenchMenuAction(workflowText(languageStore, "workflow.model.import", fallback: "选择本地模型文件夹…"),
+                        WorkbenchMenuAction(workflowText(languageStore, "workflow.model.import"),
                                action: modelPicker)
                     }.disabled(readOnly)
                 }
@@ -1889,7 +1914,7 @@ struct WorkflowConnectionSnapshot: Identifiable {
 enum WorkflowConnectionPresentation {
     @MainActor static func title(_ connection: WorkflowConnection, graph: WorkflowGraph?, registry: WorkflowRegistry, tools: [WorkflowToolDefinition], language: UILanguageStore?, disambiguateNodeNames: Bool = true) -> String {
         func endpoint(_ id: UUID, _ port: String, input: Bool) -> String {
-            guard let node = graph?.nodes.first(where: { $0.id == id }) else { return metadataText(language, "unavailableNode", "节点不可访问", "Node unavailable") }
+            guard let node = graph?.nodes.first(where: { $0.id == id }) else { return metadataText(language, "unavailableNode") }
             let definition = registry.definition(for: node, tools: tools)
             let portName = (input ? definition?.inputs : definition?.outputs)?.first(where: { $0.id == port })?.title ?? port
             // Canvas geometry changes must not sort every same-name node per wire.
@@ -1952,19 +1977,19 @@ private struct WorkflowConnectionInspection: View {
     let connection: WorkflowConnection
     @Environment(\.dLanguageStore) private var language
     var body: some View {
-        DisclosureGroup(workflowText(language, "workflow.connection.inspect", fallback: "检查输入数据")) {
+        DisclosureGroup(workflowText(language, "workflow.connection.inspect")) {
             if let value = WorkflowConnectionPresentation.configuredValue(source: controller.graph?.nodes.first {
                 $0.id == connection.sourceNode
             }) {
-                WorkflowStepValues(title: workflowText(language, "workflow.connection.configured", fallback: "当前源设置（尚非运行结果）"),
+                WorkflowStepValues(title: workflowText(language, "workflow.connection.configured"),
                     values: [connection.targetPort: value], operationID: "", portsAreInputs: true,
                     controller: controller, onReturnText: { _ in }, allowsReturn: false)
             }
             let snapshots = WorkflowConnectionPresentation.snapshots(connection, graphID: controller.graph?.id ?? UUID(), runs: controller.history(for: connection.targetNode))
-            Text(workflowText(language, "workflow.connection.history", fallback: "此输入端口的历史快照；不代表当前连线"))
+            Text(workflowText(language, "workflow.connection.history"))
                 .font(.caption).foregroundStyle(.secondary)
             if snapshots.isEmpty {
-                Text(workflowText(language, "workflow.connection.noData", fallback: "尚无已记录数据；查看不会执行上游"))
+                Text(workflowText(language, "workflow.connection.noData"))
                     .font(.caption)
             }
             ForEach(snapshots.reversed()) { snapshot in
@@ -1989,7 +2014,7 @@ private struct WorkflowCanvasConnectionInspector: View {
         WorkbenchScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Button(workflowText(language, "baseline02.ui.label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left") { onClose() }
+                    Button(workflowText(language, "baseline02.ui.label.572cf45ba436"), systemImage: "chevron.left") { onClose() }
                     Text(workflowText(language, "canvas.connection.title", fallback: "连接"))
                         .font(.title3.weight(.semibold))
                     Spacer()
@@ -2026,7 +2051,7 @@ private struct WorkflowCanvasConnectionInspector: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                Button(workflowText(language, "workflow.action.disconnect", fallback: "断开"),
+                Button(workflowText(language, "workflow.action.disconnect"),
                        systemImage: "link.badge.minus", role: .destructive) {
                     controller.disconnect(connection.id)
                     onClose()
@@ -2073,7 +2098,7 @@ private struct WorkflowStepValues: View {
                 WorkflowResultQueryControls(state: resultQuery, store: metadata, scope: resultScope, scopeDescription: scopeDescription).workbenchHelp("RESULT-FILTER")
             }
             if values.isEmpty {
-                Text(workflowText(languageStore, "workflow.value.none", fallback: "无"))
+                Text(workflowText(languageStore, "workflow.value.none"))
                     .foregroundStyle(.secondary)
             }
             ForEach(values.keys.sorted(), id: \.self) { port in
@@ -2091,7 +2116,7 @@ private struct WorkflowStepValues: View {
                             WorkflowAssetPreview(controller: controller, reference: reference)
                             WorkflowAssetIdentity(reference: reference)
                             if reference.kind == .text && allowsReturn {
-                                Button(workflowText(languageStore, "workflow.action.returnToText", fallback: "回到文稿"),
+                                Button(workflowText(languageStore, "workflow.action.returnToText"),
                                        systemImage: "arrowshape.turn.up.backward") {
                                     onReturnText(reference)
                                 }
@@ -2244,7 +2269,7 @@ struct WorkflowAssetPreview: View {
                             } else { inspectImage=image }
                         } label: {
                             Image(nsImage: image).resizable().scaledToFit().frame(maxHeight: 180)
-                        }.buttonStyle(.plain).help(metadataText(languageStore, "inspectImage", "放大查看图像", "Inspect image"))
+                        }.buttonStyle(.plain).help(metadataText(languageStore, "inspectImage"))
                     } else {
                         previewError(workflowText(
                             languageStore,
@@ -2280,7 +2305,7 @@ struct WorkflowAssetPreview: View {
         }
         .sheet(isPresented: Binding(get: { inspectImage != nil }, set: { if !$0 { inspectImage = nil } })) {
             VStack {
-                HStack { Button(metadataText(languageStore, "close", "关闭", "Close")) { inspectImage = nil }; Spacer() }
+                HStack { Button(metadataText(languageStore, "close")) { inspectImage = nil }; Spacer() }
                 if let inspectImage { ScrollView([.horizontal, .vertical]) { Image(nsImage: inspectImage).resizable().scaledToFit().frame(maxWidth: 1000, maxHeight: 750) } }
             }.padding(18).frame(minWidth: 600, minHeight: 480)
         }
@@ -2318,7 +2343,7 @@ struct WorkflowCandidatePreview: View {
                     )).font(.caption.monospaced())
                     Spacer()
                     if selected {
-                        Label(workflowText(languageStore, "workflow.candidate.highlighted", fallback: "已高亮"),
+                        Label(workflowText(languageStore, "workflow.candidate.highlighted"),
                               systemImage: "checkmark.circle.fill")
                     }
                 }
@@ -2361,7 +2386,7 @@ struct WorkflowWaitingDecision: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text(workflowText(languageStore, "workflow.decision.title", fallback: "等待人工决定"))
+            Text(workflowText(languageStore, "workflow.decision.title"))
                 .font(.headline)
             if interaction == .textReview {
                 TextSourcesQuestionEditor(value: draft, editEpoch: 0,
@@ -2381,12 +2406,12 @@ struct WorkflowWaitingDecision: View {
                     .workbenchInputSurface()
                     .task(id: textReference?.version) { await loadDraft() }
                 HStack {
-                    Button(workflowText(languageStore, "workflow.action.acceptText", fallback: "接受文字")) {
+                    Button(workflowText(languageStore, "workflow.action.acceptText")) {
                         decide(accept: true, text: draft, candidateID: nil)
                     }.workbenchHelp("DECISION-ACCEPT")
                         .buttonStyle(WorkbenchPrimaryButtonStyle())
                         .disabled(!textReady)
-                    Button(workflowText(languageStore, "workflow.action.reject", fallback: "拒绝"), role: .destructive) {
+                    Button(workflowText(languageStore, "workflow.action.reject"), role: .destructive) {
                         decide(accept: false, text: nil, candidateID: nil)
                     }.workbenchHelp("DECISION-REJECT")
                 }
@@ -2408,13 +2433,13 @@ struct WorkflowWaitingDecision: View {
                     ), isOn: $acceptPartial).disabled(readOnly)
                 }
                 HStack {
-                    Button(workflowText(languageStore, "workflow.action.acceptHighlighted", fallback: "采用高亮候选")) {
+                    Button(workflowText(languageStore, "workflow.action.acceptHighlighted")) {
                         decide(accept: true, text: nil, candidateID: highlightedCandidateID)
                     }.workbenchHelp("DECISION-ACCEPT")
                     .buttonStyle(WorkbenchPrimaryButtonStyle())
                     .disabled(readOnly || highlightedCandidateID == nil ||
                               (candidates.contains { $0.error != nil } && !acceptPartial))
-                    Button(workflowText(languageStore, "workflow.action.reject", fallback: "拒绝"), role: .destructive) {
+                    Button(workflowText(languageStore, "workflow.action.reject"), role: .destructive) {
                         decide(accept: false, text: nil, candidateID: nil)
                     }.workbenchHelp("DECISION-REJECT")
                         .disabled(readOnly)
@@ -2425,7 +2450,7 @@ struct WorkflowWaitingDecision: View {
                     "workflow.decision.explicit",
                     fallback: "此步骤等待明确决定。"
                 )).foregroundStyle(.secondary)
-                Button(workflowText(languageStore, "workflow.action.reject", fallback: "拒绝"), role: .destructive) {
+                Button(workflowText(languageStore, "workflow.action.reject"), role: .destructive) {
                     decide(accept: false, text: nil, candidateID: nil)
                 }.workbenchHelp("DECISION-REJECT")
                     .disabled(readOnly)
@@ -2478,10 +2503,10 @@ private struct WorkflowRunPlanSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Button(workflowText(languageStore, "baseline02.ui.label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left", action: onCancel)
+            Button(workflowText(languageStore, "baseline02.ui.label.572cf45ba436"), systemImage: "chevron.left", action: onCancel)
             Text(preview.only
-                 ? workflowText(languageStore, "workflow.plan.rerunTitle", fallback: "确认仅重跑本步")
-                 : workflowText(languageStore, "workflow.plan.runTitle", fallback: "确认运行到这里"))
+                 ? workflowText(languageStore, "workflow.plan.rerunTitle")
+                 : workflowText(languageStore, "workflow.plan.runTitle"))
                 .font(.title2.weight(.semibold))
             Text(workflowText(
                 languageStore,
@@ -2493,7 +2518,7 @@ private struct WorkflowRunPlanSheet: View {
                 VStack(alignment: .leading, spacing: 8) {
                     let lines = WorkflowCanvasPresentation.planLines(preview.lines)
                     if lines.isEmpty {
-                        Text(workflowText(languageStore, "workflow.plan.empty", fallback: "计划为空"))
+                        Text(workflowText(languageStore, "workflow.plan.empty"))
                             .foregroundStyle(.secondary)
                     }
                     ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
@@ -2506,8 +2531,8 @@ private struct WorkflowRunPlanSheet: View {
             }
             HStack {
                 Spacer()
-                Button(workflowText(languageStore, "workflow.action.cancel", fallback: "取消"), action: onCancel)
-                Button(workflowText(languageStore, "workflow.plan.submit", fallback: "明确提交运行"), action: onRun)
+                Button(workflowText(languageStore, "workflow.action.cancel"), action: onCancel)
+                Button(workflowText(languageStore, "workflow.plan.submit"), action: onRun)
                     .buttonStyle(WorkbenchPrimaryButtonStyle())
                     .disabled(readOnly)
                     .keyboardShortcut(.defaultAction)
@@ -2573,7 +2598,7 @@ struct WorkflowStatusBadge: View {
             Circle().fill(WorkflowCanvasPresentation.statusColor(status)).frame(width: 7 * scale, height: 7 * scale)
             Text(WorkflowCanvasPresentation.statusTitle(status, language: languageStore))
             if stale {
-                Text(workflowText(languageStore, "workflow.status.staleInput", fallback: "旧输入"))
+                Text(workflowText(languageStore, "workflow.status.staleInput"))
                     .foregroundStyle(.orange)
             }
         }
@@ -2588,10 +2613,10 @@ private enum WorkflowExampleChoice: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     @MainActor func title(_ language: UILanguageStore?) -> String {
         switch self {
-        case .text: workflowText(language, "workflow.example.text", fallback: "文字")
-        case .image: workflowText(language, "workflow.example.image", fallback: "图文")
-        case .file: workflowText(language, "workflow.example.file", fallback: "文件")
-        case .template: workflowText(language, "workflow.example.template", fallback: "模板")
+        case .text: workflowText(language, "workflow.example.text")
+        case .image: workflowText(language, "workflow.example.image")
+        case .file: workflowText(language, "workflow.example.file")
+        case .template: workflowText(language, "workflow.example.template")
         }
     }
 }
@@ -2720,14 +2745,14 @@ enum WorkflowCanvasPresentation {
         let count = Set(port.kinds).count
         let types: String
         if Set(port.kinds) == Set(WorkflowDataKind.allCases) {
-            types = workflowText(language, "workflow.port.anySupported", fallback: "所有已支持类型")
+            types = workflowText(language, "workflow.port.anySupported")
         } else if count > 3 {
-            types = workflowText(language, "workflow.port.typeCount", fallback: "{count} 种类型", arguments: ["count": String(count)])
+            types = workflowText(language, "workflow.port.typeCount", arguments: ["count": String(count)])
         } else {
             return portDetail(port, language: language)
         }
         let requirement = workflowText(language, port.required ? "workflow.port.required" : "workflow.port.optional", fallback: port.required ? "必选" : "可选")
-        return workflowText(language, "workflow.port.detail", fallback: "{kinds} · {requirement}", arguments: ["kinds": types, "requirement": requirement])
+        return workflowText(language, "workflow.port.detail", arguments: ["kinds": types, "requirement": requirement])
     }
 
     static func portDetail(_ port: WorkflowPortDefinition) -> String {
@@ -2737,8 +2762,8 @@ enum WorkflowCanvasPresentation {
     @MainActor static func portDetail(_ port: WorkflowPortDefinition, language: UILanguageStore?) -> String {
         let kinds = port.kinds.map { kind($0, language: language) }.joined(separator: "/")
         let requirement = port.required
-            ? workflowText(language, "workflow.port.required", fallback: "必选")
-            : workflowText(language, "workflow.port.optional", fallback: "可选")
+            ? workflowText(language, "workflow.port.required")
+            : workflowText(language, "workflow.port.optional")
         return workflowText(
             language,
             "workflow.port.detail",
@@ -2831,4 +2856,9 @@ enum WorkflowCanvasPresentation {
         case .queued: .gray
         }
     }
+}
+
+@MainActor func workflowProgressText(_ message: WorkflowProgressMessage, language: UILanguageStore?) -> String {
+    if message.code.hasPrefix("phase.") { return workspaceText(language, message.code) }
+    return workflowText(language, "workflow.progress." + message.code, arguments: message.arguments)
 }

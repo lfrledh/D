@@ -445,6 +445,13 @@ extension WorkflowWorkspacePresentationTests {
         await owner.createProject(at:root.appendingPathComponent("Fixture.dproject"));await owner.openWorkflow()
         return Self(root:root,suite:suite,settings:settings,owner:owner,store:try #require(owner.currentStore),controller:try #require(owner.workflow),manifest:try #require(owner.manifest),engine:engine)
     }
+    func runtimeValueGraph() throws -> WorkflowGraph {
+        controller.addBlankGraph(name: "Same")
+        controller.addNode(operationID: "d.value.input")
+        let node = try #require(controller.graph?.nodes.last)
+        controller.setDataConfiguration(nodeID: node.id, value: .init(value: .text("用户原文 {seed} 🙂")))
+        return try #require(controller.graph)
+    }
     func close() async throws { await owner.closeProject();settings.removePersistentDomain(forName:suite);try FileManager.default.removeItem(at:root) }
     func target(_ reference:WorkflowAssetReference)->WorkflowViewerTarget { .init(title:"Same human title",subtitle:"isolated",value:.asset(reference)) }
     func viewer(_ target:WorkflowViewerTarget)->WorkflowViewerSession { .init(owner:owner,store:store,projectID:manifest.id,instanceID:manifest.effectiveInstanceID,target:target) }
@@ -615,7 +622,7 @@ extension WorkflowWorkspacePresentationTests {
         #expect((await f.store.snapshot()).revision == before.revision)
         let all = WorkflowLibraryValue.entries(f.controller, language: nil)
         let references = Set(all.compactMap { $0.runtimeValue?.reference })
-        let deduplicated = WorkflowLibraryValue.entries(f.controller, language: nil, excludingSaved: references)
+        let deduplicated = WorkflowLibraryValue.entries(f.controller, language: nil, excludingSaved: references, indexedSaved: try await f.store.libraryMetadataSnapshots())
         let expected = all.filter { entry in
             guard let runtime = entry.runtimeValue, runtime.reference != nil else { return true }
             return f.controller.callRecords(runID: runtime.call.address.runID).first { $0.id == runtime.call.stepID && $0.address == runtime.call.address }?.step.status == .waiting
@@ -672,7 +679,7 @@ extension WorkflowWorkspacePresentationTests {
         release.resume();try await save.value
         #expect(viewer.metadata?.asset.id == b.asset.id && viewer.metadata?.asset.note == "")
         #expect(try await f.store.assetMetadataSnapshot(id:a.asset.id).asset.note == "A only")
-        await #expect(throws:WorkflowIssue.self) { try await viewer.saveMetadata(expected,nil,"stale",nil) }
+        await #expect(throws:SharedLibraryError.staleAnnotation) { try await viewer.saveMetadata(expected,nil,"stale",nil) }
         #expect(try await f.store.workflowText(a.record.reference) == "A")
         #expect(try await f.store.workflowText(b.record.reference) == "B")
         viewer.suspend();try await f.close()
@@ -1000,5 +1007,173 @@ extension WorkflowWorkspacePresentationTests {
         var explicit = node; explicit.parameters["modelID"] = .text("image:explicit")
         #expect(WorkflowNodeIdentity.modelIdentity(node: explicit, definition: definition, defaults: ["image": "image:default"]) == "image:explicit")
         #expect(node.parameters["modelID"]?.string == "")
+    }
+}
+
+extension WorkflowWorkspacePresentationTests {
+    @Test func exactResultNavigationAndRuntimeAnnotationsKeepFrozenStateAndSearch() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        let graph = try f.runtimeValueGraph()
+        await c.run(target: graph.nodes[0].id, only: false)
+        let runs = c.runs, manifest = await f.store.snapshot(), selected = c.selectedNodeID, undo = c.canUndo
+        let libraryURL = f.root.appendingPathComponent("annotation-library.json")
+        let library = try SharedLibraryStore(fileURL: libraryURL)
+        let entries = WorkflowLibraryValue.entries(c, language: nil, library: library)
+        let entry = try #require(entries.first { $0.runtimeValue?.annotationIdentity != nil })
+        let value = try #require(entry.runtimeValue), identity = try #require(value.annotationIdentity)
+        let context = WorkflowLibraryContext(controller: c, source: .call(value.call), name: "Same human name")
+        #expect(context.isCurrent(in: c) && context.includes(entry))
+        let otherCall = WorkflowCallReference(address: .init(runID: value.call.address.runID, path: value.call.address.path + [.iteration(4)]), stepID: value.call.stepID)
+        let wrong = WorkflowLibraryContext(controller: c, source: .call(otherCall), name: "Same human name")
+        #expect(!wrong.isCurrent(in: c) && !wrong.includes(entry))
+        let run = WorkflowLibraryContext(controller: c, source: .run(value.call.address.runID), name: "Run")
+        #expect(run.isCurrent(in: c) && entries.filter(run.includes).count >= entries.filter(context.includes).count)
+        let missing = WorkflowLibraryContext(controller: c, source: .run(UUID()), name: "Run")
+        #expect(!missing.isCurrent(in: c) && entries.filter(missing.includes).isEmpty)
+        let state = SharedLibraryBrowserState(query: .init(text: "old search"), scope: .all, selectedKeys: [entry.id], focusedKey: entry.id)
+        state.draftText = "unsubmitted composition"; state.operationPath = ["private"]
+        _ = try SharedLibraryBrowserLogic.visibleEntries(entries.filter(context.includes), store: library, query: state.query, scope: state.scope)
+        #expect(state.query.text == "old search" && state.draftText == "unsubmitted composition" && state.operationPath == ["private"] && state.focusedKey == entry.id)
+        let annotation = WorkflowValueAnnotation(name: "精确结果🙂", note: "说明 {run}", favorite: true)
+        try value.saveAnnotation(in: c, library: library, expected: nil, value: annotation)
+        let tags = try library.createTags(["私人标签"])
+        try library.editOrganizationTags(expected: .init(keys: [identity.storageKey], metadata: library.metadata), add: Set(tags))
+        let refreshed = WorkflowLibraryValue.entries(c, language: nil, library: library)
+        let annotated = try #require(refreshed.first { $0.item.key == identity.storageKey })
+        #expect(annotated.item.title == annotation.name && annotated.item.assetFacts?.favorite == true && annotated.item.assetFacts?.note == annotation.note)
+        #expect(SharedLibraryBrowserLogic.tagEditEntries([annotated.id], in: refreshed).count == 1)
+        #expect(!SharedLibraryBrowserLogic.allows(.add, entry: annotated))
+        #expect(try SharedLibraryStore(fileURL: libraryURL).metadata.runtimeAnnotations[identity.storageKey] == annotation)
+        #expect(!library.metadata.importedLegacyKeys.contains(identity.storageKey))
+        let wrongValue = WorkflowLibraryValue(projectID: value.projectID, instanceID: value.instanceID, call: otherCall, port: value.port, value: value.value, createdAt: value.createdAt)
+        #expect(throws: SharedLibraryError.staleAnnotation) { try wrongValue.saveAnnotation(in: c, library: library, expected: nil, value: annotation) }
+        #expect(c.runs == runs && c.selectedNodeID == selected && c.canUndo == undo)
+        #expect(await f.store.snapshot() == manifest)
+        await f.owner.closeProject()
+        #expect(!context.isCurrent(in: c))
+        #expect(throws: SharedLibraryError.staleAnnotation) { try value.saveAnnotation(in: c, library: library, expected: annotation, value: .init(name: "late")) }
+        try await f.close()
+    }
+
+    @Test func resourceViewerUsesSameAssetAnnotationOwnerWithoutRegisteringVersion() async throws {
+        let f = try await RenderingWorkspaceFixture.make()
+        let published = try await f.store.publishWorkflowAsset(data: Data("original bytes".utf8), mediaType: "text/plain", name: "Original", operationID: "d.text.input")
+        await f.owner.refreshAfterFileOperation(store: f.store, instanceID: f.manifest.effectiveInstanceID)
+        let content = try await f.store.readOnlyAsset(id: published.asset.id)
+        let viewer = f.viewer(.init(title: "Original", subtitle: "", resource: content.token))
+        await viewer.load()?.value
+        let baseline = ProjectAssetEditBaseline(snapshot: try #require(viewer.metadata))
+        try await viewer.saveMetadata(baseline, "Renamed", "Note", true)
+        #expect(viewer.metadata?.asset.name == "Renamed" && viewer.metadata?.asset.note == "Note")
+        let after = try await f.store.readOnlyAsset(content.token)
+        #expect(after.data == content.data && after.token == content.token)
+        #expect(after.metadata.record == content.metadata.record)
+        viewer.stop(); try await f.close()
+    }
+
+    @Test func legacyCallAndAmbiguousSavedVersionNeverNavigateToOtherBytes() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        let published = try await f.store.publishWorkflowAsset(data: Data("original".utf8), mediaType: "text/plain", name: "Same", operationID: "d.text.input")
+        let node = WorkflowNode(operationID: "d.text.input", title: "Same", parameters: ["text": .text("original")])
+        let graph = WorkflowGraph(name: "Legacy", nodes: [node])
+        let step = WorkflowStepRun(node: node, signature: "historical", outputs: ["output": .asset(published.record.reference)], status: .completed)
+        let run = WorkflowRun(graph: graph, targetNodeID: node.id, steps: [step], status: .completed)
+        let archive = try #require(try await f.store.workflowState().archive)
+        _ = try await f.store.saveWorkflow(graphs: [graph], runs: [run], expectedRevision: archive.revision)
+        await c.load()
+        let call = WorkflowCallReference(address: .init(runID: run.id, path: []), stepID: step.id)
+        let scope = WorkflowLibraryContext(controller: c, source: .call(call), name: "Same")
+        let occurrence = SharedLibraryAssetOccurrence(runID: run.id, nodeID: node.id, stepID: step.id, address: nil)
+        let snapshot = ProjectAssetMetadataSnapshot(project: f.manifest, asset: published.asset, record: published.record, job: nil, occurrences: [occurrence], sourceIssue: nil)
+        var saved = SharedLibraryBrowserEntry(item: .init(key: "saved", title: "Same", kind: .asset, assetFacts: snapshot.facts), selection: .unavailable("fixture"))
+        saved.metadataSnapshot = snapshot
+        #expect(scope.isCurrent(in: c) && scope.includes(saved))
+        #expect(WorkflowLibraryValue.entries(c, language: nil, excludingSaved: [published.record.reference], indexedSaved: [snapshot]).isEmpty)
+        let ambiguous = ProjectAssetMetadataSnapshot(project: f.manifest, asset: published.asset, record: nil, job: nil, occurrences: [occurrence], sourceIssue: "multiple versions")
+        saved.metadataSnapshot = ambiguous
+        #expect(!scope.includes(saved))
+        let retained = WorkflowLibraryValue.entries(c, language: nil, excludingSaved: [published.record.reference], indexedSaved: [ambiguous])
+        #expect(retained.count == 1 && retained[0].runtimeValue?.reference == published.record.reference)
+        #expect(scope.includes(retained[0]))
+        let wrongStep = WorkflowLibraryContext(controller: c, source: .call(.init(address: call.address, stepID: UUID())), name: "Same")
+        #expect(!wrongStep.isCurrent(in: c) && !wrongStep.includes(retained[0]))
+        try await f.close()
+    }
+
+    @Test func batchAttemptLocationSeparatesSameNamedOutputsAndViewerLanguageKeepsContent() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        let graph = try f.runtimeValueGraph()
+        let id = try await c.createBatchStage(selection: .through(graph.nodes[0].id), pins: [], repetitions: 2,
+            expectedGraphID: graph.id, expectedRevision: graph.revision)
+        await c.runBatchStage(id)
+        let stage = try #require(c.batchStages.first { $0.id == id })
+        #expect(stage.attempts.count == 2 && stage.attempts.allSatisfy { $0.state == .completed })
+        let rows = WorkflowLibraryValue.entries(c, language: nil)
+        let a = stage.attempts[0], b = stage.attempts[1]
+        let scope = WorkflowLibraryContext(controller: c, source: .attempt(stage: id, attempt: a.id, run: a.runID), name: "Same")
+        let wrong = WorkflowLibraryContext(controller: c, source: .attempt(stage: id, attempt: a.id, run: b.runID), name: "Same")
+        #expect(scope.isCurrent(in: c) && !wrong.isCurrent(in: c))
+        let located = rows.filter(scope.includes)
+        #expect(!located.isEmpty && located.allSatisfy { $0.runtimeValue?.call.address.runID == a.runID })
+        let other = rows.filter { $0.runtimeValue?.call.address.runID == b.runID }
+        #expect(!other.isEmpty && Set(located.map(\.id)).isDisjoint(with: other.map(\.id)))
+        let value = try #require(located.first { $0.runtimeValue?.annotationIdentity != nil }?.runtimeValue)
+        let viewer = f.viewer(.init(title: "captured label", subtitle: "captured status", value: value.value, call: value.call, port: value.port, usesCallTitle: true))
+        await viewer.load()?.value
+        let language = UILanguageStore(preferredLanguages: ["zh-Hans"])
+        let original = viewer.target, body = viewer.text, generation = viewer.generation, runs = c.runs
+        let chinese = viewer.displayTitle(language) + viewer.displaySubtitle(language)
+        try language.select("en")
+        #expect(viewer.displayTitle(language) + viewer.displaySubtitle(language) != chinese)
+        #expect(viewer.target.call == original.call && viewer.target.value == original.value && viewer.text == body && viewer.generation == generation && c.runs == runs)
+        #expect(await f.engine.submissions == 0)
+        viewer.stop(); try await f.close()
+    }
+
+    @Test func viewerAnnotationLifecyclePinsTargetAndKeepsOtherEditorGate() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        let graph = try f.runtimeValueGraph()
+        await c.run(target: graph.nodes[0].id, only: false)
+        let value = try #require(WorkflowLibraryValue.entries(c, language: nil).first { $0.runtimeValue?.annotationIdentity != nil }?.runtimeValue)
+        let viewer = f.viewer(.init(title: "Original", subtitle: "", value: value.value, call: value.call, port: value.port))
+        await viewer.load()?.value
+        let model = WorkbenchModel(projectSession: f.owner), target = viewer.target, generation = viewer.generation
+        model.beginEditing() // A separate workbench editor must keep its own close gate.
+        viewer.beginAnnotationEditing(model: model)
+        viewer.beginAnnotationEditing(model: model) // duplicate appearance is idempotent
+        #expect(viewer.editingAnnotations && model.hasPendingEditor)
+        viewer.replace(.init(title: "Other", subtitle: "", value: .data(.text("Other"))))
+        #expect(viewer.load() == nil && viewer.target.call == target.call && viewer.target.value == target.value && viewer.generation == generation)
+        await f.owner.closeProject() // Simulate an owner becoming unavailable outside the normal gated UI.
+        viewer.reconcile()
+        #expect(viewer.runtimeAnnotationTarget == value && !viewer.canRead && viewer.editingAnnotations)
+        viewer.endAnnotationEditing()
+        #expect(model.hasPendingEditor && !viewer.editingAnnotations)
+        model.endEditing(); #expect(!model.hasPendingEditor)
+        viewer.endAnnotationEditing(); #expect(!model.hasPendingEditor)
+        viewer.stop(); try await f.close()
+    }
+
+    @Test func viewerFailedAnnotationWriteAfterSuspensionStillReportsFailureToEditor() async throws {
+        let f = try await RenderingWorkspaceFixture.make()
+        let published = try await f.store.publishWorkflowAsset(data: Data("immutable".utf8), mediaType: "text/plain", name: "Original", operationID: "d.text.input")
+        var waiting: CheckedContinuation<Void, any Error>?
+        let viewer = WorkflowViewerSession(owner: f.owner, store: f.store, projectID: f.manifest.id, instanceID: f.manifest.effectiveInstanceID,
+            target: f.target(published.record.reference), writeAnnotations: { _, _, _, _ in
+                try await withCheckedThrowingContinuation { waiting = $0 }
+            })
+        await viewer.load()?.value
+        let expected = ProjectAssetEditBaseline(snapshot: try #require(viewer.metadata))
+        let model = WorkbenchModel(projectSession: f.owner)
+        viewer.beginAnnotationEditing(model: model)
+        let save = Task { try await viewer.saveMetadata(expected, "recoverable draft", nil, nil) }
+        for _ in 0..<100 where waiting == nil { try await Task.sleep(for: .milliseconds(5)) }
+        let release = try #require(waiting)
+        viewer.suspend()
+        release.resume(throwing: SharedLibraryError.externalChange)
+        await #expect(throws: SharedLibraryError.externalChange) { try await save.value }
+        #expect(viewer.editingAnnotations && model.hasPendingEditor && viewer.metadata?.asset.name == "Original")
+        #expect(try await f.store.workflowText(published.record.reference) == "immutable")
+        viewer.endAnnotationEditing(); viewer.stop(); try await f.close()
     }
 }

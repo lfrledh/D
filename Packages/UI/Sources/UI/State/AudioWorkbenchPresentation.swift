@@ -51,12 +51,13 @@ public protocol AudioWorkbenchPanelProviding: AnyObject {
 
 @MainActor
 public final class NativeAudioWorkbenchPanels: AudioWorkbenchPanelProviding {
-    public init() {}
+    private let language: UILanguageStore?
+    public init(language: UILanguageStore? = nil) { self.language = language }
 
     public func chooseAudioImport() async -> URL? {
         let panel = NSOpenPanel()
-        panel.title = "导入原始 WAV 或 CAF PCM"
-        panel.message = "只会读取所选的一个文件，并将受支持的原声登记到当前项目。"
+        panel.title = workflowText(language, "workbench.native.audioImport.title")
+        panel.message = workflowText(language, "workbench.native.audioImport.message")
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false

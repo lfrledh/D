@@ -21,7 +21,7 @@ struct ArtworkComparison: View {
                     .accessibilityIdentifier("end-comparison")
                 Spacer()
                 Picker(consistencyText(consistencyLanguage, "remaining.b762aec769a3"), selection: $zoom) {
-                    ForEach(ArtworkZoom.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(ArtworkZoom.allCases, id: \.self) { Text($0 == .fit ? workflowText(consistencyLanguage, "workbench.zoom.fit") : $0.rawValue).tag($0) }
                 }.pickerStyle(.segmented).frame(width: 180)
                     .accessibilityIdentifier("comparison-zoom")
                 Button(consistencyText(consistencyLanguage, "remaining.4cc3885c182e")) { pan = CGPoint(x: 0.5, y: 0.5) }

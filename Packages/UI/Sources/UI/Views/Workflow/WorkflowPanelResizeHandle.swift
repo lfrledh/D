@@ -20,7 +20,7 @@ struct WorkflowPanelResizeHandle: View {
                 }
                 .onEnded { _ in initialWidth = nil })
             .accessibilityElement()
-            .accessibilityLabel(workspaceText(language, "resizeSidebar", "调整边栏宽度", "Resize sidebar"))
+            .accessibilityLabel(workspaceText(language, "resizeSidebar"))
             .accessibilityValue("\(Int(width))")
             .accessibilityAdjustableAction { direction in
                 switch direction {

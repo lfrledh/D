@@ -31,6 +31,7 @@ struct ChatAssistancePanel: View {
     var section: ChatAssistanceSection = .organization
     var expanded: Binding<Bool>? = nil
     @State private var localExpanded = false
+    @Environment(\.dLanguageStore) private var copyLanguage
     let wording: (String, String) -> String
     @State private var summary = false
     @State private var title = false
@@ -43,7 +44,7 @@ struct ChatAssistancePanel: View {
     @State private var error: String?
     @State private var loaded = false
     private var sectionTitle: String {
-        switch section { case .summary: wording("Automatic summaries", "自动摘要"); case .memory: wording("Extract memories", "记忆提取"); case .organization: wording("Conversation organization", "会话整理") }
+        switch section { case .summary: workflowText(copyLanguage, "chat.assistancePanel.automaticSummaries"); case .memory: workflowText(copyLanguage, "chat.assistancePanel.extractMemories"); case .organization: workflowText(copyLanguage, "chat.assistancePanel.conversationOrganization") }
     }
     private func enabled(_ kind: ChatAssistanceKind) -> Bool {
         switch kind { case .summary: summary; case .title: title; case .tags: tags; case .followUps: followUps; case .memory: memoryMode != .off }
@@ -52,55 +53,53 @@ struct ChatAssistancePanel: View {
     var body: some View {
         DisclosureGroup(sectionTitle, isExpanded: expanded ?? $localExpanded) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(wording("Off by default. Enabled tasks run after complete answers with lower queue priority. Original messages stay unchanged.",
-                    "默认关闭。开启的任务在完整回答后低优先级排队，保留原始消息。"))
+                Text(workflowText(copyLanguage, "chat.assistancePanel.offByDefaultEnabledTasksRunAfterCompleteAnswersWith"))
                     .font(.caption).foregroundStyle(.secondary)
-                if section == .summary { Toggle(wording("Create summaries automatically", "自动生成摘要"), isOn: $summary) }
+                if section == .summary { Toggle(workflowText(copyLanguage, "chat.assistancePanel.createSummariesAutomatically"), isOn: $summary) }
                 if section == .organization {
-                Toggle(wording("Automatic title", "自动命名"), isOn: $title)
-                Toggle(wording("Suggested tags", "建议标签"), isOn: $tags)
-                Toggle(wording("Follow-up suggestions", "建议追问"), isOn: $followUps)
+                Toggle(workflowText(copyLanguage, "chat.assistancePanel.automaticTitle"), isOn: $title)
+                Toggle(workflowText(copyLanguage, "chat.assistancePanel.suggestedTags"), isOn: $tags)
+                Toggle(workflowText(copyLanguage, "chat.assistancePanel.followUpSuggestions"), isOn: $followUps)
                 }
                 if section == .memory {
-                WorkbenchPicker(wording("Memory extraction", "记忆提取"), selection: $memoryMode) {
-                    WorkbenchChoice(wording("Off", "关闭"), value:ChatAssistanceMemoryMode.off)
-                    WorkbenchChoice(wording("Review suggestions", "审核建议"), value:ChatAssistanceMemoryMode.suggest)
-                    WorkbenchChoice(wording("Record automatically", "自动记录"), value:ChatAssistanceMemoryMode.automatic)
+                WorkbenchPicker(workflowText(copyLanguage, "chat.assistancePanel.memoryExtraction"), selection: $memoryMode) {
+                    WorkbenchChoice(workflowText(copyLanguage, "chat.assistancePanel.off"), value:ChatAssistanceMemoryMode.off)
+                    WorkbenchChoice(workflowText(copyLanguage, "chat.assistancePanel.reviewSuggestions"), value:ChatAssistanceMemoryMode.suggest)
+                    WorkbenchChoice(workflowText(copyLanguage, "chat.assistancePanel.recordAutomatically"), value:ChatAssistanceMemoryMode.automatic)
                 }
                 if memoryMode != .off {
-                    Toggle(wording("Personal memory (otherwise this project)", "个人记忆（关闭则为本项目）"), isOn: $personal)
-                    Text(wording("Recording and reading are separate. New entries are not injected until enabled in Memory.",
-                        "记录与读取分开：新条目不会自动发送，需在记忆中启用。"))
+                    Toggle(workflowText(copyLanguage, "chat.assistancePanel.personalMemoryOtherwiseThisProject"), isOn: $personal)
+                    Text(workflowText(copyLanguage, "chat.assistancePanel.recordingAndReadingAreSeparateNewEntriesAreNotInjected"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 }
                 ForEach(section.kinds.filter { enabled($0) }, id: \.self) { kind in
-                    DisclosureGroup(label(kind) + wording(" advanced options", "高级选项")) {
+                    DisclosureGroup(label(kind) + workflowText(copyLanguage, "chat.assistancePanel.advancedOptions")) {
                         if kind == .summary {
-                            TextField(wording("Summary threshold (estimated tokens)", "摘要阈值（估计 token）"), text: $threshold)
+                            TextField(workflowText(copyLanguage, "chat.assistancePanel.summaryThresholdEstimatedTokens"), text: $threshold)
                         }
-                        TextField(wording("Output token budget", "输出 token 预算"), text: Binding(
+                        TextField(workflowText(copyLanguage, "chat.knowledgePanel.outputTokenBudget"), text: Binding(
                             get: { budgets[kind] ?? "" }, set: { budgets[kind] = $0 }))
                     }
                 }
-                Text(hasChanges ? wording("Changes are not applied", "修改尚未应用") : wording("Showing saved settings", "当前为已保存设置"))
+                Text(hasChanges ? workflowText(copyLanguage, "chat.outputFormatPanel.changesAreNotApplied") : workflowText(copyLanguage, "chat.assistancePanel.showingSavedSettings"))
                     .font(.caption).foregroundStyle(.secondary)
-                Button(wording("Discard this group's edits", "放弃本组修改")) { load() }.disabled(!hasChanges)
-                Button(wording("Apply this group", "应用本组设置")) { apply() }
+                Button(workflowText(copyLanguage, "chat.assistancePanel.discardThisGroupSEdits")) { load() }.disabled(!hasChanges)
+                Button(workflowText(copyLanguage, "chat.assistancePanel.applyThisGroup")) { apply() }
                     .accessibilityIdentifier("chat-assistance-apply").disabled(!hasChanges)
-                Text(wording("The run command below runs all saved enabled tasks, including other groups.", "下方运行命令会执行本会话所有已保存并开启的任务，包含其他分组。")).font(.caption).foregroundStyle(.secondary)
+                Text(workflowText(copyLanguage, "chat.assistancePanel.theRunCommandBelowRunsAllSavedEnabledTasksIncluding")).font(.caption).foregroundStyle(.secondary)
                 HStack {
-                    Button(wording("Run all enabled tasks in this conversation", "运行本会话所有已开启任务")) {
+                    Button(workflowText(copyLanguage, "chat.assistancePanel.runAllEnabledTasksInThisConversation")) {
                         do { try chat.runAssistance(sessionID: session.id); error = nil }
                         catch { self.error = error.localizedDescription }
                     }.disabled(chat.isRunning || chat.isAssisting || chat.pendingAssistanceSaveID != nil
                         || !ChatAssistanceKind.allCases.contains { (session.assistanceOptions ?? .init()).isEnabled($0) })
                     if chat.isAssisting {
-                        Button(wording("Stop assistance", "停止辅助")) { Task { await chat.cancelAssistance() } }
+                        Button(workflowText(copyLanguage, "chat.assistancePanel.stopAssistance")) { Task { await chat.cancelAssistance() } }
                     }
                 }
                 if chat.pendingAssistanceSaveID != nil {
-                    Button(wording("Retry saving assistance", "重试保存辅助结果")) {
+                    Button(workflowText(copyLanguage, "chat.assistancePanel.retrySavingAssistance")) {
                         Task { do { try await chat.retryAssistanceSave() } catch { self.error = error.localizedDescription } }
                     }
                 }
@@ -108,7 +107,7 @@ struct ChatAssistancePanel: View {
                 if let error { WorkbenchIssueText(raw: error).foregroundStyle(.red).textSelection(.enabled) }
                 ForEach((session.assistanceExecutions ?? []).filter { section.kinds.contains($0.record.kind) }.reversed()) { execution in
                     DisclosureGroup(label(execution.record.kind) + " · " + execution.record.status.rawValue) {
-                        Text(wording("Output budget: ", "输出预算：") + String(execution.record.maximumOutputTokens))
+                        Text(workflowText(copyLanguage, "chat.assistancePanel.outputBudget") + String(execution.record.maximumOutputTokens))
                         if let issue = execution.record.issue { WorkbenchIssueText(raw: issue).foregroundStyle(.red) }
                         if let result = execution.record.result {
                             switch result {
@@ -123,9 +122,9 @@ struct ChatAssistancePanel: View {
                                 }
                             }
                         }
-                        DisclosureGroup(wording("Technical details", "技术详情")) {
+                        DisclosureGroup(workflowText(copyLanguage, "chat.assistancePanel.technicalDetails")) {
                             Text("ID: " + execution.id.uuidString).font(.caption).textSelection(.enabled)
-                            Text(wording("Source: ", "来源：") + execution.record.source.sha256).font(.caption).textSelection(.enabled)
+                            Text(workflowText(copyLanguage, "chat.assistancePanel.source") + execution.record.source.sha256).font(.caption).textSelection(.enabled)
                         }
                     }
                 }
@@ -134,11 +133,11 @@ struct ChatAssistancePanel: View {
     }
     private func label(_ kind: ChatAssistanceKind) -> String {
         switch kind {
-        case .summary: wording("Summary", "摘要")
-        case .title: wording("Title", "标题")
-        case .tags: wording("Tags", "标签")
-        case .followUps: wording("Follow-ups", "追问")
-        case .memory: wording("Memory", "记忆")
+        case .summary: workflowText(copyLanguage, "chat.assistancePanel.summary")
+        case .title: workflowText(copyLanguage, "chat.artifactEditor.title")
+        case .tags: workflowText(copyLanguage, "consistency.LIB-TAGS")
+        case .followUps: workflowText(copyLanguage, "chat.assistancePanel.followUps")
+        case .memory: workflowText(copyLanguage, "chat.assistancePanel.memory")
         }
     }
     private var hasChanges: Bool {

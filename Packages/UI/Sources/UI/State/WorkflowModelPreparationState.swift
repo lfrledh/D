@@ -12,18 +12,18 @@ struct WorkflowModelPreparation: Equatable {
     let issue: String?
     static func make(record: ModelRecord, control: ModelResourceControl, task: ModelDownloadTask?, requiresPreparation: Bool) -> Self {
         let phase: String
-        if record.availability == .unavailable { phase = "模型文件当前不可访问" }
-        else if record.availability == .needsAuthorization { phase = "模型目录需要重新准入" }
-        else if record.state == .verifying { phase = "正在校验模型文件" }
-        else if record.state == .publishing { phase = "正在保存模型文件" }
-        else if record.state == .failed { phase = "模型准备失败" }
+        if record.availability == .unavailable { phase = "unavailable" }
+        else if record.availability == .needsAuthorization { phase = "authorization" }
+        else if record.state == .verifying { phase = "verifyingModel" }
+        else if record.state == .publishing { phase = "publishingModel" }
+        else if record.state == .failed { phase = "failedModel" }
         else if let task, task.state != .completed {
-            phase = ["queued":"等待下载", "downloading":"正在下载", "verifying":"正在校验文件", "publishing":"正在保存下载", "waitingRetry":"等待重试", "paused":"下载已暂停", "failed":"下载失败", "cancelled":"下载已取消"][task.state.rawValue] ?? "准备状态待核实"
+            phase = ["queued":"queued", "downloading":"downloading", "verifying":"verifying", "publishing":"publishing", "waitingRetry":"waitingRetry", "paused":"paused", "failed":"failed", "cancelled":"cancelled"][task.state.rawValue] ?? "unknown"
         } else if control.fileState != .verified {
-            phase = ["partial":"文件尚不完整", "unchecked":"文件待校验", "invalid":"文件校验失败", "deleting":"正在移除", "deleted":"文件已移除"][control.fileState.rawValue] ?? "文件待校验"
-        } else if record.registrationState == .pending { phase = "正在登记模型" }
-        else if record.registrationState == .registered { phase = "文件已校验并登记；执行适配另行检查" }
-        else { phase = requiresPreparation && control.role != .execution ? "文件已校验，待准备执行包" : "文件已校验，尚未登记" }
+            phase = ["partial":"partial", "unchecked":"unchecked", "invalid":"invalid", "deleting":"deleting", "deleted":"deleted"][control.fileState.rawValue] ?? "unchecked"
+        } else if record.registrationState == .pending { phase = "registering" }
+        else if record.registrationState == .registered { phase = "registered" }
+        else { phase = requiresPreparation && control.role != .execution ? "prepareExecution" : "unregistered" }
         let bytes = task?.state == .downloading && record.availability == .available
         return .init(resource: .init(rawValue: record.id.rawValue), taskID: task?.id, attemptID: task?.attemptID, phase: phase,
             completed: bytes ? record.downloadedBytes : nil, total: bytes && record.totalBytes > 0 ? record.totalBytes : nil,
@@ -59,12 +59,13 @@ extension EnvironmentValues {
 struct WorkflowModelPreparationView: View {
     let identity: String
     var scale: CGFloat = 1
+    @Environment(\.dLanguageStore) private var language
     @Environment(\.workflowModelPreparation) private var state
     @Environment(\.workflowModelInstallations) private var installations
     var body: some View {
         if let value = state?.value(identity: identity, installation: installations[identity]) {
             VStack(alignment: .leading, spacing: 3 * scale) {
-                Text(value.phase)
+                Text(workflowText(language, "workflow.preparation." + value.phase))
                 if let completed = value.completed, let total = value.total, total > 0 {
                     ProgressView(value: Double(min(completed, total)), total: Double(total))
                     Text(ByteCountFormatter.string(fromByteCount: Int64(clamping: completed), countStyle: .file) + " / " + ByteCountFormatter.string(fromByteCount: Int64(clamping: total), countStyle: .file)).monospacedDigit()

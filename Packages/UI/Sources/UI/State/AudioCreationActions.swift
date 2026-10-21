@@ -141,21 +141,21 @@ enum AudioCreationButtonHandler {
     static func submissionMessage(_ draft: AudioCreationDraft, source: ProjectAsset?,
                                   hostAllowsGeneration: Bool, hasPendingRangeInput: Bool, language: UILanguageStore? = nil) -> String {
         let language = language ?? UILanguageStore(preferredLanguages: ["zh-Hans"])
-        if draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return workflowText(language, "consistency.audio.copy52", fallback: "Enter a prompt.") }
+        if draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return workflowText(language, "consistency.audio.copy52") }
         if draft.profile == .conditionedMusic {
             if draft.music?.hasNoteCondition == true && draft.music?.notes.isEmpty != false {
-                return workflowText(language, "consistency.audio.copy53", fallback: "Melody conditioning requires at least one note. You can also turn it off and use only the style prompt.")
+                return workflowText(language, "consistency.audio.copy53")
             }
             do { _ = try draft.makeRequest(source: nil) }
             catch { return consistencyText(language, "audio.invalidMusic", arguments: ["diagnostic": error.localizedDescription]) }
         }
-        if !numericInputsAreValid(draft) { return workflowText(language, "consistency.audio.copy54", fallback: "These parameters are not supported by the current model. Your input has not changed.") }
-        if draft.operation != .generate && source == nil { return workflowText(language, "consistency.audio.copy55", fallback: "Reference variation and region inpainting require source audio.") }
-        if draft.operation != .generate && !sourceIsEditable(source) { return workflowText(language, "consistency.audio.copy56", fallback: "This model cannot edit the current source.") }
-        if draft.operation == .inpaint && hasPendingRangeInput { return workflowText(language, "consistency.audio.copy57", fallback: "Apply a valid region before generating.") }
-        if !canGenerate(draft, source: source) { return workflowText(language, "consistency.audio.copy58", fallback: "The region must stay within the source audio and end after it starts.") }
-        if !hostAllowsGeneration { return workflowText(language, "consistency.audio.copy59", fallback: "Generation is not available yet. Check the model status or wait for the current task to finish.") }
-        return workflowText(language, "consistency.audio.copy60", fallback: "Ready.")
+        if !numericInputsAreValid(draft) { return workflowText(language, "consistency.audio.copy54") }
+        if draft.operation != .generate && source == nil { return workflowText(language, "consistency.audio.copy55") }
+        if draft.operation != .generate && !sourceIsEditable(source) { return workflowText(language, "consistency.audio.copy56") }
+        if draft.operation == .inpaint && hasPendingRangeInput { return workflowText(language, "consistency.audio.copy57") }
+        if !canGenerate(draft, source: source) { return workflowText(language, "consistency.audio.copy58") }
+        if !hostAllowsGeneration { return workflowText(language, "consistency.audio.copy59") }
+        return workflowText(language, "consistency.audio.copy60")
     }
 
     static func frameRange(startText: String, endText: String, format: AudioFormatInfo) -> AudioFrameRange? {

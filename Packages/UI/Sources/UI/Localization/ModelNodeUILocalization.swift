@@ -65,8 +65,8 @@ import Foundation
     static func availability(_ value: ModelNodeAvailability, language: UILanguageStore?) -> String { owned(value.title, language: language) }
     static func requirement(_ value: ModelNodePortRequirement, language: UILanguageStore?) -> String {
         switch value {
-        case .required: workflowText(language, "workflow.port.required", fallback: "Required")
-        case .optional: workflowText(language, "workflow.port.optional", fallback: "Optional")
+        case .required: workflowText(language, "workflow.port.required")
+        case .optional: workflowText(language, "workflow.port.optional")
         case .conditional: owned("条件必选", language: language)
         }
     }

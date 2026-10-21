@@ -64,7 +64,7 @@ struct WorkbenchCategoryPicker: View {
         .onChange(of: selection) { _, _ in preview = nil }
         .onDisappear { clear() }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(workflowText(language, "refinement.shell.category", fallback: "创作分类"))
+        .accessibilityLabel(workflowText(language, "refinement.shell.category"))
         .accessibilityIdentifier("quick-category")
         .onMoveCommand { direction in
             guard enabled && controlsEnabled,

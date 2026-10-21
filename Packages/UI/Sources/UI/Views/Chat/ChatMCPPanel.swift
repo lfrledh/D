@@ -6,6 +6,7 @@ struct ChatMCPPanel: View {
     @Environment(\.dLanguageStore) private var language
     let chat: ChatController
     let session: ChatSession
+    @Environment(\.dLanguageStore) private var copyLanguage
     let wording: (String, String) -> String
     @State private var endpoint = ""
     @State private var tool = ""
@@ -16,40 +17,39 @@ struct ChatMCPPanel: View {
     var body: some View {
         Group {
             VStack(alignment: .leading, spacing: 8) {
-                Text(wording("External tools (MCP)", "外部工具连接（MCP）")).font(.headline)
+                Text(workflowText(copyLanguage, "chat.mCPPanel.externalToolsMCP")).font(.headline)
                 TextField("https://…/mcp", text: $endpoint).textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .disabled(chat.mcpSessionID != nil)
-                Text(wording("Streamable HTTP. HTTPS or local loopback only. No login, credential URLs, subprocesses or automatic reconnect. Server-side actions may continue after local cancellation.",
-                             "Streamable HTTP；仅HTTPS或本机回环。不接管登录、凭据网址、子进程，也不自动重连。停止本地请求不保证服务端动作撤回。"))
+                Text(workflowText(copyLanguage, "chat.mCPPanel.streamableHTTPHTTPSOrLocalLoopbackOnlyNoLoginCredential"))
                     .font(.caption).foregroundStyle(.secondary)
-                Toggle(wording("Allow this connection and send the explicitly entered arguments", "允许本次连接和发送明确填写的参数"), isOn: $permission)
+                Toggle(workflowText(copyLanguage, "chat.mCPPanel.allowThisConnectionAndSendTheExplicitlyEnteredArguments"), isOn: $permission)
                     .onChange(of: permission) { _, value in if !value && ownsConnection { Task { await chat.disconnectMCP() } } }
                 HStack {
-                    Button(wording("Connect and list tools", "连接并列出工具")) {
+                    Button(workflowText(copyLanguage, "chat.mCPPanel.connectAndListTools")) {
                         let captured = endpoint
                         Task { do { try await chat.connectMCP(endpoint: captured, sessionID: session.id, permitted: permission); issue = nil } catch { issue = error.localizedDescription } }
                     }.disabled(!permission || chat.mcpSessionID != nil || chat.isToolRunning)
                     if ownsConnection {
-                        Button(wording("Stop / disconnect", "停止／断开")) { Task { await chat.disconnectMCP() } }
+                        Button(workflowText(copyLanguage, "chat.mCPPanel.stopDisconnect")) { Task { await chat.disconnectMCP() } }
                     }
                 }
                 if let owner = chat.mcpSessionID, owner != session.id {
-                    Text(wording("Another conversation owns the connection. Return there to disconnect it.", "连接属于另一个会话，请回到该会话断开。" )).font(.caption)
+                    Text(workflowText(copyLanguage, "chat.MCPPanel.AnotherconversationownstheconnectionReturnthereto")).font(.caption)
                 }
                 if ownsConnection {
-                    Text(String(describing: chat.mcpStatus)).font(.caption).textSelection(.enabled)
-                    WorkbenchPicker(wording("Tool", "工具"), selection: $tool) {
-                        WorkbenchChoice(wording("Select a tool", "选择工具"), value:"")
+                    Text(chatConnectionText(chat.mcpStatus, language: language)).font(.caption).textSelection(.enabled)
+                    WorkbenchPicker(workflowText(copyLanguage, "baseline02.library.kind.tool"), selection: $tool) {
+                        WorkbenchChoice(workflowText(copyLanguage, "chat.mCPPanel.selectATool"), value:"")
                         WorkbenchChoiceForEach(chat.mcpTools, id: \.name) { WorkbenchChoice($0.title ?? $0.name, value:$0.name) }
                     }
                     if let selected = chat.mcpTools.first(where: { $0.name == tool }) {
                         if let description = selected.description { Text(description).font(.caption).textSelection(.enabled) }
-                        DisclosureGroup(wording("Declared arguments (untrusted server data)", "参数声明（服务端资料）")) {
+                        DisclosureGroup(workflowText(copyLanguage, "chat.mCPPanel.declaredArgumentsUntrustedServerData")) {
                             Text(selected.inputSchemaJSON).font(.caption.monospaced()).textSelection(.enabled)
                         }
                         TextEditor(text: $arguments).font(.body.monospaced()).frame(minHeight: 100, maxHeight: 180).workbenchInputSurface()
-                            .accessibilityLabel(wording("MCP arguments JSON", "MCP参数JSON"))
-                        Button(wording("Send these arguments and call tool", "发送上述参数并调用")) {
+                            .accessibilityLabel(workflowText(copyLanguage, "chat.mCPPanel.mCPArgumentsJSON"))
+                        Button(workflowText(copyLanguage, "chat.mCPPanel.sendTheseArgumentsAndCallTool")) {
                             guard case .connected(let address) = chat.mcpStatus else { return }
                             let request = ChatToolRequest.mcp(endpoint: address, tool: selected.name, argumentsJSON: arguments)
                             Task { do { try await chat.executeTool(request, sessionID: session.id, mcpPermission: permission); issue = nil } catch { issue = error.localizedDescription } }
@@ -57,7 +57,7 @@ struct ChatMCPPanel: View {
                     }
                 }
                 if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
-                Text(wording("Results appear in task results below; they enter the model context only when explicitly adopted.", "结果记录在下方任务结果中；只有明确采用后才进入模型上下文。" )).font(.caption)
+                Text(workflowText(copyLanguage, "chat.MCPPanel.Resultsappearintaskresultsbelowtheyenter")).font(.caption)
             }.padding(.top, 6)
         }.onAppear { endpoint = session.mcpEndpoint ?? "" }
     }

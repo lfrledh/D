@@ -167,7 +167,7 @@ enum AppSessionFactory {
                 return WorkbenchRuntimeStatus(activeRunID: snapshot.activeRunID,
                                               phase: phaseTitle(snapshot.phase, stage: stage),
                                               queuedRunIDs: snapshot.queuedRunIDs,
-                                              state: state)
+                                              state: state, phaseCode: phaseCode(snapshot.phase, stage: stage))
             },
             shutdown: { await runtime.shutdown() },
             cleanup: {
@@ -244,6 +244,32 @@ enum AppSessionFactory {
             }
         case .cancelling: .cancelling
         case .releasing: .releasing
+        case nil: nil
+        }
+    }
+
+    nonisolated private static func phaseCode(_ phase: RuntimeSnapshot.Phase?, stage: MLXLifecycleEvent.Phase?) -> String? {
+        switch phase {
+        case .preparing: "preparing"
+        case .running:
+            switch stage {
+            case .verifying: "verifyingModel"
+            case .tokenizing: "tokenizing"
+            case .loading: "loadingModel"
+            case .loadingTextEncoder: "loadingTextEncoder"
+            case .loaded: "preparingContext"
+            case .textEncoderLoaded, .encoding: "encodingPrompt"
+            case .encoded, .loadingTransformer: "loadingTransformer"
+            case .generating: "generatingRaw"
+            case .transformerLoaded, .denoising: "denoising"
+            case .loadingVAE, .vaeLoaded: "loadingVAE"
+            case .decoding: "decoding"
+            case .decoded, .publishing: "publishing"
+            case .drained, .released: "releasing"
+            case nil: "running"
+            }
+        case .cancelling: "cancelling"
+        case .releasing: "releasing"
         case nil: nil
         }
     }

@@ -33,7 +33,7 @@ struct WorkbenchModelCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(definition.inputs) { port in
                     Text(consistencyText(language, "copy.input") + " · " + WorkflowCanvasPresentation.portTitle(operationID: definition.id, port: port, input: true, language: language)
-                        + (port.required ? baselineText(language, "required", fallback: " · 必选") : baselineText(language, "optional", fallback: " · 可选")))
+                        + (port.required ? baselineText(language, "required") : baselineText(language, "optional")))
                 }
                 ForEach(definition.outputs) { port in
                     Text(consistencyText(language, "copy.output") + " · " + WorkflowCanvasPresentation.portTitle(operationID: definition.id, port: port, input: false, language: language))
@@ -49,7 +49,7 @@ struct WorkbenchModelCard: View {
         .sheet(isPresented: $details) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack { Text(consistencyText(language, "MODEL-DETAILS")).font(.headline); Spacer(); Button(workflowText(language, "common.done", fallback: "Done")) { details = false }.keyboardShortcut(.cancelAction) }
+                    HStack { Text(consistencyText(language, "MODEL-DETAILS")).font(.headline); Spacer(); Button(workflowText(language, "common.done")) { details = false }.keyboardShortcut(.cancelAction) }
                     Text(name).font(.title3).textSelection(.enabled)
                     Text(WorkflowCanvasPresentation.operationDetail(definition, language: language)).textSelection(.enabled)
                     if let descriptor {
@@ -80,10 +80,10 @@ extension EnvironmentValues {
 }
 @MainActor func workbenchModelReadinessText(_ readiness: SharedLibraryReadiness, language: UILanguageStore?) -> String {
     switch readiness {
-    case .available: baselineText(language, "readiness.ready", fallback: "文件已核验 · 运行时检查参数")
-    case .unprepared: baselineText(language, "readiness.unprepared", fallback: "需要准备模型文件")
-    case .unavailable: baselineText(language, "readiness.unavailable", fallback: "文件或授权暂不可用")
-    case .unsupported: baselineText(language, "readiness.unsupported", fallback: "当前入口未适配")
-    case .unknown: baselineText(language, "readiness.unknown", fallback: "准备状态待核验")
+    case .available: baselineText(language, "readiness.ready")
+    case .unprepared: baselineText(language, "readiness.unprepared")
+    case .unavailable: baselineText(language, "readiness.unavailable")
+    case .unsupported: baselineText(language, "readiness.unsupported")
+    case .unknown: baselineText(language, "readiness.unknown")
     }
 }

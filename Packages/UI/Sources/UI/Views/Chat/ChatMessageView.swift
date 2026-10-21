@@ -74,9 +74,6 @@ struct ChatMessageContent: View {
         workflowText(language, "chat." + key, fallback: fallback)
     }
 
-    private func wording(_ english: String, _ chinese: String) -> String {
-        language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
-    }
 
     /// Copy, speech and editing use the same selected version as the transcript.
     static func answerText(message: ChatMessage, attempt: ChatAttempt?, selectedAnswer: ChatSelectedAnswer?) -> String {
@@ -90,12 +87,12 @@ struct ChatMessageContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let selectedAnswer, let revisionID = selectedAnswer.revisionID {
-                Text(wording("Adopted manual version", "已采用人工版本"))
+                Text(workflowText(language, "chat.messageView.adoptedManualVersion"))
                     .font(.caption).foregroundStyle(.secondary)
                 ChatMarkdownView(messageID: message.id, text: primaryText,
                                  rawText: primaryText, isStreaming: false)
                     .id(revisionID)
-                DisclosureGroup(wording("Original model output · preserved", "原始模型输出 · 已保留")) {
+                DisclosureGroup(workflowText(language, "chat.messageView.originalModelOutputPreserved")) {
                     sourceContent
                 }.accessibilityIdentifier("chat-original-version-\(message.id.uuidString)")
             } else {
@@ -119,10 +116,8 @@ struct ChatMessageContent: View {
                         }
                     } label: {
                         Text(presentation.isStreaming
-                             ? wording("Raw streaming model output · answer and reasoning not separated yet",
-                                       "原始流式模型输出 · 尚未分离正文/思考")
-                             : wording("Unseparated model output · answer and reasoning unknown",
-                                       "未分离的模型输出 · 正文/思考归属未知"))
+                             ? workflowText(language, "chat.messageView.rawStreamingModelOutputAnswerAndReasoningNotSeparatedYet")
+                             : workflowText(language, "chat.messageView.unseparatedModelOutputAnswerAndReasoningUnknown"))
                     }
                     .accessibilityIdentifier("chat-\(presentation.isStreaming ? "stream" : "unseparated")-raw-\(message.id.uuidString)")
                 } else if !presentation.text.isEmpty {
@@ -130,10 +125,10 @@ struct ChatMessageContent: View {
                                      rawText: presentation.rawText, isStreaming: false)
                         .id(message.id)
                 } else {
-                    Text(wording("The model did not provide an answer body.", "模型尚未提供正文。"))
+                    Text(workflowText(language, "chat.messageView.theModelDidNotProvideAnAnswerBody"))
                         .font(.caption).foregroundStyle(.secondary)
                     if !presentation.rawText.isEmpty {
-                        DisclosureGroup(wording("Original model output · preserved", "原始模型输出 · 已保留")) {
+                        DisclosureGroup(workflowText(language, "chat.messageView.originalModelOutputPreserved")) {
                             Text(presentation.rawText).textSelection(.enabled)
                             Button(label("copyRaw", "复制原文")) {
                                 NSPasteboard.general.clearContents()
@@ -161,7 +156,7 @@ struct ChatMessageContent: View {
                     }
                 }
                 if let result = presentation.structuredResult {
-                    DisclosureGroup(wording("Structured result · read only", "结构化结果 · 只读")) {
+                    DisclosureGroup(workflowText(language, "chat.messageView.structuredResultReadOnly")) {
                         Text(result).font(.body.monospaced()).textSelection(.enabled)
                     }
                     .accessibilityIdentifier("chat-structured-result-\(message.id.uuidString)")

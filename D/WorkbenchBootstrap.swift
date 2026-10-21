@@ -230,7 +230,7 @@ final class WorkbenchBootstrap {
                         videoAccessRoot: videoAccessRoot, bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine, bundledACEEngine: aceAvailability.engine, modelLibrary: library)
                     await MainActor.run { observer.preparedValidator = Self.downloadPreparedValidator(created) }
                     return created
-                }, settings: settings, modelLibrary: library, audioEnabled: true, audioRecordingEnabled: true)
+                }, settings: settings, modelLibrary: library, audioEnabled: true, audioRecordingEnabled: true, language: languageStore)
                 observer.inventoryProvider = { [weak self] in try self?.model?.projectSession.modelInventoryConfigurations() ?? [] }
                 observer.explicitRegistration = { [weak self] url, kind in
                     guard let owner = self?.model?.projectSession else { throw WorkflowIssue("Workspace unavailable.") }
@@ -248,7 +248,7 @@ final class WorkbenchBootstrap {
                 bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine, bundledACEEngine: aceAvailability.engine, modelLibrary: library)
             let borrowed = shared.borrowed(artifactStore: quickStore)
             let quickModel = WorkbenchModel(sessionFactory: { _ in borrowed }, settings: settings,
-                modelLibrary: library, appearanceDirectory: libraryDirectory.deletingLastPathComponent().appendingPathComponent("Appearance", isDirectory: true), audioEnabled: true, audioRecordingEnabled: true)
+                modelLibrary: library, appearanceDirectory: libraryDirectory.deletingLastPathComponent().appendingPathComponent("Appearance", isDirectory: true), audioEnabled: true, audioRecordingEnabled: true, language: languageStore)
             try await quickModel.projectSession.activateInternalWorkspace(quickStore)
             quickModel.projectSession.refreshWorkflowModels()
             let quick = QuickGenerationController(store: quickStore, allowsSubmission: { [weak self, weak quickModel] in
@@ -261,7 +261,7 @@ final class WorkbenchBootstrap {
             }
             await quick.load()
             let model = WorkbenchModel(sessionFactory: { _ in borrowed }, settings: settings,
-                modelLibrary: library, displaySettingsOwner: quickModel, audioEnabled: true, audioRecordingEnabled: true)
+                modelLibrary: library, displaySettingsOwner: quickModel, audioEnabled: true, audioRecordingEnabled: true, language: languageStore)
             model.projectSession.personalChatOwner = { [weak quickModel] in quickModel?.projectSession.chat }
             self.sharedSession = shared
             self.quickModel = quickModel
@@ -344,14 +344,25 @@ final class WorkbenchBootstrap {
     /// Closing a project/window or the model sheet alone must not cancel downloads.
     func prepareQuickForTermination() async -> Bool {
         isTerminating = true
+        // Both project owners can have independent Viewer annotation drafts.
+        // Resolve them before any save, cancellation, or viewer suspension.
+        guard model?.hasPendingEditor != true, quickModel?.hasPendingEditor != true else {
+            isTerminating = false
+            let alert = NSAlert()
+            alert.messageText = languageStore.text("app.quit.editing", fallback: "")
+            alert.informativeText = languageStore.text("app.quit.editingHelp", fallback: "")
+            alert.addButton(withTitle: languageStore.text("app.quit.continue", fallback: ""))
+            alert.runModal()
+            return false
+        }
         do {
             if let quick, quick.isRunning || quick.isImporting {
                 let alert = NSAlert()
-                alert.messageText = "快速创作仍有进行中的任务"
-                alert.informativeText = "可以等待导入或生成完成后退出，或取消本次任务。已保存的创作会保留。"
-                alert.addButton(withTitle: "等待完成并退出")
-                alert.addButton(withTitle: "继续使用 D")
-                alert.addButton(withTitle: "取消任务并退出")
+                alert.messageText = languageStore.text("app.quit.quickActive", fallback: "")
+                alert.informativeText = languageStore.text("app.quit.quickHelp", fallback: "")
+                alert.addButton(withTitle: languageStore.text("app.quit.wait", fallback: ""))
+                alert.addButton(withTitle: languageStore.text("app.quit.continue", fallback: ""))
+                alert.addButton(withTitle: languageStore.text("app.quit.cancel", fallback: ""))
                 let response = alert.runModal()
                 if response == .alertSecondButtonReturn { isTerminating = false; return false }
                 if response == .alertThirdButtonReturn { await quick.cancel() }
@@ -359,14 +370,17 @@ final class WorkbenchBootstrap {
             }
             try await quick?.prepareForTermination()
             guard quick?.pendingSaveRunID == nil else { throw WorkflowIssue("快速生成仍有待保存结果，请恢复保存后退出。") }
+            guard model?.hasPendingEditor != true, quickModel?.hasPendingEditor != true else {
+                isTerminating = false; return false
+            }
             quickModel?.suspendContentViewers()
             guard await quickModel?.projectSession.prepareInternalForTermination() != false else { isTerminating = false; return false }
             return true
         } catch {
             isTerminating = false
             startupError = error.localizedDescription
-            let alert = NSAlert(); alert.messageText = "快速创作尚未保存"
-            alert.informativeText = error.localizedDescription; alert.addButton(withTitle: "继续使用 D")
+            let alert = NSAlert(); alert.messageText = languageStore.text("app.quit.quickUnsaved", fallback: "")
+            alert.informativeText = error.localizedDescription; alert.addButton(withTitle: languageStore.text("app.quit.continue", fallback: ""))
             alert.runModal()
             return false
         }

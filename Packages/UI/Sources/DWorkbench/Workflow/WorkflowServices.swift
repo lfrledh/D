@@ -48,8 +48,12 @@ struct WorkflowImageHistoryFailure: LocalizedError {
     public var streamedTextCharacterCount: Int { textSession?.partialText.count ?? languagePreview.count }
     public private(set) var cancelled = false
     public var progress: @MainActor (String) -> Void = { _ in }
+    public var progressEvent: @MainActor (WorkflowProgressMessage) -> Void = { _ in }
     public let activity = WorkflowCallActivityState()
     private func reportProgress(_ text: String) { activity.update(progress: text); progress(text) }
+    private func reportProgress(_ message: WorkflowProgressMessage) {
+        activity.update(progress: "", message: message); progress(""); progressEvent(message)
+    }
     private func activityBridge() -> Task<Void, Never> {
         Task { @MainActor [weak self] in
             while !Task.isCancelled {
@@ -61,8 +65,12 @@ struct WorkflowImageHistoryFailure: LocalizedError {
                 guard call == self.activity.current?.stepID,
                       request == (self.activeRun?.id ?? self.textSession?.activeRequestID) else { continue }
                 let draining = ["cancelling", "releasing"].contains(self.activity.current?.phase ?? "")
-                let phase = draining ? nil : request.flatMap { status.phase(for: $0) }
-                if let phase, phase != self.activity.current?.phase { self.progress(phase) }
+                let phase = draining ? nil : request.flatMap { status.phaseCode(for: $0) }
+                if let phase, phase != self.activity.current?.phase {
+                    self.reportProgress(.init("phase." + phase))
+                } else if !draining, phase == nil, let raw = request.flatMap({ status.phase(for: $0) }), raw != self.activity.current?.progress {
+                    self.reportProgress(raw)
+                }
                 self.activity.update(requestID: request, phase: phase)
                 do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
             }
@@ -361,7 +369,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
     public func generateLanguage(task: String, content: String?, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }
         let binding = try model(for: context)
-        reportProgress("Preparing context / 正在准备上下文")
+        reportProgress(.init("preparingContext"))
         let request = try await languageRequest(task: task, content: content, context: context, binding: binding)
         languagePreview = ""
         languagePreviewChanged(context.stepID, "")
@@ -570,7 +578,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
 
     private func publish(_ context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         guard let content = pending[context.stepID] else { throw WorkflowIssue("没有待保存结果。") }
-        reportProgress("Saving result / 正在保存结果")
+        reportProgress(.init("savingResult"))
         do {
             let result: WorkflowPublishedAsset
             if let request = content.request, case .video(let expected) = request.input {
@@ -620,7 +628,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         defer { textSession = nil }
         let selection = try editor.selection(inUTF16: NSRange(location: 0, length: text.utf16.count))
         try checkCancellation()
-        reportProgress("正在改写；流式文字是预览，尚未发布为流程输入")
+        reportProgress(.init("rewritingPreview"))
         try await editor.requestRewrite(selection: selection, instruction: p["instruction"]?.string ?? "",
             model: binding.reference, temperature: Float(p["temperature"]?.decimal ?? 0.7), topP: Float(p["topP"]?.decimal ?? 0.95))
         try checkCancellation()
@@ -675,7 +683,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         for i in items.indices {
             if items[i].asset != nil { continue }
             try checkCancellation()
-            reportProgress("生成候选 \(i + 1)/\(count)；等待本次计算及释放完成")
+            reportProgress(.init("generatingCandidate", ["index": String(i + 1), "count": String(count)]))
             let old = items[i]
             let attempt = pending[old.attemptID] == nil && old.error != nil ? UUID() : old.attemptID
             let itemContext = WorkflowExecutionContext(node: context.node, stepID: attempt, inputs: context.inputs)
@@ -713,7 +721,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
                     do {
                         for try await event in run.events {
                             if cancelled || Task.isCancelled { await run.cancel() }
-                            if case .progress(let completed, let total) = event { reportProgress("候选 \(i + 1)/\(count) · \(completed)/\(total)") }
+                            if case .progress(let completed, let total) = event { reportProgress(.init("candidateProgress", ["index": String(i + 1), "count": String(count), "completed": String(completed), "total": String(total)])) }
                         }
                     } catch { streamFailure = error; await run.cancel() }
                     let outcome = await run.outcome(); activeRun = nil

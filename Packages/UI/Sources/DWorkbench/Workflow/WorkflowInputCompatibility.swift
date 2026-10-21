@@ -5,6 +5,7 @@ public struct WorkflowInputCompatibilityResult: Sendable, Equatable {
     public let status: WorkflowInputCompatibility
     public let reason: String
     public let converter: String?
+    public var reasonCode: String = "diagnostic"
 }
 
 /// One receiving port, shared with historical-input admission. This is not whole
@@ -60,7 +61,7 @@ public struct WorkflowInputContract: Sendable {
         do {
             try validate(value)
             if specializedConcept != nil && value.asset != nil {
-                guard let decodedAsset else { return .init(status: .unverified, reason: "需读取并验证专用数据；文件类型不能证明结构兼容。", converter: nil) }
+                guard let decodedAsset else { return .init(status: .unverified, reason: "需读取并验证专用数据；文件类型不能证明结构兼容。", converter: nil, reasonCode: "specialized") }
                 switch specializedConcept {
                 case "音符序列": _ = try WorkflowNoteSequence(datum: decodedAsset)
                 case "和弦轨": _ = try WorkflowChordTrack(datum: decodedAsset)
@@ -69,12 +70,12 @@ public struct WorkflowInputContract: Sendable {
                 }
             }
             if schema == nil && specializedConcept == nil && [.record, .list, .optional, .result, .notes, .chords, .tempo, .pitch].contains(value.kind) && port.assetListKind == nil {
-                return .init(status: .unverified, reason: "接收端未声明足够精确的结构契约。", converter: nil)
+                return .init(status: .unverified, reason: "接收端未声明足够精确的结构契约。", converter: nil, reasonCode: "contract")
             }
-            return .init(status: .direct, reason: "符合此输入的已声明结构；其他输入与运行条件另行校验。", converter: nil)
+            return .init(status: .direct, reason: "符合此输入的已声明结构；其他输入与运行条件另行校验。", converter: nil, reasonCode: "direct")
         } catch {
             if let schema, case .data(.text(let text)) = value, (try? WorkflowStructuredText.parse(text, as: schema)) != nil {
-                return .init(status: .conversion, reason: "可经 JSON 检查（严格）再读取报告的 data 字段得到接收结构；不会自动转换。", converter: "d.value.validate")
+                return .init(status: .conversion, reason: "可经 JSON 检查（严格）再读取报告的 data 字段得到接收结构；不会自动转换。", converter: "d.value.validate", reasonCode: "conversion")
             }
             return .init(status: .incompatible, reason: error.localizedDescription, converter: nil)
         }

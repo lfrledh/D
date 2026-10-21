@@ -1,6 +1,13 @@
 import Foundation
 import Observation
 
+/// Ephemeral display event; semantic code and arguments never become run identity.
+public struct WorkflowProgressMessage: Equatable, Sendable {
+    public let code: String
+    public let arguments: [String: String]
+    public init(_ code: String, _ arguments: [String: String] = [:]) { self.code = code; self.arguments = arguments }
+}
+
 public struct WorkflowCallActivity: Equatable, Sendable {
     public let graphID: UUID?
     public let address: WorkflowExecutionAddress?
@@ -10,6 +17,7 @@ public struct WorkflowCallActivity: Equatable, Sendable {
     public var requestID: UUID?
     public var phase: String
     public var progress: String?
+    public var message: WorkflowProgressMessage? = nil
     public var elapsedSeconds: Double
     public var finished: Bool
 }
@@ -24,11 +32,11 @@ public struct WorkflowCallActivity: Equatable, Sendable {
             nodeID: context.node.id, modelIdentity: context.node.parameters["modelID"]?.string,
             phase: "preparing", elapsedSeconds: 0, finished: false)
     }
-    func update(requestID: UUID? = nil, phase: String? = nil, progress: String? = nil) {
+    func update(requestID: UUID? = nil, phase: String? = nil, progress: String? = nil, message: WorkflowProgressMessage? = nil) {
         guard var value = current, !value.finished else { return }
         if let requestID { value.requestID = requestID }
         if let phase { value.phase = phase }
-        if let progress { value.progress = progress }
+        if let progress { value.progress = progress; value.message = message }
         if let started {
             let elapsed = started.duration(to: .now).components
             value.elapsedSeconds = (Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18) * 10
@@ -36,5 +44,5 @@ public struct WorkflowCallActivity: Equatable, Sendable {
         }
         if value != current { current = value }
     }
-    func end(phase: String) { update(phase: phase); current?.finished = true; started = nil }
+    func end(phase: String) { update(phase: phase, progress: ""); current?.finished = true; started = nil }
 }

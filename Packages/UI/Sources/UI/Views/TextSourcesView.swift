@@ -277,14 +277,14 @@ public struct TextSourcesView: View {
         let layout = compact ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 10))
         return layout {
             VStack(alignment: .leading, spacing: 2) {
-                Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.29", fallback: "Questions About Sources")).font(.headline)
-                Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.130", fallback: "Citation markers check locations in sources submitted with this request. They do not verify facts."))
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.29")).font(.headline)
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.130"))
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }.frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 10) {
-                Button(action: actions.undo) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.106", fallback: "Undo"), systemImage: "arrow.uturn.backward") }
+                Button(action: actions.undo) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.106"), systemImage: "arrow.uturn.backward") }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(!canUndo || isSaving).accessibilityIdentifier("text-sources-undo")
-                Button(action: actions.save) { Label(isSaving ? workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.107", fallback: "Saving") : workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.54", fallback: "Save"), systemImage: "square.and.arrow.down") }
+                Button(action: actions.save) { Label(isSaving ? workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.107") : workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.54"), systemImage: "square.and.arrow.down") }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving).accessibilityIdentifier("text-sources-save")
             }.fixedSize(horizontal: true, vertical: false)
         }
@@ -301,16 +301,16 @@ public struct TextSourcesView: View {
     private func sourcesContent(compactActions: Bool) -> some View {
         VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.131", fallback: "Sources")).font(.headline)
+                    Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.131")).font(.headline)
                     Spacer()
-                    Button(action: actions.importSource) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.132", fallback: "Import Source"), systemImage: "plus") }
+                    Button(action: actions.importSource) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.132"), systemImage: "plus") }
                         .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving).accessibilityIdentifier("text-sources-import")
                 }
                 if notebook.sources.isEmpty {
-                    ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.133", fallback: "No Sources Yet"), systemImage: "doc.text", description: Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.134", fallback: "Import a local text source to ask questions about it.")))
+                    ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.133"), systemImage: "doc.text", description: Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.134")))
                 } else {
-                    WorkbenchPicker(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.135", fallback: "Current Source"), selection: $selectedSourceID) {
-                        WorkbenchChoice(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.136", fallback: "Choose Source"), value:Optional<UUID>.none)
+                    WorkbenchPicker(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.135"), selection: $selectedSourceID) {
+                        WorkbenchChoice(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.136"), value:Optional<UUID>.none)
                         WorkbenchChoiceForEach(notebook.sources) { source in WorkbenchChoice(source.displayName, value:Optional(source.id)) }
                     }
                     .onChange(of: selectedSourceID) { _, id in selection.select(notebook.sources.first { $0.id == id }) }
@@ -324,7 +324,7 @@ public struct TextSourcesView: View {
     @ViewBuilder private func sourceDetail(_ source: TextSourceSnapshot, compactActions: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(source.displayName).font(.subheadline.weight(.semibold))
-            Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.137", fallback: "The original source is read-only. You can select an excerpt for this request."))
+            Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.137"))
                 .font(.caption).foregroundStyle(.secondary)
             TextSourcesReadOnlyTextView(source: source, selection: selection.excerptRange(for: source)) { range in
                 selection.record(range, for: source)
@@ -334,14 +334,14 @@ public struct TextSourcesView: View {
             .accessibilityIdentifier("text-sources-source-text")
             let actionsLayout = compactActions ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
             actionsLayout {
-                Button(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.138", fallback: "Use Full Text")) { actions.useExcerpt(source.id, nil) }
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.138")) { actions.useExcerpt(source.id, nil) }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving)
                     .accessibilityIdentifier("text-sources-use-full")
-                Button(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.139", fallback: "Use Selected Excerpt")) { actions.useExcerpt(source.id, selection.excerptRange(for: source)) }
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.139")) { actions.useExcerpt(source.id, selection.excerptRange(for: source)) }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving || selection.excerptRange(for: source) == nil)
                     .accessibilityIdentifier("text-sources-use-selection")
                 if !compactActions { Spacer() }
-                Button(role: .destructive, action: { actions.removeSource(source.id) }) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.140", fallback: "Remove Source"), systemImage: "trash") }
+                Button(role: .destructive, action: { actions.removeSource(source.id) }) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.140"), systemImage: "trash") }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(isSaving).accessibilityIdentifier("text-sources-remove")
             }
         }
@@ -360,7 +360,7 @@ public struct TextSourcesView: View {
 
     private var answersContent: some View {
         VStack(alignment: .leading, spacing: 14) {
-                Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.141", fallback: "Questions and Answers")).font(.headline)
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.141")).font(.headline)
                 TextSourcesQuestionEditor(value: notebook.question, editEpoch: questionEditEpoch,
                     isEditable: !isSaving) { value in
                     actions.changeQuestion(value)
@@ -371,10 +371,10 @@ public struct TextSourcesView: View {
                 .frame(minHeight: 90).workbenchInputSurface()
                 .accessibilityIdentifier("text-sources-question")
                 HStack {
-                    Button(action: actions.ask) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.142", fallback: "Generate"), systemImage: "sparkles") }
+                    Button(action: actions.ask) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.142"), systemImage: "sparkles") }
                         .buttonStyle(WorkbenchGlassButtonStyle()).disabled(!canAsk || isRunning || isSaving)
                         .accessibilityIdentifier("text-sources-ask")
-                    Button(action: actions.cancel) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.33", fallback: "Cancel"), systemImage: "xmark") }
+                    Button(action: actions.cancel) { Label(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.33"), systemImage: "xmark") }
                         .buttonStyle(WorkbenchGlassButtonStyle()).disabled(!isRunning || isCancelling)
                         .accessibilityIdentifier("text-sources-cancel")
                     Spacer()
@@ -384,7 +384,7 @@ public struct TextSourcesView: View {
                         .accessibilityIdentifier("text-sources-error")
                 }
                 if isRunning && !partialAnswer.isEmpty {
-                    answerBlock(title: workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.143", fallback: "Generating"), answer: partialAnswer, summary: workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.144", fallback: "The answer is not complete and cannot be accepted yet."))
+                    answerBlock(title: workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.143"), answer: partialAnswer, summary: workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.144"))
                 }
                 ForEach(notebook.records) { record in recordBlock(record) }
         }.padding(16)
@@ -408,10 +408,10 @@ public struct TextSourcesView: View {
             Text(citationSummary(record)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             submittedExcerpts(record.submission.sources, excerpts: record.submission.excerpts)
             HStack {
-                Button(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.145", fallback: "Accept")) { actions.accept(record.id) }
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.145")) { actions.accept(record.id) }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(!canAccept(record) || isRunning || isSaving)
                     .accessibilityIdentifier("text-sources-accept-\(record.id.uuidString)")
-                Button(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.122", fallback: "Reject")) { actions.reject(record.id) }
+                Button(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.122")) { actions.reject(record.id) }
                     .buttonStyle(WorkbenchGlassButtonStyle()).disabled(record.disposition != .pending || isRunning || isSaving)
                     .accessibilityIdentifier("text-sources-reject-\(record.id.uuidString)")
             }
@@ -423,7 +423,7 @@ public struct TextSourcesView: View {
         let rows = TextSourcesHistoryPresentation.excerptRows(sources: sources, excerpts: excerpts)
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
-                Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.146", fallback: "Source Excerpts Submitted with This Request")).font(.caption.weight(.semibold))
+                Text(workflowText(legacyLanguage, "consistency.legacy.TextSourcesView.146")).font(.caption.weight(.semibold))
                 ForEach(rows) { row in
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(row.label) \(row.sourceName)").font(.caption.weight(.semibold))

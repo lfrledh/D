@@ -42,6 +42,7 @@ struct ChatLibraryAttachmentButton: View {
     let source: ProjectStore
     let choice: ChatProjectAttachmentChoice
     let isCurrent: () -> Bool
+    @Environment(\.dLanguageStore) private var copyLanguage
     let wording: (String, String) -> String
     let onAdopted: () -> Void
     @State private var task: Task<Void, Never>?
@@ -49,7 +50,7 @@ struct ChatLibraryAttachmentButton: View {
 
     var body: some View {
         VStack {
-            Button(wording("Add to current chat draft", "加入当前聊天草稿")) {
+            Button(workflowText(copyLanguage, "chat.projectAttachmentSheet.addToCurrentChatDraft")) {
                 guard task == nil else { return }
                 task = Task { @MainActor in
                     defer { task = nil }
@@ -69,6 +70,7 @@ struct ChatLibraryAttachmentButton: View {
 struct ChatProjectAttachmentSheet: View {
     let chat: ChatController
     let sessionID: UUID
+    @Environment(\.dLanguageStore) private var copyLanguage
     let wording: (String, String) -> String
     let close: () -> Void
     @State private var choices: [ChatProjectAttachmentChoice] = []
@@ -80,15 +82,14 @@ struct ChatProjectAttachmentSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(wording("Project assets", "本项目成果与素材")).font(.headline)
+                Text(workflowText(copyLanguage, "chat.projectAttachmentSheet.projectAssets")).font(.headline)
                 Spacer()
-                Button(wording("Close", "关闭")) { task?.cancel(); close() }.keyboardShortcut(.cancelAction)
+                Button(workflowText(copyLanguage, "workflow.action.close")) { task?.cancel(); close() }.keyboardShortcut(.cancelAction)
             }
-            Text(wording("Choose a published text, image, video, or document version. It becomes a pending attachment; nothing is sent. Audio needs transcription first.",
-                         "选择已入库的文字、图像、视频或文档版本。只加入待发送附件，不自动发送；音频请先转写。"))
+            Text(workflowText(copyLanguage, "chat.projectAttachmentSheet.chooseAPublishedTextImageVideoOrDocumentVersionIt"))
                 .font(.caption).foregroundStyle(.secondary)
             if !loaded { ProgressView() }
-            else if choices.isEmpty { Text(wording("No supported published assets in this project.", "本项目暂无可选择的已入库素材。")) }
+            else if choices.isEmpty { Text(workflowText(copyLanguage, "chat.projectAttachmentSheet.noSupportedPublishedAssetsInThisProject")) }
             List(choices, selection: $selected) { choice in
                 VStack(alignment: .leading) {
                     Text(choice.name)
@@ -97,7 +98,7 @@ struct ChatProjectAttachmentSheet: View {
                 }.tag(choice.id)
             }.accessibilityIdentifier("chat-project-attachments")
             if let issue { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
-            Button(wording("Add to draft", "加入待发送附件")) {
+            Button(workflowText(copyLanguage, "chat.projectAttachmentSheet.addToDraft")) {
                 guard task == nil, let choice = choices.first(where: { $0.id == selected }) else { return }
                 task = Task { @MainActor in
                     defer { task = nil }

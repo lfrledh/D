@@ -4,7 +4,7 @@ import DWorkbench
 import SwiftUI
 import UniformTypeIdentifiers
 
-@MainActor func baselineText(_ language: UILanguageStore?, _ key: String, fallback: String) -> String {
+@MainActor func baselineText(_ language: UILanguageStore?, _ key: String, fallback: String = "") -> String {
     workflowText(language, "baseline02.ui." + key, fallback: fallback)
 }
 
@@ -44,7 +44,7 @@ struct QuickGenerationView: View {
         workflowText(language, "quick.input." + key,
                      fallback: language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english)
     }
-    private func refinementText(_ key: String, fallback: String) -> String {
+    private func refinementText(_ key: String, fallback: String = "") -> String {
         workflowText(language, "refinement.quick." + key, fallback: fallback)
     }
     private var definition: WorkflowOperationDefinition? { quick.definition }
@@ -177,7 +177,7 @@ struct QuickGenerationView: View {
         }
         .sheet(isPresented: Binding(get: { preview != nil }, set: { if !$0 { preview = nil } })) {
             if let reference = preview { VStack {
-                HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { preview = nil }.keyboardShortcut(.cancelAction); Spacer() }
+                HStack { Button(baselineText(language, "label.572cf45ba436")) { preview = nil }.keyboardShortcut(.cancelAction); Spacer() }
                 QuickAssetPreview(store: quick.store, reference: reference, compact: false)
             }.padding(20).frame(minWidth: 560, minHeight: 360) }
         }
@@ -199,7 +199,7 @@ struct QuickGenerationView: View {
                         status: readinessTitle(quick.draft?.node.parameters["modelID"]?.string ?? ""), change: onChooseModel)
                 } else { Button(consistencyText(language, "MODEL-CHANGE"), action: onChooseModel) }
                 if let draft = quick.draft {
-                    Button(baselineText(language, "label.7d9795fa3684", fallback: "带设置到工作流")) { onSettingsToCanvas(draft) }
+                    Button(baselineText(language, "label.7d9795fa3684")) { onSettingsToCanvas(draft) }
                 }
             }.padding(20)
     }
@@ -210,7 +210,7 @@ struct QuickGenerationView: View {
                         if let definition, let draft = quick.draft {
                             if assets {
                             if definition.inputs.contains(where: { $0.id == "content" && $0.assetListKind == nil && $0.kinds.contains(.text) }) {
-                                Text(baselineText(language, "label.bf8881ad5d3a", fallback: "参考正文（可选）")).font(.subheadline)
+                                Text(baselineText(language, "label.bf8881ad5d3a")).font(.subheadline)
                                 TextEditor(text: Binding(get: { draft.inputs["content"]?.datum?.text ?? "" },
                                     set: { quick.setInput("content", value: $0.isEmpty ? nil : .data(.text($0)), draftID: draft.id) }))
                                     .frame(minHeight: 100).padding(6).workbenchInputSurface()
@@ -218,7 +218,7 @@ struct QuickGenerationView: View {
                             ForEach(definition.inputs.filter { $0.assetListKind != nil || !["task", "prompt", "content"].contains($0.id) }) { port in
                                 VStack(alignment: .leading) {
                                     Text(WorkflowCanvasPresentation.portTitle(operationID: draft.node.operationID, port: port, input: true, language: language) +
-                                         (port.required ? baselineText(language, "required", fallback: " · 必选") : baselineText(language, "optional", fallback: " · 可选"))).font(.subheadline)
+                                         (port.required ? baselineText(language, "required") : baselineText(language, "optional"))).font(.subheadline)
                                     if port.assetListKind != nil {
                                         switch assetListPresentation(port: port, draftID: draft.id) {
                                         case .valid(let items):
@@ -257,7 +257,7 @@ struct QuickGenerationView: View {
                                         }
                                     }
                                     HStack {
-                                        Button(baselineText(language, "label.1b9818e1adfe", fallback: "导入…")) {
+                                        Button(baselineText(language, "label.1b9818e1adfe")) {
                                             _ = startInputAction { ticket in await importInput(port: port, draft: draft, ticket: ticket) }
                                         }
                                         Button(inputLabel("paste", english: "Paste", chinese: "粘贴")) {
@@ -289,7 +289,7 @@ struct QuickGenerationView: View {
                                 }
                             }
                             } else {
-                            DisclosureGroup(baselineText(language, "label.44455611b910", fallback: "高级设置"), isExpanded: $advanced) {
+                            DisclosureGroup(baselineText(language, "label.44455611b910"), isExpanded: $advanced) {
                                 VStack(alignment: .leading, spacing: 14) {
                                     ForEach(definition.fields.filter { !["modelID", "task", "promptText", "count"].contains($0.id) }) { field in
                                         QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
@@ -304,18 +304,18 @@ struct QuickGenerationView: View {
                                     }
                                 }.padding(.top, 12)
                             }
-                            Stepper(workflowText(language, "refinement.quick.attemptCount", fallback: "独立尝试：{count} 次", arguments: ["count": String(draft.attempts)]), value: Binding(get: { draft.attempts },
+                            Stepper(workflowText(language, "refinement.quick.attemptCount", arguments: ["count": String(draft.attempts)]), value: Binding(get: { draft.attempts },
                                 set: { quick.setAttempts($0, draftID: draft.id) }), in: 1...8)
-                            Text(baselineText(language, "label.3238f75ca285", fallback: "每次单独排队、保存；有种子的模型按次递增，不与模型内部批量相乘。"))
+                            Text(baselineText(language, "label.3238f75ca285"))
                                 .font(.caption).foregroundStyle(.secondary)
                             }
                             if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
                             if let inputNotice { Text(inputNotice).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                         } else {
                             if let error = quick.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
-                            ContentUnavailableView(baselineText(language, "label.48ccfc0d2104", fallback: "从一个模型开始"), systemImage: "square.stack.3d.up",
-                                description: Text(baselineText(language, "label.6f33836bdd1a", fallback: "选择模型后，这里只显示它支持的输入和设置。")))
-                            Button(baselineText(language, "label.72f5f0e15b59", fallback: "浏览模型"), action: onChooseModel)
+                            ContentUnavailableView(baselineText(language, "label.48ccfc0d2104"), systemImage: "square.stack.3d.up",
+                                description: Text(baselineText(language, "label.6f33836bdd1a")))
+                            Button(baselineText(language, "label.72f5f0e15b59"), action: onChooseModel)
                         }
                     }.padding(22)
                 }
@@ -326,11 +326,11 @@ struct QuickGenerationView: View {
                 Spacer()
                 if quick.isRunning {
                     ProgressView().controlSize(.small)
-                    Button(baselineText(language, "label.ea6aa5fbc2d9", fallback: "取消生成")) { Task { await quick.cancel() } }
+                    Button(baselineText(language, "label.ea6aa5fbc2d9")) { Task { await quick.cancel() } }
                 } else if quick.pendingSaveRunID != nil || quick.saveIssue != nil {
-                    Button(baselineText(language, "label.fb412bfea70f", fallback: "重试保存（不重新生成）")) { Task { await quick.retrySave() } }
+                    Button(baselineText(language, "label.fb412bfea70f")) { Task { await quick.retrySave() } }
                 } else {
-                    Button(baselineText(language, "label.1ad1463fe16f", fallback: "生成")) { quick.start() }.buttonStyle(WorkbenchPrimaryButtonStyle())
+                    Button(baselineText(language, "label.1ad1463fe16f")) { quick.start() }.buttonStyle(WorkbenchPrimaryButtonStyle())
                         .disabled(!quick.canStart)
                         .accessibilityIdentifier("quick-generate")
                 }
@@ -375,9 +375,9 @@ struct QuickGenerationView: View {
                 QuickMediaViewport(store: quick.store, reference: reference)
                     .id(reference).frame(maxWidth: .infinity, maxHeight: .infinity)
                 HStack {
-                    Button(baselineText(language, "label.1c66265feb9f", fallback: "带结果到工作流"), systemImage: "square.stack.3d.up") { onResultToCanvas(reference) }
+                    Button(baselineText(language, "label.1c66265feb9f"), systemImage: "square.stack.3d.up") { onResultToCanvas(reference) }
                     Spacer()
-                    Button(baselineText(language, "label.643e7408e6a7", fallback: "导出…"), systemImage: "square.and.arrow.up") { Task { await export(reference) } }
+                    Button(baselineText(language, "label.643e7408e6a7"), systemImage: "square.and.arrow.up") { Task { await export(reference) } }
                 }
             } else {
                 ContentUnavailableView(refinementText("preview", fallback: "预览"), systemImage: quick.category == .image ? "photo" : "video", description: Text(refinementText("previewHelp", fallback: "生成后在这里查看；素材与结果保留在右侧。")))
@@ -403,7 +403,7 @@ struct QuickGenerationView: View {
     private func runCard(_ run: QuickRunRecord) -> some View {
                             VStack(alignment: .leading, spacing: 10) {
                                 HStack { Text(run.createdAt, style: .time); Spacer(); Text(statusTitle(run.status)).font(.caption) }
-                                if let index = run.attemptIndex { Text(workflowText(language, "refinement.quick.attempt", fallback: "独立尝试 {index}", arguments: ["index": String(index)])).font(.caption).foregroundStyle(.secondary) }
+                                if let index = run.attemptIndex { Text(workflowText(language, "refinement.quick.attempt", arguments: ["index": String(index)])).font(.caption).foregroundStyle(.secondary) }
                                 ForEach(Array(run.outputs.keys.sorted()), id: \.self) { key in
                                     if let text = run.outputs[key]?.datum?.text {
                                         Text(text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
@@ -416,12 +416,12 @@ struct QuickGenerationView: View {
                                     VStack(alignment: .leading) {
                                         QuickAssetPreview(store: quick.store, reference: reference, compact: true)
                                         HStack {
-                                            Button(baselineText(language, "label.db8db0530432", fallback: "查看")) {
+                                            Button(baselineText(language, "label.db8db0530432")) {
                                                 if detailRun != nil { pendingPreview = reference; detailRun = nil }
                                                 else { preview = reference }
                                             }
-                                            Button(baselineText(language, "label.1c66265feb9f", fallback: "带结果到工作流")) { onResultToCanvas(reference) }
-                                            Button(baselineText(language, "label.643e7408e6a7", fallback: "导出…")) { Task { await export(reference) } }
+                                            Button(baselineText(language, "label.1c66265feb9f")) { onResultToCanvas(reference) }
+                                            Button(baselineText(language, "label.643e7408e6a7")) { Task { await export(reference) } }
                                         }
                                     }
                                 }
@@ -431,7 +431,7 @@ struct QuickGenerationView: View {
                                         .disabled(quick.isRunning || quick.pendingSaveRunID != nil || quick.saveIssue != nil)
                                 }
                                 if run.retryOf != nil { Text(baselineText(language, "retry.record", fallback: "这是一次重新生成，原记录仍保留。")).font(.caption).foregroundStyle(.secondary) }
-                                DisclosureGroup(baselineText(language, "label.b27824d6e4d6", fallback: "本次输入与参数")) {
+                                DisclosureGroup(baselineText(language, "label.b27824d6e4d6")) {
                                     Text(String(data: (try? JSONEncoder().encode(run.draft)) ?? Data(), encoding: .utf8) ?? "")
                                         .font(.caption.monospaced()).textSelection(.enabled)
                                 }
@@ -446,11 +446,11 @@ struct QuickGenerationView: View {
     }
     private func readinessTitle(_ id: String) -> String {
         switch model.projectSession.explicitModelReadiness[id] ?? .unknown {
-        case .available: baselineText(language, "readiness.ready", fallback: "文件已核验 · 运行时检查参数")
-        case .unprepared: baselineText(language, "readiness.unprepared", fallback: "需要准备模型文件")
-        case .unavailable: baselineText(language, "readiness.unavailable", fallback: "文件或授权暂不可用")
-        case .unsupported: baselineText(language, "readiness.unsupported", fallback: "当前入口未适配")
-        case .unknown: baselineText(language, "readiness.unknown", fallback: "准备状态待核验")
+        case .available: baselineText(language, "readiness.ready")
+        case .unprepared: baselineText(language, "readiness.unprepared")
+        case .unavailable: baselineText(language, "readiness.unavailable")
+        case .unsupported: baselineText(language, "readiness.unsupported")
+        case .unknown: baselineText(language, "readiness.unknown")
         }
     }
     private func references(_ run: QuickRunRecord) -> [WorkflowAssetReference] {
@@ -600,7 +600,7 @@ struct QuickAssetPreview: View {
             else if let player { VideoPlayer(player: player).frame(height: reference.kind == .audio ? 90 : (compact ? 240 : 400)) }
             else if let text { Text(text).textSelection(.enabled).lineLimit(compact ? 8 : nil) }
             else if let issue { Text(issue).foregroundStyle(.red) }
-            else { ProgressView(baselineText(language, "label.0dee08a39132", fallback: "正在读取素材…")) }
+            else { ProgressView(baselineText(language, "label.0dee08a39132")) }
         }
         .task(id: identity) {
             let generation = UUID(); requestGeneration = generation

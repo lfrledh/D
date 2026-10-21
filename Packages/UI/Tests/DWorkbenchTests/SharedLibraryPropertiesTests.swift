@@ -50,6 +50,7 @@ struct SharedLibraryPropertiesTests {
         let id = try store.createSavedQuery(name: "old", query: .init(allTagIDs: [tag]))
         var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
         object["schema"] = 1
+        var body = try #require(object["metadata"] as? [String: Any]); body.removeValue(forKey: "runtimeAnnotations"); object["metadata"] = body
         let original = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
         try original.write(to: file)
         let old = try SharedLibraryStore(fileURL: file)

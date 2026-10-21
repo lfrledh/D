@@ -36,7 +36,7 @@ enum WorkflowPortStyle {
 
     @MainActor
     static func label(for port: WorkflowPortDefinition?, language: UILanguageStore? = nil) -> String {
-        let unknown = workflowText(language, "refinement.canvas.unresolvedType", fallback: "Unresolved type")
+        let unknown = workflowText(language, "refinement.canvas.unresolvedType")
         guard let port else { return unknown }
         if let kind = kind(for: port) { return WorkflowCanvasPresentation.kind(kind, language: language) }
         return port.kinds.isEmpty ? unknown : port.kinds.map { WorkflowCanvasPresentation.kind($0, language: language) }.joined(separator: "/")

@@ -208,9 +208,9 @@ public final class ModelLibraryModel {
             }
             if let requested = nodePreparations[identity]?.resource {
                 values[identity] = byResource[requested.modelID] ?? .init(resource: requested, taskID: nil, attemptID: nil,
-                    phase: "原准备副本已不可访问；未改用其他副本", completed: nil, total: nil, issue: nil)
+                    phase: "copyUnavailable", completed: nil, total: nil, issue: nil)
             } else if candidates.count == 1, let resource = candidates.first { values[identity] = byResource[resource.record.id] }
-            else if candidates.count > 1 { values[identity] = .init(resource: nil, taskID: nil, attemptID: nil, phase: "存在多个模型副本；请在模型与下载中确认", completed: nil, total: nil, issue: nil) }
+            else if candidates.count > 1 { values[identity] = .init(resource: nil, taskID: nil, attemptID: nil, phase: "ambiguousCopies", completed: nil, total: nil, issue: nil) }
         }
         nodePreparationPresentation.replace(values, resources: byResource)
     }
@@ -396,12 +396,12 @@ public final class ModelLibraryModel {
               let record = records.first(where: { $0.id == id }), record.activeLeaseCount == 0 else { return }
         let managed = record.storage == .managed
         let alert = NSAlert()
-        alert.messageText = managed ? "移除模型或下载文件？" : "取消这个模型的登记？"
+        alert.messageText = managed ? managementText("removeManagedTitle") : managementText("removeExternalTitle")
         alert.informativeText = managed
-            ? "这份模型由 D 管理的已安装文件或未完成下载将被移除。作品和生成记录会保留；以后重新安装时需要再次下载。"
-            : "仅从 D 的模型库中取消登记。原文件、作品和生成记录都会保留。"
-        alert.addButton(withTitle: managed ? "移除模型或下载文件" : "取消登记")
-        alert.addButton(withTitle: "保留")
+            ? managementText("removeManagedMessage")
+            : managementText("removeExternalMessage")
+        alert.addButton(withTitle: managed ? managementText("removeManaged") : managementText("removeExternal"))
+        alert.addButton(withTitle: managementText("keep"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         await perform(.removing, id: id) { try await self.library.remove(id) }
     }
@@ -654,7 +654,7 @@ extension ModelLibraryModel {
         do { try await body() } catch is CancellationError { } catch { errorMessage = error.localizedDescription }
         await refresh()
     }
-    func managementText(_ key: String, _ fallback: String) -> String {
-        language?.text("modelManagement." + key, fallback: fallback) ?? fallback
+    func managementText(_ key: String, _ fallback: String = "") -> String {
+        workflowText(language, "modelManagement." + key, fallback: fallback)
     }
 }

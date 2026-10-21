@@ -10,8 +10,24 @@ struct WorkflowConsumerMatch: Identifiable {
     let portTitle: String
     let modelKind: WorkflowModelKind?
     let result: WorkflowInputCompatibilityResult
+    var savedNode: WorkflowNode? = nil
+    var inputDefinition: WorkflowPortDefinition? = nil
+    @MainActor func displayTitle(_ language: UILanguageStore?) -> String {
+        if let savedNode { return savedNode.title + " · " + workflowText(language, "workflow.compatibility.savedConfiguration") }
+        return WorkflowRegistry.standard.operation(operationID).map { WorkflowCanvasPresentation.operationTitle($0.definition, language: language) } ?? title
+    }
+    @MainActor func displayPort(_ language: UILanguageStore?) -> String {
+        guard let inputDefinition else { return portTitle }
+        return WorkflowCanvasPresentation.portTitle(operationID: operationID, port: inputDefinition, input: true, language: language)
+    }
 }
 @MainActor enum WorkflowValueCompatibility {
+    static func conceptTitle(_ legacyIdentity: String, language: UILanguageStore?) -> String {
+        // Existing persisted fact IDs retain their bytes. Only their labels change.
+        let key: String
+        switch legacyIdentity { case "音符序列": key = "notes"; case "和弦轨": key = "chords"; case "速度映射": key = "tempo"; default: return legacyIdentity }
+        return workflowText(language, "workflow.concept." + key)
+    }
     // Immutable registered contracts. Mutable instance schemas are evaluated separately.
     private static let contracts: [(WorkflowOperationDefinition, WorkflowInputContract)] = WorkflowRegistry.standard.definitions.flatMap { definition in
         let node = definition.makeNode()
@@ -25,7 +41,7 @@ struct WorkflowConsumerMatch: Identifiable {
             guard contract.port.kinds.contains(value.kind) || result.status == .conversion else { return nil }
             return .init(operationID: definition.id, title: WorkflowCanvasPresentation.operationTitle(definition, language: language),
                 port: contract.port.id, portTitle: WorkflowCanvasPresentation.portTitle(operationID: definition.id, port: contract.port, input: true, language: language),
-                modelKind: definition.modelKind, result: result)
+                modelKind: definition.modelKind, result: result, inputDefinition: contract.port)
         }
     }
     /// Decoding a file for display never grants it an inline-record identity or registers a version.
@@ -50,8 +66,8 @@ struct WorkflowConsumerMatch: Identifiable {
                           let contract = try? WorkflowInputContract(step: step, portID: port, tools: tools) else { continue }
                     let match = contract.compatibility(with: value, decodedAsset: decodedAsset)
                     result.append(.init(key: key + ":" + port, operationID: step.node.operationID,
-                        title: step.node.title + " · 已保存配置", port: port, portTitle: contract.port.title,
-                        modelKind: definition?.modelKind, result: match))
+                        title: step.node.title, port: port, portTitle: contract.port.title,
+                        modelKind: definition?.modelKind, result: match, savedNode: step.node, inputDefinition: contract.port))
                 }
                 switch step.kind {
                 case .call: break

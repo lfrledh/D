@@ -4,22 +4,7 @@ import SwiftUI
 /// A finite set of presentation commands. Owners below invoke their existing actions.
 enum WorkflowKeyboardCommand: String, Codable, CaseIterable {
     case search, tags, leftTools, rightTools, activity, preview, pointer, hand, undo, redo, showAll, runCheck
-    var title: (zh: String, en: String) {
-        switch self {
-        case .search: ("聚焦当前资料栏搜索", "Focus current library search")
-        case .tags: ("打开当前资料栏标签", "Open current library tags")
-        case .leftTools: ("切换左侧工具页", "Cycle left tools")
-        case .rightTools: ("切换右侧素材页", "Cycle right resources")
-        case .activity: ("打开运行记录", "Open run history")
-        case .preview: ("只读查看选中素材", "View selected resource")
-        case .pointer: ("指针工具", "Pointer tool")
-        case .hand: ("手形工具", "Hand tool")
-        case .undo: ("撤销画布编辑", "Undo canvas edit")
-        case .redo: ("重做画布编辑", "Redo canvas edit")
-        case .showAll: ("显示全部节点", "Show all nodes")
-        case .runCheck: ("打开运行检查", "Open run check")
-        }
-    }
+    var titleKey: String { "workspace.shortcut." + rawValue }
     var defaultKey: String {
         switch self {
         case .search: "f"; case .tags: "t"; case .leftTools: "l"; case .rightTools: "r"
@@ -123,28 +108,26 @@ struct WorkflowKeyboardSettings: View {
     @State private var recording: WorkflowKeyboardCommand?
     @State private var issue: String?
     private var preferences: WorkflowKeyboardPreferences { state.preferences.workflowKeyboard ?? .init() }
-    private func t(_ zh: String, _ en: String) -> String { language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? zh : en }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(t("工作区快捷键", "Workspace shortcuts")).font(.headline)
-            TextField(t("搜索命令", "Search commands"), text: $query)
-            Text(t("先聚焦相应工作区或资料栏。文字编辑和输入法优先；运行快捷键只打开检查，不提交运行。",
-                   "Focus the workspace or library first. Text editing and composition take priority. Run check never submits a run."))
+            Text(workflowText(language, "workspace.shortcuts.workspaceShortcuts")).font(.headline)
+            TextField(workflowText(language, "workspace.shortcuts.searchCommands"), text: $query)
+            Text(workflowText(language, "workspace.shortcuts.focusTheWorkspaceOrLibraryFirstTextEditingAndComposition"))
                 .font(.caption).foregroundStyle(.secondary)
             if let issue { Text(issue).foregroundStyle(.red).font(.caption) }
-            ForEach(WorkflowKeyboardCommand.allCases.filter { query.isEmpty || t($0.title.zh, $0.title.en).localizedStandardContains(query) }, id: \.self) { command in
+            ForEach(WorkflowKeyboardCommand.allCases.filter { query.isEmpty || workflowText(language, $0.titleKey).localizedStandardContains(query) }, id: \.self) { command in
                 HStack {
-                    Text(t(command.title.zh, command.title.en)); Spacer()
-                    Button(recording == command ? t("请按组合键…", "Press shortcut…") : preferences.binding(command).display) {
+                    Text(workflowText(language, command.titleKey)); Spacer()
+                    Button(recording == command ? workflowText(language, "workspace.shortcuts.pressShortcut") : preferences.binding(command).display) {
                         issue = nil; recording = command
                     }.frame(minWidth: 140)
                     if recording == command {
                         WorkflowKeyRecorder { value in
                             recording = nil
                             guard let value else { return }
-                            guard value.valid, !value.reserved else { issue = t("请使用含 Command 或 Control 的字母/数字组合，保留系统与文字编辑快捷键。", "Use Command or Control with a letter or digit; system and text-editing shortcuts are reserved."); return }
+                            guard value.valid, !value.reserved else { issue = workflowText(language, "workspace.shortcuts.useCommandOrControlWithALetterOrDigitSystem"); return }
                             if let other = preferences.conflict(value, for: command) {
-                                issue = t("冲突：", "Conflict: ") + t(other.title.zh, other.title.en); return
+                                issue = workflowText(language, "workspace.shortcuts.conflict") + workflowText(language, other.titleKey); return
                             }
                             var next = state.preferences; var keys = preferences
                             keys.overrides[command] = value; next.workflowKeyboard = keys; state.update(next)
@@ -152,7 +135,7 @@ struct WorkflowKeyboardSettings: View {
                     }
                 }
             }
-            Button(t("恢复快捷键默认值", "Restore default shortcuts")) {
+            Button(workflowText(language, "workspace.shortcuts.restoreDefaultShortcuts")) {
                 recording = nil; issue = nil; var next = state.preferences; next.workflowKeyboard = nil; state.update(next)
             }
         }.disabled(state.hasInvalidStoredRecord)

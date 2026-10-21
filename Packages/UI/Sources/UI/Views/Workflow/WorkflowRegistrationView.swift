@@ -8,32 +8,32 @@ struct WorkflowRegistrationView: View {
 
     var body: some View {
         if let value = WorkflowNodeRegistration(node: node, registry: controller.registry, tools: controller.tools) {
-            DisclosureGroup(workspaceText(language, "registration", "登记信息", "Registration")) {
+            DisclosureGroup(workspaceText(language, "registration")) {
                 VStack(alignment: .leading, spacing: 8) {
-                    if let purpose = value.purpose, !purpose.isEmpty { Text(purpose).textSelection(.enabled) }
+                    if let purpose = value.purpose, !purpose.isEmpty { Text(value.tool == nil ? controller.registry.definition(for: node).map { WorkflowCanvasPresentation.operationDetail($0, language: language) } ?? purpose : purpose).textSelection(.enabled) }
                     if let detail = value.tool?.registration?.detail { Text(detail).font(.caption).textSelection(.enabled) }
-                    Text(workspaceText(language, "registeredInputs", "公开输入", "Public inputs")).font(.headline)
+                    Text(workspaceText(language, "registeredInputs")).font(.headline)
                     ForEach(value.inputs) { port in
-                        Text((value.tool?.registration?.inputLabels[port.id] ?? port.title)
-                            + " · " + port.kinds.map(\.rawValue).joined(separator: " / ")
-                            + (port.required ? " · " + workspaceText(language, "required", "必选", "Required") : ""))
+                        Text((value.tool?.registration?.inputLabels[port.id] ?? WorkflowCanvasPresentation.portTitle(operationID: node.operationID, port: port, input: true, language: language))
+                            + " · " + port.kinds.map { workflowText(language, "workflow.kind." + $0.rawValue, fallback: $0.rawValue) }.joined(separator: " / ")
+                            + (port.required ? " · " + workspaceText(language, "required") : ""))
                     }
-                    Text(workspaceText(language, "registeredOutputs", "公开输出", "Public outputs")).font(.headline)
+                    Text(workspaceText(language, "registeredOutputs")).font(.headline)
                     ForEach(value.outputs) { port in
-                        Text((value.tool?.registration?.outputLabels[port.id] ?? port.title)
-                            + " · " + port.kinds.map(\.rawValue).joined(separator: " / "))
+                        Text((value.tool?.registration?.outputLabels[port.id] ?? WorkflowCanvasPresentation.portTitle(operationID: node.operationID, port: port, input: false, language: language))
+                            + " · " + port.kinds.map { workflowText(language, "workflow.kind." + $0.rawValue, fallback: $0.rawValue) }.joined(separator: " / "))
                     }
                     if let definition = controller.registry.definition(for: node, tools: controller.tools), !definition.fields.isEmpty {
-                        DisclosureGroup(workspaceText(language, "registeredParameters", "参数与当前配置", "Parameters and current values")) {
+                        DisclosureGroup(workspaceText(language, "registeredParameters")) {
                             ForEach(definition.fields) { field in
-                                Text(field.title + " · " + String(describing: field.kind) + " · " + String(describing: node.parameters[field.id] ?? field.defaultValue))
+                                Text(WorkflowCanvasPresentation.fieldTitle(operationID: node.operationID, field: field, language: language) + " · " + String(describing: node.parameters[field.id] ?? field.defaultValue))
                                     .font(.caption).textSelection(.enabled)
                             }
                         }
                     }
                     if let tool = value.tool {
                         if let interface = tool.graph.interface {
-                            DisclosureGroup(workspaceText(language, "fullContract", "完整类型与映射", "Full types and mappings")) {
+                            DisclosureGroup(workspaceText(language, "fullContract")) {
                                 ForEach(interface.inputs, id: \.name) { input in
                                     Text(input.name + " · " + String(describing: input.type) + (input.required ? " *" : ""))
                                 }
@@ -42,10 +42,10 @@ struct WorkflowRegistrationView: View {
                                 }
                             }.font(.caption.monospaced())
                         }
-                        Text(workspaceText(language, "registeredGraph", "内部流程", "Internal workflow") + " · \(tool.graph.nodes.count)")
+                        Text(workspaceText(language, "registeredGraph") + " · \(tool.graph.nodes.count)")
                         WorkflowDependencySummary(graph: tool.graph, controller: controller)
                     }
-                    DisclosureGroup(workspaceText(language, "identity", "精确身份", "Exact identity")) {
+                    DisclosureGroup(workspaceText(language, "identity")) {
                         Text(value.definitionID + " · v\(value.version)").textSelection(.enabled)
                         Text(value.instanceID.uuidString).textSelection(.enabled)
                     }.font(.caption.monospaced())
@@ -70,11 +70,11 @@ struct WorkflowDependencySummary: View {
                     if row.requiresModel {
                         let model = controller.modelChoices.first(where: { $0.id == row.modelID })
                         Text(model?.displayName ?? row.modelID.flatMap { $0.isEmpty ? nil : $0 }
-                            ?? workspaceText(language, "modelAtSubmit", "提交时固定当前默认模型；当前定义未绑定", "Freeze the current default model at submission; this definition is unbound"))
+                            ?? workspaceText(language, "modelAtSubmit"))
                     }
-                    if row.effect == .human { Text(workspaceText(language, "needsReview", "需要人工处理，保存决定后才可继续", "Requires a saved human decision before continuing")) }
-                    if row.effect == .externalExport { Text(workspaceText(language, "needsExport", "写入外部目标，需要明确目标授权", "Writes to an explicitly authorized external destination")) }
-                    if row.effect == .assetPublication { Text(workspaceText(language, "publishesAsset", "在项目中保存新成果", "Saves a new project asset")) }
+                    if row.effect == .human { Text(workspaceText(language, "needsReview")) }
+                    if row.effect == .externalExport { Text(workspaceText(language, "needsExport")) }
+                    if row.effect == .assetPublication { Text(workspaceText(language, "publishesAsset")) }
                 }.font(.caption).textSelection(.enabled)
             }
             if let issue { Text(issue).foregroundStyle(.orange) }

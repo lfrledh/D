@@ -91,7 +91,7 @@ public struct ProjectResourceBrowser: View {
 
     private var resourceList: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Toggle(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.178", fallback: "Include Other Modes"), isOn: $includesOtherModes)
+            Toggle(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.178"), isOn: $includesOtherModes)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("assets-filter-other")
                 .resourceMeasured("assets-filter-other", probe: layoutProbe)
@@ -191,7 +191,7 @@ private struct ResourcePreview: View {
             if let item {
                 preview(item)
             } else {
-                ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.179", fallback: "Select an Asset"), systemImage: "square.stack.3d.up")
+                ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.179"), systemImage: "square.stack.3d.up")
             }
         }
     }
@@ -201,8 +201,8 @@ private struct ResourcePreview: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(item.title).font(.title2.weight(.semibold))
                 Text(text.prefix(8_192)).textSelection(.enabled)
-                if text.count > 8_192 { Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.180", fallback: "Only the first 8,192 characters are shown.")).font(.caption).foregroundStyle(.secondary) }
-                Button(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.181", fallback: "Open Document")) { onOpen(item) }
+                if text.count > 8_192 { Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.180")).font(.caption).foregroundStyle(.secondary) }
+                Button(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.181")) { onOpen(item) }
                     .accessibilityIdentifier("resource-open-document-\(documentID.uuidString)")
             }
         } else if let asset {
@@ -210,7 +210,7 @@ private struct ResourcePreview: View {
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 Text(item.title).font(.title2.weight(.semibold))
-                Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.182", fallback: "This is a reference to a creation document in the project. No file path or digest is generated here."))
+                Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.182"))
                     .foregroundStyle(.secondary)
             }
         }
@@ -224,27 +224,27 @@ private struct ResourcePreview: View {
                 if let image {
                     Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: 500)
                 } else if imageUnavailable {
-                    ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.183", fallback: "Image Unavailable"), systemImage: "photo.badge.exclamationmark",
-                                           description: Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.184", fallback: "No authorized local file can be read, or the file exceeds the preview limit.")))
+                    ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.183"), systemImage: "photo.badge.exclamationmark",
+                                           description: Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.184")))
                 } else {
-                    ProgressView(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.185", fallback: "Loading local preview…"))
+                    ProgressView(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.185"))
                 }
             } else if asset.mediaType == "video/mp4", let video = asset.metadata.video {
                 Text(consistencyText(legacyLanguage, "copy.ProjectResourceBrowser.1", arguments: ["v0": String(describing: video.width), "v1": String(describing: video.height), "v2": String(describing: video.frameCount), "v3": String(describing: video.frameRate.numerator), "v4": String(describing: video.frameRate.denominator)]))
                     .foregroundStyle(.secondary)
-                Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.186", fallback: "Open the source creation to inspect, preview or export this video. Videos do not play automatically in the asset browser."))
+                Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.186"))
                     .font(.caption).foregroundStyle(.secondary)
             } else if isKnownAudio(asset.mediaType) {
                 Text(recordedAudioDescription(asset.metadata.audio))
                     .foregroundStyle(.secondary)
-                Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.187", fallback: "Audio does not play automatically in the asset browser."))
+                Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.187"))
                     .font(.caption).foregroundStyle(.secondary)
             } else {
-                ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.188", fallback: "Preview Unavailable for This Format"), systemImage: "doc.questionmark",
-                                       description: Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.189", fallback: "Only the recorded MIME type is used. Unknown formats are not inferred from file extensions, and URLs are not loaded.")))
+                ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.188"), systemImage: "doc.questionmark",
+                                       description: Text(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.189")))
             }
             if let origin = item.originDocumentID, originIsAvailable(origin) {
-                Button(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.190", fallback: "Open Source Creation")) { onOpen(item) }
+                Button(workflowText(legacyLanguage, "consistency.legacy.ProjectResourceBrowser.190")) { onOpen(item) }
                     .accessibilityIdentifier("asset-open-origin-\(origin.uuidString)")
             }
         }

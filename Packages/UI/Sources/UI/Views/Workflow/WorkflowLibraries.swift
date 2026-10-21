@@ -122,10 +122,10 @@ struct WorkflowLibraryFilters: View {
                 WorkbenchMenuForEach(tags, id: \.self) { tag in
                     WorkbenchMenuToggle(tag, isOn: Binding(get: { selected.contains(tag) }, set: { if $0 { selected.insert(tag) } else { selected.remove(tag) } }))
                 }
-            } label: { Label(workflowText(language, "canvas.library.filter", fallback: "筛选标签") + (selected.isEmpty ? "" : " (\(selected.count))"), systemImage: "line.3.horizontal.decrease") }
+            } label: { Label(workflowText(language, "canvas.library.filter") + (selected.isEmpty ? "" : " (\(selected.count))"), systemImage: "line.3.horizontal.decrease") }
             if !selected.isEmpty {
                 Button { selected = [] } label: { Image(systemName: "xmark.circle") }
-                    .buttonStyle(WorkbenchGlassButtonStyle(compact: true)).accessibilityLabel(workflowText(language, "canvas.library.clear", fallback: "清除筛选"))
+                    .buttonStyle(WorkbenchGlassButtonStyle(compact: true)).accessibilityLabel(workflowText(language, "canvas.library.clear"))
             }
         }
         if !selected.isEmpty { Text(selected.sorted().joined(separator: " + ")).font(.caption).foregroundStyle(.secondary) }
@@ -146,10 +146,10 @@ struct WorkflowLibraryFilters: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title).font(.headline)
-            Text(workflowText(language, "canvas.tags.note", fallback: "系统标签来自能力资料。下方是你的标签，不改变执行参数。"))
+            Text(workflowText(language, "canvas.tags.note"))
                 .font(.caption).foregroundStyle(.secondary)
             if corrupt {
-                Text(workflowText(language, "canvas.tags.corrupt", fallback: "原标签记录损坏，已保留并暂停编辑。")) .foregroundStyle(.orange)
+                Text(workflowText(language, "canvas.tags.corrupt")) .foregroundStyle(.orange)
             }
             WorkbenchScrollView {
                 VStack(alignment: .leading) {
@@ -157,16 +157,16 @@ struct WorkflowLibraryFilters: View {
                         HStack {
                             Text(tag).textSelection(.enabled); Spacer()
                             Button { commit(values.filter { $0 != tag }, addition: false) } label: { Image(systemName: "minus.circle") }
-                                .accessibilityLabel(workflowText(language, "canvas.tags.remove", fallback: "删除标签") + " " + tag)
+                                .accessibilityLabel(workflowText(language, "canvas.tags.remove") + " " + tag)
                         }
                     }
                 }
             }.frame(maxHeight: 160)
             HStack {
-                TextField(workflowText(language, "canvas.tags.new", fallback: "新标签（最多32个字符）"), text: $draft)
+                TextField(workflowText(language, "canvas.tags.new"), text: $draft)
                     .textFieldStyle(WorkbenchGlassTextFieldStyle()).onSubmit { commit(values + [draft], addition: true) }
                     .accessibilityIdentifier("canvas-tag-draft")
-                Button(workflowText(language, "canvas.tags.add", fallback: "添加")) { commit(values + [draft], addition: true) }
+                Button(workflowText(language, "canvas.tags.add")) { commit(values + [draft], addition: true) }
             }
             if let error { Text(error).foregroundStyle(.red).font(.caption) }
         }.padding(16).frame(width: 330).disabled(busy || corrupt)

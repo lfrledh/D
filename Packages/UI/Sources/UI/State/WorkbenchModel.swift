@@ -22,15 +22,18 @@ public final class WorkbenchModel {
         }
         return chatReadingState
     }
+    public let language: UILanguageStore?
+    private func nativeText(_ key: String, arguments: [String: String] = [:]) -> String { workflowText(language, "workbench.native." + key, arguments: arguments) }
     public let projectSession: ProjectSession
     public let audioRecordingEnabled: Bool
     private let audioPanels: any AudioWorkbenchPanelProviding
     private var isChoosingLocation = false
     public private(set) var hasPendingEditor = false
     public private(set) var editorCloseAttempted = false
+    private var pendingEditorCount = 0
 
-    public func beginEditing() { hasPendingEditor = true; editorCloseAttempted = false }
-    public func endEditing() { hasPendingEditor = false; editorCloseAttempted = false }
+    public func beginEditing() { pendingEditorCount += 1; hasPendingEditor = true; editorCloseAttempted = false }
+    public func endEditing() { pendingEditorCount = max(0, pendingEditorCount - 1); hasPendingEditor = pendingEditorCount > 0; editorCloseAttempted = false }
     private func refuseEditorClose() -> Bool {
         guard hasPendingEditor else { return false }
         editorCloseAttempted = true
@@ -42,9 +45,9 @@ public final class WorkbenchModel {
     public var availableCreatorModes: [CreatorMode] { projectSession.availableCreatorModes }
     public var presentedDocument: ProjectDocument? { projectSession.presentedDocument }
     public var recentProjects: [RecentProjectSummary] {
-        let entries = projectSession.recentProjects.map { RecentProjectSummary(id: $0.id.uuidString, name: $0.name, detail: "打开已保存项目") }
+        let entries = projectSession.recentProjects.map { RecentProjectSummary(id: $0.id.uuidString, name: $0.name, detail: nativeText("recent.open")) }
         if entries.isEmpty && projectSession.hasLegacyRecentProject {
-            return [RecentProjectSummary(id: "last-project", name: "上次项目", detail: "打开原有项目记录")]
+            return [RecentProjectSummary(id: "last-project", name: nativeText("recent.last"), detail: nativeText("recent.openLegacy"))]
         }
         return entries
     }
@@ -75,7 +78,7 @@ public final class WorkbenchModel {
         }
     }
     public var visibleGenerationTitle: String {
-        switch creatorMode { case .image: "生成图片"; case .text: showingTextSources ? "根据资料回答" : "改写所选文字"; case .audio: "生成声音候选"; case .video: "生成视频候选" }
+        switch creatorMode { case .image: nativeText("action.image"); case .text: showingTextSources ? nativeText("action.sources") : nativeText("action.rewrite"); case .audio: nativeText("action.audio"); case .video: nativeText("action.video") }
     }
     public var showingTextSources = false
     public var canRunVisibleGeneration: Bool {
@@ -144,14 +147,14 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSOpenPanel()
-        panel.title = "选择参考 PNG"
-        panel.message = "原件会保存在项目中。首版支持 256–2048 像素、宽高为 32 倍数的单帧 PNG；不自动缩放裁切。"
+        panel.title = nativeText("referencePNG.title")
+        panel.message = nativeText("referencePNG.message")
         panel.allowedContentTypes = [.png]
         panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
         guard await panel.begin() == .OK, let url = panel.url else { return }
         guard manifest?.id == projectID, self.projectURL == projectURL, activeDocumentID == documentID,
               creatorMode == .image, projectSession.navigationEpoch == originEpoch else {
-            errorMessage = "文档已改变，未导入旧窗口选择的参考图。请重新选择。"
+            errorMessage = nativeText("referenceChanged")
             return
         }
         await projectSession.importImageReference(at: url, name: url.deletingPathExtension().lastPathComponent,
@@ -205,7 +208,7 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSOpenPanel()
-        panel.title = "选择已准备的 Wan2.1 视频模型"
+        panel.title = nativeText("videoModel.title")
         panel.canChooseFiles = false; panel.canChooseDirectories = true; panel.allowsMultipleSelection = false
         guard await panel.begin() == .OK, let url = panel.url,
               projectSession.videoCreationContextID == contextID, activeDocumentID == documentID else { return }
@@ -218,8 +221,8 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSSavePanel()
-        panel.title = "导出视频副本"; panel.allowedContentTypes = [.mpeg4Movie]
-        panel.nameFieldStringValue = "视频副本.mp4"
+        panel.title = nativeText("videoExport.title"); panel.allowedContentTypes = [.mpeg4Movie]
+        panel.nameFieldStringValue = nativeText("videoExport.filename")
         guard await panel.begin() == .OK, let url = panel.url,
               projectSession.videoCreationContextID == contextID, activeDocumentID == documentID else { return }
         await projectSession.exportVideoCreationAsset(id: id, to: url, contextID: contextID, documentID: documentID)
@@ -253,7 +256,7 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSOpenPanel()
-        panel.title = "选择已安装的本地声音模型"
+        panel.title = nativeText("soundModel.title")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -270,9 +273,9 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSSavePanel()
-        panel.title = "导出声音副本"
+        panel.title = nativeText("soundExport.title")
         panel.allowedContentTypes = [format.container == .caf ? UTType(filenameExtension: "caf")! : .wav]
-        panel.nameFieldStringValue = "声音副本." + (format.container == .caf ? "caf" : "wav")
+        panel.nameFieldStringValue = nativeText("soundExport.filename", arguments: ["extension": format.container == .caf ? "caf" : "wav"])
         guard await panel.begin() == .OK, let url = panel.url,
               projectSession.audioCreationContextID == contextID, activeDocumentID == documentID else { return }
         await projectSession.exportAudioCreationAsset(id: id, to: url, contextID: contextID, documentID: documentID)
@@ -286,7 +289,7 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSOpenPanel()
-        panel.title = "导入旋律条件（JSON）"
+        panel.title = nativeText("melodyImport.title")
         panel.canChooseDirectories = false; panel.canChooseFiles = true; panel.allowsMultipleSelection = false
         guard await panel.begin() == .OK, let url = panel.url else { return }
         do {
@@ -295,7 +298,7 @@ public final class WorkbenchModel {
                   session.audioCreationDraft?.revision == draft.revision else { throw CancellationError() }
             var updated = draft; updated.music = imported.draft; updated.durationText = imported.durationText
             session.updateAudioCreationDraft(updated, contextID: contextID, documentID: documentID)
-        } catch { errorMessage = "旋律条件未导入，原输入保留：\(error.localizedDescription)" }
+        } catch { errorMessage = nativeText("melodyImport.failed", arguments: ["diagnostic": error.localizedDescription]) }
     }
 
     public func exportMusicCondition(contextID: UUID, documentID: UUID) async {
@@ -307,12 +310,12 @@ public final class WorkbenchModel {
             let data = try MusicConditionFile.encode(music, durationText: draft.durationText)
             isChoosingLocation = true
             defer { isChoosingLocation = false }
-            let panel = NSSavePanel(); panel.title = "导出旋律条件（不含提示词和模型路径）"
-            panel.nameFieldStringValue = "旋律条件.json"
+            let panel = NSSavePanel(); panel.title = nativeText("melodyExport.title")
+            panel.nameFieldStringValue = nativeText("melodyExport.filename")
             guard await panel.begin() == .OK, let url = panel.url,
                   session.audioCreationContextID == contextID, activeDocumentID == documentID else { return }
             try ProjectStore.publishMusicCondition(data, to: url)
-        } catch { errorMessage = "旋律条件未导出；已有文件不会覆盖：\(error.localizedDescription)" }
+        } catch { errorMessage = nativeText("melodyExport.failed", arguments: ["diagnostic": error.localizedDescription]) }
     }
 
     /// Every callback captures the rendered project/document identity before any file panel or await.
@@ -323,8 +326,8 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSSavePanel()
-        panel.title = "导出音高与近似音符分析"
-        panel.nameFieldStringValue = "音高分析.json"
+        panel.title = nativeText("pitchExport.title")
+        panel.nameFieldStringValue = nativeText("pitchExport.filename")
         guard await panel.begin() == .OK, let url = panel.url,
               activeDocumentID == documentID, session.pitchResultAssetID == assetID else { return }
         await session.exportPitchAnalysis(to: url)
@@ -364,7 +367,7 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSOpenPanel()
-        panel.title = "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）"
+        panel.title = nativeText("textModel.title")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -378,15 +381,15 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSOpenPanel()
-        panel.title = "选择 UTF-8 TXT 或 Markdown 资料"
+        panel.title = nativeText("textSource.title")
         panel.canChooseFiles = true; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
         guard await panel.begin() == .OK, let url = panel.url else { return }
         await projectSession.importTextSource(at: url, documentID: documentID, epoch: epoch)
     }
 
-    public func createDocument(name: String = "新创作") async {
+    public func createDocument(name: String? = nil) async {
         await endComparison()
-        await projectSession.createDocument(name: name)
+        await projectSession.createDocument(name: name ?? nativeText("documentDefault"))
     }
     public func renameDocument(id: UUID, name: String) async {
         await projectSession.renameDocument(id: id, name: name)
@@ -416,10 +419,10 @@ public final class WorkbenchModel {
         var acknowledged = false
         if let warning = projectSession.forkCompatibilityWarning(for: id) {
             let alert = NSAlert()
-            alert.messageText = "使用当前模型探索"
+            alert.messageText = nativeText("fork.title")
             alert.informativeText = warning
-            alert.addButton(withTitle: "继续")
-            alert.addButton(withTitle: "取消")
+            alert.addButton(withTitle: nativeText("fork.continue"))
+            alert.addButton(withTitle: nativeText("fork.cancel"))
             guard alert.runModal() == .alertFirstButtonReturn else { return }
             acknowledged = true
         }
@@ -484,16 +487,17 @@ public final class WorkbenchModel {
                 audioEnabled: Bool = false, audioRecordingEnabled: Bool = false,
                 audioTransport: AudioTransport? = nil,
                 textSourcesEnabled: Bool = true,
-                audioPanels: any AudioWorkbenchPanelProviding = NativeAudioWorkbenchPanels()) {
+                audioPanels: (any AudioWorkbenchPanelProviding)? = nil, language: UILanguageStore? = nil) {
         self.audioRecordingEnabled = audioRecordingEnabled
-        self.audioPanels = audioPanels
+        self.language = language
+        self.audioPanels = audioPanels ?? NativeAudioWorkbenchPanels(language: language)
         chatDisplaySettings = displaySettingsOwner?.chatDisplaySettings ?? ChatDisplayPreferencesState(settings: settings, appearanceDirectory: appearanceDirectory)
         projectSession = ProjectSession(sessionFactory: sessionFactory, settings: settings,
                                         modelLibrary: modelLibrary, audioEnabled: audioEnabled,
                                         audioRecordingEnabled: audioRecordingEnabled,
                                         audioTransport: audioTransport,
                                         textSourcesEnabled: textSourcesEnabled,
-                                        closeDecision: Self.chooseCloseDecision)
+                                        closeDecision: { await Self.chooseCloseDecision(language: language) })
     }
 
     public private(set) var temporaryChatModel: WorkbenchModel?
@@ -501,7 +505,7 @@ public final class WorkbenchModel {
         let cache = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent("D/TemporaryChats", isDirectory: true)
         let child = try await projectSession.startTemporaryChat(in: cache)
-        temporaryChatModel = WorkbenchModel(projectSession: child, audioRecordingEnabled: audioRecordingEnabled)
+        temporaryChatModel = WorkbenchModel(projectSession: child, audioRecordingEnabled: audioRecordingEnabled, language: language)
         temporaryChatModel?.chatDisplaySettings = chatDisplaySettings
     }
     public func endTemporaryChat() async throws {
@@ -510,10 +514,11 @@ public final class WorkbenchModel {
 
     /// A headless service can outlive or be presented by a new facade without transferring tasks.
     public init(projectSession: ProjectSession, audioRecordingEnabled: Bool = false,
-                audioPanels: any AudioWorkbenchPanelProviding = NativeAudioWorkbenchPanels()) {
+                audioPanels: (any AudioWorkbenchPanelProviding)? = nil, language: UILanguageStore? = nil) {
         self.projectSession = projectSession
         self.audioRecordingEnabled = audioRecordingEnabled
-        self.audioPanels = audioPanels
+        self.language = language
+        self.audioPanels = audioPanels ?? NativeAudioWorkbenchPanels(language: language)
     }
 
     public func clearError() { projectSession.clearError() }
@@ -533,7 +538,7 @@ public final class WorkbenchModel {
     private func importAudio(contextID originContextID: UUID, documentID originDocumentID: UUID?) async {
         guard projectSession.audio?.contextID == originContextID,
               activeDocumentID == originDocumentID else {
-            errorMessage = "文档已改变，未打开旧的导入操作。请在当前文档重新选择。"
+            errorMessage = nativeText("importChanged")
             return
         }
         guard !projectSession.isChangingProject, !isChoosingLocation, let projectID = manifest?.id, let projectURL,
@@ -549,7 +554,7 @@ public final class WorkbenchModel {
         guard manifest?.id == projectID, self.projectURL == projectURL,
               self.activeDocumentID == activeDocumentID,
               projectSession.audio === controller, controller.contextID == contextID else {
-            errorMessage = "项目已改变，未导入所选音频。请在当前项目中重新选择。"
+            errorMessage = nativeText("audioImportChanged")
             return
         }
         let name = source.deletingPathExtension().lastPathComponent
@@ -560,10 +565,10 @@ public final class WorkbenchModel {
 
     public func startAudioRecording() async {
         guard audioRecordingEnabled else {
-            errorMessage = "当前版本尚未启用麦克风录音；不会申请系统许可。请先导入 WAV 或 CAF PCM。"
+            errorMessage = nativeText("microphoneUnavailable")
             return
         }
-        _ = await projectSession.startAudioRecording(name: "新录音")
+        _ = await projectSession.startAudioRecording(name: nativeText("recordingDefault"))
     }
 
     public func finishAudioRecording() async {
@@ -580,7 +585,7 @@ public final class WorkbenchModel {
                                                    renderDocumentID: UUID?) {
         guard validateRenderContext(contextID: contextID, documentID: renderDocumentID) else { return }
         guard projectSession.keepPendingAudioCaptureForRecovery(id: id) else {
-            errorMessage = "无法保留这项待恢复录音；请等待当前音频操作结束后重试。"
+            errorMessage = nativeText("recordingRecoveryBusy")
             return
         }
     }
@@ -593,8 +598,8 @@ public final class WorkbenchModel {
         let request = AudioExportPanelRequest(
             kind: kind,
             suggestedName: "\(name).\(kind.filenameExtension)",
-            title: "导出原声原件",
-            explanation: "保持已登记的 \(kind.filenameExtension.uppercased()) 容器和原始字节；不会覆盖已有文件。"
+            title: nativeText("audioOriginalExport.title"),
+            explanation: nativeText("audioOriginalExport.message", arguments: ["format": kind.filenameExtension.uppercased()])
         )
         guard let destination = await chooseAudioDestination(request),
               validate(identity),
@@ -616,7 +621,7 @@ public final class WorkbenchModel {
               projectSession.audio?.document?.clips.first(where: { $0.id == id })?.range == range,
               validateExtension(destination, kind: kind) else {
             if validate(identity), projectSession.audio?.document?.clips.first(where: { $0.id == id })?.range != range {
-                errorMessage = "片段已改变，未导出旧范围。请重新选择片段。"
+                errorMessage = nativeText("clipChanged")
             }
             return
         }
@@ -631,7 +636,7 @@ public final class WorkbenchModel {
               let controller = projectSession.audio,
               controller.editorRevision == editorRevision,
               controller.clipRangeInput == range else {
-            errorMessage = "当前范围已经改变，请确认新范围后再导出。"
+            errorMessage = nativeText("audioExport.rangeChanged")
             return
         }
         let kind = AudioExportPanelKind.float32WAVRange
@@ -641,7 +646,7 @@ public final class WorkbenchModel {
               validateExtension(destination, kind: kind) else {
             if validate(identity),
                controller.editorRevision != editorRevision || controller.clipRangeInput != range {
-                errorMessage = "面板打开期间范围已改变，未导出旧范围。"
+                errorMessage = nativeText("audioExport.rangeChangedWhileChoosing")
             }
             return
         }
@@ -673,7 +678,7 @@ public final class WorkbenchModel {
               projectSession.audio === identity.controller,
               projectSession.audio?.contextID == identity.contextID,
               projectSession.audio?.documentID == identity.documentID else {
-            errorMessage = "项目或原声文档已改变，未执行旧操作。请在当前文档中重试。"
+            errorMessage = nativeText("audioOperation.identityChanged")
             return false
         }
         return true
@@ -681,7 +686,7 @@ public final class WorkbenchModel {
 
     private func validateRenderContext(contextID: UUID, documentID: UUID?) -> Bool {
         guard projectSession.audio?.contextID == contextID, activeDocumentID == documentID else {
-            errorMessage = "当前文档已改变，未执行旧的原声操作。"
+            errorMessage = nativeText("audioOperation.documentChanged")
             return false
         }
         return true
@@ -699,7 +704,7 @@ public final class WorkbenchModel {
 
     private func validateExtension(_ url: URL, kind: AudioExportPanelKind) -> Bool {
         guard url.pathExtension.caseInsensitiveCompare(kind.filenameExtension) == .orderedSame else {
-            errorMessage = "导出文件扩展名必须是 .\(kind.filenameExtension)。未写入任何文件。"
+            errorMessage = nativeText("audioExport.invalidExtension", arguments: ["extension": kind.filenameExtension])
             return false
         }
         return true
@@ -708,20 +713,20 @@ public final class WorkbenchModel {
     private func rangeExportRequest(name: String) -> AudioExportPanelRequest {
         AudioExportPanelRequest(
             kind: .float32WAVRange,
-            suggestedName: "\(name)-片段.wav",
-            title: "导出原声范围",
-            explanation: "所选帧范围会转换为原采样率和声道数的 32 位浮点 WAV；不会覆盖已有文件。"
+            suggestedName: nativeText("audioRangeExport.filename", arguments: ["name": name]),
+            title: nativeText("audioRangeExport.title"),
+            explanation: nativeText("audioRangeExport.message")
         )
     }
 
     private func exportBaseName() -> String {
         let candidate = activeDocument?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return candidate.isEmpty ? "D-原声" : candidate
+        return candidate.isEmpty ? nativeText("audioExport.defaultBaseName") : candidate
     }
 
     private func rejectConcurrentAudioPanel() {
         if isChoosingLocation {
-            errorMessage = "另一个文件选择窗口尚未结束，请先完成或取消它。"
+            errorMessage = nativeText("audioPanel.alreadyOpen")
         }
     }
     public func canCancel(_ id: UUID) -> Bool { projectSession.canCancel(id) }
@@ -783,8 +788,8 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSSavePanel()
-        panel.title = "新建 D 项目"
-        panel.nameFieldStringValue = "未命名.dproject"
+        panel.title = nativeText("projectNew.title")
+        panel.nameFieldStringValue = nativeText("projectNew.filename")
         panel.canCreateDirectories = true
         panel.allowedContentTypes = ProjectDocumentType.allowedContentTypes
         panel.isExtensionHidden = false
@@ -801,7 +806,7 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSOpenPanel()
-        panel.title = "打开 D 项目"
+        panel.title = nativeText("projectOpen.title")
         panel.allowedContentTypes = ProjectDocumentType.allowedContentTypes
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -819,7 +824,7 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSOpenPanel()
-        panel.title = "选择 FLUX.2 Klein 4B q8 模型文件夹"
+        panel.title = nativeText("imageModel.title")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -832,20 +837,20 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSSavePanel()
-        panel.title = "导出 PNG"
+        panel.title = nativeText("pngExport.title")
         panel.nameFieldStringValue = "D-\(id.uuidString.prefix(8)).png"
         panel.allowedContentTypes = [.png]
         guard await panel.begin() == .OK, let url = panel.url else { return }
         await projectSession.export(assetID: id, to: url)
     }
 
-    private static func chooseCloseDecision() async -> ProjectCloseDecision {
+    private static func chooseCloseDecision(language: UILanguageStore? = nil) async -> ProjectCloseDecision {
         let alert = NSAlert()
-        alert.messageText = "项目还有运行中或排队的任务"
-        alert.informativeText = "关闭前需要等待任务结束并保存记录。取消也需要等待当前计算释放资源。"
-        alert.addButton(withTitle: "等待完成后关闭")
-        alert.addButton(withTitle: "取消任务后关闭")
-        alert.addButton(withTitle: "继续编辑")
+        alert.messageText = workflowText(language, "workbench.native." + "projectClose.title")
+        alert.informativeText = workflowText(language, "workbench.native." + "projectClose.message")
+        alert.addButton(withTitle: workflowText(language, "workbench.native." + "projectClose.wait"))
+        alert.addButton(withTitle: workflowText(language, "workbench.native." + "projectClose.cancelTasks"))
+        alert.addButton(withTitle: workflowText(language, "workbench.native." + "projectClose.keepEditing"))
         switch alert.runModal() {
         case .alertFirstButtonReturn: return .wait
         case .alertSecondButtonReturn: return .cancel

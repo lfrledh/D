@@ -118,18 +118,18 @@ public struct WorkbenchView: View {
             if model.isChangingProject {
                 VStack(spacing: 12) {
                     ProgressView()
-                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.1", fallback: "Preparing project…")).font(.callout)
+                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.1")).font(.callout)
                 }
                 .padding(24)
                 .background(.background, in: RoundedRectangle(cornerRadius: 18))
                 .shadow(color: .black.opacity(0.10), radius: 20, y: 8)
             }
         }
-        .alert(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.2", fallback: "Operation Not Completed"), isPresented: Binding(
+        .alert(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.2"), isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.clearError() } }
         )) {
-            Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.3", fallback: "OK"), role: .cancel) { model.clearError() }
+            Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.3"), role: .cancel) { model.clearError() }
         } message: {
             Text(model.errorMessage ?? "")
         }
@@ -155,7 +155,7 @@ public struct WorkbenchView: View {
 
     private var visibleGenerationCommand: WorkbenchGenerationCommand {
         if workflowVisible {
-            WorkbenchGenerationCommand(title: workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.4", fallback: "Choose a Run Target on the Canvas"), isEnabled: false, action: {})
+            WorkbenchGenerationCommand(title: workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.4"), isEnabled: false, action: {})
         } else {
             nodePresentation.generationCommand(model: model, enabled: { visibleGenerationEnabled })
         }
@@ -183,10 +183,10 @@ public struct WorkbenchView: View {
         .observingLayout { layoutProbe?($0, $1) }
         .popover(isPresented: $showTasks) {
             VStack(alignment: .leading, spacing: 12) {
-                Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.5", fallback: "Project Tasks")).font(.headline)
-                if model.manifest?.jobs.isEmpty == true { Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.6", fallback: "No generation tasks yet.")).foregroundStyle(.secondary) }
+                Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.5")).font(.headline)
+                if model.manifest?.jobs.isEmpty == true { Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.6")).foregroundStyle(.secondary) }
                 WorkbenchTasks(model: model, isExpanded: $expandTasks)
-                Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.7", fallback: "Check for Recoverable Work")) { Task { await model.recoverArtifacts() } }.disabled(model.isBusy)
+                Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.7")) { Task { await model.recoverArtifacts() } }.disabled(model.isBusy)
             }.padding(16).frame(width: 600)
         }
         .sheet(item: $namingContext, onDismiss: { model.endEditing() }) { context in
@@ -217,7 +217,7 @@ public struct WorkbenchView: View {
                     selectedDocumentID: model.presentedDocument?.id,
                     onSelect: { id in Task { await model.switchDocument(to: id) } }, onCreate: createDocument)
                 if let document = model.presentedDocument {
-                    Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.8", fallback: "Rename Current Creation…")) {
+                    Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.8")) {
                         model.beginEditing()
                         namingContext = DocumentNameContext(documentID: document.id, name: document.name)
                     }
@@ -248,20 +248,20 @@ public struct WorkbenchView: View {
             if let node = visibleNodes.first(where: { $0.id == selectedNodeID }) {
                 let legacy = SharedLibraryTagTarget.legacy(nodeTags.readState(for: node.id))
                 ModelNodeDetail(node: node, tagState: nodeTags.readState(for: node.id),
-                    onTagsChange: { _ in workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.9", fallback: "Use the shared organization tags.") },
+                    onTagsChange: { _ in workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.9") },
                     organizationTags: AnyView(SharedLibraryTagSection(store: metadata,
                         target: .init(key: node.id, title: node.title, legacy: legacy.names, legacyFailure: legacy.failure),
                         validateTarget: nodePresentation.tagValidation(node: node, model: model))))
                 .id(node.id)
             } else {
-                ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.10", fallback: "Explore Model Nodes"), systemImage: "square.stack.3d.up",
+                ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.10"), systemImage: "square.stack.3d.up",
                     description: Text(consistencyText(legacyLanguage, "copy.WorkbenchView.0", arguments: ["v0": String(describing: consistencyText(legacyLanguage, "mode." + model.creatorMode.rawValue))])))
             }
         } else if model.presentedDocument == nil {
             ContentUnavailableView {
                 Label(consistencyText(legacyLanguage, "copy.WorkbenchView.1", arguments: ["v0": String(describing: consistencyText(legacyLanguage, "mode." + model.creatorMode.rawValue))]), systemImage: model.creatorMode.symbol)
             } description: {
-                Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.11", fallback: "This project has no creations of this type yet. Switching modes does not create a document."))
+                Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.11"))
             } actions: {
                 Button(consistencyText(legacyLanguage, "newCreation." + model.creatorMode.rawValue), action: createDocument).buttonStyle(WorkbenchPrimaryButtonStyle())
             }
@@ -276,12 +276,12 @@ public struct WorkbenchView: View {
                             guard let job = model.selectedJob else { return }
                             Task { await model.copySettings(from: job.id) }
                         } label: { Image(systemName: "arrow.branch") }
-                        .disabled(model.selectedJob == nil).help(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.12", fallback: "Create from These Settings"))
-                        .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.12", fallback: "Create from These Settings")).accessibilityIdentifier("copy-settings")
+                        .disabled(model.selectedJob == nil).help(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.12"))
+                        .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.12")).accessibilityIdentifier("copy-settings")
                         .audioMeasured("copy-settings", probe: layoutProbe)
                         Button { Task { await model.exportSelected() } } label: { Image(systemName: "square.and.arrow.up") }
-                            .disabled(model.selectedAsset == nil).help(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.13", fallback: "Export Original PNG"))
-                            .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.14", fallback: "Export Work")).accessibilityIdentifier("export-artwork")
+                            .disabled(model.selectedAsset == nil).help(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.13"))
+                            .accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.14")).accessibilityIdentifier("export-artwork")
                             .audioMeasured("export-artwork", probe: layoutProbe)
                     }
                 }.padding(12)
@@ -306,7 +306,7 @@ public struct WorkbenchView: View {
             VStack(spacing: 0) {
                 if let assetID = model.activeDocument?.audioDraft?.assetID {
                     HStack {
-                        Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.15", fallback: "Create an AI Candidate from Original Audio"), systemImage: "waveform.badge.plus") {
+                        Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.15"), systemImage: "waveform.badge.plus") {
                             Task { await model.createAudioCreation(sourceAssetID: assetID) }
                         }
                         .disabled(model.isBusy)
@@ -315,19 +315,19 @@ public struct WorkbenchView: View {
                     }.padding(.horizontal, 20).padding(.top, 12)
                 }
                 if model.projectSession.hasPitchEngine || model.presentedDocument?.pitchAnalysis != nil {
-                    Picker(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.16", fallback: "Original Audio Mode"), selection: $showingPitchAnalysis) {
-                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.17", fallback: "Original Audio and Clips")).tag(false)
-                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.18", fallback: "Pitch Detection")).tag(true)
+                    Picker(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.16"), selection: $showingPitchAnalysis) {
+                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.17")).tag(false)
+                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.18")).tag(true)
                     }.pickerStyle(.segmented).padding(.horizontal, 20)
                         .accessibilityIdentifier("audio-analysis-mode")
                 }
                 if showingPitchAnalysis && (model.projectSession.hasPitchEngine || model.presentedDocument?.pitchAnalysis != nil) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(audio.document?.selectedClipID == nil ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.19", fallback: "Detection Range: Full Original Audio") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.20", fallback: "Detection Range: Current Saved Clip"))
+                        Text(audio.document?.selectedClipID == nil ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.19") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.20"))
                             .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20)
                         if model.projectSession.pitchResult == nil, model.projectSession.pitchResultAssetID != nil,
                            !model.projectSession.pitchHasSaved {
-                            Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.21", fallback: "Reject Unreadable Candidate")) { Task { await model.projectSession.decidePitchAnalysis(accept: false) } }
+                            Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.21")) { Task { await model.projectSession.decidePitchAnalysis(accept: false) } }
                                 .disabled(model.projectSession.pitchIsBusy).padding(.horizontal, 20)
                                 .accessibilityIdentifier("pitch-reject-unreadable")
                         }
@@ -361,17 +361,17 @@ public struct WorkbenchView: View {
         } else if model.isComparing {
             ArtworkComparison(model: model)
         } else if let asset = model.selectedAsset, let url = model.assetURLs[asset.id] {
-            ArtworkCanvas(url: url, label: workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.22", fallback: "Saved Work"))
+            ArtworkCanvas(url: url, label: workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.22"))
         } else if model.selectedAsset != nil {
-            ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.23", fallback: "Work Is Currently Unavailable"), systemImage: "externaldrive.badge.exclamationmark",
-                description: Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.24", fallback: "Connect the disk containing this project, then reopen the project. Your saved work will be kept.")))
+            ContentUnavailableView(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.23"), systemImage: "externaldrive.badge.exclamationmark",
+                description: Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.24")))
         } else {
             ZStack {
                 Color(nsColor: .underPageBackgroundColor)
                 ContentUnavailableView {
-                    Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.25", fallback: "Start with an Idea"), systemImage: "photo.on.rectangle.angled")
+                    Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.25"), systemImage: "photo.on.rectangle.angled")
                 } description: {
-                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.26", fallback: "Describe the image you want to create on the right.\nYour work will be saved automatically in this project."))
+                    Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.26"))
                 }
             }
         }
@@ -390,7 +390,7 @@ public struct WorkbenchView: View {
                 modelStatus: session.videoModelStatus, canGenerate: session.canGenerateVideoCreation,
                 isBusy: session.isBusy || session.isRegisteringVideoModel || model.isChangingProject,
                 progress: jobID.flatMap { session.progress[$0] },
-                status: jobID.flatMap { session.phases[$0] } ?? session.videoCreationSaveStatus,
+                status: jobID.flatMap { session.phaseCodes[$0].map { workspaceText(legacyLanguage, "phase." + $0) } ?? session.phases[$0] } ?? session.videoCreationSaveStatus,
                 previewURL: session.videoPreviewURL, previewIdentity: session.videoPreviewIdentity,
                 defaultMemoryBudgetBytes: session.defaultMemoryBudgetBytes,
                 actions: model.videoCreationActions(contextID: context, documentID: document.id))
@@ -411,7 +411,7 @@ public struct WorkbenchView: View {
                 modelStatus: session.audioModelStatus, canGenerate: session.canGenerateAudioCreation,
                 isBusy: session.isBusy || session.isRegisteringAudioModel,
                 progress: jobID.flatMap { session.progress[$0] },
-                status: jobID.flatMap { session.phases[$0] } ?? session.audioCreationSaveStatus,
+                status: jobID.flatMap { session.phaseCodes[$0].map { workspaceText(legacyLanguage, "phase." + $0) } ?? session.phases[$0] } ?? session.audioCreationSaveStatus,
                 transport: session.audioCreationTransport,
                 actions: model.audioCreationActions(contextID: context, documentID: document.id))
                 .presenting(presentation, rangeState: audioRangeState, contextID: context)
@@ -429,20 +429,20 @@ public struct WorkbenchView: View {
             let epoch = project.navigationEpoch
             VStack(spacing: 0) {
                 if project.textSourcesEnabled && presentation != .parameters {
-                    Picker(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.27", fallback: "Text Task"), selection: $model.showingTextSources) {
-                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.28", fallback: "Rewrite Selection")).tag(false)
-                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.29", fallback: "Questions About Sources")).tag(true)
+                    Picker(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.27"), selection: $model.showingTextSources) {
+                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.28")).tag(false)
+                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.29")).tag(true)
                     }.pickerStyle(.segmented).padding(8)
                 }
                 if model.showingTextSources && presentation != .parameters, let sources = project.textSources {
                     HStack {
                         Text(project.textModelStatus).font(.caption)
                         Spacer()
-                        Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.30", fallback: "Choose Text Model")) { Task { await model.chooseTextModel() } }.buttonStyle(WorkbenchGlassButtonStyle())
+                        Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.30")) { Task { await model.chooseTextModel() } }.buttonStyle(WorkbenchGlassButtonStyle())
                             .disabled(project.isBusy || project.isRegisteringTextModel)
                     }.padding(8)
                     if let pending = sources.unsavedCompletedRecord {
-                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.31", fallback: "The complete answer has not been saved. Remove sources you no longer need to free archive space, then retry saving.\n") + pending.answer)
+                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.31") + pending.answer)
                             .font(.caption).textSelection(.enabled).lineLimit(6).padding(8)
                     }
                     TextSourcesView(notebook: sources.notebook, partialAnswer: sources.partialAnswer,
@@ -466,8 +466,8 @@ public struct WorkbenchView: View {
                 if !model.showingTextSources && project.isTextWorking && !text.editor.isRunning {
                     HStack {
                         ProgressView().controlSize(.small)
-                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.32", fallback: "Verifying local text model…"))
-                        Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.33", fallback: "Cancel")) { Task { await project.cancelTextRewrite() } }
+                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.32"))
+                        Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.33")) { Task { await project.cancelTextRewrite() } }
                     }.padding(8)
                 }
                 TextWorkbenchView(session: text.editor, selection: text.selection,
@@ -593,9 +593,9 @@ private struct AudioCaptureEntry: View {
     @ViewBuilder private var entries: some View {
         let contextID = audio.contextID
         let renderDocumentID = model.activeDocumentID
-        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.34", fallback: "Original Audio")).font(.caption.weight(.semibold))
+        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.34")).font(.caption.weight(.semibold))
         Button(action: model.audioImportAction(contextID: contextID, documentID: renderDocumentID)) {
-            Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.35", fallback: "Import Original Audio…"), systemImage: "waveform.badge.plus")
+            Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.35"), systemImage: "waveform.badge.plus")
                 .frame(maxWidth: .infinity, alignment: .leading).padding(8)
         }
         .disabled(model.isChangingProject || audio.isBusy)
@@ -604,7 +604,7 @@ private struct AudioCaptureEntry: View {
             Button {
                 Task { await model.finishAudioRecording() }
             } label: {
-                Label(audio.transport.state == .recording ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.36", fallback: "Finish Recording") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.37", fallback: "Cancel Waiting"),
+                Label(audio.transport.state == .recording ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.36") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.37"),
                       systemImage: "stop.fill")
                     .frame(maxWidth: .infinity, alignment: .leading).padding(8)
             }
@@ -613,22 +613,22 @@ private struct AudioCaptureEntry: View {
             Button {
                 Task { await model.startAudioRecording() }
             } label: {
-                Label(model.audioRecordingEnabled ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.38", fallback: "Start Recording") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.39", fallback: "Recording Is Not Enabled"),
+                Label(model.audioRecordingEnabled ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.38") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.39"),
                       systemImage: model.audioRecordingEnabled ? "mic.fill" : "mic.slash")
                     .frame(maxWidth: .infinity, alignment: .leading).padding(8)
             }
             .disabled(!model.audioRecordingEnabled)
             .accessibilityIdentifier("sidebar-audio-record-start")
             Text(model.audioRecordingEnabled
-                 ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.40", fallback: "Starting a recording requests microphone access. The recording is saved in the local project when finished.")
-                 : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.41", fallback: "Microphone recording is not enabled. No system permission will be requested."))
+                 ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.40")
+                 : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.41"))
                 .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8)
         }
         ForEach(audio.pendingCaptures) { capture in
             VStack(alignment: .leading, spacing: 4) {
                 Text(consistencyText(legacyLanguage, "copy.WorkbenchView.2", arguments: ["v0": String(describing: capture.name)])).font(.caption).lineLimit(1)
                 HStack {
-                    Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.42", fallback: "Retry")) {
+                    Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.42")) {
                         Task {
                             await model.retryPendingAudioCapture(
                                 id: capture.id, contextID: contextID,
@@ -636,7 +636,7 @@ private struct AudioCaptureEntry: View {
                             )
                         }
                     }
-                    Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.43", fallback: "Keep")) {
+                    Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.43")) {
                         model.keepPendingAudioCaptureForRecovery(
                             id: capture.id, contextID: contextID,
                             renderDocumentID: renderDocumentID
@@ -658,7 +658,7 @@ private struct ImageCandidateTray: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.44", fallback: "Candidates for This Creation")).font(.caption.weight(.semibold))
+                Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.44")).font(.caption.weight(.semibold))
                 Spacer()
                 Button(consistencyText(legacyLanguage, "copy.WorkbenchView.3", arguments: ["v0": String(describing: model.comparisonSelection.count)])) { model.beginComparison() }
                     .disabled(model.comparisonSelection.count != 2)
@@ -680,9 +680,9 @@ private struct ImageCandidateTray: View {
                         Text(asset.name).font(.callout.weight(model.selectedAssetID == asset.id ? .semibold : .regular))
                             .lineLimit(2)
                         HStack(spacing: 4) {
-                            if asset.isFavorite { Image(systemName: "star.fill").accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.45", fallback: "Favorite")) }
+                            if asset.isFavorite { Image(systemName: "star.fill").accessibilityLabel(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.45")) }
                             if model.documents.contains(where: { $0.adoptedAssetID == asset.id }) {
-                                Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.46", fallback: "In Use"), systemImage: "checkmark.seal.fill")
+                                Label(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.46"), systemImage: "checkmark.seal.fill")
                             }
                         }.font(.caption).foregroundStyle(.secondary)
                     }
@@ -699,9 +699,9 @@ private struct ImageCandidateTray: View {
                 Image(systemName: model.comparisonSelection.contains(asset.id) ? "checkmark.circle.fill" : "circle")
             }
             .disabled(!model.comparisonSelection.contains(asset.id) && model.comparisonSelection.count == 2)
-            .help(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.47", fallback: "Select Two Images to Compare"))
+            .help(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.47"))
             .accessibilityLabel(consistencyText(legacyLanguage, "copy.WorkbenchView.4", arguments: ["v0": String(describing: asset.name)]))
-            .accessibilityValue(model.comparisonSelection.contains(asset.id) ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.48", fallback: "Selected") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.49", fallback: "Not Selected"))
+            .accessibilityValue(model.comparisonSelection.contains(asset.id) ? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.48") : workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.49"))
             .accessibilityIdentifier("compare-select-\(asset.id.uuidString)")
         }
         .padding(8)
@@ -742,18 +742,18 @@ private struct DocumentNameEditor: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(context.title)
                 .accessibilityIdentifier("document-name-title")
-            TextField(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.52", fallback: "Creation Name"), text: $name)
+            TextField(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.52"), text: $name)
                 .textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .accessibilityIdentifier("document-name")
             if let saveError { Text(saveError).font(.caption).foregroundStyle(.red) }
             if model.editorCloseAttempted {
-                Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.53", fallback: "Save or cancel your edits before closing the project or quitting D."))
+                Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.53"))
                     .font(.caption).accessibilityIdentifier("pending-editor-close")
             }
             HStack {
                 Spacer()
-                Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.33", fallback: "Cancel"), role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.54", fallback: "Save")) {
+                Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.33"), role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.54")) {
                     let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
                     let previousCount = model.documents.count
                     saving = true
@@ -766,7 +766,7 @@ private struct DocumentNameEditor: View {
                         } ?? (model.documents.count > previousCount && model.activeDocument?.name == value)
                         if saved { dismiss() }
                         else {
-                            saveError = model.errorMessage ?? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.55", fallback: "Could not save. Your entered name has been kept.")
+                            saveError = model.errorMessage ?? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.55")
                             model.clearError()
                         }
                     }

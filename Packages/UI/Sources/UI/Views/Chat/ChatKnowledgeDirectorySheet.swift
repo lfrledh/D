@@ -5,6 +5,7 @@ import SwiftUI
 struct ChatKnowledgeDirectorySheet: View {
     @Environment(\.dLanguageStore) private var language
     let inventory: ChatKnowledgeDirectoryInventory
+    @Environment(\.dLanguageStore) private var copyLanguage
     let wording: (String, String) -> String
     let importEntries: ([ChatKnowledgeDirectoryInventory.Entry]) async throws -> Void
     let close: () -> Void
@@ -13,8 +14,8 @@ struct ChatKnowledgeDirectorySheet: View {
     @State private var issue: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(wording("Choose documents to copy", "选择要复制的资料")).font(.headline)
-            Text(wording("Only selected direct files are imported. Folders, links and unsupported files are excluded; nothing is read recursively.", "只导入勾选的直属文件，不递归读取。子目录、链接和未支持格式不会导入。"))
+            Text(workflowText(copyLanguage, "chat.knowledgeDirectorySheet.chooseDocumentsToCopy")).font(.headline)
+            Text(workflowText(copyLanguage, "chat.knowledgeDirectorySheet.onlySelectedDirectFilesAreImportedFoldersLinksAndUnsupported"))
                 .font(.caption).foregroundStyle(.secondary)
             ScrollView {
                 ForEach(inventory.entries) { entry in
@@ -26,10 +27,10 @@ struct ChatKnowledgeDirectorySheet: View {
             }
             if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
-                Button(wording("Close", "关闭"), action: close).disabled(importing).keyboardShortcut(.cancelAction)
+                Button(workflowText(copyLanguage, "workflow.action.close"), action: close).disabled(importing).keyboardShortcut(.cancelAction)
                 Spacer()
                 if importing { ProgressView().controlSize(.small) }
-                Button(wording("Import selected copies", "导入选定副本")) {
+                Button(workflowText(copyLanguage, "chat.knowledgeDirectorySheet.importSelectedCopies")) {
                     importing = true; issue = nil
                     let entries = inventory.entries.filter { selected.contains($0.url) }
                     Task { @MainActor in

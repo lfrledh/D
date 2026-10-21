@@ -867,20 +867,20 @@ struct WorkflowLifecycleTests {
         }
         #expect(await release.entered)
         #expect(c.isRunning)
-        #expect(!c.progressMessage.contains("已停止并释放"))
+        #expect(c.progressPresentation?.code != "cancelled")
         await release.open(); await cancellation.value; await work.value
         #expect(!c.isRunning)
         if failHistory {
             #expect(c.hasPendingSaves)
             #expect(c.runs.last?.status == .saving)
             #expect(c.errorMessage?.contains("cancel history unavailable") == true)
-            #expect(!c.progressMessage.contains("已停止并释放"))
+            #expect(c.progressPresentation?.code != "cancelled")
             c.beforeHistorySave = {}
             await c.save()
         } else {
             #expect(c.runs.last?.status == .cancelled)
             #expect(c.errorMessage == nil)
-            #expect(c.progressMessage == "已取消，计算已停止并释放资源。")
+            #expect(c.progressPresentation?.code == "cancelled" && c.progressMessage.isEmpty)
             #expect(c.runs.last?.steps.last?.error == nil)
             let runID = try #require(c.runs.last?.id)
             pausePreparation = true
@@ -894,7 +894,7 @@ struct WorkflowLifecycleTests {
             await prepare.open(); await resuming.value
             #expect(c.runs.last?.status == .cancelled)
             #expect(c.errorMessage == nil)
-            #expect(c.progressMessage == "已取消，计算已停止并释放资源。")
+            #expect(c.progressPresentation?.code == "cancelled" && c.progressMessage.isEmpty)
             #expect(await engine.requests.count == 1)
             pausePreparation = false
             await c.resume(runID: runID)

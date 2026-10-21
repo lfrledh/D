@@ -70,7 +70,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         guard let id = activeRunID, runs.first(where: { $0.id == id })?.graph.id == selectedGraphID else { return "" }
         return streamingText
     }
-    public private(set) var progressMessage = "选择一个可编辑样例，或添加节点开始。"
+    public private(set) var progressMessage = "" { didSet { progressPresentation = nil } }
+    public private(set) var progressPresentation: WorkflowProgressMessage? = .init("start")
+    func setProgress(_ message: WorkflowProgressMessage) { progressMessage = ""; progressPresentation = message }
     public var textModelDescription = "尚未选择文字模型"
     public var imageModelDescription = "尚未选择图像模型"
     public var modelChoices: [WorkflowModelChoice] = []
@@ -110,6 +112,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public init(services: WorkflowServices, registry: WorkflowRegistry = .standard) {
         self.services = services; self.registry = registry
         services.progress = { [weak self] in self?.progressMessage = $0 }
+        services.progressEvent = { [weak self] in self?.setProgress($0) }
         services.languagePreviewChanged = { [weak self] stepID, text in
             guard let self, self.isRunning, self.activeRunID != nil, !self.closed, !self.closing else { return }
             self.streamingStepID = text.isEmpty ? nil : stepID
@@ -317,7 +320,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             if forksOriginal {
                 selectedGraphID = replacement.id; bodyPath = path
                 selectedNodeIDs = selection.intersection(Set(value.nodes.map(\.id)))
-                progressMessage = "正在编辑副本；运行中的原流程和已提交请求保持不变。"
+                setProgress(.init("editingCopy"))
             }
             errorMessage = nil
             return true
@@ -409,7 +412,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         next[index] = try WorkflowGraphEditing.replacingBody(in: root, path: path, with: result.graph)
         try await commitToolPublication(graphs: next, tools: tools + [result.tool])
         if selectedGraphID == root.id, bodyPath == path { selectedNodeID = result.invocationID; selectedNodeIDs = [] }
-        errorMessage = nil; progressMessage = "自定义节点和公开接口已保存。"
+        errorMessage = nil; setProgress(.init("toolSaved"))
         await onChange()
     }
 
@@ -446,7 +449,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         }
         _ = try WorkflowPlanCompiler(registry: registry).compile(body, tools: tools + [tool])
         try await commitToolPublication(graphs: graphs, tools: tools + [tool])
-        errorMessage = nil; progressMessage = "自定义节点版本已保存；旧实例保持原版本。"; await onChange()
+        errorMessage = nil; setProgress(.init("toolVersionSaved")); await onChange()
     }
 
     public func addTool(_ tool: WorkflowToolDefinition, x: Double = 160, y: Double = 160) {
@@ -482,7 +485,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             guard !title.isEmpty, title.utf8.count <= 256, !tools.contains(where: { $0.name == title }), graph.interface?.outputs.isEmpty == false else { throw WorkflowIssue("请填写唯一名称，并在公开接口中指定输出。") }
             let tool = WorkflowToolDefinition(name: title, graph: graph)
             _ = try WorkflowPlanCompiler(registry: registry).compile(graph, tools: tools + [tool])
-            undoStack.append(editSnapshot); redoStack = []; tools.append(tool); progressMessage = "工具已加入项目工具箱；保存项目后可重开。"
+            undoStack.append(editSnapshot); redoStack = []; tools.append(tool); setProgress(.init("toolAdded"))
         } catch { errorMessage = error.localizedDescription }
     }
     public func addBlankGraph(name: String = "新流程") {
@@ -970,7 +973,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         catch { persistenceFailed = true; isSaving = false; throw error }
     }
     public func save() async {
-        do { try await persist(); progressMessage = "流程、人工决定与运行历史已保存。"; await onChange() }
+        do { try await persist(); setProgress(.init("workflowSaved")); await onChange() }
         catch { errorMessage = error.localizedDescription }
     }
     public func saveExplicitEdits() async throws { try await persist(); await onChange() }
@@ -1467,7 +1470,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         do {
             let result = try await executor.execute(checkpoint)
             capture(result, runIndex: ri)
-            progressMessage = result.state == .waiting ? "等待明确决定，后续尚未执行。" : result.state == .paused ? "已在安全边界暂停，资源已释放。" : "此次运行已保存。"
+            setProgress(.init(result.state == .waiting ? "waitingDecision" : result.state == .paused ? "paused" : "runSaved"))
         } catch {
             if let latest = executor.checkpoint { capture(latest, runIndex: ri) }
             throw error
@@ -1488,7 +1491,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public func pause() {
         batchPauseRequested = true
         if activeBatchID == nil { activeExecutor?.requestPause() }
-        progressMessage = activeBatchID == nil ? "等待当前步骤结束并释放资源后暂停。" : "本次尝试到关卡并保存后暂停；其余已授权次数保留。"
+        setProgress(.init(activeBatchID == nil ? "pausePending" : "batchPausePending"))
     }
 
     /// A cancellation is terminal only after the operation drained and its model leases were released.
@@ -1507,14 +1510,14 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
                 : "失败记录已保存；流程仍失败。需要重新计算时，请明确重试计算。"
         } else if let failure, !(failure is CancellationError) {
             errorMessage = failure.localizedDescription
-            progressMessage = "运行未完成，请查看错误；已完成的产物仍保留。"
+            setProgress(.init("failed"))
         }
         if hasPendingSaves, failedRun == nil {
-            progressMessage = "运行已停止，但保存尚未完成；请恢复保存。"
+            setProgress(.init("savePending"))
             if errorMessage == nil { errorMessage = "运行记录或结果尚未保存，请恢复保存。" }
         } else if failedRun == nil && (failure is CancellationError || (failure == nil && runs.first(where: { $0.id == activeRunID })?.status == .cancelled)) {
             errorMessage = nil
-            progressMessage = "已取消，计算已停止并释放资源。"
+            setProgress(.init("cancelled"))
         }
         await onChange()
     }
@@ -1526,7 +1529,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             else if activeBatchID == nil { return }
         }
         cancelled = true
-        progressMessage = "正在取消，等待计算停止并释放资源。"
+        setProgress(.init("cancelling"))
         activeExecutor?.requestStop()
         await services.cancel()
     }
@@ -1568,7 +1571,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             })
             do { let settled = try await executor.settleWaiting(cp, stepID: stepID); capture(settled, runIndex: ri) }
             catch { if let latest = executor.checkpoint { capture(latest, runIndex: ri) }; throw error }
-            progressMessage = reject ? "已拒绝；未执行下游。" : "结果已保存；继续原运行才执行下游。"
+            setProgress(.init(reject ? "rejected" : "resultSaved"))
         } catch { errorMessage = error.localizedDescription }
     }
     public func callRecords(runID: UUID) -> [WorkflowPlanCallRecord] {
@@ -1641,7 +1644,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
                 runs[ri].status = accept ? .waiting : .rejected
                 try await persist()
             }
-            progressMessage = accept ? "决定已保存。明确点击继续运行才会执行下游。" : "已拒绝；没有发布空输出。"
+            setProgress(.init(accept ? "decisionSaved" : "rejectedEmpty"))
             await onChange()
         } catch { errorMessage = error.localizedDescription }
     }
@@ -1707,7 +1710,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             runs.append(retry); activeRunID = retry.id
             try await persist()
             try await executePlan(runID: retry.id, force: old.node.id)
-            progressMessage = "失败项已重试；成功项保留。重新运行选择节点以查看新集合。"
+            setProgress(.init("candidatesRetried"))
         } catch { failure = error }
         await finishExecution(failure)
     }

@@ -37,7 +37,7 @@ struct DApp: App {
             Group {
                 if deploymentProbeEnabled {
                     #if DEBUG
-                    AudioDeploymentCheck(expectedExecutable: ProcessInfo.processInfo.environment["D_AUDIO_PROBE_PYTHON"]!,
+                    AudioDeploymentCheck(language: bootstrap.languageStore, expectedExecutable: ProcessInfo.processInfo.environment["D_AUDIO_PROBE_PYTHON"]!,
                         expectedDigest: ProcessInfo.processInfo.environment["D_AUDIO_PROBE_SHA256"]!)
                     #endif
                 } else if let model = bootstrap.model, let library = bootstrap.libraryModel,
@@ -55,13 +55,13 @@ struct DApp: App {
                             prepareQuickForTermination: bootstrap.prepareQuickForTermination, cancelTermination: bootstrap.cancelTermination))
                 } else if let error = bootstrap.startupError {
                     VStack(spacing: 18) {
-                        Label("无法准备工作台", systemImage: "externaldrive.badge.exclamationmark")
+                        Label(bootstrap.languageStore.text("workbench.startup.failed", fallback: "—"), systemImage: "externaldrive.badge.exclamationmark")
                             .font(.title2)
                         Text(error).textSelection(.enabled).multilineTextAlignment(.center)
-                        Button("重试") { Task { await bootstrap.start() } }.buttonStyle(.glassProminent)
+                        Button(bootstrap.languageStore.text("workbench.startup.retry", fallback: "—")) { Task { await bootstrap.start() } }.buttonStyle(.glassProminent)
                     }.padding(40).frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    ProgressView("正在准备工作台…")
+                    ProgressView(bootstrap.languageStore.text("workbench.startup.preparing", fallback: "—"))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }

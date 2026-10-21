@@ -147,12 +147,12 @@ public struct AudioCreationView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(workflowText(language, "consistency.audio.copy0", fallback: "Audio Creation")).font(.title2.weight(.semibold))
-            Text(workflowText(language, "consistency.audio.copy1", fallback: "Generate candidates from a prompt or reference audio. Adopt, reject and save each result explicitly."))
+            Text(workflowText(language, "consistency.audio.copy0")).font(.title2.weight(.semibold))
+            Text(workflowText(language, "consistency.audio.copy1"))
                 .font(.caption).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 6) {
                 Text(modelStatus).font(.caption).foregroundStyle(.secondary)
-                Button(workflowText(language, "consistency.audio.copy2", fallback: "Choose Model…"), action: actions.chooseModel).disabled(isBusy)
+                Button(workflowText(language, "consistency.audio.copy2"), action: actions.chooseModel).disabled(isBusy)
                     .accessibilityIdentifier("audio-create-choose-model")
             }
         }
@@ -162,7 +162,7 @@ public struct AudioCreationView: View {
         VStack(alignment: .leading, spacing: 12) {
             capabilitySummaryContent
             profilePicker
-            TextField(draft.profile == .conditionedMusic ? workflowText(language, "consistency.audio.copy3", fallback: "Describe the instrumental style") : workflowText(language, "consistency.audio.copy4", fallback: "Describe the sound"), text: $draft.prompt, axis: .vertical)
+            TextField(draft.profile == .conditionedMusic ? workflowText(language, "consistency.audio.copy3") : workflowText(language, "consistency.audio.copy4"), text: $draft.prompt, axis: .vertical)
                 .lineLimit(3...6).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .disabled(isBusy).accessibilityIdentifier("audio-create-prompt")
             if draft.profile == .conditionedMusic {
@@ -179,19 +179,19 @@ public struct AudioCreationView: View {
     @ViewBuilder private var capabilitySummaryContent: some View {
         if let capability = executionCapability {
             VStack(alignment: .leading, spacing: 4) {
-                Text(workflowText(language, "consistency.audio.copy5", fallback: "Current Generation Capabilities")).font(.subheadline.weight(.semibold))
+                Text(workflowText(language, "consistency.audio.copy5")).font(.subheadline.weight(.semibold))
                 Text(Self.capabilitySummaryText(capability, language: language))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if capability.noteControlFidelity == .approximate {
-                    Text(workflowText(language, "consistency.audio.copy6", fallback: "Note conditioning provides approximate control. Style and accompaniment may vary; exact chords and fixed audio are not guaranteed."))
+                    Text(workflowText(language, "consistency.audio.copy6"))
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .accessibilityIdentifier("audio-capability-summary")
         } else {
-            Text(workflowText(language, "consistency.audio.copy7", fallback: "No generation capabilities have been declared for this environment."))
+            Text(workflowText(language, "consistency.audio.copy7"))
                 .font(.caption).foregroundStyle(.secondary)
                 .accessibilityIdentifier("audio-capability-summary")
         }
@@ -216,20 +216,20 @@ public struct AudioCreationView: View {
 
     private var profilePicker: some View {
         VStack(alignment: .leading, spacing: 5) {
-            WorkbenchPicker(workflowText(language, "consistency.audio.copy8", fallback: "Creation Type"), selection: profileBinding) {
-                WorkbenchChoice(workflowText(language, "consistency.audio.copy9", fallback: "Sound Generation and Editing (Stable Audio)"), value:AudioCreationProfile.stableAudio)
-                WorkbenchChoice(workflowText(language, "consistency.audio.copy10", fallback: "Melody-Conditioned Instrumental Music (MRT2)"), value:AudioCreationProfile.conditionedMusic)
+            WorkbenchPicker(workflowText(language, "consistency.audio.copy8"), selection: profileBinding) {
+                WorkbenchChoice(workflowText(language, "consistency.audio.copy9"), value:AudioCreationProfile.stableAudio)
+                WorkbenchChoice(workflowText(language, "consistency.audio.copy10"), value:AudioCreationProfile.conditionedMusic)
                     .disabled(source != nil || !musicSupported)
             }
             .pickerStyle(.menu)
             .disabled(isBusy || (source != nil && draft.profile != .conditionedMusic))
             .accessibilityIdentifier("audio-create-profile")
             if source != nil && draft.profile == .stableAudio {
-                Text(workflowText(language, "consistency.audio.copy11", fallback: "A creation with source audio cannot be converted to melody-conditioned music. Start a new creation without source audio."))
+                Text(workflowText(language, "consistency.audio.copy11"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             if draft.profile == .conditionedMusic && !musicSupported {
-                Text(workflowText(language, "consistency.audio.copy12", fallback: "Melody-conditioned music is unavailable. Existing conditions can be viewed, saved or exported, but new generation is unavailable."))
+                Text(workflowText(language, "consistency.audio.copy12"))
                     .font(.caption).foregroundStyle(.orange)
                     .accessibilityIdentifier("audio-create-music-unavailable")
             }
@@ -253,10 +253,10 @@ public struct AudioCreationView: View {
 
     private var stableAudioControls: some View {
         Group {
-            WorkbenchPicker(workflowText(language, "consistency.audio.copy13", fallback: "Operation"), selection: $draft.operation) {
-                WorkbenchChoice(workflowText(language, "consistency.audio.copy14", fallback: "Generate New Audio"), value:AudioOperation.generate)
-                WorkbenchChoice(workflowText(language, "consistency.audio.copy16", fallback: "Reference Variation"), value:AudioOperation.variation).disabled(source == nil)
-                WorkbenchChoice(workflowText(language, "consistency.audio.copy17", fallback: "Inpaint Region"), value:AudioOperation.inpaint).disabled(source == nil)
+            WorkbenchPicker(workflowText(language, "consistency.audio.copy13"), selection: $draft.operation) {
+                WorkbenchChoice(workflowText(language, "consistency.audio.copy14"), value:AudioOperation.generate)
+                WorkbenchChoice(workflowText(language, "consistency.audio.copy16"), value:AudioOperation.variation).disabled(source == nil)
+                WorkbenchChoice(workflowText(language, "consistency.audio.copy17"), value:AudioOperation.inpaint).disabled(source == nil)
             }
             .pickerStyle(.menu).disabled(isBusy)
             .accessibilityIdentifier("audio-create-operation")
@@ -267,10 +267,10 @@ public struct AudioCreationView: View {
 
     private var musicControls: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(workflowText(language, "consistency.audio.copy19", fallback: "Melody control is approximate. Each generation produces a new complete clip as a 48 kHz mix, not separate stems. Timing is aligned to 0.04-second intervals."))
+            Text(workflowText(language, "consistency.audio.copy19"))
                 .font(.caption).foregroundStyle(.secondary)
                 .accessibilityIdentifier("audio-create-music-guidance")
-            parameterRow(workflowText(language, "consistency.audio.copy20", fallback: "Duration (seconds)"), text: $draft.durationText, id: "duration", disabled: isBusy)
+            parameterRow(workflowText(language, "consistency.audio.copy20"), text: $draft.durationText, id: "duration", disabled: isBusy)
             parameterRow("Seed", text: $draft.seedText, id: "seed", disabled: isBusy)
             MusicConditionEditor(draft: musicBinding, isBusy: isBusy,
                                  importCondition: actions.importCondition,
@@ -285,18 +285,18 @@ public struct AudioCreationView: View {
     private var parameterFields: some View {
         Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
             if !sourceOperation {
-                parameterRow(workflowText(language, "consistency.audio.copy20", fallback: "Duration (seconds)"), text: $draft.durationText, id: "duration", disabled: isBusy)
+                parameterRow(workflowText(language, "consistency.audio.copy20"), text: $draft.durationText, id: "duration", disabled: isBusy)
             }
             parameterRow("Seed", text: $draft.seedText, id: "seed", disabled: isBusy)
-            parameterRow(workflowText(language, "consistency.audio.copy21", fallback: "Steps"), text: $draft.stepsText, id: "steps", disabled: isBusy)
+            parameterRow(workflowText(language, "consistency.audio.copy21"), text: $draft.stepsText, id: "steps", disabled: isBusy)
             parameterRow("Guidance", text: $draft.guidanceText, id: "guidance", disabled: isBusy)
             if draft.operation == .generate {
-                GridRow { Text(workflowText(language, "consistency.audio.copy22", fallback: "Strength")); Text(workflowText(language, "consistency.audio.copy23", fallback: "1 (fixed for new generation)")) }
+                GridRow { Text(workflowText(language, "consistency.audio.copy22")); Text(workflowText(language, "consistency.audio.copy23")) }
             } else {
-                parameterRow(workflowText(language, "consistency.audio.copy22", fallback: "Strength"), text: $draft.strengthText, id: "strength", disabled: isBusy)
+                parameterRow(workflowText(language, "consistency.audio.copy22"), text: $draft.strengthText, id: "strength", disabled: isBusy)
             }
             if sourceOperation, let sourceDuration {
-                GridRow { Text(workflowText(language, "consistency.audio.copy24", fallback: "Source Duration")); Text(sourceDuration).monospacedDigit() }
+                GridRow { Text(workflowText(language, "consistency.audio.copy24")); Text(sourceDuration).monospacedDigit() }
             }
         }
     }
@@ -311,13 +311,13 @@ public struct AudioCreationView: View {
 
     private var rangeEditor: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(workflowText(language, "consistency.audio.copy25", fallback: "Inpaint Region (seconds; start inclusive, end exclusive)")).font(.headline)
+            Text(workflowText(language, "consistency.audio.copy25")).font(.headline)
             VStack(alignment: .leading, spacing: 8) {
-                TextField(workflowText(language, "consistency.audio.copy26", fallback: "Start"), text: Binding(get: { rangeState.startText }, set: { rangeState.startText = $0 })).textFieldStyle(WorkbenchGlassTextFieldStyle()).disabled(isBusy)
+                TextField(workflowText(language, "consistency.audio.copy26"), text: Binding(get: { rangeState.startText }, set: { rangeState.startText = $0 })).textFieldStyle(WorkbenchGlassTextFieldStyle()).disabled(isBusy)
                     .accessibilityIdentifier("audio-create-range-start")
-                TextField(workflowText(language, "consistency.audio.copy27", fallback: "End"), text: Binding(get: { rangeState.endText }, set: { rangeState.endText = $0 })).textFieldStyle(WorkbenchGlassTextFieldStyle()).disabled(isBusy)
+                TextField(workflowText(language, "consistency.audio.copy27"), text: Binding(get: { rangeState.endText }, set: { rangeState.endText = $0 })).textFieldStyle(WorkbenchGlassTextFieldStyle()).disabled(isBusy)
                     .accessibilityIdentifier("audio-create-range-end")
-                Button(workflowText(language, "consistency.audio.copy28", fallback: "Apply Region"), action: applyRange)
+                Button(workflowText(language, "consistency.audio.copy28"), action: applyRange)
                     .disabled(isBusy).accessibilityIdentifier("audio-create-range-apply")
             }
             Text(rangeInputMessage ?? rangeMessage).font(.caption)
@@ -328,10 +328,10 @@ public struct AudioCreationView: View {
     private var actionRow: some View {
         HStack {
             if isBusy {
-                Button(workflowText(language, "consistency.audio.copy29", fallback: "Cancel"), role: .destructive, action: actions.cancel)
+                Button(workflowText(language, "consistency.audio.copy29"), role: .destructive, action: actions.cancel)
                     .accessibilityIdentifier("audio-create-cancel")
             } else {
-                Button(workflowText(language, "consistency.audio.copy15", fallback: "Generate")) {
+                Button(workflowText(language, "consistency.audio.copy15")) {
                     guard canSubmit else { return }
                     _ = AudioCreationButtonHandler.submit(draft, source: source,
                                                           hostAllowsGeneration: canGenerate,
@@ -342,7 +342,7 @@ public struct AudioCreationView: View {
                     .disabled(!canSubmit)
                     .accessibilityIdentifier("audio-create-generate")
             }
-            Button(workflowText(language, "consistency.audio.copy30", fallback: "Save"), action: actions.save).disabled(isBusy)
+            Button(workflowText(language, "consistency.audio.copy30"), action: actions.save).disabled(isBusy)
                 .accessibilityIdentifier("audio-create-save")
         }
     }
@@ -351,9 +351,9 @@ public struct AudioCreationView: View {
         VStack(alignment: .leading, spacing: 12) {
             sourceInfo
             Divider()
-            Text(workflowText(language, "consistency.audio.copy31", fallback: "Candidates")).font(.headline)
+            Text(workflowText(language, "consistency.audio.copy31")).font(.headline)
             if candidates.isEmpty {
-                Text(workflowText(language, "consistency.audio.copy32", fallback: "No candidates yet. Enter a prompt to create one."))
+                Text(workflowText(language, "consistency.audio.copy32"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             ForEach(candidates) { asset in candidateRow(asset) }
@@ -365,24 +365,24 @@ public struct AudioCreationView: View {
     @ViewBuilder private var sourceInfo: some View {
         if let source {
             Text(consistencyText(language, "audio.reference", arguments: ["name": source.name])).lineLimit(nil)
-            Text(sourceDuration ?? workflowText(language, "consistency.audio.copy33", fallback: "Source duration unknown")).font(.caption).foregroundStyle(.secondary)
+            Text(sourceDuration ?? workflowText(language, "consistency.audio.copy33")).font(.caption).foregroundStyle(.secondary)
             if !AudioCreationButtonHandler.sourceIsEditable(source) {
-                Text(workflowText(language, "consistency.audio.copy34", fallback: "This source is not a 44.1 kHz stereo WAV supported for editing by this model. You can still keep, play and export it."))
+                Text(workflowText(language, "consistency.audio.copy34"))
                     .font(.caption).foregroundStyle(.orange)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 86), spacing: 8)], alignment: .leading, spacing: 8) {
-                Button(workflowText(language, "consistency.audio.copy35", fallback: "Play")) { _ = AudioCreationButtonHandler.play(source.id, isBusy: isBusy, actions: actions) }.disabled(isBusy)
+                Button(workflowText(language, "consistency.audio.copy35")) { _ = AudioCreationButtonHandler.play(source.id, isBusy: isBusy, actions: actions) }.disabled(isBusy)
                     .accessibilityIdentifier("audio-create-source-play")
-                Button(workflowText(language, "consistency.audio.copy36", fallback: "Stop"), action: actions.stop)
+                Button(workflowText(language, "consistency.audio.copy36"), action: actions.stop)
                     .accessibilityIdentifier("audio-create-stop")
-                Button(workflowText(language, "consistency.audio.copy37", fallback: "Export")) { _ = AudioCreationButtonHandler.export(source.id, isBusy: isBusy, actions: actions) }.disabled(isBusy)
+                Button(workflowText(language, "consistency.audio.copy37")) { _ = AudioCreationButtonHandler.export(source.id, isBusy: isBusy, actions: actions) }.disabled(isBusy)
                     .accessibilityIdentifier("audio-create-source-export")
-                Button(workflowText(language, "consistency.audio.copy38", fallback: "Use Original Audio")) {
+                Button(workflowText(language, "consistency.audio.copy38")) {
                     _ = AudioCreationButtonHandler.adopt(nil, isRejected: false, isBusy: isBusy, actions: actions)
                 }.disabled(isBusy).accessibilityIdentifier("audio-create-adopt-original")
             }
         } else {
-            Text(workflowText(language, "consistency.audio.copy39", fallback: "No reference audio. You can generate directly from a prompt. Reference variation and region inpainting require source audio."))
+            Text(workflowText(language, "consistency.audio.copy39"))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -399,36 +399,36 @@ public struct AudioCreationView: View {
                 }.disabled(isBusy)
                     .accessibilityIdentifier("audio-create-select-\(asset.id.uuidString)")
                 HStack {
-                    if selectedAssetID == asset.id { Text(workflowText(language, "consistency.audio.copy40", fallback: "Selected")).font(.caption) }
-                    if adoptedAssetID == asset.id { Text(workflowText(language, "consistency.audio.copy41", fallback: "Adopted")).font(.caption) }
-                    if rejected { Text(workflowText(language, "consistency.audio.copy42", fallback: "Rejected")).font(.caption).foregroundStyle(.secondary) }
+                    if selectedAssetID == asset.id { Text(workflowText(language, "consistency.audio.copy40")).font(.caption) }
+                    if adoptedAssetID == asset.id { Text(workflowText(language, "consistency.audio.copy41")).font(.caption) }
+                    if rejected { Text(workflowText(language, "consistency.audio.copy42")).font(.caption).foregroundStyle(.secondary) }
                 }
             }
-            Text(assetDuration(asset) ?? workflowText(language, "consistency.audio.copy43", fallback: "Duration unknown")).font(.caption).foregroundStyle(.secondary)
+            Text(assetDuration(asset) ?? workflowText(language, "consistency.audio.copy43")).font(.caption).foregroundStyle(.secondary)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 86), spacing: 8)], alignment: .leading, spacing: 8) {
-                Button(workflowText(language, "consistency.audio.copy35", fallback: "Play")) { _ = AudioCreationButtonHandler.play(asset.id, isBusy: isBusy, actions: actions) }.disabled(isBusy)
+                Button(workflowText(language, "consistency.audio.copy35")) { _ = AudioCreationButtonHandler.play(asset.id, isBusy: isBusy, actions: actions) }.disabled(isBusy)
                     .accessibilityIdentifier("audio-create-play-\(asset.id.uuidString)")
                     .audioMeasured("audio-create-play-\(asset.id.uuidString)", probe: layoutProbe)
-                Button(workflowText(language, "consistency.audio.copy44", fallback: "Adopt")) {
+                Button(workflowText(language, "consistency.audio.copy44")) {
                     _ = AudioCreationButtonHandler.adopt(asset.id, isRejected: rejected, isBusy: isBusy, actions: actions)
                 }.disabled(isBusy || rejected)
                     .accessibilityIdentifier("audio-create-adopt-\(asset.id.uuidString)")
                     .audioMeasured("audio-create-adopt-\(asset.id.uuidString)", probe: layoutProbe)
-                Button(rejected ? workflowText(language, "consistency.audio.copy45", fallback: "Restore") : workflowText(language, "consistency.audio.copy46", fallback: "Reject")) {
+                Button(rejected ? workflowText(language, "consistency.audio.copy45") : workflowText(language, "consistency.audio.copy46")) {
                     _ = AudioCreationButtonHandler.setRejected(asset.id, currentlyRejected: rejected, isBusy: isBusy, actions: actions)
                 }.disabled(isBusy)
                     .accessibilityIdentifier("audio-create-reject-\(asset.id.uuidString)")
                     .audioMeasured("audio-create-reject-\(asset.id.uuidString)", probe: layoutProbe)
-                Button(workflowText(language, "consistency.audio.copy37", fallback: "Export")) { _ = AudioCreationButtonHandler.export(asset.id, isBusy: isBusy, actions: actions) }.disabled(isBusy)
+                Button(workflowText(language, "consistency.audio.copy37")) { _ = AudioCreationButtonHandler.export(asset.id, isBusy: isBusy, actions: actions) }.disabled(isBusy)
                     .accessibilityIdentifier("audio-create-export-\(asset.id.uuidString)")
                     .audioMeasured("audio-create-export-\(asset.id.uuidString)", probe: layoutProbe)
                 if asset.metadata.audio?.format.sampleRate != 48_000 {
-                    Button(workflowText(language, "consistency.audio.copy47", fallback: "Create from This Audio")) { actions.createFrom(asset.id) }.disabled(isBusy)
+                    Button(workflowText(language, "consistency.audio.copy47")) { actions.createFrom(asset.id) }.disabled(isBusy)
                         .accessibilityIdentifier("audio-create-from-\(asset.id.uuidString)")
                         .audioMeasured("audio-create-from-\(asset.id.uuidString)", probe: layoutProbe)
                 }
             }
-            if rejected { Text(workflowText(language, "consistency.audio.copy48", fallback: "Rejecting a candidate does not delete it or the original.")).font(.caption).foregroundStyle(.secondary) }
+            if rejected { Text(workflowText(language, "consistency.audio.copy48")).font(.caption).foregroundStyle(.secondary) }
         }
         .audioMeasured("audio-create-candidate-\(asset.id.uuidString)", probe: layoutProbe)
         .accessibilityIdentifier("audio-create-candidate-\(asset.id.uuidString)")
@@ -469,7 +469,7 @@ public struct AudioCreationView: View {
         return consistencyText(language, "audio.seconds", arguments: ["seconds": (Double(format.frameCount) / format.sampleRate).formatted(.number.precision(.fractionLength(2)).locale(Locale(identifier: language?.effectiveLanguageIdentifier ?? "en")))])
     }
     private var rangeMessage: String {
-        guard let format = source?.metadata.audio?.format else { return workflowText(language, "consistency.audio.copy49", fallback: "Source audio is required to set a region.") }
+        guard let format = source?.metadata.audio?.format else { return workflowText(language, "consistency.audio.copy49") }
         return consistencyText(language, "audio.frames", arguments: ["frames": String(format.frameCount)])
     }
     private func loadRangeText() {
@@ -479,7 +479,7 @@ public struct AudioCreationView: View {
         guard let format = source?.metadata.audio?.format,
               let candidate = AudioCreationButtonHandler.frameRange(startText: rangeStartText,
                                                                        endText: rangeEndText, format: format) else {
-            rangeInputMessage = workflowText(language, "consistency.audio.copy50", fallback: "Invalid region. The saved range has not changed.")
+            rangeInputMessage = workflowText(language, "consistency.audio.copy50")
             return
         }
         draft.editRegion = candidate
@@ -491,9 +491,9 @@ public struct AudioCreationView: View {
         guard let format = source?.metadata.audio?.format,
               let candidate = AudioCreationButtonHandler.frameRange(startText: rangeStartText,
                                                                        endText: rangeEndText, format: format) else {
-            rangeInputMessage = workflowText(language, "consistency.audio.copy50", fallback: "Invalid region. The saved range has not changed.")
+            rangeInputMessage = workflowText(language, "consistency.audio.copy50")
             return
         }
-        rangeInputMessage = candidate == draft.editRegion ? nil : workflowText(language, "consistency.audio.copy51", fallback: "Apply the region before generating.")
+        rangeInputMessage = candidate == draft.editRegion ? nil : workflowText(language, "consistency.audio.copy51")
     }
 }
