@@ -106,3 +106,35 @@ extension WorkflowClosurePresentationTests {
         #expect(sharedLibraryErrorText(SharedLibraryError.corruptedMetadata(raw), language: language).hasSuffix(raw))
     }
 }
+
+
+extension WorkflowClosurePresentationTests {
+    @Test func batchReviewCopyDistinguishesAssetsFromHumanForms() throws {
+        let registry = WorkflowRegistry.standard
+        let candidates = registry.definitions.filter { $0.interaction == .candidateReview }
+        let textReviews = registry.definitions.filter { $0.interaction == .textReview }
+        #expect(!candidates.isEmpty && !textReviews.isEmpty)
+        let language = UILanguageStore(preferredLanguages: ["zh-Hans"])
+        for definition in candidates + textReviews {
+            var step = WorkflowStepRun(node: .init(operationID: definition.id, title: "用户标题 / unchanged"), signature: "frozen-signature")
+            step.status = .waiting
+            let original = step
+            let key = WorkflowBatchPanel.reviewActionKey(for: step, registry: registry)
+            #expect(key == (definition.interaction == .candidateReview ? "reviewGate" : "reviewHumanGate"))
+            for locale in ["zh-Hans", "en"] {
+                try language.select(locale)
+                let label = workspaceText(language, key)
+                #expect(label == language.text("metadata.panel.workspace." + key, fallback: "MISSING"))
+                #expect(!label.isEmpty && label != "MISSING" && step == original)
+            }
+            for kind in WorkflowHumanTaskKind.allCases {
+                step.humanTask = .init(id: UUID(), kind: kind, title: "人工原文", materials: .text("unchanged"), resultSchema: .text)
+                let withTask = step
+                #expect(WorkflowBatchPanel.reviewActionKey(for: step, registry: registry) == "reviewHumanGate")
+                #expect(step == withTask)
+            }
+        }
+        let unknown = WorkflowStepRun(node: .init(operationID: "unknown.operation", title: "Unknown"), signature: "original")
+        #expect(WorkflowBatchPanel.reviewActionKey(for: unknown, registry: registry) == "reviewHumanGate")
+    }
+}

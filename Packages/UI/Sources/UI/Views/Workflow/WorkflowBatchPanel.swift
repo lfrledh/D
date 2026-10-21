@@ -83,6 +83,13 @@ import SwiftUI
             }
     }
 
+    // Only the candidate-review surface selects assets. Generic human forms and
+    // text review keep their own label without changing the inspected call.
+    static func reviewActionKey(for step: WorkflowStepRun, registry: WorkflowRegistry) -> String {
+        step.humanTask == nil && registry.operation(step.node.operationID)?.definition.interaction == .candidateReview
+            ? "reviewGate" : "reviewHumanGate"
+    }
+
     private func row(_ attempt: WorkflowBatchAttempt, stageID: UUID, run: WorkflowRun) -> some View {
         HStack(alignment: .top) {
             let reason = controller.batchContinuationIssue(run.id)
@@ -113,7 +120,7 @@ import SwiftUI
                 }.accessibilityIdentifier("attempt-locate-results")
             }
             ForEach(controller.callRecords(runID: run.id).filter { $0.step.status == .waiting }) { record in
-                Button(text("reviewGate")) { inspect(run, record) }
+                Button(text(Self.reviewActionKey(for: record.step, registry: controller.registry))) { inspect(run, record) }
             }
             if [.failed, .interrupted].contains(attempt.state) {
                 Button(text("newAttempt")) {
