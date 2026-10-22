@@ -41,19 +41,6 @@ private struct WorkflowCanvasCameraScope<Content: View>: View {
     }
 }
 
-private struct WorkflowCanvasZoomControl: View {
-    @Binding var zoom: CGFloat
-    let locked: Bool
-    let label: String
-
-    var body: some View {
-        Text("\(Int((zoom * 100).rounded()))%").font(.caption.monospacedDigit())
-        Slider(value: $zoom, in: WorkflowCanvasLayoutPolicy.sliderZoomRange(current: zoom))
-            .frame(width: 78).disabled(locked)
-            .accessibilityLabel(label)
-    }
-}
-
 enum WorkflowCanvasAssetIdentity {
     static func payload(_ item: WorkflowCanvasTransfer) -> (project: UUID, instance: UUID?, asset: UUID)? {
         switch item {
@@ -150,7 +137,7 @@ public struct WorkflowCanvasView: View {
     /// Seeds the production page state for offscreen layout fixtures. This does
     /// not claim a tab click; normal selection/Undo never becomes navigation.
     func startingPanels(_ panels: WorkflowWorkspacePanels) -> Self {
-        var copy = self; copy._panelsState = State(initialValue: panels); copy._activityVisible = State(initialValue: panels.runID != nil); return copy
+        var copy = self; copy._panelsState = State(initialValue: panels); copy._activityVisible = State(initialValue: panels.runID != nil); copy._recordsDetail = State(initialValue: panels.runID != nil); return copy
     }
     #endif
 
@@ -177,12 +164,17 @@ public struct WorkflowCanvasView: View {
     }
     #endif
 
+    @Environment(\.workbenchContentVisible) private var contentVisible
     @Environment(\.dLanguageStore) private var languageStore
 
     @Environment(\.chatDisplayPreferences) private var displayPreferences
     @State private var narrowLibrary = false
     @State private var requestedPanelWidths = WorkbenchPanelWidths(leading: 320, trailing: 320)
-    @State private var consoleHeight: CGFloat = 88
+    @State private var runSettingsVisible = false
+    @State private var runOptions = WorkflowWorkspaceRunOptions()
+    @State private var recordsDetail = false
+    @State private var visitedRecords = false
+    @State private var visitedRecordsDetail = false
     @State private var overlayState = WorkbenchSidebarState(leading: true, trailing: true)
     private var showLibrary: Bool { get { overlayState.trailing } nonmutating set { overlayState.trailing = newValue } }
     @Environment(\.workflowViewerModel) private var viewerModel
@@ -263,26 +255,8 @@ public struct WorkflowCanvasView: View {
         let _ = WorkflowCanvasUpdateProbe.canvasBody?()
         let _ = WorkflowCanvasUpdateProbe.workspace?(.init(draftTarget:workspaceDraft?.target,open:{id,mode in setRunTarget(id);runRange=mode;presentWorkspacePlan(id,mode:mode)},target:setRunTarget,range:setRunRange))
         #endif
-        GeometryReader { viewport in
-        VStack(spacing: 0) {
-            toolbar(width: viewport.size.width).frame(width: viewport.size.width)
-            GeometryReader { proxy in
-                panels(height: proxy.size.height, width: proxy.size.width)
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .accessibilityIdentifier("workflow-canvas-workspace")
-            }
-        }
-        .frame(width: viewport.size.width, height: viewport.size.height)
-        }
-        .frame(minWidth: WorkflowCanvasLayoutPolicy.minimumVisibleWidth,
-               minHeight: WorkflowCanvasLayoutPolicy.minimumVisibleHeight)
-        // Keyboard focus belongs to the workspace boundary. Inferring its ring
-        // from changing node/glass pixels rasterizes the whole workspace during
-        // interaction; an explicit focus-only shape leaves child focus and hits intact.
-        .contentShape(.focusEffect, Rectangle())
-        .focusable()
-        .workflowKeyboardCommands(performKeyboardCommand)
-        .environment(\.workbenchMenuContext, "canvas:\(ObjectIdentifier(controller)):\(controller.projectID):\(controller.projectInstanceID):\(controller.bodyPath):\(controller.rootGraph?.revision.uuidString ?? "none"):\(controller.rootGraph?.id.uuidString ?? "none"):\(controller.graph?.id.uuidString ?? "none"):\(controller.graph?.revision.uuidString ?? "none")")
+        canvasContent
+        .environment(\.workbenchMenuContext, canvasMenuContext)
         .alert(text("workflow.scope.rerunCall","重新运行具体调用"),isPresented:Binding(get:{pendingHistoryRetry != nil},set:{if !$0 { pendingHistoryRetry=nil }})) {
             Button(workspaceText(languageStore, "retryFrozen")) {
                 if let call=pendingHistoryRetry { pendingHistoryRetry=nil;Task { await controller.rerunCall(call) } }
@@ -310,10 +284,10 @@ public struct WorkflowCanvasView: View {
             runPreview = nil
         }
         .onChange(of: runContext) { _, _ in
-            runTarget = nil; runPreview = nil; scopePresentation = nil
+            runTarget = nil; runPreview = nil; scopePresentation = nil; runOptions.choices = [:]
         }
         .onChange(of: ObjectIdentifier(controller)) { _, _ in
-            panelsState = .init(); workspaceDraft=nil;resourceContext=nil;returnResourceCategory=nil
+            panelsState = .init(); workspaceDraft=nil;runOptions = .init();runSettingsVisible=false;recordsDetail=false;visitedRecords=false;visitedRecordsDetail=false;resourceContext=nil;returnResourceCategory=nil
             camera.owner = ObjectIdentifier(controller)
             restoreViewContext(viewContext)
         }
@@ -351,6 +325,37 @@ public struct WorkflowCanvasView: View {
         }
     }
 
+    private var canvasContent: some View {
+        GeometryReader { viewport in
+        VStack(spacing: 0) {
+            toolbar(width: viewport.size.width).frame(width: viewport.size.width)
+            GeometryReader { proxy in
+                panels(height: proxy.size.height, width: proxy.size.width)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .accessibilityIdentifier("workflow-canvas-workspace")
+            }
+        }
+        .frame(width: viewport.size.width, height: viewport.size.height)
+        }
+        .frame(minWidth: WorkflowCanvasLayoutPolicy.minimumVisibleWidth,
+               minHeight: WorkflowCanvasLayoutPolicy.minimumVisibleHeight)
+        // Keyboard focus belongs to the workspace boundary. Inferring its ring
+        // from changing node/glass pixels rasterizes the whole workspace during
+        // interaction; an explicit focus-only shape leaves child focus and hits intact.
+        .contentShape(.focusEffect, Rectangle())
+        .focusable()
+        .workflowKeyboardCommands(performKeyboardCommand)
+        .focusedSceneValue(\.workbenchCanvas, contentVisible ? canvasCommands : nil)
+        .popover(isPresented: $portLegendPresented) { portLegend }
+
+    }
+    private var canvasMenuContext: String {
+        ["canvas", String(describing: ObjectIdentifier(controller)), String(describing: controller.projectID),
+         String(describing: controller.projectInstanceID), String(describing: controller.bodyPath),
+         controller.rootGraph?.revision.uuidString ?? "none", controller.rootGraph?.id.uuidString ?? "none",
+         controller.graph?.id.uuidString ?? "none", controller.graph?.revision.uuidString ?? "none"].joined(separator: ":")
+    }
+
     private func performKeyboardCommand(_ command: WorkflowKeyboardCommand) -> Bool {
         guard !toolsPresented, !interfacePresented else { return false }
         switch command {
@@ -360,7 +365,7 @@ public struct WorkflowCanvasView: View {
         case .rightTools:
             let tabs = WorkflowResourceCategory.allCases
             resourceCategory = tabs[((tabs.firstIndex(of: resourceCategory) ?? 0) + 1) % tabs.count]; showLibrary = true
-        case .activity: panelsState.output = .overview; activityVisible = true; workspaceDraft = nil
+        case .activity: panelsState.output = .overview; activityVisible = true; recordsDetail = false; workspaceDraft = nil; runSettingsVisible = false
         case .pointer: guard !viewportInteractionLocked else { return false }; canvasTool = .pointer
         case .hand: guard !viewportInteractionLocked else { return false }; canvasTool = .hand
         case .undo: guard controller.canEditCanvas, controller.canUndo else { return false }; controller.undo()
@@ -469,7 +474,7 @@ public struct WorkflowCanvasView: View {
                     // The sidebar clips its own content; this layout slot must
                     // neither crop the glass shadow nor animate across the button.
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(.bottom, consoleHeight + 24)
+                    .padding(.bottom, 72)
                 WorkbenchSidebar(leading: false, expanded: shown.library,
                     title: workspaceText(languageStore, "resources"), identifier: "canvas-library-toggle",
                     hostIdentifier: "canvas-library-host", toggle: {
@@ -478,37 +483,41 @@ public struct WorkflowCanvasView: View {
                     .overlay(alignment: .leading) { if shown.library { panelResizeHandle(leading: false) } }
                     .frame(width: shown.library ? panelWidths.trailing : 48, alignment: .trailing)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(.bottom, consoleHeight + 24)
+                    .padding(.bottom, 72)
             }
             .padding(.horizontal, 16)
-            VStack(spacing:8) {
-                if let draft=workspaceDraft {
-                    WorkflowWorkspaceRunPlan(controller:controller,draft:draft,close:{workspaceDraft=nil},inputsChanged:{planInputLabels=$0},preview: { value, call, title, port in openValue(value, call, title, port: port) })
-                        .frame(height:min(440,max(240,height*0.58))).workbenchPanel(cornerRadius:18)
-                } else if activityVisible {
-                    outputPanel.frame(height:min(420,max(230,height*0.55))).workbenchPanel(cornerRadius:18)
-                }
-                VStack(spacing:4) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 8) {
-                            canvasTools(fitReady: fitReady, targetWidth: targetCanvasWidth).fixedSize(horizontal: true, vertical: false)
-                            Divider().frame(height: 28)
-                            executionBar.fixedSize(horizontal: true, vertical: false)
-                            activityToggle.fixedSize(horizontal: true, vertical: false)
-                        }
-                        VStack(spacing: 6) {
-                            HStack { canvasTools(fitReady: fitReady, targetWidth: targetCanvasWidth); activityToggle }
-                            executionBar
-                        }
+            VStack(spacing: 0) {
+                secondaryRunSurface(width: width, height: height)
+                    .padding(.bottom, workspaceDraft != nil || runSettingsVisible || activityVisible ? 8 : 0)
+                runDock(width: width)
+            }.padding(.bottom, 16)
+            cornerTools(fitReady: fitReady, targetWidth: targetCanvasWidth)
+                .frame(maxWidth: .infinity, alignment: .trailing).padding(.trailing, 16).padding(.bottom, 16)
+        }.overlay(alignment: .top) { captureControls.padding(.top, 8) }
+        .padding(.top, 8).environment(\.workbenchPanelWidths, panelWidths)
+    }
+
+    private func secondaryRunSurface(width: CGFloat, height: CGFloat) -> some View {
+        let opened = workspaceDraft != nil || runSettingsVisible || activityVisible
+        let panelHeight = min(420, max(120, height - 80))
+        return ZStack(alignment: .bottom) {
+            if visitedRecords || activityVisible {
+                retained(recordsPanel, visible: activityVisible && workspaceDraft == nil && !runSettingsVisible, id: "workflow-records-retained")
+                    .frame(width: min(440, width - 32), height: panelHeight)
+                    .background {
+                        if activityVisible && workspaceDraft == nil && !runSettingsVisible { Color.clear.workbenchPanel(cornerRadius: 18) }
                     }
-                    if controller.errorMessage != nil || controller.readOnlyReason != nil { statusStrip }
-                    captureControls
-                }.padding(8).workbenchPanel(cornerRadius:22)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { value in
-                        if abs(consoleHeight - value) > 0.5 { consoleHeight = value }
-                    }
-            }.padding(.horizontal,16).padding(.bottom,12)
-        }.padding(.top, 8).environment(\.workbenchPanelWidths, panelWidths)
+            }
+            if let draft = workspaceDraft {
+                WorkflowWorkspaceRunPlan(controller: controller, draft: draft, close: { workspaceDraft = nil },
+                    inputsChanged: { planInputLabels = $0 }, preview: { value, call, title, port in openValue(value, call, title, port: port) },
+                    options: $runOptions, settings: { workspaceDraft = nil; runSettingsVisible = true })
+                    .frame(width: min(440, width - 32), height: panelHeight).workbenchPanel(cornerRadius: 18)
+            } else if runSettingsVisible {
+                runSettings.frame(width: min(360, width - 32), height: panelHeight).workbenchPanel(cornerRadius: 18)
+            }
+        }.frame(height: opened ? panelHeight : 0, alignment: .bottom)
+            .onChange(of: activityVisible, initial: true) { _, visible in if visible { visitedRecords = true } }
     }
 
     private func panelResizeHandle(leading: Bool) -> some View {
@@ -517,16 +526,6 @@ public struct WorkflowCanvasView: View {
             set: { if leading { requestedPanelWidths.leading = $0 } else { requestedPanelWidths.trailing = $0 } }), leading: leading)
     }
 
-    private var activityToggle:some View {
-        VStack(alignment:.trailing,spacing:3) {
-            let pending=controller.runs.reduce(0) { $0+WorkflowWorkspacePanels.records(in:$1).filter { $0.step.status == .waiting }.count }
-            Text(controller.isRunning ? workspaceText(languageStore, "running") : pending > 0 ? workspaceText(languageStore, "waitingCount")+" · \(pending)" : controller.isSaving || controller.hasPendingSaves ? workspaceText(languageStore, "savingPending") : workspaceText(languageStore, "ready"))
-                .font(.caption).foregroundStyle(.secondary)
-            Button(workspaceText(languageStore, "activity"),systemImage:activityVisible ? "chevron.down" : "chevron.up") {
-                activityVisible.toggle();workspaceDraft=nil
-            }.accessibilityIdentifier("workflow-activity-toggle").workbenchHelp("WORKSPACE-ACTIVITY")
-        }
-    }
     private func text(_ key: String, _ fallback: String) -> String {
         workflowText(languageStore, key, fallback: fallback)
     }
@@ -686,18 +685,18 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             WorkbenchSidebarTabs(title: workspaceText(languageStore, "activity"), selection: $panelsState.output, choices: [
                 (WorkflowWorkspacePanels.Output.node, text("workspace.nodeResults", "节点结果")),
                 (.overview, text("workspace.runOverview", "运行总览")),
-                (.batches, workspaceText(languageStore, "batches"))], helpPrefix: "TAB-WORKFLOW-RIGHT-")
+                (.batches, workspaceText(languageStore, "batches"))], helpPrefix: "TAB-WORKFLOW-RIGHT-", paintsPlate: false)
             WorkbenchPicker(text("workspace.selectedRun", "所选运行"), selection: Binding(get: { panelsState.runID }, set: { panelsState.selectRun($0) })) {
                 WorkbenchChoice(text("workspace.chooseRun", "选择运行记录"), value:UUID?.none)
                 WorkbenchChoiceForEach(controller.runs.reversed()) { run in
                     WorkbenchChoice(WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore), value:Optional(run.id))
                 }
-            }.padding(.horizontal, 10).workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge).accessibilityIdentifier("workflow-result-run").workbenchHelp("RESULT-RUN")
+            }.padding(.horizontal, 10).accessibilityIdentifier("workflow-result-run").workbenchHelp("RESULT-RUN")
             ZStack {
                 if visitedOutput.contains(.node) || panelsState.output == .node {
-                    retained(resultsPanel, visible: panelsState.output == .node, id: "workflow-results-host")
+                    retained(resultsPanel.buttonStyle(.bordered).textFieldStyle(.roundedBorder), visible: panelsState.output == .node, id: "workflow-results-host")
                 }
-                retained(runOverview, visible: panelsState.output == .overview, id: "workflow-overview-host")
+                retained(runOverview.buttonStyle(.bordered).textFieldStyle(.roundedBorder), visible: panelsState.output == .overview, id: "workflow-overview-host")
                 if panelsState.output == .batches {
                     WorkflowBatchPanel(controller: controller, revealLibrary: revealLibrary) { run, record in
                         panelsState.selectRun(run.id)
@@ -748,11 +747,11 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                                 WorkflowHumanTaskForm(task: task,
                                     onSaveDraft: { controller.editHumanDraft(stepID: record.id, value: $0) },
                                     onSubmit: { value in Task { await controller.decideHuman(stepID: record.id, value: value, expectedTask: task) } },
-                                    onReject: { Task { await controller.decideHuman(stepID: record.id, value: nil, reject: true, expectedTask: task) } })
+                                    onReject: { Task { await controller.decideHuman(stepID: record.id, value: nil, reject: true, expectedTask: task) } }, flatControls: true)
                                     .id(record.id).disabled(controller.isRunning || isReadOnly)
                             } else {
                                 WorkflowWaitingDecision(controller: controller, step: record.step, readOnly: isReadOnly,
-                                    preview: controller.preview).id(record.id).disabled(controller.isRunning)
+                                    preview: controller.preview, flatControls: true).id(record.id).disabled(controller.isRunning)
                             }
                         }
                         ForEach(record.step.outputs.keys.sorted(),id:\.self) { port in
@@ -825,7 +824,8 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                                 Spacer()
                                 WorkflowStatusBadge(status: record.step.status, stale: false)
                             }.frame(maxWidth: .infinity, alignment: .leading)
-                        }.buttonStyle(WorkbenchRowButtonStyle())
+                        }.buttonStyle(.plain).padding(8)
+                            .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
                     }
                 } else {
                     Text(text("workspace.chooseRun", "选择运行记录")).foregroundStyle(.secondary)
@@ -943,10 +943,10 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     private func setRunTarget(_ id: UUID) {
         guard controller.graph?.nodes.contains(where: { $0.id == id }) == true else { return }
         runTarget = WorkflowRunTarget(context: runContext, nodeID: id)
-        runPreview = nil;workspaceDraft=nil;planInputLabels=[:]
+        runPreview = nil;workspaceDraft=nil;planInputLabels=[:];runOptions.choices=[:]
     }
     private func setRunRange(_ value:Int) {
-        runRange=value;runPreview=nil;workspaceDraft=nil;planInputLabels=[:]
+        runRange=value;runPreview=nil;workspaceDraft=nil;planInputLabels=[:];runOptions.choices=[:]
     }
     private var recoveryRuns: [WorkflowRun] {
         controller.runs.reversed().filter { WorkflowCanvasPresentation.canResume($0.status) }
@@ -955,77 +955,243 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         if let selectedResultRun, WorkflowCanvasPresentation.canResume(selectedResultRun.status) { return selectedResultRun }
         return recoveryRuns.count == 1 ? recoveryRuns.first : nil
     }
-    private var executionBar: some View {
-        VStack(spacing: 8) {
-        HStack(spacing: 10) {
-            if controller.isRunning {
-                ProgressView().controlSize(.small)
-                if let run = controller.activePresentationRun {
-                    Text(text("workflow.run.current", "正在运行到：") + (run.graph.nodes.first { $0.id == run.targetNodeID }?.title ?? run.targetNodeID.uuidString))
-                        .lineLimit(1).accessibilityIdentifier("workflow-active-target")
-                }
-                Button(text("workflow.language.control.pause", "暂停流程"), systemImage: "pause") { controller.pause() }.workbenchHelp("RUN-PAUSE")
-                    .help(text("workflow.run.pauseHelp", "当前步骤完成并释放资源后暂停。"))
-                    .disabled(!controller.canPausePresentation)
-                Button(text("workflow.action.stop", "停止流程"), systemImage: "stop.fill", role: .destructive) {
-                    Task { await controller.cancel() }
-                }.accessibilityIdentifier("workflow-cancel").workbenchHelp("RUN-STOP")
-            } else {
-                WorkbenchPicker(text("workflow.run.range", "范围"), selection: Binding(get:{runRange},set:setRunRange)) {
-                    WorkbenchChoice(text("workflow.action.runToHere", "运行到此节点"), value:0)
-                    WorkbenchChoice(text("workflow.action.rerunOnly", "只重跑此节点"), value:1)
-                    WorkbenchChoice(text("workflow.scope.from", "从这里重新运行（含此节点）"), value:2)
-                    WorkbenchChoice(text("workflow.scope.after", "从其输出继续（不重算此节点）"), value:3)
-                }.frame(maxWidth: 230).accessibilityIdentifier("workflow-run-range").workbenchHelp("RUN-RANGE")
-                WorkbenchPicker(text(["semantics.targetThrough", "semantics.targetOnly", "semantics.targetFrom", "semantics.targetAfter"][runRange], ["运行终点", "执行节点", "重新运行起点", "使用其输出的节点"][runRange]), selection: Binding(get: { validRunTarget?.id }, set: { id in
-                    if let id { setRunTarget(id) } else { runTarget = nil; runPreview = nil;workspaceDraft=nil;planInputLabels=[:] }
-                })) {
-                    WorkbenchChoice(consistencyText(languageStore, "run.choose." + String(runRange)), value:UUID?.none)
-                    WorkbenchChoiceForEach(controller.graph?.nodes ?? []) { node in WorkbenchChoice(WorkflowHumanPresentation.name(node, in: controller.graph?.nodes ?? [], language: languageStore), value:Optional(node.id)) }
-                }.frame(maxWidth: 280).accessibilityIdentifier("workflow-run-target").workbenchHelp("RUN-TARGET")
-                Button(consistencyText(languageStore, "RUN-REVIEW"), systemImage: "play.fill") {
-                    if let node = validRunTarget {
-                        if runRange < 2 { presentPlan(nodeID: node.id, only: runRange == 1) }
-                        else { presentWorkspacePlan(node.id,mode:runRange) }
-                    }
-                }.buttonStyle(WorkbenchPrimaryButtonStyle())
-                    .disabled(validRunTarget == nil || !controller.canEditCanvas || !controller.bodyPath.isEmpty)
-                    .accessibilityIdentifier("workflow-run").workbenchHelp("RUN-REVIEW", unavailableReason: runHelpReason, target: "target:\(validRunTarget?.id):\(runRange)")
-
-            }
-            Button(text("workflow.section.history", "运行历史"), systemImage: "clock.arrow.circlepath") {
-                if let run = controller.activePresentationRun {
-                    panelsState.selectRun(run.id); panelsState.nodeID = run.targetNodeID
-                } else if panelsState.runID == nil {
-                    panelsState.selectRun(controller.runs.last(where: { controller.presentationRootGraphID(for: $0.id) == controller.rootGraph?.id })?.id)
-                }
-                panelsState.output = .overview; activityVisible=true;workspaceDraft=nil
-            }.workbenchHelp("RUN-HISTORY")
-        }
-        if !controller.isRunning, recoveryRun == nil, !recoveryRuns.isEmpty {
-            WorkbenchMenu(text("semantics.choosePendingRun", "选择要处理的运行…")) {
-                WorkbenchMenuForEach(recoveryRuns) { run in
-                    WorkbenchMenuAction(WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore)) {
-                        panelsState.selectRun(run.id); panelsState.output = .overview; activityVisible=true;workspaceDraft=nil
-                    }
-                }
+    private var canvasCommands: WorkbenchCanvasCommands {
+        let context = runContext
+        func action(_ key: String, enabled: Bool = true, _ perform: @escaping () -> Void) -> WorkbenchGenerationCommand {
+            .init(title: workflowText(languageStore, key), isEnabled: enabled && contentVisible && !toolsPresented && !interfacePresented) {
+                guard contentVisible, context == runContext, !toolsPresented, !interfacePresented,
+                      NSApp.keyWindow?.attachedSheet == nil, !(NSApp.keyWindow?.firstResponder is NSTextView) else { return }
+                perform()
             }
         }
-        if !controller.isRunning, let run = recoveryRun {
-            HStack {
-                WorkbenchMenu {
-                    WorkbenchMenuForEach(recoveryRuns) { item in
-                        WorkbenchMenuAction(WorkflowHumanPresentation.run(item, in: controller.runs, language: languageStore)) {
-                            panelsState.selectRun(item.id); panelsState.output = .overview; activityVisible=true;workspaceDraft=nil
+        return .init(edit: [
+            action("workflow.action.undo", enabled: controller.canEditCanvas && controller.canUndo) { controller.undo() },
+            action("workflow.action.redo", enabled: controller.canEditCanvas && controller.canRedo) { controller.redo() },
+            action("workflow.selection.all") { controller.selectedNodeID = nil; selectedConnectionID = nil; controller.selectedNodeIDs = Set(controller.graph?.nodes.map(\.id) ?? []) },
+            action("workflow.selection.clear") { controller.selectedNodeID = nil; controller.selectedNodeIDs = []; selectedConnectionID = nil },
+            action("refinement.workflow.extractSelection", enabled: controller.canEditCanvas && !selectedNodes.isEmpty) {
+                if let node = selectedNodes.first, selectedNodes.count == 1 { controller.selectedNodeIDs = [node.id] }
+                extractSelection = true; toolsPresented = true
+            }
+        ], legend: action("refinement.workflow.typeLegend") { portLegendPresented = true })
+    }
+    private var portLegend: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(WorkflowPortStyle.legend.indices, id: \.self) { index in
+                let entry = WorkflowPortStyle.legend[index]
+                HStack(spacing: 8) {
+                    Circle().fill(WorkflowPortStyle.color(for: entry.port)).frame(width: 10, height: 10)
+                    Text(workflowText(languageStore, "refinement.workflow.legend." + entry.key, fallback: entry.fallback))
+                }
+            }
+        }.padding(14)
+    }
+    private func dockText(_ key: String) -> String { text("workflow.dock." + key, "") }
+    private var pendingCalls: [WorkflowPlanCallRecord] {
+        controller.runs.flatMap(WorkflowWorkspacePanels.records).filter { $0.step.status == .waiting }
+    }
+    private var dockSummary: String {
+        if controller.activePresentationRun?.status == .cancelling { return dockText("cancelling") }
+        if controller.isRunning {
+            return controller.progressPresentation.map { workflowProgressText($0, language: languageStore) }
+                ?? (controller.progressMessage.isEmpty ? dockText("running") : workflowRecoveryProgressText(controller.progressMessage, language: languageStore))
+        }
+        if controller.hasPendingSaves { return dockText("savePending") }
+        if !pendingCalls.isEmpty { return dockText("waiting") + " · \(pendingCalls.count)" }
+        if let run = recoveryRun, run.planCheckpoint?.state == .paused { return dockText("paused") + " · " + run.graph.name }
+        if let progress = controller.progressPresentation, progress.code == "runSaved" {
+            return workflowProgressText(progress, language: languageStore)
+        }
+        guard let target = validRunTarget else { return dockText("chooseTarget") }
+        return dockText("range." + String(runRange)) + " · " + target.title
+    }
+    private func openRecords() {
+        activityVisible.toggle(); recordsDetail = false; workspaceDraft = nil; runSettingsVisible = false
+    }
+    private func inspectRun(_ run: WorkflowRun) {
+        panelsState.selectRun(run.id); panelsState.output = .overview
+        recordsDetail = true; activityVisible = true; workspaceDraft = nil; runSettingsVisible = false
+    }
+    private func runDock(width: CGFloat) -> some View {
+        HStack(spacing: 8) {
+            Text(dockSummary).font(.caption).lineLimit(1).help(dockSummary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("workflow-run-summary")
+            dockMainAction.frame(width: 112, height: 32)
+            Button { openRecords() } label: {
+                Text(dockText("records") + (pendingCalls.isEmpty ? "" : " · \(pendingCalls.count)"))
+                    .lineLimit(1).frame(width: 72, height: 32)
+            }.accessibilityIdentifier("workflow-records")
+        }.buttonStyle(WorkflowDockButtonStyle()).padding(.horizontal, 9)
+            .frame(width: WorkflowDockLayout.width(available: width), height: 48)
+            .workbenchPanel(in: Capsule()).accessibilityIdentifier("workflow-run-dock")
+    }
+    @ViewBuilder private var dockMainAction: some View {
+        if controller.isRunning {
+            let stopping = controller.activePresentationRun?.status == .cancelling
+            HStack(spacing: 0) {
+                Button(dockText("pause")) { controller.pause() }
+                    .disabled(stopping || !controller.canPausePresentation)
+                Button(dockText("stop")) { Task { await controller.cancel() } }
+                    .disabled(stopping || controller.isSaving)
+                    .accessibilityIdentifier("workflow-cancel")
+            }.frame(maxWidth: .infinity).buttonStyle(WorkflowDockButtonStyle(expand: true))
+        } else if controller.hasPendingSaves {
+            Button(dockText("retrySave")) {
+                // Multiple owners are never resolved by recency. The list exposes
+                // the captured run/stage and its save-only command.
+                let saving = controller.runs.filter { $0.status == .saving || $0.id == controller.pendingPausedStopRunID }
+                if saving.count == 1, let run = saving.first {
+                    if let stage = controller.batchStages.first(where: { $0.attempts.contains { $0.runID == run.id } }) {
+                        Task { await controller.retryBatchSaving(stage.id) }
+                    } else { Task { await controller.retryRunSaving(runID: run.id) } }
+                }
+                else { activityVisible = true; recordsDetail = false; workspaceDraft = nil; runSettingsVisible = false }
+            }.buttonStyle(WorkflowDockButtonStyle(expand: true))
+        } else if !pendingCalls.isEmpty {
+            let assetsOnly = pendingCalls.allSatisfy { WorkflowBatchPanel.reviewActionKey(for: $0.step, registry: controller.registry) == "reviewGate" }
+            Button(dockText(assetsOnly ? "reviewAssets" : "reviewHuman")) {
+                activityVisible = true; recordsDetail = false; workspaceDraft = nil; runSettingsVisible = false
+            }.buttonStyle(WorkflowDockButtonStyle(expand: true))
+        } else if let run = recoveryRun, run.planCheckpoint?.state == .paused, !isBatchRun(run.id) {
+            HStack(spacing: 0) {
+                Button(dockText("resume")) { Task { await controller.resume(runID: run.id) } }
+                Button(dockText("stop")) { Task { await controller.stopPausedRun(runID: run.id) } }
+            }.buttonStyle(WorkflowDockButtonStyle(expand: true)).disabled(isReadOnly)
+        } else {
+            HStack(spacing: 0) {
+                Button { if let target = validRunTarget { presentWorkspacePlan(target.id, mode: runRange) } } label: {
+                    Text(dockText("run")).frame(width: 84, height: 32)
+                }.disabled(validRunTarget == nil || !controller.canEditCanvas || !controller.bodyPath.isEmpty)
+                    .accessibilityIdentifier("workflow-run")
+                Button {
+                    runSettingsVisible.toggle(); workspaceDraft = nil; activityVisible = false
+                } label: { Image(systemName: "chevron.down").frame(width: 28, height: 32) }
+                    .accessibilityLabel(dockText("settings")).accessibilityIdentifier("workflow-run-settings")
+            }
+        }
+    }
+    private var runSettings: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(dockText("settings")).font(.headline)
+            WorkbenchScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    WorkbenchPicker(dockText("target"), selection: Binding(get: { validRunTarget?.id }, set: { id in
+                        if let id { setRunTarget(id) } else { runTarget = nil; workspaceDraft = nil; runOptions.choices = [:] }
+                    })) {
+                        WorkbenchChoice(dockText("chooseTarget"), value: UUID?.none)
+                        WorkbenchChoiceForEach(controller.graph?.nodes ?? []) { node in
+                            WorkbenchChoice(WorkflowHumanPresentation.name(node, in: controller.graph?.nodes ?? [], language: languageStore), value: Optional(node.id))
+                        }
+                    }.accessibilityIdentifier("workflow-run-target")
+                    Picker(dockText("range"), selection: Binding(get: { runRange }, set: setRunRange)) {
+                        ForEach(0..<4) { mode in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(dockText("range." + String(mode)))
+                                Text(dockText("rangeHelp." + String(mode))).font(.caption).foregroundStyle(.secondary)
+                            }.tag(mode)
+                        }
+                    }.pickerStyle(.radioGroup).labelsHidden().accessibilityIdentifier("workflow-run-range")
+                    Divider()
+                    Toggle(workspaceText(languageStore, "batchGenerate"), isOn: $runOptions.batch)
+                    if runOptions.batch {
+                        Stepper(workspaceText(languageStore, "stageCount") + " \(runOptions.repetitions)", value: $runOptions.repetitions, in: 1...64)
+                    }
+                    DisclosureGroup(workspaceText(languageStore, "seedStrategy")) {
+                        Picker(workspaceText(languageStore, "seedStrategy"), selection: $runOptions.seedStrategy) {
+                            Text(workspaceText(languageStore, "seedFixed")).tag(WorkflowBatchSeedStrategy.fixed)
+                            Text(workspaceText(languageStore, "seedAutomatic")).tag(WorkflowBatchSeedStrategy.automatic)
+                        }.pickerStyle(.radioGroup).labelsHidden().disabled(!runOptions.batch || !seedSupported)
+                        Text(workspaceText(languageStore, "seedEffect")).font(.caption)
+                        if !runOptions.batch || !seedSupported {
+                            Text(dockText(!runOptions.batch ? "seedBatchOnly" : "seedUnsupported")).font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                } label: {
-                    Text(WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore))
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack {
+                Button(dockText("close")) { runSettingsVisible = false }
+                Spacer()
+                Button(dockText("viewPlan")) { if let target = validRunTarget { presentWorkspacePlan(target.id, mode: runRange) } }
+                    .disabled(validRunTarget == nil || !controller.canEditCanvas || !controller.bodyPath.isEmpty)
+            }
+        }.buttonStyle(.bordered).padding(14)
+    }
+    private var seedSupported: Bool {
+        guard let target = validRunTarget, let draft = try? WorkflowWorkspaceRunDraft(controller: controller, target: target.id, mode: runRange) else { return false }
+        return WorkflowBatchSeedSchedule.supportedNodeCount(in: draft.slice.plan, registry: controller.registry) > 0
+    }
+    private func isBatchRun(_ id: UUID) -> Bool { controller.batchStages.contains { $0.attempts.contains { $0.runID == id } } }
+    private var recordsPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if recordsDetail { Button(dockText("backToRecords")) { recordsDetail = false } }
+                else { Text(dockText("records")).font(.headline) }
+                Spacer()
+                Button(dockText("close")) { activityVisible = false }
+            }
+            ZStack {
+            if visitedRecordsDetail || recordsDetail { retained(outputPanel.buttonStyle(.bordered).textFieldStyle(.roundedBorder), visible: recordsDetail, id: "workflow-record-details-retained") }
+            if !recordsDetail {
+                WorkbenchScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if controller.errorMessage != nil || controller.readOnlyReason != nil { statusStrip }
+                        if controller.hasPendingSaves {
+                            Button(dockText("saveRecord")) { Task { await controller.save() } }
+                                .disabled(controller.isRunning || controller.isSaving)
+                        }
+                        if !controller.batchStages.isEmpty {
+                            Button(workspaceText(languageStore, "batches")) { panelsState.output = .batches; recordsDetail = true }
+                        }
+                        ForEach(controller.runs.reversed()) { run in
+                            VStack(alignment: .leading, spacing: 5) {
+                                Button { inspectRun(run) } label: {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore)).font(.subheadline)
+                                        Text(WorkflowCanvasPresentation.statusTitle(run.status, language: languageStore) + " · " + run.createdAt.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+                                        if let seconds = controller.batchStages.lazy.flatMap(\.attempts).first(where: { $0.runID == run.id })?.activeSeconds {
+                                            Text(workspaceText(languageStore, "activeTime") + String(format: " %.2f s", seconds)).font(.caption)
+                                        }
+                                    }.frame(maxWidth: .infinity, alignment: .leading)
+                                }.buttonStyle(.plain)
+                                HStack {
+                                    Button(workspaceText(languageStore, "locateResults"), systemImage: "tray.full") {
+                                        revealLibrary(.init(controller: controller, source: .run(run.id), name: WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore)))
+                                    }
+                                    if isBatchRun(run.id) {
+                                        Button(workspaceText(languageStore, "batches")) { panelsState.selectRun(run.id); panelsState.output = .batches; recordsDetail = true }
+                                    } else if run.id == controller.pendingPausedStopRunID {
+                                        Button(dockText("retrySave")) { Task { await controller.retryRunSaving(runID: run.id) } }
+                                    } else if WorkflowCanvasPresentation.canResume(run.status) { recoveryActions(run) }
+                                }
+                            }.padding(8).background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        if controller.runs.isEmpty { Text(dockText("noRecords")).foregroundStyle(.secondary) }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
                 }
-                recoveryActions(run)
+            }
+            }
+        }.padding(12).buttonStyle(.bordered).textFieldStyle(.roundedBorder)
+            .onChange(of: recordsDetail, initial: true) { _, visible in if visible { visitedRecordsDetail = true } }
+    }
+
+    private func cornerTools(fitReady: Bool, targetWidth: CGFloat) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                canvasTool = canvasTool == .hand ? .pointer : .hand
+            } label: {
+                Image(systemName: "hand.draw").foregroundStyle(canvasTool == .hand ? Color.accentColor : .primary)
+                    .overlay { Circle().strokeBorder(Color.accentColor.opacity(canvasTool == .hand ? 0.7 : 0), lineWidth: 1.5).frame(width: 36, height: 36) }
+            }.buttonStyle(WorkbenchIconButtonStyle(diameter: 40))
+                .disabled(viewportInteractionLocked).accessibilityLabel(text("refinement.workflow.hand", "手形"))
+                .accessibilityAddTraits(canvasTool == .hand ? .isSelected : [])
+                .accessibilityIdentifier("workflow-canvas-hand")
+            WorkflowCanvasCameraScope(camera: camera, controller: controller, context: viewContext, changed: rememberViewContext) { zoom in
+                WorkflowCanvasCornerZoom(zoom: zoom, locked: viewportInteractionLocked, canFit: fitReady) {
+                    fitAllNodes(targetWidth: targetWidth)
+                }
             }
         }
-        }.controlSize(.small).padding(.horizontal,6)
     }
 
     @ViewBuilder private func recoveryActions(_ run: WorkflowRun) -> some View {
@@ -1034,68 +1200,25 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             WorkbenchMenu(text("semantics.pending", "处理待确认内容")) {
                 WorkbenchMenuForEach(waiting) { call in
                     WorkbenchMenuAction(WorkflowHumanPresentation.name(call.step.node, in: WorkflowHumanPresentation.nodes(in: run), language: languageStore) + " · " + WorkflowHumanPresentation.call(call, in: WorkflowWorkspacePanels.records(in: run), language: languageStore)) {
-                        panelsState.selectRun(run.id)
-                        panelsState.selectResult(node: call.step.node.id, call: .init(address: call.address, stepID: call.id))
-                        openCall(run,record:call)
+                        inspectPending(run, call: call)
                     }
                 }
             }.accessibilityIdentifier("workflow-open-pending-" + run.id.uuidString)
         } else {
             WorkflowRunRecoveryButton(controller: controller, run: run, readOnly: isReadOnly || controller.isRunning)
+            if run.planCheckpoint?.state == .paused && !isBatchRun(run.id) {
+                Button(dockText("stop")) { Task { await controller.stopPausedRun(runID: run.id) } }
+                    .disabled(isReadOnly || controller.isRunning || controller.hasPendingSaves)
+            }
         }
     }
 
-    private func canvasTools(fitReady: Bool, targetWidth: CGFloat) -> some View {
-        HStack(spacing: 10) {
-            WorkbenchGlassSegments(title: text("refinement.workflow.canvasTool", "画布工具"), selection: $canvasTool, choices: [
-                (WorkflowCanvasTool.pointer, text("refinement.workflow.pointer", "指针")),
-                (.hand, text("refinement.workflow.hand", "手形"))], featureIDs: ["CANVAS-POINTER", "CANVAS-HAND"])
-                .frame(width: 100).accessibilityIdentifier("workflow-canvas-tool")
-            Button(text("workflow.action.undo", "撤销"), systemImage: "arrow.uturn.backward") { controller.undo() }.workbenchHelp("CANVAS-UNDO", unavailableReason: controller.canUndo ? nil : (canvasHelpReason(controller, language: languageStore) ?? consistencyText(languageStore, "help.reason.undo")))
-                .disabled(!controller.canEditCanvas || !controller.canUndo)
-            Button(text("workflow.action.redo", "重做"), systemImage: "arrow.uturn.forward") { controller.redo() }.workbenchHelp("CANVAS-REDO", unavailableReason: controller.canRedo ? nil : (canvasHelpReason(controller, language: languageStore) ?? consistencyText(languageStore, "help.reason.redo")))
-                .disabled(!controller.canEditCanvas || !controller.canRedo)
-            WorkbenchMenu(text("workflow.selection.menu", "选择"), systemImage: "square.dashed") {
-                WorkbenchMenuAction(text("workflow.selection.all", "选择全部节点")) {
-                    controller.selectedNodeID = nil; selectedConnectionID = nil
-                    controller.selectedNodeIDs = Set(controller.graph?.nodes.map(\.id) ?? [])
-                }
-                WorkbenchMenuAction(text("workflow.selection.clear", "清除选择")) {
-                    controller.selectedNodeID = nil; controller.selectedNodeIDs = []; selectedConnectionID = nil
-                }
-                WorkbenchMenuAction(text("refinement.workflow.extractSelection", "组合为自定义节点…")) {
-                    if let node = selectedNodes.first, selectedNodes.count == 1 { controller.selectedNodeIDs = [node.id] }
-                    extractSelection = true; toolsPresented = true
-                }.disabled(!controller.canEditCanvas || selectedNodes.isEmpty)
-                    .accessibilityIdentifier("workflow-canvas-extract-selection")
-            }
-            Button(workflowText(languageStore, "refinement.workflow.typeLegend"), systemImage: "paintpalette") { portLegendPresented.toggle() }
-                .popover(isPresented: $portLegendPresented) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(WorkflowPortStyle.legend.indices, id: \.self) { index in
-                            let entry = WorkflowPortStyle.legend[index]
-                            HStack(spacing: 8) {
-                                Circle().fill(WorkflowPortStyle.color(for: entry.port))
-                                    .frame(width: 10, height: 10)
-                                Text(workflowText(languageStore, "refinement.workflow.legend." + entry.key, fallback: entry.fallback))
-                            }
-                        }
-                    }
-                    .padding(14)
-                }
-                .accessibilityIdentifier("workflow-port-legend")
-            Spacer(minLength: 4)
-            WorkflowCanvasCameraScope(camera: camera, controller: controller,
-                context: viewContext, changed: rememberViewContext) { zoom in
-                WorkflowCanvasZoomControl(zoom: zoom, locked: viewportInteractionLocked,
-                    label: text("workflow.toolbar.zoom", "画布缩放"))
-            }
-            Button(text("refinement.workflow.fitAll", "显示全部节点"), systemImage: "arrow.up.left.and.arrow.down.right") {
-                fitAllNodes(targetWidth: targetWidth)
-            }.disabled(!fitReady || viewportInteractionLocked).accessibilityIdentifier("workflow-canvas-fit-all").workbenchHelp("CANVAS-FIT")
-
-        }.buttonStyle(WorkbenchGlassButtonStyle()).controlSize(.small).padding(.horizontal, 18).padding(.vertical, 8)
-            .workbenchPanel(cornerRadius: 12).padding(.horizontal, 12)
+    private func inspectPending(_ run: WorkflowRun, call: WorkflowPlanCallRecord) {
+        guard controller.runs.contains(where: { $0.id == run.id }),
+              controller.callRecords(runID: run.id).contains(where: { $0.id == call.id && $0.address == call.address }) else { return }
+        panelsState.selectRun(run.id)
+        panelsState.selectResult(node: call.step.node.id, call: .init(address: call.address, stepID: call.id))
+        recordsDetail = true; activityVisible = true; workspaceDraft = nil; runSettingsVisible = false
     }
 
     @ViewBuilder
@@ -1177,7 +1300,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             let height = measuredCardSizes[node.id]?.height ?? CGFloat(WorkflowLayout.cardHeightBudget(
                 inputs: definition?.inputs.count ?? 1, outputs: definition?.outputs.count ?? 1))
             bounds = bounds.union(CGRect(x: point.x - WorkflowCanvasLayoutPolicy.nodeWidth / 2,
-                                        y: point.y - height / 2,
+                                        y: point.y - WorkflowNodePortLayout.titleHeight / 2,
                                         width: WorkflowCanvasLayoutPolicy.nodeWidth, height: height))
         }
         guard let fitted = WorkflowCanvasFit.view(for: bounds, viewport: canvasViewport.clip) else { return }
@@ -1228,8 +1351,8 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
     private func presentWorkspacePlan(_ node:UUID,mode:Int) {
         guard !isReadOnly else { return }
-        do { planInputLabels=[:];workspaceDraft=try .init(controller:controller,target:node,mode:mode);activityVisible=false }
-        catch { controller.errorMessage=error.localizedDescription }
+        do { planInputLabels=[:];workspaceDraft=try .init(controller:controller,target:node,mode:mode);activityVisible=false;runSettingsVisible=false }
+        catch { controller.errorMessage=error.localizedDescription; workspaceDraft=nil; activityVisible=true; recordsDetail=false; runSettingsVisible=false }
     }
     private func openValue(_ value:WorkflowValue,_ call:WorkflowCallReference,_ title:String, port: String? = nil, side: WorkflowViewerValueSide = .output) {
         guard let viewerModel,viewerModel.projectSession.workflow === controller else { return }
@@ -2303,14 +2426,17 @@ struct WorkflowRunRecoveryButton: View {
         let savingFailure = run.status == .saving && run.planCheckpoint?.records.contains {
             $0.address.path.count == 1 && $0.step.status == .failed
         } == true
-        let key = savingFailure ? "workflow.action.saveFailureRecord" : run.status == .failed ? "workflow.action.retryComputation" : run.status == .saving ? "workflow.action.resumeSaving" : "workflow.action.resume"
-        let fallback = savingFailure ? "重试保存失败记录" : run.status == .failed ? "重试计算" : run.status == .saving ? "恢复保存并继续流程" : "继续流程"
+        let key = savingFailure ? "workflow.action.saveFailureRecord" : run.status == .failed ? "workflow.action.retryComputation" : run.status == .saving ? "workflow.dock.retrySave" : "workflow.action.resume"
+        let fallback = savingFailure ? "重试保存失败记录" : run.status == .failed ? "重试计算" : run.status == .saving ? "重试保存" : "继续流程"
         Button(workflowText(languageStore, key, fallback: fallback)) {
-            Task { await controller.resume(runID: run.id) }
+            Task {
+                if run.status == .saving { await controller.retryRunSaving(runID: run.id) }
+                else { await controller.resume(runID: run.id) }
+            }
         }
         .disabled(readOnly)
         .accessibilityIdentifier("workflow-run-recovery-" + run.id.uuidString)
-        .workbenchHelp(savingFailure ? "RECOVERY-SAVE-FAILURE" : run.status == .failed ? "RECOVERY-RECOMPUTE" : run.status == .saving ? "RECOVERY-SAVE-CONTINUE" : "DECISION-CONTINUE", unavailableReason: readOnly ? canvasHelpReason(controller, readOnly: readOnly, language: languageStore) : nil, target: "run:\(run.id):\(run.graph.id):\(run.status)")
+        .workbenchHelp(savingFailure ? "RECOVERY-SAVE-FAILURE" : run.status == .failed ? "RECOVERY-RECOMPUTE" : run.status == .saving ? nil : "DECISION-CONTINUE", unavailableReason: readOnly ? canvasHelpReason(controller, readOnly: readOnly, language: languageStore) : nil, target: "run:\(run.id):\(run.graph.id):\(run.status)")
     }
 }
 
@@ -2450,6 +2576,7 @@ struct WorkflowWaitingDecision: View {
     let step: WorkflowStepRun
     let readOnly: Bool
     let preview: @MainActor (WorkflowAssetReference) async throws -> Data
+    var flatControls = false
     @State private var draft = ""
     @State private var highlightedCandidateID: UUID?
     @State private var acceptPartial = false
@@ -2495,7 +2622,7 @@ struct WorkflowWaitingDecision: View {
                     Button(workflowText(languageStore, "workflow.action.acceptText")) {
                         decide(accept: true, text: draft, candidateID: nil)
                     }.workbenchHelp("DECISION-ACCEPT")
-                        .buttonStyle(WorkbenchPrimaryButtonStyle())
+                        .modifier(WorkflowDecisionPrimaryStyle(flat: flatControls))
                         .disabled(!textReady)
                     Button(workflowText(languageStore, "workflow.action.reject"), role: .destructive) {
                         decide(accept: false, text: nil, candidateID: nil)
@@ -2522,7 +2649,7 @@ struct WorkflowWaitingDecision: View {
                     Button(workflowText(languageStore, "workflow.action.acceptHighlighted")) {
                         decide(accept: true, text: nil, candidateID: highlightedCandidateID)
                     }.workbenchHelp("DECISION-ACCEPT")
-                    .buttonStyle(WorkbenchPrimaryButtonStyle())
+                    .modifier(WorkflowDecisionPrimaryStyle(flat: flatControls))
                     .disabled(readOnly || highlightedCandidateID == nil ||
                               (candidates.contains { $0.error != nil } && !acceptPartial))
                     Button(workflowText(languageStore, "workflow.action.reject"), role: .destructive) {

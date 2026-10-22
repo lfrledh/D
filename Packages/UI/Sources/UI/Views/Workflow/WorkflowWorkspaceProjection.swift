@@ -104,6 +104,14 @@ struct WorkflowLibraryValue: Equatable {
 
 /// A UI draft captures the real compiler slice and its owners. It does not resolve
 /// runtime inputs, publish assets, mutate the graph or create an edit copy.
+/// Presentation draft only. Retained by the canvas while settings and plan come and go.
+struct WorkflowWorkspaceRunOptions: Equatable {
+    var batch = false
+    var repetitions = 1
+    var seedStrategy: WorkflowBatchSeedStrategy = .fixed
+    var choices: [String: WorkflowCallReference] = [:]
+}
+
 struct WorkflowWorkspaceRunDraft: Identifiable {
     let id = UUID()
     let owner: ObjectIdentifier
@@ -131,7 +139,7 @@ struct WorkflowWorkspaceRunDraft: Identifiable {
         owner == ObjectIdentifier(controller) && project == controller.projectID && instance == controller.projectInstanceID
             && graph == controller.rootGraph && tools == controller.tools && defaults == controller.services.capturedModelDefaults()
             && controller.bodyPath.isEmpty && controller.canReadLibraryMetadata
-            && (mode < 2 || runs == controller.runs)
+            && (mode == 0 || runs == controller.runs)
     }
     /// Each row is one dependency frontier; siblings have no invented serial arrow.
     static func layers(_ plan: WorkflowPlan) -> [[WorkflowPlannedStep]] {
@@ -146,7 +154,7 @@ struct WorkflowWorkspaceRunDraft: Identifiable {
     }
     var marks: [UUID:WorkflowPlanMark] {
         var values=Dictionary(uniqueKeysWithValues:slice.plan.steps.map { ($0.id, WorkflowPlanMark(kind:mode == 0 ? .mayReuse : .recompute,human:$0.effect == .human)) })
-        for boundary in slice.boundaries where values[boundary.sourceNodeID] == nil { values[boundary.sourceNodeID] = .init(kind:mode == 1 ? .resolvedAtSubmit : .historicalInput,human:false) }
+        for boundary in slice.boundaries where values[boundary.sourceNodeID] == nil { values[boundary.sourceNodeID] = .init(kind:.historicalInput,human:false) }
         return values
     }
 }

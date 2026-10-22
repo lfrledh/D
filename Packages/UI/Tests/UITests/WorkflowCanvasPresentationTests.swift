@@ -50,7 +50,7 @@ struct WorkflowCanvasPresentationTests {
         #expect(geometry.rawPosition(first.id) == CGPoint(x: -240, y: -80))
         #expect(geometry.rawPosition(second.id) == CGPoint(x: 420, y: 260))
         #expect(geometry.displayPosition(first.id).x >= 150)
-        #expect(geometry.displayPosition(first.id).y >= 110)
+        #expect(geometry.displayPosition(first.id).y - WorkflowNodePortLayout.titleHeight / 2 >= 24)
         #expect(geometry.displayPosition(second.id).x > geometry.displayPosition(first.id).x)
         #expect(geometry.size.width >= 1_400)
         #expect(geometry.size.height >= 900)
@@ -66,9 +66,9 @@ struct WorkflowCanvasPresentationTests {
         let node = definition.makeNode()
         let graph = WorkflowGraph(nodes: [node], layout: [.init(nodeID: node.id, x: 0, y: -20)])
         let geometry = WorkflowGraphGeometry(graph: graph, registry: registry)
-        let halfHeight = WorkflowLayout.cardHeightBudget(inputs: 20, outputs: 1) / 2
-        #expect(geometry.displayPosition(node.id).y - halfHeight >= 24)
-        #expect(geometry.displayPosition(node.id).y + halfHeight <= geometry.size.height - 24)
+        let top = geometry.displayPosition(node.id).y - WorkflowNodePortLayout.titleHeight / 2
+        #expect(top >= 24)
+        #expect(top + CGFloat(WorkflowLayout.cardHeightBudget(inputs: 20, outputs: 1)) <= geometry.size.height - 24)
         #expect(geometry.rawPosition(node.id) == CGPoint(x: 0, y: -20))
     }
 

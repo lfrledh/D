@@ -9,16 +9,14 @@ import SwiftUI
     let preview:(WorkflowValue,WorkflowCallReference,String,String) -> Void
     @Environment(\.dLanguageStore) private var language
     @Environment(\.workbenchModelReadiness) private var readiness
-    @State private var choices:[String:WorkflowCallReference]=[:]
-    @State private var batch = false
-    @State private var repetitions = 1
-    @State private var seedStrategy: WorkflowBatchSeedStrategy = .fixed
+    @Binding var options: WorkflowWorkspaceRunOptions
+    var settings: () -> Void = {}
     private func text(_ key: String) -> String { workspaceText(language, key) }
     private func key(_ boundary:WorkflowScopeBoundary)->String { boundary.destinationNodeID.uuidString+":"+boundary.destinationPort }
     private var current:Bool { draft.isCurrent(in:controller) }
     private var pins:[WorkflowHistoricalInput] {
         draft.slice.boundaries.compactMap { boundary in
-            guard let choice=choices[key(boundary)],controller.historicalCalls(for:boundary).contains(where:{$0.address == choice.address && $0.id == choice.stepID}) else { return nil }
+            guard let choice=options.choices[key(boundary)],controller.historicalCalls(for:boundary).contains(where:{$0.address == choice.address && $0.id == choice.stepID}) else { return nil }
             return .init(destinationNodeID:boundary.destinationNodeID,destinationPort:boundary.destinationPort,sourceCall:choice,sourcePort:boundary.sourcePort)
         }
     }
@@ -31,21 +29,15 @@ import SwiftUI
                 Button(text("close"),systemImage:"xmark",action:close)
             }
             if !current { Label(text("stalePlan"),systemImage:"exclamationmark.triangle").foregroundStyle(.orange) }
-            HStack {
-                Toggle(text("batchGenerate"), isOn: $batch)
-                if batch {
-                    Stepper(text("stageCount") + " \(repetitions)", value: $repetitions, in: 1...64)
-                    WorkbenchPicker(text("seedStrategy"), selection: $seedStrategy) {
-                        WorkbenchChoice(text("seedFixed"), value: WorkflowBatchSeedStrategy.fixed)
-                        WorkbenchChoice(text("seedAutomatic"), value: WorkflowBatchSeedStrategy.automatic)
-                    }
-                    Text(text("seedEffect")).font(.caption)
-                }
-            }
             WorkbenchScrollView {
                 VStack(alignment:.leading,spacing:10) {
-                    Text(batch ? text("batchFresh") : draft.mode == 0 ? text("reuseNote") : draft.mode == 1 ? text("singleNote") : text("boundaryNote"))
+                    Text(options.batch ? text("batchFresh") : draft.mode == 0 ? text("reuseNote") : draft.mode == 1 ? text("singleNote") : text("boundaryNote"))
                         .font(.callout).foregroundStyle(.secondary)
+                    Text(workflowText(language, "workflow.dock.range." + String(draft.mode))).font(.subheadline)
+                    if draft.mode >= 1 || options.batch {
+                        ForEach(Array(draft.slice.boundaries.enumerated()),id:\.offset) { _,boundary in boundaryPicker(boundary) }
+                    }
+                    DisclosureGroup(workflowText(language, "workflow.dock.steps")) {
                     let layers=WorkflowWorkspaceRunDraft.layers(draft.slice.plan)
                     ForEach(layers.indices,id:\.self) { index in
                         VStack(alignment:.leading,spacing:5) {
@@ -64,13 +56,6 @@ import SwiftUI
                             }
                         }.padding(8).frame(maxWidth:.infinity,alignment:.leading)
                     }
-                    if draft.mode >= 2 || batch {
-                        ForEach(Array(draft.slice.boundaries.enumerated()),id:\.offset) { _,boundary in boundaryPicker(boundary) }
-                    } else if !draft.slice.boundaries.isEmpty {
-                        ForEach(Array(draft.slice.boundaries.enumerated()),id:\.offset) { _,boundary in
-                            Text(name(boundary.sourceNodeID)+" · "+boundary.sourcePort+" → "+name(boundary.destinationNodeID)+" · "+boundary.destinationPort)
-                                .font(.caption).textSelection(.enabled)
-                        }
                     }
                     DisclosureGroup(text("planIdentity")) {
                         WorkflowTechnicalDetails(value:"\(draft.project) / \(draft.instance)\n\(draft.graph.id) / \(draft.graph.revision)\n\(draft.target)")
@@ -78,33 +63,33 @@ import SwiftUI
                 }.frame(maxWidth:.infinity,alignment:.leading)
             }
             HStack {
-                Text(text("noComputePreview")).font(.caption).foregroundStyle(.secondary)
+                Button(workflowText(language, "workflow.dock.settings"), action: settings)
                 Spacer()
-                Button(batch ? text("batchStart") + " ×\(repetitions)" : text("submit"),systemImage:"play.fill") {
+                Button(options.batch ? text("batchStart") + " ×\(options.repetitions)" : text("submit"),systemImage:"play.fill") {
                     guard current else { return }
-                    let inputs=pins, isBatch=batch, count=repetitions
-                    guard (!batch && draft.mode < 2) || inputs.count == draft.slice.boundaries.count else { return }
+                    let inputs=pins, isBatch=options.batch, count=options.repetitions, selectedSeed=options.seedStrategy
+                    guard (!options.batch && draft.mode == 0) || inputs.count == draft.slice.boundaries.count else { return }
                     close()
                     Task {
                         guard draft.isCurrent(in:controller) else { controller.errorMessage=text("stalePlan");return }
                         if isBatch {
                             do {
                                 let id = try await controller.createBatchStage(selection: draft.selection, pins: inputs,
-                                    repetitions: count, expectedGraphID: draft.graph.id, expectedRevision: draft.graph.revision, seedStrategy: seedStrategy)
+                                    repetitions: count, expectedGraphID: draft.graph.id, expectedRevision: draft.graph.revision, seedStrategy: selectedSeed)
                                 await controller.runBatchStage(id)
                             } catch { controller.errorMessage = error.localizedDescription }
-                        } else if draft.mode < 2 { await controller.run(target:draft.target,only:draft.mode == 1) }
+                        } else if draft.mode == 0 { await controller.run(target:draft.target,only:false) }
                         else { await controller.runScoped(draft.selection,pins:inputs,expectedGraphID:draft.graph.id,expectedRevision:draft.graph.revision) }
                     }
-                }.buttonStyle(WorkbenchPrimaryButtonStyle())
-                    .disabled(!current || !controller.canEditCanvas || controller.isRunning || ((draft.mode >= 2 || batch) && pins.count != draft.slice.boundaries.count))
+                }.buttonStyle(.borderedProminent)
+                    .disabled(!current || !controller.canEditCanvas || controller.isRunning || ((draft.mode >= 1 || options.batch) && pins.count != draft.slice.boundaries.count))
                     .accessibilityIdentifier("workflow-run-preview-submit")
             }
-        }.padding(14)
-            .onChange(of:choices) { _,_ in
+        }.padding(14).buttonStyle(.bordered)
+            .onChange(of:options.choices, initial: true) { _,_ in
                 var labels:[UUID:String]=[:]
                 for boundary in draft.slice.boundaries {
-                    if let choice=choices[key(boundary)],let run=controller.runs.first(where:{$0.id == choice.address.runID}) {
+                    if let choice=options.choices[key(boundary)],let run=controller.runs.first(where:{$0.id == choice.address.runID}) {
                         labels[boundary.sourceNodeID]=run.createdAt.formatted(date:.abbreviated,time:.shortened)
                     }
                 }
@@ -116,15 +101,15 @@ import SwiftUI
         let records=controller.historicalCalls(for:boundary)
         return VStack(alignment:.leading,spacing:6) {
             Text(name(boundary.sourceNodeID)+" · "+boundary.sourcePort+" → "+name(boundary.destinationNodeID)+" · "+boundary.destinationPort).font(.subheadline)
-            WorkbenchPicker(text("chooseInput"),selection:Binding<UUID?>(get:{choices[key(boundary)]?.stepID},set:{ id in
-                choices[key(boundary)]=records.first { $0.id == id }.map { .init(address:$0.address,stepID:$0.id) }
+            WorkbenchPicker(text("chooseInput"),selection:Binding<UUID?>(get:{options.choices[key(boundary)]?.stepID},set:{ id in
+                options.choices[key(boundary)]=records.first { $0.id == id }.map { .init(address:$0.address,stepID:$0.id) }
             })) {
                 WorkbenchChoice(text("none"),value:UUID?.none)
                 WorkbenchChoiceForEach(records) { call in
                     WorkbenchChoice((controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0,in:controller.runs,language:language) } ?? text("missing"))+" · "+WorkflowHumanPresentation.call(call,in:records,language:language),value:Optional(call.id))
                 }
             }.disabled(!current)
-            if let choice=choices[key(boundary)],let call=records.first(where:{$0.address == choice.address && $0.id == choice.stepID}),let value=call.step.outputs[boundary.sourcePort] {
+            if let choice=options.choices[key(boundary)],let call=records.first(where:{$0.address == choice.address && $0.id == choice.stepID}),let value=call.step.outputs[boundary.sourcePort] {
                 Button(text("previewInput"),systemImage:"arrow.up.right.square") { preview(value,choice,name(boundary.sourceNodeID),boundary.sourcePort) }
             }
         }.padding(8)

@@ -167,7 +167,7 @@ private struct MetadataHostProbe: NSViewRepresentable {
                       wire.targetNode: CGRect(x: 480, y: 20, width: 240, height: 160),
                       occluder: CGRect(x: 335, y: 50, width: 50, height: 100)]
         let ends = WorkflowConnectionGeometry.endpoints(for: wire, geometry: geometry, portCenters: ports, nodeFrames: frames)
-        #expect(ends.start == CGPoint(x: 240, y: 100) && ends.end == CGPoint(x: 480, y: 100))
+        #expect(ends.start == ports[output] && ends.end == ports[input])
         let cache = WorkflowConnectionHitCache()
         var hit = cache.path(for: wire, geometry: geometry, portCenters: ports, excluding: [], nodeFrames: frames)
         #expect(hit.cgPath.contains(CGPoint(x: 300, y: 100)))
@@ -578,7 +578,7 @@ extension WorkflowWorkspacePresentationTests {
         #expect(draft.slice.boundaries.count == [0,2,2,1][mode])
         #expect(expected.isSubset(of:Set(draft.marks.keys)))
         for boundary in draft.slice.boundaries {
-            #expect(draft.marks[boundary.sourceNodeID]?.kind == (mode == 1 ? .resolvedAtSubmit : .historicalInput))
+            #expect(draft.marks[boundary.sourceNodeID]?.kind == .historicalInput)
         }
         if mode == 0 {
             let layers=WorkflowWorkspaceRunDraft.layers(draft.slice.plan)

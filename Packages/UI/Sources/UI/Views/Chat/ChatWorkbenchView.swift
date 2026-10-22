@@ -553,6 +553,7 @@ struct ChatWorkbenchView: View {
     @State private var newPresetName = ""
     @State private var filePanelBusy = false
     @State private var ocrImport = false
+    private var textWorkspaceActions: AnyView
     private var openToolsRequest: ChatToolsNavigationRequest?
     private var onToolsOpened: (UUID) -> Void
     private var layoutProbe: ((String, CGRect) -> Void)?
@@ -572,6 +573,7 @@ struct ChatWorkbenchView: View {
          onAssetsChanged: @escaping () -> Void,
          onSavedValue: ((WorkflowDatum, UUID) async throws -> Void)? = nil,
          onResolveSharedAsset: ((UUID, UUID?, UUID) async throws -> (ProjectStore, WorkflowAssetReference, String))? = nil,
+         textWorkspaceActions: AnyView = AnyView(EmptyView()),
          initialPreparationTab: String = "settings",
          initialInspectorVisible: Bool = false,
          initialSettingsVisible: Bool = false,
@@ -579,6 +581,7 @@ struct ChatWorkbenchView: View {
          initialInspectedAttemptID: UUID? = nil,
          initiallyFollowsBottom: Bool = true,
          initiallyHasNewContent: Bool = false) {
+        self.textWorkspaceActions = textWorkspaceActions
         self.openToolsRequest = openToolsRequest
         self.onToolsOpened = onToolsOpened
         self.chat = chat; self.model = model; self.onChooseModel = onChooseModel
@@ -640,8 +643,11 @@ struct ChatWorkbenchView: View {
             ZStack(alignment: .topLeading) {
                 Group {
                     if !chat.isLoaded {
-                        ContentUnavailableView(label("loadFailed", "聊天记录不可用"), systemImage: "exclamationmark.triangle",
-                            description: Text(chat.error.map { ChatErrorText.display($0, language: language) } ?? label("loading", "正在读取聊天记录…")))
+                        VStack(spacing: 0) {
+                            HStack { Text(label("conversation", "对话")).font(.headline); Spacer(); textWorkspaceActions }.padding(8)
+                            ContentUnavailableView(label("loadFailed", "聊天记录不可用"), systemImage: "exclamationmark.triangle",
+                                description: Text(chat.error.map { ChatErrorText.display($0, language: language) } ?? label("loading", "正在读取聊天记录…")))
+                        }
                     } else if let session {
                         conversation(session, width: geometry.size.width, height: geometry.size.height, sidebarShown: sidebarShown)
                     } else {
@@ -803,7 +809,16 @@ struct ChatWorkbenchView: View {
     }
 
     private func emptyConversation(width: CGFloat, sidebarShown: Bool) -> some View {
-        ChatEmptyConversationView { createSession() }
+        VStack(spacing: 0) {
+            HStack {
+                Text(label("conversation", "对话")).font(.headline)
+                Spacer()
+                Button(workflowText(language, "quick.textWorkspace.newConversation"), systemImage: "plus") { createSession() }
+                    .disabled(chat.saveIssue != nil).accessibilityIdentifier("chat-new-conversation")
+                textWorkspaceActions
+            }.padding(8)
+            ChatEmptyConversationView(onNew: { createSession() }, showsNewButton: false)
+        }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .chatMeasured("empty-conversation", probe: layoutProbe)
     }
@@ -1046,9 +1061,9 @@ ScrollViewReader { proxy in
                             }
                         } , contextID: "path:\(session.id):\(session.selectedLeafID?.uuidString ?? "none")").fixedSize().chatMeasured("paths", probe: layoutProbe)
                 }
-                Button { createSession() } label: { Image(systemName: "plus").frame(width: 28, height: 28) }
-                    .buttonStyle(WorkbenchIconButtonStyle()).help(label("new", "新建"))
-                    .accessibilityLabel(label("new", "新建")).disabled(chat.saveIssue != nil)
+                Button(workflowText(language, "quick.textWorkspace.newConversation"), systemImage: "plus") { createSession() }
+                    .disabled(chat.saveIssue != nil).accessibilityIdentifier("chat-new-conversation")
+                textWorkspaceActions
 
             }.padding(.horizontal, 8).padding(.vertical, 8)
                 .chatMeasured("topbar", probe: layoutProbe)

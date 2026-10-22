@@ -24,6 +24,7 @@ struct QuickGenerationView: View {
     var onOpenLibrary: () -> Void = {}
     var onAssetsChanged: () -> Void = {}
     var onResolveSharedAsset: QuickInputImport.SharedAssetResolver? = nil
+    var textWorkspaceActions: AnyView = AnyView(EmptyView())
     @Environment(\.workbenchSidebars) private var sharedSidebars
     @State private var localSidebars = WorkbenchSidebarState()
     private var sidebars: WorkbenchSidebarState { sharedSidebars ?? localSidebars }
@@ -62,8 +63,9 @@ struct QuickGenerationView: View {
             ZStack(alignment: .topLeading) {
                 VStack(spacing: 10) {
                     HStack {
-                        Text(title).font(.headline).lineLimit(1)
+                        Text(quick.category == .text ? workflowText(language, "quick.textWorkspace.singleTitle") : title).font(.headline).lineLimit(1)
                         Spacer()
+                        if quick.category == .text { textWorkspaceActions }
                         if let result = selectedMedia, let run = run(containing: result) {
                             Button(refinementText("resultDetails", fallback: "结果详情"), systemImage: "info.circle") { detailRun = run }
                         }

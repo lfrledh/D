@@ -209,6 +209,7 @@ struct WorkflowHumanTaskForm: View {
     let onSaveDraft: (WorkflowDatum?) -> Void
     let onSubmit: (WorkflowDatum) -> Void
     let onReject: () -> Void
+    let flatControls: Bool
     @State private var state: WorkflowHumanTaskFormState
     @Environment(\.dLanguageStore) private var languageStore
 
@@ -216,12 +217,14 @@ struct WorkflowHumanTaskForm: View {
         task: WorkflowHumanTask,
         onSaveDraft: @escaping (WorkflowDatum?) -> Void,
         onSubmit: @escaping (WorkflowDatum) -> Void,
-        onReject: @escaping () -> Void
+        onReject: @escaping () -> Void,
+        flatControls: Bool = false
     ) {
         self.task = task
         self.onSaveDraft = onSaveDraft
         self.onSubmit = onSubmit
         self.onReject = onReject
+        self.flatControls = flatControls
         _state = State(initialValue: WorkflowHumanTaskFormState(task: task))
     }
 
@@ -237,7 +240,7 @@ struct WorkflowHumanTaskForm: View {
                 taskEditor.id(task.id)
                 HStack {
                     Button(humanTaskText("workflow.language.form.submit", fallback: "Submit")) { submit() }
-                        .buttonStyle(WorkbenchPrimaryButtonStyle())
+                        .modifier(WorkflowDecisionPrimaryStyle(flat: flatControls))
                         .disabled(!state.canSubmit)
                         .accessibilityIdentifier("workflow-human-task-submit")
                     Button(humanTaskText("workflow.language.form.reject", fallback: "Reject"), role: .destructive) {

@@ -35,17 +35,19 @@ import SwiftUI
                                 let complete = stage.attempts.filter { $0.state == .completed }.count
                                 Text("\(complete)/\(stage.attempts.count) " + text("batchCompleted") +
                                      " · \(waiting) " + text("batchWaiting")).font(.caption)
-                                if stage.state == .savingBlocked || stage.attempts.contains(where: { $0.state == .savingBlocked }) {
+                                if stage.state == .savingBlocked || stage.attempts.contains(where: { $0.state == .savingBlocked }) || (stage.state == .cancelled && controller.hasPendingSaves) {
                                     Button(text("saveOnly")) { Task { await controller.retryBatchSaving(stage.id) } }.disabled(controller.isRunning)
                                 } else if stage.attempts.contains(where: { $0.state == .queued }), stage.state != .cancelled {
                                     Button(text("resumeQueue")) { Task { await controller.runBatchStage(stage.id) } }
+                                        .disabled(controller.isRunning || controller.hasPendingSaves)
+                                    Button(workflowText(language, "workflow.dock.stopRemaining")) { Task { await controller.stopBatchQueue(stage.id) } }
                                         .disabled(controller.isRunning || controller.hasPendingSaves)
                                 }
                             }
                             ForEach(stage.attempts) { attempt in
                                 if let run = controller.runs.first(where: { $0.id == attempt.runID }) { row(attempt, stageID: stage.id, run: run) }
                             }
-                        }.padding(8).workbenchPanel(cornerRadius: 12)
+                        }.padding(8).background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
                     }
                     if controller.batchStages.isEmpty {
                         Text(text("batchEmpty")).foregroundStyle(.secondary)

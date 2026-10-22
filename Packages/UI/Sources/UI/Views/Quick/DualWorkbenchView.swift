@@ -249,6 +249,59 @@ public struct DualWorkbenchView: View {
         }
     }
 
+    private var textWorkspaceMenu: some View {
+        let owner = quick
+        let destination = automaticQuickModel.temporaryChatModel ?? quickModel
+        let target = destination.projectSession.chat
+        let presentation = owner.textPresentation
+        let temporary = automaticQuickModel.temporaryChatModel
+        let sessionID = target?.state.selectedSessionID
+        let current = {
+            entry == .quick && quick === owner && owner.category == .text && owner.textPresentation == presentation
+                && (automaticQuickModel.temporaryChatModel ?? quickModel) === destination
+                && destination.projectSession.chat === target && target?.state.selectedSessionID == sessionID
+                && !quickOwnerIsChanging && !temporaryChatChanging && !destination.projectSession.isChangingProject
+                && target?.isDiscarding != true
+        }
+        let unavailable = temporaryChatChanging || quickOwnerIsChanging || destination.projectSession.isChangingProject || target?.isDiscarding == true
+        return WorkbenchMenu {
+            quickTextWorkspaceRows(presentation: presentation, temporary: temporary != nil,
+                language: language, enabled: !unavailable, current: current,
+                temporaryAction: changeTemporaryChat, switchAction: {
+                    captureChatReading(); owner.selectTextPresentation(presentation == .chat ? .single : .chat)
+                })
+        } label: {
+            Image(systemName: "ellipsis").frame(width: 28, height: 28).contentShape(Circle())
+        }.buttonStyle(WorkbenchIconButtonStyle())
+            .accessibilityLabel(workflowText(language, "quick.textWorkspace.more"))
+            .accessibilityIdentifier("quick-text-internal-menu")
+            .help(unavailable ? workflowText(language, "quick.textWorkspace.unavailable") : workflowText(language, "quick.textWorkspace.more"))
+            .environment(\.workbenchMenuContext, "text:\(ObjectIdentifier(owner)):\(ObjectIdentifier(destination)):\(presentation):\(sessionID)")
+    }
+    private var singleTextActions: some View {
+        let owner = quick
+        // A temporary owner survives a visit to single generation. New conversation
+        // must be created in the owner that will actually be visible on return.
+        let destination = automaticQuickModel.temporaryChatModel ?? quickModel
+        let target = destination.projectSession.chat
+        return HStack(spacing: 8) {
+            Button(workflowText(language, "quick.textWorkspace.newConversation"), systemImage: "plus") {
+                guard entry == .quick, quick === owner, owner.category == .text, owner.textPresentation == .single,
+                      (automaticQuickModel.temporaryChatModel ?? quickModel) === destination,
+                      destination.projectSession.chat === target, let target,
+                      !quickOwnerIsChanging, !temporaryChatChanging, !destination.projectSession.isChangingProject,
+                      target.isLoaded, !target.isDiscarding, target.saveIssue == nil else { return }
+                do {
+                    try target.newSession()
+                    owner.selectTextPresentation(.chat)
+                } catch { issue = error.localizedDescription }
+            }.disabled(target == nil || target?.saveIssue != nil || target?.isLoaded != true || target?.isDiscarding == true || destination.projectSession.isChangingProject || temporaryChatChanging || quickOwnerIsChanging)
+                .help(target?.saveIssue ?? (target?.isLoaded != true ? (target?.error.map { ChatErrorText.display($0, language: language) } ?? workflowText(language, "chat.loading")) : (quickOwnerIsChanging || temporaryChatChanging || destination.projectSession.isChangingProject || target?.isDiscarding == true) ? workflowText(language, "quick.textWorkspace.unavailable") : workflowText(language, "quick.textWorkspace.newConversation")))
+                .accessibilityIdentifier("single-text-new-conversation")
+            textWorkspaceMenu
+        }
+    }
+
     private var saveCommand: WorkbenchGenerationCommand {
         if entry == .workflow, let controller = canvasModel.projectSession.workflow {
             return .init(title: consistencyText(language, "FLOW-SAVE"), isEnabled: !controller.isSaving && !canvasModel.isChangingProject) {
@@ -346,24 +399,6 @@ public struct DualWorkbenchView: View {
                         guard entry == .quick, quick === dragOwner, quickModel.projectSession.currentStore === dragStore else { return }
                         selectCategory(category)
                     }.workbenchHelp("QUICK-MODALITY")
-                if entry == .quick, quick.category == .text {
-                    WorkbenchMenu {
-                        WorkbenchPickerOptions(workflowText(language, "chat.textSurface"),
-                            selection: Binding(get: { quick.textPresentation }, set: { captureChatReading(); quick.selectTextPresentation($0) })) {
-                            WorkbenchChoice(workflowText(language, "chat.conversation"), value:QuickTextPresentation.chat)
-                            WorkbenchChoice(workflowText(language, "chat.single"), value:QuickTextPresentation.single)
-                        }
-                        if quick.textPresentation == .chat {
-                            WorkbenchMenuDivider()
-                            WorkbenchMenuAction(chat?.isTemporary == true ? t("endTemporary") : t("temporary"), action: changeTemporaryChat)
-                                .disabled(temporaryChatChanging).accessibilityIdentifier("chat-temporary-toggle")
-                        }
-                    } label: {
-                        Label(quick.textPresentation == .single ? t("singleShort") :
-                            (chat?.isTemporary == true ? t("temporary") : t("chat")),
-                            systemImage: chat?.isTemporary == true ? "bubble.left.and.text.bubble.right" : "bubble.left")
-                    }.fixedSize().accessibilityIdentifier("quick-text-surface")
-                }
                     Spacer(minLength: 0)
                 }.padding(.horizontal, 16).padding(.bottom, 8)
             }
@@ -421,7 +456,7 @@ public struct DualWorkbenchView: View {
                                             guard let asset = manifest.assets.first(where: { $0.id == assetID }) else { throw WorkflowIssue("源素材已不存在。") }
                                             let reference = try await source.pinWorkflowAsset(assetID)
                                             return (source, reference, asset.name)
-                                        })
+                                        }, textWorkspaceActions: AnyView(textWorkspaceMenu))
                                         .id(chat.store.rootURL.standardizedFileURL.path)
                                         .disabled(quickOwnerIsChanging || chat.isDiscarding || chatModel.projectSession.isChangingProject)
                                 } else { quickSurface }
@@ -843,7 +878,7 @@ public struct DualWorkbenchView: View {
                             throw WorkflowIssue("源素材已不存在。")
                         }
                         return (source, try await source.pinWorkflowAsset(assetID), asset.name)
-                    })
+                    }, textWorkspaceActions: AnyView(singleTextActions))
                     .id(quick.store.rootURL.standardizedFileURL.path)
                     .disabled(quickOwnerIsChanging)
     }
@@ -1216,4 +1251,20 @@ func suggestedExternalCopyName(_ name: String, suffix: String) -> String {
     if let current = UTType(filenameExtension: existing), let expected = UTType(filenameExtension: suffix),
        current == expected { return name }
     return name + "." + suffix
+}
+
+/// The same captured commands feed the internal menu and component checks.
+@MainActor @WorkbenchMenuBuilder
+func quickTextWorkspaceRows(presentation: QuickTextPresentation, temporary: Bool,
+    language: UILanguageStore?, enabled: Bool, current: @escaping () -> Bool,
+    temporaryAction: @escaping () -> Void, switchAction: @escaping () -> Void) -> WorkbenchMenuRows {
+    if presentation == .chat {
+        WorkbenchMenuAction(workflowText(language, temporary ? "quick.textWorkspace.endTemporary" : "quick.textWorkspace.newTemporary"), id: "chat-temporary-toggle") {
+            guard current() else { return }; temporaryAction()
+        }.disabled(!enabled).validation(current)
+        WorkbenchMenuDivider()
+    }
+    WorkbenchMenuAction(workflowText(language, presentation == .chat ? "quick.textWorkspace.toSingle" : "quick.textWorkspace.toChat"), id: "text-presentation-switch") {
+        guard current() else { return }; switchAction()
+    }.disabled(!enabled).validation(current)
 }

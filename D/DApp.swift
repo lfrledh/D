@@ -106,6 +106,7 @@ private struct WorkbenchCommands: Commands {
     let requestSettings: () -> Void
     @FocusedValue(\.workbenchGeneration) private var generationCommand
     @FocusedValue(\.workbenchSave) private var saveCommand
+    @FocusedValue(\.workbenchCanvas) private var canvasCommands
     @Environment(\.openWindow) private var openWindow
     private var modalResourceOperation: Bool {
         bootstrap.libraryModel?.isPresented == true || bootstrap.libraryModel?.isChoosingLocation == true
@@ -147,6 +148,22 @@ private struct WorkbenchCommands: Commands {
             Button(saveCommand?.title ?? label("consistency.menu.file.save", "保存更改")) { saveCommand?.action() }
                 .keyboardShortcut("s")
                 .disabled(modalResourceOperation || bootstrap.isTerminating || saveCommand?.isEnabled != true)
+        }
+        CommandGroup(after: .undoRedo) {
+            if let canvasCommands {
+                Menu(label("workflow.dock.nodeEditing", "节点编辑")) {
+                    ForEach(canvasCommands.edit.indices, id: \.self) { index in
+                        let command = canvasCommands.edit[index]
+                        Button(command.title, action: command.action)
+                            .disabled(!command.isEnabled || NSApp.keyWindow?.firstResponder is NSTextView || settingsBlocked || bootstrap.isTerminating)
+                    }
+                }
+            }
+        }
+        CommandGroup(after: .help) {
+            if let command = canvasCommands?.legend {
+                Button(command.title, action: command.action).disabled(!command.isEnabled || settingsBlocked || bootstrap.isTerminating)
+            }
         }
         CommandGroup(after: .importExport) {
             Button(label("command.asset.export", "导出所选作品…")) { Task { await bootstrap.model?.exportSelected() } }

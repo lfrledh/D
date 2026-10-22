@@ -21,6 +21,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
 /// Coordinates compiled structured workflows; all expensive model work is still admitted by the shared InferenceRuntime.
 @MainActor @Observable public final class WorkflowController {
     public let registry: WorkflowRegistry
+    public private(set) var pendingPausedStopRunID: UUID?
     public private(set) var batchStages: [WorkflowBatchStage] = []
     @ObservationIgnored private var batchPauseRequested = false
     @ObservationIgnored private var activeBatchID: UUID?
@@ -973,7 +974,8 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         catch { persistenceFailed = true; isSaving = false; throw error }
     }
     public func save() async {
-        do { try await persist(); setProgress(.init("workflowSaved")); await onChange() }
+        let pendingStop = pendingPausedStopRunID
+        do { try await persist(); if pendingPausedStopRunID == pendingStop { pendingPausedStopRunID = nil }; setProgress(.init("workflowSaved")); await onChange() }
         catch { errorMessage = error.localizedDescription }
     }
     public func saveExplicitEdits() async throws { try await persist(); await onChange() }
@@ -1123,6 +1125,32 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             errorMessage = error.localizedDescription
         }
         await onChange()
+    }
+
+    /// Stop only undispatched attempts. Completed/waiting results and adopted
+    /// prefixes remain byte-for-byte intact; failed persistence keeps this intent.
+    public func stopBatchQueue(_ id: UUID) async {
+        guard !closed, !closing, !isRunning, !isSaving, !toolPublicationBusy,
+              !externalOperationBusy(), readOnlyReason == nil, !hasPendingSaves,
+              let si = batchStages.firstIndex(where: { $0.id == id }),
+              [.queued, .paused].contains(batchStages[si].state),
+              batchStages[si].attempts.contains(where: { $0.state == .queued }) else { return }
+        isRunning = true; defer { isRunning = false }
+        do {
+            try WorkflowBatchValidation.validate(batchStages, runs: runs, registry: registry)
+            let queued = batchStages[si].attempts.filter { $0.state == .queued }
+            // Validate all identities before changing any record.
+            guard queued.allSatisfy({ attempt in runs.contains { $0.id == attempt.runID && $0.planCheckpoint?.state == .ready } }) else {
+                throw WorkflowIssue("排队恢复点不是未派发状态；没有取消其他运行。")
+            }
+            for ai in batchStages[si].attempts.indices where batchStages[si].attempts[ai].state == .queued {
+                let ri = runs.firstIndex { $0.id == batchStages[si].attempts[ai].runID }!
+                runs[ri].status = .cancelled; runs[ri].planCheckpoint?.state = .cancelled
+                batchStages[si].attempts[ai].state = .cancelled
+            }
+            batchStages[si].state = .cancelled
+            try await persist(); errorMessage = nil; await onChange()
+        } catch { errorMessage = error.localizedDescription }
     }
 
     private func batchAttemptState(_ run: WorkflowRun) -> WorkflowBatchAttempt.State {
@@ -1648,7 +1676,87 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             await onChange()
         } catch { errorMessage = error.localizedDescription }
     }
+    /// Persist this exact run without admitting a calculation or accepting a human decision.
+    /// A resumed computation still requires the separate explicit resume command.
+    public func retryRunSaving(runID: UUID) async {
+        guard !closed, !closing, !isRunning, !isSaving, !toolPublicationBusy,
+              readOnlyReason == nil, !externalOperationBusy(),
+              !batchStages.contains(where: { $0.attempts.contains(where: { $0.runID == runID }) }),
+              let ri = runs.firstIndex(where: { $0.id == runID }),
+              runs[ri].status == .saving || persistenceFailed,
+              var cp = runs[ri].planCheckpoint else { return }
+        isRunning = true; activeRunID = runID
+        defer { isRunning = false; activeRunID = nil }
+        func pausedIfReady(_ value: WorkflowPlanCheckpoint) -> WorkflowPlanCheckpoint {
+            var copy = value
+            if copy.state == .running || copy.state == .ready { copy.state = .paused }
+            return copy
+        }
+        let saver = WorkflowPlanExecutor(registry: registry,
+            executeCall: { _ in throw WorkflowIssue("保存恢复禁止计算。") },
+            save: { [unowned self] value in
+                self.capture(pausedIfReady(value), runIndex: ri)
+                try await self.persist()
+            })
+        do {
+            try WorkflowArchiveInspection.validateScopeHistory(runs, tools: tools, registry: registry)
+            // A failed terminal write must never be fed to saveOnly's derived-state
+            // recovery: every recorded step may already be complete at pause time.
+            if pendingPausedStopRunID == runID {
+                guard cp.state == .cancelled else { throw WorkflowIssue("待保存的停止记录已改变。") }
+                try await persist(); pendingPausedStopRunID = nil
+                errorMessage = nil; setProgress(.init("cancelled")); await onChange(); return
+            }
+            for record in cp.records where services.hasPendingPublication(stepID: record.id) {
+                guard record.step.status == .saving else {
+                    throw WorkflowIssue("此内容来自尚未保存的人工决定。请在原关卡再次保存决定；未计算或自动采用。")
+                }
+                guard let context = services.retainedPublicationContext(stepID: record.id),
+                      context.node == record.step.node, context.inputs == record.step.inputs,
+                      context.address == record.address else { throw WorkflowIssue("待保存内容与冻结调用不符。") }
+                do {
+                    let outputs = try await services.retryWorkflowPublications(context)
+                    cp = try await saver.restorePublication(cp, stepID: record.id, outputs: outputs)
+                } catch let failure as WorkflowOutputValidationFailure {
+                    cp = try await saver.restorePublicationFailure(cp, stepID: record.id, failure: failure)
+                }
+            }
+            cp = pausedIfReady(try await saver.saveOnly(cp))
+            capture(cp, runIndex: ri)
+            try await persist()
+            for record in cp.records where [.completed, .partial, .failed].contains(record.step.status)
+                && !services.hasPendingPublication(stepID: record.id) {
+                services.acknowledgePublication(stepID: record.id)
+            }
+            if cp.state == .failed {
+                errorMessage = cp.error
+                progressMessage = "失败记录已保存；流程仍失败。需要重新计算时，请明确重试计算。"
+            } else { errorMessage = nil; setProgress(.init("workflowSaved")) }
+            await onChange()
+        } catch {
+            if let latest = saver.checkpoint { capture(pausedIfReady(latest), runIndex: ri) }
+            errorMessage = error.localizedDescription; setProgress(.init("savePending"))
+        }
+    }
+
+    /// Paused plans have already drained. Persist the explicit terminal intent;
+    /// a save failure retains it for a save-only retry, never a preparingRetry.
+    public func stopPausedRun(runID: UUID) async {
+        guard !closed, !closing, !isRunning, !isSaving, !hasPendingSaves, !toolPublicationBusy,
+              readOnlyReason == nil, !externalOperationBusy(),
+              !batchStages.contains(where: { $0.attempts.contains(where: { $0.runID == runID }) }),
+              let ri = runs.firstIndex(where: { $0.id == runID }),
+              var cp = runs[ri].planCheckpoint, cp.state == .paused else { return }
+        isRunning = true; defer { isRunning = false }
+        cp.state = .cancelled
+        for i in cp.records.indices where cp.records[i].step.status == .running { cp.records[i].step.status = .cancelled }
+        capture(cp, runIndex: ri)
+        do { try await persist(); pendingPausedStopRunID = nil; errorMessage = nil; setProgress(.init("cancelled")); await onChange() }
+        catch { pendingPausedStopRunID = runID; errorMessage = error.localizedDescription; setProgress(.init("savePending")) }
+    }
+
     public func resume(runID: UUID) async {
+        guard pendingPausedStopRunID == nil else { errorMessage = "请先恢复停止状态的保存；没有重新计算。"; return }
         guard !batchStages.contains(where: { $0.attempts.contains(where: { $0.runID == runID }) }) else { errorMessage = "批次尝试保留固定结果；请使用继续所选，明确下一阶段次数。"; return }
         guard !externalOperationBusy() else { errorMessage = "请先结束录音或恢复保存，再恢复流程。"; return }
         guard !closed, !closing, !isRunning, !toolPublicationBusy, readOnlyReason == nil, let i = runs.firstIndex(where: { $0.id == runID }) else { return }

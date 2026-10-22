@@ -48,7 +48,9 @@ final class WorkflowPortDragView: NSView {
         guard enabled, !isHiddenOrHasHiddenAncestor else { return nil }
         let local = convert(point, from: superview)
         guard visibleAt(CGPoint(x: local.x - bounds.midX, y: local.y - bounds.midY)) else { return nil }
-        return hypot(local.x - bounds.midX, local.y - bounds.midY) <= min(bounds.width, bounds.height) / 2 ? self : nil
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+        return pow((local.x - bounds.midX) / (bounds.width / 2), 2)
+            + pow((local.y - bounds.midY) / (bounds.height / 2), 2) <= 1 ? self : nil
     }
     override func mouseDown(with event: NSEvent) {
         guard enabled, event.buttonNumber == 0, let window, window.isKeyWindow else { return }

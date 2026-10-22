@@ -66,6 +66,7 @@ struct WorkbenchSidebarTabs<Tab: Hashable>: View {
     @Binding var selection: Tab
     let choices: [(Tab, String)]
     var helpPrefix: String? = nil
+    var paintsPlate = true
     @FocusState private var focused: Tab?
     var body: some View {
         HStack(spacing: 0) {
@@ -85,7 +86,7 @@ struct WorkbenchSidebarTabs<Tab: Hashable>: View {
                     .onKeyPress(.leftArrow) { move(-1); return .handled }
                     .onKeyPress(.rightArrow) { move(1); return .handled }
             }
-        }.frame(height: 36).workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge).accessibilityElement(children: .contain).accessibilityLabel(title).workbenchHelp(helpPrefix?.contains("RESOURCE") == true ? "WORKSPACE-RESOURCES" : helpPrefix?.contains("RIGHT") == true ? "WORKSPACE-ACTIVITY" : "BAR-LEFT")
+        }.frame(height: 36).modifier(WorkbenchSidebarTabPlate(enabled: paintsPlate)).workbenchSurface(.scrollEdge).accessibilityElement(children: .contain).accessibilityLabel(title).workbenchHelp(helpPrefix?.contains("RESOURCE") == true ? "WORKSPACE-RESOURCES" : helpPrefix?.contains("RIGHT") == true ? "WORKSPACE-ACTIVITY" : "BAR-LEFT")
     }
     private func featureID(_ value: Tab) -> String {
         let name = String(describing: value)
@@ -428,4 +429,11 @@ private struct WorkbenchMeasureLayout: ViewModifier {
 }
 extension View {
     func workbenchMeasureLayout(_ id: String) -> some View { modifier(WorkbenchMeasureLayout(id: id)) }
+}
+
+private struct WorkbenchSidebarTabPlate: ViewModifier {
+    let enabled: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if enabled { content.workbenchPanel(cornerRadius: 0) } else { content }
+    }
 }

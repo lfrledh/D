@@ -220,7 +220,7 @@ struct WorkflowCanvasDragTests {
     }
 
     @Test
-    func idleOriginRaisesForSameGraphExpansionAndNeverShrinksAfterDrag() {
+    func idleOriginKeepsHeaderFixedForExpansionAndNeverShrinksAfterDrag() {
         let node = WorkflowNode(operationID: "d.model.language", title: "model")
         let graphID = UUID(), revision = UUID()
         let collapsed = WorkflowGraph(
@@ -247,7 +247,8 @@ struct WorkflowCanvasDragTests {
             active: nil
         )
         #expect(reachableIdle.height >= expandedNatural.height)
-        #expect(reachableIdle.height > retainedAfterDrag.height)
+        #expect(reachableIdle.height == retainedAfterDrag.height)
+        #expect(WorkflowGraphGeometry(graph: expanded).estimatedHeights[node.id]! > WorkflowGraphGeometry(graph: collapsed).estimatedHeights[node.id]!)
 
         let collapsedAgain = WorkflowCanvasOriginPolicy.resolved(
             natural: WorkflowGraphGeometry(graph: collapsed).translation,

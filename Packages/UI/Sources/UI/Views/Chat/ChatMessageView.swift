@@ -40,6 +40,7 @@ struct ChatChannelPresentation {
 @MainActor
 struct ChatEmptyConversationView: View {
     let onNew: () -> Void
+    var showsNewButton = true
     @Environment(\.dLanguageStore) private var language
 
     private func label(_ key: String, _ fallback: String) -> String {
@@ -51,8 +52,9 @@ struct ChatEmptyConversationView: View {
             ContentUnavailableView(label("empty", "开始新对话"), systemImage: "bubble.left.and.bubble.right",
                 description: Text(label("emptyHelp", "新建对话后选择模型。不会自动发送。")))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Button(label("new", "新建"), systemImage: "plus", action: onNew)
-                .padding(20)
+            if showsNewButton {
+                Button(label("new", "新建"), systemImage: "plus", action: onNew).padding(20)
+            }
         }
     }
 }

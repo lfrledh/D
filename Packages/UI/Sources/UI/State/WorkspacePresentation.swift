@@ -68,3 +68,20 @@ public extension FocusedValues {
         window.performClose(nil)
     }
 }
+
+/// The mounted canvas offers its existing actions to the standard menus. Text
+/// editors retain the native Edit commands and their own Undo manager.
+@MainActor public struct WorkbenchCanvasCommands {
+    public let edit: [WorkbenchGenerationCommand]
+    public let legend: WorkbenchGenerationCommand
+    public init(edit: [WorkbenchGenerationCommand], legend: WorkbenchGenerationCommand) {
+        self.edit = edit; self.legend = legend
+    }
+}
+private struct WorkbenchCanvasKey: FocusedValueKey { typealias Value = WorkbenchCanvasCommands }
+public extension FocusedValues {
+    var workbenchCanvas: WorkbenchCanvasCommands? {
+        get { self[WorkbenchCanvasKey.self] }
+        set { self[WorkbenchCanvasKey.self] = newValue }
+    }
+}

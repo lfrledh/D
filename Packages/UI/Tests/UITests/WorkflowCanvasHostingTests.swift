@@ -68,7 +68,7 @@ struct WorkflowCanvasHostingTests {
                     let size = try #require(sizes[node.id])
                     #expect(size.width > 0 && size.height > 0)
                     let point = geometry.displayPosition(node.id)
-                    let rectangle = CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2,
+                    let rectangle = CGRect(x: point.x - size.width / 2, y: point.y - WorkflowNodePortLayout.titleHeight / 2,
                         width: size.width, height: size.height)
                     #expect(rectangle.minY >= 0 && rectangle.maxY <= geometry.size.height,
                         "Card must remain reachable: \(graph.name) / \(node.title) / \(locale)")

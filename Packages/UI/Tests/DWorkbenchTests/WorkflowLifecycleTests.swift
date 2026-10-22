@@ -1233,6 +1233,111 @@ struct WorkflowLifecycleTests {
         #expect(!ProjectManifest.readableSchemaVersions.contains(13)); #expect(!ProjectManifest.readableSchemaVersions.contains(14)); #expect(!ProjectManifest.readableSchemaVersions.contains(15))
     }
 
+    @Test func stoppedBatchQueueKeepsWaitingParentAndRetriesOnlySaving() async throws {
+        let (_, store, engine, c) = try await fixture()
+        var input = try #require(c.registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("fixed"))
+        let human = try #require(c.registry.operation("d.control.human")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [input, human], connections: [.init(sourceNode: input.id, targetNode: human.id)])
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
+        await c.load()
+        let stage = try await c.createBatchStage(selection: .through(human.id), pins: [], repetitions: 2,
+            expectedGraphID: graph.id, expectedRevision: graph.revision)
+        c.beforeHistorySave = {
+            if c.runs.first?.status == .waiting { c.pause() }
+        }
+        await c.runBatchStage(stage)
+        try #require(c.batchStages[0].attempts.map(\.state) == [.waiting, .queued])
+        let parent = c.runs[0], queued = c.runs[1]
+        let gate = WorkflowSaveSwitch()
+        c.beforeHistorySave = { if gate.fails { throw WorkflowIssue("stop queue save failed") } }
+        await c.stopBatchQueue(stage)
+        #expect(c.hasPendingSaves && c.batchStages[0].state == .cancelled)
+        #expect(c.runs[0] == parent && c.runs[1].planCheckpoint?.records == queued.planCheckpoint?.records)
+        await c.runBatchStage(stage); #expect(c.runs[0] == parent)
+        await c.retryBatchSaving(stage); #expect(c.hasPendingSaves && c.batchStages[0].state == .cancelled)
+        gate.fails = false; await c.retryBatchSaving(stage)
+        #expect(!c.hasPendingSaves && c.errorMessage == nil)
+        #expect(c.batchStages[0].attempts.map(\.state) == [.waiting, .cancelled])
+        #expect(c.runs[0] == parent && c.runs[1].planCheckpoint?.batchSeeds == queued.planCheckpoint?.batchSeeds)
+        #expect(await engine.requests.isEmpty)
+        c.deactivateAfterClose()
+        let reopened = WorkflowController(services: c.services); await reopened.load()
+        #expect(reopened.batchStages[0].state == .cancelled && reopened.runs[0] == parent)
+        #expect(reopened.runs[1].status == .cancelled)
+        try await reopened.close(); try await store.close()
+    }
+
+    @Test func saveOnlyStopsBeforeUnexecutedDownstreamAndColdResumeIsExplicit() async throws {
+        let (_, store, engine, c) = try await fixture()
+        c.addExample("text")
+        let original = try #require(c.graph), input = original.nodes[0], first = original.nodes[1]
+        var second = try #require(c.registry.operation("d.text.rewrite")).definition.makeNode()
+        second.title = "Second rewrite"
+        let graph = WorkflowGraph(nodes: [input, first, second], connections: [
+            .init(sourceNode: input.id, targetNode: first.id), .init(sourceNode: first.id, targetNode: second.id)])
+        let archive = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: archive.revision)
+        await c.load()
+        let gate = WorkflowSaveSwitch()
+        c.beforeHistorySave = {
+            if gate.fails && c.runs.last?.steps.contains(where: { $0.node.id == first.id && $0.status == .completed }) == true {
+                throw WorkflowIssue("save-only downstream counterexample")
+            }
+        }
+        await c.run(target: second.id, only: false)
+        let failed = try #require(c.runs.last), id = failed.id
+        #expect(failed.status == .saving); #expect(await engine.requests.count == 1)
+        let firstCall = try #require(c.callRecords(runID: id).first { $0.step.node.id == first.id })
+        gate.fails = false
+        await c.retryRunSaving(runID: id)
+        #expect(c.errorMessage == nil && c.runs.last?.planCheckpoint?.state == .paused)
+        #expect(await engine.requests.count == 1)
+        #expect(!c.callRecords(runID: id).contains { $0.step.node.id == second.id })
+        #expect(c.callRecords(runID: id).first { $0.step.node.id == first.id } == firstCall)
+        #expect(c.runs.last?.graph == failed.graph)
+        c.deactivateAfterClose()
+        let reopened = WorkflowController(services: c.services); await reopened.load()
+        #expect(reopened.runs.last?.planCheckpoint?.state == .paused)
+        #expect(await engine.requests.count == 1)
+        await reopened.resume(runID: id)
+        #expect(reopened.runs.last?.status == .completed && reopened.errorMessage == nil)
+        #expect(await engine.requests.count == 2)
+        #expect(reopened.callRecords(runID: id).first { $0.step.node.id == first.id } == firstCall)
+        try await reopened.close(); try await store.close()
+    }
+
+    @Test func pausedStopSaveFailureKeepsTerminalIntentInsteadOfDerivingCompleted() async throws {
+        let (_, store, engine, c) = try await fixture()
+        c.addExample("text"); let target = try #require(c.graph?.nodes[1].id)
+        await c.run(target: target, only: false)
+        var archive = try #require(try await store.workflowState().archive)
+        // Explicit boundary fixture: pause accepted after the final call completed.
+        // Every record is complete, so derivedState would incorrectly erase Stop.
+        archive.runs[0].planCheckpoint?.state = .paused; archive.runs[0].status = .waiting
+        _ = try await store.saveWorkflow(graphs: archive.graphs, runs: archive.runs, expectedRevision: archive.revision)
+        await c.load()
+        let id = try #require(c.runs.first?.id), before = c.callRecords(runID: id)
+        let gate = WorkflowSaveSwitch()
+        c.beforeHistorySave = { if gate.fails { throw WorkflowIssue("paused stop save failed") } }
+        await c.stopPausedRun(runID: id)
+        #expect(c.pendingPausedStopRunID == id && c.hasPendingSaves)
+        #expect(c.runs.first?.planCheckpoint?.state == .cancelled && c.runs.first?.status == .cancelled)
+        await c.resume(runID: id) // Another legacy entry must not erase unsaved Stop.
+        #expect(c.pendingPausedStopRunID == id && c.runs.first?.planCheckpoint?.state == .cancelled)
+        await c.retryRunSaving(runID: id) // A second failure must keep the exact terminal intent.
+        #expect(c.pendingPausedStopRunID == id && c.runs.first?.planCheckpoint?.state == .cancelled)
+        #expect(c.callRecords(runID: id) == before); #expect(await engine.requests.count == 1)
+        gate.fails = false; await c.retryRunSaving(runID: id)
+        #expect(c.pendingPausedStopRunID == nil && !c.hasPendingSaves && c.errorMessage == nil)
+        c.deactivateAfterClose()
+        let reopened = WorkflowController(services: c.services); await reopened.load()
+        #expect(reopened.runs.first?.planCheckpoint?.state == .cancelled && reopened.runs.first?.status == .cancelled)
+        #expect(reopened.callRecords(runID: id) == before); #expect(await engine.requests.count == 1)
+        try await reopened.close(); try await store.close()
+    }
+
     @Test func deliveredResultHistoryFailureDoesNotRepeatInference() async throws {
         let (_, store, engine, c) = try await fixture()
         c.addExample("text"); let rewrite = try #require(c.graph?.nodes[1].id)
