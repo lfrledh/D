@@ -1,8 +1,42 @@
 import SwiftUI
+import DWorkbench
 
 /// Fixed geometry of the approved dock; no camera or execution ownership.
 enum WorkflowDockLayout {
     static func width(available: CGFloat) -> CGFloat { min(440, max(1, available - 224)) }
+}
+
+/// A batch can pause between attempts without leaving any paused run. Keep the
+/// stage owner explicit; multiple paused queues require selection in Records.
+@MainActor enum WorkflowDockRecovery {
+    static func pausedQueues(_ controller: WorkflowController) -> [WorkflowBatchStage] {
+        controller.batchStages.filter { $0.state == .paused && $0.attempts.contains { $0.state == .queued } }
+    }
+}
+
+@MainActor struct WorkflowPausedBatchControls: View {
+    let controller: WorkflowController
+    let showRecords: () -> Void
+    @Environment(\.dLanguageStore) private var language
+    var body: some View {
+        let queues = WorkflowDockRecovery.pausedQueues(controller)
+        Group {
+            if queues.count == 1, let stage = queues.first {
+                HStack(spacing: 0) {
+                    Button(workflowText(language, "workflow.dock.resume")) {
+                        Task { await controller.runBatchStage(stage.id) }
+                    }.accessibilityIdentifier("workflow-batch-resume")
+                    Button(workflowText(language, "workflow.dock.stop")) {
+                        Task { await controller.stopBatchQueue(stage.id) }
+                    }.accessibilityIdentifier("workflow-batch-stop")
+                }
+            } else {
+                Button(workflowText(language, "workflow.dock.records"), action: showRecords)
+                    .accessibilityIdentifier("workflow-batch-choose")
+            }
+        }.buttonStyle(WorkflowDockButtonStyle(expand: true))
+            .disabled(controller.isRunning || controller.hasPendingSaves || controller.readOnlyReason != nil)
+    }
 }
 
 struct WorkflowDockButtonStyle: ButtonStyle {

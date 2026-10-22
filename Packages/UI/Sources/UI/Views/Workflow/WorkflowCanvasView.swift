@@ -997,6 +997,10 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 ?? (controller.progressMessage.isEmpty ? dockText("running") : workflowRecoveryProgressText(controller.progressMessage, language: languageStore))
         }
         if controller.hasPendingSaves { return dockText("savePending") }
+        let pausedQueues = WorkflowDockRecovery.pausedQueues(controller)
+        if let stage = pausedQueues.first {
+            return dockText("paused") + " · " + (pausedQueues.count == 1 ? stage.name : String(pausedQueues.count))
+        }
         if !pendingCalls.isEmpty { return dockText("waiting") + " · \(pendingCalls.count)" }
         if let run = recoveryRun, run.planCheckpoint?.state == .paused { return dockText("paused") + " · " + run.graph.name }
         if let progress = controller.progressPresentation, progress.code == "runSaved" {
@@ -1048,6 +1052,10 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 }
                 else { activityVisible = true; recordsDetail = false; workspaceDraft = nil; runSettingsVisible = false }
             }.buttonStyle(WorkflowDockButtonStyle(expand: true))
+        } else if !WorkflowDockRecovery.pausedQueues(controller).isEmpty {
+            WorkflowPausedBatchControls(controller: controller) {
+                activityVisible = true; recordsDetail = false; workspaceDraft = nil; runSettingsVisible = false
+            }.disabled(isReadOnly)
         } else if !pendingCalls.isEmpty {
             let assetsOnly = pendingCalls.allSatisfy { WorkflowBatchPanel.reviewActionKey(for: $0.step, registry: controller.registry) == "reviewGate" }
             Button(dockText(assetsOnly ? "reviewAssets" : "reviewHuman")) {

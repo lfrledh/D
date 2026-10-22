@@ -1,6 +1,6 @@
 import AppKit
 import DInference
-import DWorkbench
+@testable import DWorkbench
 import SwiftUI
 import Testing
 @testable import UI
@@ -12,6 +12,105 @@ private actor LayoutNoInference: InferenceEngine {
 }
 
 @Suite(.serialized) @MainActor struct WorkflowApprovedLayoutTests {
+    @Test(arguments: ["resume", "stop", "choose"])
+    func pausedBatchDockUsesExactStageAndPreservesCompletedPrefix(action: String) async throws {
+        try await exercisePausedBatchDock(action: action, native: false)
+    }
+
+    // Native hosting is an explicit companion check. Keep its key-window and
+    // actual button assertions intact; a headless/blocked run is not a pass.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_UI_NATIVE_DOCK_TEST"] == "1"), arguments: ["resume", "stop", "choose"])
+    func nativePausedBatchDockButtons(action: String) async throws {
+        try await exercisePausedBatchDock(action: action, native: true)
+    }
+
+    private func exercisePausedBatchDock(action: String, native: Bool) async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent("paused-dock-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Batch.dproject"), name: "Synthetic paused batch")
+        let session = WorkbenchSession(engine: LayoutNoInference(), backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let c = WorkflowController(services: WorkflowServices(store: store, session: session,
+            resolveText: { throw WorkflowIssue("No model") }, resolveImage: { throw WorkflowIssue("No model") }))
+        await c.load()
+        var input = try #require(c.registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("frozen prefix"))
+        let graph = WorkflowGraph(name: "Paused fixture", nodes: [input])
+        let archive = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: archive.revision)
+        await c.load()
+        func stage() async throws -> UUID {
+            let id = try await c.createBatchStage(selection: .through(input.id), pins: [], repetitions: 2,
+                expectedGraphID: graph.id, expectedRevision: graph.revision)
+            let first = try #require(c.batchStages.first { $0.id == id }?.attempts.first?.runID)
+            c.beforeHistorySave = { if c.runs.first(where: { $0.id == first })?.status == .completed { c.pause() } }
+            await c.runBatchStage(id)
+            try #require(c.batchStages.first { $0.id == id }?.attempts.map(\.state) == [.completed, .queued])
+            return id
+        }
+        let firstStage = try await stage(), prefix = c.runs[0]
+        if action == "choose" { _ = try await stage() }
+        c.beforeHistorySave = {}
+        let before = c.runs, stages = c.batchStages
+        #expect(WorkflowDockRecovery.pausedQueues(c).count == (action == "choose" ? 2 : 1))
+        var recordsOpened = 0
+        if native {
+        let host = NSHostingView(rootView: AnyView(WorkflowCanvasView(controller: c, onTextModel: {}, onImageModel: {}, onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in })
+            .environment(\.dLanguageStore, UILanguageStore(preferredLanguages: ["en"]))))
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 1200, height: 800), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        let application = NSApplication.shared, oldPolicy = NSApplication.shared.activationPolicy()
+        application.setActivationPolicy(.regular)
+        window.makeKeyAndOrderFront(nil); application.activate(ignoringOtherApps: true)
+        defer { window.contentView = nil; window.close(); application.setActivationPolicy(oldPolicy) }
+        func controls() -> [any NSAccessibilityProtocol] {
+            var pending: [NSObject] = [host], seen = Set<ObjectIdentifier>(), result: [any NSAccessibilityProtocol] = []
+            while let object = pending.popLast(), seen.count < 4000 {
+                guard seen.insert(ObjectIdentifier(object)).inserted else { continue }
+                if let element = object as? any NSAccessibilityProtocol {
+                    if element.accessibilityRole() == .button { result.append(element) }
+                    pending += (element.accessibilityChildren() ?? []).compactMap { $0 as? NSObject }
+                }
+                if let view = object as? NSView { pending += view.subviews }
+            }
+            return result
+        }
+        func settle() async throws { for _ in 0..<12 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) } }
+        try await settle()
+        try #require(window.isVisible && window.isKeyWindow && host.window === window,
+            "Dock controls require a visible key test window before interpreting AX results")
+        let labels = controls().compactMap { $0.accessibilityLabel() }
+        if action != "choose" {
+            #expect(labels.contains("Resume") && labels.contains("Stop"), "The actual dock must not fall back to Run for a paused batch")
+        }
+        host.rootView = AnyView(WorkflowPausedBatchControls(controller: c) { recordsOpened += 1 }
+            .frame(width: 112, height: 32).environment(\.dLanguageStore, UILanguageStore(preferredLanguages: ["en"])))
+        try await settle()
+        let button = try #require(controls().first { $0.accessibilityIdentifier() == "workflow-batch-" + action })
+        #expect(HostingControlClick.send(to: button, in: host))
+        } else {
+            let queues = WorkflowDockRecovery.pausedQueues(c)
+            if queues.count == 1, let id = queues.first?.id {
+                if action == "resume" { await c.runBatchStage(id) }
+                else { await c.stopBatchQueue(id) }
+            } else { recordsOpened += 1 }
+        }
+        for _ in 0..<200 {
+            if action == "choose" ? recordsOpened == 1 : (c.batchStages[0].state != .paused && !c.isRunning) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        if action == "choose" { #expect(recordsOpened == 1 && c.runs == before && c.batchStages == stages) }
+        else {
+            #expect(c.batchStages[0].id == firstStage)
+            #expect(c.batchStages[0].attempts.map(\.state) == (action == "resume" ? [.completed, .completed] : [.completed, .cancelled]))
+            #expect(c.runs[0] == prefix, "Completed prefix and its proof cannot be rewritten")
+        }
+        let saved = c.batchStages
+        try await c.close(); try await store.close()
+        let cold = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await cold.workflowState().archive?.batchStages == saved)
+        try await cold.close()
+    }
+
     @Test(arguments: [WorkflowCanvasTool.pointer, .hand])
     func renderedNodeDragKeepsCameraAndCommitsOnlyOnRelease(tool: WorkflowCanvasTool) async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent("node-routing-\(UUID())")
