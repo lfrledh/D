@@ -349,6 +349,9 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         @discardableResult
         func routePointer(_ event: NSEvent) -> Bool {
             if event.type == .leftMouseDown {
+                // A new press ends an interrupted sequence before its old drag
+                // lock can reject ownership of the new target (including controls).
+                cancelPointer()
                 if canvasHit(event) != nil { wheelZoom?.cancel(); layoutAnchor.cancel() }
                 guard window?.isKeyWindow == true, accepts(event), navigationAllowed(),
                       let clip = enclosingScrollView?.contentView else { return false }
@@ -357,7 +360,6 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                     y: clip.isFlipped ? location.y - clip.bounds.minY : clip.bounds.maxY - location.y)
                 let target = pointerTarget(point, clip.bounds.origin, clip.bounds.size)
                 guard target != .control else { return false }
-                cancelPointer()
                 pointerSession = PointerSession(target: target, tool: tool,
                     windowStart: event.locationInWindow, point: point, offset: clip.bounds.origin,
                     viewport: clip.bounds.size, shift: event.modifierFlags.contains(.shift),
@@ -510,12 +512,19 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             return canvasHit(at: event.locationInWindow)
         }
         private func canvasHit(at location: CGPoint) -> NSView? {
-            guard let window, let scroll = visibleCanvasScroll(), let content = window.contentView else { return nil }
-            let point = content.superview?.convert(location, from: nil) ?? location
-            guard let hit = content.hitTest(point) else { return nil }
+            guard let scroll = visibleCanvasScroll(), let hit = windowHit(at: location) else { return nil }
             var view: NSView? = hit
             while let current = view, current !== scroll { view = current.superview }
             return view === scroll ? hit : nil
+        }
+
+        private func windowHit(at location: CGPoint) -> NSView? {
+            guard let content = window?.contentView else { return nil }
+            // Menus are siblings of contentView to preserve the SwiftUI foreground.
+            // Start at their shared presentation root so an obscured canvas cannot
+            // acquire a click or wheel intended for the actual frontmost surface.
+            let root = content.superview ?? content
+            return root.hitTest(root.superview?.convert(location, from: nil) ?? location)
         }
 
         private func accepts(_ event: NSEvent) -> Bool {
@@ -547,8 +556,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             if begins || !phased { wheelOwner = nil; wheelScrollOwner = nil }
             let hit = canvasHit(at: location)
             if wheelOwner == nil {
-                var current: NSView? = hit ?? window.contentView?.hitTest(
-                    window.contentView?.superview?.convert(location, from: nil) ?? location)
+                var current: NSView? = hit ?? windowHit(at: location)
                 var nested: NSScrollView?
                 var ownsControl = false
                 while let view = current, view !== scroll {

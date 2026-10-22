@@ -138,6 +138,25 @@ private actor LayoutNoInference: InferenceEngine {
             let scroll = try #require(probe.enclosingScrollView), clip = scroll.contentView
             let plate = try #require(descendants(host).compactMap { $0 as? WorkflowNodePlateView }.min { $0.convert(.zero, to: host).x < $1.convert(.zero, to: host).x })
             plate.scrollToVisible(plate.bounds); try await settle()
+            // Check the drawn plate during a native resize before queued SwiftUI
+            // measurement tasks settle, then again after that transition.
+            func verifyDrawnHit() throws {
+                for (local, expected) in [
+                    (CGPoint(x: plate.bounds.midX, y: 10 * zoom), WorkflowCanvasPointerTarget.node(node.id)),
+                    (CGPoint(x: plate.bounds.midX, y: plate.bounds.maxY + 30 * zoom), .blank)
+                ] {
+                    let native = plate.convert(local, to: clip)
+                    let point = CGPoint(x: native.x - clip.bounds.minX,
+                        y: clip.isFlipped ? native.y - clip.bounds.minY : clip.bounds.maxY - native.y)
+                    #expect(probe.pointerTarget(point, clip.bounds.origin, clip.bounds.size) == expected,
+                        "Actual visible plate must govern hits during window resize")
+                }
+            }
+            for size in [CGSize(width: 1400, height: 900), CGSize(width: 1200, height: 800)] {
+                window.setContentSize(size); host.layoutSubtreeIfNeeded()
+                try verifyDrawnHit()
+                try await settle(); try verifyDrawnHit()
+            }
             let start = plate.convert(CGPoint(x: plate.bounds.midX, y: 10 * zoom), to: nil)
             let end = CGPoint(x: start.x + 36 * zoom, y: start.y - 24 * zoom)
             let camera = clip.bounds.origin

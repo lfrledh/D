@@ -115,7 +115,7 @@ struct WorkflowGraphSurface: View {
                                 "workflow.canvas.dropHint",
                                 fallback: "将节点或项目素材拖到这里；拖动输出端口可建立连接。"
                             ))
-                            .background(viewportInput(geometry: geometry, scope: scope))
+                            .background(viewportInput(geometry: geometry, layout: layout, scope: scope))
                         ZStack(alignment: .topLeading) {
                         ForEach(graph.nodes) { node in
                             let position = geometry.displayPosition(node.id)
@@ -498,7 +498,8 @@ struct WorkflowGraphSurface: View {
             zoom * gestureScale, current: zoom)
     }
 
-    private func viewportInput(geometry: WorkflowGraphGeometry, scope: WorkflowCanvasScope)
+    private func viewportInput(geometry: WorkflowGraphGeometry, layout: WorkflowCanvasViewportGeometry,
+                               scope: WorkflowCanvasScope)
         -> WorkflowCanvasViewportInput {
         WorkflowCanvasViewportInput(
             tool: tool,
@@ -510,9 +511,9 @@ struct WorkflowGraphSurface: View {
                 WorkflowCanvasViewportGeometry(graphSize: geometry.size, viewportSize: size,
                     zoom: effectiveZoom, translation: geometry.translation)
             },
-            pointerTarget: { point, offset, size in
-                let layout = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
-                    viewportSize: size, zoom: zoom, translation: geometry.translation)
+            pointerTarget: { point, offset, _ in
+                // Match the layout actually drawn, including the interval between a
+                // native clip resize and delivery of its SwiftUI measurement.
                 let raw = layout.rawPoint(screenPoint: point, offset: offset)
                 let display = CGPoint(x: raw.x + geometry.translation.width,
                                       y: raw.y + geometry.translation.height)
@@ -558,19 +559,14 @@ struct WorkflowGraphSurface: View {
                     case .cancelled:
                         nodeDrag.cancel(sessionID: update.sessionID); restoreMeasuredHits(); viewportInteractionLocked = false
                     case .clicked:
-                        let layout = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
-                            viewportSize: update.viewport, zoom: zoom, translation: geometry.translation)
                         let raw = layout.rawPoint(screenPoint: update.startPoint, offset: update.startOffset)
                         let displayY = raw.y + geometry.translation.height
                         let center = geometry.displayPosition(id)
-                        let size = cardSizes[id] ?? CGSize(width: WorkflowCanvasLayoutPolicy.nodeWidth, height: 600)
                         if !update.extendingSelection, !readOnly, displayY < center.y + WorkflowNodePortLayout.titleHeight / 2 {
                             controller.toggleCollapsed(id)
                         } else { onInspect(id) }
                     }
                 case .blank:
-                    let layout = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
-                        viewportSize: update.viewport, zoom: zoom, translation: geometry.translation)
                     let start = CGPoint(x: (update.startPoint.x + update.startOffset.x) / zoom,
                                         y: (update.startPoint.y + update.startOffset.y) / zoom)
                     let current = CGPoint(x: start.x + update.translation.width / zoom,

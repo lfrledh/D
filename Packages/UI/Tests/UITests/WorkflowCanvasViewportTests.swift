@@ -3,8 +3,113 @@ import DWorkbench
 import Testing
 @testable import UI
 
-@Suite @MainActor
+@Suite(.serialized) @MainActor
 struct WorkflowCanvasViewportTests {
+    @Test(arguments: [false, true])
+    func newPressRecoversNodeDragWhoseReleaseWasLost(overControl: Bool) throws {
+        let window = CursorFixtureWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 480),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let scroll = NSScrollView(frame: .init(x: 0, y: 0, width: 640, height: 480))
+        let document = CursorFixtureDocument(frame: .init(x: 0, y: 0, width: 3000, height: 2400))
+        scroll.documentView = document; window.contentView = scroll
+        let probe = WorkflowCanvasViewportInput.ProbeView(frame: document.bounds); document.addSubview(probe)
+        defer { probe.stopMonitoring(); window.contentView = nil; window.close() }
+        probe.reportViewportSize(); scroll.layoutSubtreeIfNeeded()
+        scroll.contentView.scroll(to: .init(x: 600, y: 500))
+        let clip = scroll.contentView
+        let start = clip.convert(.init(x: clip.bounds.minX + 100, y: clip.bounds.minY + 100), to: nil)
+        let moved = CGPoint(x: start.x + 40, y: start.y - 20)
+        var locked = false, cancelled = 0, committed = 0, pans = 0
+        probe.navigationAllowed = { !locked }; probe.setTool(.hand)
+        probe.pointerTarget = { _, _, _ in .node(UUID()) }
+        probe.onPointer = { update in
+            switch update.phase {
+            case .began: locked = true
+            case .cancelled: cancelled += 1; locked = false
+            case .ended: committed += 1; locked = false
+            default: break
+            }
+        }
+        probe.onPan = { active, _, _ in if active { pans += 1 } }
+        try #require(probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: start)))
+        try #require(probe.routePointer(CursorFixtureEvent(type: .leftMouseDragged, owner: window, point: moved)))
+        try #require(locked)
+        // A missing mouse-up must not make the next down inherit this node.
+        probe.pointerTarget = { _, _, _ in overControl ? .control : .blank }
+        #expect(probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: start)) == !overControl)
+        #expect(cancelled == 1 && !locked && committed == 0)
+        let offset = clip.bounds.origin
+        #expect(probe.routePointer(CursorFixtureEvent(type: .leftMouseDragged, owner: window, point: moved)) == !overControl)
+        #expect(probe.routePointer(CursorFixtureEvent(type: .leftMouseUp, owner: window, point: moved)) == !overControl)
+        #expect(committed == 0 && cancelled == 1 && pans == (overControl ? 0 : 1))
+        #expect(overControl ? clip.bounds.origin == offset : clip.bounds.origin != offset)
+    }
+
+    @Test(arguments: [false, true])
+    func siblingPopupOwnsCanvasClicksAndWheel(nodeBehind: Bool) async throws {
+        try await exerciseSiblingPopup(nodeBehind: nodeBehind, native: false)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_UI_NATIVE_POPUP_TEST"] == "1"), arguments: [false, true])
+    func nativeSiblingPopupClickReachesCapturedAction(nodeBehind: Bool) async throws {
+        try await exerciseSiblingPopup(nodeBehind: nodeBehind, native: true)
+    }
+
+    private func exerciseSiblingPopup(nodeBehind: Bool, native: Bool) async throws {
+        let window: NSWindow = native ? NSWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 480),
+            styleMask: [.titled], backing: .buffered, defer: false) : CursorFixtureWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 480),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let scroll = NSScrollView(frame: .init(x: 0, y: 0, width: 640, height: 480))
+        let document = CursorFixtureDocument(frame: .init(x: 0, y: 0, width: 3000, height: 2400))
+        scroll.documentView = document; window.contentView = scroll
+        let probe = WorkflowCanvasViewportInput.ProbeView(frame: document.bounds); document.addSubview(probe)
+        defer { probe.stopMonitoring(); window.contentView = nil; window.close() }
+        probe.navigationAllowed = { true }; probe.setTool(.hand)
+        probe.pointerTarget = { _, _, _ in nodeBehind ? .node(UUID()) : .blank }
+        probe.reportViewportSize(); scroll.layoutSubtreeIfNeeded()
+        scroll.contentView.scroll(to: .init(x: 500, y: 400))
+        let anchor = NSView(frame: .init(x: 600, y: 480, width: 30, height: 24)); document.addSubview(anchor)
+        var calls = 0, canvasEvents = 0, wheels = 0
+        probe.onPointer = { _ in canvasEvents += 1 }; probe.onWheel = { _, _, _, _ in wheels += 1 }
+        let popup = try #require(WorkbenchPopupOverlay.present(from: anchor, contextID: "canvas-menu",
+            title: "Node", items: [.init(id: "delete", title: "Delete", action: { calls += 1 })],
+            style: .init(owner: nil, palette: .defaultLight, strength: 0.55, drawsGlass: false,
+                         legacyFill: nil, readability: .init()), validContext: { true }))
+        defer { popup.cancel(restoreFocus: false) }
+        window.contentView?.superview?.layoutSubtreeIfNeeded()
+        func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
+        let row = try #require(descendants(popup).compactMap { $0 as? NSButton }.first)
+        let point = row.convert(.init(x: row.bounds.midX, y: row.bounds.midY), to: nil)
+        try #require(popup.superview === scroll.superview && row.bounds.width > 0)
+        if native {
+            NSApp.activate(); window.makeKeyAndOrderFront(nil)
+            try await Task.sleep(for: .milliseconds(100))
+            try #require(NSApp.isActive && window.isVisible && window.isKeyWindow)
+        }
+        #expect(window.contentView?.superview?.hitTest(point) === row)
+        let offset = scroll.contentView.bounds.origin
+        #expect(!probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: point)))
+        #expect(!probe.routePointer(CursorFixtureEvent(type: .leftMouseUp, owner: window, point: point)))
+        let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: 1, wheel2: 0, wheel3: 0))
+        _ = probe.routeWheel(FixtureWheel(base: try #require(NSEvent(cgEvent: cg)), owner: window, point: point))
+        #expect(wheels == 0 && canvasEvents == 0 && scroll.contentView.bounds.origin == offset)
+        // Full test-process event pair reaches the real native menu row. This is
+        // not OS input or a claim about foreground/native performance.
+        if native {
+            try #require(HostingControlClick.send(to: row, in: popup))
+            await Task.yield(); try await Task.sleep(for: .milliseconds(10))
+            #expect(calls == 1 && popup.superview == nil && canvasEvents == 0)
+        } else {
+            #expect(calls == 0)
+            popup.cancel(restoreFocus: false)
+        }
+        #expect(scroll.contentView.bounds.origin == offset)
+        #expect(probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: point)))
+        #expect(probe.routePointer(CursorFixtureEvent(type: .leftMouseUp, owner: window, point: point)))
+    }
+
     @Test(arguments: [false, true])
     func handPointerPresentationDoesNotRepublishDuringWheelLayout(node: Bool) throws {
         let window = CursorFixtureWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 480),
