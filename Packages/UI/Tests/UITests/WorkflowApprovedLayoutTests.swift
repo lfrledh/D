@@ -12,6 +12,74 @@ private actor LayoutNoInference: InferenceEngine {
 }
 
 @Suite(.serialized) @MainActor struct WorkflowApprovedLayoutTests {
+    @Test(arguments: [WorkflowCanvasTool.pointer, .hand])
+    func renderedNodeDragKeepsCameraAndCommitsOnlyOnRelease(tool: WorkflowCanvasTool) async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent("node-routing-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Drag.dproject"), name: "Synthetic drag")
+        let session = WorkbenchSession(engine: LayoutNoInference(), backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let controller = WorkflowController(services: WorkflowServices(store: store, session: session,
+            resolveText: { throw WorkflowIssue("No model") }, resolveImage: { throw WorkflowIssue("No model") }))
+        await controller.load(); controller.addBlankGraph(name: "Drag fixture")
+        controller.addNode(operationID: "d.text.input", x: 240, y: 200)
+        controller.addNode(operationID: "d.text.input", x: 620, y: 200)
+        let window = LayoutDragWindow(contentRect: .init(x: 0, y: 0, width: 1200, height: 800), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: AnyView(EmptyView())); window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
+        func settle() async throws {
+            for _ in 0..<5 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(20)) }
+        }
+        for zoom: CGFloat in [1, 1.5] {
+            let original = try #require(controller.graph), node = try #require(original.nodes.first)
+            host.rootView = AnyView(LayoutDragSurface(controller: controller, zoom: zoom, tool: tool))
+            try await settle()
+            let probe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+            let scroll = try #require(probe.enclosingScrollView), clip = scroll.contentView
+            let plate = try #require(descendants(host).compactMap { $0 as? WorkflowNodePlateView }.min { $0.convert(.zero, to: host).x < $1.convert(.zero, to: host).x })
+            plate.scrollToVisible(plate.bounds); try await settle()
+            let start = plate.convert(CGPoint(x: plate.bounds.midX, y: 10 * zoom), to: nil)
+            let end = CGPoint(x: start.x + 36 * zoom, y: start.y - 24 * zoom)
+            let camera = clip.bounds.origin
+            func send(_ type: NSEvent.EventType, _ point: CGPoint) throws {
+                try #require(probe.routePointer(LayoutDragEvent(type: type, owner: window, point: point)))
+            }
+            try send(.leftMouseDown, start); try send(.leftMouseDragged, end)
+            try await settle()
+            #expect(controller.graph == original, "Continuous movement is local until release")
+            #expect(clip.bounds.origin == camera, "Dragging a node cannot pan in either tool")
+            try send(.leftMouseUp, end); try await settle()
+            let moved = try #require(controller.graph)
+            let oldPosition = try #require(original.layout.first { $0.nodeID == node.id })
+            let newPosition = try #require(moved.layout.first { $0.nodeID == node.id })
+            #expect(abs(newPosition.x - oldPosition.x - 36) < 0.01 && abs(newPosition.y - oldPosition.y - 24) < 0.01)
+            #expect(moved.nodes == original.nodes && moved.connections == original.connections)
+            #expect(moved.layout.filter { $0.nodeID != node.id } == original.layout.filter { $0.nodeID != node.id })
+            #expect(clip.bounds.origin == camera && controller.runs.isEmpty)
+            controller.undo(); #expect(controller.graph == original)
+            controller.redo(); #expect(controller.graph == moved)
+            controller.undo(); try await settle()
+            try send(.leftMouseDown, start); try send(.leftMouseDragged, end)
+            probe.cancelPointer(); try await settle()
+            #expect(controller.graph == original && clip.bounds.origin == camera)
+
+            // The opposite route remains tool-specific: blank hand drag pans;
+            // blank pointer drag selects, without editing or panning the graph.
+            clip.scroll(to: .zero); scroll.reflectScrolledClipView(clip); try await settle()
+            let blank = clip.convert(CGPoint(x: clip.bounds.minX + 100, y: clip.bounds.minY + 100), to: nil)
+            let blankEnd = CGPoint(x: blank.x - 30, y: blank.y + 20)
+            let before = clip.bounds.origin
+            try send(.leftMouseDown, blank); try send(.leftMouseDragged, blankEnd); try send(.leftMouseUp, blankEnd)
+            try await settle()
+            #expect(controller.graph == original)
+            if tool == .hand { #expect(clip.bounds.origin != before) }
+            else { #expect(clip.bounds.origin == before) }
+            probe.stopMonitoring()
+        }
+        controller.deactivateAfterClose(); try await store.close()
+    }
+
     @Test func compactPortsHaveRealAnchorsAndNonoverlappingNativeHits() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent("approved-layout-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -58,6 +126,17 @@ private actor LayoutNoInference: InferenceEngine {
                     #expect(abs(plate.bounds.width / zoom - 240) < 1)
                     let size = try #require(measured[node.id])
                     #expect(abs(size.width - 240) < 1 && abs(size.height - plate.bounds.height / zoom) < 1)
+                    // Resolve a point from the actual rendered plate through the
+                    // production target closure, not a synthetic .node target.
+                    plate.scrollToVisible(plate.bounds)
+                    host.layoutSubtreeIfNeeded()
+                    let probe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+                    let clip = try #require(probe.enclosingScrollView?.contentView)
+                    let native = plate.convert(CGPoint(x: plate.bounds.midX, y: 10 * zoom), to: clip)
+                    let screen = CGPoint(x: native.x - clip.bounds.minX,
+                        y: clip.isFlipped ? native.y - clip.bounds.minY : clip.bounds.maxY - native.y)
+                    try #require(probe.pointerTarget(screen, clip.bounds.origin, clip.bounds.size) == .node(node.id),
+                        "The visible card and the production pointer target must occupy the same coordinates")
                     let definition = definitions[index]
                     for input in [true, false] {
                         for (row, definition) in (input ? definition.inputs : definition.outputs).enumerated() {
@@ -144,5 +223,32 @@ private actor LayoutNoInference: InferenceEngine {
             let toolsLeft = width - 16 - 88
             #expect(toolsLeft - dockRight >= 8)
         }
+    }
+}
+
+// Component event qualification only; this is not OS input or native-frame evidence.
+@MainActor private final class LayoutDragWindow: NSWindow {
+    override var isKeyWindow: Bool { true }
+}
+private final class LayoutDragEvent: NSEvent {
+    let kind: NSEvent.EventType, owner: NSWindow, point: CGPoint
+    @MainActor init(type: NSEvent.EventType, owner: NSWindow, point: CGPoint) {
+        kind = type; self.owner = owner; self.point = point; super.init()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override var type: NSEvent.EventType { kind }
+    override var window: NSWindow? { owner }
+    override var locationInWindow: NSPoint { point }
+}
+@MainActor private struct LayoutDragSurface: View {
+    let controller: WorkflowController
+    let zoom: CGFloat
+    let tool: WorkflowCanvasTool
+    @State private var locked = false
+    var body: some View {
+        WorkflowGraphSurface(controller: controller, graph: controller.graph, zoom: .constant(zoom), tool: .constant(tool),
+            navigationRequest: .constant(nil), viewportInteractionLocked: $locked,
+            viewContext: .init(projectID: controller.projectID, rootGraphID: controller.rootGraph?.id, bodyPath: []),
+            pendingConnection: .constant(nil), selectedConnectionID: .constant(nil), readOnly: false, onPlan: { _,_ in })
     }
 }

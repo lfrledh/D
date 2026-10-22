@@ -183,7 +183,11 @@ struct WorkflowGraphSurface: View {
                             .allowsHitTesting(false)
                         }
                         }
-                        .frame(width: geometry.size.width * effectiveZoom, height: geometry.size.height * effectiveZoom)
+                        // Offset-positioned cards keep their intrinsic layout size.
+                        // Anchor that stack at the graph origin; centering it would
+                        // move the painted cards away from pointer/connection geometry.
+                        .frame(width: geometry.size.width * effectiveZoom, height: geometry.size.height * effectiveZoom,
+                               alignment: .topLeading)
                         // Main wires and their event receivers belong behind opaque node plates.
                         // Edge ports meet the main wires directly; node plates retain their z-order.
                         .backgroundPreferenceValue(WorkflowPortAnchorPreferenceKey.self) { anchors in
