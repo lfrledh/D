@@ -89,8 +89,12 @@ struct WorkflowConnectionDrawing: NSViewRepresentable {
         // child's drawing bounds in viewport points as well as clipping its frame.
         let drawingBounds = CGRect(origin: .zero, size: convert(visible, to: clip).size)
         if drawing.frame != visible || drawing.bounds != drawingBounds || drawing.sourceRect != visible {
-            drawing.frame = visible
-            drawing.bounds = drawingBounds
+            // Pure pan changes the origin, not the backing size. Assigning the
+            // whole frame also invokes AppKit's size/layout/tracking machinery.
+            if drawing.frame.size != visible.size { drawing.setFrameSize(visible.size) }
+            if drawing.frame.origin != visible.origin { drawing.setFrameOrigin(visible.origin) }
+            // Changing frame size can change bounds; compare after the resize.
+            if drawing.bounds != drawingBounds { drawing.bounds = drawingBounds }
             drawing.sourceRect = visible
             drawing.needsDisplay = true
         }
@@ -101,6 +105,13 @@ struct WorkflowConnectionDrawing: NSViewRepresentable {
         var paths: [CGPath] = []
         var origin = CGPoint.zero
         var sourceRect = CGRect.zero
+        #if DEBUG
+        private(set) var frameSizeCalls = 0
+        override func setFrameSize(_ newSize: NSSize) {
+            frameSizeCalls += 1
+            super.setFrameSize(newSize)
+        }
+        #endif
         private(set) var drawCount = 0
         private(set) var strokedPathCount = 0
         override var isFlipped: Bool { true }

@@ -70,6 +70,34 @@ struct WorkflowCanvasDragTests {
         }
         scroll.contentView.scroll(to: .init(x: 200 * zoom,y: 200 * zoom))
         try verify()
+        let drawer = wrapper.drawing, initialSize = wrapper.drawing.frame.size
+        let initialBounds = drawer.bounds.size, initialOrigin = drawer.frame.origin
+        var sourceOrigins = Set<CGFloat>()
+        #if DEBUG
+        let resizeCalls = drawer.frameSizeCalls
+        #endif
+        for step in 1...36 {
+            scroll.contentView.scroll(to: .init(x: (200 + CGFloat(step)) * zoom, y: 200 * zoom))
+            wrapper.updateViewport()
+            #expect(wrapper.drawing === drawer)
+            #expect(abs(drawer.frame.width - initialSize.width) < 0.00001 && abs(drawer.frame.height - initialSize.height) < 0.00001)
+            #expect(abs(drawer.bounds.width - initialBounds.width) < 0.00001 && abs(drawer.bounds.height - initialBounds.height) < 0.00001)
+            #expect(drawer.sourceRect == drawer.frame)
+            sourceOrigins.insert(drawer.sourceRect.minX)
+        }
+        #expect(abs(drawer.frame.minX - initialOrigin.x - 36) < 0.00001 && sourceOrigins.count >= 20)
+        #expect(abs(drawer.frame.minY - initialOrigin.y) < 0.00001)
+        #if DEBUG
+        if zoom == 1 { #expect(drawer.frameSizeCalls == resizeCalls, "Pure pan must not resize the native drawing surface") }
+        #endif
+        try verify()
+        window.setContentSize(.init(width: 700, height: 520))
+        window.contentView?.layoutSubtreeIfNeeded(); wrapper.updateViewport()
+        #expect(drawer.frame.size != initialSize)
+        #if DEBUG
+        #expect(drawer.frameSizeCalls > resizeCalls)
+        #endif
+        try verify()
         // Move to the distant curve using only native scroll geometry.
         scroll.contentView.scroll(to: .init(x: 179_900 * zoom,y: 119_900 * zoom))
         scroll.reflectScrolledClipView(scroll.contentView)
