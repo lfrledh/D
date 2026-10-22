@@ -228,6 +228,10 @@ public struct WorkflowCanvasView: View {
         }
         .frame(minWidth: WorkflowCanvasLayoutPolicy.minimumVisibleWidth,
                minHeight: WorkflowCanvasLayoutPolicy.minimumVisibleHeight)
+        // Keyboard focus belongs to the workspace boundary. Inferring its ring
+        // from changing node/glass pixels rasterizes the whole workspace during
+        // interaction; an explicit focus-only shape leaves child focus and hits intact.
+        .contentShape(.focusEffect, Rectangle())
         .focusable()
         .workflowKeyboardCommands(performKeyboardCommand)
         .environment(\.workbenchMenuContext, "canvas:\(ObjectIdentifier(controller)):\(controller.projectID):\(controller.projectInstanceID):\(controller.bodyPath):\(controller.rootGraph?.revision.uuidString ?? "none"):\(controller.rootGraph?.id.uuidString ?? "none"):\(controller.graph?.id.uuidString ?? "none"):\(controller.graph?.revision.uuidString ?? "none")")

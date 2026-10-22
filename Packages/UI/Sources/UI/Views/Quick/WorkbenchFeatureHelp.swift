@@ -20,7 +20,10 @@ struct WorkbenchFeature: Decodable, Identifiable {
               Set(values.map(\.id)).count == values.count else { return [] }
         return values
     }()
-    static func feature(_ id: String) -> WorkbenchFeature? { all.first { $0.id == id } }
+    // The validated bundle catalog is immutable for this process. Keep its
+    // ordering for browsing, but do not scan every feature for each node label.
+    private static let byID = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+    static func feature(_ id: String) -> WorkbenchFeature? { byID[id] }
     static func text(_ key: String, language: UILanguageStore?) -> String {
         consistencyText(language, String(key.dropFirst("consistency.".count)))
     }
@@ -72,8 +75,9 @@ private struct WorkbenchFeatureHelpModifier: ViewModifier {
     @State private var token = UUID()
     private var context: WorkbenchHelpContext { .init(featureID: id, owner: owner + (target.map { ":" + $0 } ?? ""), unavailableReason: reason) }
     func body(content: Content) -> some View {
-        content.help(WorkbenchFeatures.purpose(id, language: language))
-            .accessibilityHint(WorkbenchFeatures.purpose(id, language: language))
+        let purpose = WorkbenchFeatures.purpose(id, language: language)
+        content.help(purpose)
+            .accessibilityHint(purpose)
             .accessibilityAction(named: Text(consistencyText(language, "help.open"))) { store?.pin(token) }
             .onAppear { store?.update(token, context: context) }
             .onChange(of: context) { _, value in store?.update(token, context: value) }

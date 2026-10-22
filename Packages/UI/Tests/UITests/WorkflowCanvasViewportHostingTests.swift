@@ -394,7 +394,7 @@ struct WorkflowCanvasViewportHostingTests {
         try #require(cardFrame.contains(windowPoint(inClip: cardCenter)),
                      "The geometric node center must belong to this actual rendered card")
         let inspectElement = try #require(accessibilityElements(host).first {
-            $0.accessibilityIdentifier() == "workflow-node-inspect-" + cardNode.id.uuidString
+            $0.accessibilityIdentifier() == "workflow-node-menu-" + cardNode.id.uuidString
         })
         let inspectFrame = window.convertFromScreen(inspectElement.accessibilityFrame())
         try #require(inspectFrame.width > 0 && inspectFrame.height > 0)
@@ -603,14 +603,14 @@ struct WorkflowCanvasViewportHostingTests {
         })
         #expect(controller.graph == nil && controller.canUndo == undoBefore)
 
-        // The edit affordance follows the visible configuration panel, not ordinary
-        // selection or a separate "last clicked" flag. Use its actual production action.
+        // The card menu and its Properties command preserve exact selection and
+        // configuration visibility. Opening a menu alone must not inspect a node.
         controller.selectedGraphID = graph.id
         for _ in 0..<15 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
         let restoredZoom = try #require(observations.last).zoom
-        func inspectButton(_ nodeID: UUID) throws -> any NSAccessibilityProtocol {
+        func nodeMenu(_ nodeID: UUID) throws -> any NSAccessibilityProtocol {
             try #require(accessibilityElements(host).first {
-                $0.accessibilityIdentifier() == "workflow-node-inspect-" + nodeID.uuidString
+                $0.accessibilityIdentifier() == "workflow-node-menu-" + nodeID.uuidString
             })
         }
         func revealNode(_ nodeID: UUID) async throws {
@@ -623,29 +623,48 @@ struct WorkflowCanvasViewportHostingTests {
         let firstNode = try #require(graph.nodes.first)
         let secondNode = try #require(graph.nodes.last)
         try #require(firstNode.id != secondNode.id)
+        func configurationHost() -> NSView? {
+            descendants(host).first { $0.accessibilityIdentifier() == "workflow-preparation-configuration" }
+        }
+        func inspect(_ nodeID: UUID) async throws {
+            let selectedBefore = controller.selectedNodeID
+            let visibleBefore = configurationHost().map { !$0.isHiddenOrHasHiddenAncestor } ?? false
+            try #require(HostingControlClick.send(to: nodeMenu(nodeID), in: host))
+            for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+            #expect(controller.selectedNodeID == selectedBefore)
+            #expect((configurationHost().map { !$0.isHiddenOrHasHiddenAncestor } ?? false) == visibleBefore,
+                    "Opening the card menu alone does not change configuration")
+            let presentationRoot = try #require(window.contentView?.superview)
+            let properties = try #require(accessibilityElements(presentationRoot).first {
+                $0.accessibilityIdentifier() == "node.properties"
+            })
+            try #require(HostingControlClick.send(to: properties, in: presentationRoot))
+            for _ in 0..<40 {
+                host.layoutSubtreeIfNeeded()
+                if controller.selectedNodeID == nodeID,
+                   configurationHost().map({ !$0.isHiddenOrHasHiddenAncestor }) == true { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            #expect(controller.selectedNodeID == nodeID)
+            let visibleConfiguration = try #require(configurationHost())
+            #expect(!visibleConfiguration.isHiddenOrHasHiddenAncestor)
+        }
         controller.selectedNodeID = firstNode.id
         try await revealNode(firstNode.id)
-        #expect(try !inspectButton(firstNode.id).isAccessibilitySelected(),
+        #expect(configurationHost().map { $0.isHiddenOrHasHiddenAncestor } ?? true,
                 "Ordinary selection has not opened configuration")
-        try #require(HostingControlClick.send(to: inspectButton(firstNode.id), in: host))
-        for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
-        #expect(try inspectButton(firstNode.id).isAccessibilitySelected())
+        try await inspect(firstNode.id)
         #expect(HostingControlClick.contains("workflow-field-text", in: host))
         try await revealNode(secondNode.id)
-        try #require(HostingControlClick.send(to: inspectButton(secondNode.id), in: host))
-        for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
-        #expect(controller.selectedNodeID == secondNode.id)
-        #expect(try inspectButton(secondNode.id).isAccessibilitySelected())
-        try await revealNode(firstNode.id)
-        #expect(try !inspectButton(firstNode.id).isAccessibilitySelected())
+        try await inspect(secondNode.id)
         let inspectorToggle = try #require(accessibilityElements(host).first {
             $0.accessibilityIdentifier() == "canvas-inspector-toggle"
         })
         try #require(HostingControlClick.send(to: inspectorToggle, in: host))
         for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
-        try await revealNode(secondNode.id)
-        #expect(try !inspectButton(secondNode.id).isAccessibilitySelected(),
-                "A hidden configuration panel cannot leave a node looking inspected")
+        let hiddenConfiguration = try #require(configurationHost())
+        #expect(hiddenConfiguration.isHiddenOrHasHiddenAncestor,
+                "Closing the sidebar hides its retained configuration host")
         #expect(!observations.isEmpty)
         #expect(controller.graphs == graphBefore && controller.availableAssets == assetsBefore)
         #expect(controller.runs == runsBefore && controller.canUndo == undoBefore)

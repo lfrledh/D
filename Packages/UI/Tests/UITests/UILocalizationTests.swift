@@ -1,10 +1,55 @@
 import Darwin
 import Foundation
+import Observation
+import Synchronization
 import Testing
 @testable import UI
 
 @Suite(.serialized) @MainActor
 struct UILocalizationTests {
+    @Test
+    func warmSystemResolutionObservesImportedFamilyThenExactLanguage() throws {
+        let store = UILanguageStore(preferredLanguages: ["fr-FR"])
+        #expect(store.text("workflow.action.save", fallback: "fallback") == "Save")
+        #expect(store.effectiveLanguageIdentifier == "en")
+        let importedChange = Mutex(false)
+        withObservationTracking {
+            _ = store.text("workflow.action.save", fallback: "fallback")
+        } onChange: { importedChange.withLock { $0 = true } }
+        try store.importPack(data: pack(locale: "fr-CA", displayName: "Français Canada",
+                                       strings: ["workflow.action.save": "Enregistrer CA"]))
+        #expect(importedChange.withLock { $0 })
+        #expect(store.selection == UILanguageStore.systemIdentifier)
+        #expect(store.effectiveLanguageIdentifier == "fr-CA")
+        #expect(store.text("workflow.action.save", fallback: "fallback") == "Enregistrer CA")
+        try store.importPack(data: pack(locale: "fr-FR", displayName: "Français France",
+                                       strings: ["workflow.action.save": "Enregistrer FR"]))
+        #expect(store.effectiveLanguageIdentifier == "fr-FR")
+        #expect(store.text("workflow.action.save", fallback: "fallback") == "Enregistrer FR")
+    }
+
+    @Test
+    func warmResolutionKeepsSelectionAndSameLanguageContentObservable() throws {
+        let store = UILanguageStore(preferredLanguages: ["en"])
+        #expect(store.text("workflow.action.save", fallback: "fallback") == "Save")
+        let selectionChange = Mutex(false)
+        withObservationTracking {
+            _ = store.text("workflow.action.save", fallback: "fallback")
+        } onChange: { selectionChange.withLock { $0 = true } }
+        try store.select("zh-Hans")
+        #expect(selectionChange.withLock { $0 })
+        #expect(store.text("workflow.action.save", fallback: "fallback") == "保存")
+        let contentChange = Mutex(false)
+        withObservationTracking {
+            _ = store.text("workflow.action.save", fallback: "fallback")
+        } onChange: { contentChange.withLock { $0 = true } }
+        store.testingBuiltIn(.init(schemaVersion: 1, locale: "zh-Hans", displayName: "中文",
+                                  strings: ["workflow.action.save": "同语言更新"]))
+        #expect(contentChange.withLock { $0 })
+        #expect(store.text("workflow.action.save", fallback: "fallback") == "同语言更新")
+        #expect(store.text("workflow.action.cancel", fallback: "fallback") == "Cancel")
+    }
+
     @Test
     func builtInsFollowSupportedLanguagesAndFallBackToEnglish() throws {
         let chinese = UILanguageStore(preferredLanguages: ["zh-CN"])

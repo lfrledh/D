@@ -46,16 +46,38 @@ public final class UILanguageStore {
     @ObservationIgnored private let preferredLanguages: [String]
     @ObservationIgnored private var builtIns: [String: LanguagePack] = [:]
     @ObservationIgnored private var externalPacks: [String: LanguagePack] = [:]
+    // One resolution per selection/pack revision, owned by this store. Do not
+    // cache rendered text: arguments and caller fallbacks remain per invocation.
+    @ObservationIgnored private var languageResolution: LanguageResolution?
+
+    private struct LanguageResolution {
+        let selection: String
+        let revision: UInt64
+        let identifier: String
+        let builtInFallback: String
+    }
 
     public var effectiveLanguageIdentifier: String {
-        _ = contentRevision
-        if selection != Self.systemIdentifier {
-            return resolvedIdentifier(for: selection) ?? "en"
+        resolvedLanguage.identifier
+    }
+
+    private var resolvedLanguage: LanguageResolution {
+        // Read observable inputs even on a cache hit. Retained pages must still
+        // observe language selection and successful language-pack changes.
+        let selected = selection
+        let revision = contentRevision
+        if let cached = languageResolution,
+           cached.selection == selected, cached.revision == revision { return cached }
+        let identifier: String
+        if selected != Self.systemIdentifier {
+            identifier = resolvedIdentifier(for: selected) ?? "en"
+        } else {
+            identifier = preferredLanguages.lazy.compactMap { self.resolvedIdentifier(for: $0) }.first ?? "en"
         }
-        for preferred in preferredLanguages {
-            if let resolved = resolvedIdentifier(for: preferred) { return resolved }
-        }
-        return "en"
+        let resolved = LanguageResolution(selection: selected, revision: revision, identifier: identifier,
+                                          builtInFallback: builtInFallbackIdentifier(for: identifier))
+        languageResolution = resolved
+        return resolved
     }
 
     public var availableLanguages: [UILanguage] {
@@ -106,10 +128,9 @@ public final class UILanguageStore {
         fallback: String,
         arguments: [String: String] = [:]
     ) -> String {
-        _ = contentRevision
-        let identifier = effectiveLanguageIdentifier
-        let selectedPack = externalPacks[identifier] ?? builtIns[identifier]
-        let builtInIdentifier = builtInFallbackIdentifier(for: identifier)
+        let language = resolvedLanguage
+        let selectedPack = externalPacks[language.identifier] ?? builtIns[language.identifier]
+        let builtInIdentifier = language.builtInFallback
         let template: String
         if builtIns["en"]?.strings[key] != nil {
             template = selectedPack?.strings[key]
