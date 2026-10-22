@@ -1,5 +1,15 @@
 # 当前行动与接手点
 
+## D-UI-CONSOLIDATED-01 · P / U 续办（2026-10-22，部分修补）
+
+仍在原工作树 `D-Worktrees/D-UI-CONSOLIDATED-20261020` / 原分支；实际起点 `75fbf0954956aa4d2cd6ad62fe56aa2a657b9bbf`、生产43c2，fetch与累计祖先核对通过。新生产 **`5708fc49fbaa075ab22e654bdde86830af91e8cd`**：缩放观察限制到画布/缩放控件子视图，资料库在执行插入时取得当前中心；owner/context与旧回调防线保持。无布局/材质/文案/执行存储变更，前轮focusEffect/语言缓存/静态索引保留。
+
+[现有性能报告](investigations/D-PERFORMANCE-ATTRIBUTION-01/regression-20261022/README.zh-CN.md)新增有限计数反例与旧trace时钟对应。16次隐藏宿主onWheel的工作区/库构造48/64→0/0，真实zoom往返、32观察；13＋4定向方法通过，独立复核发现的旧pan记忆污染已修并补反例。这不是FPS或正常App迟滞收益；PAN/ZOOM与四动作整体目标继续OPEN。
+
+U线固定43c2正常包，UI-01/02/03-r1、r2/04/06真实画面已在会话展示，图号/状态见[任务UI审阅待决](tasks/D-UI-CONSOLIDATED-01.md#p--u-续办与-ui审阅待决2026-10-22)。未收到需登记的具体意见，不开始UI整改。之后Viewer信息操作造成原生桥断开，有限重绑定仍失败；不是锁屏。保持旧实例，不强退、不要求用户做工具排错。新包在独立产物目录正常Apple Development构建及strict/deep验签通过，未启动，原生复验与UI-05缺图如实保留；准确产物、签名与完整交付统一至原delivery/review.py及README。
+
+[唯一集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)区分新包未验、旧原生限制与未完成性能工程。保护普通D、原会话与个人scheme，不合并、不发布。停在本次差分的顾问审计与固定版视觉反馈，不自动恢复其他阶段。以下是前轮历史回执。
+
 ## D-UI-CONSOLIDATED-01 · 严重 UI 性能回归修补（2026-10-22，部分修复交审）
 
 仍为本树 `codex/ui-consolidated-20261020`；实际起点 `65d0edc540bef17f8cb6c2652a4c53e5a54f7cf0`、旧生产4775、累计6f5祖先检查通过；fetch无遗漏后继。正式生产 **`43c2cf1f6dfe94d4604bf2111bd6fb19442d2a81`**：明确工作区focusEffect形状，消除整页内容焦点位图路径；容量1语言解析缓存与静态功能索引。保留官方玻璃/动画/命中/子焦点、最新业务与保存保护。Lead单写，三名只读复核；个人scheme保持。
