@@ -1,5 +1,15 @@
 # 当前行动与接手点
 
+## D-UI-CONSOLIDATED-01 · 已批准布局＋性能续办（2026-10-22，签名候选待原生复验）
+
+本包明确替代此前U线只截图限制，仅授权节点双列端口、单层居中运行条、右下圆按钮及文字内部菜单。实际起点/远端均为 `5b9f072a7f777cd1f61df2958412309b88a9ddb4`，生产5708；fetch后祖先检查exit0，无遗漏后继或本轮起点未提交修改。保留原工作树/分支，Lead单写、三名只读复核，无迁移或全分支整合。
+
+原生 inventory 成功，但按精确43c2执行路径绑定返回 `native pipe closed before response`，一次重置后的精确重绑定仍失败；不是锁屏证据。旧实例未退出/覆盖，新7901未启动。有限恢复已停止；四项布局及复核修正已提交，最终新包静态/四动作及真实截图仍未验，不以旧图或组件通过代替。
+
+新生产 **`790109af01dbe2a1038c5e868b54dd569c521a13`**，独立布局提交；本轮未在缺乏依据时新增纯性能补丁。83项定向方法通过，两语言4504键与占位符一致。正常 Debug/-Onone/DEBUG_DYLIB=YES、无性能诊断宏的 Apple Development 独立包构建及strict/deep验签通过。三名非实施者复核问题已修，停在顾问审计与用户视觉检查；原生待验仍由Agent负责。唯一候选入口仍为任务既有 `run-20261020-01/delivery/review.py`（默认只核验；不得绕过隔离启动或覆盖运行实例）。
+
+现行范围/18项回执见[本轮任务增量](tasks/D-UI-CONSOLIDATED-01.md#已批准布局与性能续办2026-10-22)，性能仍见[原报告](investigations/D-PERFORMANCE-ATTRIBUTION-01/regression-20261022/README.zh-CN.md)，环境与体验余项只入[集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。以下P/U段为前轮交付记录，不再限制本包四项实施。
+
 ## D-UI-CONSOLIDATED-01 · P / U 续办（2026-10-22，部分修补）
 
 仍在原工作树 `D-Worktrees/D-UI-CONSOLIDATED-20261020` / 原分支；实际起点 `75fbf0954956aa4d2cd6ad62fe56aa2a657b9bbf`、生产43c2，fetch与累计祖先核对通过。新生产 **`5708fc49fbaa075ab22e654bdde86830af91e8cd`**：缩放观察限制到画布/缩放控件子视图，资料库在执行插入时取得当前中心；owner/context与旧回调防线保持。无布局/材质/文案/执行存储变更，前轮focusEffect/语言缓存/静态索引保留。
