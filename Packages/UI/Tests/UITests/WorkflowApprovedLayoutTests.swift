@@ -157,6 +157,53 @@ private actor LayoutNoInference: InferenceEngine {
                 try verifyDrawnHit()
                 try await settle(); try verifyDrawnHit()
             }
+            #if DEBUG
+            // A cursor-only press/release must not rebuild graph/card content.
+            // Exercise the actual callback, with both SwiftUI tools and zooms.
+            do {
+                var surfaceBodies = 0, cardBodies = 0, menus = 0
+                var cursorStates: [Bool] = []
+                let oldSurface = WorkflowCanvasUpdateProbe.surfaceBody
+                let oldCard = WorkflowCanvasUpdateProbe.nodeBody
+                let oldMenu = WorkflowCanvasUpdateProbe.nodeMenuBuild
+                let oldCursor = WorkflowCanvasUpdateProbe.handPointerStyle
+                defer {
+                    WorkflowCanvasUpdateProbe.surfaceBody = oldSurface
+                    WorkflowCanvasUpdateProbe.nodeBody = oldCard
+                    WorkflowCanvasUpdateProbe.nodeMenuBuild = oldMenu
+                    WorkflowCanvasUpdateProbe.handPointerStyle = oldCursor
+                }
+                WorkflowCanvasUpdateProbe.surfaceBody = { surfaceBodies += 1 }
+                WorkflowCanvasUpdateProbe.nodeBody = { _ in cardBodies += 1 }
+                WorkflowCanvasUpdateProbe.nodeMenuBuild = { _ in menus += 1 }
+                WorkflowCanvasUpdateProbe.handPointerStyle = { activeTool, pressed in
+                    #expect(activeTool == tool)
+                    cursorStates.append(pressed)
+                }
+                let plateOrigin = plate.convert(CGPoint.zero, to: host)
+                let ports = descendants(host).compactMap { $0 as? WorkflowPortDragView }
+                let cameraBeforeCursor = clip.bounds.origin
+                let selection = controller.selectedNodeID
+                let selections = controller.selectedNodeIDs
+                let responder = window.firstResponder
+                for pressed in [true, false, true, false] {
+                    cursorStates = []
+                    probe.onHandPressedChanged(pressed)
+                    try await settle()
+                    if tool == .hand {
+                        #expect(!cursorStates.isEmpty && cursorStates.allSatisfy { $0 == pressed },
+                            "Keep the actual cursor leaf responding to each press/release")
+                    }
+                }
+                print("HAND_PRESENTATION tool=\(tool) zoom=\(zoom) surface=\(surfaceBodies) cards=\(cardBodies) menus=\(menus)")
+                #expect(surfaceBodies == 0 && cardBodies == 0 && menus == 0)
+                #expect(controller.graph == original && plate.convert(CGPoint.zero, to: host) == plateOrigin)
+                #expect(clip.bounds.origin == cameraBeforeCursor && controller.selectedNodeID == selection && controller.selectedNodeIDs == selections)
+                #expect(window.firstResponder === responder)
+                #expect(descendants(host).contains { $0 === plate })
+                #expect(ports.allSatisfy { port in descendants(host).contains { $0 === port } })
+            }
+            #endif
             let start = plate.convert(CGPoint(x: plate.bounds.midX, y: 10 * zoom), to: nil)
             let end = CGPoint(x: start.x + 36 * zoom, y: start.y - 24 * zoom)
             let camera = clip.bounds.origin

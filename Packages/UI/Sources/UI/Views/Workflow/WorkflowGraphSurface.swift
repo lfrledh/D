@@ -109,7 +109,7 @@ struct WorkflowGraphSurface: View {
                     ZStack(alignment: .topLeading) {
                         displayPreferences.resolvedAppearance.palette(for: colorScheme).canvasColor.opacity(localBackground == nil ? 1 : 0)
                             .contentShape(Rectangle())
-                            .pointerStyle(tool == .hand ? (handPointer.pressed ? .grabActive : .grabIdle) : nil)
+                            .modifier(WorkflowHandPointerStyle(presentation: handPointer, tool: tool))
                             .help(workflowText(
                                 languageStore,
                                 "workflow.canvas.dropHint",
@@ -128,7 +128,7 @@ struct WorkflowGraphSurface: View {
                                 definition: controller.registry.definition(for: node, tools: controller.tools),
                                 pendingConnection: $pendingConnection,
                                 tool: tool,
-                                handPressed: handPointer.pressed,
+                                pointerPresentation: handPointer,
                                 pendingConnectionScope: pendingConnectionScope,
                                 readOnly: readOnly,
                                 selected: controller.selectedNodeID == node.id || controller.selectedNodeIDs.contains(node.id),
@@ -1026,7 +1026,7 @@ private struct WorkflowNodeCard: View {
     let definition: WorkflowOperationDefinition?
     @Binding var pendingConnection: WorkflowPendingConnection?
     let tool: WorkflowCanvasTool
-    let handPressed: Bool
+    let pointerPresentation: WorkflowCanvasPointerPresentation
     let pendingConnectionScope: WorkflowCanvasScope?
     let readOnly: Bool
     let selected: Bool
@@ -1140,7 +1140,7 @@ private struct WorkflowNodeCard: View {
         .padding(.horizontal, 11 * scale)
         .background {
             WorkflowNodePlateReceiver(scale: scale)
-                .pointerStyle(tool == .hand ? (handPressed ? .grabActive : .grabIdle) : nil)
+                .modifier(WorkflowHandPointerStyle(presentation: pointerPresentation, tool: tool))
                 .workbenchPanel(cornerRadius: 13 * scale)
                 .frame(width: WorkflowCanvasLayoutPolicy.nodeWidth * scale)
         }
@@ -1597,6 +1597,20 @@ final class WorkflowCanvasNodeDragPresentation {
     private func clearPresentation() {
         movingNodeIDs = []
         offset = .zero
+    }
+}
+
+// Observe cursor feedback at the leaf, not while constructing graph/card content.
+private struct WorkflowHandPointerStyle: ViewModifier {
+    let presentation: WorkflowCanvasPointerPresentation
+    let tool: WorkflowCanvasTool
+
+    func body(content: Content) -> some View {
+        let pressed = tool == .hand && presentation.pressed
+        #if DEBUG
+        let _ = WorkflowCanvasUpdateProbe.handPointerStyle?(tool, pressed)
+        #endif
+        content.pointerStyle(tool == .hand ? (pressed ? .grabActive : .grabIdle) : nil)
     }
 }
 
