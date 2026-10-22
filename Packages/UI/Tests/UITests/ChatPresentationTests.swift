@@ -1318,7 +1318,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         }
     }
 
-    @Test func paneResizeKeepsNativeEditorAndExplicitHidingReleasesInput() throws {
+    @Test func paneResizeKeepsNativeEditorAndExplicitHidingReleasesInput() async throws {
         func pane(_ visible: Bool) -> some View {
             RetainedContentHost(content: TextSourcesQuestionEditor(value: "", editEpoch: 0,
                 isEditable: true, accessibilityIdentifier: "pane-editor", onEdit: { _ in }),
@@ -1330,27 +1330,29 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         window.isReleasedWhenClosed = false
         window.contentView = host
         defer { window.close() }
-        func settle() {
+        func settle() async throws {
             host.layoutSubtreeIfNeeded()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            // Visibility is committed after the current SwiftUI update stack.
+            // Yield the main actor instead of nesting a run loop inside its job.
+            try await Task.sleep(for: .milliseconds(50))
             host.layoutSubtreeIfNeeded()
         }
-        settle()
+        try await settle()
         let editor = try #require(descendants(host).compactMap { $0 as? NSTextView }.first)
         #expect(window.makeFirstResponder(editor))
         editor.setMarkedText("pinyin", selectedRange: .init(location: 6, length: 0),
                              replacementRange: .init(location: NSNotFound, length: 0))
         host.frame.size.width = 240
         host.rootView = pane(true)
-        settle()
+        try await settle()
         #expect(descendants(host).contains { $0 === editor })
         #expect(editor.hasMarkedText() && window.firstResponder === editor)
         host.rootView = pane(false)
-        settle()
+        try await settle()
         #expect(editor.isHiddenOrHasHiddenAncestor)
         #expect(window.firstResponder !== editor)
         host.rootView = pane(true)
-        settle()
+        try await settle()
         #expect(descendants(host).contains { $0 === editor })
         #expect(!editor.isHiddenOrHasHiddenAncestor)
         #expect(window.firstResponder !== editor)

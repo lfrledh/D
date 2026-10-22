@@ -10,24 +10,61 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
     let identifier: String
     var fallbackSize = CGSize(width: 240, height: 640)
 
-    func makeNSView(context: Context) -> NSHostingView<RetainedContentRoot<Content>> {
-        let host = NSHostingView(rootView: RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, preparation: context.environment.workflowModelPreparation, installations: context.environment.workflowModelInstallations, featureHelp: context.environment.workbenchHelpStore, contentVisible: visible && context.environment.workbenchContentVisible))
+    func makeNSView(context: Context) -> RetainedNativeHostingView<RetainedContentRoot<Content>> {
+        let host = RetainedNativeHostingView(rootView: RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, preparation: context.environment.workflowModelPreparation, installations: context.environment.workflowModelInstallations, featureHelp: context.environment.workbenchHelpStore, contentVisible: visible && context.environment.workbenchContentVisible))
         host.sizingOptions = []
         host.setAccessibilityIdentifier(identifier)
-        host.isHidden = !visible
+        host.setInitialVisibility(visible)
         return host
     }
-    func updateNSView(_ host: NSHostingView<RetainedContentRoot<Content>>, context: Context) {
+    func updateNSView(_ host: RetainedNativeHostingView<RetainedContentRoot<Content>>, context: Context) {
         #if DEBUG
         WorkbenchCategoryUpdateProbe.retainedUpdate?()
         #endif
         host.rootView = RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, preparation: context.environment.workflowModelPreparation, installations: context.environment.workflowModelInstallations, featureHelp: context.environment.workbenchHelpStore, contentVisible: visible && context.environment.workbenchContentVisible)
-        // Only an actual close/open changes native visibility. Hiding can release
-        // the first responder; a layout change must not transiently hide an editor.
-        if host.isHidden != !visible { host.isHidden = !visible }
+        host.requestVisibility(visible)
     }
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSHostingView<RetainedContentRoot<Content>>, context: Context) -> CGSize? {
+    static func dismantleNSView(_ host: RetainedNativeHostingView<RetainedContentRoot<Content>>, coordinator: ()) {
+        host.invalidateVisibility()
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: RetainedNativeHostingView<RetainedContentRoot<Content>>, context: Context) -> CGSize? {
         .init(width: proposal.width ?? fallbackSize.width, height: proposal.height ?? fallbackSize.height)
+    }
+}
+
+/// AppKit hiding may synchronously traverse sibling hosting views to find the
+/// next key view. Doing that inside updateNSView re-enters AttributeGraph while
+/// it is updating preferences. Keep one latest visibility request per host and
+/// apply native hiding after that update stack has unwound.
+@MainActor final class RetainedNativeHostingView<Content: View>: NSHostingView<Content> {
+    private var desiredVisible = true
+    private var visibilityQueued = false
+    private var visibilityInvalidated = false
+
+    func setInitialVisibility(_ visible: Bool) {
+        desiredVisible = visible
+        isHidden = !visible // Initial host is not attached to a window/key loop.
+    }
+
+    func requestVisibility(_ visible: Bool) {
+        guard !visibilityInvalidated else { return }
+        desiredVisible = visible
+        guard !visibilityQueued, isHidden != !visible else { return }
+        visibilityQueued = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.visibilityInvalidated else { return }
+            self.visibilityQueued = false
+            if self.isHidden != !self.desiredVisible { self.isHidden = !self.desiredVisible }
+        }
+    }
+
+    func invalidateVisibility() {
+        visibilityInvalidated = true
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard desiredVisible, !visibilityInvalidated else { return nil }
+        return super.hitTest(point)
     }
 }
 

@@ -33,6 +33,83 @@ private struct MetadataHostProbe: NSViewRepresentable {
 }
 
 @Suite(.serialized) @MainActor struct WorkflowWorkspacePresentationTests {
+    @Test func retainedVisibilityDefersKeyLoopWorkAndCoalescesLatestRequest() async throws {
+        let host = RetainedNativeHostingView(rootView: Color.clear)
+        host.setInitialVisibility(true)
+        host.frame = .init(x: 0, y: 0, width: 300, height: 200)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.close() }
+        let button = NSButton(title: "Retained hit target", target: nil, action: nil)
+        button.frame = .init(x: 20, y: 20, width: 180, height: 32)
+        host.addSubview(button)
+        let hitPoint = CGPoint(x: 40, y: 30)
+        _ = try #require(host.hitTest(hitPoint), "Open pane must actually accept this point before testing closure")
+        func drain() async {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.main.async { continuation.resume() }
+            }
+        }
+        host.requestVisibility(false)
+        #expect(!host.isHidden, "Native key-loop work must not run inside updateNSView")
+        #expect(host.hitTest(hitPoint) == nil, "Closing pane rejects mouse input immediately")
+        host.requestVisibility(true)
+        await drain()
+        #expect(!host.isHidden, "A superseded close must not transiently release editor focus")
+        #expect(host.hitTest(hitPoint) != nil)
+        host.requestVisibility(false); host.requestVisibility(true); host.requestVisibility(false)
+        await drain()
+        #expect(host.isHidden)
+        host.requestVisibility(true); host.invalidateVisibility()
+        await drain()
+        #expect(host.isHidden, "Dismantled host must not apply an obsolete open")
+        #expect(host.hitTest(.init(x: 10, y: 10)) == nil)
+        let initial = RetainedNativeHostingView(rootView: Color.clear)
+        initial.setInitialVisibility(false)
+        #expect(initial.isHidden, "Initially inactive panes must never enter the native key loop")
+    }
+
+    @Test func retainedSiblingSwitchReleasesFocusWithoutReplacingEditors() async throws {
+        func pane(_ firstVisible: Bool) -> some View {
+            ZStack {
+                RetainedContentHost(content: TextSourcesQuestionEditor(value: "first", editEpoch: 0,
+                    isEditable: true, accessibilityIdentifier: "retained-first", onEdit: { _ in }),
+                    visible: firstVisible, identifier: "retained-first-host")
+                RetainedContentHost(content: TextSourcesQuestionEditor(value: "second", editEpoch: 0,
+                    isEditable: true, accessibilityIdentifier: "retained-second", onEdit: { _ in }),
+                    visible: !firstVisible, identifier: "retained-second-host")
+            }
+        }
+        func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+        let host = NSHostingView(rootView: pane(true))
+        host.frame = .init(x: 0, y: 0, width: 320, height: 240)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.close() }
+        func settle() async throws {
+            for _ in 0..<4 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+        }
+        try await settle()
+        let editors = descendants(host).compactMap { $0 as? NSTextView }
+        let first = try #require(editors.first { $0.string == "first" })
+        let second = try #require(editors.first { $0.string == "second" })
+        #expect(window.makeFirstResponder(first))
+        first.setMarkedText("pinyin", selectedRange: .init(location: 6, length: 0),
+                            replacementRange: .init(location: NSNotFound, length: 0))
+        host.rootView = pane(true); host.frame.size.width = 360
+        try await settle()
+        #expect(first.hasMarkedText() && window.firstResponder === first)
+        host.rootView = pane(false)
+        try await settle()
+        #expect(first.isHiddenOrHasHiddenAncestor && !second.isHiddenOrHasHiddenAncestor)
+        #expect(window.firstResponder !== first)
+        host.rootView = pane(true)
+        try await settle()
+        #expect(!first.isHiddenOrHasHiddenAncestor && second.isHiddenOrHasHiddenAncestor)
+        #expect(descendants(host).contains { $0 === first } && descendants(host).contains { $0 === second })
+        #expect(window.firstResponder !== first, "Reopening must not steal text focus")
+    }
+
     @Test func retainedNativeHostsForwardMetadataCloseGateWithoutReplacingEditor() async throws {
         let state = MetadataHostProbeState()
         let lifecycle = MetadataEditorLifecycle(begin: { state.gateHits += 1 })
