@@ -96,6 +96,47 @@ class ReviewLauncherTests(unittest.TestCase):
             with self.subTest(child=child, ready=ready):
                 self.assertEqual(launcher.launch_exit_code(child, ready), expected)
 
+    def test_optimized_python_is_rejected_before_receipt_or_launch(self):
+        args = [str(script), '--receipt', str(self.parent / 'absent.json'),
+                '--fixture-server', str(self.parent / 'absent.py'), '--launch']
+        for flags, optimize in [(['-O'], None), ([], '1'), (['-OO'], None)]:
+            with self.subTest(flags=flags, environment=optimize):
+                env = dict(os.environ)
+                env.pop('PYTHONOPTIMIZE', None)
+                if optimize: env['PYTHONOPTIMIZE'] = optimize
+                result = subprocess.run([sys.executable, *flags, *args], env=env,
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn('identity checks must remain enabled', result.stderr)
+                self.assertNotIn('Traceback', result.stderr)
+                self.assertNotIn('Launched', result.stdout)
+                self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_delivery_must_descend_from_build_without_product_changes(self):
+        repo = self.parent / 'source'; repo.mkdir()
+        def git(*arguments):
+            return subprocess.check_output(['git', '-c', 'user.name=Review Fixture',
+                '-c', 'user.email=review-fixture@example.invalid', *arguments],
+                cwd=repo, text=True, stderr=subprocess.DEVNULL).strip()
+        git('init', '-q')
+        (repo / 'D').mkdir(); (repo / 'D/source.swift').write_text('original')
+        git('add', 'D/source.swift'); git('commit', '-qm', 'fixture build')
+        built = git('rev-parse', 'HEAD')
+        (repo / 'receipt.md').write_text('evidence only')
+        git('add', 'receipt.md'); git('commit', '-qm', 'fixture receipt')
+        delivery = git('rev-parse', 'HEAD')
+        launcher.validate_built_source(repo, built, built)
+        launcher.validate_built_source(repo, built, delivery)
+        (repo / 'D/source.swift').write_text('different product')
+        git('add', 'D/source.swift'); git('commit', '-qm', 'fixture changed product')
+        changed = git('rev-parse', 'HEAD')
+        with self.assertRaises(subprocess.CalledProcessError):
+            launcher.validate_built_source(repo, built, changed)
+        with self.assertRaises(subprocess.CalledProcessError):
+            launcher.validate_built_source(repo, changed, delivery)
+        with self.assertRaises(subprocess.CalledProcessError):
+            launcher.validate_built_source(repo, '0' * 40, delivery)
+
 
 if __name__ == '__main__':
     unittest.main()

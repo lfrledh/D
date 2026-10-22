@@ -28,6 +28,14 @@ def launch_exit_code(returncode, ready):
     return 0 if ready else 2
 
 
+def validate_built_source(worktree, built_source, delivery_source):
+    """A documentation/tool receipt may follow the build, but product code may not."""
+    subprocess.run(['git', 'merge-base', '--is-ancestor', built_source, delivery_source],
+                   cwd=worktree, check=True)
+    subprocess.run(['git', 'diff', '--exit-code', built_source, delivery_source, '--',
+                    'D', 'Packages', 'D.xcodeproj', 'D.xcworkspace'], cwd=worktree, check=True)
+
+
 # Keep these finite paths aligned with WorkbenchReviewAdmission.validateStorage.
 REVIEW_SERVICE_PATHS = (
     'ModelLibrary', 'ModelLibrary/index.json', 'Quick Creations.dproject',
@@ -65,6 +73,12 @@ def validate_review_storage(root, session):
 
 
 def main():
+    # Identity assertions below are mandatory. Refuse -O/PYTHONOPTIMIZE before
+    # reading a receipt or creating any lock, server, log or application process.
+    if sys.flags.optimize:
+        print('启动前检查失败：请关闭 Python 优化模式；身份核验不可跳过。 / '
+              'Python optimization is unsupported; identity checks must remain enabled.', file=sys.stderr)
+        return 2
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--receipt', required=True, type=Path)
     parser.add_argument('--fixture-server', required=True, type=Path)
@@ -78,6 +92,9 @@ def main():
     assert info.get('CFBundleIdentifier') == 'first-test.D.review.D', 'Not the dedicated review bundle'
     assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=worktree, text=True).strip() == receipt['source_sha']
     subprocess.run(['git', 'diff', '--exit-code', receipt['source_sha'], '--', 'D', 'Packages', 'D.xcodeproj', 'D.xcworkspace'], cwd=worktree, check=True)
+    # Older receipts used one SHA for both roles. Preserve that exact-source
+    # contract; when the build SHA is supplied, validate it rather than ignore it.
+    validate_built_source(worktree, receipt.get('built_source_sha', receipt['source_sha']), receipt['source_sha'])
     for relative, digest in receipt['code_files'].items():
         assert hashlib.sha256((app / relative).read_bytes()).hexdigest() == digest, 'Code changed: ' + relative
     subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
