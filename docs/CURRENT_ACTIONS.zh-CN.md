@@ -1,5 +1,15 @@
 # 当前行动与接手点
 
+## D-UI-CONSOLIDATED-01 · 严重 UI 性能回归修补（2026-10-22，部分修复交审）
+
+仍为本树 `codex/ui-consolidated-20261020`；实际起点 `65d0edc540bef17f8cb6c2652a4c53e5a54f7cf0`、旧生产4775、累计6f5祖先检查通过；fetch无遗漏后继。正式生产 **`43c2cf1f6dfe94d4604bf2111bd6fb19442d2a81`**：明确工作区focusEffect形状，消除整页内容焦点位图路径；容量1语言解析缓存与静态功能索引。保留官方玻璃/动画/命中/子焦点、最新业务与保存保护。Lead单写，三名只读复核；个人scheme保持。
+
+[本轮报告](investigations/D-PERFORMANCE-ATTRIBUTION-01/regression-20261022/README.zh-CN.md)列同构建四动作对照与70段账本，旧调查预算/失败不改。SIDEBAR可重复改善；NODE部分改善；PAN/ZOOM仍未达标，**不能宣布严重回归全部消除或原有体验目标完成**。无最终呈现FPS，进程内事件与原生手感分开。没有收益依据的材质搬层、去显式backing layer、菜单留白实验均未进产品，诊断仅留本地。
+
+43c2正常Apple Development构建/strict/deep验签通过，独立7E6012EA合成项目已启动。亲看完整工作区、一级/子菜单、150%节点、双栏收放和Viewer Cmd-W；实图已在会话展示。最终坐标拖动仍在输入前报windowNotFoundAtPosition，停止该路径，不误报锁屏。14语言+3定向方法通过；viewport测试止于key-window前置，未算通过。正常包/完整交付SHA/启动统一至原 `D-UI-CONSOLIDATED-01/run-20261020-01/delivery/README.md` 与 `review.py`。
+
+余项只在[唯一集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)分开工程未完成、工具限制、历史未验与最终体验判断。无需用户手势/计时/解锁；普通D、原会话及旧产物未替换。交审后不自动恢复资产容器/布局/文案/模型开发，不合并、不发布。以下为历史回执。
+
 ## D-UI-CONSOLIDATED-01 · 解锁后原生收口
 
 本轮继续同一工作树/分支，最新接续 `b42b8b799bc5de3668a6207ab8b2b88b262328b6`，fetch及累计祖先检查通过。用户正常退出18c后，462独立候选已启动并亲跑浅色一级/子菜单、文件菜单前景、注解冷重开、总运行/嵌套调用精确定位、零结果/返回原搜索、双击/Space只读查看和外部独立副本。前景与菜单局部外观修正已取得原生证据。
