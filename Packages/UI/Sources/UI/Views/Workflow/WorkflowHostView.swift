@@ -10,7 +10,7 @@ struct WorkflowHostView: View {
     var metadata: SharedLibraryStore? = nil
     var library: ModelLibraryModel? = nil
     var onQuickUse: ((WorkflowNode) -> Void)? = nil
-    var libraryContent: ((WorkflowCanvasLibraryMode, CGPoint, @escaping () -> Void) -> AnyView)? = nil
+    var libraryContent: ((WorkflowCanvasLibraryMode, @escaping () -> CGPoint?, @escaping () -> Void) -> AnyView)? = nil
     var onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
     var acceptsLegacyAsset: ((UUID, UUID) -> Bool)? = nil
     @Environment(\.dLanguageStore) private var languageStore

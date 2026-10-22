@@ -1,7 +1,58 @@
 import AppKit
 import DWorkbench
 import Foundation
+import Observation
 import SwiftUI
+
+/// Per-mounted-canvas camera. Only the surface and zoom control observe zoom;
+/// navigation bookkeeping does not invalidate the libraries or workspace shell.
+@MainActor @Observable
+private final class WorkflowCanvasCameraPresentation {
+    var zoom: CGFloat = 1
+    @ObservationIgnored var visibleCenter = CGPoint(x: 550, y: 426)
+    @ObservationIgnored var insertionPoint = CGPoint(x: 170, y: 130)
+    @ObservationIgnored var context: WorkflowCanvasViewContext?
+    @ObservationIgnored var owner: ObjectIdentifier?
+
+    init(context: WorkflowCanvasViewContext? = nil, owner: ObjectIdentifier? = nil) {
+        self.context = context; self.owner = owner
+    }
+}
+
+/// Construct the binding while evaluating a camera-only child, not the workspace
+/// GeometryReader (Binding construction may read its initial value).
+private struct WorkflowCanvasCameraScope<Content: View>: View {
+    let camera: WorkflowCanvasCameraPresentation
+    let controller: WorkflowController
+    let context: WorkflowCanvasViewContext
+    let changed: () -> Void
+    @ViewBuilder let content: (Binding<CGFloat>) -> Content
+
+    var body: some View {
+        content(Binding(get: { camera.zoom }, set: { value in
+            let current = WorkflowCanvasViewContext(projectID: controller.projectID,
+                rootGraphID: controller.rootGraph?.id,
+                bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init))
+            guard camera.owner == ObjectIdentifier(controller),
+                  camera.context == context, current == context else { return }
+            camera.zoom = value
+            changed()
+        }))
+    }
+}
+
+private struct WorkflowCanvasZoomControl: View {
+    @Binding var zoom: CGFloat
+    let locked: Bool
+    let label: String
+
+    var body: some View {
+        Text("\(Int((zoom * 100).rounded()))%").font(.caption.monospacedDigit())
+        Slider(value: $zoom, in: WorkflowCanvasLayoutPolicy.sliderZoomRange(current: zoom))
+            .frame(width: 78).disabled(locked)
+            .accessibilityLabel(label)
+    }
+}
 
 enum WorkflowCanvasAssetIdentity {
     static func payload(_ item: WorkflowCanvasTransfer) -> (project: UUID, instance: UUID?, asset: UUID)? {
@@ -83,7 +134,7 @@ public struct WorkflowCanvasView: View {
     private let onImportAsset: () -> Void
     private let onDropFile: (URL) -> Bool
     private let onQuickUse: ((WorkflowNode) -> Void)?
-    private let libraryContent: ((WorkflowCanvasLibraryMode, CGPoint, @escaping () -> Void) -> AnyView)?
+    private let libraryContent: ((WorkflowCanvasLibraryMode, @escaping () -> CGPoint?, @escaping () -> Void) -> AnyView)?
     private let onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)?
     private let acceptsLegacyAsset: ((UUID, UUID) -> Bool)?
     private let onDestination: () -> Void
@@ -147,16 +198,13 @@ public struct WorkflowCanvasView: View {
     @State private var visitedPreparation: Set<WorkflowWorkspacePanels.Preparation> = [.models]
     @State private var visitedOutput: Set<WorkflowWorkspacePanels.Output> = [.overview]
     private var showInspector: Bool { get { overlayState.leading } nonmutating set { overlayState.leading = newValue } }
-    @State private var zoom: CGFloat = 1
+    @State private var camera = WorkflowCanvasCameraPresentation()
     @State private var canvasTool: WorkflowCanvasTool = .pointer
     @State private var canvasViewport: WorkflowCanvasViewportMeasurement?
     @State private var measuredCardSizes: [UUID: CGSize] = [:]
     @State private var navigationRequest: WorkflowCanvasNavigationRequest?
     @State private var viewportInteractionLocked = false
     @State private var viewStates = WorkflowCanvasViewStateStore()
-    @State private var activeViewContext: WorkflowCanvasViewContext?
-    @State private var actualVisibleRawCenter = CGPoint(x: 550, y: 426)
-    @State private var canvasInsertionPoint = CGPoint(x: 170, y: 130)
     @State private var pendingConnection: WorkflowPendingConnection?
     @State private var selectedConnectionID: UUID?
     @State private var runPreview: WorkflowRunPreview?
@@ -183,7 +231,7 @@ public struct WorkflowCanvasView: View {
         onImportAsset: @escaping () -> Void = {},
         onDropFile: @escaping (URL) -> Bool = { _ in false },
         onQuickUse: ((WorkflowNode) -> Void)? = nil,
-        libraryContent: ((WorkflowCanvasLibraryMode, CGPoint, @escaping () -> Void) -> AnyView)? = nil,
+        libraryContent: ((WorkflowCanvasLibraryMode, @escaping () -> CGPoint?, @escaping () -> Void) -> AnyView)? = nil,
         onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil,
         acceptsLegacyAsset: ((UUID, UUID) -> Bool)? = nil,
         captureControls: AnyView = AnyView(EmptyView())
@@ -205,9 +253,9 @@ public struct WorkflowCanvasView: View {
         self.onDestination = onDestination
         self.onPublishText = onPublishText
         self.onReturnText = onReturnText
-        _activeViewContext = State(initialValue: WorkflowCanvasViewContext(projectID: controller.projectID,
+        _camera = State(initialValue: WorkflowCanvasCameraPresentation(context: WorkflowCanvasViewContext(projectID: controller.projectID,
             rootGraphID: controller.rootGraph?.id,
-            bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init)))
+            bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init)), owner: ObjectIdentifier(controller)))
     }
 
     public var body: some View {
@@ -264,7 +312,11 @@ public struct WorkflowCanvasView: View {
         .onChange(of: runContext) { _, _ in
             runTarget = nil; runPreview = nil; scopePresentation = nil
         }
-        .onChange(of: ObjectIdentifier(controller)) { _, _ in panelsState = .init(); workspaceDraft=nil;resourceContext=nil;returnResourceCategory=nil }
+        .onChange(of: ObjectIdentifier(controller)) { _, _ in
+            panelsState = .init(); workspaceDraft=nil;resourceContext=nil;returnResourceCategory=nil
+            camera.owner = ObjectIdentifier(controller)
+            restoreViewContext(viewContext)
+        }
         .onChange(of: panelsState.preparation) { _, tab in visitedPreparation.insert(tab) }
         .onChange(of: panelsState.output) { _, tab in visitedOutput.insert(tab) }
         .onChange(of: resourceCategory) { _,tab in visitedResources.insert(tab) }
@@ -282,8 +334,10 @@ public struct WorkflowCanvasView: View {
             }
         }
         .onChange(of: viewContext) { _, next in restoreViewContext(next) }
-        .onAppear { activeViewContext = viewContext }
-        .onChange(of: zoom) { _, _ in rememberViewContext() }
+        .onAppear { camera.owner = ObjectIdentifier(controller); camera.context = viewContext }
+        .onDisappear {
+            if camera.owner == ObjectIdentifier(controller) { camera.owner = nil; camera.context = nil }
+        }
         .onChange(of: viewportInteractionLocked) { _, locked in viewportLockObserver?(locked) }
         .onChange(of: controller.selectedNodeIDs) { _, ids in
             if !ids.isEmpty {
@@ -340,7 +394,10 @@ public struct WorkflowCanvasView: View {
         return ZStack(alignment: .bottom) {
             ZStack(alignment: .topLeading) {
                 VStack(spacing: 0) {
-                WorkflowGraphSurface(controller: controller, graph: controller.graph, zoom: $zoom,
+                WorkflowCanvasCameraScope(camera: camera, controller: controller,
+                    context: viewContext, changed: rememberViewContext) { zoom in
+                let measuredContext = viewContext
+                WorkflowGraphSurface(controller: controller, graph: controller.graph, zoom: zoom,
                     tool: $canvasTool,
                     navigationRequest: $navigationRequest,
                     viewportInteractionLocked: $viewportInteractionLocked,
@@ -357,21 +414,24 @@ public struct WorkflowCanvasView: View {
                         guard let node=controller.graph?.nodes.first(where:{$0.id == id}) else { return }
                         revealLibrary(.init(controller: controller, source: .node(id), name: node.title))
                     }, nodeSizeObserver: { id, size in
+                        guard camera.owner == ObjectIdentifier(controller),
+                              camera.context == measuredContext, viewContext == measuredContext else { return }
                         measuredCardSizes[id] = size
                         nodeSizeObserver?(id, size)
                     },
                     viewportSizeObserver: { canvasViewport = $0 },
                     portCenterObserver: portCenterObserver,
                     onScrollObservation: { context, observation in
+                        guard camera.owner == ObjectIdentifier(controller) else { return }
                         if observation.isGestureEnd {
                             // An interrupted pan may finish after another graph has mounted.
                             // Save its captured context without moving the new graph's insertion point.
                             viewStates.capture(zoom: observation.zoom, rawVisibleCenter: observation.visibleRawCenter,
                                 selectedNodeID: viewStates.state(for: context)?.selectedNodeID, for: context)
                         }
-                        guard context == viewContext, activeViewContext == context else { return }
-                        actualVisibleRawCenter = observation.visibleRawCenter
-                        canvasInsertionPoint = observation.visibleRawCenter
+                        guard context == viewContext, camera.context == context else { return }
+                        camera.visibleCenter = observation.visibleRawCenter
+                        camera.insertionPoint = observation.visibleRawCenter
                         rememberViewContext()
                         scrollObserver?(context, observation)
                     },
@@ -394,6 +454,7 @@ public struct WorkflowCanvasView: View {
                     }, onClearSelection: { panelsState.clearSelection() })
 
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
                 }.frame(width: targetCanvasWidth)
                     .workbenchMeasureLayout("workflow-center")
                 .transaction { $0.animation = nil }
@@ -558,15 +619,15 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         else {
             VStack(spacing: 8) {
                 if let libraryContent {
-                    libraryContent(tab == .programs ? .programs : .nodes, canvasInsertionPoint, { showInspector = false })
+                    libraryContent(tab == .programs ? .programs : .nodes, libraryInsertionPoint, { showInspector = false })
                 } else if tab == .models {
                     WorkflowNodeLibrary(controller: controller, tagStore: nodeTags, metadata: metadata) { entry in
                         controller.addNode(operationID: entry.operation.id, modelID: entry.model?.id,
-                            x: canvasInsertionPoint.x, y: canvasInsertionPoint.y)
+                            x: camera.insertionPoint.x, y: camera.insertionPoint.y)
                     }
                 } else {
                     WorkflowNodeLibrary(controller:controller,tagStore:nodeTags,metadata:metadata) { entry in
-                        controller.addNode(operationID:entry.operation.id,modelID:entry.model?.id,x:canvasInsertionPoint.x,y:canvasInsertionPoint.y)
+                        controller.addNode(operationID:entry.operation.id,modelID:entry.model?.id,x:camera.insertionPoint.x,y:camera.insertionPoint.y)
                     }
                 }
                 if tab == .programs {
@@ -597,13 +658,14 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 ForEach(WorkflowResourceCategory.allCases,id:\.self) { tab in
                     if visitedResources.contains(tab) || resourceCategory == tab {
                         if let libraryContent {
-                            retained(libraryContent(tab.mode,canvasInsertionPoint,{showLibrary=false})
+                            retained(libraryContent(tab.mode,libraryInsertionPoint,{showLibrary=false})
                                 .environment(\.workflowLibraryContext,resourceContext),visible:resourceCategory == tab,id:"workflow-resource-"+tab.rawValue)
                         } else {
                             retained(WorkflowAssetLibrary(controller:controller,metadata:metadata,onAdd:{project,asset in
                                 if controller.graph == nil { controller.addBlankGraph() }
                                 guard let target=controller.canvasInsertionTarget() else { return }
-                                Task { await controller.addAssetNode(projectID:project,assetID:asset,x:canvasInsertionPoint.x,y:canvasInsertionPoint.y,target:target) }
+                                let point = camera.insertionPoint
+                                Task { await controller.addAssetNode(projectID:project,assetID:asset,x:point.x,y:point.y,target:target) }
                             },onImport:onImportAsset,onDropFile:onDropFile),visible:resourceCategory == tab,id:"workflow-resource-"+tab.rawValue)
                         }
                     }
@@ -1023,10 +1085,11 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 }
                 .accessibilityIdentifier("workflow-port-legend")
             Spacer(minLength: 4)
-            Text("\(Int((zoom * 100).rounded()))%").font(.caption.monospacedDigit())
-            Slider(value: $zoom, in: WorkflowCanvasLayoutPolicy.sliderZoomRange(current: zoom))
-                .frame(width: 78).disabled(viewportInteractionLocked)
-                .accessibilityLabel(text("workflow.toolbar.zoom", "画布缩放"))
+            WorkflowCanvasCameraScope(camera: camera, controller: controller,
+                context: viewContext, changed: rememberViewContext) { zoom in
+                WorkflowCanvasZoomControl(zoom: zoom, locked: viewportInteractionLocked,
+                    label: text("workflow.toolbar.zoom", "画布缩放"))
+            }
             Button(text("refinement.workflow.fitAll", "显示全部节点"), systemImage: "arrow.up.left.and.arrow.down.right") {
                 fitAllNodes(targetWidth: targetWidth)
             }.disabled(!fitReady || viewportInteractionLocked).accessibilityIdentifier("workflow-canvas-fit-all").workbenchHelp("CANVAS-FIT")
@@ -1081,12 +1144,28 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
 
     private func rememberViewContext() {
-        viewStates.capture(zoom: zoom, rawVisibleCenter: actualVisibleRawCenter,
+        guard camera.owner == ObjectIdentifier(controller), camera.context == viewContext else { return }
+        viewStates.capture(zoom: camera.zoom, rawVisibleCenter: camera.visibleCenter,
             selectedNodeID: controller.selectedNodeID, for: viewContext)
     }
 
+    private var libraryInsertionPoint: () -> CGPoint? {
+        let context = viewContext
+        let camera = camera
+        let controller = controller
+        return {
+            let current = WorkflowCanvasViewContext(projectID: controller.projectID,
+                rootGraphID: controller.rootGraph?.id,
+                bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init))
+            guard camera.owner == ObjectIdentifier(controller), camera.context == context,
+                  current == context else { return nil }
+            return camera.insertionPoint
+        }
+    }
+
     private func fitAllNodes(targetWidth: CGFloat) {
-        guard !viewportInteractionLocked, activeViewContext == viewContext,
+        guard camera.owner == ObjectIdentifier(controller),
+              !viewportInteractionLocked, camera.context == viewContext,
               let canvasViewport, canvasViewport.permitsFit(targetWidth: targetWidth), let graph = controller.graph,
               !graph.nodes.isEmpty else { return }
         let geometry = WorkflowGraphGeometry(graph: graph, tools: controller.tools,
@@ -1102,29 +1181,32 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                                         width: WorkflowCanvasLayoutPolicy.nodeWidth, height: height))
         }
         guard let fitted = WorkflowCanvasFit.view(for: bounds, viewport: canvasViewport.clip) else { return }
-        zoom = fitted.zoom
+        camera.zoom = fitted.zoom
+        rememberViewContext()
         navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: fitted.center)
     }
 
     private func restoreViewContext(_ context: WorkflowCanvasViewContext) {
+        camera.context = nil
         if let saved = viewStates.state(for: context) {
-            zoom = WorkflowCanvasLayoutPolicy.restoredZoom(saved.zoom)
-            actualVisibleRawCenter = saved.rawVisibleCenter
+            camera.zoom = WorkflowCanvasLayoutPolicy.restoredZoom(saved.zoom)
+            camera.visibleCenter = saved.rawVisibleCenter
             navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: saved.rawVisibleCenter)
             controller.selectedNodeID = controller.graph?.nodes.contains(where: { $0.id == saved.selectedNodeID }) == true
                 ? saved.selectedNodeID : nil
         } else {
-            zoom = 1
+            camera.zoom = 1
             if let graph = controller.graph {
                 let geometry = WorkflowGraphGeometry(graph: graph, tools: controller.tools,
                     registry: controller.registry)
-                actualVisibleRawCenter = CGPoint(
+                camera.visibleCenter = CGPoint(
                     x: geometry.size.width / 2 - geometry.translation.width,
                     y: geometry.size.height / 2 - geometry.translation.height)
             }
             navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: nil)
         }
-        activeViewContext = context
+        camera.insertionPoint = camera.visibleCenter
+        camera.context = context
     }
 
     private var isReadOnly: Bool {

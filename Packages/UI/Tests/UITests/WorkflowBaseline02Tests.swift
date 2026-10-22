@@ -14,7 +14,7 @@ private actor Baseline02NoInferenceEngine: InferenceEngine {
     }
 }
 
-@Suite @MainActor
+@Suite(.serialized) @MainActor
 struct WorkflowBaseline02Tests {
     private let modelDefinition = WorkflowOperationDefinition(
         id: "d.test.model", title: "模型操作", detail: "", inputs: [], outputs: [], modelKind: .text
@@ -224,6 +224,142 @@ struct WorkflowBaseline02Tests {
         nativePort.onEnd(nil)
         try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
         #expect(controller.graph == originalGraph)
+        #expect(await engine.calls == 0)
+    }
+
+    @Test func zoomDoesNotRebuildUnrelatedLibraryContent() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("canvas-zoom-boundary-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Zoom.dproject"), name: "Zoom")
+        let engine = Baseline02NoInferenceEngine()
+        let runtime = WorkbenchSession(engine: engine, backendID: "never",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let services = WorkflowServices(store: store, session: runtime,
+            resolveText: { throw WorkflowIssue("No model in zoom test") },
+            resolveImage: { throw WorkflowIssue("No model in zoom test") })
+        let controller = WorkflowController(services: services)
+        await controller.load()
+        controller.addExample("text")
+        let graphBefore = try #require(controller.graph)
+        let undoBefore = controller.canUndo
+        var libraryBuilds = 0
+        var insertionPoint: (() -> CGPoint?)?
+        var libraryGraph: UUID?
+        var observations: [WorkflowCanvasScrollObservation] = []
+        var observedContexts: [WorkflowCanvasViewContext] = []
+        func makeView(_ owner: WorkflowController) -> WorkflowCanvasView {
+            WorkflowCanvasView(controller: owner, onTextModel: {}, onImageModel: {},
+            onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in },
+            libraryContent: { mode, point, _ in
+                libraryBuilds += 1
+                libraryGraph = owner.graph?.id
+                if mode == .nodes { insertionPoint = point }
+                return AnyView(Text(owner.graph?.name ?? "No graph"))
+            }).observingScroll { context, observation in
+                observedContexts.append(context); observations.append(observation)
+            }
+        }
+        let host = NSHostingView(rootView: makeView(controller))
+        host.frame = CGRect(x: 0, y: 0, width: 1100, height: 720)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.close() }
+        func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
+        for _ in 0..<30 {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let probe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+        let scroll = try #require(probe.enclosingScrollView)
+        try #require(libraryBuilds > 0 && !observations.isEmpty)
+        let firstZoom = try #require(observations.last).zoom
+        let capturedInsertion = try #require(insertionPoint)
+        let initialPoint = try #require(capturedInsertion())
+        var canvasBuilds = 0
+        WorkflowCanvasUpdateProbe.canvasBody = { canvasBuilds += 1 }
+        defer { WorkflowCanvasUpdateProbe.canvasBody = nil }
+        libraryBuilds = 0; observations.removeAll()
+        // This exercises the production receiver and real layout in a hidden
+        // host. It is an update-boundary counterexample, not desktop input/FPS.
+        for step in 0..<16 {
+            let clip = scroll.contentView
+            probe.onWheel(step < 8 ? 5 : -5,
+                CGPoint(x: clip.bounds.width * 0.4, y: clip.bounds.height * 0.4),
+                clip.bounds.origin, clip.bounds.size)
+            try await Task.sleep(for: .milliseconds(20))
+            host.layoutSubtreeIfNeeded()
+            let currentPoint = try #require(capturedInsertion())
+            let observedCenter = try #require(observations.last).visibleRawCenter
+            #expect(currentPoint == observedCenter)
+        }
+        try #require(observations.contains { abs($0.zoom - firstZoom) > 0.1 }, "Zoom must actually change")
+        #expect(abs(try #require(observations.last).zoom - firstZoom) < 0.001)
+        #expect(controller.graph == graphBefore && controller.canUndo == undoBefore)
+        #expect(await engine.calls == 0)
+        print("CANVAS_ZOOM_BOUNDARY steps=16 canvas=\(canvasBuilds) library=\(libraryBuilds) observations=\(observations.count) desktopFPS=NOT_MEASURED")
+        #expect(canvasBuilds == 0 && libraryBuilds == 0)
+        #expect(observations.contains { $0.visibleRawCenter != initialPoint })
+
+        // A source change must still rebuild the library; an old callback must
+        // not acquire the replacement graph's insertion point.
+        controller.addBlankGraph()
+        #expect(capturedInsertion() == nil)
+        for _ in 0..<30 {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(libraryBuilds > 0 && libraryGraph == controller.graph?.id)
+        let replacementInsertion = try #require(insertionPoint)
+        let oldWheel = probe.onWheel
+        let oldPan = probe.onPan
+        #expect(replacementInsertion() != nil && capturedInsertion() == nil)
+
+        // Even the same saved graph IDs in a replacement controller are a new
+        // owner. The old getter must not follow the new controller's camera.
+        await controller.save()
+        try #require(controller.errorMessage == nil)
+        let replacement = WorkflowController(services: services)
+        await replacement.load()
+        replacement.selectedGraphID = controller.selectedGraphID
+        try #require(replacement.graph?.id == controller.graph?.id)
+        host.rootView = makeView(replacement)
+        for _ in 0..<30 {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(replacementInsertion() == nil)
+        let currentInsertion = try #require(insertionPoint)
+        #expect(currentInsertion() != nil)
+        let replacementZoom = try #require(observations.last).zoom
+        let replacementCenter = try #require(observations.last).visibleRawCenter
+        let replacementGraphID = try #require(replacement.selectedGraphID)
+        oldWheel(12, .init(x: 100, y: 100), scroll.contentView.bounds.origin, scroll.contentView.bounds.size)
+        try await Task.sleep(for: .milliseconds(40))
+        host.layoutSubtreeIfNeeded()
+        #expect(try #require(observations.last).zoom == replacementZoom)
+        // An old owner can finish after the new owner has moved to another
+        // graph. It must not overwrite the replacement owner's saved camera.
+        replacement.selectedGraphID = graphBefore.id
+        for _ in 0..<30 {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        oldPan(false, .init(x: 123, y: 456), scroll.contentView.bounds.size)
+        let observationsBeforeReturn = observations.count
+        replacement.selectedGraphID = replacementGraphID
+        for _ in 0..<30 {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(observations.count > observationsBeforeReturn)
+        #expect(observedContexts.last?.rootGraphID == replacementGraphID)
+        let restored = try #require(observations.last)
+        #expect(abs(restored.zoom - replacementZoom) < 0.001)
+        #expect(abs(restored.visibleRawCenter.x - replacementCenter.x) < 2)
+        #expect(abs(restored.visibleRawCenter.y - replacementCenter.y) < 2)
         #expect(await engine.calls == 0)
     }
 

@@ -430,7 +430,7 @@ public struct DualWorkbenchView: View {
                     }
                 }
                 RetainedContentHost(content: WorkflowHostView(model: canvasModel, nodeTags: nodeTags, metadata: metadata, library: library, onQuickUse: useNode,
-                    libraryContent: { mode, point, close in AnyView(libraryBrowser(compact: true, at: point, onBack: close, canvasMode: mode)) },
+                    libraryContent: canvasLibraryContent,
                     onSharedAssetDrop: acceptSharedAssetDrop,
                     acceptsLegacyAsset: { projectID, assetID in
                         guard let instance = SharedLibraryProjection.resolvedInstanceID(projectID: projectID,
@@ -486,7 +486,7 @@ public struct DualWorkbenchView: View {
                     Text(t("checkingModel"))
                         .font(.caption).foregroundStyle(.secondary).padding(.vertical, 5)
                 }
-                libraryBrowser(compact: false, at: CGPoint(x: 160, y: 140))
+                libraryBrowser(compact: false, at: { CGPoint(x: 160, y: 140) })
             }
             .frame(minWidth: 820, minHeight: 540)
             .task { await refreshLibrary(checkModels: true) }
@@ -694,7 +694,13 @@ public struct DualWorkbenchView: View {
         !languageVisible && !settingsVisible && !library.isPresented && previewAsset == nil && libraryInfo == nil &&
         filesRoute == nil && pendingFilesRoute == nil
     }
-    @ViewBuilder private func libraryBrowser(compact: Bool, at point: CGPoint, onBack: (() -> Void)? = nil, canvasMode: WorkflowCanvasLibraryMode? = nil) -> some View {
+    private func canvasLibraryContent(_ mode: WorkflowCanvasLibraryMode,
+                                      _ point: @escaping () -> CGPoint?,
+                                      _ close: @escaping () -> Void) -> AnyView {
+        AnyView(libraryBrowser(compact: true, at: point, onBack: close, canvasMode: mode))
+    }
+
+    @ViewBuilder private func libraryBrowser(compact: Bool, at point: @escaping () -> CGPoint?, onBack: (() -> Void)? = nil, canvasMode: WorkflowCanvasLibraryMode? = nil) -> some View {
         if let metadata {
             let sourceEntries: [SharedLibraryBrowserEntry] = {
                 if let category = canvasMode?.resourceCategory {
@@ -705,7 +711,10 @@ public struct DualWorkbenchView: View {
             }()
             SharedLibraryBrowser(entries: sourceEntries, store: metadata, compact: compact, allowsImport: canvasMode == nil || canvasMode?.resourceCategory != nil, canvasMode:canvasMode,
                 state: canvasMode.flatMap { canvasLibraryStates[$0] } ?? (compact ? compactLibraryState : fullLibraryState),
-                onUse: useLibraryEntry, onAdd: { value in beginAddingLibraryEntry(value, at: point) },
+                onUse: useLibraryEntry, onAdd: { value in
+                    guard let insertionPoint = point() else { return }
+                    beginAddingLibraryEntry(value, at: insertionPoint)
+                },
                 onPreview: { value in Task { await previewLibraryEntry(value) } },
                 onExternalCopy: { value in Task { await openExternalLibraryCopy(value) } }, readPreview: readLibraryPreview,
                 onLocation: { value in Task { await showAssetLocation(value) } },
