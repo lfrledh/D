@@ -86,6 +86,9 @@ struct WorkflowLibraryEntry: Identifiable {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(entry.title).font(.callout.weight(.medium)).fixedSize(horizontal: false, vertical: true)
                                     Text(entry.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                    if let model = entry.model {
+                                        ModelSpecificationFields(descriptor: SharedLibraryProjection.descriptor(for: model), font: .caption)
+                                    }
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                                 Button { onAdd(entry) } label: { Image(systemName: "plus.circle") }
                                     .buttonStyle(WorkbenchGlassButtonStyle(compact: true)).disabled(!controller.canEditCanvas)
