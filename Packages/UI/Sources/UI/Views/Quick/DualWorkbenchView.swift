@@ -84,6 +84,7 @@ public struct DualWorkbenchView: View {
     }
 
     @State private var commandScope = WorkbenchCommandScope()
+    @State private var windowFullScreen = false
     @State private var sidebarState = WorkbenchSidebarState()
     @Environment(\.isEnabled) private var controlsEnabled
     private func selectCategory(_ category: QuickCategory) {
@@ -406,6 +407,7 @@ public struct DualWorkbenchView: View {
     private var applicationToolbar: some View {
         let commands = workspaceCommands
         return HStack(spacing: 12) {
+            WorkbenchNativeWindowControls(fullScreen: $windowFullScreen)
             Button(action: goBack) { Image(systemName: "chevron.left") }
                 .buttonStyle(WorkbenchIconButtonStyle(diameter: 40))
                 .disabled(entryHistory.isEmpty).help(t("back")).accessibilityIdentifier("workbench-back")
@@ -428,14 +430,14 @@ public struct DualWorkbenchView: View {
             }.accessibilityIdentifier("app-project").accessibilityLabel(displayedTitle).workbenchHelp("APP-PROJECT").help(displayedTitle)
                 .frame(maxWidth: 260, alignment: .leading).layoutPriority(-1)
                 .environment(\.workbenchMenuContext, "project:\(displayedOwner.manifest?.effectiveInstanceID.uuidString ?? "none"):\(entry):\(usesTemporaryChat)")
-            Spacer(minLength: 72)
+            WorkbenchWindowDragRegion().frame(minWidth: 72, maxWidth: .infinity).frame(height: 32)
             WorkbenchGlassSegments(title: t("workspaceMode"), selection: Binding(get: { entry }, set: { navigate(to: $0) }),
                 choices: [(Entry.quick, layoutText(language, "quick")), (.workflow, layoutText(language, "workflow"))],
                 owner: AnyHashable("\(displayedOwner.manifest?.effectiveInstanceID.uuidString ?? "none"):\(displayedOwner.projectSession.navigationEpoch)"), minimumItemLength: 108)
                 .fixedSize(horizontal: true, vertical: false).accessibilityIdentifier("workbench-entry").workbenchHelp("APP-MODE")
             Button(layoutText(language, "models")) { library.presentManagement() }
                 .frame(height: 32).accessibilityIdentifier("workbench-models-downloads").workbenchHelp("MENU-RESOURCES-MODELS")
-        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 16).frame(height: 56)
+        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 16).frame(height: 64)
     }
 
     @ViewBuilder private var workspaceContent: some View {
@@ -561,6 +563,7 @@ public struct DualWorkbenchView: View {
         .environment(\.workbenchMenuContext, menuContext)
         .environment(\.openWorkbenchSettings, { section in presentSettings(section: section) })
         .workbenchTheme(paintsCanvas: false)
+        .ignoresSafeArea(.container, edges: windowFullScreen ? [] : .top)
         .modifier(WorkbenchCanvasModifier(state: automaticQuickModel.chatDisplaySettings, stylesWindowTitlebar: true))
         .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences)
         .preferredColorScheme(automaticQuickModel.chatDisplaySettings.preferences.preferredColorScheme)

@@ -320,9 +320,19 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
         inputGeometryChanged(notification)
     }
     func windowWillEnterFullScreen(_ notification: Notification) { previousWindowDelegate?.windowWillEnterFullScreen?(notification) }
-    func windowDidEnterFullScreen(_ notification: Notification) { previousWindowDelegate?.windowDidEnterFullScreen?(notification) }
+    func windowDidEnterFullScreen(_ notification: Notification) { previousWindowDelegate?.windowDidEnterFullScreen?(notification); inputGeometryChanged(notification) }
     func windowWillExitFullScreen(_ notification: Notification) { previousWindowDelegate?.windowWillExitFullScreen?(notification) }
-    func windowDidExitFullScreen(_ notification: Notification) { previousWindowDelegate?.windowDidExitFullScreen?(notification) }
+    func windowDidExitFullScreen(_ notification: Notification) { previousWindowDelegate?.windowDidExitFullScreen?(notification); inputGeometryChanged(notification) }
+    func windowDidFailToEnterFullScreen(_ window: NSWindow) {
+        previousWindowDelegate?.windowDidFailToEnterFullScreen?(window)
+        WorkbenchWindowChrome.fullScreenTransitionFailed(window)
+        if window === workbenchWindow { inputGeometry?.invalidateAfterLayout() }
+    }
+    func windowDidFailToExitFullScreen(_ window: NSWindow) {
+        previousWindowDelegate?.windowDidFailToExitFullScreen?(window)
+        WorkbenchWindowChrome.fullScreenTransitionFailed(window)
+        if window === workbenchWindow { inputGeometry?.invalidateAfterLayout() }
+    }
     func windowDidChangeOcclusionState(_ notification: Notification) { previousWindowDelegate?.windowDidChangeOcclusionState?(notification) }
 }
 

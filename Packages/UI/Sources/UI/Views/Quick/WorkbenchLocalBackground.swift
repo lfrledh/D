@@ -321,6 +321,7 @@ enum WorkbenchLocalRenderer {
 /// blur and one lazily prepared opaque glass source, independent of node count.
 @MainActor final class WorkbenchBackgroundOwner {
     weak var root: WorkbenchBackgroundNSView?
+    weak var windowControls: WorkbenchWindowControlHost?
     let surfaces = NSHashTable<WorkbenchBackgroundNSView>.weakObjects()
     let readability = WorkbenchReadabilityRegistry()
     let glassFields = WorkbenchGlassFields()
@@ -381,7 +382,7 @@ enum WorkbenchLocalRenderer {
             }
         }
     }
-    func invalidate() { for view in surfaces.allObjects { view.refreshGlass(); view.needsDisplay = true; view.titlebar?.surface.needsDisplay = true } }
+    func invalidate() { for view in surfaces.allObjects { view.refreshGlass(); view.needsDisplay = true } }
     func coordinateRoot(in window: NSWindow?) -> NSView? {
         guard let root, root.window === window else { return window?.contentView }
         return root.stylesWindowTitlebar ? window?.contentView : root

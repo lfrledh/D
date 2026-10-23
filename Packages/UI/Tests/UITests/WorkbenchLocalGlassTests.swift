@@ -59,259 +59,112 @@ private actor LocalGlassNoInference: InferenceEngine {
         let ptr = try #require(c.data).assumingMemoryBound(to: UInt8.self)
         return Array(UnsafeBufferPointer(start: ptr, count: c.bytesPerRow * c.height))
     }
-    private func titlebarPixel(_ canvas: WorkbenchBackgroundNSView, external: CGColor) throws -> [UInt8] {
-        let surface = try #require(canvas.titlebar?.surface)
-        try #require(surface.superview === canvas.window?.contentView?.superview && !surface.isHidden)
-        #expect(surface.subviews.isEmpty, "Native chrome floats over the root background, without a glass strip")
-        let c = try #require(WorkbenchLocalRenderer.bitmap(width: Int(surface.bounds.width), height: Int(surface.bounds.height)))
-        c.setFillColor(external); c.fill(surface.bounds)
+    private func rootPixel(_ canvas: WorkbenchBackgroundNSView, external: CGColor) throws -> [UInt8] {
+        let c = try #require(WorkbenchLocalRenderer.bitmap(width: Int(canvas.bounds.width), height: Int(canvas.bounds.height)))
+        c.setFillColor(external); c.fill(canvas.bounds)
         c.translateBy(x: 0, y: CGFloat(c.height)); c.scaleBy(x: 1, y: -1)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: c, flipped: true)
-        surface.draw(surface.bounds)
+        canvas.draw(canvas.bounds)
         NSGraphicsContext.restoreGraphicsState()
         let data = try #require(c.data).assumingMemoryBound(to: UInt8.self)
-        let offset = Int(surface.bounds.midY) * c.bytesPerRow + Int(surface.bounds.midX) * 4
-        return Array(UnsafeBufferPointer(start: data + offset, count: 4))
+        return Array(UnsafeBufferPointer(start: data, count: c.bytesPerRow * c.height))
     }
 
     @Test(arguments: [ColorScheme.light, .dark])
-    func titlebarKeepsLegacyPreferencesButUsesRootBackground(scheme: ColorScheme) async throws {
+    func floatingChromeKeepsRootOpaqueAndPreservesLegacyPreferences(scheme: ColorScheme) async throws {
         let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
         let state = ChatDisplayPreferencesState(appearanceDirectory: root)
         var value = state.preferences; value.appearance?.local = nil
         try #require(state.update(value))
         func content() -> some View {
-            Text("Legacy").frame(maxWidth: .infinity, maxHeight: .infinity)
-                .modifier(WorkbenchCanvasModifier(state: state, stylesWindowTitlebar: true))
-                .environment(\.colorScheme, scheme)
+            Text("Legacy").frame(maxWidth: .infinity, maxHeight: .infinity).ignoresSafeArea(.container, edges: .top)
+                .modifier(WorkbenchCanvasModifier(state: state, stylesWindowTitlebar: true)).environment(\.colorScheme, scheme)
         }
         let host = NSHostingView(rootView: content())
-        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 250),
-            styleMask: [.titled], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 250), styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host
         defer { window.contentView = nil; window.close() }
         func children(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + children($0) } }
         var images: [[UInt8]] = []
         for blend in [0.0, 0.83, 1.0] {
-            value.appearance?.backgroundTransparency = blend; try #require(state.update(value))
-            host.rootView = content()
+            value.appearance?.backgroundTransparency = blend; try #require(state.update(value)); host.rootView = content()
             for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
             let canvas = try #require(children(host).compactMap { $0 as? WorkbenchBackgroundNSView }.first { $0.isCanvas })
-            #expect(canvas.legacyTitlebarBlend == blend && !canvas.drawsGlass)
+            #expect(canvas.legacyTitlebarBlend == blend && !canvas.drawsGlass && window.isOpaque)
             #expect(state.preferences == value && state.preferences.appearance?.local == nil)
-            let pixel = try titlebarPixel(canvas, external: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
-            let expected = try #require(NSColor(canvas.palette.canvasColor).usingColorSpace(.sRGB))
-            for (actual, expected) in zip(pixel.prefix(3), [expected.redComponent, expected.greenComponent, expected.blueComponent]) {
-                #expect(abs(Double(actual) - Double(expected) * 255) <= 1)
-            }
-            #expect(pixel[3] == 255); images.append(pixel)
+            let red = try rootPixel(canvas, external: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+            let green = try rootPixel(canvas, external: CGColor(red: 0, green: 1, blue: 0, alpha: 1))
+            #expect(red == green && red.enumerated().filter { $0.offset % 4 == 3 }.allSatisfy { $0.element == 255 })
+            images.append(red)
         }
         #expect(images[0] == images[1] && images[1] == images[2])
     }
 
-    @Test(arguments: [ColorScheme.light, .dark])
-    func titlebarContinuesRootWithoutMovingContentOrReplacingControls(scheme: ColorScheme) async throws {
-        let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
-        let state = ChatDisplayPreferencesState(appearanceDirectory: root.appendingPathComponent("Appearance"))
-        let source = root.appendingPathComponent("source.png"); try png(pattern(), at: source)
-        await state.importWallpaper(source)
-        func content() -> some View {
-            TextField("Top input", text: .constant("Native content"))
-                .frame(height: 32).padding(8).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .modifier(WorkbenchCanvasModifier(state: state, stylesWindowTitlebar: true))
-                .environment(\.colorScheme, scheme).environment(\.chatDisplayPreferences, state.preferences)
-        }
-        let host = NSHostingView(rootView: content())
-        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 640, height: 400),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false; window.title = "D native title"
-        let buttons = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].map { window.standardWindowButton($0) }
-        let movable = window.isMovableByWindowBackground, visibility = window.titleVisibility
-        let appearance = window.appearance
-        window.contentView = host
+    @Test func floatingChromeMovesRealButtonsAndRestoresAfterFailedFullScreen() async throws {
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 400), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = NSView(frame: window.contentView!.bounds); window.contentView = host
         defer { window.contentView = nil; window.close() }
-        func children(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + children($0) } }
-        func settle() async throws {
-            for _ in 0..<20 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
-        }
-        try await settle()
-        let canvas = try #require(children(host).compactMap { $0 as? WorkbenchBackgroundNSView }.first { $0.isCanvas })
-        let chrome = try #require(canvas.titlebar), owner = try #require(canvas.owner)
-        let input = try #require(children(host).compactMap { $0 as? NSTextField }.first)
-        #expect(window.makeFirstResponder(input))
-        let responder = window.firstResponder
-        #expect(window.titlebarAppearsTransparent && window.styleMask.contains(.fullSizeContentView) && window.isOpaque)
-        #expect(window.titlebarSeparatorStyle == .none && window.titleVisibility == visibility && window.title == "D native title")
-        #expect(window.isMovableByWindowBackground == movable && window.contentView === host && window.appearance === appearance)
-        #expect(zip(buttons, [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton]).allSatisfy { $0 === window.standardWindowButton($1) })
-        try #require(owner.image != nil && owner.blurred != nil)
-        func checkGeometry() throws {
-            try #require(!chrome.surface.visibleRect.isEmpty)
-            #expect(chrome.surface.bounds.contains(chrome.surface.visibleRect),
-                "Opaque titlebar drawing cannot cover the SwiftUI workbench")
-            let band = chrome.frame(in: canvas)
-            #expect(!band.isEmpty && !band.isNull)
-            let nativeBand = canvas.convert(band, to: nil)
-            #expect(abs(nativeBand.minY - window.contentLayoutRect.maxY) < 1)
-            #expect(abs(nativeBand.maxY - host.convert(host.bounds, to: nil).maxY) < 1)
-            #expect(input.convert(input.bounds, to: nil).maxY <= window.contentLayoutRect.maxY,
-                "Only the background extends into the native titlebar; input stays below it")
-            #expect(canvas.hitTest(band.origin) == nil)
-        }
-        try checkGeometry()
-        var images: [[UInt8]] = []
-        for strength in [0.0, 0.55, 1.0] {
-            var value = state.preferences; value.appearance?.local?.strength = strength
-            try #require(state.update(value)); host.rootView = content(); try await settle()
-            #expect(children(host).contains { $0 === canvas } && children(host).contains { $0 === input })
-            #expect(window.firstResponder === responder && canvas.strength == strength)
-            #expect(canvas.palette == (scheme == .dark ? .defaultDark : .defaultLight))
-            let a = try titlebarPixel(canvas, external: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
-            let b = try titlebarPixel(canvas, external: CGColor(red: 0, green: 1, blue: 0, alpha: 1))
-            #expect(a == b && a[3] == 255, "Titlebar pixels exclude anything behind D")
-            images.append(a)
-        }
-        #expect(images[0] == images[1] && images[1] == images[2], "Root continuation has no separate glass tint")
-        window.setContentSize(CGSize(width: 840, height: 520)); try await settle(); try checkGeometry()
-        #expect(owner.decodeCount == 1 && owner.blurCount == 1)
-        var value = state.preferences; value.appearance?.local?.material = .solid
-        try #require(state.update(value)); host.rootView = content(); try await settle()
-        #expect(!canvas.drawsGlass && window.isOpaque)
+        let types: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        let buttons = try types.map { try #require(window.standardWindowButton($0)) }
+        let parents = buttons.map(\.superview), frames = buttons.map(\.frame)
+        let originalButtonOrder = parents[0]?.subviews.filter { view in buttons.contains { $0 === view } }
+        let union = buttons.reduce(CGRect.null) { $0.union($1.convert($1.bounds, to: nil)) }
+        let owner = WorkbenchBackgroundOwner()
+        let canvas = WorkbenchBackgroundNSView(frame: host.bounds); canvas.owner = owner; owner.root = canvas
+        canvas.isCanvas = true; canvas.stylesWindowTitlebar = true; host.addSubview(canvas)
+        let controls = WorkbenchWindowControlHost(frame: .init(x: 16, y: host.bounds.height - 52, width: union.width + 24, height: 40))
+        controls.owner = owner; host.addSubview(controls); controls.bind()
+        let chrome = try #require(canvas.titlebar)
+        #expect(window.contentView === host && window.styleMask.contains(.titled) && window.isOpaque)
+        #expect(buttons.allSatisfy { $0.superview === controls })
+        #expect(zip(types, buttons).allSatisfy { window.standardWindowButton($0) === $1 })
+        #expect(controls.measuredWidth == union.width + 24)
+        #expect(buttons.map { $0.frame.size } == frames.map(\.size))
+        #expect(abs(buttons.first!.frame.minX - 12) < 0.1)
+        #expect(abs(buttons.last!.frame.maxX - (controls.measuredWidth - 12)) < 0.1)
+        let siblingCount = host.superview?.subviews.count
+        chrome.refreshGeometry(); chrome.refreshGeometry()
+        #expect(host.superview?.subviews.count == siblingCount, "No full-width titlebar or repeated overlay is mounted")
+        NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: window)
+        #expect(zip(buttons, parents).allSatisfy { $0.superview === $1 })
+        WorkbenchWindowChrome.fullScreenTransitionFailed(window)
+        #expect(buttons.allSatisfy { $0.superview === controls })
+        var callbacks = 0; controls.changed = { _, _ in callbacks += 1 }
+        controls.report(width: controls.measuredWidth + 1, fullScreen: true)
+        chrome.detach(controls)
+        await Task.yield(); try await Task.sleep(for: .milliseconds(10))
+        #expect(callbacks == 0, "Detached host must not deliver stale full-screen state")
+        #expect(parents[0]?.subviews.filter { view in buttons.contains { $0 === view } } == originalButtonOrder)
+        #expect(zip(buttons, parents).allSatisfy { $0.superview === $1 } && buttons.map(\.frame) == frames)
+        #expect(window.standardWindowButton(.closeButton) === buttons[0])
         canvas.releaseTitlebar()
         #expect(!window.titlebarAppearsTransparent && !window.styleMask.contains(.fullSizeContentView))
-        #expect(window.contentView === host && window.firstResponder === responder)
     }
 
-    @Test func titlebarEscapesClippedCanvasAndMaintainsOwnedChrome() throws {
-        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 640, height: 400),
-            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        defer { window.contentView = nil; window.close() }
-        let host = NSView(frame: CGRect(x: 0, y: 0, width: 640, height: 400)); window.contentView = host
-        let clip = NSView(frame: CGRect(x: 0, y: 0, width: 640, height: 350)); clip.clipsToBounds = true; host.addSubview(clip)
-        let canvas = WorkbenchBackgroundNSView(frame: clip.bounds); canvas.isCanvas = true; canvas.stylesWindowTitlebar = true
-        let owner = WorkbenchBackgroundOwner(); canvas.owner = owner; owner.root = canvas; clip.addSubview(canvas)
-        canvas.synchronizeTitlebar()
-        let chrome = try #require(canvas.titlebar)
-        #expect(chrome.frame(in: canvas).isEmpty || chrome.frame(in: canvas).isNull)
-        #expect(chrome.surface.superview === host.superview && chrome.surface.frame.height > 0 && !chrome.surface.isHidden)
-        try #require(!chrome.surface.visibleRect.isEmpty)
-        #expect(chrome.surface.bounds.contains(chrome.surface.visibleRect),
-            "The opaque titlebar continuation must not claim the workbench below its narrow strip")
-        #expect(chrome.surface.convert(chrome.surface.bounds, to: nil).minY == window.contentLayoutRect.maxY)
-        #expect(chrome.surface.hitTest(.zero) == nil && owner.coordinateRoot(in: window) === host)
-        #expect(!host.isFlipped)
-        #expect(owner.coordinates(for: chrome.surface).rect.minY == 0)
-        #expect(owner.coordinates(for: canvas).rect.minY == host.bounds.maxY - canvas.convert(canvas.bounds, to: host).maxY)
-        let button = window.standardWindowButton(.closeButton)
-        window.titlebarAppearsTransparent = false
-        window.styleMask.remove(.fullSizeContentView)
-        canvas.synchronizeTitlebar()
-        #expect(window.titlebarAppearsTransparent && window.styleMask.contains(.fullSizeContentView))
-        #expect(window.standardWindowButton(.closeButton) === button && window.contentView === host)
-        let pixel = try titlebarPixel(canvas, external: CGColor(red: 1, green: 0, blue: 0, alpha: 1))
-        #expect(pixel[3] == 255)
-        canvas.releaseTitlebar(); #expect(chrome.surface.superview == nil)
-    }
-
-    @Test func invalidTitlebarLayoutCannotBecomeAnOpaqueWholeWindow() throws {
-        let window = TitlebarLayoutWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 400),
-            styleMask: [.titled, .resizable], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        defer { window.contentView = nil; window.close() }
-        let host = NSView(frame: .init(x: 0, y: 0, width: 640, height: 400)); window.contentView = host
-        let canvas = WorkbenchBackgroundNSView(frame: host.bounds)
-        canvas.isCanvas = true; canvas.stylesWindowTitlebar = true; host.addSubview(canvas)
-        canvas.synchronizeTitlebar()
-        let chrome = try #require(canvas.titlebar)
-        let normal = chrome.surface.frame
-        try #require(normal.height > 0 && normal.height < host.bounds.height)
-        for invalid in [CGRect.zero, .init(x: 0, y: 0, width: 640, height: CGFloat.infinity),
-                        .init(x: 0, y: -500, width: 640, height: 10)] {
-            window.testLayout = invalid; canvas.synchronizeTitlebar()
-            #expect(chrome.surface.isHidden)
-            #expect(chrome.surface.frame == normal)
-        }
-        window.testLayout = nil; canvas.synchronizeTitlebar()
-        #expect(!chrome.surface.isHidden && chrome.surface.frame == normal)
-        canvas.releaseTitlebar()
-    }
-
-    @Test func titlebarOwnershipIsLocalAndRestoresOnlyChrome() {
-        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 250),
-            styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    @Test func floatingChromeOwnershipIsWindowLocalAndRestoresOnlyOwnedProperties() {
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 250), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         let other = NSWindow(contentRect: window.frame, styleMask: [.titled], backing: .buffered, defer: false)
         let panel = NSPanel(contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         for w in [window, other, panel] { w.isReleasedWhenClosed = false }
         defer { for w in [window, other, panel] { w.contentView = nil; w.close() } }
-        let color = window.backgroundColor, separator = window.titlebarSeparatorStyle
-        let view = WorkbenchBackgroundNSView(frame: CGRect(x: 0, y: 0, width: 400, height: 250))
+        let color = window.backgroundColor, separator = window.titlebarSeparatorStyle, visibility = window.titleVisibility
+        let view = WorkbenchBackgroundNSView(frame: .init(x: 0, y: 0, width: 400, height: 250))
         view.isCanvas = true; window.contentView = view
         #expect(view.titlebar == nil && !window.titlebarAppearsTransparent)
         view.stylesWindowTitlebar = true; view.synchronizeTitlebar()
-        #expect(view.titlebar?.window === window && window.titlebarAppearsTransparent)
+        #expect(view.titlebar?.window === window && window.titlebarAppearsTransparent && window.titleVisibility == .hidden)
         #expect(!other.titlebarAppearsTransparent && !other.styleMask.contains(.fullSizeContentView))
         #expect(WorkbenchWindowTitlebar(window: panel, invalidate: {}) == nil)
-        // Detachment releases the first window before attachment to the next.
         window.contentView = nil; other.contentView = view
         #expect(!window.titlebarAppearsTransparent && !window.styleMask.contains(.fullSizeContentView))
-        #expect(window.backgroundColor == color && window.titlebarSeparatorStyle == separator)
+        #expect(window.backgroundColor == color && window.titlebarSeparatorStyle == separator && window.titleVisibility == visibility)
         #expect(view.titlebar?.window === other && other.titlebarAppearsTransparent)
         other.title = "Unrelated new title"; other.backgroundColor = .orange
         view.releaseTitlebar(); view.releaseTitlebar()
         #expect(other.title == "Unrelated new title" && other.backgroundColor == .orange)
         #expect(!other.titlebarAppearsTransparent && !other.styleMask.contains(.fullSizeContentView))
-    }
-
-    @Test(arguments: [false, true])
-    func titlebarWallpaperMatchesWholeRootAcrossClippedHosts(flipped: Bool) async throws {
-        let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
-        let file = root.appendingPathComponent("pattern.png"); try png(pattern(width: 640, height: 420), at: file)
-        let owner = WorkbenchBackgroundOwner(); owner.load(file, blur: false)
-        for _ in 0..<100 where owner.image == nil { try await Task.sleep(for: .milliseconds(5)) }
-        let image = try #require(owner.image)
-        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 640, height: 400),
-            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false; defer { window.contentView = nil; window.close() }
-        let host = TitlebarCoordinateHost(frame: CGRect(x: 0, y: 0, width: 640, height: 400)); host.flipsY = flipped
-        window.contentView = host
-        let clip = NSView(frame: CGRect(x: 0, y: flipped ? 60 : 0, width: 640, height: 340)); clip.clipsToBounds = true; host.addSubview(clip)
-        let canvas = WorkbenchBackgroundNSView(frame: clip.bounds)
-        canvas.isCanvas = true; canvas.stylesWindowTitlebar = true; canvas.owner = owner; owner.root = canvas
-        clip.addSubview(canvas); canvas.synchronizeTitlebar()
-        let surface = try #require(canvas.titlebar?.surface)
-        let coordinates = owner.coordinates(for: surface), size = surface.bounds.size
-        #expect(surface.subviews.isEmpty && surface.hitTest(.zero) == nil)
-        #expect(coordinates.rect.minY == 0, "Root continuation reaches the actual window top")
-        let actual = try #require(WorkbenchLocalRenderer.bitmap(width: Int(size.width), height: Int(size.height)))
-        actual.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1)); actual.fill(surface.bounds)
-        actual.translateBy(x: 0, y: CGFloat(actual.height)); actual.scaleBy(x: 1, y: -1)
-        NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: actual, flipped: true)
-        surface.draw(surface.bounds); NSGraphicsContext.restoreGraphicsState()
-        let whole = try #require(WorkbenchLocalRenderer.bitmap(width: Int(coordinates.viewport.width), height: Int(coordinates.viewport.height)))
-        whole.translateBy(x: 0, y: CGFloat(whole.height)); whole.scaleBy(x: 1, y: -1)
-        WorkbenchLocalRenderer.draw(in: whole, size: coordinates.viewport,
-            rect: CGRect(origin: .zero, size: coordinates.viewport), viewport: coordinates.viewport,
-            image: image, canvas: canvas.palette.canvas, panel: canvas.palette.panel, strength: 0, glass: false)
-        let a = try #require(actual.data).assumingMemoryBound(to: UInt8.self)
-        let b = try #require(whole.data).assumingMemoryBound(to: UInt8.self)
-        // Bitmap storage rows follow the top-left drawing after the explicit CTM flip.
-        let firstRow = Int(coordinates.rect.minY), firstColumn = Int(coordinates.rect.minX)
-        var colors = Set<UInt8>(), maxDifference = 0, alternateDifference = 0
-        for y in 0..<actual.height { for x in 0..<actual.width {
-            let source = (y+firstRow)*whole.bytesPerRow+(x+firstColumn)*4, target = y*actual.bytesPerRow+x*4
-            for channel in 0..<4 {
-                maxDifference = max(maxDifference, abs(Int(a[target+channel])-Int(b[source+channel])))
-                let alternate = (y+whole.height-Int(coordinates.rect.maxY))*whole.bytesPerRow+(x+firstColumn)*4
-                alternateDifference = max(alternateDifference, abs(Int(a[target+channel])-Int(b[alternate+channel])))
-            }
-            #expect(a[target+3] == 255); colors.insert(a[target])
-        } }
-        print("TITLEBAR_COORD flipped=\(flipped) rect=\(coordinates.rect) viewport=\(coordinates.viewport) actual=\(actual.width)x\(actual.height) diff=\(maxDifference) alternate=\(alternateDifference)")
-        #expect(maxDifference <= 1)
-        #expect(alternateDifference > 16, "The opposite strip is a negative coordinate control")
-        #expect(colors.count > 16, "Nonuniform wallpaper must expose a misplaced strip")
     }
 
     @Test(arguments: [CGFloat(22), CGFloat(48), CGFloat(320)])

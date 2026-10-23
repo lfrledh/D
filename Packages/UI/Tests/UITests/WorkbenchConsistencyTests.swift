@@ -74,13 +74,9 @@ import Testing
         let canvas = try #require(views(host).compactMap { $0 as? WorkbenchBackgroundNSView }.first { $0.isCanvas })
         let chrome = try #require(canvas.titlebar)
         func checkTitlebar() {
-            #expect(chrome.surface.superview === host.superview && chrome.surface.superview !== host)
-            let strip = chrome.surface.convert(chrome.surface.bounds, to: nil)
-            #expect(abs(strip.minY - w.contentLayoutRect.maxY) < 1)
-            #expect(abs(strip.maxY - host.convert(host.bounds, to: nil).maxY) < 1)
-            #expect(strip.height > 0 && strip.height < host.bounds.height)
-            #expect(chrome.surface.bounds.contains(chrome.surface.visibleRect))
-            #expect(chrome.surface.hitTest(.zero) == nil)
+            #expect(chrome.window === w && w.isOpaque && w.titlebarAppearsTransparent)
+            #expect(w.contentView === host && w.titleVisibility == .hidden)
+            #expect(host.superview?.subviews.contains(where: { String(describing: type(of: $0)) == "WorkbenchTitlebarSurface" }) != true)
         }
         checkTitlebar()
         var calls = 0
