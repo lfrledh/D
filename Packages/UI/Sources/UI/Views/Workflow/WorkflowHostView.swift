@@ -11,6 +11,8 @@ struct WorkflowHostView: View {
     var library: ModelLibraryModel? = nil
     var onQuickUse: ((WorkflowNode) -> Void)? = nil
     var libraryContent: ((WorkflowCanvasLibraryMode, @escaping () -> CGPoint?, @escaping () -> Void) -> AnyView)? = nil
+    var onExpandLibrary: ((WorkflowCanvasLibraryMode, WorkflowLibraryContext?, @escaping () -> Void) -> Void)? = nil
+    var onImportLibraryAsset: (() -> Void)? = nil
     var onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
     var acceptsLegacyAsset: ((UUID, UUID) -> Bool)? = nil
     @Environment(\.dLanguageStore) private var languageStore
@@ -23,19 +25,29 @@ struct WorkflowHostView: View {
                     onImport: { id in Task { await importFile(nodeID: id, controller: controller) } },
                     onDestination: { Task { await destination(controller) } },
                     onPublishText: {
-                        guard let target = controller.canvasInsertionTarget() else { return }
-                        Task { await model.projectSession.publishTextToWorkflow(target: target, controller: controller) }
+                        let owner = model.projectSession
+                        guard let target = controller.canvasInsertionTarget(), let source = owner.text,
+                              !model.isChangingProject else { return }
+                        let documentID = source.editor.document.id, epoch = owner.navigationEpoch
+                        Task {
+                            guard model.projectSession === owner, owner.workflow === controller, owner.text === source,
+                                  source.editor.document.id == documentID, owner.navigationEpoch == epoch else { return }
+                            await owner.publishTextToWorkflow(target: target, controller: controller)
+                        }
                     },
                     onReturnText: { ref in Task { await model.projectSession.returnWorkflowText(ref) } },
                     onAdditionalModel: { chooseModel(controller: controller, kind: $0) },
                     onRecord: { nodeID in Task { await model.projectSession.startWorkflowRecording(nodeID: nodeID, controller: controller) } },
                     nodeTags: nodeTags, metadata: metadata,
-                    onImportAsset: { Task { await importAsset(controller) } },
+                    onImportAsset: onImportLibraryAsset ?? { Task { await importAsset(controller) } },
                     onDropFile: { url in
                         guard model.projectSession.workflow === controller, controller.canEditCanvas else { return false }
                         Task { await importAssetURL(url, controller: controller) }; return true
                     }, onQuickUse: onQuickUse, libraryContent: libraryContent,
-                    onSharedAssetDrop: onSharedAssetDrop, acceptsLegacyAsset: acceptsLegacyAsset, captureControls:AnyView(captureControls))
+                    onSharedAssetDrop: onSharedAssetDrop, acceptsLegacyAsset: acceptsLegacyAsset, captureControls:AnyView(captureControls),
+                    publishDocumentDescription: model.projectSession.text != nil && !model.isChangingProject ? layoutText(languageStore, "documentHelp", arguments: ["source": model.manifest?.documents.first(where: { $0.id == model.projectSession.text?.editor.document.id })?.name ?? "—", "target": controller.graph?.name ?? model.manifest?.name ?? "—"]) : nil,
+                    destinationEnabled: !model.isBusy && !model.isChangingProject && controller.readOnlyReason == nil)
+                    .expandingLibrary(onExpandLibrary)
                     .environment(\.workflowViewerModel,model)
                     .environment(\.workflowPrepareNode, preparationAction(controller: controller))
                     .environment(\.workflowPreparingModels, library?.preparingNodeIdentities ?? [])

@@ -21,7 +21,9 @@
     "category": "project",
     "aliases": [
       "文件",
-      "File"
+      "File",
+      "文件命令的位置",
+      "File command locations"
     ],
     "destructive": false
   },
@@ -34,7 +36,9 @@
     "category": "models",
     "aliases": [
       "资源",
-      "Resources"
+      "Resources",
+      "节点库、资产库与模型管理",
+      "Node Library, Asset Library and model management"
     ],
     "destructive": false
   },
@@ -294,7 +298,9 @@
     "category": "project",
     "aliases": [
       "导入…",
-      "Import…"
+      "Import…",
+      "导入资产…",
+      "Import Asset…"
     ],
     "destructive": false
   },
@@ -359,7 +365,9 @@
     "category": "organize",
     "aliases": [
       "保存搜索…",
-      "Save Search…"
+      "Save Search…",
+      "保存当前筛选…",
+      "Save Current Filter…"
     ],
     "destructive": false
   },
@@ -1152,7 +1160,9 @@
     "category": "project",
     "aliases": [
       "导入素材…",
-      "Import Assets…"
+      "Import Assets…",
+      "导入资产…",
+      "Import Asset…"
     ],
     "destructive": false
   },
@@ -1165,7 +1175,9 @@
     "category": "project",
     "aliases": [
       "导出…",
-      "Export…"
+      "Export…",
+      "导出位置…",
+      "Export Location…"
     ],
     "destructive": false
   },
@@ -1191,7 +1203,9 @@
     "category": "models",
     "aliases": [
       "资料库…",
-      "Library…"
+      "Library…",
+      "展开节点库或资产库",
+      "Expand Node Library or Asset Library"
     ],
     "destructive": false
   },

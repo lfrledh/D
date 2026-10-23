@@ -103,29 +103,20 @@ struct ArtworkCanvas: View {
     }
 
     private var zoomControls: some View {
-        zoomButtons.padding(6).workbenchPanel(in: Capsule())
+        WorkbenchGlassSegments(title: consistencyText(consistencyLanguage, "remaining.b762aec769a3"), selection: $zoom,
+            choices: ArtworkZoom.allCases.map { ($0, $0 == .fit ? consistencyText(consistencyLanguage, "remaining.ff6c8048b322") : $0.rawValue) },
+            identifiers: ["zoom-fit", "zoom-actual", "zoom-double", "zoom-quadruple"], owner: AnyHashable(url))
+            .frame(maxWidth: 360)
+            .background {
+                // Keep the two original shortcuts once each, without assigning
+                // Cmd-1 to every magnification.
+                Group {
+                    Button("") { zoom = .fit }.keyboardShortcut("0", modifiers: .command)
+                    Button("") { zoom = .actual }.keyboardShortcut("1", modifiers: .command)
+                }.hidden().accessibilityHidden(true)
+            }
     }
 
-    private var zoomButtons: some View {
-        HStack(spacing: 2) {
-            ForEach(ArtworkZoom.allCases, id: \.self) { value in
-                Button {
-                    zoom = value
-                } label: {
-                    Text(value == .fit ? consistencyText(consistencyLanguage, "remaining.ff6c8048b322") : value.rawValue)
-                        .font(.callout.weight(zoom == value ? .semibold : .regular))
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(zoom == value ? Color.primary.opacity(0.10) : .clear,
-                                    in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut(value == .fit ? KeyEquivalent("0") : KeyEquivalent("1"), modifiers: .command)
-                .accessibilityIdentifier(value == .fit ? "zoom-fit" : "zoom-actual")
-                .accessibilityAddTraits(zoom == value ? .isSelected : [])
-                .help(value == .actual ? consistencyText(consistencyLanguage, "remaining.672b447ed394") : consistencyText(consistencyLanguage, "remaining.e4bb20946c4b"))
-            }
-        }
-    }
 }
 
 /// Native scroll and mouse handling, including backing-scale changes between displays.

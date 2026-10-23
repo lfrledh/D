@@ -103,7 +103,7 @@ public struct ProjectResourceBrowser: View {
             }
             .listStyle(.sidebar)
         }
-        .padding(10)
+        .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 16)
     }
 
     private var resourcePreview: some View {

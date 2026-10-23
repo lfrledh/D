@@ -126,6 +126,9 @@ public struct WorkflowCanvasView: View {
     private let acceptsLegacyAsset: ((UUID, UUID) -> Bool)?
     private let onDestination: () -> Void
     private let onPublishText: () -> Void
+    private let publishDocumentDescription: String?
+    private var onExpandLibrary: ((WorkflowCanvasLibraryMode, WorkflowLibraryContext?, @escaping () -> Void) -> Void)? = nil
+    private let destinationEnabled: Bool
     private let onReturnText: (WorkflowAssetReference) -> Void
     private let captureControls: AnyView
     private var nodeSizeObserver: ((UUID, CGSize) -> Void)?
@@ -226,7 +229,9 @@ public struct WorkflowCanvasView: View {
         libraryContent: ((WorkflowCanvasLibraryMode, @escaping () -> CGPoint?, @escaping () -> Void) -> AnyView)? = nil,
         onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil,
         acceptsLegacyAsset: ((UUID, UUID) -> Bool)? = nil,
-        captureControls: AnyView = AnyView(EmptyView())
+        captureControls: AnyView = AnyView(EmptyView()),
+        publishDocumentDescription: String? = nil,
+        destinationEnabled: Bool = true
     ) {
         self.controller = controller
         self.captureControls = captureControls
@@ -244,12 +249,16 @@ public struct WorkflowCanvasView: View {
         self.onQuickUse = onQuickUse; self.libraryContent = libraryContent
         self.onDestination = onDestination
         self.onPublishText = onPublishText
+        self.publishDocumentDescription = publishDocumentDescription; self.destinationEnabled = destinationEnabled
         self.onReturnText = onReturnText
         _camera = State(initialValue: WorkflowCanvasCameraPresentation(context: WorkflowCanvasViewContext(projectID: controller.projectID,
             rootGraphID: controller.rootGraph?.id,
             bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init)), owner: ObjectIdentifier(controller)))
     }
 
+    func expandingLibrary(_ action: ((WorkflowCanvasLibraryMode, WorkflowLibraryContext?, @escaping () -> Void) -> Void)?) -> Self {
+        var copy = self; copy.onExpandLibrary = action; return copy
+    }
     public var body: some View {
         #if DEBUG
         let _ = WorkflowCanvasUpdateProbe.canvasBody?()
@@ -468,7 +477,7 @@ public struct WorkflowCanvasView: View {
                     title: workspaceText(languageStore, "operations"), identifier: "canvas-inspector-toggle",
                     hostIdentifier: "canvas-inspector-host", toggle: {
                         showInspector = !shown.inspector; narrowLibrary = false
-                    }) { preparationPanel }
+                    }, actions: { AnyView(preparationActions) }) { preparationPanel }
                     .overlay(alignment: .trailing) { if shown.inspector { panelResizeHandle(leading: true) } }
                     .frame(width: shown.inspector ? panelWidths.leading : 48, alignment: .leading)
                     // The sidebar clips its own content; this layout slot must
@@ -479,7 +488,7 @@ public struct WorkflowCanvasView: View {
                     title: workspaceText(languageStore, "resources"), identifier: "canvas-library-toggle",
                     hostIdentifier: "canvas-library-host", toggle: {
                         showLibrary = !shown.library; narrowLibrary = true
-                    }) { resourcePanel }
+                    }, actions: { AnyView(resourceActions) }) { resourcePanel }
                     .overlay(alignment: .leading) { if shown.library { panelResizeHandle(leading: false) } }
                     .frame(width: shown.library ? panelWidths.trailing : 48, alignment: .trailing)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
@@ -577,7 +586,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                         .disabled(controller.graph == nil || !controller.canEditCanvas)
                     Text(text("workflow.overview.hint", "选择卡片以配置节点；选择连线以查看来源和数据。运行终点在下方单独指定。"))
                         .font(.callout).foregroundStyle(.secondary)
-                }.padding(14)
+                }.padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 16)
             }
         }
     }
@@ -629,10 +638,37 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                         controller.addNode(operationID:entry.operation.id,modelID:entry.model?.id,x:camera.insertionPoint.x,y:camera.insertionPoint.y)
                     }
                 }
-                if tab == .programs {
-                    Button(text("workflow.language.tools", "管理自定义节点…")) { extractSelection = false; toolsPresented = true }.workbenchHelp("MENU-FLOW-CUSTOM")
-                }
             }
+        }
+    }
+    private func manageCustomNodes() { extractSelection = false; toolsPresented = true }
+    @ViewBuilder private var preparationActions: some View {
+        HStack(spacing: 8) {
+        if panelsState.preparation != .configuration {
+            if panelsState.preparation == .programs {
+                WorkbenchMenu {
+                    WorkbenchMenuAction(layoutText(languageStore, "manageNodes"), action: manageCustomNodes).featureHelp("MENU-FLOW-CUSTOM", language: languageStore)
+                } label: { Image(systemName: "ellipsis") }
+                    .help(layoutText(languageStore, "manageNodes")).accessibilityLabel(layoutText(languageStore, "manageNodes"))
+                    .accessibilityIdentifier("workflow-program-actions")
+            }
+            Button { onExpandLibrary?(panelsState.preparation == .programs ? .programs : .nodes, nil, {}) } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
+                .disabled(onExpandLibrary == nil).help(layoutText(languageStore, "expandNodes")).accessibilityLabel(layoutText(languageStore, "expandNodes"))
+                .accessibilityIdentifier("workflow-expand-nodes")
+        }
+        }
+    }
+    private var resourceActions: some View {
+        HStack(spacing: 8) {
+            Button(action: onImportAsset) { Image(systemName: "square.and.arrow.down") }
+                .disabled(!controller.canEditCanvas).help(layoutText(languageStore, "importAsset")).accessibilityLabel(layoutText(languageStore, "importAsset"))
+                .accessibilityIdentifier("workflow-import-asset")
+            Button {
+                let captured = resourceContext
+                onExpandLibrary?(resourceCategory.mode, captured, { if resourceContext == captured { clearLibraryLocation() } })
+            } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
+                .disabled(onExpandLibrary == nil).help(layoutText(languageStore, "expandAssets")).accessibilityLabel(layoutText(languageStore, "expandAssets"))
+                .accessibilityIdentifier("workflow-expand-assets")
         }
     }
     private func revealLibrary(_ context: WorkflowLibraryContext) {
@@ -670,7 +706,6 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     }
                 }
             }
-            Button(text("workflow.action.publishText","将当前文稿存为流程素材")) { guarded(onPublishText)() }.disabled(!controller.canEditCanvas)
         }
     }
     private var selectedResultRun: WorkflowRun? { controller.runs.first { $0.id == panelsState.runID } }
@@ -913,7 +948,13 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             WorkbenchMenu(text("canvas.flowMenu", "流程设置"), systemImage: "ellipsis.circle") {
                 WorkbenchMenuAction(text("workflow.language.interface", "设置流程输入与输出…")) { interfacePresented = true }
                     .disabled(controller.graph == nil || !controller.canEditCanvas)
-                WorkbenchMenuAction(text("workflow.language.tools", "管理自定义节点…")) { extractSelection = false; toolsPresented = true }
+                WorkbenchMenuAction(layoutText(languageStore, "exportLocation"), action: guarded(onDestination)).featureHelp("MENU-FILE-EXPORT", language: languageStore)
+                    .disabled(!destinationEnabled || controller.readOnlyReason != nil || controller.isSaving).help(controller.readOnlyReason ?? (destinationEnabled ? layoutText(languageStore, "exportHelp") : consistencyText(languageStore, "help.reason.saving")))
+                WorkbenchMenuDivider()
+                WorkbenchMenuAction(layoutText(languageStore, "addDocument"), action: guarded(onPublishText))
+                    .disabled(!controller.canEditCanvas || publishDocumentDescription == nil)
+                    .help(publishDocumentDescription ?? layoutText(languageStore, "noDocument"))
+                WorkbenchMenuAction(layoutText(languageStore, "manageNodes"), action: manageCustomNodes).featureHelp("MENU-FLOW-CUSTOM", language: languageStore)
             }.accessibilityIdentifier("canvas-more").workbenchHelp("FLOW-MORE")
         }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 18).padding(.vertical, 10)
             .padding(.top, 6)
@@ -1080,7 +1121,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         }
     }
     private var runSettings: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(dockText("settings")).font(.headline)
             WorkbenchScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -1123,7 +1164,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 Button(dockText("viewPlan")) { if let target = validRunTarget { presentWorkspacePlan(target.id, mode: runRange) } }
                     .disabled(validRunTarget == nil || !controller.canEditCanvas || !controller.bodyPath.isEmpty)
             }
-        }.buttonStyle(.bordered).padding(14)
+        }.buttonStyle(.bordered).padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 16)
     }
     private var seedSupported: Bool {
         guard let target = validRunTarget, let draft = try? WorkflowWorkspaceRunDraft(controller: controller, target: target.id, mode: runRange) else { return false }
@@ -1179,7 +1220,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 }
             }
             }
-        }.padding(12).buttonStyle(.bordered).textFieldStyle(.roundedBorder)
+        }.padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 16).buttonStyle(.bordered).textFieldStyle(.roundedBorder)
             .onChange(of: recordsDetail, initial: true) { _, visible in if visible { visitedRecordsDetail = true } }
     }
 
@@ -1452,7 +1493,7 @@ private struct WorkflowNodeInspector: View {
                     }
                     }
                 }
-                .padding(14)
+                .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 16)
             } else {
                 ContentUnavailableView(
                     workflowText(languageStore, "workflow.inspector.empty"),
@@ -2276,7 +2317,7 @@ private struct WorkflowCanvasConnectionInspector: View {
                 .disabled(!controller.canEditCanvas)
                 .accessibilityIdentifier("canvas-disconnect-" + connection.id.uuidString)
                 WorkflowConnectionInspection(controller: controller, connection: connection)
-            }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+            }.padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 16).frame(maxWidth: .infinity, alignment: .leading)
         }
         .workbenchPanel(cornerRadius: 12)
         .accessibilityIdentifier("canvas-connection-inspector")

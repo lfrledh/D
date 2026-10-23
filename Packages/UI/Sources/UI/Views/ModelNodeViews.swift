@@ -46,7 +46,7 @@ public struct ModelNodeList: View {
                     }
                 }
             }
-            .padding(10)
+            .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 16)
         }
         .accessibilityIdentifier("model-node-list")
         .coordinateSpace(name: ModelNodeLayoutSpace.name)

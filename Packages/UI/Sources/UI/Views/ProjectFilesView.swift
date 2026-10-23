@@ -38,6 +38,25 @@ enum ProjectFilesPresentation {
     }
 }
 
+/// The UI captures its exact destination before opening the native selector.
+/// The same admission check runs on both sides of the suspension.
+@MainActor struct WorkbenchAssetImportCommand {
+    let store: ProjectStore
+    let controller: WorkflowController?
+    let staleMessage: String
+    let isCurrent: () -> Bool
+    func perform(choose: () async -> (URL, AssetImportMode)?) async throws -> Bool {
+        guard isCurrent() else { throw WorkflowIssue(staleMessage) }
+        guard let (url, mode) = await choose() else { return false }
+        guard isCurrent() else { throw WorkflowIssue(staleMessage) }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        if let controller { await controller.importLibraryFile(url, mode: mode) }
+        else { _ = try await store.importWorkflowMediaFile(at: url, mode: mode) }
+        return true
+    }
+}
+
 @MainActor
 enum NativeAssetImportPanel {
     static func choose(language: UILanguageStore?) async -> (URL, AssetImportMode)? {

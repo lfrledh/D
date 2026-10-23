@@ -502,6 +502,9 @@ struct ChatWorkbenchView: View {
     @Bindable var chat: ChatController
     let model: WorkbenchModel
     let onChooseModel: () -> Void
+    let onOpenLibrary: () -> Void
+    let onImportAsset: () -> Void
+    let importTargetTitle: String
     let onSavedAsset: (WorkflowAssetReference) -> Void
     let onRetainTemporary: ((WorkflowAssetReference, Bool, UUID) async throws -> Void)?
     let onAssetsChanged: () -> Void
@@ -566,6 +569,9 @@ struct ChatWorkbenchView: View {
 
     init(chat: ChatController, model: WorkbenchModel,
          onChooseModel: @escaping () -> Void,
+         onOpenLibrary: @escaping () -> Void = {},
+         onImportAsset: @escaping () -> Void = {},
+         importTargetTitle: String = "",
          openToolsRequest: ChatToolsNavigationRequest? = nil,
          onToolsOpened: @escaping (UUID) -> Void = { _ in },
          onSavedAsset: @escaping (WorkflowAssetReference) -> Void,
@@ -585,6 +591,7 @@ struct ChatWorkbenchView: View {
         self.openToolsRequest = openToolsRequest
         self.onToolsOpened = onToolsOpened
         self.chat = chat; self.model = model; self.onChooseModel = onChooseModel
+        self.onOpenLibrary = onOpenLibrary; self.onImportAsset = onImportAsset; self.importTargetTitle = importTargetTitle
         self.scrollStates = model.readingState(for: chat)
         self.onSavedAsset = onSavedAsset; self.onRetainTemporary = onRetainTemporary; self.onAssetsChanged = onAssetsChanged; self.onSavedValue = onSavedValue
         self.onResolveSharedAsset = onResolveSharedAsset
@@ -877,12 +884,17 @@ ScrollViewReader { proxy in
                             settings(session).id(session.id.uuidString + ":settings")
                         }
                         else { Button(label("new", "新建")) { createSession() }.disabled(!chat.isLoaded || chat.saveIssue != nil) }
-                    }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                    }.padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 16).frame(maxWidth: .infinity, alignment: .leading)
                 }.onChange(of: organizationRequest) { _, _ in proxy.scrollTo("conversation-organization", anchor: .top) }
                 }
     }
     private func materialsContent(_ session: ChatSession) -> some View {
 
+                    VStack(spacing: 0) {
+                        HStack(spacing: 8) {
+                            Button(layoutText(language, "importAsset"), action: onImportAsset).help(importTargetTitle)
+                            Button(layoutText(language, "expandAssets"), action: onOpenLibrary)
+                        }.padding(.horizontal, 12).padding(.vertical, 8)
                     WorkbenchScrollView {
                         VStack(alignment: .leading, spacing: 12) {
                             attachmentButtons(session)
@@ -902,6 +914,7 @@ ScrollViewReader { proxy in
                         }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
                     }
 
+                    }
     }
     private func toolsContent(_ session: ChatSession) -> some View {
 
@@ -1010,7 +1023,7 @@ ScrollViewReader { proxy in
                     } }
                 }
             }
-        }.padding(14)
+        }.padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 16)
     }
 
     private func searchExcerpt(_ hit: ChatSearchHit) -> String {

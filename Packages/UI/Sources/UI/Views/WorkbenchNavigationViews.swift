@@ -502,7 +502,7 @@ public struct ModalityDocumentList: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(consistencyText(legacyLanguage, "copy.WorkbenchNavigationViews.1", arguments: ["v0": String(describing: consistencyText(legacyLanguage, "mode." + mode.rawValue))]))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -563,7 +563,7 @@ public struct ModalityDocumentList: View {
             .accessibilityIdentifier(newDocumentIdentifier)
             .navigationMeasured(newDocumentIdentifier, probe: layoutProbe)
         }
-        .padding(8)
+        .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 16)
         .coordinateSpace(name: NavigationLayoutSpace.name)
     }
 

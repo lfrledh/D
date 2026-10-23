@@ -363,41 +363,108 @@ private struct WorkbenchGlassButtonBody: View {
             .opacity(isEnabled ? 1 : 0.45)
     }
 }
-/// Finite navigation choices keep their exact binding; only the selector shell
-/// changes. This does not reuse the category drag recognizer or commit commands.
+/// All finite lens selectors share local preview; business bindings only receive a
+/// final choice. Native buttons retain keyboard and accessibility activation.
 struct WorkbenchGlassSegments<Value: Hashable>: View {
     let title: String
     @Binding var selection: Value
     let choices: [(Value, String)]
     var featureIDs: [String]? = nil
+    var identifiers: [String]? = nil
+    var owner: AnyHashable? = nil
+    var standard = false
+    var direction: WorkbenchSegmentGeometry.Direction = .horizontal
+    var unavailable: Set<Value> = []
+    var minimumItemLength: CGFloat = 0
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.workbenchContentVisible) private var visible
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focus: Value?
+    @State private var identity = NSObject()
+    @State private var preview: CGFloat?
+    @State private var hovered: Int?
+    @State private var pressed: Int?
+    private var indices: Set<Int> { Set(choices.indices.filter { !unavailable.contains(choices[$0].0) }) }
+    private var index: Int { choices.firstIndex(where: { $0.0 == selection }) ?? -1 }
+    private var thickness: CGFloat { standard ? 44 : 32 }
+    private var itemMinimum: CGFloat {
+        if standard { return 66 }
+        return max(minimumItemLength, (choices.map { ($0.1 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: NSFont.systemFontSize)]).width }.max() ?? 0) + 24)
+    }
+    private var motion: Animation? {
+        WorkbenchEffectsPolicy(appearance: preferences.resolvedAppearance, reduceMotion: reduceMotion,
+            reduceTransparency: false, increasedContrast: false).morphAnimation
+    }
+    private func select(_ i: Int) {
+        guard enabled && visible, indices.contains(i), choices[i].0 != selection else { return }
+        selection = choices[i].0
+    }
+    private func clear() { preview = nil; hovered = nil; pressed = nil }
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(choices, id: \.0) { value, label in
-                Button { if enabled && selection != value { selection = value } } label: {
-                    Text(label).lineLimit(1).frame(maxWidth: .infinity).padding(.vertical, 6)
-                        .background {
-                            if selection == value { Color.clear.workbenchPanel(in: Capsule()) }
-                        }
-                        .overlay { Capsule().strokeBorder(.primary.opacity(selection == value ? 0.22 : 0), lineWidth: 0.6).allowsHitTesting(false) }
-                        .contentShape(Capsule())
-                }.buttonStyle(.plain).focused($focus, equals: value)
-                    .accessibilityAddTraits(selection == value ? .isSelected : [])
-                    .workbenchHelp(featureIDs.flatMap { ids in choices.firstIndex(where: { $0.0 == value }).flatMap { ids.indices.contains($0) ? ids[$0] : nil } })
-            }
-        }.padding(3).workbenchPanel(in: Capsule())
-            .accessibilityElement(children: .contain).accessibilityLabel(title)
-            .onMoveCommand { direction in
-                guard enabled, let index = choices.firstIndex(where: { $0.0 == (focus ?? selection) }) else { return }
-                let next: Int
-                switch direction {
-                case .left: next = max(0, index - 1)
-                case .right: next = min(choices.count - 1, index + 1)
-                default: return
+        GeometryReader { proxy in
+            let length = direction == .horizontal ? proxy.size.width : proxy.size.height
+            let geometry = WorkbenchSegmentGeometry(direction: direction, count: choices.count, length: length, thickness: thickness)
+            ZStack(alignment: .topLeading) {
+                Capsule().fill(.clear).frame(width: geometry.track.width, height: geometry.track.height)
+                    .workbenchPanel(in: Capsule()).offset(x: geometry.track.minX, y: geometry.track.minY)
+                    .allowsHitTesting(false)
+                ForEach(Array(choices.enumerated()), id: \.element.0) { i, choice in
+                    let rect = geometry.lens(CGFloat(i), engagement: 0)
+                    Button { select(i) } label: { Text(choice.1).foregroundStyle(.clear) }
+                        .buttonStyle(WorkbenchCategoryButtonStyle(height: rect.height, onPressChanged: { down in
+                            if down { pressed = i } else if pressed == i { pressed = nil }
+                        }))
+                        .frame(width: rect.width, height: rect.height).offset(x: rect.minX, y: rect.minY)
+                        .disabled(unavailable.contains(choice.0))
+                        .focused($focus, equals: choice.0)
+                        .onHover { inside in if inside && enabled { hovered = i } else if hovered == i { hovered = nil } }
+                        .accessibilityAddTraits(selection == choice.0 ? .isSelected : [])
+                        .accessibilityIdentifier(identifiers.flatMap { $0.indices.contains(i) ? $0[i] : nil } ?? "")
+                        .workbenchHelp(featureIDs.flatMap { $0.indices.contains(i) ? $0[i] : nil })
                 }
-                if next != index { selection = choices[next].0; focus = choices[next].0 }
+                if !choices.isEmpty {
+                    WorkbenchCategoryLensTrack(selection: preview ?? CGFloat(max(0, index)), titles: choices.map(\.1),
+                        engagement: preview != nil || pressed == index ? 1 : 0, hovered: hovered, pressed: pressed,
+                        dragReceiver: WorkbenchCategoryDragReceiver(selection: index, owner: owner ?? AnyHashable(ObjectIdentifier(identity)),
+                            enabled: enabled && visible, onPreview: { preview = $0 }, onCommit: select,
+                            geometry: geometry, options: choices.map { AnyHashable($0.0) }, available: indices),
+                        geometry: geometry, available: indices, showsSelection: index >= 0)
+                        .animation(preview == nil ? motion : nil, value: preview ?? CGFloat(index))
+                        .animation(reduceMotion || preferences.resolvedAppearance.motion == 0 ? nil : .easeOut(duration: 0.1), value: preview != nil || pressed == index)
+                }
+            }.frame(width: geometry.slotSize.width, height: geometry.slotSize.height)
+                .onChange(of: geometry) { _, _ in clear() }
+        }
+        .frame(minWidth: direction == .horizontal ? itemMinimum * CGFloat(choices.count) : thickness + 8,
+               idealWidth: direction == .horizontal ? itemMinimum * CGFloat(choices.count) : thickness + 8,
+               maxWidth: direction == .horizontal ? .infinity : thickness + 8,
+               minHeight: direction == .horizontal ? thickness + 8 : itemMinimum * CGFloat(choices.count),
+               idealHeight: direction == .horizontal ? thickness + 8 : itemMinimum * CGFloat(choices.count),
+               maxHeight: direction == .horizontal ? thickness + 8 : .infinity)
+        .opacity(enabled ? 1 : 0.45)
+        .onChange(of: visible) { _, value in if !value { clear() } }
+        .onChange(of: enabled) { _, value in if !value { clear() } }
+        .onChange(of: owner) { _, _ in clear() }
+        .onChange(of: choices.map(\.0)) { _, _ in clear() }
+        .onChange(of: unavailable) { _, _ in clear() }
+        .onChange(of: selection) { _, _ in preview = nil }
+        .onDisappear { clear() }
+        .accessibilityElement(children: .contain).accessibilityLabel(title)
+        .onMoveCommand { command in
+            guard enabled && visible, let current = choices.firstIndex(where: { $0.0 == (focus ?? selection) }) else { return }
+            let delta: Int
+            switch (direction, command) {
+            case (.horizontal, .left), (.vertical, .up): delta = -1
+            case (.horizontal, .right), (.vertical, .down): delta = 1
+            default: return
             }
+            var next = current + delta
+            while choices.indices.contains(next) {
+                if indices.contains(next) { select(next); focus = choices[next].0; return }
+                next += delta
+            }
+        }
     }
 }
 
@@ -460,13 +527,14 @@ struct WorkbenchIconButtonStyle: ButtonStyle {
 
 /// Fixed capsule targets sit above the decorative moving lens.
 struct WorkbenchCategoryButtonStyle: ButtonStyle {
+    var height: CGFloat = 44
     var onPressChanged: (Bool) -> Void = { _ in }
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body)
-            .frame(maxWidth: .infinity).frame(height: 36)
+            .frame(maxWidth: .infinity).frame(height: height)
             .contentShape(.interaction, Capsule())
             .onChange(of: configuration.isPressed) { _, pressed in onPressChanged(isEnabled && pressed) }
             .opacity(isEnabled ? 1 : 0.45)
@@ -540,4 +608,8 @@ extension View {
         if editor.textColor != color { editor.textColor = color }
         if editor.insertionPointColor != color { editor.insertionPointColor = color }
     }
+}
+
+@MainActor func layoutText(_ language: UILanguageStore?, _ key: String, arguments: [String: String] = [:]) -> String {
+    workflowText(language, "layoutInteraction." + key, arguments: arguments)
 }

@@ -151,6 +151,7 @@ struct WorkbenchSidebar<Content: View>: View {
     let identifier: String
     let hostIdentifier: String
     let toggle: () -> Void
+    let actions: () -> AnyView
     @ViewBuilder let content: () -> Content
     @State private var surfaceGroup = UUID().uuidString
     @State private var revealed: Bool
@@ -167,10 +168,10 @@ struct WorkbenchSidebar<Content: View>: View {
     }
 
     init(leading: Bool, expanded: Bool, title: String, identifier: String, hostIdentifier: String,
-         toggle: @escaping () -> Void, @ViewBuilder content: @escaping () -> Content) {
+         toggle: @escaping () -> Void, actions: @escaping () -> AnyView = { AnyView(EmptyView()) }, @ViewBuilder content: @escaping () -> Content) {
         self.leading = leading; self.expanded = expanded; self.title = title
         self.identifier = identifier; self.hostIdentifier = hostIdentifier
-        self.toggle = toggle; self.content = content
+        self.toggle = toggle; self.actions = actions; self.content = content
         _revealed = State(initialValue: expanded)
     }
 
@@ -189,10 +190,13 @@ struct WorkbenchSidebar<Content: View>: View {
                 // Its geometry and identity change only at an endpoint or resize;
                 // evaluating a glass frame must not rebuild the entire foreground.
                 VStack(spacing: 0) {
-                    Text(title).font(.headline).lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: leading ? .trailing : .leading)
+                    HStack(spacing: 8) {
+                        Text(title).font(.headline).lineLimit(1)
+                        Spacer(minLength: 0)
+                        actions().buttonStyle(WorkbenchIconButtonStyle(diameter: 28))
+                    }
                         .padding(.leading, leading ? 60 : 12)
-                        .padding(.trailing, leading ? 12 : 60)
+                        .padding(.trailing, leading ? 12 : 56)
                         .frame(height: 52)
                         .opacity(visible ? 1 : 0)
                         .transaction { $0.animation = nil }
@@ -310,70 +314,64 @@ struct WorkbenchCategoryLensTrack: View, Animatable {
     var hovered: Int? = nil
     var pressed: Int? = nil
     var dragReceiver: WorkbenchCategoryDragReceiver? = nil
+    var geometry = WorkbenchSegmentGeometry()
+    var available: Set<Int> = [0, 1, 2, 3]
+    var showsSelection = true
     @Environment(\.chatDisplayPreferences) private var preferences
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
     nonisolated var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(selection, engagement) }
         set { selection = newValue.first; engagement = newValue.second }
     }
+    private var labels: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(titles.indices, id: \.self) { index in
+                let rect = geometry.lens(CGFloat(index), engagement: 0)
+                WorkbenchCategoryInk(title: titles[index], hovered: hovered == index, pressed: pressed == index)
+                    .frame(width: rect.width, height: rect.height).offset(x: rect.minX, y: rect.minY)
+                    .opacity(available.contains(index) ? 1 : 0.45)
+            }
+        }.frame(width: geometry.slotSize.width, height: geometry.slotSize.height, alignment: .topLeading)
+    }
     var body: some View {
         let decorated = !preferences.resolvedAppearance.lightweight && !reduceTransparency && contrast != .increased
         let native = decorated && preferences.resolvedAppearance.local?.material == .glass
-        let lift = preferences.resolvedAppearance.lightweight || reduceMotion || preferences.resolvedAppearance.motion == 0
-            ? 0 : min(1, max(0, engagement))
-        let width = WorkbenchCategoryDragView.itemWidth * (1 + 0.06 * lift)
-        let height = 36 * (1 + 0.08 * lift)
-        // Keep the lifted lens inside the bar's existing 4pt breathing room.
-        let x = min(256 - width + 3, max(-3, selection * WorkbenchCategoryDragView.stride
-            - (width - WorkbenchCategoryDragView.itemWidth) / 2))
-        let y = (36 - height) / 2
+        let rect = geometry.lens(selection, engagement: engagement)
         let ink = preferences.resolvedAppearance.palette(for: scheme).foregroundColor
-        HStack(spacing: 2) {
-            ForEach(titles.indices, id: \.self) { index in
-                WorkbenchCategoryInk(title: titles[index], hovered: hovered == index, pressed: pressed == index)
-                    .frame(maxWidth: .infinity).frame(height: 36)
+        labels
+            .mask {
+                if native && showsSelection {
+                    Rectangle().overlay(alignment: .topLeading) {
+                        Capsule().frame(width: rect.width, height: rect.height)
+                            .offset(x: rect.minX, y: rect.minY).blendMode(.destinationOut)
+                    }.compositingGroup()
+                } else { Rectangle() }
             }
-        }
-        .frame(width: 256, height: 36)
-        .mask {
-            if native {
-                Rectangle().overlay(alignment: .topLeading) {
-                    Capsule().frame(width: width, height: height).offset(x: x, y: y).blendMode(.destinationOut)
-                }.compositingGroup()
-            } else { Rectangle() }
-        }
-        .modifier(WorkbenchCategoryRefraction(origin: x, enabled: decorated && !native,
-            verticalOrigin: y, size: CGSize(width: width, height: height)))
-        .overlay(alignment: .topLeading) {
-            if native {
-                HStack(spacing: 2) {
-                    ForEach(titles.indices, id: \.self) { index in
-                        WorkbenchCategoryInk(title: titles[index], hovered: hovered == index, pressed: pressed == index)
-                            .frame(maxWidth: .infinity).frame(height: 36)
-                    }
-                }.frame(width: 256, height: 36).offset(x: -x, y: -y)
-                    .frame(width: width, height: height, alignment: .topLeading).clipShape(Capsule())
-                    .glassEffect(.regular, in: Capsule()).offset(x: x, y: y)
-            } else {
-            Capsule()
-                .strokeBorder(ink.opacity(decorated ? 0.22 : 1), lineWidth: decorated ? 0.6 : 1.5)
-                .frame(width: width, height: height).offset(x: x, y: y)
+            .modifier(WorkbenchCategoryRefraction(origin: rect.minX, enabled: decorated && !native && showsSelection,
+                verticalOrigin: rect.minY, size: rect.size))
+            .overlay(alignment: .topLeading) {
+                if showsSelection {
+                if native {
+                    labels.offset(x: -rect.minX, y: -rect.minY)
+                        .frame(width: rect.width, height: rect.height, alignment: .topLeading).clipShape(Capsule())
+                        .glassEffect(.regular, in: Capsule()).offset(x: rect.minX, y: rect.minY)
+                } else {
+                    Capsule().strokeBorder(ink.opacity(decorated ? 0.22 : 1), lineWidth: decorated ? 0.6 : 1.5)
+                        .frame(width: rect.width, height: rect.height).offset(x: rect.minX, y: rect.minY)
+                }
             }
-        }
-        .frame(width: 256, height: 36)
-        .allowsHitTesting(false).accessibilityHidden(true)
-        .overlay {
-            if var receiver = dragReceiver {
-                // The native hit region follows this exact interpolated optical
-                // geometry, including a quick re-grab while the lens is settling.
-                let _ = receiver.presentation = CGRect(x: x + 4, y: y + 4, width: width, height: height)
-                let _ = receiver.presentationSelection = selection
-                receiver.frame(width: 264, height: 44)
             }
-        }
+            .allowsHitTesting(false).accessibilityHidden(true)
+            .overlay {
+                if showsSelection, var receiver = dragReceiver {
+                    // Use the actual interpolated presentation when re-grabbed.
+                    let _ = receiver.presentation = rect
+                    let _ = receiver.presentationSelection = selection
+                    receiver.frame(width: geometry.slotSize.width, height: geometry.slotSize.height)
+                }
+            }
     }
 }
 

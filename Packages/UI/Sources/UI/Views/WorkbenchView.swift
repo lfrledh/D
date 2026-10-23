@@ -59,10 +59,9 @@ public struct WorkbenchView: View {
                     HStack {
                         Text(model.manifest?.name ?? "D").font(.headline)
                         Spacer()
-                        Picker(label("workbench.view", "工作视图"), selection: $workflowVisible) {
-                            Text(label("workbench.canvas", "流程画布")).tag(true)
-                            Text(label("workbench.creation", "创作与资料")).tag(false)
-                        }.pickerStyle(.segmented).frame(width: 230)
+                        WorkbenchGlassSegments(title: label("workbench.view", "工作视图"), selection: $workflowVisible,
+                            choices: [(true, label("workbench.canvas", "流程画布")), (false, label("workbench.creation", "创作与资料"))], owner: AnyHashable(model.manifest?.effectiveInstanceID))
+                            .frame(maxWidth: 300)
                         Button(label("workbench.projects", "返回项目")) { Task { await model.closeProject() } }
                     }.padding(10).background(.bar)
                     Divider()
@@ -196,15 +195,11 @@ public struct WorkbenchView: View {
 
     private var workspaceSidebar: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 4) {
-                ForEach(WorkspacePane.allCases) { item in
-                    Button { pane = item } label: { Text(item.title).frame(maxWidth: .infinity).padding(.vertical, 6) }
-                        .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
-                        .background(pane == item ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 7))
-                        .accessibilityAddTraits(pane == item ? .isSelected : [])
-                        .accessibilityIdentifier("workspace-\(item.rawValue)")
-                }
-            }.padding([.horizontal, .top], 10)
+            WorkbenchGlassSegments(title: label("workbench.view", "工作视图"), selection: Binding(get: { pane }, set: { pane = $0 }),
+                choices: WorkspacePane.allCases.map { ($0, $0.title) },
+                identifiers: WorkspacePane.allCases.map { "workspace-\($0.rawValue)" }, owner: AnyHashable(model.manifest?.effectiveInstanceID))
+                .padding(.horizontal, 12).padding(.top, 8)
+
             if pane == .nodes {
                 ModelNodeList(entries: visibleNodes, selectedID: selectedNodeID, onSelect: { selectedNodeID = $0 })
             } else if pane == .assets, let manifest = model.manifest {
@@ -222,7 +217,7 @@ public struct WorkbenchView: View {
                         namingContext = DocumentNameContext(documentID: document.id, name: document.name)
                     }
                     .accessibilityIdentifier("rename-document-\(document.id.uuidString)")
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 12).padding(.bottom, 16)
                 }
                 if model.creatorMode == .audio, let audio = model.projectSession.audio {
                     AudioCaptureEntry(model: model, audio: audio)
@@ -315,10 +310,8 @@ public struct WorkbenchView: View {
                     }.padding(.horizontal, 20).padding(.top, 12)
                 }
                 if model.projectSession.hasPitchEngine || model.presentedDocument?.pitchAnalysis != nil {
-                    Picker(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.16"), selection: $showingPitchAnalysis) {
-                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.17")).tag(false)
-                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.18")).tag(true)
-                    }.pickerStyle(.segmented).padding(.horizontal, 20)
+                    WorkbenchGlassSegments(title: workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.16"), selection: $showingPitchAnalysis,
+                        choices: [(false, workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.17")), (true, workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.18"))], owner: AnyHashable(model.presentedDocument?.id)).padding(.horizontal, 20)
                         .accessibilityIdentifier("audio-analysis-mode")
                 }
                 if showingPitchAnalysis && (model.projectSession.hasPitchEngine || model.presentedDocument?.pitchAnalysis != nil) {
@@ -429,10 +422,8 @@ public struct WorkbenchView: View {
             let epoch = project.navigationEpoch
             VStack(spacing: 0) {
                 if project.textSourcesEnabled && presentation != .parameters {
-                    Picker(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.27"), selection: $model.showingTextSources) {
-                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.28")).tag(false)
-                        Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.29")).tag(true)
-                    }.pickerStyle(.segmented).padding(8)
+                    WorkbenchGlassSegments(title: workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.27"), selection: $model.showingTextSources,
+                        choices: [(false, workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.28")), (true, workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.29"))], owner: AnyHashable(model.presentedDocument?.id)).padding(8)
                 }
                 if model.showingTextSources && presentation != .parameters, let sources = project.textSources {
                     HStack {
@@ -589,7 +580,7 @@ private struct AudioCaptureEntry: View {
 
     @Bindable var model: WorkbenchModel
     let audio: ProjectAudioController
-    var body: some View { ScrollView { VStack(alignment: .leading, spacing: 8) { entries }.padding(10) } }
+    var body: some View { ScrollView { VStack(alignment: .leading, spacing: 8) { entries }.padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 16) } }
     @ViewBuilder private var entries: some View {
         let contextID = audio.contextID
         let renderDocumentID = model.activeDocumentID

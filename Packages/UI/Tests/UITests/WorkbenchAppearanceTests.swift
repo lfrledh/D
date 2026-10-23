@@ -80,7 +80,7 @@ import Testing
         NSApp.setActivationPolicy(.regular)
         defer { NSApp.setActivationPolicy(oldPolicy) }
         let root = NSView(frame: CGRect(x: 0, y: 0, width: 420, height: 100))
-        let receiver = WorkbenchCategoryDragView(frame: CGRect(x: 10, y: 40, width: 256, height: 36))
+        let receiver = WorkbenchCategoryDragView(frame: CGRect(x: 10, y: 40, width: 264, height: 52))
         let editor = NSTextView(frame: CGRect(x: 280, y: 0, width: 140, height: 90))
         root.addSubview(receiver); root.addSubview(editor)
         let window = NSWindow(contentRect: root.frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -104,7 +104,8 @@ import Testing
             window.sendEvent(event)
         }
         // Start 1pt inside the visible lens edge, not its center.
-        let start = CGPoint(x: 1, y: 18), target = CGPoint(x: 194.5, y: 18)
+        let plate = receiver.geometry.lens(0, engagement: 0)
+        let start = CGPoint(x: plate.minX + 1, y: plate.midY), target = CGPoint(x: plate.minX + 1 + 3 * receiver.geometry.itemLength, y: plate.midY)
         try #require(root.hitTest(receiver.convert(start, to: root)) === receiver)
         try send(.leftMouseDown, start)
         #expect(commits.isEmpty && previews.last! == 0)
@@ -116,7 +117,7 @@ import Testing
         try send(.leftMouseUp, target)
         #expect(commits == [3], "Only one commit per gesture")
         try send(.leftMouseDown, start); try send(.leftMouseDragged, target)
-        try send(.leftMouseUp, CGPoint(x: 194.5, y: 90))
+        try send(.leftMouseUp, CGPoint(x: target.x, y: 90))
         #expect(commits == [3] && previews.last! == nil)
         try send(.leftMouseDown, start); try send(.leftMouseDragged, target)
         NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
@@ -137,14 +138,14 @@ import Testing
         // A new press during settling grabs the actual visible lens, not the
         // integer target or its old location, and continues without a position jump.
         receiver.selection = 3; receiver.presentationSelection = 1.5
-        receiver.presentation = CGRect(x: 1.5 * 64.5, y: 0, width: 62.5, height: 36)
-        let middle = CGPoint(x: 128, y: 18)
+        receiver.presentation = receiver.geometry.lens(1.5, engagement: 0)
+        let middle = CGPoint(x: receiver.presentation.midX, y: receiver.presentation.midY)
         try #require(root.hitTest(receiver.convert(middle, to: root)) === receiver)
         try send(.leftMouseDown, middle)
         #expect(previews.last! == 1.5)
-        try send(.leftMouseDragged, CGPoint(x: 160.25, y: 18))
+        try send(.leftMouseDragged, CGPoint(x: middle.x + receiver.geometry.itemLength / 2, y: middle.y))
         #expect(previews.last! == 2 && commits == [3])
-        try send(.leftMouseUp, CGPoint(x: 160.25, y: 18))
+        try send(.leftMouseUp, CGPoint(x: middle.x + receiver.geometry.itemLength / 2, y: middle.y))
         #expect(commits == [3, 2])
     }
 
@@ -207,7 +208,7 @@ import Testing
                 .environment(\.colorScheme, scheme))
             renderer.scale = 1
             let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
-            return try (0..<36).flatMap { y in try (0..<256).map { x in try #require(bitmap.colorAt(x: x, y: y)) } }
+            return try (0..<52).flatMap { y in try (0..<264).map { x in try #require(bitmap.colorAt(x: x, y: y)) } }
         }
         for scheme: ColorScheme in [.light, .dark] {
             for selection: CGFloat in [0, 1] {
@@ -215,7 +216,7 @@ import Testing
                 let hover = try pixels(selection: selection, hovered: 1, scheme: scheme)
                 let changed = rest.indices.filter { rest[$0] != hover[$0] }
                 #expect(!changed.isEmpty, "Both the normal and magnified label need visible ink feedback")
-                #expect(changed.allSatisfy { (76...118).contains($0 % 256) && (7...29).contains($0 / 256) },
+                #expect(changed.allSatisfy { (76...122).contains($0 % 264) && (13...39).contains($0 / 264) },
                     "Hover may change text pixels only, not a second capsule's padding or rim")
             }
         }

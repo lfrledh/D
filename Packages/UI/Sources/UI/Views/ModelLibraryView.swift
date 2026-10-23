@@ -73,10 +73,9 @@ public struct ModelLibraryView: View {
                 WorkbenchFeatureGuideButton(store: featureHelp)
                 Button(text("close", "完成")) { dismiss() }.keyboardShortcut(.cancelAction)
             }.padding(20)
-            Picker(text("workspace", "工作面"), selection: Binding(get: { model.workspace }, set: { model.workspace = $0; narrowDetail = false })) {
-                Text(text("resources", "模型与文件")).tag("resources")
-                Text(text("downloads", "下载任务")).tag("downloads")
-            }.pickerStyle(.segmented).padding(.horizontal, 20).padding(.bottom, 14)
+            WorkbenchGlassSegments(title: text("workspace", "工作面"),
+                selection: Binding(get: { model.workspace }, set: { model.workspace = $0; narrowDetail = false }),
+                choices: [("resources", text("resources", "模型与文件")), ("downloads", text("downloads", "下载任务"))], owner: AnyHashable(ObjectIdentifier(model))).padding(.horizontal, 20).padding(.bottom, 14)
                 .accessibilityIdentifier("model-manager-workspace")
             if let error = model.errorMessage ?? model.snapshot?.queueError {
                 HStack { Image(systemName: "exclamationmark.triangle"); Text(error).textSelection(.enabled); Spacer(); Button(text("dismiss", "收起")) { model.clearError() } }

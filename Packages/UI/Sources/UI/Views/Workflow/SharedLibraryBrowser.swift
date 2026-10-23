@@ -347,6 +347,8 @@ public struct SharedLibraryBrowser: View {
     private let onImport: () -> Void
     private let allowsImport: Bool
     private let canvasMode: WorkflowCanvasLibraryMode?
+    private let scopeDescription: String
+    private let importTargetDescription: String
     private let onClose: () -> Void
     private let queryContext: SharedLibraryQueryContext
     private let annotationSave: (SharedLibraryBrowserEntry) -> SharedLibraryAnnotationSave?
@@ -382,7 +384,7 @@ public struct SharedLibraryBrowser: View {
     @State private var parentID: UUID?
 
     public init(
-        entries: [SharedLibraryBrowserEntry], store: SharedLibraryStore, compact: Bool = false, allowsImport: Bool = true, canvasMode: WorkflowCanvasLibraryMode? = nil,
+        entries: [SharedLibraryBrowserEntry], store: SharedLibraryStore, compact: Bool = false, allowsImport: Bool = true, canvasMode: WorkflowCanvasLibraryMode? = nil, scopeDescription: String = "", importTargetDescription: String = "",
         state: SharedLibraryBrowserState? = nil,
         onUse: @escaping (SharedLibraryBrowserEntry) -> Void,
         onAdd: @escaping (SharedLibraryBrowserEntry) -> Void,
@@ -396,7 +398,7 @@ public struct SharedLibraryBrowser: View {
         queryContext: SharedLibraryQueryContext = .init(), annotationSave: @escaping (SharedLibraryBrowserEntry) -> SharedLibraryAnnotationSave? = { _ in nil }
     ) {
         self._state = State(initialValue: state ?? SharedLibraryBrowserState())
-        self.canvasMode = canvasMode; self.entries = entries; self.store = store; self.compact = compact; self.allowsImport = allowsImport
+        self.importTargetDescription = importTargetDescription; self.scopeDescription = scopeDescription; self.canvasMode = canvasMode; self.entries = entries; self.store = store; self.compact = compact; self.allowsImport = allowsImport
         self.onUse = onUse; self.onAdd = onAdd; self.onPreview = onPreview; self.onLocation = onLocation
         self.onExternalCopy = onExternalCopy; self.readPreview = readPreview
         self.onPrepare = onPrepare; self.onImport = onImport; self.onClose = onClose
@@ -543,17 +545,22 @@ public struct SharedLibraryBrowser: View {
         HStack(spacing: 8) {
             Button(action: onClose) { Label(word("back", "返回"), systemImage: "chevron.left") }
                 .accessibilityIdentifier("shared-library-close")
-            Text(word("title", "共享资料库")).font(.headline).lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(layoutText(language, allowsImport ? "assetLibrary" : "nodeLibrary")).font(.headline).lineLimit(1)
+                Text(scopeDescription.isEmpty ? word("registered", "已登记条目") : scopeDescription).font(.caption2).foregroundStyle(.secondary)
+            }
             Spacer(minLength: 0)
-            Button(action: onImport) { Image(systemName: "square.and.arrow.down") }
-                .help(word("import", "导入素材")).accessibilityLabel(word("import", "导入素材"))
+            if allowsImport {
+                Button(action: onImport) { Image(systemName: "square.and.arrow.down") }
+                    .help(layoutText(language, "importAsset") + " · " + importTargetDescription).accessibilityLabel(layoutText(language, "importAsset"))
+            }
             Button { showOrganizer = true } label: { Image(systemName: "square.stack.3d.up") }
                 .help(word("organize", "整理资料库")).accessibilityLabel(word("organize", "整理资料库")).workbenchHelp("MENU-LIBRARY-MANAGE")
             Button { perform { try store.undo() } } label: { Image(systemName: "arrow.uturn.backward") }
                 .disabled(!store.canUndo).help(word("undo", "撤销")).accessibilityLabel(word("undo", "撤销")).workbenchHelp("MENU-LIBRARY-UNDO")
             Button { perform { try store.redo() } } label: { Image(systemName: "arrow.uturn.forward") }
                 .disabled(!store.canRedo).help(word("redo", "重做")).accessibilityLabel(word("redo", "重做")).workbenchHelp("MENU-LIBRARY-REDO")
-        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(10)
+        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 12).padding(.vertical, 10)
     }
 
     private var navigationScroll: Binding<ScrollPosition> {
@@ -565,7 +572,7 @@ public struct SharedLibraryBrowser: View {
         })
     }
     private var compactBody: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 12) {
             searchControls
             if !validSelection.isEmpty { bulkControls }
             WorkbenchScrollView {
@@ -575,10 +582,10 @@ public struct SharedLibraryBrowser: View {
 
                     } else if canvasMode == .image || canvasMode == .video { resourceGrid }
                     else { ForEach(visible) { entry in entryRow(entry, compact: true) } }
-                }.padding(.horizontal, 6)
+                }.padding(.bottom, 16)
             }.scrollPosition(navigationScroll)
             searchFooter
-        }.padding(7).frame(maxWidth: .infinity, maxHeight: .infinity)
+        }.padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 16).frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var resourceGrid: some View {
@@ -666,7 +673,7 @@ public struct SharedLibraryBrowser: View {
                 ForEach(saved) { item in
                     scopeButton(item.name, icon: "line.3.horizontal.decrease.circle", value: .saved(item.id)).workbenchHelp("MENU-LIBRARY-SAVED-DYNAMIC", target: item.id.uuidString)
                 }
-            }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
+            }.padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 16).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -680,25 +687,27 @@ public struct SharedLibraryBrowser: View {
     }
 
     private var results: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 12) {
             searchControls
             Text(word("legend", "能力 / 我的标签")).font(.caption2).foregroundStyle(.secondary)
             bulkControls
-            if case .failure = visibleResult {
+            if (canvasMode == .nodes || canvasMode == .programs), query.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                WorkbenchScrollView { operationNavigation.padding(.bottom, 16) }.scrollPosition(navigationScroll)
+            } else if case .failure = visibleResult {
                 Spacer()
             } else if visible.isEmpty {
                 ContentUnavailableView(word("empty", "没有符合条件的条目"), systemImage: "square.stack")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if query.contentKinds.count == 1 && (query.contentKinds.contains(.image) || query.contentKinds.contains(.video)) {
-                WorkbenchScrollView { resourceGrid }
-                    .accessibilityIdentifier("shared-library-results")
+            } else if canvasMode == .image || canvasMode == .video || (query.contentKinds.count == 1 && (query.contentKinds.contains(.image) || query.contentKinds.contains(.video))) {
+                WorkbenchScrollView { resourceGrid.padding(.bottom, 16) }
+                    .scrollPosition(navigationScroll).accessibilityIdentifier("shared-library-results")
             } else {
                 List(selection: $state.selectedKeys) {
                     ForEach(visible) { entry in entryRow(entry, compact: false).tag(entry.id) }
-                }.listStyle(.plain).accessibilityIdentifier("shared-library-results")
+                }.listStyle(.plain).contentMargins(.bottom, 16, for: .scrollContent).scrollPosition(navigationScroll).accessibilityIdentifier("shared-library-results")
             }
             searchFooter
-        }.padding(8)
+        }.padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 16)
     }
 
     private func tagTarget(_ entry: SharedLibraryBrowserEntry) -> SharedLibraryTagTarget {
@@ -720,9 +729,23 @@ public struct SharedLibraryBrowser: View {
         case .saved(let id): word("savedQueries", "智能筛选") + ": " + (store.metadata.savedQueries[id]?.name ?? "—")
         }
     }
+    private var searchMore: some View {
+                    WorkbenchMenu {
+                        if allowsImport { WorkbenchMenuAction(layoutText(language, "importAsset"), action: onImport) }
+                        WorkbenchMenuAction(layoutText(language, "saveFilter")) { openSaveQuery() }.featureHelp("QUERY-SAVE", language: language)
+                        WorkbenchMenuAction(word("advancedConditions", "高级条件")) { showFilters = true }
+                        WorkbenchSubmenu(consistencyText(language, "menu.library.saved")) { WorkbenchMenuForEach(saved) { item in WorkbenchMenuAction(item.name) { selectScope(.saved(item.id)) } } }
+                        WorkbenchMenuAction(consistencyText(language, "menu.library.manage")) { showOrganizer = true }
+                        WorkbenchMenuDivider()
+                        WorkbenchMenuAction(word("undo", "撤销")) { perform { try store.undo() } }.disabled(!store.canUndo)
+                        WorkbenchMenuAction(word("redo", "重做")) { perform { try store.redo() } }.disabled(!store.canRedo)
+                    } label: { Image(systemName: "ellipsis.circle") }
+                        .accessibilityLabel(word("more", "更多"))
+                        .accessibilityIdentifier("shared-library-more")
+    }
     private var searchControls: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 TextField(word("search", "搜索名称、说明或我的标签"), text: searchTextBinding)
                     .textFieldStyle(.plain).focused($searchFocused).onSubmit { submitSearch() }
                     .accessibilityIdentifier("shared-library-search").workbenchHelp("LIB-SEARCH")
@@ -731,6 +754,7 @@ public struct SharedLibraryBrowser: View {
                     .popover(isPresented: $showTags, arrowEdge: .bottom) { queryTagPopover }
                 Button { submitSearch() } label: { Image(systemName: "magnifyingglass").padding(6).contentShape(Rectangle()) }
                     .buttonStyle(.plain).accessibilityLabel(word("searchNow", "搜索"))
+                searchMore
             }.padding(7).workbenchInputSurface()
             if state.hasUnsubmittedText {
                 Text(word("searchPending", "待搜索 · 当前仍显示上次搜索结果")).font(.caption2).foregroundStyle(.secondary)
@@ -745,17 +769,7 @@ public struct SharedLibraryBrowser: View {
                 }.font(.caption)
                 Group {
                     Spacer(minLength: 0)
-                    WorkbenchMenu {
-                        if allowsImport { WorkbenchMenuAction(consistencyText(language, "LIB-ADD"), action: onImport) }
-                        WorkbenchMenuAction(word("advancedConditions", "高级条件")) { showFilters = true }
-                        WorkbenchSubmenu(consistencyText(language, "menu.library.saved")) { WorkbenchMenuForEach(saved) { item in WorkbenchMenuAction(item.name) { selectScope(.saved(item.id)) } } }
-                        WorkbenchMenuAction(consistencyText(language, "menu.library.manage")) { showOrganizer = true }
-                        WorkbenchMenuDivider()
-                        WorkbenchMenuAction(word("undo", "撤销")) { perform { try store.undo() } }.disabled(!store.canUndo)
-                        WorkbenchMenuAction(word("redo", "重做")) { perform { try store.redo() } }.disabled(!store.canRedo)
-                    } label: { Image(systemName: "ellipsis.circle") }
-                        .accessibilityLabel(word("more", "更多"))
-                        .accessibilityIdentifier("shared-library-more")
+
                 }
             }
             if query.scope != nil || query.properties?.isEmpty == false {
@@ -793,7 +807,6 @@ public struct SharedLibraryBrowser: View {
                 }
                 Spacer(minLength: 0)
                 WorkbenchFeatureGuideButton(store: featureHelp)
-                Button(word("saveQuery", "保存检索")) { openSaveQuery() }.workbenchHelp("QUERY-SAVE").font(.caption)
             }
     }
     private var hasSearchTokens: Bool {
@@ -940,8 +953,8 @@ public struct SharedLibraryBrowser: View {
 
     private var detailPane: some View {
         WorkbenchScrollView {
-            if let entry = selectedEntry { details(entry).padding(12) }
-            else { Text(word("choose", "选择条目以查看详情")).foregroundStyle(.secondary).padding(12) }
+            if let entry = selectedEntry { details(entry).padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 16) }
+            else { Text(word("choose", "选择条目以查看详情")).foregroundStyle(.secondary).padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 16) }
         }
     }
 
@@ -1194,11 +1207,9 @@ public struct SharedLibraryBrowser: View {
                 Text(word("organize", "整理资料库")).font(.headline)
                 Spacer()
             }
-            Picker(word("organize", "整理资料库"), selection: $tab) {
-                Text(word("myTags", "我的标签")).tag(OrganizerTab.tags)
-                Text(word("folders", "分类")).tag(OrganizerTab.folders)
-                Text(word("savedQueries", "智能筛选")).tag(OrganizerTab.saved)
-            }.pickerStyle(.segmented)
+            WorkbenchGlassSegments(title: word("organize", "整理资料库"), selection: $tab,
+                choices: [(OrganizerTab.tags, word("myTags", "我的标签")), (.folders, word("folders", "分类")), (.saved, word("savedQueries", "智能筛选"))], owner: AnyHashable(ObjectIdentifier(store)))
+
             Text(word("legend", "能力 / 我的标签")).font(.caption).foregroundStyle(.secondary)
             switch tab {
             case .tags: tagOrganizer
@@ -1210,7 +1221,7 @@ public struct SharedLibraryBrowser: View {
     }
 
     private var tagOrganizer: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 TextField(word("newTag", "新标签"), text: $newName)
                 Button(word("create", "创建")) {
@@ -1253,7 +1264,7 @@ public struct SharedLibraryBrowser: View {
     }
 
     private var folderOrganizer: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 TextField(word("newFolder", "新分类"), text: $newName)
                 Button(word("create", "创建")) {
@@ -1313,7 +1324,7 @@ public struct SharedLibraryBrowser: View {
     }
 
     private var savedOrganizer: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 TextField(word("newQuery", "新智能筛选"), text: $newName)
                 Button(word("saveQuery", "保存当前智能筛选")) {

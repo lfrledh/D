@@ -198,7 +198,9 @@ import Foundation
         let current = result.filter { value in
             if let canvasMode {
                 if let category = canvasMode.resourceCategory { return value.item.kind == .asset && category.contains(value.item.contentKind) }
-                return canvasMode == .nodes ? value.item.kind == .model || value.item.kind == .component : value.item.kind == .program || value.item.kind == .tool
+                let matches = canvasMode == .nodes ? value.item.kind == .model || value.item.kind == .component : value.item.kind == .program || value.item.kind == .tool
+                guard matches else { return false }
+                if family == nil { return true }
             }
             guard let family else { return true }
             guard case .operation(let operation, _) = value.selection else { return false }

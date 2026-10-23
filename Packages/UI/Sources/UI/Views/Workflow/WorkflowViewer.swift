@@ -430,7 +430,7 @@ extension EnvironmentValues {
     }
     @ViewBuilder private var content:some View {
         if let image=session.image {
-            WorkbenchGlassSegments(title:text("imageZoom"),selection:$zoom,choices:[(.fit,text("fit")),(.actual,"1:1"),(.double,"200%"),(.quadruple,"400%")])
+            WorkbenchGlassSegments(title:text("imageZoom"),selection:$zoom,choices:[(.fit,text("fit")),(.actual,"1:1"),(.double,"200%"),(.quadruple,"400%")],owner:AnyHashable(session.generation))
             PixelCanvas(image:image,zoom:zoom)
         } else if let value=session.text { textContent(value) }
         else if let url=session.mediaURL { VideoPreview(url:url,identity:session.generation,session:session.video) }

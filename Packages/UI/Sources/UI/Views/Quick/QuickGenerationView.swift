@@ -22,6 +22,8 @@ struct QuickGenerationView: View {
     let onResultToCanvas: (WorkflowAssetReference) -> Void
     let onValueToCanvas: (WorkflowDatum) -> Void
     var onOpenLibrary: () -> Void = {}
+    var onImportAsset: () -> Void = {}
+    var importTargetTitle: String = ""
     var onAssetsChanged: () -> Void = {}
     var onResolveSharedAsset: QuickInputImport.SharedAssetResolver? = nil
     var textWorkspaceActions: AnyView = AnyView(EmptyView())
@@ -115,13 +117,16 @@ struct QuickGenerationView: View {
                             WorkbenchSidebarPages(selection: leftTab, choices: LeftTab.allCases, identifier: "quick-left") { tab in
                                 if tab == .settings { VStack(spacing: 0) { modelHeader; parameterPanel(assets: false) } }
                                 else { VStack(spacing: 0) {
-                                    Button(refinementText("openLibrary", fallback: "全部资料库…"), action: onOpenLibrary).padding(10)
+                                    HStack(spacing: 8) {
+                                        Button(layoutText(language, "importAsset"), action: onImportAsset).help(importTargetTitle)
+                                        Button(layoutText(language, "expandAssets"), action: onOpenLibrary)
+                                    }.padding(.horizontal, 12).padding(.vertical, 8)
                                     if !inputReferences.isEmpty {
                                         ScrollView(.horizontal) { HStack {
                                             ForEach(inputReferences, id: \.self) { reference in
                                                 Button { preview = reference } label: { QuickInputAssetName(store: quick.store, reference: reference) }
                                             }
-                                        }.padding(10) }.frame(maxHeight: 56)
+                                        }.padding(.horizontal, 12).padding(.vertical, 10) }.frame(maxHeight: 56)
                                     }
                                     parameterPanel(assets: true)
                                 } }
@@ -155,14 +160,14 @@ struct QuickGenerationView: View {
                                     ForEach(quick.visibleRuns) { run in runCard(run) }
                                     if quick.visibleRuns.isEmpty { Text(refinementText("noResults", fallback: "尚无结果")).foregroundStyle(.secondary).padding() }
                                 }
-                            }.padding(10)
+                            }.padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 16)
                         }
                                 } else {
                                     WorkbenchScrollView { LazyVStack(alignment: .leading, spacing: 10) {
                                 ForEach(quick.visibleRuns) { run in
                                     Button { detailRun = run } label: { HStack { Text(run.createdAt, style: .time); Text(statusTitle(run.status)); Spacer(); Image(systemName: "info.circle") } }
                                 }
-                                    }.padding(10) }
+                                    }.padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 16) }
                                 }
                             }
                         }
