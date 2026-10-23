@@ -512,6 +512,11 @@ public struct SharedLibraryBrowser: View {
         .background(WorkbenchCommandWindow(scope: commandScope))
         .focusable().focused($selectionFocused)
         .focusedValue(\.workbenchAssetExport, exportMenuCommand)
+        .onKeyPress(.space) {
+            guard selectionFocused, !searchFocused, contentVisible, commandScope.permitsCommands,
+                  let entry = selectedEntry, visible.contains(where: { $0.id == entry.id }), canPreview(entry) else { return .ignored }
+            dispatch(.preview, key: entry.id); return .handled
+        }
         .workflowKeyboardCommands { command in
             switch command {
             case .search: searchFocused = true; return true
@@ -942,7 +947,7 @@ public struct SharedLibraryBrowser: View {
         .padding(6).contentShape(Rectangle())
         .onTapGesture {
             focusedKey = entry.id
-            selectionFocused = true
+            if compact { selectionFocused = true }
             if compact { selectedKeys = [entry.id]; if canvasMode?.resourceCategory == nil { compactDetailKey = entry.id } }
         }
         .accessibilityIdentifier("shared-library-entry-" + entry.id)

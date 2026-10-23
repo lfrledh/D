@@ -152,9 +152,12 @@ private struct WorkbenchCommands: Commands {
             Menu(text("recent")) {
                 if let workspace, !workspace.recent.isEmpty {
                     ForEach(workspace.recent.indices, id: \.self) { i in button(workspace.recent[i], title: "") }
-                } else if NSApp.keyWindow == nil, let model = bootstrap.model, !model.recentProjects.isEmpty {
+                } else if let model = bootstrap.model, !model.recentProjects.isEmpty {
                     ForEach(model.recentProjects) { project in
-                        Button(project.name) { openWindow(id: "workbench"); Task { await model.openRecentProject(id: project.id) } }
+                        Button(project.name) {
+                            guard !blocked, NSApp.keyWindow == nil else { return }
+                            openWindow(id: "workbench"); Task { await model.openRecentProject(id: project.id) }
+                        }.disabled(NSApp.keyWindow != nil)
                     }
                 } else { Button(text("recentEmpty")) {}.disabled(true) }
             }.disabled(blocked || (NSApp.keyWindow != nil && !current))
