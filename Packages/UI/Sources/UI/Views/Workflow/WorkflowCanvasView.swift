@@ -171,6 +171,7 @@ public struct WorkflowCanvasView: View {
     @Environment(\.dLanguageStore) private var languageStore
 
     @Environment(\.chatDisplayPreferences) private var displayPreferences
+    @State private var commandScope = WorkbenchCommandScope()
     @State private var narrowLibrary = false
     @State private var requestedPanelWidths = WorkbenchPanelWidths(leading: 320, trailing: 320)
     @State private var runSettingsVisible = false
@@ -354,6 +355,7 @@ public struct WorkflowCanvasView: View {
         .contentShape(.focusEffect, Rectangle())
         .focusable()
         .workflowKeyboardCommands(performKeyboardCommand)
+        .background(WorkbenchCommandWindow(scope: commandScope))
         .focusedSceneValue(\.workbenchCanvas, contentVisible ? canvasCommands : nil)
         .popover(isPresented: $portLegendPresented) { portLegend }
 
@@ -998,23 +1000,84 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
     private var canvasCommands: WorkbenchCanvasCommands {
         let context = runContext
-        func action(_ key: String, enabled: Bool = true, _ perform: @escaping () -> Void) -> WorkbenchGenerationCommand {
+        func action(_ key: String, enabled: Bool = true, editing: Bool = false, _ perform: @escaping () -> Void) -> WorkbenchGenerationCommand {
             .init(title: workflowText(languageStore, key), isEnabled: enabled && contentVisible && !toolsPresented && !interfacePresented) {
-                guard contentVisible, context == runContext, !toolsPresented, !interfacePresented,
-                      NSApp.keyWindow?.attachedSheet == nil, !(NSApp.keyWindow?.firstResponder is NSTextView) else { return }
+                guard commandScope.permitsCommands, contentVisible, context == runContext, !toolsPresented, !interfacePresented,
+                      NSApp.keyWindow?.attachedSheet == nil, !editing || !(NSApp.keyWindow?.firstResponder is NSTextView) else { return }
                 perform()
             }
         }
-        return .init(edit: [
-            action("workflow.action.undo", enabled: controller.canEditCanvas && controller.canUndo) { controller.undo() },
-            action("workflow.action.redo", enabled: controller.canEditCanvas && controller.canRedo) { controller.redo() },
-            action("workflow.selection.all") { controller.selectedNodeID = nil; selectedConnectionID = nil; controller.selectedNodeIDs = Set(controller.graph?.nodes.map(\.id) ?? []) },
-            action("workflow.selection.clear") { controller.selectedNodeID = nil; controller.selectedNodeIDs = []; selectedConnectionID = nil },
-            action("refinement.workflow.extractSelection", enabled: controller.canEditCanvas && !selectedNodes.isEmpty) {
+        var commands = WorkbenchCanvasCommands(edit: [
+            action("workflow.action.undo", enabled: controller.canEditCanvas && controller.canUndo, editing: true) { controller.undo() },
+            action("workflow.action.redo", enabled: controller.canEditCanvas && controller.canRedo, editing: true) { controller.redo() },
+            action("workflow.selection.all", editing: true) { controller.selectedNodeID = nil; selectedConnectionID = nil; controller.selectedNodeIDs = Set(controller.graph?.nodes.map(\.id) ?? []) },
+            action("workflow.selection.clear", editing: true) { controller.selectedNodeID = nil; controller.selectedNodeIDs = []; selectedConnectionID = nil },
+            action("refinement.workflow.extractSelection", enabled: controller.canEditCanvas && !selectedNodes.isEmpty, editing: true) {
                 if let node = selectedNodes.first, selectedNodes.count == 1 { controller.selectedNodeIDs = [node.id] }
                 extractSelection = true; toolsPresented = true
             }
         ], legend: action("refinement.workflow.typeLegend") { portLegendPresented = true })
+        commands.scope = commandScope
+        commands.sidebars = [action("systemMenu." + (showInspector ? "hideLeft" : "showLeft")) { showInspector.toggle() },
+                             action("systemMenu." + (showLibrary ? "hideRight" : "showRight")) { showLibrary.toggle() }]
+        // Do not read the observable zoom here: this provider is on the retained
+        // page, while only the camera leaf subscribes to continuous zoom updates.
+        commands.zoom = [action("systemMenu.zoomIn", enabled: !viewportInteractionLocked) { changeMenuZoom(multiplier: 1.2) },
+                         action("systemMenu.zoomOut", enabled: !viewportInteractionLocked) { changeMenuZoom(multiplier: 1 / 1.2) },
+                         action("systemMenu.actualSize", enabled: !viewportInteractionLocked) { changeMenuZoom(actual: true) },
+                         action("systemMenu.fit", enabled: !viewportInteractionLocked && canvasViewport != nil) { if let canvasViewport { fitAllNodes(targetWidth: canvasViewport.clip.width) } }]
+        commands.run = action("workflow.dock.run", enabled: !controller.isRunning && !controller.hasPendingSaves && validRunTarget != nil && controller.canEditCanvas && controller.bodyPath.isEmpty) {
+            if let target = validRunTarget { presentWorkspacePlan(target.id, mode: runRange) }
+        }
+        commands.settings = action("systemMenu.runSettings", enabled: !controller.isRunning && !controller.hasPendingSaves) { toggleRunSettings() }
+        let activeRun = controller.activePresentationRun?.id
+        commands.pause = action("systemMenu.pause", enabled: controller.isRunning && controller.canPausePresentation && controller.activePresentationRun?.status != .cancelling) { if let activeRun, controller.activePresentationRun?.id == activeRun, controller.isRunning && controller.canPausePresentation && controller.activePresentationRun?.status != .cancelling { controller.pause() } }
+        let recovery = WorkflowDockRecovery.capture(controller)
+        commands.resume = action("systemMenu.resume", enabled: !isReadOnly && !controller.isRunning && !controller.hasPendingSaves && !recovery.targets.isEmpty) {
+            WorkflowDockRecovery.perform(recovery, stopping: false, controller: controller, showRecords: showRecoveryRecords)
+        }
+        commands.stop = action("systemMenu.stop", enabled: !controller.isSaving && controller.activePresentationRun?.status != .cancelling && (controller.isRunning || (!isReadOnly && !recovery.targets.isEmpty))) {
+            if let activeRun {
+                Task { if controller.isRunning && controller.activePresentationRun?.id == activeRun && context == runContext { await controller.cancel() } }
+            } else { WorkflowDockRecovery.perform(recovery, stopping: true, controller: controller, showRecords: showRecoveryRecords) }
+        }
+        if controller.hasPendingSaves {
+            let pending = pendingSavingTargets
+            commands.retrySave = action("systemMenu.retrySave", enabled: !controller.isRunning && !controller.isSaving) { retryPendingSaving(pending, context: context) }
+        }
+        commands.workflow = [action("systemMenu.blankFlow", enabled: controller.canEditCanvas) { controller.addBlankGraph() },
+            action("workflow.language.interface", enabled: controller.graph != nil && controller.canEditCanvas) { interfacePresented = true },
+            action("layoutInteraction.exportLocation", enabled: destinationEnabled && controller.readOnlyReason == nil && !controller.isSaving, guarded(onDestination)),
+            action("layoutInteraction.addDocument", enabled: controller.canEditCanvas && publishDocumentDescription != nil, guarded(onPublishText)),
+            action("layoutInteraction.manageNodes", manageCustomNodes)]
+        commands.templates = WorkflowLanguageExample.allCases.map { example in action("workflow.language.example." + example.rawValue, enabled: controller.canEditCanvas) { controller.addLanguageExample(example) } }
+            + WorkflowExampleChoice.allCases.map { example in
+                let command = action("systemMenu.templates", enabled: controller.canEditCanvas) { controller.addExample(example.rawValue) }
+                return .init(title: example.title(languageStore), isEnabled: command.isEnabled, action: command.action)
+            }
+        return commands
+    }
+    private func changeMenuZoom(multiplier: CGFloat = 1, actual: Bool = false) {
+        guard camera.owner == ObjectIdentifier(controller), camera.context == viewContext else { return }
+        camera.zoom = actual ? 1 : WorkflowCanvasLayoutPolicy.restoredZoom(camera.zoom * multiplier)
+        rememberViewContext()
+    }
+    private func toggleRunSettings() { runSettingsVisible.toggle(); workspaceDraft = nil; activityVisible = false }
+    private func showRecoveryRecords() { activityVisible = true; recordsDetail = false; workspaceDraft = nil; runSettingsVisible = false }
+    private struct SavingTarget: Hashable { let run: UUID; let stage: UUID? }
+    private var pendingSavingTargets: Set<SavingTarget> {
+        Set(controller.runs.filter { $0.status == .saving || $0.id == controller.pendingPausedStopRunID }.map { run in
+            SavingTarget(run: run.id, stage: controller.batchStages.first { $0.attempts.contains { $0.runID == run.id } }?.id)
+        })
+    }
+    private func retryPendingSaving(_ expected: Set<SavingTarget>, context: WorkflowRunTarget.Context) {
+        guard context == runContext, !controller.isRunning, !controller.isSaving else { return }
+        guard expected == pendingSavingTargets, expected.count == 1, let target = expected.first else { showRecoveryRecords(); return }
+        Task {
+            guard context == runContext, expected == pendingSavingTargets, !controller.isRunning, !controller.isSaving else { return }
+            if let stage = target.stage { await controller.retryBatchSaving(stage) }
+            else { await controller.retryRunSaving(runID: target.run) }
+        }
     }
     private var portLegend: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1082,18 +1145,9 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     .accessibilityIdentifier("workflow-cancel")
             }.frame(maxWidth: .infinity).buttonStyle(WorkflowDockButtonStyle(expand: true))
         } else if controller.hasPendingSaves {
-            Button(dockText("retrySave")) {
-                // Multiple owners are never resolved by recency. The list exposes
-                // the captured run/stage and its save-only command.
-                let saving = controller.runs.filter { $0.status == .saving || $0.id == controller.pendingPausedStopRunID }
-                if saving.count == 1, let run = saving.first {
-                    if let stage = controller.batchStages.first(where: { $0.attempts.contains { $0.runID == run.id } }) {
-                        Task { await controller.retryBatchSaving(stage.id) }
-                    } else { Task { await controller.retryRunSaving(runID: run.id) } }
-                }
-                else { activityVisible = true; recordsDetail = false; workspaceDraft = nil; runSettingsVisible = false }
-            }.buttonStyle(WorkflowDockButtonStyle(expand: true))
-        } else if !WorkflowDockRecovery.pausedQueues(controller).isEmpty {
+            let pending = pendingSavingTargets, context = runContext
+            Button(dockText("retrySave")) { retryPendingSaving(pending, context: context) }.buttonStyle(WorkflowDockButtonStyle(expand: true))
+        } else if !WorkflowDockRecovery.capture(controller).targets.isEmpty {
             WorkflowPausedBatchControls(controller: controller) {
                 activityVisible = true; recordsDetail = false; workspaceDraft = nil; runSettingsVisible = false
             }.disabled(isReadOnly)
@@ -1102,11 +1156,6 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             Button(dockText(assetsOnly ? "reviewAssets" : "reviewHuman")) {
                 activityVisible = true; recordsDetail = false; workspaceDraft = nil; runSettingsVisible = false
             }.buttonStyle(WorkflowDockButtonStyle(expand: true))
-        } else if let run = recoveryRun, run.planCheckpoint?.state == .paused, !isBatchRun(run.id) {
-            HStack(spacing: 0) {
-                Button(dockText("resume")) { Task { await controller.resume(runID: run.id) } }
-                Button(dockText("stop")) { Task { await controller.stopPausedRun(runID: run.id) } }
-            }.buttonStyle(WorkflowDockButtonStyle(expand: true)).disabled(isReadOnly)
         } else {
             HStack(spacing: 0) {
                 Button { if let target = validRunTarget { presentWorkspacePlan(target.id, mode: runRange) } } label: {
@@ -1114,7 +1163,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 }.disabled(validRunTarget == nil || !controller.canEditCanvas || !controller.bodyPath.isEmpty)
                     .accessibilityIdentifier("workflow-run")
                 Button {
-                    runSettingsVisible.toggle(); workspaceDraft = nil; activityVisible = false
+                    toggleRunSettings()
                 } label: { Image(systemName: "chevron.down").frame(width: 28, height: 32) }
                     .accessibilityLabel(dockText("settings")).accessibilityIdentifier("workflow-run-settings")
             }

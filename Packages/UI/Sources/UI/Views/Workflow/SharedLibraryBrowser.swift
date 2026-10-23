@@ -341,6 +341,7 @@ public struct SharedLibraryBrowser: View {
     private let onAdd: (SharedLibraryBrowserEntry) -> Void
     private let onPreview: (SharedLibraryBrowserEntry) -> Void
     private let onExternalCopy: ((SharedLibraryBrowserEntry) -> Void)?
+    private let onExport: ((SharedLibraryBrowserEntry, @escaping () -> Bool) -> Void)?
     private let readPreview: (@MainActor @Sendable (SharedLibraryBrowserEntry) async throws -> ProjectReadOnlyContent)?
     private let onLocation: (SharedLibraryBrowserEntry) -> Void
     private let onPrepare: (SharedLibraryBrowserEntry) -> Void
@@ -358,6 +359,8 @@ public struct SharedLibraryBrowser: View {
     @Environment(\.workflowLibraryContext) private var workflowContext
     @Environment(\.workflowLibraryInsertionController) private var insertionController
     @State private var state: SharedLibraryBrowserState
+    @State private var commandScope = WorkbenchCommandScope()
+    @Environment(\.workbenchContentVisible) private var contentVisible
     @State private var featureHelp = WorkbenchHelpStore()
     @State private var showFilters = false
     @State private var saveQueryRequest: SharedLibrarySaveQueryRequest?
@@ -390,6 +393,7 @@ public struct SharedLibraryBrowser: View {
         onAdd: @escaping (SharedLibraryBrowserEntry) -> Void,
         onPreview: @escaping (SharedLibraryBrowserEntry) -> Void,
         onExternalCopy: ((SharedLibraryBrowserEntry) -> Void)? = nil,
+        onExport: ((SharedLibraryBrowserEntry, @escaping () -> Bool) -> Void)? = nil,
         readPreview: (@MainActor @Sendable (SharedLibraryBrowserEntry) async throws -> ProjectReadOnlyContent)? = nil,
         onLocation: @escaping (SharedLibraryBrowserEntry) -> Void = { _ in },
         onPrepare: @escaping (SharedLibraryBrowserEntry) -> Void,
@@ -400,6 +404,7 @@ public struct SharedLibraryBrowser: View {
         self._state = State(initialValue: state ?? SharedLibraryBrowserState())
         self.importTargetDescription = importTargetDescription; self.scopeDescription = scopeDescription; self.canvasMode = canvasMode; self.entries = entries; self.store = store; self.compact = compact; self.allowsImport = allowsImport
         self.onUse = onUse; self.onAdd = onAdd; self.onPreview = onPreview; self.onLocation = onLocation
+        self.onExport = onExport
         self.onExternalCopy = onExternalCopy; self.readPreview = readPreview
         self.onPrepare = onPrepare; self.onImport = onImport; self.onClose = onClose
         self.tagValidation = tagValidation; self.queryContext = queryContext; self.annotationSave = annotationSave
@@ -455,6 +460,20 @@ public struct SharedLibraryBrowser: View {
     }
     private var visible: [SharedLibraryBrowserEntry] { (try? visibleResult.get()) ?? [] }
 
+    private var exportMenuCommand: WorkbenchGenerationCommand? {
+        let selected = visible.filter { selectedKeys.contains($0.id) }
+        guard contentVisible, selected.count == 1, let item = selected.first, selectedKeys == [item.id], item.runtimeValue == nil,
+              item.item.kind == .asset, let mediaType = item.metadataSnapshot?.asset.mediaType,
+              WorkflowMediaFormat.supportsReadOnlyExport(mediaType), let onExport else { return nil }
+        let current: () -> Bool = {
+            contentVisible && selectedKeys == [item.id] && visible.contains { $0.id == item.id && $0.selection == item.selection && $0.metadataSnapshot == item.metadataSnapshot }
+        }
+        return .init(title: systemMenuText(language, "export"), isEnabled: true) {
+            guard commandScope.permitsCommands, current() else { return }
+            onExport(item, current)
+        }
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             if !compact { header }
@@ -489,6 +508,8 @@ public struct SharedLibraryBrowser: View {
                 }
             }
         }
+        .background(WorkbenchCommandWindow(scope: commandScope))
+        .focusedValue(\.workbenchAssetExport, exportMenuCommand)
         .focusable()
         .workflowKeyboardCommands { command in
             switch command {

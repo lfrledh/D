@@ -57,6 +57,24 @@ enum ProjectFilesPresentation {
     }
 }
 
+/// Existing package exporter, with one immutable source/reference admission on
+/// both sides of the destination panel. No external application is launched.
+@MainActor struct WorkbenchAssetExportCommand {
+    let store: ProjectStore
+    let reference: WorkflowAssetReference
+    let staleMessage: String
+    let isCurrent: () -> Bool
+    func perform(choose: () async -> URL?) async throws -> Bool {
+        guard isCurrent() else { throw WorkflowIssue(staleMessage) }
+        guard let destination = await choose() else { return false }
+        guard isCurrent() else { throw WorkflowIssue(staleMessage) }
+        let scoped = destination.startAccessingSecurityScopedResource()
+        defer { if scoped { destination.stopAccessingSecurityScopedResource() } }
+        _ = try await store.exportWorkflowAssets([reference], name: "D-" + UUID().uuidString.prefix(8), exportID: UUID(), directory: destination)
+        return true
+    }
+}
+
 @MainActor
 enum NativeAssetImportPanel {
     static func choose(language: UILanguageStore?) async -> (URL, AssetImportMode)? {

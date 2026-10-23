@@ -74,6 +74,17 @@ public extension FocusedValues {
 @MainActor public struct WorkbenchCanvasCommands {
     public let edit: [WorkbenchGenerationCommand]
     public let legend: WorkbenchGenerationCommand
+    public var scope: WorkbenchCommandScope? = nil
+    public var zoom: [WorkbenchGenerationCommand] = []
+    public var sidebars: [WorkbenchGenerationCommand] = []
+    public var run: WorkbenchGenerationCommand? = nil
+    public var settings: WorkbenchGenerationCommand? = nil
+    public var pause: WorkbenchGenerationCommand? = nil
+    public var resume: WorkbenchGenerationCommand? = nil
+    public var stop: WorkbenchGenerationCommand? = nil
+    public var retrySave: WorkbenchGenerationCommand? = nil
+    public var workflow: [WorkbenchGenerationCommand] = []
+    public var templates: [WorkbenchGenerationCommand] = []
     public init(edit: [WorkbenchGenerationCommand], legend: WorkbenchGenerationCommand) {
         self.edit = edit; self.legend = legend
     }
@@ -83,5 +94,77 @@ public extension FocusedValues {
     var workbenchCanvas: WorkbenchCanvasCommands? {
         get { self[WorkbenchCanvasKey.self] }
         set { self[WorkbenchCanvasKey.self] = newValue }
+    }
+}
+
+/// The native window is captured by each mounted command provider. A retained
+/// page or a different key window cannot execute its stale menu closure.
+@MainActor @Observable public final class WorkbenchCommandScope {
+    public weak var window: NSWindow?
+    public init() {}
+    public var permitsCommands: Bool { window?.isKeyWindow == true && window?.attachedSheet == nil }
+}
+struct WorkbenchCommandWindow: NSViewRepresentable {
+    let scope: WorkbenchCommandScope
+    func makeNSView(context: Context) -> View { View(scope: scope) }
+    func updateNSView(_ view: View, context: Context) { view.scope = scope; scope.window = view.window }
+    static func dismantleNSView(_ view: View, coordinator: ()) { if view.scope.window === view.window { view.scope.window = nil } }
+    final class View: NSView {
+        var scope: WorkbenchCommandScope
+        init(scope: WorkbenchCommandScope) { self.scope = scope; super.init(frame: .zero) }
+        required init?(coder: NSCoder) { fatalError("init(coder:)") }
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); scope.window = window }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+}
+
+@MainActor public struct WorkbenchChoiceCommand {
+    public let command: WorkbenchGenerationCommand
+    public let selected: Bool
+    public init(_ command: WorkbenchGenerationCommand, selected: Bool) { self.command = command; self.selected = selected }
+}
+@MainActor public struct WorkbenchWorkspaceCommands {
+    public let workflow: Bool
+    public let chat: Bool
+    public let scope: WorkbenchCommandScope
+    public let newProject: WorkbenchGenerationCommand
+    public let openProject: WorkbenchGenerationCommand
+    public let recent: [WorkbenchGenerationCommand]
+    public let files: WorkbenchGenerationCommand
+    public let quickDestination: [WorkbenchChoiceCommand]
+    public let importAsset: WorkbenchGenerationCommand
+    public let legacy: WorkbenchGenerationCommand
+    public let modes: [WorkbenchChoiceCommand]
+    public let sidebars: [WorkbenchGenerationCommand]
+    public let help: WorkbenchGenerationCommand
+    public let stop: WorkbenchGenerationCommand?
+    public let retrySave: WorkbenchGenerationCommand?
+}
+private struct WorkbenchWorkspaceKey: FocusedValueKey { typealias Value = WorkbenchWorkspaceCommands }
+private struct WorkbenchAssetExportKey: FocusedValueKey { typealias Value = WorkbenchGenerationCommand }
+public extension FocusedValues {
+    var workbenchWorkspace: WorkbenchWorkspaceCommands? {
+        get { self[WorkbenchWorkspaceKey.self] }
+        set { self[WorkbenchWorkspaceKey.self] = newValue }
+    }
+    var workbenchAssetExport: WorkbenchGenerationCommand? {
+        get { self[WorkbenchAssetExportKey.self] }
+        set { self[WorkbenchAssetExportKey.self] = newValue }
+    }
+}
+@MainActor func systemMenuText(_ language: UILanguageStore?, _ key: String) -> String {
+    workflowText(language, "systemMenu." + key)
+}
+
+@MainActor public struct WorkbenchChatCommands {
+    public let run: WorkbenchGenerationCommand
+    public let stop: WorkbenchGenerationCommand
+    public let retrySave: WorkbenchGenerationCommand?
+}
+private struct WorkbenchChatKey: FocusedValueKey { typealias Value = WorkbenchChatCommands }
+public extension FocusedValues {
+    var workbenchChat: WorkbenchChatCommands? {
+        get { self[WorkbenchChatKey.self] }
+        set { self[WorkbenchChatKey.self] = newValue }
     }
 }

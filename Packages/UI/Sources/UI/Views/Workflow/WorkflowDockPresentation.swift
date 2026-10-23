@@ -9,8 +9,35 @@ enum WorkflowDockLayout {
 /// A batch can pause between attempts without leaving any paused run. Keep the
 /// stage owner explicit; multiple paused queues require selection in Records.
 @MainActor enum WorkflowDockRecovery {
+    enum Target: Hashable { case stage(UUID), run(UUID) }
+    struct Snapshot: Equatable {
+        let context: WorkflowRunTarget.Context
+        let targets: Set<Target>
+        var soleTarget: Target? { targets.count == 1 ? targets.first : nil }
+    }
     static func pausedQueues(_ controller: WorkflowController) -> [WorkflowBatchStage] {
         controller.batchStages.filter { $0.state == .paused && $0.attempts.contains { $0.state == .queued } }
+    }
+    static func targets(stageIDs: [UUID], runIDs: [UUID]) -> Set<Target> {
+        Set(stageIDs.map(Target.stage) + runIDs.map(Target.run))
+    }
+    static func capture(_ controller: WorkflowController) -> Snapshot {
+        let batchRuns = Set(controller.batchStages.flatMap { $0.attempts.compactMap(\.runID) })
+        let runs = controller.runs.filter { !batchRuns.contains($0.id) && WorkflowCanvasPresentation.canResume($0.status) && $0.planCheckpoint?.state == .paused }
+        return Snapshot(context: WorkflowRunTarget.Context(controller), targets: targets(stageIDs: pausedQueues(controller).map(\.id), runIDs: runs.map(\.id)))
+    }
+    static func perform(_ snapshot: Snapshot, stopping: Bool, controller: WorkflowController, showRecords: () -> Void) {
+        guard !controller.isRunning, !controller.hasPendingSaves, !controller.isSaving, controller.readOnlyReason == nil else { return }
+        guard snapshot == capture(controller), let target = snapshot.soleTarget else { showRecords(); return }
+        Task {
+            // The task may begin after another command changed the owner or queue.
+            guard snapshot == capture(controller), !controller.isRunning, !controller.hasPendingSaves,
+                  !controller.isSaving, controller.readOnlyReason == nil else { return }
+            switch target {
+            case .stage(let id): if stopping { await controller.stopBatchQueue(id) } else { await controller.runBatchStage(id) }
+            case .run(let id): if stopping { await controller.stopPausedRun(runID: id) } else { await controller.resume(runID: id) }
+            }
+        }
     }
 }
 
@@ -19,15 +46,15 @@ enum WorkflowDockLayout {
     let showRecords: () -> Void
     @Environment(\.dLanguageStore) private var language
     var body: some View {
-        let queues = WorkflowDockRecovery.pausedQueues(controller)
+        let snapshot = WorkflowDockRecovery.capture(controller)
         Group {
-            if queues.count == 1, let stage = queues.first {
+            if snapshot.soleTarget != nil {
                 HStack(spacing: 0) {
                     Button(workflowText(language, "workflow.dock.resume")) {
-                        Task { await controller.runBatchStage(stage.id) }
+                        WorkflowDockRecovery.perform(snapshot, stopping: false, controller: controller, showRecords: showRecords)
                     }.accessibilityIdentifier("workflow-batch-resume")
                     Button(workflowText(language, "workflow.dock.stop")) {
-                        Task { await controller.stopBatchQueue(stage.id) }
+                        WorkflowDockRecovery.perform(snapshot, stopping: true, controller: controller, showRecords: showRecords)
                     }.accessibilityIdentifier("workflow-batch-stop")
                 }
             } else {

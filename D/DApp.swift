@@ -107,84 +107,126 @@ private struct WorkbenchCommands: Commands {
     @FocusedValue(\.workbenchGeneration) private var generationCommand
     @FocusedValue(\.workbenchSave) private var saveCommand
     @FocusedValue(\.workbenchCanvas) private var canvasCommands
+    @FocusedValue(\.workbenchWorkspace) private var workspace
+    @FocusedValue(\.workbenchAssetExport) private var exportCommand
+    @FocusedValue(\.workbenchChat) private var chatCommands
     @Environment(\.openWindow) private var openWindow
     private var modalResourceOperation: Bool {
-        bootstrap.libraryModel?.isPresented == true || bootstrap.libraryModel?.isChoosingLocation == true
+        settingsBlocked || bootstrap.libraryModel?.isPresented == true || bootstrap.libraryModel?.isChoosingLocation == true
             || bootstrap.model?.hasPendingEditor == true
     }
-
-    private func label(_ key: String, _ fallback: String) -> String { bootstrap.languageStore.text(key, fallback: fallback) }
-
+    private var blocked: Bool { bootstrap.isTerminating || modalResourceOperation }
+    private var current: Bool { workspace?.scope.permitsCommands == true && !blocked }
+    private var canvas: WorkbenchCanvasCommands? {
+        guard workspace?.workflow == true, current, canvasCommands?.scope?.permitsCommands == true else { return nil }
+        return canvasCommands
+    }
+    private var generation: WorkbenchGenerationCommand? { workspace?.workflow == true ? canvas?.run : workspace?.chat == true ? chatCommands?.run : generationCommand }
+    private func label(_ key: String, _ fallback: String = "—") -> String { bootstrap.languageStore.text(key, fallback: fallback) }
+    private func text(_ key: String) -> String { label("systemMenu." + key) }
+    @ViewBuilder private func button(_ command: WorkbenchGenerationCommand?, title: String) -> some View {
+        Button(command?.title ?? title) { if !blocked { command?.action() } }
+            .disabled(blocked || command?.isEnabled != true)
+    }
+    @ViewBuilder private func choices(_ items: [WorkbenchChoiceCommand]) -> some View {
+        ForEach(items.indices, id: \.self) { i in
+            let item = items[i]
+            Toggle(item.command.title, isOn: Binding(get: { item.selected }, set: { selected in if selected { item.command.action() } }))
+                .disabled(!current || !item.command.isEnabled)
+        }
+    }
     var body: some Commands {
         CommandGroup(replacing: .appSettings) {
-            Button(label("refinement.settings.title", "设置") + "…") {
-                // A single pending intent survives a closed window or an existing sheet.
-                // The workbench captures its exact owner only when presentation is admitted.
-                requestSettings()
-                openWindow(id: "workbench")
-            }.keyboardShortcut(",", modifiers: .command)
-                .disabled(bootstrap.isTerminating || settingsBlocked || modalResourceOperation)
+            Button(label("refinement.settings.title", "设置") + "…") { requestSettings(); openWindow(id: "workbench") }
+                .keyboardShortcut(",", modifiers: .command).disabled(blocked)
         }
         CommandGroup(replacing: .newItem) {
-            Button(label("command.project.new", "新建项目…")) {
-                openWindow(id: "workbench")
-                Task { await bootstrap.model?.newProject() }
-            }
-            .keyboardShortcut("n")
-            .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model == nil || bootstrap.model?.isChangingProject == true)
-
-            Button(label("command.project.open", "打开项目…")) {
-                openWindow(id: "workbench")
-                Task { await bootstrap.model?.openProject() }
-            }
-            .keyboardShortcut("o")
-            .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model == nil || bootstrap.model?.isChangingProject == true)
+            Button(label("command.project.new")) {
+                if let workspace, current { workspace.newProject.action() }
+                else if !blocked && NSApp.keyWindow == nil { openWindow(id: "workbench"); Task { await bootstrap.model?.newProject() } }
+            }.keyboardShortcut("n").disabled(blocked || bootstrap.model == nil || (NSApp.keyWindow != nil && (!current || workspace?.newProject.isEnabled != true)))
+            Button(label("command.project.open")) {
+                if let workspace, current { workspace.openProject.action() }
+                else if !blocked && NSApp.keyWindow == nil { openWindow(id: "workbench"); Task { await bootstrap.model?.openProject() } }
+            }.keyboardShortcut("o").disabled(blocked || bootstrap.model == nil || (NSApp.keyWindow != nil && (!current || workspace?.openProject.isEnabled != true)))
+            Menu(text("recent")) {
+                if let workspace, !workspace.recent.isEmpty {
+                    ForEach(workspace.recent.indices, id: \.self) { i in button(workspace.recent[i], title: "") }
+                } else if NSApp.keyWindow == nil, let model = bootstrap.model, !model.recentProjects.isEmpty {
+                    ForEach(model.recentProjects) { project in
+                        Button(project.name) { openWindow(id: "workbench"); Task { await model.openRecentProject(id: project.id) } }
+                    }
+                } else { Button(text("recentEmpty")) {}.disabled(true) }
+            }.disabled(blocked || (NSApp.keyWindow != nil && !current))
         }
         CommandGroup(replacing: .saveItem) {
-            Button(label("command.window.close", "关闭窗口")) {
-                WorkbenchWindowCloseCommand.perform(on: NSApp.keyWindow)
-            }.keyboardShortcut("w")
-                .disabled(bootstrap.isTerminating)
-            Button(saveCommand?.title ?? label("consistency.menu.file.save", "保存更改")) { saveCommand?.action() }
-                .keyboardShortcut("s")
-                .disabled(modalResourceOperation || bootstrap.isTerminating || saveCommand?.isEnabled != true)
+            Button(label("layoutInteraction.save", "保存更改")) { if current { saveCommand?.action() } }
+                .keyboardShortcut("s").disabled(!current || saveCommand?.isEnabled != true)
+            button(current ? workspace?.files : nil, title: label("layoutInteraction.projectFiles"))
+            if let workspace, !workspace.quickDestination.isEmpty {
+                Menu(label("layoutInteraction.quickDestination")) { choices(workspace.quickDestination) }
+            }
+        }
+        CommandGroup(replacing: .importExport) {
+            button(current ? workspace?.importAsset : nil, title: text("import"))
+            Button(text("export")) { if !bootstrap.isTerminating { exportCommand?.action() } }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(bootstrap.isTerminating || exportCommand?.isEnabled != true)
+            Divider()
+            Menu(label("layoutInteraction.advanced")) { button(current ? workspace?.legacy : nil, title: label("layoutInteraction.legacy")) }
+            Divider()
+            Button(label("command.window.close")) { WorkbenchWindowCloseCommand.perform(on: NSApp.keyWindow) }
+                .keyboardShortcut("w").disabled(bootstrap.isTerminating || NSApp.keyWindow == nil || NSApp.keyWindow?.attachedSheet != nil)
         }
         CommandGroup(after: .undoRedo) {
-            if let canvasCommands {
-                Menu(label("workflow.dock.nodeEditing", "节点编辑")) {
-                    ForEach(canvasCommands.edit.indices, id: \.self) { index in
-                        let command = canvasCommands.edit[index]
-                        Button(command.title, action: command.action)
-                            .disabled(!command.isEnabled || NSApp.keyWindow?.firstResponder is NSTextView || settingsBlocked || bootstrap.isTerminating)
-                    }
+            Menu(label("workflow.dock.nodeEditing")) {
+                ForEach((canvas?.edit ?? []).indices, id: \.self) { i in
+                    let command = canvas!.edit[i]
+                    Button(command.title, action: command.action).disabled(!command.isEnabled || NSApp.keyWindow?.firstResponder is NSTextView)
                 }
-            }
+            }.disabled(canvas == nil || NSApp.keyWindow?.firstResponder is NSTextView)
         }
-        CommandGroup(after: .help) {
-            if let command = canvasCommands?.legend {
-                Button(command.title, action: command.action).disabled(!command.isEnabled || settingsBlocked || bootstrap.isTerminating)
+        CommandGroup(replacing: .sidebar) {
+            choices(workspace?.modes ?? [])
+            Divider()
+            let sidebars = workspace?.workflow == true ? (canvas?.sidebars ?? []) : (current ? workspace?.sidebars ?? [] : [])
+            ForEach(sidebars.indices, id: \.self) { i in button(sidebars[i], title: "") }
+            Divider()
+            if let canvas {
+                ForEach(canvas.zoom.indices, id: \.self) { i in button(canvas.zoom[i], title: "") }
+            } else {
+                ForEach(["zoomIn", "zoomOut", "actualSize", "fit"], id: \.self) { key in button(nil, title: text(key)) }
             }
-        }
-        CommandGroup(after: .importExport) {
-            Button(label("command.asset.export", "导出所选作品…")) { Task { await bootstrap.model?.exportSelected() } }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
-                .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.selectedAsset == nil || bootstrap.model?.creatorMode != .image)
         }
         CommandMenu(label("command.creation", "创作")) {
-            Button(generationCommand?.title ?? bootstrap.model?.visibleGenerationTitle ?? "生成") {
-                generationCommand?.action()
+            if workspace?.chat == true {
+                // The native composer exclusively owns its send shortcut.
+                button(current ? generation : nil, title: text("generate"))
+            } else {
+                Button(generation?.title ?? text("generate")) { if current { generation?.action() } }
+                    .keyboardShortcut(.return, modifiers: [.command])
+                    .disabled(!current || generation?.isEnabled != true || NSApp.keyWindow?.firstResponder is NSTextView)
             }
-            .keyboardShortcut(.return, modifiers: [.command])
-            .disabled(modalResourceOperation || bootstrap.isTerminating || generationCommand?.isEnabled != true)
-
+            button(canvas?.settings, title: text("runSettings"))
+            button(canvas?.pause, title: text("pause"))
+            button(canvas?.resume, title: text("resume"))
+            button(workspace?.workflow == true ? canvas?.stop : (current ? (workspace?.chat == true ? chatCommands?.stop : workspace?.stop) : nil), title: text("stop"))
+            if let retry = workspace?.workflow == true ? canvas?.retrySave : (current ? (workspace?.chat == true ? chatCommands?.retrySave : workspace?.retrySave) : nil) { button(retry, title: text("retrySave")) }
+            Divider()
+            Menu(text("workflow")) {
+                button(canvas?.workflow.first, title: text("blankFlow"))
+                Menu(text("templates")) { ForEach((canvas?.templates ?? []).indices, id: \.self) { i in button(canvas!.templates[i], title: "") } }
+                ForEach(Array((canvas?.workflow ?? []).dropFirst()).indices, id: \.self) { i in button(canvas!.workflow[i+1], title: "") }
+            }.disabled(canvas == nil)
         }
-        CommandMenu(label("command.resources", "资源")) {
-            Button(label("command.models", "模型与下载…")) {
-                openWindow(id: "workbench")
-                bootstrap.libraryModel?.presentManagement()
-            }
-            .keyboardShortcut("m", modifiers: [.command, .shift])
-            .disabled(bootstrap.isTerminating || bootstrap.libraryModel == nil)
+        CommandGroup(before: .windowList) {
+            Button(text("showWorkbench")) { openWindow(id: "workbench") }.disabled(bootstrap.isTerminating)
+            Button(label("command.models")) { openWindow(id: "workbench"); bootstrap.libraryModel?.presentManagement() }
+                .keyboardShortcut("m", modifiers: [.command, .shift]).disabled(blocked || bootstrap.libraryModel == nil)
+        }
+        CommandGroup(replacing: .help) {
+            button(current ? workspace?.help : nil, title: text("guide"))
+            if let command = canvas?.legend { button(command, title: "") }
         }
     }
 }

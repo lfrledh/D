@@ -2,7 +2,9 @@ import DInference
 import Foundation
 
 /// The formats admitted by the current workflow Store. This is not a decoder registry.
-enum WorkflowMediaFormat {
+public enum WorkflowMediaFormat {
+    /// Availability only; reads and exports still validate the exact source token and bytes.
+    public static func supportsReadOnlyExport(_ mediaType: String) -> Bool { descriptor(mediaType) != nil }
     static let noteType = "application/vnd.d.music-notes+json"
     static let chordType = "application/vnd.d.music-chords+json"
     static let tempoType = "application/vnd.d.music-tempo+json"

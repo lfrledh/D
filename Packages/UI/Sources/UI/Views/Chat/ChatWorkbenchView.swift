@@ -512,6 +512,7 @@ struct ChatWorkbenchView: View {
     let onResolveSharedAsset: ((UUID, UUID?, UUID) async throws -> (ProjectStore, WorkflowAssetReference, String))?
 
     @Environment(\.dLanguageStore) private var language
+    @State private var commandScope = WorkbenchCommandScope()
     @State private var search = ""
     @State private var showArchived = false
     @State private var showDeleted = false
@@ -695,6 +696,8 @@ struct ChatWorkbenchView: View {
 
         }
         .padding(.horizontal, 16).padding(.bottom, 16)
+        .background(WorkbenchCommandWindow(scope: commandScope))
+        .focusedSceneValue(\.workbenchChat, chatCommands)
         .coordinateSpace(name: ChatLayoutSpace.name)
         .environment(\.workbenchMenuContext, "chat:\(ObjectIdentifier(chat)):\(ObjectIdentifier(chat.store)):\(chat.state.selectedSessionID?.uuidString ?? "none")")
         .task(id: openToolsRequest) {
@@ -2200,6 +2203,19 @@ ScrollViewReader { proxy in
             .help(newLabel("pasteAttachments", english: "Paste attachments", chinese: "粘贴附件"))
             .accessibilityLabel(newLabel("pasteAttachments", english: "Paste attachments", chinese: "粘贴附件"))
             .disabled(session.archived || session.contextChoices?.deletedAt != nil)
+    }
+
+    private var chatCommands: WorkbenchChatCommands {
+        let controller = chat, id = chat.state.selectedSessionID
+        func command(_ title: String, enabled: Bool, _ perform: @escaping () -> Void) -> WorkbenchGenerationCommand {
+            .init(title: title, isEnabled: enabled && !filePanelBusy) {
+                guard commandScope.permitsCommands, chat === controller, chat.state.selectedSessionID == id, !filePanelBusy else { return }
+                perform()
+            }
+        }
+        return .init(run: command(label("send", "发送"), enabled: session.map { ChatRunAdmission.allowsSend($0, isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil, invalidFields: chat.invalidParameterFields) } ?? false) { if let id { submitFromComposer(id) } },
+            stop: command(systemMenuText(language, "stop"), enabled: chat.canStopGeneration && !chat.isCancelling) { Task { await controller.cancel() } },
+            retrySave: chat.pendingSaveAttemptID != nil || chat.saveIssue != nil ? command(systemMenuText(language, "retrySave"), enabled: !chat.isRunning) { Task { await controller.retrySave() } } : nil)
     }
 
     private func submitFromComposer(_ sessionID: UUID) {

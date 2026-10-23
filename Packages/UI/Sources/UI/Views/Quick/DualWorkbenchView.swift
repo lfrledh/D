@@ -83,6 +83,7 @@ public struct DualWorkbenchView: View {
             tools: canvasModel.projectSession.workflow?.tools ?? [], projects: projects, language: language, metadata: libraryMetadata, tags: nodeTags)
     }
 
+    @State private var commandScope = WorkbenchCommandScope()
     @State private var sidebarState = WorkbenchSidebarState()
     @Environment(\.isEnabled) private var controlsEnabled
     private func selectCategory(_ category: QuickCategory) {
@@ -331,14 +332,14 @@ public struct DualWorkbenchView: View {
     private var saveCommand: WorkbenchGenerationCommand {
         if entry == .workflow, let controller = canvasModel.projectSession.workflow {
             return .init(title: consistencyText(language, "FLOW-SAVE"), isEnabled: !controller.isSaving && !canvasModel.isChangingProject) {
-                guard entry == .workflow, canvasModel.projectSession.workflow === controller else { return }
+                guard commandScope.permitsCommands, canPresentSettings, entry == .workflow, canvasModel.projectSession.workflow === controller else { return }
                 Task { await controller.save() }
             }
         }
         let owner = quick
         let activeChat = quick.category == .text && quick.textPresentation == .chat ? chat : nil
         return .init(title: t("saveDraft"), isEnabled: !quickOwnerIsChanging) {
-            guard entry == .quick, quick === owner, !quickOwnerIsChanging else { return }
+            guard commandScope.permitsCommands, canPresentSettings, entry == .quick, quick === owner, !quickOwnerIsChanging else { return }
             Task {
                 do {
                     if let activeChat { guard chat === activeChat else { return }; try await activeChat.flush() }
@@ -347,85 +348,97 @@ public struct DualWorkbenchView: View {
             }
         }
     }
-    private var applicationToolbar: some View {
-        let owner = displayedOwner
-        let instance = owner.manifest?.effectiveInstanceID
-        let store = owner.projectSession.currentStore
-        let originalQuick = quick
-        let projectQuick = model.projectSession.projectQuick
+    private var workspaceCommands: WorkbenchWorkspaceCommands {
+        let owner = displayedOwner, instance = displayedOwner.manifest?.effectiveInstanceID
+        let store = owner.projectSession.currentStore, epoch = owner.projectSession.navigationEpoch
+        let capturedEntry = entry, intent = navigationIntent, originalQuick = quick
+        let projectQuick = model.projectSession.projectQuick, targetInstance = model.manifest?.effectiveInstanceID
         let targetName = model.manifest?.name
-        let targetInstance = model.manifest?.effectiveInstanceID
+        func action(_ title: String, enabled: Bool = true, _ perform: @escaping () -> Void) -> WorkbenchGenerationCommand {
+            let admitted = enabled && canPresentSettings && controlsEnabled && !owner.isChangingProject
+            return .init(title: title, isEnabled: admitted) {
+                guard admitted, commandScope.permitsCommands, canPresentSettings, controlsEnabled,
+                      entry == capturedEntry, navigationIntent == intent, displayedOwner === owner,
+                      owner.manifest?.effectiveInstanceID == instance, owner.projectSession.currentStore === store,
+                      owner.projectSession.navigationEpoch == epoch, !owner.isChangingProject else {
+                    issue = systemMenuText(language, "stale"); return
+                }
+                perform()
+            }
+        }
+        var destinations: [WorkbenchChoiceCommand] = []
+        if entry == .quick {
+            if let targetName, let projectQuick {
+                destinations.append(.init(action(layoutText(language, "currentProject", arguments: ["name": targetName]), enabled: !usesTemporaryChat) {
+                    guard model.manifest?.effectiveInstanceID == targetInstance, model.projectSession.projectQuick === projectQuick, quick === originalQuick else { return }
+                    captureChatReading(); useProjectQuick = true
+                }, selected: quick === projectQuick))
+            }
+            destinations.append(.init(action(layoutText(language, "independent"), enabled: !usesTemporaryChat) {
+                guard quick === originalQuick else { return }; captureChatReading(); useProjectQuick = false
+            }, selected: quick === automaticQuick))
+            if projectQuick == nil, targetName != nil {
+                destinations.append(.init(action(layoutText(language, "enableQuick"), enabled: !usesTemporaryChat) {
+                    guard model.manifest?.effectiveInstanceID == targetInstance else { return }
+                    captureChatReading()
+                    Task { await model.projectSession.enableProjectQuick()
+                        if model.manifest?.effectiveInstanceID == targetInstance { useProjectQuick = true; navigate(to: .quick) }
+                    }
+                }, selected: false))
+            }
+        }
+        return .init(workflow: entry == .workflow, chat: entry == .quick && quick.category == .text && quick.textPresentation == .chat, scope: commandScope,
+            newProject: action(consistencyText(language, "menu.file.new")) { Task { if await model.newProject() { navigate(to: .workflow) } } },
+            openProject: action(consistencyText(language, "menu.file.open")) { Task { if await model.openProject() { navigate(to: .workflow) } } },
+            recent: model.recentProjects.map { project in action(project.name) { Task { if await model.openRecentProject(id: project.id) { navigate(to: .workflow) } } } },
+            files: action(layoutText(language, owner === automaticQuickModel ? "workspaceFiles" : "projectFiles"), enabled: !usesTemporaryChat && store != nil && instance != nil) {
+                if let store, let instance { filesRoute = .init(store: store, instanceID: instance, assetID: nil) }
+            }, quickDestination: destinations,
+            importAsset: action(systemMenuText(language, "import"), enabled: quickModel.projectSession.currentStore != nil && (entry != .workflow || canvasModel.projectSession.workflow?.canEditCanvas == true)) { beginLibraryImport(forCanvas: capturedEntry == .workflow) },
+            legacy: action(layoutText(language, "legacy"), enabled: targetName != nil) { guard model.manifest?.effectiveInstanceID == targetInstance else { return }; openLegacy() },
+            modes: Entry.allCases.map { mode in .init(action(layoutText(language, mode == .quick ? "quick" : "workflow")) { navigate(to: mode) }, selected: entry == mode) },
+            sidebars: [action(systemMenuText(language, sidebarState.leading ? "hideLeft" : "showLeft")) { sidebarState.leading.toggle() },
+                       action(systemMenuText(language, sidebarState.trailing ? "hideRight" : "showRight")) { sidebarState.trailing.toggle() }],
+            help: action(systemMenuText(language, "guide")) { featureHelp.presentation = .init(featureID: nil, token: nil, context: nil) },
+            stop: entry == .quick && (quick.category != .text || quick.textPresentation == .single) ? action(systemMenuText(language, "stop"), enabled: originalQuick.isRunning) { Task { await originalQuick.cancel() } } : nil,
+            retrySave: entry == .quick && (originalQuick.pendingSaveRunID != nil || originalQuick.saveIssue != nil) ? action(systemMenuText(language, "retrySave"), enabled: !originalQuick.isRunning) { Task { await originalQuick.retrySave() } } : nil)
+    }
+    private var applicationToolbar: some View {
+        let commands = workspaceCommands
         return HStack(spacing: 12) {
             Button(action: goBack) { Image(systemName: "chevron.left") }
                 .buttonStyle(WorkbenchIconButtonStyle(diameter: 40))
                 .disabled(entryHistory.isEmpty).help(t("back")).accessibilityIdentifier("workbench-back")
             Text("D").font(.title2.bold())
             WorkbenchMenu(consistencyText(language, "APP-PROJECT")) {
-                WorkbenchMenuText(layoutText(language, "project"))
-                WorkbenchMenuAction(consistencyText(language, "menu.file.new")) { Task { if await model.newProject() { navigate(to: .workflow) } } }.keyboardShortcut("n").featureHelp("MENU-FILE-NEW", language: language)
-                WorkbenchMenuAction(consistencyText(language, "menu.file.open")) { Task { if await model.openProject() { navigate(to: .workflow) } } }.keyboardShortcut("o").featureHelp("MENU-FILE-OPEN", language: language)
-                WorkbenchMenuAction(layoutText(language, "recent")) { projectsVisible = true }
-                WorkbenchMenuDivider()
-                WorkbenchMenuText(layoutText(language, "currentContent"))
                 let command = saveCommand
-                WorkbenchMenuAction(layoutText(language, "save"), action: command.action).disabled(!command.isEnabled).keyboardShortcut("s").featureHelp("MENU-FILE-SAVE", language: language)
-                WorkbenchMenuAction(layoutText(language, owner === automaticQuickModel ? "workspaceFiles" : "projectFiles")) {
-                    guard displayedOwner === owner, owner.manifest?.effectiveInstanceID == instance,
-                          owner.projectSession.currentStore === store, !usesTemporaryChat, let store, let instance else { return }
-                    filesRoute = .init(store: store, instanceID: instance, assetID: nil)
-                }.featureHelp("MENU-FILE-BACKUPS", language: language).disabled(usesTemporaryChat || store == nil || instance == nil || owner.isChangingProject)
-                    .help(usesTemporaryChat ? layoutText(language, "temporaryHelp") : displayedTitle)
-                if entry == .quick {
+                WorkbenchMenuAction(layoutText(language, "save"), action: command.action).disabled(!command.isEnabled).featureHelp("MENU-FILE-SAVE", language: language)
+                WorkbenchMenuAction(commands.files.title, action: commands.files.action).disabled(!commands.files.isEnabled).featureHelp("MENU-FILE-BACKUPS", language: language)
+                if !commands.quickDestination.isEmpty {
                     WorkbenchMenuDivider()
                     WorkbenchSubmenu(layoutText(language, "quickDestination")) {
-                        WorkbenchMenuOptions(layoutText(language, "quickDestination"), selection: Binding(get: { projectQuick != nil && quick === projectQuick }, set: { value in
-                            guard quick === originalQuick, model.projectSession.projectQuick === projectQuick,
-                                  model.manifest?.effectiveInstanceID == targetInstance, !usesTemporaryChat, !quickOwnerIsChanging,
-                                  !value || projectQuick != nil else { return }
-                            captureChatReading(); useProjectQuick = value
-                        }), choices: (projectQuick != nil && targetName != nil ? [(true, layoutText(language, "currentProject", arguments: ["name": targetName ?? "—"]))] : []) + [(false, layoutText(language, "independent"))])
-                        if projectQuick == nil, targetName != nil {
-                            WorkbenchMenuAction(layoutText(language, "enableQuick")) {
-                                guard model.manifest?.effectiveInstanceID == targetInstance, !usesTemporaryChat, !model.isChangingProject else { return }
-                                captureChatReading()
-                                Task { await model.projectSession.enableProjectQuick()
-                                    if model.manifest?.effectiveInstanceID == targetInstance { useProjectQuick = true; navigate(to: .quick) }
-                                }
-                            }
+                        WorkbenchMenuForEach(Array(commands.quickDestination.indices), id: \.self) { i in
+                            let item = commands.quickDestination[i]
+                            WorkbenchMenuAction(item.command.title, systemImage: item.selected ? "checkmark" : nil, action: item.command.action).disabled(!item.command.isEnabled)
                         }
-                    }.disabled(usesTemporaryChat || quickOwnerIsChanging).help(layoutText(language, usesTemporaryChat ? "temporaryHelp" : "switchHelp"))
-                }
-                WorkbenchMenuDivider()
-                WorkbenchSubmenu(layoutText(language, "advanced")) {
-                    WorkbenchMenuText(targetName.map { layoutText(language, "legacyHelp", arguments: ["name": $0]) } ?? layoutText(language, "noProject"))
-                    WorkbenchMenuAction(layoutText(language, "legacy")) {
-                        guard model.manifest?.effectiveInstanceID == targetInstance else { return }; openLegacy()
-                    }.disabled(targetName == nil || model.isChangingProject)
+                    }
                 }
             } label: {
                 HStack(spacing: 4) { Text(displayedTitle).lineLimit(1).truncationMode(.middle); Image(systemName: "chevron.down").font(.caption) }
             }.accessibilityIdentifier("app-project").accessibilityLabel(displayedTitle).workbenchHelp("APP-PROJECT").help(displayedTitle)
                 .frame(maxWidth: 260, alignment: .leading).layoutPriority(-1)
-                .environment(\.workbenchMenuContext, "project:\(instance?.uuidString ?? "none"):\(entry):\(usesTemporaryChat)")
-            Spacer(minLength: 0)
+                .environment(\.workbenchMenuContext, "project:\(displayedOwner.manifest?.effectiveInstanceID.uuidString ?? "none"):\(entry):\(usesTemporaryChat)")
+            Spacer(minLength: 72)
             WorkbenchGlassSegments(title: t("workspaceMode"), selection: Binding(get: { entry }, set: { navigate(to: $0) }),
                 choices: [(Entry.quick, layoutText(language, "quick")), (.workflow, layoutText(language, "workflow"))],
-                owner: AnyHashable("\(instance?.uuidString ?? "none"):\(owner.projectSession.navigationEpoch)"), minimumItemLength: 108)
+                owner: AnyHashable("\(displayedOwner.manifest?.effectiveInstanceID.uuidString ?? "none"):\(displayedOwner.projectSession.navigationEpoch)"), minimumItemLength: 108)
                 .fixedSize(horizontal: true, vertical: false).accessibilityIdentifier("workbench-entry").workbenchHelp("APP-MODE")
             Button(layoutText(language, "models")) { library.presentManagement() }
                 .frame(height: 32).accessibilityIdentifier("workbench-models-downloads").workbenchHelp("MENU-RESOURCES-MODELS")
-            Button { featureHelp.presentation = .init(featureID: nil, token: nil, context: nil) } label: { Image(systemName: "questionmark.circle") }
-                .buttonStyle(WorkbenchIconButtonStyle(diameter: 40))
-                .help(consistencyText(language, "help.open")).accessibilityLabel(consistencyText(language, "help.title"))
-                .accessibilityIdentifier("workbench-feature-guide").disabled(!canPresentSettings)
-            Button { presentSettings() } label: { Image(systemName: "gearshape") }
-                .buttonStyle(WorkbenchIconButtonStyle(diameter: 40))
-                .help(t("settings")).accessibilityLabel(t("settings"))
-                .accessibilityIdentifier("workbench-settings").workbenchHelp("APP-SETTINGS").disabled(!canPresentSettings)
         }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 16).frame(height: 56)
     }
 
-    public var body: some View {
+    @ViewBuilder private var workspaceContent: some View {
         #if DEBUG
         let _ = WorkbenchCategoryUpdateProbe.workbenchBody?()
         #endif
@@ -529,14 +542,23 @@ public struct DualWorkbenchView: View {
 
         }
         .frame(minWidth: WorkbenchSidebarLayout.minimumWindowWidth, minHeight: 580)
-        .focusedSceneValue(\.workbenchSave, saveCommand)
+    }
+    private var menuContext: String {
+        let instance = canvasModel.manifest?.effectiveInstanceID.uuidString ?? "none"
+        return "workbench:\(entry.rawValue):\(ObjectIdentifier(quick)):\(instance)"
+    }
+    private var presentedWorkspace: some View {
+        workspaceContent
+        .background(WorkbenchCommandWindow(scope: commandScope))
+        .focusedSceneValue(\.workbenchWorkspace, workspaceCommands)
+        .focusedSceneValue(\.workbenchSave, canPresentSettings ? saveCommand : nil)
         .environment(\.workbenchHelpStore, featureHelp)
         .sheet(item: $featureHelp.presentation) { presentation in
             WorkbenchFeatureGuide(presentation: presentation, store: featureHelp)
                 .environment(\.dLanguageStore, language)
         }
         .environment(\.workbenchSidebars, sidebarState)
-        .environment(\.workbenchMenuContext, "workbench:\(entry.rawValue):\(ObjectIdentifier(quick)):\(canvasModel.manifest?.effectiveInstanceID.uuidString ?? "none")")
+        .environment(\.workbenchMenuContext, menuContext)
         .environment(\.openWorkbenchSettings, { section in presentSettings(section: section) })
         .workbenchTheme(paintsCanvas: false)
         .modifier(WorkbenchCanvasModifier(state: automaticQuickModel.chatDisplaySettings, stylesWindowTitlebar: true))
@@ -722,6 +744,9 @@ public struct DualWorkbenchView: View {
         .onChange(of: model.manifest?.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .onChange(of: quickModelIdentity) { _, _ in Task { await checkDemandReadiness() } }
         .onChange(of: graphModelIdentities) { _, _ in Task { await checkDemandReadiness() } }
+    }
+    public var body: some View {
+        presentedWorkspace
         .sheet(item: $previewAsset, onDismiss: {
             if let pendingFilesRoute {
                 returnToLibrary = false; filesRoute = pendingFilesRoute; self.pendingFilesRoute = nil
@@ -757,7 +782,7 @@ public struct DualWorkbenchView: View {
         }
         .environment(\.metadataEditorLifecycle, MetadataEditorLifecycle(begin: model.beginEditing, end: model.endEditing))
         .focusedSceneValue(\.workbenchGeneration, WorkbenchGenerationCommand(title: t("quickAction"), isEnabled: quickCommandEnabled,
-            action: { if quickCommandEnabled { quick.start() } }))
+            action: { if commandScope.permitsCommands && quickCommandEnabled { quick.start() } }))
     }
     private func presentLibraryDestination(_ value: LibraryDestination) {
         if libraryVisible {
@@ -812,7 +837,8 @@ public struct DualWorkbenchView: View {
                     beginAddingLibraryEntry(value, at: insertionPoint)
                 },
                 onPreview: { value in Task { await previewLibraryEntry(value) } },
-                onExternalCopy: { value in Task { await openExternalLibraryCopy(value) } }, readPreview: readLibraryPreview,
+                onExternalCopy: { value in Task { await openExternalLibraryCopy(value) } },
+                onExport: { value, current in Task { await exportLibraryAsset(value, isCurrent: current) } }, readPreview: readLibraryPreview,
                 onLocation: { value in Task { await showAssetLocation(value) } },
                 onPrepare: { value in Task { await prepareModel(value) } },
                 onImport: { beginLibraryImport(forCanvas: forCanvas) }, onClose: { if let onBack { onBack() } else { libraryVisible = false } }, tagValidation: libraryTagValidation,
@@ -1082,6 +1108,24 @@ public struct DualWorkbenchView: View {
         _ = try await store(for: result.token.projectID, instanceID: result.token.instanceID)
         try Task.checkCancellation()
         return result
+    }
+    private func exportLibraryAsset(_ value: SharedLibraryBrowserEntry, isCurrent: @escaping () -> Bool) async {
+        let intent = navigationIntent, owner = displayedOwner, epoch = displayedOwner.projectSession.navigationEpoch
+        do {
+            guard isCurrent() else { throw WorkflowIssue(systemMenuText(language, "stale")) }
+            let content = try await readLibraryPreview(value)
+            let source = try await store(for: content.token.projectID, instanceID: content.token.instanceID)
+            guard isCurrent(), navigationIntent == intent, displayedOwner === owner, owner.projectSession.navigationEpoch == epoch else { throw WorkflowIssue(systemMenuText(language, "stale")) }
+            let panel = NSSavePanel(); panel.title = systemMenuText(language, "export")
+            panel.nameFieldStringValue = content.metadata.asset.name
+            if let type = UTType(mimeType: content.token.mediaType), let suffix = type.preferredFilenameExtension {
+                panel.allowedContentTypes = [type]; panel.nameFieldStringValue = suggestedExternalCopyName(content.metadata.asset.name, suffix: suffix)
+            }
+            guard await panel.begin() == .OK, let destination = panel.url else { return }
+            guard isCurrent(), navigationIntent == intent, displayedOwner === owner, owner.projectSession.navigationEpoch == epoch else { throw WorkflowIssue(systemMenuText(language, "stale")) }
+            _ = try await store(for: content.token.projectID, instanceID: content.token.instanceID)
+            try await source.exportReadOnlyCopy(content.token, to: destination)
+        } catch { issue = error.localizedDescription }
     }
     private func openExternalLibraryCopy(_ value: SharedLibraryBrowserEntry) async {
         do {

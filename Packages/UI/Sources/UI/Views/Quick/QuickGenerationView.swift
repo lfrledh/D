@@ -38,6 +38,8 @@ struct QuickGenerationView: View {
     @State private var pendingPreview: WorkflowAssetReference?
     @State private var advanced = false
     @State private var history = false
+    @State private var commandScope = WorkbenchCommandScope()
+    @Environment(\.workbenchContentVisible) private var contentVisible
     @State private var inputIssue: String?
     @State private var inputNotice: String?
     @State private var inputAction: InputAction?
@@ -175,6 +177,8 @@ struct QuickGenerationView: View {
             }.padding(.horizontal, 16).padding(.bottom, 16)
                 .environment(\.workbenchPanelWidths, WorkbenchSidebarLayout.widths(available: geometry.size.width))
         }
+        .background(WorkbenchCommandWindow(scope: commandScope))
+        .focusedSceneValue(\.workbenchAssetExport, exportMenuCommand)
         .environment(\.workbenchMenuContext, "quick:\(ObjectIdentifier(quick)):\(quick.draft?.id ?? "none")")
         .sheet(item: $detailRun, onDismiss: {
             if let pendingPreview { preview = pendingPreview; self.pendingPreview = nil }
@@ -523,13 +527,29 @@ struct QuickGenerationView: View {
         do { try action(); inputIssue = nil }
         catch { inputIssue = error.localizedDescription }
     }
-    private func export(_ reference: WorkflowAssetReference) async {
-        let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
-        guard await panel.begin() == .OK, let url = panel.url else { return }
-        let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        do { _ = try await quick.store.exportWorkflowAssets([reference], name: "D-" + UUID().uuidString.prefix(8), exportID: UUID(), directory: url) }
-        catch { inputIssue = error.localizedDescription }
+    private var exportMenuCommand: WorkbenchGenerationCommand? {
+        guard contentVisible, quick.category == .image || quick.category == .video, let reference = selectedMedia else { return nil }
+        return .init(title: systemMenuText(language, "export"), isEnabled: detailRun == nil && preview == nil) {
+            guard commandScope.permitsCommands, contentVisible, selectedMedia == reference else { return }
+            Task { await export(reference, selectionIsCurrent: { selectedMedia == reference }) }
+        }
     }
+    private func export(_ reference: WorkflowAssetReference, selectionIsCurrent: @escaping () -> Bool = { true }) async {
+        let owner = quick, source = quick.store, category = quick.category, draftID = quick.draft?.id
+        let command = WorkbenchAssetExportCommand(store: source, reference: reference,
+            staleMessage: systemMenuText(language, "stale"), isCurrent: {
+                selectionIsCurrent() && contentVisible && quick === owner && quick.store === source && quick.category == category && quick.draft?.id == draftID
+                    && quick.visibleRuns.contains { references($0).contains(reference) }
+            })
+        do {
+            _ = try await command.perform {
+                let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
+                panel.title = systemMenuText(language, "export")
+                return await panel.begin() == .OK ? panel.url : nil
+            }
+        } catch { inputIssue = error.localizedDescription }
+    }
+
 }
 
 private struct QuickInputAssetName: View {
