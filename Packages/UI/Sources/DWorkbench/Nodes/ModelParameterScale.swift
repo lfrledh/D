@@ -24,7 +24,7 @@ public extension ModelNodeDescriptor {
         case "flux2-klein-4b-bf16", "flux2-dev-bf16": return "BF16"
         case "sm-music", "sm-sfx", "medium": return "FP16 · codec FP32"
         case "wan21-t2v-1.3b-bf16-v1": return "model.spec.weight.wanMixed"
-        case "ace-step-1.5-xl-sft-f32-no-lm": return "F32 · XL SFT"
+        case "ace-step-1.5-xl-sft-f32-no-lm": return "FP32"
         case "audio.singing.qixuan": return "model.spec.weight.acoustic"
         case "mrt2-small-export-v1": return "model.spec.weight.graphUnknown"
         case "swift-f0-0.1.2-cpu-v1": return "model.spec.weight.inputOnly"

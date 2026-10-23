@@ -1084,10 +1084,16 @@ private struct WorkflowNodeCard: View {
                 }
             }.padding(.horizontal, 12 * scale).frame(height: WorkflowNodePortLayout.titleHeight * scale)
             if !collapsed {
-                Text(identitySummary).font(.system(size: 11 * scale, weight: .medium))
-                    .lineLimit(1).help(identitySummary).allowsHitTesting(false)
-                    .padding(.horizontal, 12 * scale)
-                    .frame(height: 22 * scale, alignment: .leading)
+                if definition?.modelKind != nil {
+                    ModelSpecificationFields(descriptor: modelDescriptor, font: .system(size: 11 * scale))
+                        .padding(.horizontal, 12 * scale).padding(.vertical, 4 * scale)
+                        .allowsHitTesting(false)
+                } else {
+                    Text(identitySummary).font(.system(size: 11 * scale, weight: .medium))
+                        .lineLimit(1).help(identitySummary).allowsHitTesting(false)
+                        .padding(.horizontal, 12 * scale)
+                        .frame(height: 22 * scale, alignment: .leading)
+                }
             }
             if let definition { portGrid(definition) }
             if !collapsed {
@@ -1199,18 +1205,14 @@ private struct WorkflowNodeCard: View {
         }.featureHelp("MENU-NODE-DELETE", language: languageStore).disabled(readOnly || !controller.canEditCanvas)
     }
 
+    private var modelDescriptor: ModelNodeDescriptor? {
+        guard let definition, definition.modelKind != nil else { return nil }
+        let choice = controller.modelChoices.first { $0.id == modelIdentity && $0.kind == definition.modelKind }
+            ?? WorkflowModelRoutes.draftChoice(operationID: node.operationID, modelID: modelIdentity)
+        return choice.flatMap(SharedLibraryProjection.descriptor(for:))
+    }
+
     private var identitySummary: String {
-        if let definition, definition.modelKind != nil {
-            let choice = controller.modelChoices.first { $0.id == modelIdentity && $0.kind == definition.modelKind }
-                ?? WorkflowModelRoutes.draftChoice(operationID: node.operationID, modelID: modelIdentity)
-            guard let descriptor = choice.flatMap(SharedLibraryProjection.descriptor(for:)) else { return "" }
-            var parts: [String] = []
-            if let value = descriptor.parameterScale { parts.append("\(value.publishedBillions)B") }
-            if let value = descriptor.weightSummary {
-                parts.append(value.hasPrefix("model.spec.") ? workflowText(languageStore, value) : value)
-            }
-            return parts.joined(separator: " · ")
-        }
         return WorkflowNodeIdentity.resolve(node: node, definition: definition,
             modelChoices: controller.modelChoices, assets: controller.availableAssets,
             tools: controller.tools, language: languageStore).detail ?? ""

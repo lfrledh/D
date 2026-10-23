@@ -245,6 +245,58 @@ private actor LayoutNoInference: InferenceEngine {
         controller.deactivateAfterClose(); try await store.close()
     }
 
+    @Test func modelSpecificationRowsKeepActualPortsAlignedAtBothScales() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("model-spec-layout-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Models.dproject"), name: "Synthetic model specifications")
+        let session = WorkbenchSession(engine: LayoutNoInference(), backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let controller = WorkflowController(services: WorkflowServices(store: store, session: session,
+            resolveText: { throw WorkflowIssue("No model") }, resolveImage: { throw WorkflowIssue("No model") }))
+        await controller.load(); controller.addBlankGraph(name: "Model fields")
+        let profile = try #require(ExternalVideoExecutionProfile.allCases.first { $0.rawValue == "ltx-2.3-dev-q8-gemma3-q4-test-v1" })
+        let operationID = WorkflowVideoRecipe(profile: profile).operationID
+        controller.addNode(operationID: operationID, modelID: "video:" + profile.modelIdentity, x: 220, y: 200)
+        controller.addNode(operationID: operationID, x: 620, y: 200) // no exact descriptor: both fields remain visible
+        let graph = try #require(controller.graph); try #require(graph.nodes.count == 2)
+        let geometry = WorkflowGraphGeometry(graph: graph, registry: controller.registry)
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 1600, height: 1100), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: AnyView(EmptyView())); window.contentView = host
+        host.frame = .init(x: 0, y: 0, width: 1600, height: 1100)
+        defer { window.contentView = nil; window.close() }
+        func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
+        for locale in ["zh-Hans", "en"] {
+            for zoom: CGFloat in [1, 1.5] {
+                var anchors: [WorkflowPortIdentity: CGPoint] = [:]
+                host.rootView = AnyView(WorkflowGraphSurface(controller: controller, graph: graph, zoom: .constant(zoom), tool: .constant(.pointer), navigationRequest: .constant(nil), viewportInteractionLocked: .constant(false), viewContext: .init(projectID: controller.projectID, rootGraphID: controller.rootGraph?.id, bodyPath: []), pendingConnection: .constant(nil), selectedConnectionID: .constant(nil), readOnly: false, onPlan: { _,_ in }, portCenterObserver: { anchors = $0 })
+                    .environment(\.dLanguageStore, UILanguageStore(preferredLanguages: [locale])))
+                for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30)) }
+                let ports = descendants(host).compactMap { $0 as? WorkflowPortDragView }
+                let plates = descendants(host).compactMap { $0 as? WorkflowNodePlateView }.sorted { $0.convert(.zero, to: host).x < $1.convert(.zero, to: host).x }
+                try #require(plates.count == graph.nodes.count && !ports.isEmpty)
+                for (index, node) in graph.nodes.enumerated() {
+                    let plate = plates[index], position = geometry.displayPosition(node.id)
+                    let nodePorts = ports.filter { $0.port?.nodeID == node.id }
+                    try #require(!nodePorts.isEmpty)
+                    for port in nodePorts {
+                        let identity = try #require(port.port), anchor = try #require(anchors[identity])
+                        let center = CGPoint(x: port.bounds.midX, y: port.bounds.midY)
+                        let actual = port.convert(center, to: plate)
+                        #expect(abs(actual.x / zoom - (identity.input ? 0 : 240)) < 1)
+                        #expect(actual.y / zoom > WorkflowNodePortLayout.firstCenter(collapsed: false))
+                        #expect(actual.y < plate.bounds.maxY)
+                        #expect(abs(anchor.x - (position.x - 120 + actual.x / zoom)) < 1)
+                        #expect(abs(anchor.y - (position.y - WorkflowNodePortLayout.titleHeight / 2 + actual.y / zoom)) < 1)
+                        #expect(port.hitTest(port.convert(center, to: port.superview)) === port)
+                    }
+                }
+                #expect(controller.graph == graph && controller.runs.isEmpty)
+            }
+        }
+        controller.deactivateAfterClose(); try await store.close()
+    }
+
     @Test func compactPortsHaveRealAnchorsAndNonoverlappingNativeHits() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent("approved-layout-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

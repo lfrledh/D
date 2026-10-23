@@ -138,3 +138,41 @@ extension WorkflowClosurePresentationTests {
         #expect(WorkflowBatchPanel.reviewActionKey(for: unknown, registry: registry) == "reviewHumanGate")
     }
 }
+
+
+extension WorkflowClosurePresentationTests {
+    @Test func modelFieldsAlwaysShowBothFactsWithoutGuessingVersionsOrComponentCounts() throws {
+        let language = UILanguageStore(preferredLanguages: ["zh-Hans"])
+        let known = try #require(ModelNodeCatalog.entries.first { $0.modelIdentity == "Qwen/Qwen3.5-9B" })
+        let wrongRevision = ModelNodeDescriptor(id: known.id, modality: known.modality, title: "User 999B Q8",
+            summary: known.summary, modelIdentity: known.modelIdentity, revision: "unreviewed-v99",
+            engine: known.engine, device: known.device, precision: "Version 99, input FP32",
+            availability: known.availability, deploymentNote: known.deploymentNote,
+            operations: known.operations, notes: known.notes, evidencePaths: known.evidencePaths)
+        for locale in ["zh-Hans", "en"] {
+            try language.select(locale)
+            for descriptor in ModelNodeCatalog.entries {
+                let fields = ModelSpecificationPresentation(descriptor: descriptor, language: language)
+                #expect(fields.parameterLabel == (locale == "en" ? "Parameter count" : "参数量"))
+                #expect(fields.precisionLabel == (locale == "en" ? "Quantization / precision" : "量化精度"))
+                #expect(!fields.parameterValue.isEmpty && !fields.precisionValue.isEmpty)
+                #expect(!fields.parameterValue.contains("model.spec.") && !fields.precisionValue.contains("model.spec."))
+            }
+            for descriptor in [nil, wrongRevision] {
+                let fields = ModelSpecificationPresentation(descriptor: descriptor, language: language)
+                #expect(fields.parameterValue == workflowText(language, "model.spec.unrecorded"))
+                #expect(fields.precisionValue == workflowText(language, "model.spec.unrecorded"))
+            }
+            let original = ModelSpecificationPresentation(descriptor: known, language: language)
+            #expect(original.parameterValue == "9B · " + workspaceText(language, "languageParameters"))
+            #expect(original.precisionValue == "BF16")
+            let mixed = try #require(ModelNodeCatalog.entries.first { $0.id == "video.model.ltx-2.3-dev-q8-gemma3-q4-test-v1" })
+            #expect(ModelSpecificationPresentation(descriptor: mixed, language: language).precisionValue == workflowText(language, "model.spec.weight.ltxMixed"))
+            let vocoder = try #require(ModelNodeCatalog.entries.first { $0.id == "audio.singing.qixuan" })
+            #expect(ModelSpecificationPresentation(descriptor: vocoder, language: language).parameterValue == "0.122B · " + workspaceText(language, "vocoderParameters"))
+            let inputOnly = try #require(ModelNodeCatalog.entries.first { $0.id == "swift-f0-0.1.2-cpu-v1" })
+            #expect(ModelSpecificationPresentation(descriptor: inputOnly, language: language).precisionValue == workflowText(language, "model.spec.weight.inputOnly"))
+        }
+        #expect(known.modelIdentity == "Qwen/Qwen3.5-9B" && wrongRevision.title == "User 999B Q8")
+    }
+}

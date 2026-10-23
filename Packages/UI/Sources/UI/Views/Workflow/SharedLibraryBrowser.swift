@@ -857,9 +857,7 @@ public struct SharedLibraryBrowser: View {
                     WorkflowLibraryPreview(entry: entry, cache: state.previewCache, pixels: 160, load: { try await readPreview(entry) }).frame(height: 34)
                 } else { Text(entry.item.detail).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
                 if entry.item.kind == .model {
-                    if let descriptor = ModelNodeCatalog.entries.first(where: { $0.id == entry.item.key }) {
-                        ModelSpecificationSummary(descriptor: descriptor)
-                    }
+                    ModelSpecificationSummary(descriptor: ModelNodeCatalog.entries.first { $0.id == entry.item.key })
                     if case .operation(let id, _) = entry.selection, let definition = WorkflowRegistry.standard.operation(id)?.definition {
                         Text(WorkflowCanvasPresentation.operationDetail(definition, language: language)).font(.caption).lineLimit(2)
                     }

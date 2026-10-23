@@ -112,6 +112,7 @@ public struct ModelNodeDetail: View {
         ModelNodeSection(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.149"), identifier: "identity") {
             Text(displayNode.title).font(.title2.weight(.semibold))
             Text(displayNode.summary).foregroundStyle(.secondary)
+            ModelSpecificationFields(descriptor: node)
             ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.150"), value: node.modelIdentity)
             ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.151"), value: node.revision)
             ModelNodeMetadataRow(workflowText(legacyLanguage, "consistency.legacy.ModelNodeViews.152"), value: displayNode.engine)
@@ -334,6 +335,7 @@ private struct ModelNodeListRow: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(displayNode.title).font(.callout.weight(.semibold)).lineLimit(2)
             Text(displayNode.summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            ModelSpecificationFields(descriptor: node, font: .caption)
             Text(ModelNodeUILocalization.availability(node.availability, language: legacyLanguage)).font(.caption2.weight(.medium)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
