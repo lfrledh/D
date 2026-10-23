@@ -1,6 +1,20 @@
 # D-UI-CONSOLIDATED-01
 
-状态：2026-10-23 续修用户反馈的节点/画布命中、节点菜单与NODE/PAN性能。当前生产 `d47423a3e67a666747c0ba46121a27819669dcdd`，正常签名组合候选已完成本轮定向原生复验及正常冷重开。缩放体验获用户认可；NODE/PAN仍为部分改善，不以构建或组件测试关闭性能目标。
+状态：2026-10-23 当前收口模型节点的参数量/量化精度双栏，生产 `31b9f83ce0d7917f04288c9ea1adc7060a889d66`。此前指针修补和性能增量全部继承；NODE/PAN性能目标仍OPEN，本轮不开展性能或新布局工作。
+
+## 模型规格双栏统一（2026-10-23）
+
+- 接续：原工作树 `D-Worktrees/D-UI-CONSOLIDATED-20261020`、分支 `codex/ui-consolidated-20261020`；本地/远端起点 `cf727436c689e5f1d706cf03c2d50070c7486300`，fetch后相同、祖先检查exit0，起点无未提交内容，无其他写入者。个人scheme内容/索引摘要保持，无迁移或全分支合并。
+- 实现：`ModelSpecificationSummary.swift`内共用只读展示投影；画布模型节点、工作面模型卡、操作库模型卡及保留的ModelNodeList/Detail及WorkflowNodeLibrary固定显示“参数量”“量化精度”。精确descriptor缺失仍显示两项“未记录”，不从名称、版本或文件大小推断。参数量保留语言组件/生成主干/声码器等范围；Q8/Q4与BF16/FP32混合精度保持，ACE权重简述仅显示FP32，XL SFT仍在原详细说明。非模型节点、身份、执行、存储与下载机制不变。
+- 语言：只在正式 `Packages/UI/Sources/UI/Resources/Localization/{zh-Hans,en}.json` 增加4个稳定键，双语各4508键、无重复、键及占位符一致；不建术语表或文案镜像。版本、来源和蒸馏说明保留详情。
+- 亲跑组件：首批32测试方法中31通过；旧`actualFailureRecoveryButtonSavesOnlyAndThenOffersExplicitRetry`两语言因测试进程visible/key窗口前置失败，不计通过、不改门禁。新增已知/未知revision、所有目录模型双栏、混合精度、组件范围及用户原文反例通过；另2个宿主方法通过：新增真实模型宿主覆盖中英×100/150，既有非模型端口宿主覆盖100/150；检查实际连线anchor与端口中心一致、graph/runs不变。构建/宿主不冒充原生鼠标。
+- 非实施者只读复核实际差分和测试；其提出的模型卡增高端口检查已补并通过，另补保留WorkflowNodeLibrary的3行实际接线，复核无剩余必修项。没有新增缓存、计时服务或性能归因。
+- 原生亲跑：最终31b9正常Apple Development签名、strict/deep通过，Debug/-Onone/DEBUG_DYLIB、无评审或性能宏。Finder双击CurrentD启动PID8894；新专用合成项目Model Specifications 20261023内添加BF16、Q4、LTX Q8/Gemma Q4真实目录节点（未下载/未推理），看到双栏和库内未知参数提示。100%真实拖动分开节点；150%实际端口拖线连接“原始模型文字→内容”；恢复100%保存，3节点/1连接/0运行。D菜单正常Quit后8894消失，再次双击PID9075，最近项目冷重开，原3节点与连接ID保留。未改原会话或普通D。
+- 真实图：UI-MODEL-01-r1/r2/r3与UI-MODEL-02-r1-150，均31b9、中文、1920×1080；r3为保存连线后100%全景，02为150%中央混合精度节点。已直接展示会话，r1/r2不覆盖。图片不证明帧率；英文/保留库依赖组件与源码复核，未冒称最终英文原生亲跑。
+- 交付入口仍是桌面“D 最新版”→CurrentD/D.app，正常包已就位并冷重开。确认无旧App运行占用后清理d474旧包、本轮DerivedData/test tmp及中间alias，保留项目/草稿、原件、共享依赖与必要证据。清理后再验签；个人scheme内容/索引不变。
+- 旧NODE/PAN性能目标、真实IME/长文、玻璃外部排除等仍按既有证据等级开放。本轮只统一两项规格，不再展开下一批UI/文案/性能调查，无必须本人操作事项。
+- 本地必要证据：既有任务证据区 `run-20261023-model-fields` 的 baseline/checks、tests、model-layout-tests、build及截图。原始日志不入Git。
+
 
 ## 指针归属与平移续修（2026-10-23）
 
