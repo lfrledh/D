@@ -55,7 +55,7 @@ import SwiftUI
         }
         for name in [NSWindow.willEnterFullScreenNotification, NSWindow.didEnterFullScreenNotification,
                      NSWindow.willExitFullScreenNotification, NSWindow.didExitFullScreenNotification,
-                     NSWindow.didDeminiaturizeNotification, NSWindow.didResizeNotification,
+                     NSWindow.didDeminiaturizeNotification, NSWindow.didResizeNotification, NSWindow.didUpdateNotification,
                      NSWindow.didChangeBackingPropertiesNotification, WorkbenchWindowChrome.transitionFailed] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.transition(name) }
@@ -88,6 +88,14 @@ import SwiftUI
     }
     private func transition(_ name: Notification.Name) {
         guard let window else { return }
+        if name == NSWindow.didUpdateNotification {
+            // AppKit may reinstall its standard controls after a scene update.
+            // Reconcile only changed ownership/frames; ordinary updates do no
+            // layout, state publication, backdrop invalidation or window writes.
+            guard !transitioning, !isFullScreen, let host = controls,
+                  placements.contains(where: { $0.button.superview !== host || $0.button.frame != buttonFrame($0, in: host) }) else { return }
+            refreshGeometry(); return
+        }
         if name == NSWindow.willEnterFullScreenNotification || name == NSWindow.willExitFullScreenNotification {
             transitioning = true; isFullScreen = true; restoreButtons()
         } else if name == NSWindow.didEnterFullScreenNotification || name == NSWindow.didExitFullScreenNotification || name == WorkbenchWindowChrome.transitionFailed {
@@ -120,12 +128,17 @@ import SwiftUI
         let union = placements.reduce(CGRect.null) { $0.union($1.inWindow) }
         guard !union.isNull, union.width.isFinite, union.width > 0 else { return }
         host.report(width: union.width + 24, fullScreen: false)
-        for item in placements where item.button.superview === host {
-            let frame = CGRect(x: 12 + item.inWindow.minX - union.minX,
-                y: (host.bounds.height - union.height) / 2 + item.inWindow.minY - union.minY,
-                width: item.frame.width, height: item.frame.height)
+        for item in placements {
+            if item.button.superview !== host { host.addSubview(item.button); item.button.autoresizingMask = [] }
+            let frame = buttonFrame(item, in: host)
             if item.button.frame != frame { item.button.frame = frame }
         }
+    }
+    private func buttonFrame(_ item: Placement, in host: NSView) -> CGRect {
+        let union = placements.reduce(CGRect.null) { $0.union($1.inWindow) }
+        return CGRect(x: 12 + item.inWindow.minX - union.minX,
+            y: (host.bounds.height - union.height) / 2 + item.inWindow.minY - union.minY,
+            width: item.frame.width, height: item.frame.height)
     }
     private func restoreButtons() {
         for item in placements.sorted(by: { $0.index > $1.index }) where item.button.superview === controls {

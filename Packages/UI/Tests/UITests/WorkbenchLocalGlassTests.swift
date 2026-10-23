@@ -124,6 +124,13 @@ private actor LocalGlassNoInference: InferenceEngine {
         #expect(buttons.map { $0.frame.size } == frames.map(\.size))
         #expect(abs(buttons.first!.frame.minX - 12) < 0.1)
         #expect(abs(buttons.last!.frame.maxX - (controls.measuredWidth - 12)) < 0.1)
+        // Model the public effect of AppKit restoring controls during a scene update.
+        for (button, parent) in zip(buttons, parents) { parent?.addSubview(button) }
+        NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
+        #expect(buttons.allSatisfy { $0.superview === controls })
+        let restoredFrames = buttons.map(\.frame)
+        NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
+        #expect(buttons.map(\.frame) == restoredFrames)
         let siblingCount = host.superview?.subviews.count
         chrome.refreshGeometry(); chrome.refreshGeometry()
         #expect(host.superview?.subviews.count == siblingCount, "No full-width titlebar or repeated overlay is mounted")

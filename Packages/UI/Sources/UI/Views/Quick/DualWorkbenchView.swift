@@ -430,7 +430,7 @@ public struct DualWorkbenchView: View {
             }.accessibilityIdentifier("app-project").accessibilityLabel(displayedTitle).workbenchHelp("APP-PROJECT").help(displayedTitle)
                 .frame(maxWidth: 260, alignment: .leading).layoutPriority(-1)
                 .environment(\.workbenchMenuContext, "project:\(displayedOwner.manifest?.effectiveInstanceID.uuidString ?? "none"):\(entry):\(usesTemporaryChat)")
-            WorkbenchWindowDragRegion().frame(minWidth: 72, maxWidth: .infinity).frame(height: 32)
+            WorkbenchWindowDragRegion().frame(minWidth: 72, maxWidth: .infinity).frame(height: 32).layoutPriority(-2)
             WorkbenchGlassSegments(title: t("workspaceMode"), selection: Binding(get: { entry }, set: { navigate(to: $0) }),
                 choices: [(Entry.quick, layoutText(language, "quick")), (.workflow, layoutText(language, "workflow"))],
                 owner: AnyHashable("\(displayedOwner.manifest?.effectiveInstanceID.uuidString ?? "none"):\(displayedOwner.projectSession.navigationEpoch)"), minimumItemLength: 108)
