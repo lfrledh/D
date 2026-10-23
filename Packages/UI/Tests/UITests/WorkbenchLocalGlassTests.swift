@@ -34,6 +34,12 @@ private actor LocalGlassNoInference: InferenceEngine {
     }
 }
 
+@MainActor private final class DragRecordingWindow: NSWindow {
+    var dragEvents: [NSEvent] = []
+    override var isKeyWindow: Bool { true }
+    override func performDrag(with event: NSEvent) { dragEvents.append(event) }
+}
+
 @Suite("D-owned local glass", .serialized)
 @MainActor struct WorkbenchLocalGlassTests {
     private func temporary() throws -> URL {
@@ -190,6 +196,57 @@ private actor LocalGlassNoInference: InferenceEngine {
         canvas.releaseTitlebar()
         #expect(zip(replacements, parents).allSatisfy { $0.superview === $1 })
         #expect(replacements.map(\.frame) == frames)
+    }
+
+    @Test func actualWorkbenchTopRowDoesNotRouteDragIntoCanvas() async throws {
+        let directory = try temporary(); defer { try? FileManager.default.removeItem(at: directory) }
+        let suite = "D.ChromeTest." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        let project = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: LocalGlassNoInference(), backendID: "chrome.fixture",
+                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        }, settings: settings)
+        await project.createProject(at: directory.appendingPathComponent("Chrome.dproject"))
+        await project.enableProjectQuick(); await project.openWorkflow()
+        do {
+            let quick = try #require(project.projectQuick)
+            let model = WorkbenchModel(projectSession: project)
+            model.chatDisplaySettings = ChatDisplayPreferencesState(appearanceDirectory: directory.appendingPathComponent("Appearance"))
+            let library = ModelLibraryModel(library: try await ModelLibrary(stateDirectory: directory.appendingPathComponent("models")))
+            let host = NSHostingView(rootView: DualWorkbenchView(model: model, quickModel: model, quick: quick,
+                library: library, nodeTags: ModelNodeTagStore(), metadata: nil))
+            let window = DragRecordingWindow(contentRect: .init(x: 0, y: 0, width: 1080, height: 680),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false; window.contentView = host
+            defer { window.contentView = nil; window.close() }
+            func children(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + children($0) } }
+            for _ in 0..<20 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+            let modes = try #require(children(host).compactMap { $0 as? WorkbenchCategoryDragView }.first { $0.geometry.count == 2 && $0.geometry.thickness == 32 })
+            modes.onCommit(1) // Select the real workflow page; this is component setup, not a native gesture.
+            for _ in 0..<20 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+            let region = try #require(children(host).compactMap { $0 as? WorkbenchWindowDragRegion.View }.first)
+            #expect(region.bounds.width >= 72 && region.bounds.height == 32)
+            #expect(region.owner?.root?.titlebar?.window === window)
+            let probe = try #require(children(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+            try #require(modes.selection == 1)
+            let scroll = try #require(probe.enclosingScrollView)
+            try #require(!probe.isHiddenOrHasHiddenAncestor && !scroll.isHiddenOrHasHiddenAncestor && !scroll.visibleRect.isEmpty)
+            try #require(probe.navigationAllowed())
+            let frameView = try #require(host.superview)
+            for local in [CGPoint(x: 1, y: 1), CGPoint(x: region.bounds.midX, y: region.bounds.midY), CGPoint(x: region.bounds.maxX - 1, y: 31)] {
+                let point = region.convert(local, to: nil)
+                let hit = try #require(frameView.hitTest(frameView.superview?.convert(point, from: nil) ?? point))
+                #expect(hit === region)
+                let event = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: 1,
+                    windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+                #expect(!probe.routePointer(event))
+                hit.mouseDown(with: event)
+                #expect(window.dragEvents.last === event)
+            }
+            #expect(window.dragEvents.count == 3)
+        } catch { await project.closeProject(); throw error }
+        await project.closeProject()
     }
 
     @Test func floatingChromeOwnershipIsWindowLocalAndRestoresOnlyOwnedProperties() {
