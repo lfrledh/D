@@ -416,7 +416,6 @@ struct WorkbenchGlassSegments<Value: Hashable>: View {
                             if down { pressed = i } else if pressed == i { pressed = nil }
                         }))
                         .frame(width: rect.width, height: rect.height)
-                        .overlay { Capsule().strokeBorder(.tint, lineWidth: focus == choice.0 ? 2 : 0).allowsHitTesting(false) }
                         .offset(x: rect.minX, y: rect.minY)
                         .disabled(unavailable.contains(choice.0))
                         .focusable().focusEffectDisabled()
@@ -436,6 +435,13 @@ struct WorkbenchGlassSegments<Value: Hashable>: View {
                         geometry: geometry, available: indices, showsSelection: index >= 0)
                         .animation(preview == nil ? motion : nil, value: preview ?? CGFloat(index))
                         .animation(reduceMotion || preferences.resolvedAppearance.motion == 0 ? nil : .easeOut(duration: 0.1), value: preview != nil || pressed == index)
+                }
+                if let focus, let focusedIndex = choices.firstIndex(where: { $0.0 == focus }) {
+                    let rect = geometry.lens(CGFloat(focusedIndex), engagement: 0)
+                    Capsule().strokeBorder(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 2)
+                        .frame(width: rect.width, height: rect.height)
+                        .offset(x: rect.minX, y: rect.minY)
+                        .allowsHitTesting(false).accessibilityHidden(true)
                 }
             }.frame(width: geometry.slotSize.width, height: geometry.slotSize.height)
                 .onChange(of: geometry) { _, _ in clear() }
