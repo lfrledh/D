@@ -184,6 +184,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
     private let onTasks: () -> Void
     private let onModels: () -> Void
     private let sidebar: Sidebar
+    private let sidebarWidth: CGFloat
     private let editor: Editor
     private let inspector: Inspector
     private var layoutProbe: ((String, CGRect) -> Void)?
@@ -205,6 +206,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
         onBack: @escaping () -> Void,
         onTasks: @escaping () -> Void,
         onModels: @escaping () -> Void,
+        sidebarWidth: CGFloat = 210,
         @ViewBuilder sidebar: () -> Sidebar,
         @ViewBuilder editor: () -> Editor,
         @ViewBuilder inspector: () -> Inspector
@@ -219,6 +221,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
         self.onTasks = onTasks
         self.onModels = onModels
         self.sidebar = sidebar()
+        self.sidebarWidth = sidebarWidth
         self.editor = editor()
         self.inspector = inspector()
     }
@@ -334,7 +337,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
         HStack(spacing: 0) {
             if !presentation.sidebarUsesPopover, showsSidebarColumn {
                 sidebar
-                    .frame(width: 210)
+                    .frame(width: sidebarWidth)
                     .frame(maxHeight: .infinity, alignment: .topLeading)
                     .background(Color(nsColor: .controlBackgroundColor))
                     .navigationMeasured("shell-sidebar", probe: layoutProbe)
@@ -380,7 +383,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
         .navigationMeasured("toggle-creations", probe: layoutProbe)
         .popover(isPresented: $showsSidebarPopover, arrowEdge: .top) {
             sidebar
-                .frame(width: 260, height: 430, alignment: .topLeading)
+                .frame(width: max(260, sidebarWidth), height: 430, alignment: .topLeading)
                 .background(Color(nsColor: .controlBackgroundColor))
         }
     }

@@ -95,6 +95,33 @@ struct WorkbenchNavigationViewsTests {
         #expect(host.fittingSize.width <= width + 1)
     }
 
+    @Test(arguments: [CGFloat(860), CGFloat(1_024), CGFloat(1_440)])
+    func legacyLensSidebarFitsWithoutRaisingWindowMinimum(width: CGFloat) {
+        var rectangles: [String: CGRect] = [:]
+        var selector = CGRect.zero, sidebar = CGRect.zero
+        let view = ProjectWorkspaceShell(projectName: "Synthetic selector", mode: .image,
+            availableModes: [.image, .text], hasInspector: true, taskCount: 0,
+            onMode: { _ in }, onBack: {}, onTasks: {}, onModels: {}, sidebarWidth: 264,
+            sidebar: {
+                WorkbenchGlassSegments(title: "View", selection: .constant(WorkspacePane.creations),
+                    choices: WorkspacePane.allCases.map { ($0, $0.title) })
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { selector = $0 }
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { sidebar = $0 }
+            }, editor: { Text("Editor") }, inspector: { Text("Inspector") })
+            .observingLayout { rectangles[$0] = $1 }
+        let host = NSHostingView(rootView: view)
+        settle(host, width: width, height: 580)
+        #expect(abs((rectangles["shell-sidebar"]?.width ?? 0) - 264) < 1)
+        #expect(selector.width > 0)
+        #expect(selector.minX >= sidebar.minX + 11)
+        #expect(selector.maxX <= sidebar.maxX - 11)
+        #expect(isInsideViewport(rectangles["shell-sidebar"], of: host))
+        #expect(isInsideViewport(rectangles["shell-editor"], of: host))
+        #expect(host.fittingSize.width <= width + 1)
+    }
+
     @Test
     func unsupportedInspectorHasNeitherAColumnNorAControl() {
         let (_, rectangles) = hostedShell(width: 1_440, hasInspector: false)
@@ -116,7 +143,8 @@ struct WorkbenchNavigationViewsTests {
 
     private func hostedShell(
         width: CGFloat,
-        hasInspector: Bool
+        hasInspector: Bool,
+        sidebarWidth: CGFloat = 210
     ) -> (NSHostingView<ProjectWorkspaceShell<Text, Text, Text>>, [String: CGRect]) {
         var rectangles: [String: CGRect] = [:]
         let view = ProjectWorkspaceShell(
@@ -126,6 +154,7 @@ struct WorkbenchNavigationViewsTests {
             hasInspector: hasInspector,
             taskCount: 12,
             onMode: { _ in }, onBack: {}, onTasks: {}, onModels: {},
+            sidebarWidth: sidebarWidth,
             sidebar: { Text("创作列表") },
             editor: { Text("编辑器") },
             inspector: { Text("创作参数") }

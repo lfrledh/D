@@ -167,7 +167,7 @@ public struct WorkbenchView: View {
             taskCount: model.projectSession.activeJobIDs.count + (model.projectSession.isTextWorking ? 1 : 0),
             onMode: { mode in Task { await model.switchCreatorMode(mode) } },
             onBack: { Task { await model.closeProject() } },
-            onTasks: { showTasks = true }, onModels: { library?.presentManagement() }) {
+            onTasks: { showTasks = true }, onModels: { library?.presentManagement() }, sidebarWidth: 264) {
                 workspaceSidebar
             } editor: {
                 workspaceEditor
