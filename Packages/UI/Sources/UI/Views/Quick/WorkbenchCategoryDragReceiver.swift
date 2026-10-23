@@ -38,6 +38,7 @@ struct WorkbenchCategoryDragReceiver: NSViewRepresentable {
     let enabled: Bool
     let onPreview: (CGFloat?) -> Void
     let onCommit: (Int) -> Void
+    var onFinish: () -> Void = {}
     var geometry = WorkbenchSegmentGeometry()
     var options: [AnyHashable] = (0..<4).map { AnyHashable($0) }
     var available: Set<Int> = [0, 1, 2, 3]
@@ -59,7 +60,7 @@ struct WorkbenchCategoryDragReceiver: NSViewRepresentable {
         }
         view.geometry = geometry; view.options = options; view.available = available
         view.selection = selection; view.owner = owner; view.enabled = accepts
-        view.onPreview = onPreview; view.onCommit = onCommit
+        view.onPreview = onPreview; view.onCommit = onCommit; view.onFinish = onFinish
         view.presentation = presentation; view.presentationSelection = presentationSelection
         #if DEBUG
         WorkbenchCategoryUpdateProbe.presentationTrace()
@@ -78,6 +79,7 @@ final class WorkbenchCategoryDragView: NSView {
     var enabled = true
     var onPreview: (CGFloat?) -> Void = { _ in }
     var onCommit: (Int) -> Void = { _ in }
+    var onFinish: () -> Void = {}
     var geometry = WorkbenchSegmentGeometry() { didSet { if oldValue != geometry { cancel() } } }
     var options: [AnyHashable] = (0..<4).map { AnyHashable($0) } { didSet { if oldValue != options { cancel() } } }
     var available: Set<Int> = [0, 1, 2, 3] { didSet { if oldValue != available { cancel() } } }
@@ -140,7 +142,8 @@ final class WorkbenchCategoryDragView: NSView {
         let accepts = enabled && !isHiddenOrHasHiddenAncestor && owner == startOwner && selection == startSelection
             && geometry.track.insetBy(dx: -12, dy: -12).contains(point) && window?.isKeyWindow == true
         cancel()
-        if accepts, let target, target != selection {
+        if accepts, let target {
+            if target != selection {
             #if DEBUG
             WorkbenchCategoryUpdateProbe.beginCommit()
             #endif
@@ -148,6 +151,10 @@ final class WorkbenchCategoryDragView: NSView {
             #if DEBUG
             WorkbenchCategoryUpdateProbe.phase("owner-returned")
             #endif
+            }
+            // Only an accepted release requests selector focus. Cancellation
+            // preserves the editor/IME owner; rejected bindings stay authoritative.
+            onFinish()
         }
     }
     func cancel(notify: Bool = true) {

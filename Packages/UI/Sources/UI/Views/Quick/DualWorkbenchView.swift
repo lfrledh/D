@@ -699,6 +699,9 @@ public struct DualWorkbenchView: View {
         .task {
             if quick.state.drafts.isEmpty && quick.state.navigation == nil { quick.select(operationID: "d.model.language", modelID: "") }
             await refreshLibrary(checkModels: false)
+            #if DEBUG
+            WorkbenchCategoryUpdateProbe.phase("initial-library-ready")
+            #endif
         }
         // Draft autosaves do not change installed models or assets. Refresh at
         // result/publication boundaries, not on every typing pause.

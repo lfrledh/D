@@ -773,6 +773,9 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             try #require(model.chatDisplaySettings.wallpaperURL() != nil)
         }
         let library = ModelLibraryModel(library: try await ModelLibrary(stateDirectory: root.appendingPathComponent("models")))
+        var libraryReady = false
+        WorkbenchCategoryUpdateProbe.phaseObserver = { if $0 == "initial-library-ready" { libraryReady = true } }
+        defer { WorkbenchCategoryUpdateProbe.phaseObserver = nil }
         let host = NSHostingView(rootView: DualWorkbenchView(model: model, quickModel: model,
             quick: quick, library: library, nodeTags: ModelNodeTagStore(), metadata: nil))
         let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1200, height: 800),
@@ -783,7 +786,13 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             WorkbenchCategoryUpdateProbe.retainedUpdate = nil
             window.close()
         }
-        try await Task.sleep(for: .milliseconds(250)); host.layoutSubtreeIfNeeded()
+        // The asynchronous first library projection is setup, not drag work.
+        // Await its real completion rather than assuming a fixed 250 ms warm-up.
+        let deadline = ProcessInfo.processInfo.systemUptime + 3
+        while !libraryReady && ProcessInfo.processInfo.systemUptime < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        try #require(libraryReady)
+        host.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
         func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
         let receiver = try #require(descendants(host).compactMap { $0 as? WorkbenchCategoryDragView }.first { $0.geometry.thickness == 44 })
         var rootUpdates = 0, retainedUpdates = 0

@@ -45,6 +45,7 @@ import Testing
         receiver.geometry = geometry; receiver.presentation = geometry.lens(0, engagement: 0)
         let owner = NSObject(); receiver.owner = AnyHashable(ObjectIdentifier(owner))
         var values: [CGFloat?] = [], commits: [Int] = []
+        var finishes = 0; receiver.onFinish = { finishes += 1 }
         receiver.onPreview = { values.append($0) }; receiver.onCommit = { commits.append($0) }
         let start = CGPoint(x: receiver.presentation.midX, y: receiver.presentation.midY)
         func point(_ i: CGFloat) -> CGPoint {
@@ -60,16 +61,16 @@ import Testing
         }
         try send(.leftMouseDown, start)
         for i in [CGFloat(1), 2, 3, 0] { try send(.leftMouseDragged, point(i)); #expect(commits.isEmpty) }
-        try send(.leftMouseUp, start); #expect(commits.isEmpty)
+        try send(.leftMouseUp, start); #expect(commits.isEmpty && finishes == 1)
         try send(.leftMouseDown, start); try send(.leftMouseDragged, point(3)); try send(.leftMouseUp, point(3))
-        try send(.leftMouseUp, point(3)); #expect(commits == [3])
+        try send(.leftMouseUp, point(3)); #expect(commits == [3] && finishes == 2)
         // The binding may reject the choice; the receiver still uses its actual
         // authoritative selection on the next gesture, rather than the preview.
         #expect(receiver.selection == 0 && values.last! == nil)
         try send(.leftMouseDown, start); try send(.leftMouseDragged, point(2))
         receiver.geometry.length = 300
         #expect(values.last! == nil)
-        try send(.leftMouseUp, point(2)); #expect(commits == [3])
+        try send(.leftMouseUp, point(2)); #expect(commits == [3] && finishes == 2)
         receiver.geometry = geometry
         try send(.leftMouseDown, start); receiver.options = ["a", "c", "d", "e"]
         try send(.leftMouseUp, point(3)); #expect(commits == [3] && values.last! == nil)

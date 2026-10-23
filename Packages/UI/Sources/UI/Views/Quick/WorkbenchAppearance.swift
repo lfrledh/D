@@ -411,12 +411,13 @@ struct WorkbenchGlassSegments<Value: Hashable>: View {
                     .allowsHitTesting(false)
                 ForEach(Array(choices.enumerated()), id: \.element.0) { i, choice in
                     let rect = geometry.lens(CGFloat(i), engagement: 0)
-                    Button { select(i) } label: { Text(choice.1).foregroundStyle(.clear) }
+                    Button { select(i); focus = selection } label: { Text(choice.1).foregroundStyle(.clear) }
                         .buttonStyle(WorkbenchCategoryButtonStyle(height: rect.height, onPressChanged: { down in
                             if down { pressed = i } else if pressed == i { pressed = nil }
                         }))
                         .frame(width: rect.width, height: rect.height).offset(x: rect.minX, y: rect.minY)
                         .disabled(unavailable.contains(choice.0))
+                        .focusable()
                         .focused($focus, equals: choice.0)
                         .onHover { inside in if inside && enabled { hovered = i } else if hovered == i { hovered = nil } }
                         .accessibilityAddTraits(selection == choice.0 ? .isSelected : [])
@@ -428,6 +429,7 @@ struct WorkbenchGlassSegments<Value: Hashable>: View {
                         engagement: preview != nil || pressed == index ? 1 : 0, hovered: hovered, pressed: pressed,
                         dragReceiver: WorkbenchCategoryDragReceiver(selection: index, owner: owner ?? AnyHashable(ObjectIdentifier(identity)),
                             enabled: enabled && visible, onPreview: { preview = $0 }, onCommit: select,
+                            onFinish: { focus = selection },
                             geometry: geometry, options: choices.map { AnyHashable($0.0) }, available: indices),
                         geometry: geometry, available: indices, showsSelection: index >= 0)
                         .animation(preview == nil ? motion : nil, value: preview ?? CGFloat(index))
@@ -461,7 +463,7 @@ struct WorkbenchGlassSegments<Value: Hashable>: View {
             }
             var next = current + delta
             while choices.indices.contains(next) {
-                if indices.contains(next) { select(next); focus = choices[next].0; return }
+                if indices.contains(next) { select(next); focus = selection; return }
                 next += delta
             }
         }
