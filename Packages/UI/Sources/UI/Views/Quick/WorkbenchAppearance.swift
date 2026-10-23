@@ -415,9 +415,11 @@ struct WorkbenchGlassSegments<Value: Hashable>: View {
                         .buttonStyle(WorkbenchCategoryButtonStyle(height: rect.height, onPressChanged: { down in
                             if down { pressed = i } else if pressed == i { pressed = nil }
                         }))
-                        .frame(width: rect.width, height: rect.height).offset(x: rect.minX, y: rect.minY)
+                        .frame(width: rect.width, height: rect.height)
+                        .overlay { Capsule().strokeBorder(.tint, lineWidth: focus == choice.0 ? 2 : 0).allowsHitTesting(false) }
+                        .offset(x: rect.minX, y: rect.minY)
                         .disabled(unavailable.contains(choice.0))
-                        .focusable()
+                        .focusable().focusEffectDisabled()
                         .focused($focus, equals: choice.0)
                         .onHover { inside in if inside && enabled { hovered = i } else if hovered == i { hovered = nil } }
                         .accessibilityAddTraits(selection == choice.0 ? .isSelected : [])
