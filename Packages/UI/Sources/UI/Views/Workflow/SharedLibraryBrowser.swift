@@ -381,6 +381,7 @@ public struct SharedLibraryBrowser: View {
     @State private var selectedTagID: UUID?
     @State private var selectedFolderID: UUID?
     @FocusState private var searchFocused: Bool
+    @FocusState private var selectionFocused: Bool
     @State private var showTags = false
     @State private var tagSearch = ""
     @State private var selectedQueryID: UUID?
@@ -509,8 +510,8 @@ public struct SharedLibraryBrowser: View {
             }
         }
         .background(WorkbenchCommandWindow(scope: commandScope))
+        .focusable().focused($selectionFocused)
         .focusedValue(\.workbenchAssetExport, exportMenuCommand)
-        .focusable()
         .workflowKeyboardCommands { command in
             switch command {
             case .search: searchFocused = true; return true
@@ -627,7 +628,7 @@ public struct SharedLibraryBrowser: View {
                         .background(selectedKeys.contains(entry.id) ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 12))
                         .contentShape(RoundedRectangle(cornerRadius: 12))
                         .onTapGesture(count: 2) { dispatch(.preview, key: entry.id) }
-                        .onTapGesture { selectedKeys = [entry.id]; focusedKey = entry.id }
+                        .onTapGesture { selectedKeys = [entry.id]; focusedKey = entry.id; selectionFocused = true }
                         .focusable().onKeyPress(.space) { dispatch(.preview, key: entry.id); return .handled }
                         .workbenchContextMenu { resourceActions(entry) }.onDrag { dragProvider(for: entry.id) }
                         .accessibilityElement(children: .combine).accessibilityIdentifier("shared-library-entry-" + entry.id)
@@ -920,6 +921,7 @@ public struct SharedLibraryBrowser: View {
                     if selectedKeys.contains(entry.id) { selectedKeys.remove(entry.id) }
                     else { selectedKeys.insert(entry.id) }
                     focusedKey = entry.id
+                    selectionFocused = true
                 } label: {
                     Image(systemName: selectedKeys.contains(entry.id) ? "checkmark.circle.fill" : "circle")
                 }
@@ -940,6 +942,7 @@ public struct SharedLibraryBrowser: View {
         .padding(6).contentShape(Rectangle())
         .onTapGesture {
             focusedKey = entry.id
+            selectionFocused = true
             if compact { selectedKeys = [entry.id]; if canvasMode?.resourceCategory == nil { compactDetailKey = entry.id } }
         }
         .accessibilityIdentifier("shared-library-entry-" + entry.id)
