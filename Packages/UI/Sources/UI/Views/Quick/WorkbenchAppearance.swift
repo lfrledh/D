@@ -450,11 +450,16 @@ struct WorkbenchGlassSegments<Value: Hashable>: View {
         .onChange(of: owner) { _, _ in clear() }
         .onChange(of: choices.map(\.0)) { _, _ in clear() }
         .onChange(of: unavailable) { _, _ in clear() }
-        .onChange(of: selection) { _, _ in preview = nil }
+        .onChange(of: selection) { _, value in
+            preview = nil
+            // Some adapters publish their authoritative selection on the next
+            // render. Follow that accepted value without focusing an editor-outside change.
+            if focus != nil { focus = value }
+        }
         .onDisappear { clear() }
         .accessibilityElement(children: .contain).accessibilityLabel(title)
         .onMoveCommand { command in
-            guard enabled && visible, let current = choices.firstIndex(where: { $0.0 == (focus ?? selection) }) else { return }
+            guard enabled && visible, let current = choices.firstIndex(where: { $0.0 == selection }) else { return }
             let delta: Int
             switch (direction, command) {
             case (.horizontal, .left), (.vertical, .up): delta = -1
