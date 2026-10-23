@@ -92,8 +92,15 @@ import SwiftUI
             // AppKit may reinstall its standard controls after a scene update.
             // Reconcile only changed ownership/frames; ordinary updates do no
             // layout, state publication, backdrop invalidation or window writes.
-            guard !transitioning, !isFullScreen, let host = controls,
-                  placements.contains(where: { $0.button.superview !== host || $0.button.frame != buttonFrame($0, in: host) }) else { return }
+            guard !transitioning, !isFullScreen, let host = controls else { return }
+            let ready = Self.types.allSatisfy { type in
+                guard let button = window.standardWindowButton(type) else { return false }
+                return button.window === window && button.superview != nil
+            }
+            guard ready && (placements.isEmpty || placements.contains(where: {
+                window.standardWindowButton($0.type) !== $0.button ||
+                $0.button.superview !== host || $0.button.frame != buttonFrame($0, in: host)
+            })) else { return }
             refreshGeometry(); return
         }
         if name == NSWindow.willEnterFullScreenNotification || name == NSWindow.willExitFullScreenNotification {

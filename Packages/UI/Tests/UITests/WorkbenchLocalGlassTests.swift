@@ -25,6 +25,15 @@ private actor LocalGlassNoInference: InferenceEngine {
     override var contentLayoutRect: NSRect { testLayout ?? super.contentLayoutRect }
 }
 
+@MainActor private final class DeferredChromeWindow: NSWindow {
+    var buttonsReady = true
+    var replacements: [NSWindow.ButtonType: NSButton] = [:]
+    override func standardWindowButton(_ type: NSWindow.ButtonType) -> NSButton? {
+        guard buttonsReady else { return nil }
+        return replacements[type] ?? super.standardWindowButton(type)
+    }
+}
+
 @Suite("D-owned local glass", .serialized)
 @MainActor struct WorkbenchLocalGlassTests {
     private func temporary() throws -> URL {
@@ -148,6 +157,39 @@ private actor LocalGlassNoInference: InferenceEngine {
         #expect(window.standardWindowButton(.closeButton) === buttons[0])
         canvas.releaseTitlebar()
         #expect(!window.titlebarAppearsTransparent && !window.styleMask.contains(.fullSizeContentView))
+    }
+
+    @Test func floatingChromeHandlesLateAndReplacedNativeButtonsWithoutResize() throws {
+        let window = DeferredChromeWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 400), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = NSView(frame: window.contentView!.bounds); window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        let types: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        let originals = try types.map { try #require(window.standardWindowButton($0)) }
+        let parents = originals.map(\.superview), frames = originals.map(\.frame)
+        window.buttonsReady = false
+        let owner = WorkbenchBackgroundOwner()
+        let canvas = WorkbenchBackgroundNSView(frame: host.bounds); canvas.owner = owner; owner.root = canvas
+        canvas.isCanvas = true; canvas.stylesWindowTitlebar = true; host.addSubview(canvas)
+        let controls = WorkbenchWindowControlHost(frame: .init(x: 16, y: 348, width: 84, height: 40))
+        controls.owner = owner; host.addSubview(controls); controls.bind()
+        #expect(originals.allSatisfy { $0.superview !== controls })
+        window.buttonsReady = true
+        NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
+        #expect(originals.allSatisfy { $0.superview === controls })
+        let replacements = try types.enumerated().map { index, type in
+            let button = try #require(NSWindow.standardWindowButton(type, for: window.styleMask))
+            button.frame = frames[index]; parents[index]?.addSubview(button)
+            window.replacements[type] = button
+            return button
+        }
+        // Old objects remain at the exact correct frames; identity alone changes.
+        NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
+        #expect(replacements.allSatisfy { $0.superview === controls })
+        #expect(originals.allSatisfy { $0.superview == nil })
+        canvas.releaseTitlebar()
+        #expect(zip(replacements, parents).allSatisfy { $0.superview === $1 })
+        #expect(replacements.map(\.frame) == frames)
     }
 
     @Test func floatingChromeOwnershipIsWindowLocalAndRestoresOnlyOwnedProperties() {
