@@ -4613,6 +4613,8 @@
     "modelManagement.pauseHelp": "Pause temporarily; you can resume later.",
     "modelManagement.stopHelp": "Stop this download and keep the files already downloaded.",
     "modelManagement.unknownAdditionalBytes": "Unknown; existing progress has not passed full verification",
-    "modelManagement.retryAfter": "The source requires waiting until {time} before retrying."
+    "modelManagement.retryAfter": "The source requires waiting until {time} before retrying.",
+    "modelManagement.historicalDownload": "History",
+    "modelManagement.historicalDownloadHelp": "This record does not represent the current download. View the current files in Model Manager."
   }
 }

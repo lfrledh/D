@@ -1013,3 +1013,78 @@ extension DownloadManagementTests {
         try await reopened.shutdown()
     }
 }
+
+
+extension DownloadManagementTests {
+    @Test func deletingNewerFailedHistoryCannotReviveOlderRegistrationIntentAfterColdOpen() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let server = try await LoopbackServer(f, mode: "http-403")
+        var owner: ModelLibrary? = try await f.library(server: server)
+        let stopped: ModelDownloadTask
+        let newer: ModelDownloadTask
+        do {
+            let library = try #require(owner)
+            try await library.configureRoot(at: f.destination)
+            try await library.pauseQueue()
+            let first = try await library.enqueueDownloads([f.entry.id], postAction: .register)[0]
+            try await library.cancelDownload(first.id)
+            stopped = try #require((await library.snapshot()).downloads.first)
+            _ = try await library.enqueueDownloads([f.entry.id], postAction: .filesOnly)
+            try await library.resumeQueue()
+            let failed = try await wait(library) { $0.downloads.last?.state == .failed }
+            newer = try #require(failed.downloads.last)
+            #expect(newer.id != stopped.id && newer.postAction == .filesOnly)
+            #expect(failed.resources.first?.control.downloadOwner?.matches(newer) == true)
+            try await library.deleteDownload(newer.id, expectedGeneration: newer.generation)
+            #expect((await library.snapshot()).resources.first?.control.downloadOwner?.taskID == newer.id)
+            try await library.shutdown()
+        }
+        owner = nil
+        let reopened = try await f.library(server: server)
+        let before = await reopened.snapshot()
+        #expect(before.downloads.map(\.id) == [stopped.id])
+        #expect(before.resources.first?.control.downloadOwner?.taskID == newer.id)
+        await #expect(throws: ModelLibraryError.self) { _ = try await reopened.continueDownload(stopped.id, expectedGeneration: stopped.generation) }
+        await #expect(throws: ModelLibraryError.self) { try await reopened.deleteDownload(stopped.id, expectedGeneration: stopped.generation, cleanupPartial: true) }
+        #expect((await reopened.snapshot()).downloads == before.downloads)
+        try server.setMode("valid")
+        let explicit = try await reopened.enqueueDownloads([f.entry.id], postAction: .filesOnly)[0]
+        try await reopened.resumeQueue()
+        let done = try await wait(reopened) { $0.downloads.last?.state == .completed }
+        #expect(explicit.id != stopped.id && explicit.postAction == .filesOnly)
+        #expect(done.resources.first?.record.registrationState == .unregistered)
+        #expect(done.resources.first?.control.fileState == .verified)
+        try await reopened.shutdown()
+    }
+}
+
+
+extension DownloadManagementTests {
+    @Test(arguments: ["dispatch.beforeWrite", "dispatch.afterRename"])
+    func dispatchSaveFailureRetainsRecoverableQueueAndFileOwner(point: String) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let fault = FixtureFault(), transfer = FixtureTransfer(f.contents)
+        let library = try await self.library(f, transport: transfer, fault: fault)
+        try await library.configureRoot(at: f.destination)
+        try await library.pauseQueue()
+        let initial = try await library.enqueueDownloads([f.entry.id])[0]
+        let owner = try #require((await library.snapshot()).resources.first?.control.downloadOwner)
+        fault.arm(point)
+        try await library.resumeQueue()
+        let blocked = await library.snapshot()
+        #expect(blocked.queueError != nil && blocked.downloads.first?.state == .queued)
+        #expect(await transfer.requests == 0)
+        if point == "dispatch.beforeWrite" {
+            #expect(blocked.resources.first?.control.downloadOwner == owner)
+            #expect(blocked.downloads.first?.attemptID == initial.attemptID)
+        } else {
+            #expect(blocked.resources.first?.control.downloadOwner?.matches(try #require(blocked.downloads.first)) == true)
+        }
+        fault.clear()
+        try await library.resumeQueue()
+        let done = try await wait(library) { $0.downloads.first?.state == .completed }
+        #expect(done.resources.first?.control.downloadOwner?.matches(try #require(done.downloads.first)) == true)
+        #expect(done.resources.first?.control.fileState == .verified)
+        try await library.shutdown()
+    }
+}

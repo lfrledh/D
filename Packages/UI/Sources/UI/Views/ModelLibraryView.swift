@@ -205,7 +205,7 @@ public struct ModelLibraryView: View {
                             let entry = model.catalog.first { $0.id == task.catalogID }
                             Text(entry?.title ?? task.catalogID).font(.headline).lineLimit(1).help(entry?.title ?? task.catalogID)
                             ModelSpecificationFields(descriptor: descriptor(entry), font: .caption)
-                            if let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) {
+                            if let resource = model.currentDownloadResource(for: task) {
                                 ProgressView(value: Double(resource.record.downloadedBytes), total: Double(max(1, resource.record.totalBytes)))
                                 Text(ModelLibraryModel.formatBytes(resource.record.downloadedBytes) + " / " + ModelLibraryModel.formatBytes(resource.record.totalBytes)).font(.caption.monospacedDigit())
                             }
@@ -330,7 +330,7 @@ public struct ModelLibraryView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text(model.catalog.first { $0.id == task.catalogID }?.title ?? task.catalogID).font(.title2.bold())
             Text(taskStatus(task)).font(.headline)
-            if let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) {
+            if let resource = model.currentDownloadResource(for: task) {
                 ProgressView(value: Double(resource.record.downloadedBytes), total: Double(max(1, resource.record.totalBytes)))
                 Text(ModelLibraryModel.formatBytes(resource.record.downloadedBytes) + " / " + ModelLibraryModel.formatBytes(resource.record.totalBytes)).font(.caption.monospacedDigit())
             }
@@ -343,7 +343,7 @@ public struct ModelLibraryView: View {
             HStack { taskPrimary(task); taskMenu(task) }
             if let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) {
                 Button(text("viewResource", "查看对应模型")) { model.selectedResource = resource.id; model.workspace = "resources"; narrowDetail = true }
-                if task.state == .completed, task.postActionError != nil, resource.record.registrationState != .registered {
+                if task.state == .completed, model.currentDownloadResource(for: task) != nil, task.postActionError != nil, resource.record.registrationState != .registered {
                     Button(text("retryRegistration", "重试登记")) { Task { await model.retryRegistration(task) } }
                         .disabled(resource.record.state == .preparationRequired || model.globalOperation != nil)
                 }
@@ -449,22 +449,25 @@ public struct ModelLibraryView: View {
         return ModelNodeCatalog.entries.first { $0.revision == entry.revision && ($0.id == entry.workflowIdentity || $0.modelIdentity == entry.repository) }
     }
     private func taskStatus(_ task: ModelDownloadTask) -> String {
-        if let pending = model.pendingActions[task.resourceID.modelID] { return text("pending." + String(describing: pending), pending.title) }
+        if let pending = model.pendingDownloadAction(for: task) { return text("pending." + String(describing: pending), pending.title) }
         if task.state == .queued, !model.queueIsRunning { return text("waitingQueue", "等待队列开始") }
-        if task.state == .completed, task.postActionError != nil, model.snapshot?.resources.first(where: { $0.id == task.resourceID })?.record.registrationState != .registered { return text("registrationIncomplete", "下载完成 · 登记未完成") }
+        if task.state == .completed, task.postActionError != nil, model.currentDownloadResource(for: task)?.record.registrationState != .registered { return text("registrationIncomplete", "下载完成 · 登记未完成") }
         return downloadState(task.state)
     }
     @ViewBuilder private func taskPrimary(_ task: ModelDownloadTask) -> some View {
-        if model.pendingActions[task.resourceID.modelID] != nil { ProgressView().controlSize(.small) }
-        else {
+        if model.pendingDownloadAction(for: task) != nil { ProgressView().controlSize(.small) }
+        else if model.currentDownloadResource(for: task) == nil {
+            Text(text("historicalDownload", "历史记录")).font(.caption).foregroundStyle(.secondary)
+                .help(text("historicalDownloadHelp", "此记录不代表当前下载；请在模型管理中查看当前文件。"))
+        } else {
             switch task.state {
             case .downloading, .verifying, .publishing:
                 Button(text("pauseTask", "暂停")) { Task { await model.pauseTask(task.id) } }.help(text("pauseHelp", "暂时暂停，可继续下载。"))
             case .paused, .cancelled, .failed:
                 Button(text(!model.queueIsRunning ? "queueOne" : task.state == .paused ? "continue" : task.state == .failed ? "retry" : "start", "继续")) { Task { await model.continueTask(task) } }
-                    .disabled((task.earliestRetry ?? .distantPast) > Date())
+                    .disabled(!model.canContinueDownload(task) || (task.earliestRetry ?? .distantPast) > Date())
             case .completed:
-                let resource = model.snapshot?.resources.first { $0.id == task.resourceID }
+                let resource = model.currentDownloadResource(for: task)
                 Button(text("showFile", "查看文件")) { if let resource { model.reveal(resource) } }
                     .disabled(resource?.record.directory == nil || resource?.record.availability != .available)
             case .queued, .waitingRetry: EmptyView()
@@ -483,7 +486,7 @@ public struct ModelLibraryView: View {
             if task.state == .failed {
                 WorkbenchMenuAction(text("viewError", "查看错误")) { model.selectedTask = task.id; narrowDetail = true }
             }
-            if task.state == .failed || task.state == .cancelled {
+            if (task.state == .failed || task.state == .cancelled), model.canContinueDownload(task) {
                 WorkbenchMenuAction(text("restart", "重新下载…")) { Task { await model.restartTask(task) } }
             }
             if task.state == .completed, let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) {
@@ -498,7 +501,7 @@ public struct ModelLibraryView: View {
             .buttonStyle(.plain)
     }
     private func canCleanPartial(_ task: ModelDownloadTask) -> Bool {
-        guard task.state != .completed, let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) else { return false }
+        guard task.state != .completed, let resource = model.currentDownloadResource(for: task) else { return false }
         return resource.record.storage == .managed && ([.partial, .invalid].contains(resource.control.fileState) || resource.control.fileState == .deleting && ![.installed, .preparationRequired].contains(resource.record.state)) && resource.record.activeLeaseCount == 0
     }
     private func deleteConfirmation(_ task: ModelDownloadTask) -> some View {

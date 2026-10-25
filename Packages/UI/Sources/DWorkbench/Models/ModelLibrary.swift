@@ -170,6 +170,13 @@ public actor ModelLibrary {
             }
             if task.state.isActive { disk.downloads![index].state = .queued }
         }
+        // Legacy unfinished requests still own their work. Terminal-only history
+        // cannot prove which attempt last handled the files, so remains unknown.
+        for index in disk.records.indices where disk.records[index].control?.downloadOwner == nil {
+            let tasks = disk.downloads!.filter { $0.resourceID.modelID == disk.records[index].record.id && !$0.state.isTerminal }
+            guard tasks.count <= 1 else { throw ModelLibraryError.integrity("同一文件存在多个未结束的下载任务。") }
+            if let task = tasks.first { disk.records[index].control?.downloadOwner = .init(task) }
+        }
         disk.queueState = .waitingForResume
         try persist()
     }
@@ -1247,7 +1254,8 @@ private final class ModelScopedLocation: Sendable {
 // library lock, file ledger and atomic index. Views never own these tasks.
 extension ModelLibrary {
     private func downloadForResource(_ id: ModelID) -> ModelDownloadTask? {
-        (disk.downloads ?? []).last { $0.resourceID.modelID == id }
+        guard let owner = disk.records.first(where: { $0.record.id == id })?.control?.downloadOwner else { return nil }
+        return (disk.downloads ?? []).first { $0.resourceID.modelID == id && owner.matches($0) }
     }
     private func taskIndex(_ id: UUID) throws -> Int {
         guard let index = disk.downloads?.firstIndex(where: { $0.id == id }) else {
@@ -1300,6 +1308,7 @@ extension ModelLibrary {
             }
             let task = ModelDownloadTask(resourceID: .init(rawValue: id.rawValue), catalogID: catalogID, recipeIdentity: recipe, postAction: postAction, createdAt: now())
             disk.downloads = (disk.downloads ?? []) + [task]; result.append(task)
+            mutate(id) { $0.control?.downloadOwner = .init(task) }
             event(id, "downloadRequested")
         }
         if startIfIdle, wasEmpty, disk.queueState == .waitingForResume { disk.queueState = .running }
@@ -1412,6 +1421,8 @@ extension ModelLibrary {
             }
             disk.downloads = (disk.downloads ?? []) + [task]; index = disk.downloads!.count - 1
         }
+        let owner = ModelDownloadOwnership(disk.downloads![index])
+        mutate(resource.modelID) { $0.control?.downloadOwner = owner }
         if resumeQueue { disk.queueState = .running }
         if disk.downloads![index].state == .queued { setState(resource.modelID, .queued) }
         try persist(); if resumeQueue { queueError = nil }
@@ -1431,6 +1442,11 @@ extension ModelLibrary {
               [.paused, .failed, .cancelled].contains(task.state) else {
             throw ModelLibraryError.busy("下载任务已改变，请重新查看当前任务。")
         }
+        let resource = try stored(task.resourceID.modelID)
+        guard resource.control?.fileState != .verified,
+              ![.installed, .preparationRequired].contains(resource.record.state) else {
+            throw ModelLibraryError.busy("模型文件已经完成；请到模型管理查看，不会重新开始旧下载记录。")
+        }
         return try continuePartial(task.resourceID, postAction: task.postAction, resumeQueue: false)
     }
     public func restartDownload(_ id: UUID, expectedGeneration: UUID) async throws {
@@ -1446,7 +1462,8 @@ extension ModelLibrary {
     public func retryDownloadRegistration(_ id: UUID, expectedGeneration: UUID) throws {
         try requireAdmission()
         let index = try taskIndex(id), task = disk.downloads![index]
-        guard task.generation == expectedGeneration, task.state == .completed, task.postAction == .register,
+        guard task.generation == expectedGeneration, downloadForResource(task.resourceID.modelID)?.id == id,
+              task.state == .completed, task.postAction == .register,
               !cleanupReservations.contains(task.resourceID.modelID) else { throw ModelLibraryError.busy("下载记录已改变。") }
         try registerResource(task.resourceID, clearingTask: id)
     }
@@ -1573,22 +1590,33 @@ extension ModelLibrary {
         let currentTime = now()
         if let index = disk.downloads?.firstIndex(where: { $0.state == .queued || ($0.state == .waitingRetry && ($0.earliestRetry ?? .distantFuture) <= currentTime) }) {
             let task = disk.downloads![index], id = task.resourceID.modelID
+            let previous = disk
             do {
                 guard let root = libraryRoot else { throw ModelLibraryError.unavailable("模型库磁盘不可用，队列等待重新定位。") }
                 try root.validateLocation()
                 let record = try stored(id)
-                guard record.deletion == nil, record.control?.fileState != .deleted, record.recipeIdentity == task.recipeIdentity else {
+                guard record.deletion == nil, record.control?.fileState != .deleted, record.recipeIdentity == task.recipeIdentity,
+                      record.control?.downloadOwner?.matches(task) == true else {
                     throw ModelLibraryError.integrity("下载资源已改变。")
                 }
                 disk.downloads![index].state = .downloading
                 disk.downloads![index].attemptID = UUID(); disk.downloads![index].generation = UUID()
                 disk.downloads![index].attempts += 1
                 disk.downloads![index].earliestRetry = nil
-                try persist()
+                let owner = ModelDownloadOwnership(disk.downloads![index])
+                mutate(id) { $0.control?.downloadOwner = owner }
+                try persist(purpose: "dispatch")
                 let started = disk.downloads![index]
                 activeDownload = (started.id, started.attemptID, started.generation, id)
                 launchInstallation(id)
-            } catch { queueError = "队列等待处理：" + error.localizedDescription; disk.revision &+= 1 }
+            } catch {
+                if case ModelAtomicWriteError.publishedButUnsynced = error {
+                    // No worker was started. Keep the published identity, but make
+                    // explicit queue recovery able to persist and dispatch it again.
+                    disk.downloads![index].state = .queued
+                } else { disk = previous }
+                queueError = "队列等待处理：" + error.localizedDescription; disk.revision &+= 1
+            }
             return
         }
         if let next = disk.downloads?.filter({ $0.state == .waitingRetry }).compactMap(\.earliestRetry).min() {

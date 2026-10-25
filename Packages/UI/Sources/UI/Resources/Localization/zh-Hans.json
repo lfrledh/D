@@ -4613,6 +4613,8 @@
     "modelManagement.pauseHelp": "暂时暂停，可继续下载。",
     "modelManagement.stopHelp": "结束本次下载，保留已下载部分。",
     "modelManagement.unknownAdditionalBytes": "待核实；已有进度尚未通过完整校验",
-    "modelManagement.retryAfter": "来源要求等待至 {time} 后再试。"
+    "modelManagement.retryAfter": "来源要求等待至 {time} 后再试。",
+    "modelManagement.historicalDownload": "历史记录",
+    "modelManagement.historicalDownloadHelp": "此记录不代表当前下载；请在模型管理中查看当前文件。"
   }
 }

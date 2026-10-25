@@ -276,7 +276,7 @@ extension ModelLibraryPresentationTests {
         }
     }
 
-    @Test(arguments: ["new", "files-only", "existing-files", "paused", "target-changed", "bind-failed", "registration-failed", "raw-video"])
+    @Test(arguments: ["new", "files-only", "existing-files", "paused", "target-changed", "bind-failed", "registration-failed", "raw-video", "delete-old-history"])
     func nodePreparationUsesExistingQueueAndExactCopy(scenario: String) async throws {
         let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
             .appendingPathComponent("NodePreparation-" + UUID().uuidString)
@@ -307,6 +307,14 @@ extension ModelLibraryPresentationTests {
             bound.append(id)
         }
         do {
+            var oldTask: ModelDownloadTask?
+            if scenario == "delete-old-history" {
+                try await library.pauseQueue()
+                let old = try await library.enqueueDownloads([entry.id], postAction: .register)[0]
+                try await library.cancelDownload(old.id)
+                oldTask = try #require((await library.snapshot()).downloads.first)
+                try await library.resumeQueue()
+            }
             if scenario == "paused" { try await library.pauseQueue() }
             if ["files-only", "existing-files"].contains(scenario) {
                 _ = try await library.enqueueDownloads([entry.id], postAction: .filesOnly)
@@ -325,6 +333,12 @@ extension ModelLibraryPresentationTests {
             if model.preparingNodeIdentities.contains(identity) {
                 await model.prepareNode(operationID: operation, identity: identity, isCurrent: { current }, bind: bind)
             }
+            if let oldTask {
+                #expect(model.preparingNodeIdentities.contains(identity))
+                await model.deleteTask(oldTask, cleanupPartial: false)
+                #expect(model.errorMessage == nil && model.preparingNodeIdentities.contains(identity))
+                #expect(model.snapshot?.downloads.count == 1)
+            }
             model.isPresented = false; model.clearSelectionContext() // Closing the manager cannot cancel the request.
             if scenario == "target-changed" { current = false }
             if scenario == "paused" {
@@ -342,7 +356,7 @@ extension ModelLibraryPresentationTests {
                 let resource = try #require(model.snapshot?.resources.first)
                 #expect(await transport.count == 1)
                 #expect(resource.record.revision == entry.revision && resource.control.fileState == .verified)
-                let shouldBind = ["new", "files-only", "existing-files"].contains(scenario)
+                let shouldBind = ["new", "files-only", "existing-files", "delete-old-history"].contains(scenario)
                 #expect(bound == (shouldBind ? [resource.record.id] : []))
                 #expect(model.preparingNodeIdentities.isEmpty)
                 if scenario == "files-only" { #expect(model.snapshot?.downloads.first?.postAction == .filesOnly) }
@@ -530,6 +544,8 @@ extension ModelLibraryPresentationTests {
         #expect(model.errorMessage == nil && !model.queueIsRunning)
         let resumed = try #require(model.snapshot?.downloads.last)
         #expect(resumed.id != stopped.id && resumed.postAction == .register)
+        #expect(model.currentDownloadResource(for: stopped) == nil && !model.canContinueDownload(stopped))
+        #expect(model.currentDownloadResource(for: resumed) != nil)
         await model.resumeQueue()
         for _ in 0..<500 { if await transfer.started { break }; await Task.yield() }
         await model.refresh()
@@ -537,6 +553,8 @@ extension ModelLibraryPresentationTests {
         let pause = Task { await model.pauseTask(active.id) }
         for _ in 0..<500 { if model.pendingActions[active.resourceID.modelID] != nil { break }; await Task.yield() }
         if case .pausing? = model.pendingActions[active.resourceID.modelID] { } else { Issue.record("Pause must remain pending until the transfer drains") }
+        #expect(model.pendingDownloadAction(for: stopped) == nil)
+        #expect(model.pendingDownloadAction(for: active) != nil)
         await transfer.open(); await pause.value
         #expect(model.pendingActions[active.resourceID.modelID] == nil)
         #expect(model.snapshot?.downloads.last?.state == .paused)
@@ -544,6 +562,16 @@ extension ModelLibraryPresentationTests {
         for _ in 0..<500 { await model.refresh(); if model.snapshot?.downloads.last?.state == .completed { break }; try await Task.sleep(for: .milliseconds(10)) }
         #expect(model.snapshot?.downloads.last?.state == .completed)
         #expect(model.snapshot?.resources.first?.record.registrationState == .registered)
+        let completed = try #require(model.snapshot?.downloads.last)
+        await model.deleteTask(completed, cleanupPartial: false)
+        #expect(model.errorMessage == nil)
+        #expect(model.currentDownloadResource(for: stopped) == nil && !model.canContinueDownload(stopped))
+        let before = await transfer.count
+        await model.continueTask(stopped)
+        #expect(model.errorMessage != nil)
+        #expect(await transfer.count == before)
+        #expect(model.snapshot?.resources.first?.control.fileState == .verified)
+        #expect(model.snapshot?.downloads.count == 1)
         try await library.shutdown()
     }
 }

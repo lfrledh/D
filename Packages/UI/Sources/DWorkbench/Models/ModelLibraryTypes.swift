@@ -265,8 +265,21 @@ public struct ModelResourceEvent: Codable, Sendable, Equatable, Identifiable {
     public let date: Date?
     public let result: String?
 }
+/// One current file owner; removing history never restores an older request.
+public struct ModelDownloadOwnership: Codable, Sendable, Equatable {
+    public let taskID: UUID
+    public let attemptID: UUID
+    public let generation: UUID
+    public init(_ task: ModelDownloadTask) {
+        taskID = task.id; attemptID = task.attemptID; generation = task.generation
+    }
+    public func matches(_ task: ModelDownloadTask) -> Bool {
+        taskID == task.id && attemptID == task.attemptID && generation == task.generation
+    }
+}
 public struct ModelResourceControl: Codable, Sendable, Equatable {
     public var fileState: ModelResourceFileState
+    public var downloadOwner: ModelDownloadOwnership?
     public var origin: ModelResourceOrigin
     public var role: ModelResourceRole = .original
     public var parentResourceID: ModelResourceID?
