@@ -3421,7 +3421,7 @@
     "consistency.help.MODELS-DOWNLOAD.object": "明确选择的模型资源",
     "consistency.help.MODELS-DOWNLOAD.conditions": "新建下载时选择受支持的模型和保存位置；自动登记默认关闭。",
     "consistency.help.MODELS-REGISTER.name": "登记模型",
-    "consistency.help.MODELS-REGISTER.purpose": "选择已有的模型文件夹，让 D 识别并使用这份模型。",
+    "consistency.help.MODELS-REGISTER.purpose": "将这份已有模型登记到 D，不会更改当前节点的模型选择。",
     "consistency.help.MODELS-REGISTER.object": "这一份模型资源",
     "consistency.help.MODELS-REGISTER.conditions": "模型须属于已支持的配置并通过文件校验。登记不会为当前节点选用模型。",
     "consistency.help.MODELS-UNREGISTER.name": "取消登记…",

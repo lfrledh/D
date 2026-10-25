@@ -3421,7 +3421,7 @@
     "consistency.help.MODELS-DOWNLOAD.object": "The explicitly selected model resource",
     "consistency.help.MODELS-DOWNLOAD.conditions": "For a new download, choose a supported model and destination. Automatic registration is off by default.",
     "consistency.help.MODELS-REGISTER.name": "Register model",
-    "consistency.help.MODELS-REGISTER.purpose": "Choose an existing model folder so D can recognize and use this model.",
+    "consistency.help.MODELS-REGISTER.purpose": "Register this existing model with D without changing the model selected for the current node.",
     "consistency.help.MODELS-REGISTER.object": "This particular model resource",
     "consistency.help.MODELS-REGISTER.conditions": "The model must match a supported configuration and pass file validation. Registration does not select it for the current node.",
     "consistency.help.MODELS-UNREGISTER.name": "Unregister model…",
