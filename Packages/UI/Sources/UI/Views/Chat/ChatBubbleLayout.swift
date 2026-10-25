@@ -112,6 +112,14 @@ struct ChatMessageIconStyle: ButtonStyle {
     }
 }
 
+private struct ChatMessageToolOpacityKey: EnvironmentKey { static let defaultValue: Double = 1 }
+extension EnvironmentValues {
+    var chatMessageToolOpacity: Double {
+        get { self[ChatMessageToolOpacityKey.self] }
+        set { self[ChatMessageToolOpacityKey.self] = newValue }
+    }
+}
+
 /// A bounded hover region includes body, the six-point bridge and the permanently
 /// allocated tool slot. No timers, reading-track-wide hit region or hidden editor.
 struct ChatMessageChrome<Content: View, Actions: View, Footer: View>: View {
@@ -130,7 +138,7 @@ struct ChatMessageChrome<Content: View, Actions: View, Footer: View>: View {
         ChatMessageStack(user: user) {
             content($menuOpen)
             actions($actionFocused, $menuOpen)
-                .opacity(active ? 1 : latestAnswer ? 0.5 : 0)
+                .environment(\.chatMessageToolOpacity, active ? 1 : latestAnswer ? 0.5 : 0)
             VStack(alignment: user ? .trailing : .leading, spacing: 0) { footer() }
         }
         .contentShape(Rectangle())

@@ -86,6 +86,7 @@ struct ChatMessageTools: View {
     let disabledReasons: [String: String]
     let layoutProbe: ((String, CGRect) -> Void)?
     let messageID: UUID
+    @Environment(\.chatMessageToolOpacity) private var toolOpacity
     @FocusState private var focusedItem: String?
     @State private var copied = false
     @State private var copyGeneration = 0
@@ -114,34 +115,34 @@ struct ChatMessageTools: View {
                         if id == "copy" { copied = true; copyGeneration += 1 }
                     } label: {
                         Image(systemName: id == "copy" && copied ? "checkmark" : ChatMessageMenuOrganization.symbols(id))
-                            .font(.system(size: 16)).frame(width: 28, height: 28)
+                            .font(.system(size: 16)).frame(width: 28, height: 28).opacity(toolOpacity)
                     }
-                    .buttonStyle(ChatMessageIconStyle()).focused($focusedItem, equals: id)
+                    .buttonStyle(ChatMessageIconStyle()).focusable(interactions: [.edit, .activate]).focused($focusedItem, equals: id)
                     .disabled(!item.enabled)
                     .help(help(item)).accessibilityLabel(id == "copy" && copied ? copiedTitle : item.title)
                     .accessibilityIdentifier(identifier + "-" + id)
                 }
             }
-            WorkbenchMenu(moreTitle, onPresentationChange: { menuOpen = $0 }, onFocusChange: {
+            WorkbenchMenu(moreTitle, keyboardFocusable: true, onPresentationChange: { menuOpen = $0 }, onFocusChange: {
                 menuFocused = $0; focus = $0 || focusedItem != nil
             }) { WorkbenchMenuRows(items: menu.map(ChatActionMenu.convert)) } label: {
-                Image(systemName: "ellipsis").font(.system(size: 16)).frame(width: 28, height: 28)
+                Image(systemName: "ellipsis").font(.system(size: 16)).frame(width: 28, height: 28).opacity(toolOpacity)
             }.buttonStyle(ChatMessageIconStyle()).help(moreTitle).accessibilityLabel(moreTitle)
                 .accessibilityIdentifier(identifier)
                 .chatMeasured("message-menu-\(messageID.uuidString)", probe: layoutProbe)
             if candidates, let choices = commands.first(where: { $0.id == "candidates" })?.children {
                 HStack(spacing: 0) {
                     candidateButton("chevron.left", item: choices[max(0, candidateIndex - 1)], enabled: candidateIndex > 0)
-                    Text("\(candidateIndex + 1) / \(candidateCount)").font(.caption).monospacedDigit()
+                    Text("\(candidateIndex + 1) / \(candidateCount)").font(.caption).monospacedDigit().opacity(toolOpacity)
                     candidateButton("chevron.right", item: choices[min(choices.count - 1, candidateIndex + 1)], enabled: candidateIndex + 1 < choices.count)
                 }
             }
         }
     }
     private func candidateButton(_ symbol: String, item: ChatActionMenuItem, enabled: Bool) -> some View {
-        Button { item.action?() } label: { Image(systemName: symbol).font(.system(size: 12)).frame(width: 28, height: 28) }
-            .buttonStyle(ChatMessageIconStyle()).disabled(!enabled)
-            .focused($focusedItem, equals: symbol).help(item.title).accessibilityLabel(item.title)
+        Button { item.action?() } label: { Image(systemName: symbol).font(.system(size: 12)).frame(width: 28, height: 28).opacity(toolOpacity) }
+            .buttonStyle(ChatMessageIconStyle())
+            .focusable(interactions: [.edit, .activate]).focused($focusedItem, equals: symbol).disabled(!enabled).help(item.title).accessibilityLabel(item.title)
     }
     private func help(_ item: ChatActionMenuItem) -> String {
         if item.id == "copy", copied { return copiedTitle }

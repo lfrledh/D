@@ -78,18 +78,28 @@ extension EnvironmentValues {
     let title: String
     let items: WorkbenchMenuRows
     let label: Label
+    var keyboardFocusable = false
     var onPresentationChange: (Bool) -> Void = { _ in }
     var onFocusChange: (Bool) -> Void = { _ in }
     @State private var handle = WorkbenchMenuHandle()
     @FocusState private var focused: Bool
-    init(_ title: String = "", onPresentationChange: @escaping (Bool) -> Void = { _ in }, onFocusChange: @escaping (Bool) -> Void = { _ in }, @WorkbenchMenuBuilder content: () -> WorkbenchMenuRows, @ViewBuilder label: () -> Label) {
+    init(_ title: String = "", keyboardFocusable: Bool = false, onPresentationChange: @escaping (Bool) -> Void = { _ in }, onFocusChange: @escaping (Bool) -> Void = { _ in }, @WorkbenchMenuBuilder content: () -> WorkbenchMenuRows, @ViewBuilder label: () -> Label) {
+        self.keyboardFocusable = keyboardFocusable
         self.title = title; self.onPresentationChange = onPresentationChange; self.onFocusChange = onFocusChange; items = content(); self.label = label()
     }
     var body: some View {
         Button { handle.open?() } label: { label }
+            .modifier(WorkbenchMenuTabFocus(enabled: keyboardFocusable))
             .focused($focused)
             .onChange(of: focused) { _, value in onFocusChange(value) }
             .background(WorkbenchMenuAnchor(title: title, items: items.items, handle: handle, restoreTrigger: { focused = true }, onPresentationChange: onPresentationChange).allowsHitTesting(false))
+    }
+}
+private struct WorkbenchMenuTabFocus: ViewModifier {
+    let enabled: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if enabled { content.focusable(interactions: [.edit, .activate]) }
+        else { content }
     }
 }
 extension WorkbenchMenu where Label == Text {
