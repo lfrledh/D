@@ -144,3 +144,24 @@ extension WorkbenchChildPanelTests {
         #expect(closes == 1)
     }
 }
+
+
+extension WorkbenchChildPanelTests {
+    @Test func retainedDraftContributionsCannotOverwriteEachOther() async {
+        let gate = WorkbenchChildCloseGate(), first = UUID(), second = UUID()
+        var writes: [Int] = [], closes = 0
+        gate.commit = { closes += 1 }
+        gate.register(first, dirty: true, busy: false, allowsDiscard: true, save: { writes.append(1) })
+        gate.register(second, dirty: false, busy: false, allowsDiscard: true, save: nil)
+        gate.requestClose(); #expect(gate.asksToClose && gate.save != nil)
+        gate.keepEditing()
+        gate.register(second, dirty: true, busy: false, allowsDiscard: false, save: { writes.append(2); throw NSError(domain:"second-draft",code:1) })
+        gate.requestClose(); gate.discard(); #expect(closes == 0)
+        gate.saveAndClose()
+        for _ in 0..<10 { await Task.yield() }
+        #expect(writes == [1,2] && gate.failure != nil && gate.asksToClose && closes == 0)
+        gate.unregister(first); #expect(gate.dirty)
+        gate.keepEditing(); gate.unregister(second); #expect(!gate.dirty)
+        gate.requestClose(); #expect(closes == 1)
+    }
+}

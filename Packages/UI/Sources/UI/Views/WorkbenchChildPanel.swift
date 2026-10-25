@@ -12,6 +12,31 @@ import Observation
     @ObservationIgnored var busy = false
     @ObservationIgnored var save: (() async throws -> Void)?
     @ObservationIgnored var commit: () -> Void = {}
+    @ObservationIgnored var isCurrentSurface: () -> Bool = { true }
+    private struct Protection {
+        let dirty: Bool; let busy: Bool; let allowsDiscard: Bool
+        let save: (() async throws -> Void)?
+    }
+    @ObservationIgnored private var protections: [UUID: Protection] = [:]
+    @ObservationIgnored private var protectionOrder: [UUID] = []
+    func register(_ id: UUID, dirty: Bool, busy: Bool, allowsDiscard: Bool, save: (() async throws -> Void)?) {
+        guard active else { return }
+        if protections[id] == nil { protectionOrder.append(id) }
+        protections[id] = .init(dirty: dirty, busy: busy, allowsDiscard: allowsDiscard, save: save)
+        refreshProtections()
+    }
+    func unregister(_ id: UUID) {
+        protections.removeValue(forKey: id); protectionOrder.removeAll { $0 == id }
+        if active { refreshProtections() }
+    }
+    private func refreshProtections() {
+        let records = protectionOrder.compactMap { protections[$0] }, drafts = records.filter(\.dirty)
+        let saves = drafts.compactMap(\.save)
+        let combined: (() async throws -> Void)? = !drafts.isEmpty && saves.count == drafts.count
+            ? { for save in saves { try await save() } } : nil
+        update(dirty: !drafts.isEmpty, busy: records.contains(where: \.busy),
+               allowsDiscard: drafts.allSatisfy(\.allowsDiscard), save: combined)
+    }
     @ObservationIgnored var afterClose: (() -> Void)?
     @ObservationIgnored private var closeWaiters: [CheckedContinuation<Bool, Never>] = []
     var hasCloseWaiter: Bool { !closeWaiters.isEmpty }
@@ -26,7 +51,7 @@ import Observation
         }
     }
     func requestClose() {
-        guard active else { return }
+        guard active, isCurrentSurface() else { return }
         guard !saving && !busy else { pendingClose = true; return }
         if asksToClose { keepEditing(); return }
         if dirty { asksToClose = true } else { commit() }
@@ -42,15 +67,15 @@ import Observation
             if first && !asksToClose { requestClose() }
         }
     }
-    func detach() { active = false; pendingClose = false; commit = {}; save = nil }
+    func detach() { active = false; pendingClose = false; commit = {}; save = nil; protections = [:]; protectionOrder = []; isCurrentSurface = { false } }
     func finishClose() -> (() -> Void)? {
         let navigation = afterClose; afterClose = nil
         resolveClose(true); invalidate(); return navigation
     }
-    func invalidate() { active = false; pendingClose = false; commit = {}; save = nil; afterClose = nil; resolveClose(false) }
-    func discard() { guard active && allowsDiscard && !saving && !busy else { return }; asksToClose = false; commit() }
+    func invalidate() { active = false; pendingClose = false; commit = {}; save = nil; afterClose = nil; protections = [:]; protectionOrder = []; isCurrentSurface = { false }; resolveClose(false) }
+    func discard() { guard active && isCurrentSurface() && allowsDiscard && !saving && !busy else { return }; asksToClose = false; commit() }
     func saveAndClose() {
-        guard active, !saving, !busy, let save else { return }
+        guard active, isCurrentSurface(), !saving, !busy, let save else { return }
         saving = true; failure = nil
         Task { @MainActor in
             do { try await save(); guard active else { return }; saving = false; asksToClose = false; pendingClose = false; commit() }
@@ -191,6 +216,10 @@ public struct WorkbenchChildPanelSize: Equatable {
         super.init(frame: .zero)
         autoresizingMask = [.width, .height]; host.sizingOptions = []
         addSubview(host)
+        gate.isCurrentSurface = { [weak self] in
+            guard let self, let window = self.window else { return false }
+            return WorkbenchChildPanels.top(on: window) === self && window.attachedSheet == nil && NSApp.modalWindow == nil
+        }
         setAccessibilityIdentifier("workbench-child-backdrop")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:)") }
@@ -312,8 +341,18 @@ private struct ChildProtection: NSViewRepresentable {
     let allowsDiscard: Bool
     let save: (() async throws -> Void)?
     @Environment(\.workbenchChildClose) private var gate
+    @MainActor final class Registration {
+        let id = UUID()
+        weak var gate: WorkbenchChildCloseGate?
+        func detach() { gate?.unregister(id); gate = nil }
+    }
+    func makeCoordinator() -> Registration { Registration() }
     func makeNSView(context: Context) -> NSView { NSView() }
-    func updateNSView(_ view: NSView, context: Context) { gate?.update(dirty: dirty, busy: busy, allowsDiscard: allowsDiscard, save: save) }
+    func updateNSView(_ view: NSView, context: Context) {
+        if context.coordinator.gate !== gate { context.coordinator.detach(); context.coordinator.gate = gate }
+        gate?.register(context.coordinator.id, dirty: dirty, busy: busy, allowsDiscard: allowsDiscard, save: save)
+    }
+    static func dismantleNSView(_ view: NSView, coordinator: Registration) { coordinator.detach() }
 }
 
 private struct ChildPresentation: NSViewRepresentable {

@@ -4628,6 +4628,8 @@
     "modelManagement.credentialBusy": "请等待当前模型操作完成后设置访问令牌。",
     "childPanel.close": "关闭",
     "childPanel.closeNamed": "关闭{name}",
+    "chat.config.closeSaveInvalid": "请填写有效的预设名称并完成参数后再保存。",
+    "chat.organization.defaults.targetChanged": "设置目标已改变，请回到目标工作区后重新打开设置。",
     "childPanel.unsubmitted": "放弃尚未提交的修改并关闭？",
     "childPanel.unsaved": "是否保存修改后关闭？",
     "childPanel.keep": "继续编辑",

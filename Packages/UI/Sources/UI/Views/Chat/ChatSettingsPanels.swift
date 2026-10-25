@@ -50,6 +50,10 @@ struct ChatDefaultsSettingsPanel: View {
                 .font(.caption).foregroundStyle(.secondary)
             ChatPresetsManagementPanel(chat: chat, isAvailable: isAvailable, sessionID: chat.state.selectedSessionID)
         }.onAppear { if !loaded { draft = chat.defaultSystemPrompt; loaded = true } }
+            .workbenchCloseProtection(isDirty: loaded && draft != chat.defaultSystemPrompt, save: {
+                guard isAvailable() else { throw WorkflowIssue(t("defaults.targetChanged", "The workspace changed. Reopen Settings from the intended workspace.", "设置目标已改变，请回到目标工作区后重新打开设置。")) }
+                try chat.setDefaultSystemPrompt(draft)
+            })
     }
 }
 
@@ -67,7 +71,7 @@ struct ChatPresetsManagementPanel: View {
         VStack(alignment: .leading) {
             ChatPresetsPanel(chat: chat, sessionID: sessionID,
                 onImport: { Task { await importFile() } },
-                onExport: { values in Task { await export(values) } }, showsHeading: false).disabled(busy)
+                onExport: { values in Task { await export(values) } }, showsHeading: false, isAvailable: isAvailable).disabled(busy)
             if let pending {
                 Text(t("presets.importPreview", "Import copies: ", "将作为副本导入：") + pendingNames.joined(separator: "、"))
                 HStack {
@@ -79,7 +83,7 @@ struct ChatPresetsManagementPanel: View {
                 }
             }
             if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red) }
-        }
+        }.workbenchCloseProtection(isDirty: pending != nil, isSaving: busy)
     }
     private func importFile() async {
         guard !busy, isAvailable() else { return }; busy = true; defer { busy = false }

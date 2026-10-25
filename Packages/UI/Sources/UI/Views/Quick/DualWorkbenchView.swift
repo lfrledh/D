@@ -141,7 +141,6 @@ public struct DualWorkbenchView: View {
     }
     @State private var settingsContext: SettingsContext?
     @State private var openToolsRequest: ChatToolsNavigationRequest?
-    @State private var settingsDestination: String?
     @State private var issue: String?
     @State private var failedAssetRoute: FilesRoute?
     @Environment(\.dLanguageStore) private var language
@@ -192,23 +191,24 @@ public struct DualWorkbenchView: View {
         settingsContext = .init(owner: owner, files: files, searchOwner: searchOwner, search: target,
             searchSessionID: target?.state.selectedSessionID,
             searchTitle: target.map { (searchOwner.manifest?.name ?? t("workspace")) + " · " + ($0.selectedSession?.title ?? t("newConversation")) })
-        settingsDestination = nil
         settingsSection = section
         settingsVisible = true
     }
-    private func finishSettingsDismissal() {
-        let context = settingsContext
-        let destination = settingsDestination
-        settingsContext = nil; settingsDestination = nil
-        guard let context, let destination else { return }
-        if destination == "files" {
-            guard let route = context.files else { projectsVisible = true; return }
-            guard context.owner.projectSession.currentStore === route.store,
-                  context.owner.manifest?.effectiveInstanceID == route.instanceID else {
-                issue = t("targetChanged")
-                return
+    private func finishSettingsDismissal() { settingsContext = nil }
+    private func requestSettingsFiles(_ context: SettingsContext) {
+        guard let window = commandScope.window else { return }
+        WorkbenchChildPanels.navigate(on: window) {
+            guard commandScope.window === window else { return }
+            if let route = context.files {
+                guard context.owner.projectSession.currentStore === route.store,
+                      context.owner.manifest?.effectiveInstanceID == route.instanceID else {
+                    issue = t("targetChanged"); return
+                }
+                filesRoute = route
+            } else {
+                guard context.owner.projectSession.currentStore == nil else { issue = t("targetChanged"); return }
+                projectsVisible = true
             }
-            filesRoute = route
         }
     }
 
@@ -554,7 +554,7 @@ public struct DualWorkbenchView: View {
             if let language, let context = settingsContext {
                 WorkbenchSettingsView(model: context.owner, library: library, language: language,
                     projectPath: context.files?.store.rootURL.path, searchTargetLabel: context.searchTitle,
-                    onProjectFiles: { settingsDestination = "files"; settingsVisible = false },
+                    onProjectFiles: { requestSettingsFiles(context) },
                     onSearchSettings: nil, chat: context.search, initialSection: settingsSection,
                     isChatContextValid: {
                         guard let target = context.search else { return false }

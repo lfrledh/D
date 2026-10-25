@@ -69,6 +69,7 @@ import SwiftUI
 struct ChatPresetsPanel: View {
     @Environment(\.dLanguageStore) private var language
     let chat: ChatController
+    let isAvailable: @MainActor () -> Bool
     let sessionID: UUID?
     let onImport: () -> Void
     let showsHeading: Bool
@@ -76,15 +77,17 @@ struct ChatPresetsPanel: View {
 
     @State private var editingID: UUID?
     @State private var editorOpen = false
+    @State private var draftLoaded = false
     @State private var name = ""
     @State private var prompt = ""
     @State private var selectionInstruction = ""
     @State private var captureConfiguration = false
     @State private var issue: String?
+    @State private var closeSaveApplied = false
 
     init(chat: ChatController, sessionID: UUID?, onImport: @escaping () -> Void,
-         onExport: @escaping ([ChatPromptPreset]) -> Void, showsHeading: Bool = true) {
-        self.chat = chat
+         onExport: @escaping ([ChatPromptPreset]) -> Void, showsHeading: Bool = true, isAvailable: @escaping @MainActor () -> Bool = { true }) {
+        self.chat = chat; self.isAvailable = isAvailable
         self.sessionID = sessionID
         self.onImport = onImport
         self.onExport = onExport; self.showsHeading = showsHeading
@@ -113,9 +116,10 @@ struct ChatPresetsPanel: View {
         selectionInstruction = preset?.selectionInstruction ?? ""
         captureConfiguration = false
         issue = nil
-        editorOpen = true
+        editorOpen = true; draftLoaded = true
     }
     private func save() {
+        guard isAvailable() else { issue = workflowText(language, "chat.organization.defaults.targetChanged"); return }
         guard validName, !invalidCapture else { return }
         guard editingID == nil || original != nil else {
             issue = text("removed", "This preset was removed. Create a new preset to save these edits.",
@@ -128,7 +132,7 @@ struct ChatPresetsPanel: View {
             selectionInstruction: instruction)
         perform { try ChatConfigurationActions.savePreset(preset,
             captureCurrentConfiguration: captureConfiguration, sessionID: sessionID, chat: chat) }
-        if issue == nil { editorOpen = false }
+        if issue == nil { editorOpen = false; draftLoaded = false }
     }
 
     var body: some View {
@@ -182,7 +186,26 @@ struct ChatPresetsPanel: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .disabled(closeSaveApplied)
+        .workbenchCloseProtection(isDirty: closeSaveApplied || (draftLoaded && (name != (original?.name ?? "") || prompt != (original?.prompt ?? "") || selectionInstruction != (original?.selectionInstruction ?? "") || captureConfiguration)), allowsDiscard: !closeSaveApplied, save: {
+            guard isAvailable() else { throw WorkflowIssue(workflowText(language, "chat.organization.defaults.targetChanged")) }
+            if !closeSaveApplied {
+                save()
+                guard issue == nil, !draftLoaded else {
+                    throw WorkflowIssue(issue ?? text("closeSaveInvalid", "Complete a valid preset name and settings before saving.", "请填写有效的预设名称并完成参数后再保存。"))
+                }
+                closeSaveApplied = true; editorOpen = true; draftLoaded = true
+            }
+            do {
+                guard isAvailable() else { throw WorkflowIssue(workflowText(language, "chat.organization.defaults.targetChanged")) }
+                try await chat.flush()
+                guard isAvailable() else { throw WorkflowIssue(workflowText(language, "chat.organization.defaults.targetChanged")) }
+                closeSaveApplied = false; editorOpen = false; draftLoaded = false
+            }
+            catch { issue = error.localizedDescription; throw error }
+        })
         .onChange(of: sessionID) { _, _ in
+            if draftLoaded || closeSaveApplied { return }
             editorOpen = false
             editingID = nil
             issue = nil
@@ -219,7 +242,7 @@ struct ChatPresetsPanel: View {
                     Button(text("restore", "Restore saved version", "恢复已保存版本")) { load(original) }
                         .disabled(original == nil)
                     Spacer()
-                    Button(text("cancel", "Cancel", "取消")) { editorOpen = false; issue = nil }
+                    Button(text("cancel", "Cancel", "取消")) { editorOpen = false; draftLoaded = false; issue = nil }
                     Button(text("save", "Save preset", "保存预设"), action: save)
                         .disabled(!validName || invalidCapture || prompt.utf8.count > 65_536 ||
                                   selectionInstruction.utf8.count > 16_384 || !chat.isLoaded || chat.saveIssue != nil)
