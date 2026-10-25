@@ -84,6 +84,11 @@ struct ChatMessageContent: View {
         return attempt?.rawText ?? message.text
     }
 
+    var recordedReasoning: String? {
+        guard attempt?.status != .running, let value = attempt?.response?.reasoningText, !value.isEmpty else { return nil }
+        return value
+    }
+
     var primaryText: String { Self.answerText(message: message, attempt: attempt, selectedAnswer: selectedAnswer) }
 
     var body: some View {
@@ -93,6 +98,17 @@ struct ChatMessageContent: View {
                                  rawText: primaryText, isStreaming: false)
             } else {
                 sourceContent
+            }
+            if let reasoning = recordedReasoning {
+                DisclosureGroup(label("reasoning", "思考过程"), isExpanded: $reasoningExpanded) {
+                    Text(reasoning).font(.system(size: CGFloat(displayPreferences.textPointSize))).textSelection(.enabled)
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(reasoning, forType: .string)
+                    } label: { Image(systemName: "doc.on.doc").font(.system(size: 16)).frame(width: 28, height: 28) }
+                    .buttonStyle(ChatMessageIconStyle()).help(label("copyReasoning", "复制思考内容"))
+                    .accessibilityLabel(label("copyReasoning", "复制思考内容"))
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -107,18 +123,6 @@ struct ChatMessageContent: View {
                     ChatMarkdownView(messageID: message.id, text: presentation.text,
                                      rawText: presentation.rawText, isStreaming: presentation.isUnseparatedRaw)
                         .id(message.id)
-                }
-                if !presentation.isUnseparatedRaw,
-                   let reasoning = attempt.response?.reasoningText, !reasoning.isEmpty {
-                    DisclosureGroup(label("reasoning", "思考过程"), isExpanded: $reasoningExpanded) {
-                        Text(reasoning).font(.system(size: CGFloat(displayPreferences.textPointSize))).textSelection(.enabled)
-                        Button {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(reasoning, forType: .string)
-                        } label: { Image(systemName: "doc.on.doc").font(.system(size: 16)).frame(width: 28, height: 28) }
-                        .buttonStyle(ChatMessageIconStyle()).help(label("copyReasoning", "复制思考内容"))
-                        .accessibilityLabel(label("copyReasoning", "复制思考内容"))
-                    }
                 }
                 if !presentation.isUnseparatedRaw,
                    let calls = attempt.response?.toolCalls, !calls.isEmpty {

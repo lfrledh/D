@@ -92,6 +92,8 @@ struct ChatMessageClarityTests {
         #expect(ChatMessageContent.answerText(message: m, attempt: a, selectedAnswer: s.selectedAnswer(messageID: m.id)) == revision.text)
         #expect(ChatChannelPresentation(a).rawText == a.rawText)
         #expect(s.attempts == [a])
+        let view = ChatMessageContent(message: m, attempt: a, selectedAnswer: s.selectedAnswer(messageID: m.id), onPreview: { _ in })
+        #expect(view.recordedReasoning == "private reasoning")
     }
     @Test func independentBodyAndToolGeometry() async throws {
         for user in [false, true] {
