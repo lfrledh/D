@@ -149,11 +149,35 @@ public struct WorkbenchChildPanelSize: Equatable {
     }
 }
 
+/// Owns the initial responder before any field is clicked. NSTextView keeps
+/// composition handling when it is the responder; this host only handles its own Escape.
+@MainActor final class WorkbenchChildHostingView: NSHostingView<AnyView> {
+    let closeGate: WorkbenchChildCloseGate
+    init(rootView: AnyView, gate: WorkbenchChildCloseGate) {
+        closeGate = gate
+        super.init(rootView: rootView)
+    }
+    required init(rootView: AnyView) { fatalError("Use init(rootView:gate:)") }
+    @MainActor required dynamic init?(coder: NSCoder) { fatalError("init(coder:)") }
+    override var acceptsFirstResponder: Bool { true }
+    override func cancelOperation(_ sender: Any?) {
+        guard let window, WorkbenchChildPanels.top(on: window)?.host === self,
+              window.attachedSheet == nil, NSApp.modalWindow == nil, !(NSApp.keyWindow is NSSavePanel),
+              (window.firstResponder as? NSTextView)?.hasMarkedText() != true else { return }
+        closeGate.requestClose()
+    }
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53, event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+            cancelOperation(nil)
+        } else { super.keyDown(with: event) }
+    }
+}
+
 /// B is a native hit-test barrier. AppKit keeps the entire mouse gesture here,
 /// including a drag out of the parent. C never reaches this view.
 @MainActor private final class WorkbenchChildOverlay: NSView {
     let gate: WorkbenchChildCloseGate
-    let host: NSHostingView<AnyView>
+    let host: WorkbenchChildHostingView
     var size: WorkbenchChildPanelSize
     weak var previousResponder: NSResponder?
     weak var previousEditorDelegate: AnyObject?
@@ -163,7 +187,7 @@ public struct WorkbenchChildPanelSize: Equatable {
     }
     override var isFlipped: Bool { true }
     init(content: AnyView, gate: WorkbenchChildCloseGate, size: WorkbenchChildPanelSize) {
-        self.gate = gate; self.size = size; host = NSHostingView(rootView: content)
+        self.gate = gate; self.size = size; host = WorkbenchChildHostingView(rootView: content, gate: gate)
         super.init(frame: .zero)
         autoresizingMask = [.width, .height]; host.sizingOptions = []
         addSubview(host)
@@ -266,7 +290,7 @@ private struct WorkbenchChildSurface: View {
                 ZStack {
                     Color.black.opacity(0.08).contentShape(Rectangle()).onTapGesture { gate.keepEditing() }
                     VStack(alignment: .leading, spacing: 16) {
-                        Text(t("unsaved")).font(.headline)
+                        Text(t(gate.save == nil ? "unsubmitted" : "unsaved")).font(.headline)
                         if let failure = gate.failure { Text(failure).foregroundStyle(.red).textSelection(.enabled) }
                         if gate.saving { ProgressView() }
                         HStack {

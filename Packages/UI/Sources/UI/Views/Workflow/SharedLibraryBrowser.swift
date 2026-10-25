@@ -383,6 +383,7 @@ public struct SharedLibraryBrowser: View {
     @State private var selectedFolderID: UUID?
     @FocusState private var searchFocused: Bool
     @FocusState private var selectionFocused: Bool
+    @FocusState private var entryKeyboardFocus: String?
     @State private var showTags = false
     @State private var tagSearch = ""
     @State private var selectedQueryID: UUID?
@@ -513,6 +514,9 @@ public struct SharedLibraryBrowser: View {
         .background(WorkbenchCommandWindow(scope: commandScope))
         .focusable().focusEffectDisabled().focused($selectionFocused)
         .focusedValue(\.workbenchAssetExport, exportMenuCommand)
+        .onChange(of: entryKeyboardFocus) { _, value in
+            if let value, visible.contains(where: { $0.id == value }) { focusedKey = value }
+        }
         .onKeyPress(.space) {
             guard selectionFocused, !searchFocused, contentVisible, commandScope.permitsCommands,
                   let entry = selectedEntry, visible.contains(where: { $0.id == entry.id }), canPreview(entry) else { return .ignored }
@@ -631,11 +635,11 @@ public struct SharedLibraryBrowser: View {
                         Text(entry.item.title).font(.callout.weight(.medium)).lineLimit(2)
                         Text(readinessName(entry.item.readiness)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(selectedKeys.contains(entry.id) ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 12))
+                        .modifier(WorkbenchItemFeedback(selected: selectedKeys.contains(entry.id), focused: entryKeyboardFocus == entry.id, radius: 12))
                         .contentShape(RoundedRectangle(cornerRadius: 12))
                         .onTapGesture(count: 2) { dispatch(.preview, key: entry.id) }
-                        .onTapGesture { selectedKeys = [entry.id]; focusedKey = entry.id; selectionFocused = true }
-                        .focusable().focusEffectDisabled().onKeyPress(.space) { dispatch(.preview, key: entry.id); return .handled }
+                        .onTapGesture { selectedKeys = [entry.id]; focusedKey = entry.id; entryKeyboardFocus = entry.id }
+                        .focusable().focused($entryKeyboardFocus, equals: entry.id).focusEffectDisabled().onKeyPress(.space) { dispatch(.preview, key: entry.id); return .handled }
                         .workbenchContextMenu { resourceActions(entry) }.onDrag { dragProvider(for: entry.id) }
                         .accessibilityElement(children: .combine).accessibilityIdentifier("shared-library-entry-" + entry.id)
                 }
@@ -667,6 +671,7 @@ public struct SharedLibraryBrowser: View {
                     Button { state.operationPath = ancestors.map(\.id) + [item.id] } label: {
                         HStack { Text(item.title); Spacer(); Image(systemName: "chevron.right") }
                             .padding(10).frame(maxWidth: .infinity).contentShape(Rectangle())
+                            .modifier(WorkbenchItemFeedback(selected: false, focused: false))
                     }.buttonStyle(.plain)
                 }
             }
@@ -927,7 +932,7 @@ public struct SharedLibraryBrowser: View {
                     if selectedKeys.contains(entry.id) { selectedKeys.remove(entry.id) }
                     else { selectedKeys.insert(entry.id) }
                     focusedKey = entry.id
-                    selectionFocused = true
+                    entryKeyboardFocus = entry.id
                 } label: {
                     Image(systemName: selectedKeys.contains(entry.id) ? "checkmark.circle.fill" : "circle")
                 }
@@ -946,20 +951,18 @@ public struct SharedLibraryBrowser: View {
             }
         }
         .padding(6)
-        .background(selectedKeys.contains(entry.id) ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(alignment: .leading) {
-            if selectionFocused && focusedKey == entry.id { Capsule().fill(Color.accentColor).frame(width: 3, height: 20).allowsHitTesting(false) }
-        }.contentShape(Rectangle())
+        .modifier(WorkbenchItemFeedback(selected: selectedKeys.contains(entry.id), focused: entryKeyboardFocus == entry.id))
+        .contentShape(Rectangle())
         .onTapGesture {
             focusedKey = entry.id
-            if compact { selectionFocused = true }
+            if compact { entryKeyboardFocus = entry.id }
             if compact { selectedKeys = [entry.id]; if canvasMode?.resourceCategory == nil { compactDetailKey = entry.id } }
         }
         .accessibilityIdentifier("shared-library-entry-" + entry.id)
         VStack(alignment: .leading, spacing: 4) {
             row.workbenchContextMenu { resourceActions(entry) }.onDrag { dragProvider(for: entry.id) }
                 .onTapGesture(count:2) { if entry.item.kind == .asset,canPreview(entry) { dispatch(.preview,key:entry.id) } }
-                .focusable(entry.item.kind == .asset).focusEffectDisabled()
+                .focusable().focused($entryKeyboardFocus, equals: entry.id).focusEffectDisabled()
                 .onKeyPress(.space) { guard entry.item.kind == .asset,canPreview(entry) else { return .ignored }; dispatch(.preview,key:entry.id);return .handled }
             if let ids = store.metadata.tagAssignments[entry.item.key], !ids.isEmpty {
                 HStack {

@@ -641,3 +641,20 @@ extension View {
 @MainActor func layoutText(_ language: UILanguageStore?, _ key: String, arguments: [String: String] = [:]) -> String {
     workflowText(language, "layoutInteraction." + key, arguments: arguments)
 }
+
+// Item-local feedback: hover changes only this surface, never a sidebar host.
+struct WorkbenchItemFeedback: ViewModifier {
+    let selected: Bool
+    let focused: Bool
+    var radius: CGFloat = 10
+    @State private var hovering = false
+    func body(content: Content) -> some View {
+        content
+            .background(selected ? Color.accentColor.opacity(0.14) : hovering ? Color.primary.opacity(0.05) : .clear,
+                        in: RoundedRectangle(cornerRadius: radius))
+            .overlay(alignment: .leading) {
+                if focused { Capsule().fill(Color.accentColor).frame(width: 3, height: 20).allowsHitTesting(false) }
+            }
+            .onHover { hovering = $0 }
+    }
+}

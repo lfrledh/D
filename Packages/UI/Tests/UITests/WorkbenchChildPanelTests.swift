@@ -111,3 +111,36 @@ extension WorkbenchChildPanelTests {
         #expect(rate.identity == nil)
     }
 }
+
+
+extension WorkbenchChildPanelTests {
+    @Test func initialPanelHostAcceptsEscapeWithoutClickingAnEditor() throws {
+        let window = NSWindow(contentRect: .init(x:0,y:0,width:1080,height:740), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = NSView()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-child-escape-" + UUID().uuidString)
+        defer { window.close(); try? FileManager.default.removeItem(at: root) }
+        let preferences = ChatDisplayPreferencesState(appearanceDirectory: root)
+        let panel = try #require(WorkbenchChildPanelHandle(owner: window, title: "Parent", content: AnyView(Text("Controlled panel")), preferences: preferences, language: nil))
+        let host = try #require(WorkbenchChildPanels.frontmostSurface(on: window)?.subviews.compactMap { $0 as? WorkbenchChildHostingView }.first)
+        let gate = host.closeGate; var closes = 0
+        gate.commit = { closes += 1 }
+        #expect(host.acceptsFirstResponder)
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        gate.update(dirty: true, busy: false, save: nil)
+        host.keyDown(with: event)
+        #expect(gate.asksToClose && closes == 0)
+        host.keyDown(with: event)
+        #expect(!gate.asksToClose && closes == 0)
+        let child = try #require(WorkbenchChildPanelHandle(owner: window, title: "Child", content: AnyView(Text("Nested panel")), preferences: preferences, language: nil))
+        host.keyDown(with: event) // A stale parent responder must not close either surface.
+        #expect(!gate.asksToClose && closes == 0 && child.isVisible && panel.isVisible)
+        child.close()
+        gate.update(dirty: false, busy: false, save: nil)
+        host.keyDown(with: event)
+        #expect(closes == 1)
+        panel.close()
+        host.keyDown(with: event) // Detached host is inert.
+        #expect(closes == 1)
+    }
+}

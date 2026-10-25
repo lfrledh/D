@@ -4628,6 +4628,7 @@
     "modelManagement.credentialBusy": "Wait for the current model operation to finish before setting the access token.",
     "childPanel.close": "Close",
     "childPanel.closeNamed": "Close {name}",
+    "childPanel.unsubmitted": "Discard unsubmitted changes and close?",
     "childPanel.unsaved": "Save changes before closing?",
     "childPanel.keep": "Keep Editing",
     "childPanel.discard": "Discard and Close",

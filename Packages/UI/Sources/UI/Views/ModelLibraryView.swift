@@ -25,7 +25,7 @@ public struct ModelLibraryView: View {
     @State private var registerAfterDownload = false
     @State private var narrowDetail = false
     @State private var expandedTask: UUID?
-    @State private var hoveredTask: UUID?
+    @FocusState private var focusedTask: UUID?
     @State private var rate = ModelDownloadRate()
     @State private var preparableResource: ModelID?
     @State private var confirmation: Confirmation?
@@ -220,9 +220,19 @@ public struct ModelLibraryView: View {
                         }.frame(minHeight: 64)
                         if expandedTask == task.id { Divider(); downloadDetail(task).padding(.vertical, 8) }
                     }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(model.selectedTask == task.id ? Color.accentColor.opacity(0.14) : hoveredTask == task.id ? Color.primary.opacity(0.05) : .clear, in: RoundedRectangle(cornerRadius: 10))
-                        .contentShape(RoundedRectangle(cornerRadius: 10)).onTapGesture { model.selectedTask = task.id }
-                        .onHover { hoveredTask = $0 ? task.id : nil }
+                        .modifier(WorkbenchItemFeedback(selected: model.selectedTask == task.id, focused: focusedTask == task.id))
+                        .contentShape(RoundedRectangle(cornerRadius: 10))
+                        .onTapGesture { model.selectedTask = task.id; focusedTask = task.id }
+                        .focusable().focused($focusedTask, equals: task.id).focusEffectDisabled()
+                        .onMoveCommand { direction in
+                            guard direction == .up || direction == .down,
+                                  let index = downloads.firstIndex(where: { $0.id == task.id }) else { return }
+                            let next = index + (direction == .up ? -1 : 1)
+                            guard downloads.indices.contains(next) else { return }
+                            let id = downloads[next].id
+                            focusedTask = id; model.selectedTask = id
+                            model.taskListScroll.scrollTo(id: id)
+                        }
                         .id(task.id)
     }
     private func sampleTransfer() {
