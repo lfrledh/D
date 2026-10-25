@@ -90,7 +90,7 @@ struct QuickGenerationView: View {
                     if let definition, let draft = quick.draft {
                         VStack(alignment: .leading, spacing: 6) {
                             ForEach(definition.fields.filter { ["task", "promptText"].contains($0.id) }) { field in
-                                QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
+                                QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, modelIdentity: draft.node.parameters["modelID"]?.string, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
                                     onChange: { quick.setParameter(field.id, value: $0, draftID: draft.id) }, raw: draft.fieldText[field.id], onRaw: { quick.setFieldText(field.id, text: $0, draftID: draft.id) })
                             }
                         }.frame(maxHeight: min(180, geometry.size.height * 0.28))
@@ -303,7 +303,7 @@ struct QuickGenerationView: View {
                             DisclosureGroup(baselineText(language, "label.44455611b910"), isExpanded: $advanced) {
                                 VStack(alignment: .leading, spacing: 14) {
                                     ForEach(definition.fields.filter { !["modelID", "task", "promptText", "count"].contains($0.id) }) { field in
-                                        QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
+                                        QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, modelIdentity: draft.node.parameters["modelID"]?.string, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
                                             onChange: { quick.setParameter(field.id, value: $0, draftID: draft.id) }, raw: draft.fieldText[field.id], onRaw: { quick.setFieldText(field.id, text: $0, draftID: draft.id) })
                                     }
                                     if WorkflowModelRoutes.isLanguage(draft.node.operationID),
@@ -572,6 +572,7 @@ private struct QuickInputAssetName: View {
 struct QuickParameterField: View {
     let ownerID: String
     let operationID: String
+    var modelIdentity: String? = nil
     let field: WorkflowFieldDefinition
     let value: WorkflowScalar
     let onChange: (WorkflowScalar) -> Void
@@ -595,7 +596,16 @@ struct QuickParameterField: View {
                 }
                 else { TextField(title, text: stringBinding).textFieldStyle(WorkbenchGlassTextFieldStyle()) }
             case .choice(let options):
-                WorkbenchPicker(title, selection: stringBinding) { WorkbenchChoiceForEach(options, id: \.self) { WorkbenchChoice(WorkflowCanvasPresentation.choiceTitle(fieldID: field.id, value: $0, language: language), value:$0) } }.labelsHidden()
+                WorkbenchPicker(title, selection: stringBinding) {
+                    WorkbenchChoiceForEach(options, id: \.self) { option in
+                        WorkbenchChoice(WorkflowCanvasPresentation.choiceTitle(fieldID: field.id, value: option, language: language), value: option)
+                            .disabled(field.id == "loadingStrategy" && WorkflowModelRoutes.rejectsTextLoading(modelIdentity: modelIdentity, strategy: option))
+                    }
+                }.labelsHidden()
+                if field.id == "loadingStrategy", WorkflowModelRoutes.rejectsTextLoading(modelIdentity: modelIdentity, strategy: "ssdLayered") {
+                    Text(workflowText(language, "workflow.loading.quantizedRestriction"))
+                        .font(.caption).foregroundStyle(value.string == "ssdLayered" ? .orange : .secondary)
+                }
             case .flag: Toggle(title, isOn: Binding(get: { if case .flag(let b) = value { b } else { false } }, set: { onChange(.flag($0)) })).labelsHidden()
             case .integer, .decimal:
                 TextField(title, text: Binding(get: { raw ?? numberString }, set: { onRaw($0) })).textFieldStyle(WorkbenchGlassTextFieldStyle())

@@ -87,6 +87,7 @@
     "files.import.copy": "Copy into Project (Default)",
     "files.import.reference": "Reference Original Location",
     "files.import.warning": "References require the original file and disk connection; the original is not moved or deleted.",
+    "workflow.loading.quantizedRestriction": "This quantized model does not support SSD layer loading. Choose resident loading; existing settings are not changed automatically.",
     "workflow.loading.resident": "Resident weights (same precision)",
     "workflow.loading.staged": "Load by stage (same precision)",
     "workflow.loading.ssdLayered": "Lower memory: SSD layer loading (same precision)",

@@ -5,6 +5,27 @@ import Testing
 
 @Suite("VLM shared form and response closeout")
 struct WorkflowLanguageCloseoutTests {
+    @Test func knownLoadingRestrictionUsesExactProfileAndPreservesSavedChoice() throws {
+        let profiles = try TextModelProfiles.registeredVLM()
+        #expect(profiles.contains { $0.quantizationBits == 4 })
+        #expect(profiles.contains { $0.quantizationBits == 0 })
+        for profile in profiles {
+            let identity = "text:" + profile.revision
+            #expect(WorkflowModelRoutes.rejectsTextLoading(modelIdentity: identity, strategy: "ssdLayered") == (profile.quantizationBits > 0))
+            #expect(!WorkflowModelRoutes.rejectsTextLoading(modelIdentity: identity, strategy: "resident"))
+        }
+        #expect(!WorkflowModelRoutes.rejectsTextLoading(modelIdentity: "Qwen3.5-9B-4bit", strategy: "ssdLayered"))
+        #expect(!WorkflowModelRoutes.rejectsTextLoading(modelIdentity: nil, strategy: "ssdLayered"))
+        var node = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
+        node.parameters["modelID"] = .text("text:" + (try #require(profiles.first { $0.quantizationBits == 4 })).revision)
+        node.parameters["loadingStrategy"] = .text("ssdLayered")
+        let before = node
+        #expect(WorkflowModelRoutes.rejectsTextLoading(modelIdentity: node.parameters["modelID"]?.string, strategy: node.parameters["loadingStrategy"]?.string ?? ""))
+        #expect(node == before)
+        // Rendering must preserve old selections. Execution retains backend inventory rejection.
+        #expect(try WorkflowLanguageMessageForm.loadingStrategy(node.parameters) == .ssdLayered)
+    }
+
     @Test func orderedMediaAndRoleFormPreservesMeaningAndRejectsUnusedInputs() throws {
         let image = TextImageReference(url: URL(fileURLWithPath: "/fixture/a.png"), width: 1, height: 1,
                                       byteCount: 3, contentSHA256: String(repeating: "a", count: 64))

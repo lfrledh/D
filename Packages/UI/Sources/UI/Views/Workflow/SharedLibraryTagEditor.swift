@@ -40,7 +40,7 @@ struct SharedLibraryTagSection: View {
                 if let failure = target.legacyFailure { Text(failure).font(.caption).foregroundStyle(.orange) }
                 Button(text("edit", "编辑标签…")) { editing = true }
                     .accessibilityIdentifier("organization-tags-edit")
-                    .workbenchSheet(isPresented: $editing, title: workflowText(language, "childPanel.name.metadata")) { SharedLibraryTagEditor(store: store, targets: [target], validateTarget: validateTarget) }
+                    .workbenchSheet(isPresented: $editing, title: workflowText(language, "childPanel.name.tags")) { SharedLibraryTagEditor(store: store, targets: [target], validateTarget: validateTarget) }
             } else { Text(text("unavailable", "共享标签库不可用；未写入旧标签存储。")) .font(.caption).foregroundStyle(.secondary) }
         }
     }

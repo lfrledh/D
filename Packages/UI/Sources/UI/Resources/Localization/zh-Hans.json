@@ -89,6 +89,7 @@
     "files.import.copy": "复制到项目（默认）",
     "files.import.reference": "引用原位置",
     "files.import.warning": "引用需要保留原文件和磁盘连接；不会移动或删除原件。",
+    "workflow.loading.quantizedRestriction": "此量化模型不支持 SSD 分层加载。请选择常驻内存；已有配置不会自动更改。",
     "workflow.loading.resident": "常驻内存（精度不变）",
     "workflow.loading.staged": "分阶段加载（精度不变）",
     "workflow.loading.ssdLayered": "省内存（SSD 分层加载，精度不变）",

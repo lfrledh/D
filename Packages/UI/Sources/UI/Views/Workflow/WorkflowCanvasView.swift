@@ -1821,6 +1821,7 @@ private struct WorkflowNodeInspector: View {
 
     private func fieldEditor(_ field: WorkflowFieldDefinition, node: WorkflowNode, definition: WorkflowOperationDefinition) -> some View {
         WorkflowFieldEditor(field: field, operationID: node.operationID,
+            modelIdentity: node.parameters["modelID"]?.string,
             value: node.parameters[field.id] ?? field.defaultValue,
             readOnly: readOnly || !controller.canEditCanvas,
             modelChoices: controller.modelChoices.filter { $0.kind == definition.modelKind },
@@ -2133,6 +2134,7 @@ struct WorkflowVideoPresetAction: Equatable {
 private struct WorkflowFieldEditor: View {
     let field: WorkflowFieldDefinition
     let operationID: String
+    let modelIdentity: String?
     let value: WorkflowScalar
     let readOnly: Bool
     let modelChoices: [WorkflowModelChoice]
@@ -2191,10 +2193,17 @@ private struct WorkflowFieldEditor: View {
             Toggle(title, isOn: flagBinding).labelsHidden().disabled(readOnly)
         case .choice(let choices):
             WorkbenchPicker(title, selection: textBinding) {
-                WorkbenchChoiceForEach(choices, id: \.self) { WorkbenchChoice(WorkflowCanvasPresentation.choiceTitle(fieldID: field.id, value: $0, language: languageStore), value:$0) }
+                WorkbenchChoiceForEach(choices, id: \.self) { option in
+                    WorkbenchChoice(WorkflowCanvasPresentation.choiceTitle(fieldID: field.id, value: option, language: languageStore), value: option)
+                        .disabled(field.id == "loadingStrategy" && WorkflowModelRoutes.rejectsTextLoading(modelIdentity: modelIdentity, strategy: option))
+                }
             }
             .labelsHidden()
             .disabled(readOnly)
+            if field.id == "loadingStrategy", WorkflowModelRoutes.rejectsTextLoading(modelIdentity: modelIdentity, strategy: "ssdLayered") {
+                Text(workflowText(languageStore, "workflow.loading.quantizedRestriction"))
+                    .font(.caption).foregroundStyle(value.string == "ssdLayered" ? .orange : .secondary)
+            }
         }
     }
 

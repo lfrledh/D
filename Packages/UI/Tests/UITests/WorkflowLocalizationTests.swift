@@ -25,7 +25,8 @@ struct WorkflowLocalizationTests {
         #expect(workflowRecoveryProgressText(pending, language: language) == (locale == "en"
             ? "Computation failed. The failure record has not been saved; retry saving the record." : pending))
         #expect(workflowRecoveryProgressText(saved, language: language) == (locale == "en"
-            ? "The failure record is saved. The workflow is still failed. Retry computation explicitly when needed." : saved))
+            ? "The failure record is saved. The workflow is still failed. Retry computation explicitly when needed."
+            : "失败记录已保存；工作流仍失败。需要重新计算时，请明确重试计算。"))
         let primary = "DHA integrity / 私有路径/a%20b {runID}\n原始严重诊断"
         let secondary = "write failed: /原样/🙂 {stepID}\nsecondary details"
         let raw = primary + "\n失败记录保存错误：" + secondary

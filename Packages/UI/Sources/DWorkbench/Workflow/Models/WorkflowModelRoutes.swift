@@ -36,6 +36,14 @@ public enum WorkflowModelRoutes {
         if entry.workflowProfileID == operationID { return true }
         return entry.workflowProfileID == "d.model.language" && identity == "text:" + entry.revision && legacyTextOperations(identity: identity).contains(operationID)
     }
+    /// A restriction from the fixed adapter catalog, not a claim of runtime readiness.
+    /// Unknown/local identities still require the backend's full inventory validation.
+    public static func rejectsTextLoading(modelIdentity: String?, strategy: String) -> Bool {
+        strategy == "ssdLayered" && modelIdentity.map(quantizedVLMIdentities.contains) == true
+    }
+    private static let quantizedVLMIdentities = Set(((try? TextModelProfiles.registeredVLM()) ?? [])
+        .filter { $0.quantizationBits > 0 }.map { "text:" + $0.revision })
+
     private static let draftRoutes: [(operation: String, choice: WorkflowModelChoice)] = {
         let textIDs = Set((((try? TextModelProfiles.registered()) ?? [])
             + ((try? TextModelProfiles.registeredVLM()) ?? [])).map(\.id))

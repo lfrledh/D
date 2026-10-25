@@ -1998,6 +1998,7 @@ ScrollViewReader { proxy in
                     Text(label("toolsUnexecuted", "仅向模型提供声明；此字段尚未接通自动执行。右侧工具仍可手动运行。")).font(.caption).foregroundStyle(.secondary)
                 }
                 QuickParameterField(ownerID: session.id.uuidString, operationID: node.operationID,
+                    modelIdentity: node.parameters["modelID"]?.string,
                     field: field, value: node.parameters[field.id] ?? field.defaultValue,
                     onChange: { value in changeParameter(field.id, value: value, node: node, sessionID: session.id) },
                     raw: chat.parameterText[session.id.uuidString + ":" + field.id],
