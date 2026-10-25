@@ -248,6 +248,16 @@ import Testing
         #expect(config.inlineStyle.codeTextFont.pointSize == 22)
         #expect(!config.imageConfig.enabled)
         #expect(config.codeBlockConfig.wrapsLines)
+        // A local theme must win over a contrary system appearance, including
+        // code chrome. Syntax highlighting resolves the same scheme in DocumentView.
+        for (theme, system, resolved) in [(ChatDisplayPreferences.Theme.light, ColorScheme.dark, ColorScheme.light), (.dark, .light, .dark)] {
+            preferences.theme = theme
+            let styled = ChatMarkdownPresentation.config(for: preferences, colorScheme: system)
+            let palette = preferences.resolvedAppearance.palette(for: resolved)
+            #expect(styled.codeBlockConfig.theme == .xcode)
+            #expect(styled.codeBlockConfig.foregroundColor == palette.foregroundColor)
+            #expect(styled.codeBlockConfig.backgroundColor == palette.panelColor)
+        }
         #expect(!ChatMarkdownPresentation.config.codeBlockConfig.wrapsLines)
         let document = await ChatMarkdownPresentation.parse("**Hello**", pointSize: 22)
         #expect(document != .empty)

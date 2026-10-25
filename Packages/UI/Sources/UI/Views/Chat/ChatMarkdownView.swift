@@ -55,9 +55,8 @@ enum ChatMarkdownPresentation {
         let code = fonts(size, monospaced: true)
         let table = MarkdownRenderConfig.defaultTableStyle
         let inline = MarkdownRenderConfig.defaultInlineStyle
-        let codeBlock = CodeBlockConfig.default
-        var block = CodeBlockConfig(theme: codeBlock.theme, backgroundColor: codeBlock.backgroundColor,
-            foregroundColor: codeBlock.foregroundColor, codeTextFonts: code, chromeTextFonts: fonts(max(12, size - 2)))
+        var block = CodeBlockConfig(theme: .xcode, backgroundColor: palette.panelColor,
+            foregroundColor: palette.foregroundColor, codeTextFonts: code, chromeTextFonts: fonts(max(12, size - 2)))
         block.wrapsLines = preferences.wrapsCode
         let minorHeading = fonts(size * 20 / 17)
         let config = MarkdownRenderConfig(
@@ -195,6 +194,7 @@ struct ChatMarkdownView: View {
                 DocumentView(renderableDocument: document,
                              config: ChatMarkdownPresentation.config(for: displayPreferences, colorScheme: colorScheme),
                              listener: ChatMarkdownListener())
+                    .environment(\.colorScheme, displayPreferences.preferredColorScheme ?? colorScheme)
                     .environment(\.openURL, OpenURLAction { url in
                         ChatMarkdownPresentation.requestURL(url) { pendingLink = $0 }
                     })
