@@ -34,7 +34,7 @@ enum ChatMarkdownPresentation {
     }
 
     private struct ConfigurationKey: Equatable {
-        let size: Int; let wraps: Bool; let foreground: String; let accent: String; let panel: String; let language: String
+        let size: Int; let wraps: Bool; let foreground: String; let accent: String; let panel: String; let copyCode: String; let copyTable: String; let copied: String
     }
     @MainActor private static var configurations: [(ConfigurationKey, MarkdownRenderConfig)] = []
     #if DEBUG
@@ -45,7 +45,7 @@ enum ChatMarkdownPresentation {
     static func config(for preferences: ChatDisplayPreferences, colorScheme: ColorScheme = .light, language: UILanguageStore? = nil) -> MarkdownRenderConfig {
         let palette = preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? colorScheme)
         let key = ConfigurationKey(size: preferences.textPointSize, wraps: preferences.wrapsCode,
-            foreground: palette.foreground, accent: palette.accent, panel: palette.panel, language: language?.effectiveLanguageIdentifier ?? "")
+            foreground: palette.foreground, accent: palette.accent, panel: palette.panel, copyCode: workflowText(language, "chat.clarity.copyCode"), copyTable: workflowText(language, "chat.clarity.copyTable"), copied: workflowText(language, "chat.clarity.copied"))
         if let cached = configurations.first(where: { $0.0 == key }) { return cached.1 }
         #if DEBUG
         configurationBuilds += 1
@@ -58,12 +58,12 @@ enum ChatMarkdownPresentation {
         var block = CodeBlockConfig(theme: .xcode, backgroundColor: palette.panelColor,
             foregroundColor: palette.foregroundColor, codeTextFonts: code, chromeTextFonts: fonts(max(12, size - 2)))
         block.wrapsLines = preferences.wrapsCode
-        block.copyLabel = workflowText(language, "chat.clarity.copyCode")
-        block.copiedLabel = workflowText(language, "chat.clarity.copied")
+        block.copyLabel = key.copyCode
+        block.copiedLabel = key.copied
         var tableStyle = MarkdownRenderConfig.MarkdownTableTextStyle(textFonts: base, headerTextColor: palette.foregroundColor,
             regularTextColor: palette.foregroundColor, headerBackgroundColor: palette.panelColor,
             borderColor: table.borderColor, actionButtonColor: palette.accentColor)
-        tableStyle.copyLabel = workflowText(language, "chat.clarity.copyTable")
+        tableStyle.copyLabel = key.copyTable
         let minorHeading = fonts(size * 20 / 17)
         let config = MarkdownRenderConfig(
             blockQuoteStyle: .init(textFonts: base, textColor: palette.foregroundColor),
