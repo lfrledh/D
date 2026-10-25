@@ -8,7 +8,7 @@ import Testing
 struct ChatMessageClarityTests {
     @Test func formalLanguageResourcesLoadAndChangeWithoutMissingMessageLabels() throws {
         let store = UILanguageStore(preferredLanguages: ["en"])
-        let keys = ["copyMessage", "copyAnswer", "copyCurrent", "copied", "editMessage", "regenerate", "regenerateHelp", "read", "readHelp", "more", "quote", "fork", "generation", "editAnswer", "reproduce", "saveAsset", "artifact", "fields", "raw", "viewRaw", "copyRaw", "details", "detailsTitle", "notSaved", "preview", "unparsed", "length", "invalidFormat", "notRecorded", "context", "candidates", "sender", "time", "displayedVersion", "edited", "originalVersion", "recordedModel", "model", "modelRevision", "precision", "parameters", "state", "technical", "generating", "stopped", "partial", "failed", "emptyBody", "toolsUnexecuted", "copyCode", "copyTable", "reasonLoading", "reasonSaving", "reasonBusy", "reasonArchived", "reasonModel", "reasonParameters", "reasonNoQuestion", "reasonSpeech"]
+        let keys = ["copyMessage", "copyAnswer", "copyCurrent", "copied", "editMessage", "regenerate", "regenerateHelp", "read", "readHelp", "more", "quote", "fork", "generation", "editAnswer", "reproduce", "saveAsset", "artifact", "fields", "raw", "viewRaw", "copyRaw", "details", "detailsTitle", "notSaved", "retrySaveHelp", "preview", "unparsed", "length", "invalidFormat", "notRecorded", "context", "candidates", "sender", "time", "displayedVersion", "edited", "originalVersion", "recordedModel", "model", "modelRevision", "precision", "parameters", "state", "technical", "generating", "stopped", "partial", "failed", "emptyBody", "toolsUnexecuted", "copyCode", "copyTable", "reasonLoading", "reasonSaving", "reasonBusy", "reasonArchived", "reasonModel", "reasonParameters", "reasonNoQuestion", "reasonSpeech"]
         for locale in ["en", "zh-Hans"] {
             try store.select(locale)
             for key in keys {
@@ -20,9 +20,12 @@ struct ChatMessageClarityTests {
         try store.select("en")
         #expect(store.text("chat.clarity.copyAnswer", fallback: "missing") == "Copy answer")
         #expect(store.text("chat.reasoning", fallback: "missing") == "Reasoning")
+        #expect(store.text("chat.clarity.retrySaveHelp", fallback: "missing") == "Retry saving without generating again.")
         let english = ChatMarkdownPresentation.config(for: .init(), language: store)
         #expect(english.codeBlockConfig.copyLabel == "Copy code")
         try store.select("zh-Hans")
+        #expect(store.text("chat.clarity.readHelp", fallback: "missing") == "使用系统声音朗读当前显示的回答。")
+        #expect(store.text("chat.clarity.retrySaveHelp", fallback: "missing") == "只重试保存，不重新生成。")
         #expect(ChatMarkdownPresentation.config(for: .init(), language: store).codeBlockConfig.copyLabel != english.codeBlockConfig.copyLabel)
     }
 

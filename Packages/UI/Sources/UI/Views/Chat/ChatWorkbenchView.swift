@@ -2122,6 +2122,7 @@ ScrollViewReader { proxy in
             }
             if chat.pendingSaveAttemptID != nil || chat.saveIssue != nil {
                 Button(label("retrySave", "重试保存（不重新生成）")) { Task { await chat.retrySave() } }
+                    .help(clarity("retrySaveHelp"))
                     .disabled(chat.isRunning).accessibilityIdentifier("chat-composer-retry-save")
                     .chatMeasured("composer-retry-save", probe: layoutProbe)
             }
@@ -2223,6 +2224,7 @@ ScrollViewReader { proxy in
                 }
                 if chat.pendingSaveAttemptID != nil || chat.saveIssue != nil {
                     Button(label("retrySave", "重试保存（不重新生成）")) { Task { await chat.retrySave() } }
+                    .help(clarity("retrySaveHelp"))
                         .disabled(chat.isRunning)
                 }
             }
@@ -2856,6 +2858,7 @@ private struct ChatEditForm: View {
                     .disabled((edit.kind == .rename || edit.kind == .message || edit.kind == .answer) &&
                               text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityIdentifier("chat-edit-save")
+                    .help(applied ? label("clarity.retrySaveHelp", "只重试保存，不重新生成。") : "")
             }
         }.padding(20).frame(maxWidth: .infinity).disabled(saving)
         .workbenchCloseProtection(isDirty: applied || text != edit.text, isSaving: saving, allowsDiscard: !applied, save: { try await saveDraft() })

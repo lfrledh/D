@@ -4709,6 +4709,7 @@
     "chat.clarity.details": "Message details…",
     "chat.clarity.detailsTitle": "Message details",
     "chat.clarity.notSaved": "Not saved yet",
+    "chat.clarity.retrySaveHelp": "Retry saving without generating again.",
     "chat.clarity.preview": "Output preview",
     "chat.clarity.unparsed": "Output has not been parsed",
     "chat.clarity.length": "Output length limit reached",
