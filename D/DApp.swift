@@ -163,8 +163,8 @@ private struct WorkbenchCommands: Commands {
             }.disabled(blocked || (NSApp.keyWindow != nil && !current))
         }
         CommandGroup(replacing: .saveItem) {
-            Button(label("layoutInteraction.save", "保存更改")) { if current { saveCommand?.action() } }
-                .keyboardShortcut("s").disabled(!current || saveCommand?.isEnabled != true)
+            Button(label("layoutInteraction.save", "保存更改")) { if current { (workspace?.workflow == true ? canvas?.save : saveCommand)?.action() } }
+                .keyboardShortcut("s").disabled(!current || (workspace?.workflow == true ? canvas?.save : saveCommand)?.isEnabled != true)
             button(current ? workspace?.files : nil, title: label("layoutInteraction.projectFiles"))
             if let workspace, !workspace.quickDestination.isEmpty {
                 Menu(label("layoutInteraction.quickDestination")) { choices(workspace.quickDestination) }
@@ -217,13 +217,21 @@ private struct WorkbenchCommands: Commands {
             if let retry = workspace?.workflow == true ? canvas?.retrySave : (current ? (workspace?.chat == true ? chatCommands?.retrySave : workspace?.retrySave) : nil) { button(retry, title: text("retrySave")) }
             Divider()
             Menu(text("workflow")) {
+                Menu(label("workflow.management.switch")) { choices(canvas?.workflowChoices ?? []) }
+                Divider()
                 button(canvas?.workflow.first, title: text("blankFlow"))
                 Menu(text("templates")) { ForEach((canvas?.templates ?? []).indices, id: \.self) { i in button(canvas!.templates[i], title: "") } }
+                Divider()
+                button(canvas?.save, title: label("layoutInteraction.save"))
                 ForEach(Array((canvas?.workflow ?? []).dropFirst()).indices, id: \.self) { i in button(canvas!.workflow[i+1], title: "") }
             }.disabled(canvas == nil)
+            Divider()
+            button(canvas?.manageNodes, title: label("layoutInteraction.manageNodes"))
         }
         CommandGroup(before: .windowList) {
             Button(text("showWorkbench")) { openWindow(id: "workbench") }.disabled(bootstrap.isTerminating)
+            Button(label("modelManagement.downloadTitle") + "…") { openWindow(id: "workbench"); bootstrap.libraryModel?.presentDownloads() }
+                .disabled(blocked || bootstrap.libraryModel == nil)
             Button(label("command.models")) { openWindow(id: "workbench"); bootstrap.libraryModel?.presentManagement() }
                 .keyboardShortcut("m", modifiers: [.command, .shift]).disabled(blocked || bootstrap.libraryModel == nil)
         }

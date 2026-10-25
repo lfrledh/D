@@ -95,7 +95,6 @@ public struct DualWorkbenchView: View {
         #endif
     }
     @State private var entry: Entry = .quick
-    @State private var entryHistory: [Entry] = []
     @State private var navigationIntent = UUID()
     @State private var previewNavigationRequest = UUID()
     @State private var libraryVisible = false
@@ -216,12 +215,7 @@ public struct DualWorkbenchView: View {
     private func navigate(to destination: Entry) {
         guard destination != entry else { return }
         captureChatReading(); navigationIntent = UUID()
-        entryHistory.append(entry); entry = destination
-    }
-    private func goBack() {
-        guard let previous = entryHistory.popLast() else { return }
-        captureChatReading(); navigationIntent = UUID()
-        entry = previous
+        entry = destination
     }
     private func presentQuickModelSelection() {
         let owner = selectionModel.projectSession, temporary = usesTemporaryChat, controller = quick
@@ -332,8 +326,8 @@ public struct DualWorkbenchView: View {
 
     private var saveCommand: WorkbenchGenerationCommand {
         if entry == .workflow, let controller = canvasModel.projectSession.workflow {
-            return .init(title: consistencyText(language, "FLOW-SAVE"), isEnabled: !controller.isSaving && !canvasModel.isChangingProject) {
-                guard commandScope.permitsCommands, canPresentSettings, entry == .workflow, canvasModel.projectSession.workflow === controller else { return }
+            return .init(title: consistencyText(language, "FLOW-SAVE"), isEnabled: controller.readOnlyReason == nil && !controller.isSaving && !canvasModel.isChangingProject) {
+                guard commandScope.permitsCommands, canPresentSettings, entry == .workflow, canvasModel.projectSession.workflow === controller, controller.readOnlyReason == nil, !controller.isSaving, !canvasModel.isChangingProject else { return }
                 Task { await controller.save() }
             }
         }
@@ -408,9 +402,9 @@ public struct DualWorkbenchView: View {
         let commands = workspaceCommands
         return HStack(spacing: 12) {
             WorkbenchNativeWindowControls(fullScreen: $windowFullScreen)
-            Button(action: goBack) { Image(systemName: "chevron.left") }
-                .buttonStyle(WorkbenchIconButtonStyle(diameter: 40))
-                .disabled(entryHistory.isEmpty).help(t("back")).accessibilityIdentifier("workbench-back")
+            Button(workflowText(language, "modelManagement.downloadTitle"), systemImage: "arrow.down") { library.presentDownloads() }
+                .frame(height: 32).fixedSize(horizontal: true, vertical: false)
+                .accessibilityIdentifier("workbench-download-manager").workbenchHelp("MODELS-DOWNLOAD")
             Text("D").font(.title2.bold())
             WorkbenchMenu(consistencyText(language, "APP-PROJECT")) {
                 let command = saveCommand
@@ -435,8 +429,7 @@ public struct DualWorkbenchView: View {
                 choices: [(Entry.quick, layoutText(language, "quick")), (.workflow, layoutText(language, "workflow"))],
                 owner: AnyHashable("\(displayedOwner.manifest?.effectiveInstanceID.uuidString ?? "none"):\(displayedOwner.projectSession.navigationEpoch)"), minimumItemLength: 108)
                 .fixedSize(horizontal: true, vertical: false).accessibilityIdentifier("workbench-entry").workbenchHelp("APP-MODE")
-            Button(layoutText(language, "models")) { library.presentManagement() }
-                .frame(height: 32).accessibilityIdentifier("workbench-models-downloads").workbenchHelp("MENU-RESOURCES-MODELS")
+
         }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 16).frame(height: 64)
     }
 
@@ -549,11 +542,12 @@ public struct DualWorkbenchView: View {
         let instance = canvasModel.manifest?.effectiveInstanceID.uuidString ?? "none"
         return "workbench:\(entry.rawValue):\(ObjectIdentifier(quick)):\(instance)"
     }
-    private var presentedWorkspace: some View {
+    private var workspacePanels: some View {
         workspaceContent
         .background(WorkbenchCommandWindow(scope: commandScope))
         .focusedSceneValue(\.workbenchWorkspace, workspaceCommands)
         .focusedSceneValue(\.workbenchSave, canPresentSettings ? saveCommand : nil)
+        .environment(\.workbenchSaveAction, canPresentSettings ? saveCommand : nil)
         .environment(\.workbenchHelpStore, featureHelp)
         .sheet(item: $featureHelp.presentation) { presentation in
             WorkbenchFeatureGuide(presentation: presentation, store: featureHelp)
@@ -690,6 +684,9 @@ public struct DualWorkbenchView: View {
                 }, onClose: { filesRoute = nil }, initialAssetID: route.assetID)
             .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
+    }
+    private var presentedWorkspace: some View {
+        workspacePanels
         .sheet(isPresented: $compatibilityVisible) {
             VStack(spacing: 0) {
                 HStack { Button(baselineText(language, "label.572cf45ba436")) { compatibilityVisible = false }.keyboardShortcut(.cancelAction); Text(layoutText(language, "legacy") + " · " + legacyName); Spacer() }.padding()

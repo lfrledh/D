@@ -110,6 +110,7 @@ func workflowRecoveryErrorText(_ value: String, runs: [WorkflowRun], language: U
 /// ``WorkflowController``; this view never reads files or starts inference directly.
 @MainActor
 public struct WorkflowCanvasView: View {
+    @Environment(\.workbenchSaveAction) private var sharedSaveCommand
     private let controller: WorkflowController
     private let nodeTags: ModelNodeTagStore
     private let metadata: SharedLibraryStore?
@@ -906,60 +907,51 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
 
     private func toolbar(width: CGFloat) -> some View {
-        HStack(spacing: 12) {
+        let commands = canvasCommands
+        return HStack(spacing: 12) {
             if !controller.bodyPath.isEmpty {
-                Button(text("workflow.language.control.back", "返回外层"), systemImage: "arrow.up.backward") {
+                Button(text("workflow.language.control.back", "返回上一级"), systemImage: "arrow.up.backward") {
                     rememberViewContext(); controller.closeBody()
-                }
+                }.frame(height: 32)
             }
             WorkbenchMenu {
-                WorkbenchMenuForEach(controller.graphs) { graph in
-                    WorkbenchMenuAction(graph.name) { rememberViewContext(); controller.selectedGraphID = graph.id }
+                WorkbenchSubmenu(text("workflow.management.switch", "切换工作流")) {
+                    WorkbenchMenuForEach(Array(commands.workflowChoices.indices), id: \.self) { i in
+                        let item = commands.workflowChoices[i]
+                        WorkbenchMenuAction(item.command.title, systemImage: item.selected ? "checkmark" : nil, action: item.command.action).disabled(!item.command.isEnabled)
+                    }
+                }
+                WorkbenchMenuDivider()
+                if let new = commands.workflow.first { WorkbenchMenuAction(new.title, action: new.action).disabled(!new.isEnabled) }
+                WorkbenchSubmenu(consistencyText(languageStore, "menu.flow.templates")) {
+                    WorkbenchMenuForEach(Array(commands.templates.indices), id: \.self) { i in
+                        let item = commands.templates[i]
+                        WorkbenchMenuAction(item.title, action: item.action).disabled(!item.isEnabled)
+                    }
+                }
+                WorkbenchMenuDivider()
+                if let save = commands.save { WorkbenchMenuAction(save.title, action: save.action).keyboardShortcut("s").disabled(!save.isEnabled) }
+                WorkbenchMenuForEach(Array(commands.workflow.dropFirst().indices), id: \.self) { i in
+                    let item = commands.workflow[i]
+                    WorkbenchMenuAction(item.title, action: item.action).disabled(!item.isEnabled)
+                        .help(i == 1 ? text("workflow.management.interfaceHelp", "设置这个工作流对外提供的输入和输出。") : i == 2 ? layoutText(languageStore, "exportHelp") : publishDocumentDescription ?? layoutText(languageStore, "noDocument"))
                 }
             } label: {
-                Label(text("semantics.flowPrefix", "流程：") + (controller.rootGraph?.name ?? text("workflow.toolbar.noGraph", "选择流程")), systemImage: "chevron.down")
-                    .lineLimit(1)
-            }.accessibilityIdentifier("workflow-graph-picker").workbenchHelp("FLOW-SELECT")
-            WorkbenchMenu {
-                WorkbenchMenuAction(text("workspace.blankFlow", "空白流程")) { controller.addBlankGraph() }.featureHelp("MENU-FLOW-BLANK", language: languageStore)
-                WorkbenchSubmenu(consistencyText(languageStore, "menu.flow.templates")) {
-                    WorkbenchMenuForEach(WorkflowLanguageExample.allCases, id: \.rawValue) { example in
-                        WorkbenchMenuAction(text("workflow.language.example.\(example.rawValue)",
-                            ["data": "数据与控制", "images": "主题与图像批次", "music": "哼唱与和声", "multimodal": "同源四模态"][example.rawValue] ?? example.rawValue)) {
-                            controller.addLanguageExample(example)
-                        }.featureHelp(example.rawValue == "images" ? "MENU-FLOW-TEMPLATE-IMAGES" : "MENU-FLOW-TEMPLATE-EXISTING", language: languageStore)
-                    }
-                    WorkbenchMenuForEach(WorkflowExampleChoice.allCases) { example in WorkbenchMenuAction(example.title(languageStore)) { controller.addExample(example.rawValue) }.featureHelp(example.rawValue == "template" ? "MENU-FLOW-TEMPLATE-TEXT" : "MENU-FLOW-TEMPLATE-EXISTING", language: languageStore) }
-                }.featureHelp("MENU-FLOW-TEMPLATES", language: languageStore).disabled(!controller.canEditCanvas)
-            } label: { Label(consistencyText(languageStore, "FLOW-NEW"), systemImage: "plus") }
-                .disabled(!controller.canEditCanvas).accessibilityIdentifier("canvas-new-flow").workbenchHelp("FLOW-NEW", unavailableReason: canvasHelpReason(controller, language: languageStore))
-            if !controller.bodyPath.isEmpty {
-                Text(bodyBreadcrumb).foregroundStyle(.secondary).lineLimit(1)
-            }
+                HStack(spacing: 4) {
+                    Text(text("semantics.flowPrefix", "工作流：") + (controller.rootGraph?.name ?? text("workflow.toolbar.noGraph", "选择工作流"))).lineLimit(1)
+                    Image(systemName: "chevron.down").font(.caption)
+                }
+            }.frame(height: 32).accessibilityIdentifier("workflow-management-menu")
+                .help(controller.rootGraph?.name ?? text("workflow.toolbar.noGraph", "选择工作流"))
+            if !controller.bodyPath.isEmpty { Text(bodyBreadcrumb).foregroundStyle(.secondary).lineLimit(1) }
+            Text(text("workflow.management." + controller.savePresentation, "")).font(.caption).foregroundStyle(.secondary)
+                .accessibilityIdentifier("workflow-save-status")
+            if let retry = commands.retrySave { Button(retry.title, action: retry.action).disabled(!retry.isEnabled) }
             if controller.presentationEditingOriginalID == controller.rootGraph?.id {
                 Label(consistencyText(languageStore, "copy.runningWorkflow"), systemImage: "lock").help(consistencyText(languageStore, "copy.copyOnEdit")).font(.caption).foregroundStyle(.secondary)
-            } else if controller.presentationCopySourceID != nil {
-                Text(text("workspace.editingCopy", "编辑副本")).font(.caption).foregroundStyle(.secondary)
-            }
+            } else if controller.presentationCopySourceID != nil { Text(text("workspace.editingCopy", "编辑副本")).font(.caption).foregroundStyle(.secondary) }
             Spacer(minLength: 8)
-            Button(consistencyText(languageStore, "FLOW-SAVE"), systemImage: "square.and.arrow.down") {
-                Task { await controller.save() }
-            }.disabled(isReadOnly || controller.isSaving).accessibilityIdentifier("workflow-save").workbenchHelp("FLOW-SAVE", unavailableReason: controller.isSaving ? consistencyText(languageStore, "help.reason.saving") : controller.readOnlyReason)
-            if controller.isSaving { ProgressView().controlSize(.small) }
-            else if controller.hasPendingSaves { Text(text("workflow.status.pendingSave", "有待恢复保存")).foregroundStyle(.orange).font(.caption) }
-            WorkbenchMenu(text("canvas.flowMenu", "流程设置"), systemImage: "ellipsis.circle") {
-                WorkbenchMenuAction(text("workflow.language.interface", "设置流程输入与输出…")) { interfacePresented = true }
-                    .disabled(controller.graph == nil || !controller.canEditCanvas)
-                WorkbenchMenuAction(layoutText(languageStore, "exportLocation"), action: guarded(onDestination)).featureHelp("MENU-FILE-EXPORT", language: languageStore)
-                    .disabled(!destinationEnabled || controller.readOnlyReason != nil || controller.isSaving).help(controller.readOnlyReason ?? (destinationEnabled ? layoutText(languageStore, "exportHelp") : consistencyText(languageStore, "help.reason.saving")))
-                WorkbenchMenuDivider()
-                WorkbenchMenuAction(layoutText(languageStore, "addDocument"), action: guarded(onPublishText))
-                    .disabled(!controller.canEditCanvas || publishDocumentDescription == nil)
-                    .help(publishDocumentDescription ?? layoutText(languageStore, "noDocument"))
-                WorkbenchMenuAction(layoutText(languageStore, "manageNodes"), action: manageCustomNodes).featureHelp("MENU-FLOW-CUSTOM", language: languageStore)
-            }.accessibilityIdentifier("canvas-more").workbenchHelp("FLOW-MORE")
-        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 18).padding(.vertical, 10)
-            .padding(.top, 6)
+        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 18).padding(.vertical, 10).padding(.top, 6)
     }
 
     private var bodyBreadcrumb: String {
@@ -1043,13 +1035,24 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         }
         if controller.hasPendingSaves {
             let pending = pendingSavingTargets
-            commands.retrySave = action("systemMenu.retrySave", enabled: !controller.isRunning && !controller.isSaving) { retryPendingSaving(pending, context: context) }
+            commands.retrySave = action("systemMenu.retrySave", enabled: !controller.isRunning && !controller.isSaving) {
+                if pending.isEmpty { Task { guard context == runContext else { return }; await controller.save() } }
+                else { retryPendingSaving(pending, context: context) }
+            }
         }
         commands.workflow = [action("systemMenu.blankFlow", enabled: controller.canEditCanvas) { controller.addBlankGraph() },
             action("workflow.language.interface", enabled: controller.graph != nil && controller.canEditCanvas) { interfacePresented = true },
             action("layoutInteraction.exportLocation", enabled: destinationEnabled && controller.readOnlyReason == nil && !controller.isSaving, guarded(onDestination)),
-            action("layoutInteraction.addDocument", enabled: controller.canEditCanvas && publishDocumentDescription != nil, guarded(onPublishText)),
-            action("layoutInteraction.manageNodes", manageCustomNodes)]
+            action("layoutInteraction.addDocument", enabled: controller.canEditCanvas && publishDocumentDescription != nil, guarded(onPublishText))]
+        commands.manageNodes = action("layoutInteraction.manageNodes", manageCustomNodes)
+        commands.workflowChoices = controller.graphs.map { graph in
+            let change = action("workflow.management.switch") {
+                guard controller.graphs.contains(where: { $0.id == graph.id }) else { return }
+                rememberViewContext(); controller.selectedGraphID = graph.id
+            }
+            return .init(.init(title: graph.name, isEnabled: change.isEnabled, action: change.action), selected: controller.selectedGraphID == graph.id)
+        }
+        commands.save = sharedSaveCommand ?? action("layoutInteraction.save", enabled: !isReadOnly && !controller.isSaving) { Task { await controller.save() } }
         commands.templates = WorkflowLanguageExample.allCases.map { example in action("workflow.language.example." + example.rawValue, enabled: controller.canEditCanvas) { controller.addLanguageExample(example) } }
             + WorkflowExampleChoice.allCases.map { example in
                 let command = action("systemMenu.templates", enabled: controller.canEditCanvas) { controller.addExample(example.rawValue) }

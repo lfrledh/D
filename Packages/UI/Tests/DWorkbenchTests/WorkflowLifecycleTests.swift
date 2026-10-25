@@ -3195,3 +3195,28 @@ extension WorkflowLifecycleTests {
         try await reopened.close()
     }
 }
+
+extension WorkflowLifecycleTests {
+    @Test func workflowSaveStatusTracksCapturedVersionAndFailureRetry() async throws {
+        let (_, store, _, c) = try await fixture()
+        c.addBlankGraph(name: "Save state fixture")
+        #expect(c.savePresentation == "unsaved")
+        try await c.saveExplicitEdits()
+        #expect(c.savePresentation == "saved")
+        var changed = false
+        c.beforeHistorySave = {
+            if !changed { changed = true; c.addNode(operationID: "d.value.input") }
+        }
+        try await c.saveExplicitEdits()
+        #expect(c.savePresentation == "unsaved", "Saving the preceding version does not save the edit made while its transaction was pending")
+        c.beforeHistorySave = { throw WorkflowIssue("controlled save status failure") }
+        await #expect(throws: (any Error).self) { try await c.saveExplicitEdits() }
+        #expect(c.savePresentation == "failed")
+        c.beforeHistorySave = {}
+        await c.save()
+        #expect(c.savePresentation == "saved")
+        let persisted = try #require(try await store.workflowState().archive)
+        #expect(persisted.graphs == c.graphs)
+        try await c.close(); try await store.close()
+    }
+}

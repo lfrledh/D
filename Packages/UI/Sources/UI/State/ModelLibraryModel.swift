@@ -457,14 +457,18 @@ extension ModelLibraryModel {
     public func clearSelectionContext() { selectionTitle = nil; selectionIsCurrent = nil; selectionAction = nil; configurationSelectionAction = nil; selectionID = nil }
     public func presentManagement() {
         clearSelectionContext()
+        workspace = "resources"
         loadInventory()
         isPresented = true
+    }
+    public func presentDownloads() {
+        clearSelectionContext(); workspace = "downloads"; loadInventory(); isPresented = true
     }
     public func loadInventory() {
         do { readOnlyConfigurations = try inventoryProvider?() ?? [] } catch { errorMessage = error.localizedDescription }
     }
     public func presentSelection(selected: ModelID? = nil, action: @escaping @MainActor (ModelID) async -> Void) {
-        clearSelectionContext(); loadInventory()
+        clearSelectionContext(); workspace = "resources"; loadInventory()
         selectionAction = action; selectionID = selected; isPresented = true
     }
     public func importConfiguration(kind: WorkflowModelKind) async {

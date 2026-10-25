@@ -85,6 +85,9 @@ public extension FocusedValues {
     public var retrySave: WorkbenchGenerationCommand? = nil
     public var workflow: [WorkbenchGenerationCommand] = []
     public var templates: [WorkbenchGenerationCommand] = []
+    public var workflowChoices: [WorkbenchChoiceCommand] = []
+    public var save: WorkbenchGenerationCommand? = nil
+    public var manageNodes: WorkbenchGenerationCommand? = nil
     public init(edit: [WorkbenchGenerationCommand], legend: WorkbenchGenerationCommand) {
         self.edit = edit; self.legend = legend
     }
@@ -167,4 +170,8 @@ public extension FocusedValues {
         get { self[WorkbenchChatKey.self] }
         set { self[WorkbenchChatKey.self] = newValue }
     }
+}
+
+extension EnvironmentValues {
+    @Entry var workbenchSaveAction: WorkbenchGenerationCommand? = nil
 }

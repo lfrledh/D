@@ -22,15 +22,15 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
 @MainActor @Observable public final class WorkflowController {
     public let registry: WorkflowRegistry
     public private(set) var pendingPausedStopRunID: UUID?
-    public private(set) var batchStages: [WorkflowBatchStage] = []
+    public private(set) var batchStages: [WorkflowBatchStage] = [] { didSet { contentGeneration &+= 1 } }
     @ObservationIgnored private var batchPauseRequested = false
     @ObservationIgnored private var activeBatchID: UUID?
     public private(set) var graphs: [WorkflowGraph] = [] {
-        didSet { emptyInsertionRevision = UUID(); displayGraphGeneration &+= 1 }
+        didSet { emptyInsertionRevision = UUID(); displayGraphGeneration &+= 1; contentGeneration &+= 1 }
     }
     @ObservationIgnored private var emptyInsertionRevision = UUID()
-    public private(set) var runs: [WorkflowRun] = [] { didSet { displayHistoryGeneration &+= 1 } }
-    public private(set) var tools: [WorkflowToolDefinition] = [] { didSet { displayToolGeneration &+= 1 } }
+    public private(set) var runs: [WorkflowRun] = [] { didSet { displayHistoryGeneration &+= 1; contentGeneration &+= 1 } }
+    public private(set) var tools: [WorkflowToolDefinition] = [] { didSet { displayToolGeneration &+= 1; contentGeneration &+= 1 } }
     @ObservationIgnored private var activeExecutor: WorkflowPlanExecutor? {
         didSet { if activeExecutor == nil { presentationHasExecutor = false } }
     }
@@ -55,6 +55,14 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public var selectedNodeIDs: Set<UUID> = []
     public var selectedNodeID: UUID?
     public private(set) var isRunning = false
+    private var contentGeneration: UInt64 = 0
+    private var savedContentGeneration: UInt64 = 0
+    @ObservationIgnored private var savingToken = UUID()
+    public var savePresentation: String {
+        if isSaving { return "saving" }
+        if hasPendingSaves { return "failed" }
+        return contentGeneration == savedContentGeneration ? "saved" : "unsaved"
+    }
     public private(set) var isSaving = false
     public private(set) var readOnlyReason: String?
     public var errorMessage: String?
@@ -131,6 +139,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             readOnlyReason = state.readOnlyReason
             guard let archive = state.archive else { return }
             graphs = archive.graphs; runs = archive.runs; tools = archive.tools ?? []; batchStages = archive.batchStages ?? []
+            savedContentGeneration = contentGeneration
             let batchRunIDs = Set(batchStages.flatMap(\.attempts).map(\.runID))
             for ri in runs.indices where batchRunIDs.contains(runs[ri].id) {
                 guard var cp = runs[ri].planCheckpoint, cp.state == .saving,
@@ -429,6 +438,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             expectedRevision: archive.revision, tools: nextTools, batchStages: batches.isEmpty ? nil : batches)
         undoStack.append(before); if undoStack.count > 100 { undoStack.removeFirst() }; redoStack = []
         tools = nextTools; graphs = next
+        if runs == capturedRuns && batchStages == batches { savedContentGeneration = contentGeneration }
     }
 
     public func publishGraphTool(name: String, registration: WorkflowToolRegistration,
@@ -961,6 +971,8 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     private func persist() async throws {
         guard !closed, !toolPublicationBusy, readOnlyReason == nil else { throw WorkflowIssue(readOnlyReason ?? "项目已关闭或节点正在保存。") }
         // Chain the complete transaction, including its read, so actor reentrancy cannot lose another save.
+        let generation = contentGeneration, token = UUID()
+        savingToken = token
         let preceding = writeTail, store = services.store, capturedGraphs = graphs, capturedRuns = runs, capturedTools = tools, capturedBatches = batchStages
         let task = Task { @MainActor in
             if let preceding { _ = try? await preceding.value }
@@ -970,8 +982,15 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             _ = try await store.saveWorkflow(graphs: capturedGraphs, runs: capturedRuns, expectedRevision: archive.revision, tools: capturedTools, batchStages: capturedBatches.isEmpty ? nil : capturedBatches)
         }
         writeTail = task; isSaving = true
-        do { try await task.value; persistenceFailed = false; isSaving = false; await refreshAssets() }
-        catch { persistenceFailed = true; isSaving = false; throw error }
+        do {
+            try await task.value
+            savedContentGeneration = max(savedContentGeneration, generation)
+            if savingToken == token { persistenceFailed = false; isSaving = false }
+            await refreshAssets()
+        } catch {
+            if savingToken == token { persistenceFailed = true; isSaving = false }
+            throw error
+        }
     }
     public func save() async {
         let pendingStop = pendingPausedStopRunID
