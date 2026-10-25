@@ -122,6 +122,8 @@ public enum ModelLibrarySelection {
         guard let operationID = entry.workflowProfileID,
               let identity = entry.workflowIdentity else { return false }
         switch operationID {
+        case "d.model.language":
+            return identity == "text:" + entry.revision && WorkflowModelRoutes.legacyTextOperations(identity: identity).contains(operationID)
         case WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38:
             return identity == "text:" + entry.revision
         case WorkflowModelRoutes.fluxDev, "d.image.generate":

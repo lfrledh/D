@@ -1128,6 +1128,13 @@ public final class ProjectSession {
                 reference = try await adapter.validateModel(lease.reference.directory)
                 backendID = adapter.backendID; operationID = adapter.operationID
                 textCapability = adapter.textCapability; imageRecipe = adapter.imageRecipe
+            } else if kind == .text, entry.workflowProfileID == "d.model.language",
+                      WorkflowModelRoutes.legacyTextOperations(identity: identity).contains("d.model.language"),
+                      let validate = session.validateTextModel, let backend = session.textBackendID {
+                reference = try await validate(lease.reference.directory); backendID = backend
+                // The backend's existing typed contract admits prompt generation and
+                // rewrite, never Chat/messages. Do not pin this lease to just one.
+                textCapability = session.textCapability
             } else if kind == .image, entry.id == ModelCatalog.flux2ID {
                 try await session.validateModel(lease.reference.directory)
                 reference = lease.reference; backendID = session.backendID

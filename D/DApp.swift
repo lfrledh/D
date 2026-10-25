@@ -78,7 +78,7 @@ struct DApp: App {
             .onAppear { consumeFallbackSettings() }
             .onChange(of: settingsRequest) { _, _ in consumeFallbackSettings() }
             .onChange(of: fallbackSettingsReady) { _, ready in if ready { consumeFallbackSettings() } }
-            .sheet(isPresented: $fallbackSettingsVisible) {
+            .workbenchSheet(isPresented: $fallbackSettingsVisible, title: bootstrap.languageStore.text("refinement.settings.title", fallback: "设置")) {
                 if let model = bootstrap.model, let library = bootstrap.libraryModel {
                     VStack(spacing: 0) {
                         if let issue = bootstrap.startupError { Text(issue).textSelection(.enabled).padding() }
@@ -116,7 +116,8 @@ private struct WorkbenchCommands: Commands {
             || bootstrap.model?.hasPendingEditor == true
     }
     private var blocked: Bool { bootstrap.isTerminating || modalResourceOperation }
-    private var current: Bool { workspace?.scope.permitsCommands == true && !blocked }
+    private var navigationBlocked: Bool { bootstrap.isTerminating || bootstrap.libraryModel?.isChoosingLocation == true || NSApp.modalWindow != nil || NSApp.keyWindow?.attachedSheet != nil }
+    private var current: Bool { workspace?.scope.permitsNavigation == true && !navigationBlocked }
     private var canvas: WorkbenchCanvasCommands? {
         guard workspace?.workflow == true, current, canvasCommands?.scope?.permitsCommands == true else { return nil }
         return canvasCommands
@@ -137,18 +138,18 @@ private struct WorkbenchCommands: Commands {
     }
     var body: some Commands {
         CommandGroup(replacing: .appSettings) {
-            Button(label("refinement.settings.title", "设置") + "…") { requestSettings(); openWindow(id: "workbench") }
-                .keyboardShortcut(",", modifiers: .command).disabled(blocked)
+            Button(label("refinement.settings.title", "设置") + "…") { WorkbenchChildPanels.navigate(on: NSApp.keyWindow) { requestSettings(); openWindow(id: "workbench") } }
+                .keyboardShortcut(",", modifiers: .command).disabled(navigationBlocked)
         }
         CommandGroup(replacing: .newItem) {
             Button(label("command.project.new")) {
                 if let workspace, current { workspace.newProject.action() }
                 else if !blocked && NSApp.keyWindow == nil { openWindow(id: "workbench"); Task { await bootstrap.model?.newProject() } }
-            }.keyboardShortcut("n").disabled(blocked || bootstrap.model == nil || (NSApp.keyWindow != nil && (!current || workspace?.newProject.isEnabled != true)))
+            }.keyboardShortcut("n").disabled(navigationBlocked || bootstrap.model == nil || (NSApp.keyWindow != nil && (!current || workspace?.newProject.isEnabled != true)))
             Button(label("command.project.open")) {
                 if let workspace, current { workspace.openProject.action() }
                 else if !blocked && NSApp.keyWindow == nil { openWindow(id: "workbench"); Task { await bootstrap.model?.openProject() } }
-            }.keyboardShortcut("o").disabled(blocked || bootstrap.model == nil || (NSApp.keyWindow != nil && (!current || workspace?.openProject.isEnabled != true)))
+            }.keyboardShortcut("o").disabled(navigationBlocked || bootstrap.model == nil || (NSApp.keyWindow != nil && (!current || workspace?.openProject.isEnabled != true)))
             Menu(text("recent")) {
                 if let workspace, !workspace.recent.isEmpty {
                     ForEach(workspace.recent.indices, id: \.self) { i in button(workspace.recent[i], title: "") }
@@ -230,10 +231,10 @@ private struct WorkbenchCommands: Commands {
         }
         CommandGroup(before: .windowList) {
             Button(text("showWorkbench")) { openWindow(id: "workbench") }.disabled(bootstrap.isTerminating)
-            Button(label("modelManagement.downloadTitle") + "…") { openWindow(id: "workbench"); bootstrap.libraryModel?.presentDownloads() }
-                .disabled(blocked || bootstrap.libraryModel == nil)
-            Button(label("command.models")) { openWindow(id: "workbench"); bootstrap.libraryModel?.presentManagement() }
-                .keyboardShortcut("m", modifiers: [.command, .shift]).disabled(blocked || bootstrap.libraryModel == nil)
+            Button(label("modelManagement.downloadTitle") + "…") { WorkbenchChildPanels.navigate(on: NSApp.keyWindow) { openWindow(id: "workbench"); bootstrap.libraryModel?.presentDownloads() } }
+                .disabled(navigationBlocked || bootstrap.libraryModel == nil)
+            Button(label("command.models")) { WorkbenchChildPanels.navigate(on: NSApp.keyWindow) { openWindow(id: "workbench"); bootstrap.libraryModel?.presentManagement() } }
+                .keyboardShortcut("m", modifiers: [.command, .shift]).disabled(navigationBlocked || bootstrap.libraryModel == nil)
         }
         CommandGroup(replacing: .help) {
             button(current ? workspace?.help : nil, title: text("guide"))

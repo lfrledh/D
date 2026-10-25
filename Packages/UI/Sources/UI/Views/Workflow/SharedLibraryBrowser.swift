@@ -142,6 +142,7 @@ enum SharedLibraryBrowserOrganizerItem: Hashable {
 
 struct SharedLibraryBrowserRenameDrafts {
     private var values: [SharedLibraryBrowserOrganizerItem: String] = [:]
+    var hasDrafts: Bool { !values.isEmpty }
 
     func text(for item: SharedLibraryBrowserOrganizerItem?, canonical: String) -> String {
         guard let item else { return "" }
@@ -510,7 +511,7 @@ public struct SharedLibraryBrowser: View {
             }
         }
         .background(WorkbenchCommandWindow(scope: commandScope))
-        .focusable().focused($selectionFocused)
+        .focusable().focusEffectDisabled().focused($selectionFocused)
         .focusedValue(\.workbenchAssetExport, exportMenuCommand)
         .onKeyPress(.space) {
             guard selectionFocused, !searchFocused, contentVisible, commandScope.permitsCommands,
@@ -528,21 +529,21 @@ public struct SharedLibraryBrowser: View {
             }
         }
         .environment(\.workbenchHelpStore, featureHelp)
-        .sheet(item: $featureHelp.presentation) { WorkbenchFeatureGuide(presentation: $0, store: featureHelp).environment(\.dLanguageStore, language) }
+        .workbenchSheet(item: $featureHelp.presentation, title: workflowText(language, "childPanel.name.help")) { WorkbenchFeatureGuide(presentation: $0, store: featureHelp).environment(\.dLanguageStore, language) }
         .environment(\.workbenchMenuContext, "library:\(ObjectIdentifier(store)):\(ObjectIdentifier(state)):\(queryContext.projectID?.uuidString ?? "none"):\(queryContext.instanceID?.uuidString ?? "none")")
         .modifier(LibraryPanelSurface(enabled: !compact))
-        .sheet(item: $saveQueryRequest) { request in SharedLibrarySaveQuerySheet(request: request, store: store) { saveQueryRequest = nil } }
-        .sheet(isPresented: $showOrganizer) { organizer }
-        .sheet(item: $tagRequest) { request in
+        .workbenchSheet(item: $saveQueryRequest, title: workflowText(language, "childPanel.name.query")) { request in SharedLibrarySaveQuerySheet(request: request, store: store) { saveQueryRequest = nil } }
+        .workbenchSheet(isPresented: $showOrganizer, title: workflowText(language, "childPanel.name.organizer")) { organizer }
+        .workbenchSheet(item: $tagRequest, title: workflowText(language, "childPanel.name.tags")) { request in
             SharedLibraryTagEditor(store: store, targets: request.targets, add: request.add, remove: request.remove,
                 validateTarget: {
                     for check in request.validations { try check() }
                 })
         }
-        .sheet(isPresented: Binding(
+        .workbenchSheet(isPresented: Binding(
             get: { SharedLibraryBrowserLogic.detailEntry(key: compactDetailKey, entries: entries) != nil },
             set: { if !$0 { compactDetailKey = nil } }
-        )) {
+        ), title: word("detail", "详情")) {
             if let entry = SharedLibraryBrowserLogic.detailEntry(key: compactDetailKey, entries: entries) {
                 VStack(alignment: .leading) {
                     HStack {
@@ -634,7 +635,7 @@ public struct SharedLibraryBrowser: View {
                         .contentShape(RoundedRectangle(cornerRadius: 12))
                         .onTapGesture(count: 2) { dispatch(.preview, key: entry.id) }
                         .onTapGesture { selectedKeys = [entry.id]; focusedKey = entry.id; selectionFocused = true }
-                        .focusable().onKeyPress(.space) { dispatch(.preview, key: entry.id); return .handled }
+                        .focusable().focusEffectDisabled().onKeyPress(.space) { dispatch(.preview, key: entry.id); return .handled }
                         .workbenchContextMenu { resourceActions(entry) }.onDrag { dragProvider(for: entry.id) }
                         .accessibilityElement(children: .combine).accessibilityIdentifier("shared-library-entry-" + entry.id)
                 }
@@ -778,7 +779,7 @@ public struct SharedLibraryBrowser: View {
                     .accessibilityIdentifier("shared-library-search").workbenchHelp("LIB-SEARCH")
                 Button { showTags.toggle() } label: { Image(systemName: "tag").padding(6).contentShape(Rectangle()) }
                     .buttonStyle(.plain).accessibilityLabel(word("conditions", "条件"))
-                    .popover(isPresented: $showTags, arrowEdge: .bottom) { queryTagPopover }
+                    .workbenchPopover(isPresented: $showTags, title: workflowText(language, "childPanel.name.tags"), arrowEdge: .bottom) { queryTagPopover }
                 Button { submitSearch() } label: { Image(systemName: "magnifyingglass").padding(6).contentShape(Rectangle()) }
                     .buttonStyle(.plain).accessibilityLabel(word("searchNow", "搜索"))
                 searchMore
@@ -822,7 +823,7 @@ public struct SharedLibraryBrowser: View {
             if !query.allTagIDs.union(query.anyTagIDs).filter({ store.metadata.tags[$0] == nil }).isEmpty {
                 WorkflowTechnicalDetails(value: query.allTagIDs.union(query.anyTagIDs).filter { store.metadata.tags[$0] == nil }.sorted { $0.uuidString < $1.uuidString }.map { state.tagPresentation.title($0, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition")) + ": " + $0.uuidString }.joined(separator: "\n"))
             }
-        }.popover(isPresented: $showFilters, arrowEdge: .bottom) { filterPopover }
+        }.workbenchPopover(isPresented: $showFilters, title: workflowText(language, "childPanel.name.filters"), arrowEdge: .bottom) { filterPopover }
             .workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge)
     }
     private var searchFooter: some View {
@@ -944,7 +945,11 @@ public struct SharedLibraryBrowser: View {
                     .accessibilityLabel(word("detail","详情"))
             }
         }
-        .padding(6).contentShape(Rectangle())
+        .padding(6)
+        .background(selectedKeys.contains(entry.id) ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(alignment: .leading) {
+            if selectionFocused && focusedKey == entry.id { Capsule().fill(Color.accentColor).frame(width: 3, height: 20).allowsHitTesting(false) }
+        }.contentShape(Rectangle())
         .onTapGesture {
             focusedKey = entry.id
             if compact { selectionFocused = true }
@@ -954,7 +959,7 @@ public struct SharedLibraryBrowser: View {
         VStack(alignment: .leading, spacing: 4) {
             row.workbenchContextMenu { resourceActions(entry) }.onDrag { dragProvider(for: entry.id) }
                 .onTapGesture(count:2) { if entry.item.kind == .asset,canPreview(entry) { dispatch(.preview,key:entry.id) } }
-                .focusable(entry.item.kind == .asset)
+                .focusable(entry.item.kind == .asset).focusEffectDisabled()
                 .onKeyPress(.space) { guard entry.item.kind == .asset,canPreview(entry) else { return .ignored }; dispatch(.preview,key:entry.id);return .handled }
             if let ids = store.metadata.tagAssignments[entry.item.key], !ids.isEmpty {
                 HStack {
@@ -1232,7 +1237,7 @@ public struct SharedLibraryBrowser: View {
     private var organizer: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Button(word("back", "返回")) { showOrganizer = false }
+                WorkbenchRequestCloseButton(title: workflowText(language, "childPanel.close"), fallback: { showOrganizer = false })
                 Text(word("organize", "整理资料库")).font(.headline)
                 Spacer()
             }
@@ -1246,7 +1251,8 @@ public struct SharedLibraryBrowser: View {
             case .saved: savedOrganizer
             }
             if let errorMessage { Text(errorMessage).foregroundStyle(.red).font(.caption) }
-        }.padding(16).frame(width: 520, height: 470)
+        }.padding(16).frame(maxWidth: .infinity, maxHeight: .infinity)
+        .workbenchCloseProtection(isDirty: !newName.isEmpty || renameDrafts.hasDrafts)
     }
 
     private var tagOrganizer: some View {

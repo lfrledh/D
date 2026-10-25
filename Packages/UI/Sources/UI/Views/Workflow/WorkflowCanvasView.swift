@@ -274,19 +274,19 @@ public struct WorkflowCanvasView: View {
             }
             Button(workspaceText(languageStore, "cancel"),role:.cancel) { pendingHistoryRetry=nil }
         } message: { Text(workspaceText(languageStore, "retryHistoryExplanation")) }
-        .sheet(isPresented: $toolsPresented) {
+        .workbenchSheet(isPresented: $toolsPresented, title: workflowText(languageStore, "childPanel.name.tools")) {
             VStack(alignment: .leading) {
-                Button(workflowText(languageStore, "baseline02.ui.label.572cf45ba436"), systemImage: "chevron.left") { toolsPresented = false }.padding([.top, .leading])
+                WorkbenchRequestCloseButton(title: workflowText(languageStore, "childPanel.close"), fallback: { toolsPresented = false }).padding([.top, .leading])
                 WorkflowToolPanel(controller: controller, selectionOnly: extractSelection)
             }.workbenchPresentation()
         }
-        .sheet(isPresented: $interfacePresented) {
+        .workbenchSheet(isPresented: $interfacePresented, title: workflowText(languageStore, "childPanel.name.interface")) {
             if let graph = controller.graph {
                 VStack(alignment: .leading) {
                     Button(workflowText(languageStore, "baseline02.ui.label.572cf45ba436"), systemImage: "chevron.left") { interfacePresented = false }.padding([.top, .leading])
                     WorkbenchScrollView { WorkflowGraphInterfaceEditor(graph: Binding(get: { controller.graph?.id == graph.id ? controller.graph! : graph }, set: { controller.updateInterface($0.interface, in: graph.id) }), registry: controller.registry, tools: controller.tools).padding() }
                 }
-                    .frame(minWidth: 640, minHeight: 500).workbenchPresentation()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity).workbenchPresentation()
             }
         }
         .onChange(of: controller.graph?.id) { _, _ in
@@ -358,7 +358,7 @@ public struct WorkflowCanvasView: View {
         .workflowKeyboardCommands(performKeyboardCommand)
         .background(WorkbenchCommandWindow(scope: commandScope))
         .focusedSceneValue(\.workbenchCanvas, contentVisible ? canvasCommands : nil)
-        .popover(isPresented: $portLegendPresented) { portLegend }
+        .workbenchPopover(isPresented: $portLegendPresented, title: workflowText(languageStore, "childPanel.name.legend")) { portLegend }
 
     }
     private var canvasMenuContext: String {
@@ -399,6 +399,7 @@ public struct WorkflowCanvasView: View {
         panelsState.selectPreparation(.configuration)
     }
 
+    @Environment(\.workbenchModeSize) private var modeSize
     private func panels(height: CGFloat, width: CGFloat) -> some View {
         let shown = WorkflowCanvasLayoutPolicy.visiblePanels(width: width, library: showLibrary,
             inspector: showInspector, preferLibrary: narrowLibrary)
@@ -495,7 +496,6 @@ public struct WorkflowCanvasView: View {
                     .overlay(alignment: .leading) { if shown.library { panelResizeHandle(leading: false) } }
                     .frame(width: shown.library ? panelWidths.trailing : 48, alignment: .trailing)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(.bottom, 72)
             }
             .padding(.horizontal, 16)
             VStack(spacing: 0) {
@@ -503,15 +503,19 @@ public struct WorkflowCanvasView: View {
                     .padding(.bottom, workspaceDraft != nil || runSettingsVisible || activityVisible ? 8 : 0)
                 runDock(width: width)
             }.padding(.bottom, 16)
+            let toolFrame = WorkbenchFloatingLayout.canvasTools(viewport: .init(width: width, height: height),
+                rightPanelWidth: shown.library ? panelWidths.trailing : nil, mode: modeSize,
+                runPanelHeight: workspaceDraft != nil || runSettingsVisible || activityVisible ? WorkbenchFloatingLayout.runPanelHeight(available: height) : 0)
             cornerTools(fitReady: fitReady, targetWidth: targetCanvasWidth)
-                .frame(maxWidth: .infinity, alignment: .trailing).padding(.trailing, 16).padding(.bottom, 16)
+                .frame(width: 88, height: 40).position(x: toolFrame.midX, y: toolFrame.midY)
+                .workbenchMorph(value: toolFrame)
         }.overlay(alignment: .top) { captureControls.padding(.top, 8) }
         .padding(.top, 8).environment(\.workbenchPanelWidths, panelWidths)
     }
 
     private func secondaryRunSurface(width: CGFloat, height: CGFloat) -> some View {
         let opened = workspaceDraft != nil || runSettingsVisible || activityVisible
-        let panelHeight = min(420, max(120, height - 80))
+        let panelHeight = WorkbenchFloatingLayout.runPanelHeight(available: height)
         return ZStack(alignment: .bottom) {
             if visitedRecords || activityVisible {
                 retained(recordsPanel, visible: activityVisible && workspaceDraft == nil && !runSettingsVisible, id: "workflow-records-retained")
@@ -951,7 +955,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 Label(consistencyText(languageStore, "copy.runningWorkflow"), systemImage: "lock").help(consistencyText(languageStore, "copy.copyOnEdit")).font(.caption).foregroundStyle(.secondary)
             } else if controller.presentationCopySourceID != nil { Text(text("workspace.editingCopy", "编辑副本")).font(.caption).foregroundStyle(.secondary) }
             Spacer(minLength: 8)
-        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 18).padding(.vertical, 10).padding(.top, 6)
+        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.leading, 128).padding(.trailing, 18).padding(.vertical, 10).padding(.top, 6)
     }
 
     private var bodyBreadcrumb: String {
@@ -1562,10 +1566,10 @@ private struct WorkflowNodeInspector: View {
         .workbenchPanel(cornerRadius: 12)
         .environment(\.workbenchMenuContext, "inspector:\(ObjectIdentifier(controller)):\(controller.projectID):\(controller.projectInstanceID):\(controller.bodyPath):\(controller.rootGraph?.revision.uuidString ?? "none"):\(controller.graph?.id.uuidString ?? "none"):\(controller.graph?.revision.uuidString ?? "none"):\(node?.id.uuidString ?? "none"):\(resultRunID):\(resultRecord?.id):\(resultRecord?.address)")
         .accessibilityIdentifier("workflow-inspector")
-        .sheet(item: $scopePresentation) { request in
+        .workbenchSheet(item: $scopePresentation, title: workflowText(languageStore, "childPanel.name.scope")) { request in
             WorkflowScopePanel(controller: controller, graphID: request.graphID, revision: request.revision, nodeID: request.nodeID, initialMode: request.mode).workbenchPresentation()
         }
-        .sheet(item: $fixedToolPresentation) { request in
+        .workbenchSheet(item: $fixedToolPresentation, title: workflowText(languageStore, "childPanel.name.tools")) { request in
             WorkflowFixedToolSheet(controller: controller, reference: request.reference,
                 onClose: { fixedToolPresentation = nil },
                 onCopy: {
@@ -2099,7 +2103,7 @@ private struct WorkflowFixedToolSheet: View {
                     .foregroundStyle(.orange)
             }
         }
-        .padding(20).frame(minWidth: 620, minHeight: 500)
+        .padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityIdentifier("canvas-fixed-tool-sheet")
     }
 }
@@ -2458,7 +2462,7 @@ private struct WorkflowStepValues: View {
             await resultQuery.load(identity: resultIdentity) { try await controller.services.store.libraryMetadataSnapshots() }
         }
         .onDisappear { resultQuery.invalidate() }
-        .sheet(item: $annotationRequest) { request in
+        .workbenchSheet(item: $annotationRequest, title: workflowText(languageStore, "childPanel.name.metadata")) { request in
             AssetAnnotationEditor(snapshot: request.snapshot, context: request.context, validate: request.validate, save: request.save) { annotationRequest = nil }
         }
     }
@@ -2616,11 +2620,11 @@ struct WorkflowAssetPreview: View {
                 }
             }
         }
-        .sheet(isPresented: Binding(get: { inspectImage != nil }, set: { if !$0 { inspectImage = nil } })) {
+        .workbenchSheet(isPresented: Binding(get: { inspectImage != nil }, set: { if !$0 { inspectImage = nil } }), title: workflowText(languageStore, "childPanel.name.preview")) {
             VStack {
                 HStack { Button(metadataText(languageStore, "close")) { inspectImage = nil }; Spacer() }
                 if let inspectImage { ScrollView([.horizontal, .vertical]) { Image(nsImage: inspectImage).resizable().scaledToFit().frame(maxWidth: 1000, maxHeight: 750) } }
-            }.padding(18).frame(minWidth: 600, minHeight: 480)
+            }.padding(18).frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task(id: identity) {
             await state.load(identity: identity, preview: {

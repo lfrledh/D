@@ -100,7 +100,7 @@ struct WorkflowCanvasCornerZoom: View {
                 WorkbenchMenuDivider()
                 WorkbenchMenuAction(text("fineZoom") + " · \(Int((zoom * 100).rounded()))%") { precisionVisible = true }.disabled(locked)
             }
-            .popover(isPresented: $precisionVisible) {
+            .workbenchPopover(isPresented: $precisionVisible, title: workflowText(language, "childPanel.name.zoom")) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(text("fineZoom") + " · \(Int((zoom * 100).rounded()))%")
                     Slider(value: $zoom, in: WorkflowCanvasLayoutPolicy.sliderZoomRange(current: zoom))

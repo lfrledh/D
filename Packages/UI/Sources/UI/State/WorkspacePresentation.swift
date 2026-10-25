@@ -63,6 +63,8 @@ public extension FocusedValues {
 /// retain ownership of unsaved work, annotation drafts and asynchronous drains.
 @MainActor public enum WorkbenchWindowCloseCommand {
     public static func perform(on window: NSWindow?) {
+        if let editor = window?.firstResponder as? NSTextView, editor.hasMarkedText() { return }
+        if WorkbenchChildPanels.requestClose(on: window) { return }
         guard let window, window.styleMask.contains(.closable),
               window.sheetParent == nil, window.attachedSheet == nil else { return }
         window.performClose(nil)
@@ -104,19 +106,21 @@ public extension FocusedValues {
 /// page or a different key window cannot execute its stale menu closure.
 @MainActor @Observable public final class WorkbenchCommandScope {
     public weak var window: NSWindow?
+    weak var sourceView: NSView?
     public init() {}
-    public var permitsCommands: Bool { window?.isKeyWindow == true && window?.attachedSheet == nil }
+    public var permitsNavigation: Bool { window?.isKeyWindow == true && window?.attachedSheet == nil && NSApp.modalWindow == nil }
+    public var permitsCommands: Bool { window?.isKeyWindow == true && window?.attachedSheet == nil && WorkbenchChildPanels.permitsCommands(from: sourceView, on: window) }
 }
 struct WorkbenchCommandWindow: NSViewRepresentable {
     let scope: WorkbenchCommandScope
     func makeNSView(context: Context) -> View { View(scope: scope) }
-    func updateNSView(_ view: View, context: Context) { view.scope = scope; scope.window = view.window }
+    func updateNSView(_ view: View, context: Context) { view.scope = scope; scope.window = view.window; scope.sourceView = view }
     static func dismantleNSView(_ view: View, coordinator: ()) { if view.scope.window === view.window { view.scope.window = nil } }
     final class View: NSView {
         var scope: WorkbenchCommandScope
         init(scope: WorkbenchCommandScope) { self.scope = scope; super.init(frame: .zero) }
         required init?(coder: NSCoder) { fatalError("init(coder:)") }
-        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); scope.window = window }
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); scope.window = window; scope.sourceView = self }
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 }

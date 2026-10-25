@@ -46,7 +46,7 @@ struct WorkbenchModelCard: View {
                 Button(consistencyText(language, "MODEL-DETAILS")) { details = true }.workbenchHelp("MODEL-DETAILS")
             }
         }.environment(\.workbenchMenuContext, "\(helpOwner):model:\(definition.id):\(modelID ?? "none")")
-        .sheet(isPresented: $details) {
+        .workbenchSheet(isPresented: $details, title: workflowText(language, "childPanel.name.model")) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack { Text(consistencyText(language, "MODEL-DETAILS")).font(.headline); Spacer(); Button(workflowText(language, "common.done")) { details = false }.keyboardShortcut(.cancelAction) }

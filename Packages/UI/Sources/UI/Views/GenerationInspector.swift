@@ -85,7 +85,7 @@ struct GenerationInspector: View {
                 .padding(.horizontal, 20).padding(.vertical, 16)
                 .background(.background)
         }
-        .sheet(item: $editingAsset, onDismiss: { model.endEditing() }) { asset in
+        .workbenchSheet(item: $editingAsset, title: workflowText(legacyLanguage, "childPanel.name.metadata"), onDismiss: { model.endEditing() }) { asset in
             CandidateMetadataEditor(model: model, asset: asset, isPresented: Binding(
                 get: { editingAsset != nil }, set: { if !$0 { editingAsset = nil } }))
         }
@@ -420,6 +420,7 @@ private struct CandidateDetails: View {
 private struct CandidateMetadataEditor: View {
     @Environment(\.dLanguageStore) private var legacyLanguage
 
+    @Environment(\.workbenchChildClose) private var closeGate
     @Bindable var model: WorkbenchModel
     let asset: ProjectAsset
     @Binding var isPresented: Bool
@@ -458,16 +459,13 @@ private struct CandidateMetadataEditor: View {
             }
             HStack {
                 Spacer()
-                Button(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.33"), role: .cancel) { isPresented = false }.keyboardShortcut(.cancelAction)
+                Button(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.33"), role: .cancel) { if let closeGate { closeGate.requestClose() } else { isPresented = false } }.keyboardShortcut(.cancelAction)
                 Button(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.54")) {
                     saving = true
                     Task {
                         defer { saving = false }
                         do {
-                            guard let owner, let baseline else { throw WorkflowIssue("作品所属实例不可访问，草稿保留。") }
-                            try await model.projectSession.saveAssetAnnotations(owner: owner, expected: baseline,
-                                name: name.utf8.elementsEqual(baseline.name.utf8) ? nil : name,
-                                note: note.utf8.elementsEqual(baseline.note.utf8) ? nil : note)
+                            try await saveDraft()
                             isPresented = false
                         } catch { saveError = error.localizedDescription }
 
@@ -478,5 +476,13 @@ private struct CandidateMetadataEditor: View {
             }
         }.padding(24).frame(width: 360)
             .disabled(saving).interactiveDismissDisabled()
+            .workbenchCloseProtection(isDirty: name != originalName || note != originalNote, isSaving: saving, save: { try await saveDraft() })
     }
+    private func saveDraft() async throws {
+        guard let owner, let baseline else { throw WorkflowIssue("作品所属实例不可访问，草稿保留。") }
+        try await model.projectSession.saveAssetAnnotations(owner: owner, expected: baseline,
+            name: name.utf8.elementsEqual(baseline.name.utf8) ? nil : name,
+            note: note.utf8.elementsEqual(baseline.note.utf8) ? nil : note)
+    }
+
 }

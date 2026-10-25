@@ -389,7 +389,7 @@ struct WorkbenchGlassSegments<Value: Hashable>: View {
     private var index: Int { choices.firstIndex(where: { $0.0 == selection }) ?? -1 }
     private var thickness: CGFloat { standard ? 44 : 32 }
     private var itemMinimum: CGFloat {
-        if standard { return 66 }
+        if standard && minimumItemLength == 0 { return 66 }
         return max(minimumItemLength, (choices.map { ($0.1 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: NSFont.systemFontSize)]).width }.max() ?? 0) + 24)
     }
     private var motion: Animation? {
@@ -494,8 +494,10 @@ extension EnvironmentValues {
 }
 private struct WorkbenchPresentedSurface: ViewModifier {
     @Environment(\.workbenchAppearanceState) private var state
+    @Environment(\.workbenchChildClose) private var panel
     func body(content: Content) -> some View {
-        if let state { content.workbenchPresentation(state: state) }
+        if panel != nil { content.workbenchTheme(paintsCanvas: false) }
+        else if let state { content.workbenchPresentation(state: state) }
         else { content.workbenchTheme() }
     }
 }
@@ -505,10 +507,21 @@ private struct WorkbenchPresentedSurface: ViewModifier {
 extension View {
     func workbenchPresentation() -> some View { modifier(WorkbenchPresentedSurface()) }
     func workbenchPresentation(state: ChatDisplayPreferencesState) -> some View {
-        workbenchTheme(paintsCanvas: false)
-            .modifier(WorkbenchCanvasModifier(state: state))
-            .environment(\.chatDisplayPreferences, state.preferences)
-            .preferredColorScheme(state.preferences.preferredColorScheme)
+        modifier(WorkbenchSpecifiedPresentation(state: state))
+    }
+}
+
+private struct WorkbenchSpecifiedPresentation: ViewModifier {
+    let state: ChatDisplayPreferencesState
+    @Environment(\.workbenchChildClose) private var panel
+    func body(content: Content) -> some View {
+        if panel != nil { content.workbenchTheme(paintsCanvas: false) }
+        else {
+            content.workbenchTheme(paintsCanvas: false)
+                .modifier(WorkbenchCanvasModifier(state: state))
+                .environment(\.chatDisplayPreferences, state.preferences)
+                .preferredColorScheme(state.preferences.preferredColorScheme)
+        }
     }
 }
 

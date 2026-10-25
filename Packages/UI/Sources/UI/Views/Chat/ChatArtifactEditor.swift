@@ -196,6 +196,7 @@ struct ChatArtifactEditor: View {
     let mermaidDocument: ((String) throws -> String)?
     let onSave: @MainActor (ChatArtifactContent) async throws -> ChatArtifactContent
     let onClose: @MainActor () -> Void
+    @Environment(\.workbenchChildClose) private var closeGate
     @Environment(\.dLanguageStore) private var language
     @State private var state: ChatArtifactEditorState
 
@@ -295,7 +296,7 @@ struct ChatArtifactEditor: View {
             }
             HStack {
                 Spacer()
-                Button(workflowText(language, "workflow.action.close")) { state.requestClose(onClose) }
+                Button(workflowText(language, "workflow.action.close")) { if let closeGate { closeGate.requestClose() } else { state.requestClose(onClose) } }
                     .keyboardShortcut(.cancelAction)
                     .disabled(state.isSaving)
                     .accessibilityIdentifier("chat-artifact-close")
@@ -309,8 +310,13 @@ struct ChatArtifactEditor: View {
         }
         .padding(16)
         }
-        .frame(minWidth: 640, minHeight: 560)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .interactiveDismissDisabled(state.isDirty || state.isSaving)
+        .workbenchCloseProtection(isDirty: state.isDirty, isSaving: state.isSaving, save: {
+            await state.save(using: onSave)
+            if let issue = state.issue { throw WorkflowIssue(issue) }
+            guard !state.isDirty else { throw WorkflowIssue(workflowText(language, "chat.artifactEditor.discardUnsavedEdits")) }
+        })
         .confirmationDialog(workflowText(language, "chat.artifactEditor.discardUnsavedEdits"),
                             isPresented: $state.asksToDiscard) {
             Button(workflowText(language, "chat.artifactEditor.discardEdits"), role: .destructive) {

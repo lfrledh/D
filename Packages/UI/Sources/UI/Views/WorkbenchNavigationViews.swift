@@ -381,7 +381,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
         .accessibilityAddTraits((showsSidebarColumn && !presentation.sidebarUsesPopover) || showsSidebarPopover
                                 ? .isSelected : [])
         .navigationMeasured("toggle-creations", probe: layoutProbe)
-        .popover(isPresented: $showsSidebarPopover, arrowEdge: .top) {
+        .workbenchPopover(isPresented: $showsSidebarPopover, title: workflowText(legacyLanguage, "childPanel.name.library"), arrowEdge: .top) {
             sidebar
                 .frame(width: max(260, sidebarWidth), height: 430, alignment: .topLeading)
                 .background(Color(nsColor: .controlBackgroundColor))
@@ -405,7 +405,7 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
         .accessibilityAddTraits((showsInspectorColumn && !presentation.inspectorUsesPopover) || showsInspectorPopover
                                 ? .isSelected : [])
         .navigationMeasured("toggle-inspector", probe: layoutProbe)
-        .popover(isPresented: $showsInspectorPopover, arrowEdge: .top) {
+        .workbenchPopover(isPresented: $showsInspectorPopover, title: workflowText(legacyLanguage, "childPanel.name.details"), arrowEdge: .top) {
             inspector
                 .frame(width: 320, height: 480, alignment: .topLeading)
                 .background(Color(nsColor: .controlBackgroundColor))

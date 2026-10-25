@@ -90,7 +90,7 @@ public struct WorkbenchView: View {
                 }.accessibilityIdentifier("display-language-settings")
             }
         }
-        .sheet(isPresented: $languageSettingsVisible) {
+        .workbenchSheet(isPresented: $languageSettingsVisible, title: workflowText(legacyLanguage, "childPanel.name.language")) {
             if let language {
                 VStack(spacing: 0) {
                     LanguageSettingsView(store: language)
@@ -132,10 +132,10 @@ public struct WorkbenchView: View {
         } message: {
             Text(model.errorMessage ?? "")
         }
-        .sheet(isPresented: Binding(
+        .workbenchSheet(isPresented: Binding(
             get: { library?.isPresented ?? false },
             set: { library?.isPresented = $0 }
-        )) {
+        ), title: workflowText(legacyLanguage, library?.workspace == "downloads" ? "modelManagement.downloadTitle" : "modelManagement.modelTitle"), size: .init(download: library?.workspace == "downloads")) {
             if let library {
                 ModelLibraryView(model: library)
             }
@@ -180,7 +180,7 @@ public struct WorkbenchView: View {
                 }
             }
         .observingLayout { layoutProbe?($0, $1) }
-        .popover(isPresented: $showTasks) {
+        .workbenchPopover(isPresented: $showTasks, title: workflowText(legacyLanguage, "childPanel.name.tasks")) {
             VStack(alignment: .leading, spacing: 12) {
                 Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.5")).font(.headline)
                 if model.manifest?.jobs.isEmpty == true { Text(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.6")).foregroundStyle(.secondary) }
@@ -188,7 +188,7 @@ public struct WorkbenchView: View {
                 Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.7")) { Task { await model.recoverArtifacts() } }.disabled(model.isBusy)
             }.padding(16).frame(width: 600)
         }
-        .sheet(item: $namingContext, onDismiss: { model.endEditing() }) { context in
+        .workbenchSheet(item: $namingContext, title: workflowText(legacyLanguage, "childPanel.name.metadata"), onDismiss: { model.endEditing() }) { context in
             DocumentNameEditor(model: model, context: context)
         }
     }
@@ -719,7 +719,7 @@ private struct DocumentNameEditor: View {
     @State private var name: String
     @State private var saving = false
     @State private var saveError: String?
-    @Environment(\.dismiss) private var dismiss
+    @WorkbenchDismiss private var dismiss
 
     init(model: WorkbenchModel, context: DocumentNameContext) {
         self.model = model
@@ -745,21 +745,11 @@ private struct DocumentNameEditor: View {
                 Spacer()
                 Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.33"), role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
                 Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.54")) {
-                    let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let previousCount = model.documents.count
                     saving = true
                     Task {
-                        if let id = context.documentID { await model.renameDocument(id: id, name: value) }
-                        else { await model.createDocument(name: value) }
-                        saving = false
-                        let saved = context.documentID.map { identifier in
-                            model.documents.contains { $0.id == identifier && $0.name == value }
-                        } ?? (model.documents.count > previousCount && model.activeDocument?.name == value)
-                        if saved { dismiss() }
-                        else {
-                            saveError = model.errorMessage ?? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.55")
-                            model.clearError()
-                        }
+                        defer { saving = false }
+                        do { try await saveDraft(); $dismiss() }
+                        catch { saveError = error.localizedDescription }
                     }
                 }
                 .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -768,5 +758,16 @@ private struct DocumentNameEditor: View {
             }
         }.padding(24).frame(width: 320)
             .disabled(saving).interactiveDismissDisabled()
+            .workbenchCloseProtection(isDirty: name != context.name, isSaving: saving, save: { try await saveDraft() })
     }
+    private func saveDraft() async throws {
+        let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previousCount = model.documents.count
+        if let id = context.documentID { await model.renameDocument(id: id, name: value) }
+        else { await model.createDocument(name: value) }
+        let saved = context.documentID.map { identifier in model.documents.contains { $0.id == identifier && $0.name == value } }
+            ?? (model.documents.count > previousCount && model.activeDocument?.name == value)
+        guard saved else { throw WorkflowIssue(model.errorMessage ?? workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.55")) }
+    }
+
 }

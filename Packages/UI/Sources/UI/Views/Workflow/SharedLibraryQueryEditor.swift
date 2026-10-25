@@ -106,6 +106,7 @@ struct SharedLibrarySaveQueryRequest: Identifiable {
 struct SharedLibrarySaveQuerySheet: View {
     let request: SharedLibrarySaveQueryRequest
     let store: SharedLibraryStore
+    @Environment(\.workbenchChildClose) private var closeGate
     let close: () -> Void
     @State private var name = ""
     @State private var failure: (any Error)?
@@ -130,14 +131,15 @@ struct SharedLibrarySaveQuerySheet: View {
             Text(t("saveQueryImpact")).font(.caption)
             if let failure { Text(sharedLibraryErrorText(failure, language: language)).foregroundStyle(.red) }
             HStack {
-                Button(t("cancel"), action: close).keyboardShortcut(.cancelAction)
+                Button(t("cancel")) { if let closeGate { closeGate.requestClose() } else { close() } }.keyboardShortcut(.cancelAction)
                 Spacer()
                 Button(t("saveQuery")) {
                     do { _ = try store.createSavedQuery(name: name, query: request.query); close() }
                     catch { failure = error }
                 }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).keyboardShortcut(.defaultAction)
             }
-        }.padding(20).frame(width: 460)
+        }.padding(20).frame(maxWidth: 460)
+        .workbenchCloseProtection(isDirty: !name.isEmpty, save: { _ = try store.createSavedQuery(name: name, query: request.query) })
     }
     private func conditions(_ ids: Set<UUID>, title: String) -> some View {
         ForEach(WorkflowResultQueryState.tagConditions(ids, store: store, missingLabel: t("deletedTagCondition")), id: \.id) { item in Text(title + ": " + (request.tagTitles[item.id] ?? item.title)) }

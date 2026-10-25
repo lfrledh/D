@@ -52,7 +52,7 @@ struct ChatConversationImportSheet: View {
             } else { Spacer() }
             if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
-                Button(workflowText(language, "workflow.action.cancel"), action: onCancel).disabled(saving)
+                WorkbenchRequestCloseButton(title: workflowText(language, "workflow.action.cancel"), fallback: onCancel).disabled(saving)
                 Spacer()
                 Button(workflowText(language, "chat.conversationImportSheet.createImportedConversation")) {
                     guard let preview else { return }
@@ -64,7 +64,8 @@ struct ChatConversationImportSheet: View {
                     }
                 }.disabled(saving || preview == nil || (preview?.losses.isEmpty == false && !acceptLosses))
             }
-        }.padding(20).frame(minWidth: 580, idealWidth: 720, minHeight: 440, idealHeight: 600)
+        }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
+        .workbenchCloseProtection(isDirty: acceptLosses || selectedIndex >= 0, isSaving: saving)
         .task {
             do {
                 choices = (try? ChatOpenWebUIImport.conversations(in: data)) ?? []

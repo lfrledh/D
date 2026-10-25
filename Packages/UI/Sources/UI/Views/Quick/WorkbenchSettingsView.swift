@@ -19,7 +19,7 @@ public struct WorkbenchSettingsView: View {
     @State private var selected: Section = .appearance
     @State private var visited: Set<Section> = [.appearance]
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.dismiss) private var dismiss
+    @WorkbenchDismiss private var dismiss
 
     public init(model: WorkbenchModel, library: ModelLibraryModel, language: UILanguageStore,
                 projectPath: String?, searchTargetLabel: String?,
@@ -155,11 +155,9 @@ public struct WorkbenchSettingsView: View {
     public var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(text("title", "Settings", "设置")).font(.title2.bold())
                 Spacer()
                 WorkbenchFeatureGuideButton(store: featureHelp)
-                Button(text("done", "Done", "完成")) { dismiss() }.keyboardShortcut(.cancelAction)
-            }.padding(20)
+            }.padding(.horizontal, 16).padding(.top, 4)
             if chat != nil && !isChatContextValid() {
                 Text(text("targetChanged2", "The captured workspace changed. Reopen Settings from the intended workspace.", "设置目标已改变，请回到目标工作区后重新打开设置。")).foregroundStyle(.red).padding(.horizontal)
             }
@@ -194,9 +192,9 @@ public struct WorkbenchSettingsView: View {
 
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        }.frame(minWidth: 700, idealWidth: 840, minHeight: 520, idealHeight: 660)
+        }.frame(maxWidth: .infinity, maxHeight: .infinity)
             .environment(\.workbenchHelpStore, featureHelp)
-            .sheet(item: $featureHelp.presentation) { WorkbenchFeatureGuide(presentation: $0, store: featureHelp).environment(\.dLanguageStore, language) }
+            .workbenchSheet(item: $featureHelp.presentation, title: workflowText(nil, "childPanel.name.help")) { WorkbenchFeatureGuide(presentation: $0, store: featureHelp).environment(\.dLanguageStore, language) }
             .workbenchTheme(paintsCanvas: false)
             .environment(\.dLanguageStore, language)
             .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)

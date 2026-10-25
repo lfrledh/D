@@ -56,8 +56,8 @@ struct ReleaseModelCatalogTests {
 
     @Test func allFrozenProfilesAndPinsArePresent() throws {
         let entries = try ModelCatalog.entries()
-        #expect(entries.count == 12)
-        #expect(Set(entries.map(\.id)).count == 12)
+        #expect(entries.count == 17)
+        #expect(Set(entries.map(\.id)).count == 17)
         for id in ["qwen35-9b-bf16", "qwen35-9b-q4", "qwen38-27b-bf16", "qwen38-27b-q4",
                    "flux2-klein-4b-q8", "flux2-klein-4b-bf16", "flux2-dev-bf16",
                    "minimax-h3-fl2va-bf16", "ltx-2.5-bf16", "wan21-t2v-1.3b-bf16",

@@ -55,7 +55,7 @@ import SwiftUI
                 }.padding(8)
             }
         }.padding(10)
-            .sheet(isPresented: $showPlan) {
+            .workbenchSheet(isPresented: $showPlan, title: workflowText(language, "childPanel.name.plan")) {
                 VStack(alignment: .leading, spacing: 14) {
                     Text(text("nextStage")).font(.headline)
                     Stepper(text("perSelected") + " \(repetitions)", value: $repetitions, in: 1...64)

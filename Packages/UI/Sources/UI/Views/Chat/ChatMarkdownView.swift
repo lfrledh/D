@@ -184,7 +184,6 @@ struct ChatMarkdownView: View {
                 Button(label("copyRaw", "复制原文")) {
                     NSPasteboard.general.clearContents(); NSPasteboard.general.setString(rawText, forType: .string)
                 }
-                Spacer()
             }.font(.caption)
             if let literal = ChatMarkdownPresentation.literalText(rendered: text, raw: rawText,
                 streaming: isStreaming, showingRaw: showsRaw,

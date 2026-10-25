@@ -106,7 +106,7 @@ struct WorkflowLibraryEntry: Identifiable {
                 }
             }
         }.padding(12).workbenchPanel(cornerRadius: 12)
-        .popover(item: $edited) { entry in
+        .workbenchPopover(item: $edited, title: workflowText(language, "childPanel.name.tags")) { entry in
             let legacy = SharedLibraryTagTarget.legacy(tagStore.readState(for: entry.tagKey))
             if let metadata {
                 SharedLibraryTagEditor(store: metadata, targets: [.init(key: entry.tagKey, title: entry.title, legacy: legacy.names, legacyFailure: legacy.failure)], validateTarget: WorkflowMetadataTarget.validation(controller: controller))
@@ -172,7 +172,8 @@ struct WorkflowLibraryFilters: View {
                 Button(workflowText(language, "canvas.tags.add")) { commit(values + [draft], addition: true) }
             }
             if let error { Text(error).foregroundStyle(.red).font(.caption) }
-        }.padding(16).frame(width: 330).disabled(busy || corrupt)
+        }.padding(16).frame(maxWidth: 330).disabled(busy || corrupt)
+        .workbenchCloseProtection(isDirty: !draft.isEmpty, isSaving: busy)
         .onAppear { values = initial }
     }
     private func commit(_ proposed: [String], addition: Bool) {
@@ -256,12 +257,12 @@ struct WorkflowLibraryFilters: View {
             guard urls.count == 1, let url = urls.first, url.isFileURL, controller.canEditCanvas else { return false }
             return onDropFile(url)
         }
-        .popover(item: $edited) { asset in
+        .workbenchPopover(item: $edited, title: workflowText(language, "childPanel.name.tags")) { asset in
             if let metadata, let project = controller.projectID {
                 SharedLibraryTagEditor(store: metadata, targets: [.init(key: "asset:" + project.uuidString + ":" + asset.id.uuidString, title: asset.name, legacy: asset.tags)], validateTarget: WorkflowMetadataTarget.validation(controller: controller, assetID: asset.id))
             } else { Text(text("unavailableTags", "共享标签库不可用，旧记录只读保留。")).padding() }
         }
-        .sheet(item: $preview) { reference in
+        .workbenchSheet(item: $preview, title: workflowText(language, "childPanel.name.preview")) { reference in
             VStack {
                 WorkflowAssetPreview(controller: controller, reference: reference)
                 Button(text("close", "关闭")) { preview = nil }

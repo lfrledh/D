@@ -240,7 +240,7 @@ private struct WorkflowMediaPreviewPanel: View {
     let reference: WorkflowAssetReference
     @State private var ready = false
     @State private var requestID = UUID()
-    @Environment(\.dismiss) private var dismiss
+    @WorkbenchDismiss private var dismiss
     @Environment(\.dLanguageStore) private var languageStore
     var body: some View {
         VStack(spacing: 14) {

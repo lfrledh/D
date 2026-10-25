@@ -163,7 +163,7 @@ import SwiftUI
         placements = []
     }
     func drag(with event: NSEvent) {
-        guard let window, !isFullScreen, !transitioning, event.window === window, window.attachedSheet == nil else { return }
+        guard let window, !isFullScreen, !transitioning, event.window === window, window.attachedSheet == nil, !WorkbenchChildPanels.isPresented(on: window) else { return }
         if event.clickCount == 2 {
             // The native parent remains in the window. Delegate this event rather
             // than hard-coding Zoom or changing the user's double-click setting.

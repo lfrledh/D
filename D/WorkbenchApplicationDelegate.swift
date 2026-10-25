@@ -176,6 +176,7 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
             }
         }
         workbenchWindow = window
+        WorkbenchChildPanels.registerOwner(window)
         for name in Self.sheetObservationNames {
             NotificationCenter.default.addObserver(self, selector: #selector(observeSheetState(_:)),
                                                    name: name, object: window)
@@ -199,7 +200,8 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
         guard !windowClosePending else { return false }
         windowClosePending = true
         Task { @MainActor [weak self, weak sender] in
-            let approved = await closeGate.prepareToClose()
+            var approved = await WorkbenchChildPanels.prepareForClosing(on: sender)
+            if approved { approved = await closeGate.prepareToClose() }
             guard let self else { return }
             self.windowClosePending = false
             guard approved, let sender else { return }
@@ -215,7 +217,8 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
         guard !terminationPending else { return .terminateLater }
         terminationPending = true
         Task { @MainActor [weak self] in
-            var approved = await self?.prepareQuickForTermination?() ?? true
+            var approved = await WorkbenchChildPanels.prepareForClosing(on: self?.workbenchWindow)
+            if approved { approved = await self?.prepareQuickForTermination?() ?? true }
             if approved { approved = await closeGate.prepareToClose() }
             if approved { approved = await self?.prepareLibraryForTermination?() ?? true }
             if !approved { self?.cancelTermination?() }

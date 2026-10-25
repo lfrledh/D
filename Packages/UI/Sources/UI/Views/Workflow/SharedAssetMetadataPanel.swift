@@ -144,7 +144,7 @@ struct SharedAssetMetadataPanel: View {
                 Text(t("exportLimit")).font(.caption)
             }
         }.font(.caption).textSelection(.enabled)
-        .sheet(item: $editing) { request in
+        .workbenchSheet(item: $editing, title: workflowText(language, "childPanel.name.metadata")) { request in
             AssetAnnotationEditor(snapshot: request.snapshot, validate: request.validate, save: request.save) { editing = nil }
         }
     }
@@ -177,6 +177,7 @@ struct AssetAnnotationEditor: View {
     @State private var context: String?
     @State private var validate: () throws -> Void
     @State private var save: (WorkflowValueAnnotation) async throws -> Void
+    @Environment(\.workbenchChildClose) private var closeGate
     let dismiss: () -> Void
     @State private var name: String
     @State private var note: String
@@ -218,14 +219,13 @@ struct AssetAnnotationEditor: View {
             if let failure { Text(sharedLibraryErrorText(failure, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
                 Spacer()
-                Button(t("cancel"), action: dismiss).workbenchHelp("ANNOTATION-CANCEL").keyboardShortcut(.cancelAction)
+                Button(t("cancel")) { if let closeGate { closeGate.requestClose() } else { dismiss() } }.workbenchHelp("ANNOTATION-CANCEL").keyboardShortcut(.cancelAction)
                 Button(t("saveResultInfo")) {
                     saving = true
                     Task { @MainActor in
                         defer { saving = false }
                         do {
-                            try validate()
-                            try await save(.init(name: name, note: note, favorite: favorite))
+                            try await saveDraft()
                             dismiss()
                         } catch { failure = error }
                     }
@@ -233,7 +233,14 @@ struct AssetAnnotationEditor: View {
             }
             WorkflowTechnicalDetails(value: identity)
         }.padding(24).frame(minWidth: 410, idealWidth: 480).disabled(saving).interactiveDismissDisabled()
+        .workbenchCloseProtection(isDirty: name != initial.name || note != initial.note || favorite != initial.favorite,
+                                  isSaving: saving, save: { try await saveDraft() })
         .onAppear { lifecycle.begin() }.onDisappear { lifecycle.end() }
+    }
+    private func saveDraft() async throws {
+        try validate()
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw WorkflowIssue(t("resultName")) }
+        try await save(.init(name: name, note: note, favorite: favorite))
     }
 }
 
@@ -267,7 +274,7 @@ struct RuntimeValueMetadataPanel: View {
                 target: .init(key: identity.storageKey, title: annotation?.name ?? title, legacy: []), validateTarget: validate)
             Text(metadataText(language, "runtimeOwnership", "", "")).font(.caption).foregroundStyle(.secondary)
         }
-        .sheet(item: $draft) { captured in
+        .workbenchSheet(item: $draft, title: workflowText(language, "childPanel.name.metadata")) { captured in
             AssetAnnotationEditor(initial: captured.initial, context: value.createdAt.formatted(date: .abbreviated, time: .standard),
                 identity: captured.identity.storageKey, ownershipKey: "runtimeOwnership", validate: captured.validate, save: { updated in
                     // No suspension between target validation, CAS and durable publication.

@@ -21,7 +21,7 @@ struct RecipeHandoffButton: View {
         } label: { Label(workflowText(legacyLanguage, "consistency.legacy.RecipeHandoffView.191"), systemImage: "doc.text.magnifyingglass") }
         .accessibilityIdentifier("png-recipe-handoff")
         .disabled(model.isChangingProject || model.isBusy || model.hasPendingEditor)
-        .sheet(isPresented: $presented, onDismiss: { model.endEditing() }) {
+        .workbenchSheet(isPresented: $presented, title: workflowText(legacyLanguage, "childPanel.name.recipe"), onDismiss: { model.endEditing() }) {
             RecipeHandoffView(model: model, expectedProjectID: projectID, assetID: assetID)
         }
     }
@@ -33,7 +33,7 @@ private struct RecipeHandoffView: View {
     let model: WorkbenchModel
     let expectedProjectID: UUID?
     let assetID: UUID?
-    @Environment(\.dismiss) private var dismiss
+    @WorkbenchDismiss private var dismiss
     @State private var privateArchive = false
     @State private var prepared: Data?
     @State private var inspection: PNGRecipeInspection?
@@ -87,7 +87,8 @@ private struct RecipeHandoffView: View {
                 Button(workflowText(legacyLanguage, "consistency.legacy.RecipeHandoffView.205")) { dismiss() }.disabled(busy).keyboardShortcut(.cancelAction)
             }
         }
-        .padding(24).frame(width: 740, height: 620)
+        .padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
+        .workbenchCloseProtection(isDirty: false, isSaving: busy)
         .interactiveDismissDisabled(busy)
     }
 

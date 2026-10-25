@@ -35,12 +35,14 @@ public actor ModelLibrary {
         var rootURL: URL?
         var rootIdentity: ModelFileIdentity?
         var downloadCredentialBookmark: Data?
+        var downloadCredentialAccount: String?
         var records: [StoredRecord] = []
         var downloads: [ModelDownloadTask]?
         var queueState: ModelDownloadQueueState?
     }
     private let now: @Sendable () -> Date
     private let sleepUntil: @Sendable (Date) async throws -> Void
+    private let credentialServices: ModelCredentialServices
     private let checkpoint: @Sendable (String) throws -> Void
     private let wanPreparation: ModelWanPreparation.Converter?
     private let stateDirectory: ModelDirectory
@@ -49,6 +51,8 @@ public actor ModelLibrary {
     private let transport: any ModelRangeTransport
     private let sourceBaseURL: URL?
     private let availableBytesOverride: UInt64?
+    private var inlineDownloadCredential: ModelDownloadCredential?
+    private var credentialIntent = UUID()
     private var disk: DiskState
     private var rootScope: ModelScopedLocation?
     private var libraryRoot: ModelDirectory?
@@ -78,6 +82,7 @@ public actor ModelLibrary {
          transport: any ModelRangeTransport = URLSessionModelRangeTransport(), sourceBaseURL: URL? = nil, availableBytesOverride: UInt64? = nil, wanPreparation: ModelWanPreparation.Converter? = nil,
          now: @escaping @Sendable () -> Date = { Date() },
          sleepUntil: @escaping @Sendable (Date) async throws -> Void = { deadline in try await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow))) },
+         credentialServices: ModelCredentialServices = .init(),
          checkpoint: @escaping @Sendable (String) throws -> Void = { _ in }) async throws {
         try Self.validateCatalog(catalog)
         if let sourceBaseURL {
@@ -96,7 +101,7 @@ public actor ModelLibrary {
         self.catalog = catalog; self.transport = transport; self.sourceBaseURL = sourceBaseURL
         self.availableBytesOverride = availableBytesOverride
         self.wanPreparation = wanPreparation
-        self.now = now; self.sleepUntil = sleepUntil; self.checkpoint = checkpoint
+        self.now = now; self.sleepUntil = sleepUntil; self.checkpoint = checkpoint; self.credentialServices = credentialServices
         let originalIndex = try Self.exists("index.json", in: directory) ? directory.read("index.json", maximum: 32 * 1024 * 1024) : nil
         if let originalIndex {
             disk = try JSONDecoder().decode(DiskState.self, from: originalIndex)
@@ -230,29 +235,96 @@ public actor ModelLibrary {
             return record
         }
         return .init(revision: disk.revision, rootURL: rootScope?.url ?? disk.rootURL, catalog: catalog,
-                     records: records, downloadCredentialConnected: disk.downloadCredentialBookmark != nil,
+                     records: records, downloadCredentialConnected: disk.downloadCredentialBookmark != nil || disk.downloadCredentialAccount != nil || inlineDownloadCredential != nil,
                      copyProgress: currentCopy,
                      resources: zip(records, disk.records).map { .init(record: $0.0, control: $0.1.control ?? .init(fileState: .unchecked, origin: .local)) },
                      downloads: disk.downloads ?? [], queueState: disk.queueState ?? .waitingForResume, queueError: queueError)
     }
 
-    public func connectDownloadCredential(at selected: URL) throws {
-        try Task.checkCancellation()
-        try requireAdmission(); try requireIdleWorker()
-        let credential = try ModelDownloadCredential.choose(selected)
-        try Task.checkCancellation()
-        let previous = disk.downloadCredentialBookmark
-        disk.downloadCredentialBookmark = credential.bookmark
-        do { try persist() } catch { disk.downloadCredentialBookmark = previous; throw error }
+    public func checkDownloadAccess(taskID: UUID) async throws {
+        try requireAdmission()
+        guard let task = disk.downloads?.first(where: { $0.id == taskID }),
+              let entry = catalog.first(where: { $0.id == task.catalogID }), !entry.files.isEmpty, sourceBaseURL == nil else {
+            throw ModelLibraryError.accessDenied("当前任务没有可核对的固定模型来源。")
+        }
+        let intent = credentialIntent
+        let credential = downloadCredential
+        let groups = Dictionary(grouping: entry.files) { ($0.sourceRepository ?? entry.repository) + "@" + ($0.sourceRevision ?? entry.revision) }
+        for key in groups.keys.sorted() {
+            guard let file = groups[key]?.max(by: { $0.size < $1.size }) else { continue }
+            try await ModelSourceAccessProbe.check(sourceURL(entry: entry, file: file, start: 0), credential: credential)
+            try Task.checkCancellation()
+            guard intent == credentialIntent else { throw CancellationError() }
+            guard disk.downloads?.contains(where: { $0.id == task.id && $0.generation == task.generation && $0.attemptID == task.attemptID }) == true else {
+                throw ModelLibraryError.busy("下载任务已改变；请重新选择当前任务。")
+            }
+        }
     }
 
-    public func disconnectDownloadCredential() throws {
-        try Task.checkCancellation()
+    public func connectDownloadToken(_ token: String, saveToKeychain: Bool) async throws {
         try requireAdmission(); try requireIdleWorker()
-        try Task.checkCancellation()
-        let previous = disk.downloadCredentialBookmark
-        disk.downloadCredentialBookmark = nil
-        do { try persist() } catch { disk.downloadCredentialBookmark = previous; throw error }
+        let token = try ModelDownloadCredential.validated(token)
+        let intent = UUID(); credentialIntent = intent
+        try await credentialServices.validate(token)
+        try Task.checkCancellation(); try requireAdmission(); try requireIdleWorker()
+        guard credentialIntent == intent else { throw CancellationError() }
+        let account = saveToKeychain ? credentialSlots.first(where: { $0 != disk.downloadCredentialAccount }) : nil
+        if let account {
+            // Fixed two slots make even a failed rollback cleanup discoverable
+            // after reopening, without scanning credentials or storing tokens.
+            try credentialServices.remove(account)
+            try credentialServices.insert(token, account)
+        }
+        do { try replaceDownloadCredential(bookmark: nil, account: account, inline: account == nil ? try ModelDownloadCredential(token: token) : nil) }
+        catch {
+            if case ModelAtomicWriteError.publishedButUnsynced = error { throw error }
+            // A cleanup error after publication must never delete the current token.
+            if disk.downloadCredentialAccount == account, account != nil { throw error }
+            if let account {
+                do { try credentialServices.remove(account) }
+                catch let cleanup {
+                    throw ModelLibraryError.unavailable(error.localizedDescription + "\n" + cleanup.localizedDescription)
+                }
+            }
+            throw error
+        }
+    }
+    private var credentialSlots: [String] { [0, 1].map { disk.libraryID.uuidString.lowercased() + ".download-token.\($0)" } }
+    private func clearInactiveCredentials(previous: String? = nil) throws {
+        let accounts = Set(credentialSlots + (previous.map { [$0] } ?? []))
+        for account in accounts.sorted() where account != disk.downloadCredentialAccount { try credentialServices.remove(account) }
+    }
+    public func connectDownloadCredential(at selected: URL) throws {
+        try Task.checkCancellation(); try requireAdmission(); try requireIdleWorker()
+        let credential = try ModelDownloadCredential.choose(selected)
+        _ = try credential.token()
+        credentialIntent = UUID()
+        try replaceDownloadCredential(bookmark: credential.bookmark, account: nil, inline: nil)
+    }
+    public func disconnectDownloadCredential() throws {
+        try Task.checkCancellation(); try requireAdmission(); try requireIdleWorker()
+        credentialIntent = UUID()
+        try replaceDownloadCredential(bookmark: nil, account: nil, inline: nil)
+    }
+    private func replaceDownloadCredential(bookmark: Data?, account: String?, inline: ModelDownloadCredential?) throws {
+        let oldDisk = disk, oldAccount = disk.downloadCredentialAccount, oldInline = inlineDownloadCredential
+        disk.downloadCredentialBookmark = bookmark; disk.downloadCredentialAccount = account; inlineDownloadCredential = inline
+        disk.revision &+= 1
+        do { try persist() }
+        catch {
+            if case ModelAtomicWriteError.publishedButUnsynced = error {
+                // The new reference is already durable. Keep both fixed slots
+                // until a later explicit connection/removal retries cleanup.
+                throw error
+            }
+            disk = oldDisk; inlineDownloadCredential = oldInline; throw error
+        }
+        try clearInactiveCredentials(previous: oldAccount)
+    }
+    private var downloadCredential: ModelDownloadCredential? {
+        if let inlineDownloadCredential { return inlineDownloadCredential }
+        if let account = disk.downloadCredentialAccount { return .init(keychainAccount: account, read: credentialServices.read) }
+        return disk.downloadCredentialBookmark.map { .init(bookmark: $0) }
     }
 
     public func configureRoot(at selected: URL) throws {
@@ -970,8 +1042,8 @@ public actor ModelLibrary {
             let end = min(offset + Self.chunkBytes, file.size) - 1
             let url = sourceURL(entry: entry, file: file, start: offset)
             var range = ModelByteRange(url: url, start: offset, end: end, total: file.size)
-            if sourceBaseURL == nil, let bookmark = disk.downloadCredentialBookmark {
-                range.credential = ModelDownloadCredential(bookmark: bookmark)
+            if sourceBaseURL == nil, let credential = downloadCredential {
+                range.credential = credential
                 range.authorizedPath = url.path
             }
             try await transport.download(range, to: fd)

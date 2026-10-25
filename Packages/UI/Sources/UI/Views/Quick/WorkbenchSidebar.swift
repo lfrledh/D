@@ -159,6 +159,7 @@ struct WorkbenchSidebar<Content: View>: View {
     @Environment(\.dLanguageStore) private var language
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.workbenchModeSize) private var modeSize
     @Environment(\.workbenchPanelWidths) private var widths
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -237,6 +238,7 @@ struct WorkbenchSidebar<Content: View>: View {
             .frame(width: width, height: geometry.size.height, alignment: alignment)
         }
         .frame(width: leading ? widths.leading : widths.trailing)
+        .padding(.bottom, leading ? 0 : modeSize.height + 28)
         .onChange(of: expanded) { _, open in if !open { revealed = false } }
         .environment(\.workbenchSurfaceGroup, "sidebar:" + surfaceGroup)
         .task(id: "\(identifier):\(expanded):\(isEnabled):\(revealDuration ?? 0)") {

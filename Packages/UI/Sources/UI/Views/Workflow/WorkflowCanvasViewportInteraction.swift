@@ -329,6 +329,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel,
                 .leftMouseDown, .leftMouseDragged, .leftMouseUp, .keyDown]) { [weak self] event in
                 guard let self else { return event }
+                if WorkbenchChildPanels.isPresented(on: self.window) { self.cancelPointer(); self.setHandPressed(false); return event }
                 switch event.type {
                 case .keyDown:
                     if event.keyCode == 53, self.pointerSession != nil {
@@ -496,7 +497,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         /// Establish canvas ownership before deciding whether a child owns scrolling.
         /// Native controls such as ports must not leak an unused wheel into the canvas.
         private func visibleCanvasScroll() -> NSScrollView? {
-            guard let window, window.attachedSheet == nil,
+            guard let window, window.attachedSheet == nil, !WorkbenchChildPanels.isPresented(on: window),
                   !isHiddenOrHasHiddenAncestor,
                   let scroll = enclosingScrollView, !scroll.isHiddenOrHasHiddenAncestor else { return nil }
             var ancestor: NSView? = self

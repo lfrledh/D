@@ -19,7 +19,7 @@ struct ChatQuoteSheet: View {
             HStack {
                 Text(workflowText(language, "chat.quoteSheet.selectTextToQuote")).font(.headline)
                 Spacer()
-                Button(workflowText(language, "workflow.action.close")) { task?.cancel(); onClose() }.keyboardShortcut(.cancelAction)
+                WorkbenchRequestCloseButton(title: workflowText(language, "workflow.action.close"), fallback: onClose).keyboardShortcut(.cancelAction)
             }
             Text(workflowText(language, "chat.quoteSheet.thisAddsAnEditableQuotationToTheOriginalConversationNothing"))
                 .font(.caption).foregroundStyle(.secondary)
@@ -54,7 +54,8 @@ struct ChatQuoteSheet: View {
             }.disabled(task != nil)
             if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             if task != nil { ProgressView().controlSize(.small) }
-        }.padding(20).frame(minWidth: 600, idealWidth: 800, minHeight: 400)
+        }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
+            .workbenchCloseProtection(isDirty: issue != nil, isSaving: task != nil)
             .onDisappear { task?.cancel() }
     }
 }

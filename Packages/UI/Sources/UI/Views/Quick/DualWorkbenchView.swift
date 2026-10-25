@@ -350,15 +350,18 @@ public struct DualWorkbenchView: View {
         let projectQuick = model.projectSession.projectQuick, targetInstance = model.manifest?.effectiveInstanceID
         let targetName = model.manifest?.name
         func action(_ title: String, enabled: Bool = true, _ perform: @escaping () -> Void) -> WorkbenchGenerationCommand {
-            let admitted = enabled && canPresentSettings && controlsEnabled && !owner.isChangingProject
+            let admitted = enabled && controlsEnabled && !owner.isChangingProject
             return .init(title: title, isEnabled: admitted) {
-                guard admitted, commandScope.permitsCommands, canPresentSettings, controlsEnabled,
+                guard admitted, commandScope.permitsNavigation else { return }
+                WorkbenchChildPanels.navigate(on: commandScope.window) {
+                guard canPresentSettings, controlsEnabled,
                       entry == capturedEntry, navigationIntent == intent, displayedOwner === owner,
                       owner.manifest?.effectiveInstanceID == instance, owner.projectSession.currentStore === store,
                       owner.projectSession.navigationEpoch == epoch, !owner.isChangingProject else {
                     issue = systemMenuText(language, "stale"); return
                 }
                 perform()
+                }
             }
         }
         var destinations: [WorkbenchChoiceCommand] = []
@@ -398,39 +401,15 @@ public struct DualWorkbenchView: View {
             stop: entry == .quick && (quick.category != .text || quick.textPresentation == .single) ? action(systemMenuText(language, "stop"), enabled: originalQuick.isRunning) { Task { await originalQuick.cancel() } } : nil,
             retrySave: entry == .quick && (originalQuick.pendingSaveRunID != nil || originalQuick.saveIssue != nil) ? action(systemMenuText(language, "retrySave"), enabled: !originalQuick.isRunning) { Task { await originalQuick.retrySave() } } : nil)
     }
-    private var applicationToolbar: some View {
-        let commands = workspaceCommands
-        return HStack(spacing: 12) {
-            WorkbenchNativeWindowControls(fullScreen: $windowFullScreen)
-            Button(workflowText(language, "modelManagement.downloadTitle"), systemImage: "arrow.down") { library.presentDownloads() }
-                .frame(height: 32).fixedSize(horizontal: true, vertical: false)
-                .accessibilityIdentifier("workbench-download-manager").workbenchHelp("MODELS-DOWNLOAD")
-            Text("D").font(.title2.bold())
-            WorkbenchMenu(consistencyText(language, "APP-PROJECT")) {
-                let command = saveCommand
-                WorkbenchMenuAction(layoutText(language, "save"), action: command.action).disabled(!command.isEnabled).featureHelp("MENU-FILE-SAVE", language: language)
-                WorkbenchMenuAction(commands.files.title, action: commands.files.action).disabled(!commands.files.isEnabled).featureHelp("MENU-FILE-BACKUPS", language: language)
-                if !commands.quickDestination.isEmpty {
-                    WorkbenchMenuDivider()
-                    WorkbenchSubmenu(layoutText(language, "quickDestination")) {
-                        WorkbenchMenuForEach(Array(commands.quickDestination.indices), id: \.self) { i in
-                            let item = commands.quickDestination[i]
-                            WorkbenchMenuAction(item.command.title, systemImage: item.selected ? "checkmark" : nil, action: item.command.action).disabled(!item.command.isEnabled)
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: 4) { Text(displayedTitle).lineLimit(1).truncationMode(.middle); Image(systemName: "chevron.down").font(.caption) }
-            }.accessibilityIdentifier("app-project").accessibilityLabel(displayedTitle).workbenchHelp("APP-PROJECT").help(displayedTitle)
-                .frame(maxWidth: 260, alignment: .leading).layoutPriority(-1)
-                .environment(\.workbenchMenuContext, "project:\(displayedOwner.manifest?.effectiveInstanceID.uuidString ?? "none"):\(entry):\(usesTemporaryChat)")
-            WorkbenchWindowDragRegion().frame(minWidth: 72, maxWidth: .infinity).frame(height: 32).layoutPriority(-2)
-            WorkbenchGlassSegments(title: t("workspaceMode"), selection: Binding(get: { entry }, set: { navigate(to: $0) }),
-                choices: [(Entry.quick, layoutText(language, "quick")), (.workflow, layoutText(language, "workflow"))],
-                owner: AnyHashable("\(displayedOwner.manifest?.effectiveInstanceID.uuidString ?? "none"):\(displayedOwner.projectSession.navigationEpoch)"), minimumItemLength: 108)
-                .fixedSize(horizontal: true, vertical: false).accessibilityIdentifier("workbench-entry").workbenchHelp("APP-MODE")
-
-        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 16).frame(height: 64)
+    @State private var modeSize = CGSize(width: 232, height: 52)
+    private var modeSwitcher: some View {
+        WorkbenchGlassSegments(title: t("workspaceMode"), selection: Binding(get: { entry }, set: { navigate(to: $0) }),
+            choices: [(Entry.quick, layoutText(language, "quick")), (.workflow, layoutText(language, "workflow"))],
+            owner: AnyHashable("\(displayedOwner.manifest?.effectiveInstanceID.uuidString ?? "none"):\(displayedOwner.projectSession.navigationEpoch)"),
+            standard: true, minimumItemLength: 108)
+            .fixedSize(horizontal: true, vertical: false).frame(height: 52)
+            .onGeometryChange(for: CGSize.self, of: { $0.size }) { modeSize = $0 }
+            .accessibilityIdentifier("workbench-entry").workbenchHelp("APP-MODE")
     }
 
     @ViewBuilder private var workspaceContent: some View {
@@ -438,7 +417,6 @@ public struct DualWorkbenchView: View {
         let _ = WorkbenchCategoryUpdateProbe.workbenchBody?()
         #endif
         VStack(spacing: 0) {
-            applicationToolbar
             if entry == .quick {
                 HStack(spacing: 12) {
                     Spacer(minLength: 0)
@@ -537,6 +515,14 @@ public struct DualWorkbenchView: View {
 
         }
         .frame(minWidth: WorkbenchSidebarLayout.minimumWindowWidth, minHeight: 580)
+        .environment(\.workbenchModeSize, modeSize)
+        .overlay(alignment: .topLeading) {
+            WorkbenchNativeWindowControls(fullScreen: $windowFullScreen).padding(.leading, 16).padding(.top, 12)
+        }
+        .overlay(alignment: .topTrailing) {
+            WorkbenchWindowDragRegion().frame(width: 120, height: 28).padding(.trailing, 16).padding(.top, 8)
+        }
+        .overlay(alignment: .bottomTrailing) { modeSwitcher.padding(.trailing, 16).padding(.bottom, 16) }
     }
     private var menuContext: String {
         let instance = canvasModel.manifest?.effectiveInstanceID.uuidString ?? "none"
@@ -549,7 +535,7 @@ public struct DualWorkbenchView: View {
         .focusedSceneValue(\.workbenchSave, canPresentSettings ? saveCommand : nil)
         .environment(\.workbenchSaveAction, canPresentSettings ? saveCommand : nil)
         .environment(\.workbenchHelpStore, featureHelp)
-        .sheet(item: $featureHelp.presentation) { presentation in
+        .workbenchSheet(item: $featureHelp.presentation, title: workflowText(language, "childPanel.name.help")) { presentation in
             WorkbenchFeatureGuide(presentation: presentation, store: featureHelp)
                 .environment(\.dLanguageStore, language)
         }
@@ -564,7 +550,7 @@ public struct DualWorkbenchView: View {
         .onAppear { consumeSettingsRequest() }
         .onChange(of: settingsRequest) { _, _ in consumeSettingsRequest() }
         .onChange(of: canPresentSettings) { _, ready in if ready { consumeSettingsRequest() } }
-        .sheet(isPresented: $settingsVisible, onDismiss: finishSettingsDismissal) {
+        .workbenchSheet(isPresented: $settingsVisible, title: workflowText(language, "childPanel.name.settings"), onDismiss: finishSettingsDismissal) {
             if let language, let context = settingsContext {
                 WorkbenchSettingsView(model: context.owner, library: library, language: language,
                     projectPath: context.files?.store.rootURL.path, searchTargetLabel: context.searchTitle,
@@ -579,8 +565,8 @@ public struct DualWorkbenchView: View {
                     }).workbenchPresentation(state: context.owner.chatDisplaySettings)
             }
         }
-        .onChange(of: libraryVisible) { _, _ in navigationIntent = UUID() }
-        .sheet(isPresented: $libraryVisible, onDismiss: finishLibraryDismissal) {
+        .onChange(of: libraryVisible) { _, shown in if shown { navigationIntent = UUID() } }
+        .workbenchSheet(isPresented: $libraryVisible, title: workflowText(language, "childPanel.name.library"), onDismiss: finishLibraryDismissal) {
             VStack(spacing: 0) {
                 if !quickModel.projectSession.explicitModelChecking.isEmpty {
                     Text(t("checkingModel"))
@@ -596,11 +582,11 @@ public struct DualWorkbenchView: View {
                 libraryBrowser(compact: false, at: { CGPoint(x: 160, y: 140) }, canvasMode: expandedLibraryMode, forCanvas: expandedLibraryForCanvas)
                     .environment(\.workflowLibraryContext, expandedLibraryContext)
             }
-            .frame(minWidth: 820, minHeight: 540)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .task { await refreshLibrary(checkModels: true) }
             .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
-        .sheet(isPresented: $projectsVisible) {
+        .workbenchSheet(isPresented: $projectsVisible, title: workflowText(language, "childPanel.name.projects")) {
             VStack(spacing: 0) {
                 HStack { Button(baselineText(language, "label.572cf45ba436")) { projectsVisible = false }.keyboardShortcut(.cancelAction); Text(baselineText(language, "label.79f326be4409")).font(.headline); Spacer() }.padding()
                 ProjectChooserView(recentProjects: model.recentProjects, isBusy: model.isChangingProject,
@@ -611,10 +597,10 @@ public struct DualWorkbenchView: View {
                 if let error = model.errorMessage {
                     Text(error).foregroundStyle(.red).textSelection(.enabled).padding()
                 }
-            }.frame(minWidth: 640, minHeight: 420)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
             .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
-        .sheet(item: $filesRoute) { route in
+        .workbenchSheet(item: $filesRoute, title: workflowText(language, "childPanel.name.files")) { route in
             ProjectFilesView(store: route.store, instanceID: route.instanceID,
                 isActive: { (canvasModel.projectSession.currentStore === route.store &&
                     canvasModel.manifest?.effectiveInstanceID == route.instanceID) ||
@@ -687,25 +673,25 @@ public struct DualWorkbenchView: View {
     }
     private var presentedWorkspace: some View {
         workspacePanels
-        .sheet(isPresented: $compatibilityVisible) {
+        .workbenchSheet(isPresented: $compatibilityVisible, title: workflowText(language, "childPanel.name.legacy")) {
             VStack(spacing: 0) {
                 HStack { Button(baselineText(language, "label.572cf45ba436")) { compatibilityVisible = false }.keyboardShortcut(.cancelAction); Text(layoutText(language, "legacy") + " · " + legacyName); Spacer() }.padding()
                 if model.manifest?.effectiveInstanceID == legacyInstance {
                     WorkbenchView(model: model, library: library, nodeTags: nodeTags, metadata: metadata)
                 } else { Text(layoutText(language, "legacyChanged")).padding(24) }
-            }.frame(minWidth: 960, minHeight: 650)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
             .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
-        .sheet(isPresented: Binding(get: { library.isPresented }, set: { library.isPresented = $0 }), onDismiss: restoreLibraryIfNeeded) {
+        .workbenchSheet(isPresented: Binding(get: { library.isPresented }, set: { library.isPresented = $0 }), title: workflowText(language, library.workspace == "downloads" ? "modelManagement.downloadTitle" : "modelManagement.modelTitle"), size: .init(download: true), onDismiss: restoreLibraryIfNeeded) {
             ModelLibraryView(model: library)
             .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
 
-        .sheet(isPresented: $languageVisible) {
+        .workbenchSheet(isPresented: $languageVisible, title: workflowText(language, "childPanel.name.language")) {
             VStack {
                 HStack { Button(baselineText(language, "label.572cf45ba436")) { languageVisible = false }.keyboardShortcut(.cancelAction); Spacer() }
                 if let language { LanguageSettingsView(store: language) }
-            }.padding().frame(width: 560, height: 440)
+            }.padding().frame(maxWidth: .infinity, maxHeight: .infinity)
             .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
         .alert(consistencyText(language, "error.incomplete"), isPresented: Binding(get: { issue != nil }, set: { if !$0 { issue = nil; failedAssetRoute = nil } })) {
@@ -747,7 +733,7 @@ public struct DualWorkbenchView: View {
     }
     public var body: some View {
         presentedWorkspace
-        .sheet(item: $previewAsset, onDismiss: {
+        .workbenchSheet(item: $previewAsset, title: workflowText(language, "childPanel.name.preview"), onDismiss: {
             if let pendingFilesRoute {
                 returnToLibrary = false; filesRoute = pendingFilesRoute; self.pendingFilesRoute = nil
             }
@@ -773,7 +759,7 @@ public struct DualWorkbenchView: View {
             }.padding(20).frame(minWidth: 560, minHeight: 360)
             .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
-        .sheet(item: $libraryInfo, onDismiss: restoreLibraryIfNeeded) { value in
+        .workbenchSheet(item: $libraryInfo, title: workflowText(language, "childPanel.name.details"), onDismiss: restoreLibraryIfNeeded) { value in
             VStack(alignment: .leading, spacing: 14) { HStack { Button(baselineText(language, "label.572cf45ba436")) { libraryInfo = nil }; Text(value.item.title).font(.title2); Spacer() }
                 Text(value.item.detail); ForEach(value.facts, id: \.self) { Text($0).textSelection(.enabled) }
                 if case .unavailable = value.selection { Button(baselineText(language, "label.32d818ead29f")) { returnToLibrary = false; libraryInfo = nil; libraryVisible = false; openLegacy() } }
@@ -1053,9 +1039,10 @@ public struct DualWorkbenchView: View {
         }
     }
     private func previewLibraryEntry(_ value: SharedLibraryBrowserEntry, allowPin:Bool=false) async {
+        guard let previewWindow = commandScope.window, previewWindow.isKeyWindow else { return }
         if let runtime=value.runtimeValue {
             guard let controller=canvasModel.projectSession.workflow,runtime.isCurrent(in:controller) else { issue=t("runtimeUnavailable");return }
-            do { canvasModel.viewers.library=metadata;try canvasModel.viewers.open(.init(title:value.item.title,subtitle:value.item.detail,value:runtime.value,call:runtime.call,port:runtime.port,usesCallTitle: true),model:canvasModel,language:language) }
+            do { canvasModel.viewers.library=metadata;try canvasModel.viewers.open(.init(title:value.item.title,subtitle:value.item.detail,value:runtime.value,call:runtime.call,port:runtime.port,usesCallTitle: true),model:canvasModel,language:language,ownerWindow:previewWindow) }
             catch { issue=error.localizedDescription }
             return
         }
@@ -1082,7 +1069,7 @@ public struct DualWorkbenchView: View {
                   identity.1 == nil || content.token.instanceID == identity.1 else { return }
             guard let owningModel = [model,automaticQuickModel].first(where: { $0.projectSession === owner }) else { return }
             owningModel.viewers.library = metadata
-            try owningModel.viewers.open(.init(title:value.item.title, subtitle:value.item.detail, resource:content.token), model:owningModel, language:language)
+            try owningModel.viewers.open(.init(title:value.item.title, subtitle:value.item.detail, resource:content.token), model:owningModel, language:language, ownerWindow:previewWindow)
         } catch {
             guard current() else { return }
             let snapshot = await source.snapshot()

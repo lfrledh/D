@@ -19,7 +19,7 @@ struct WorkflowScopePresentation: Identifiable {
     let graphID: UUID
     let revision: UUID
     let nodeID: UUID
-    @Environment(\.dismiss) private var dismiss
+    @WorkbenchDismiss private var dismiss
     @Environment(\.dLanguageStore) private var language
     @State private var mode = 0
     @State private var choices: [String: UUID] = [:]

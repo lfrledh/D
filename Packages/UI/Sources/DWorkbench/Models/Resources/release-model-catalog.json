@@ -1609,6 +1609,352 @@
       "title": "ACE-Step 1.5 XL SFT · F32 / no-LM",
       "workflowIdentity": "music:d06de46b4622f781cf07f4a013a67d591ca52819",
       "workflowProfileID": "d.music.ace-step-1.5-xl-sft"
+    },
+    {
+      "files": [
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "README.md",
+          "sha256": "9112fd338440b927dc9d12e668e224d34aa090f2",
+          "size": 748
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "added_tokens.json",
+          "sha256": "482ced4679301bf287ebb310bdd1790eb4514232",
+          "size": 605
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "config.json",
+          "sha256": "e3c0e76e4e54c951f36d49e3042347b58382136e",
+          "size": 783
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "merges.txt",
+          "sha256": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+          "size": 1671853
+        },
+        {
+          "digestAlgorithm": "sha256",
+          "path": "model.safetensors",
+          "sha256": "ddffab9cbc7bf6dde941c6724841eeca8981fcfa81ca20ff8efff1396326d153",
+          "size": 278064920
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "model.safetensors.index.json",
+          "sha256": "8831428421e282132532f717fcaba43f8c7f5445",
+          "size": 44209
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "special_tokens_map.json",
+          "sha256": "ac23c0aaa2434523c494330aeb79c58395378103",
+          "size": 613
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "tokenizer.json",
+          "sha256": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e",
+          "size": 7031673
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "tokenizer_config.json",
+          "sha256": "482ccbc1096b0e9400e86e33f189681c2aebdab9",
+          "size": 7308
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "vocab.json",
+          "sha256": "4783fe10ac3adce15ac8f358ef5462739852c569",
+          "size": 2776833
+        }
+      ],
+      "id": "qwen25-0.5b-q4",
+      "memoryGuidance": "运行所需内存取决于设备与任务。",
+      "modelSpec": "4-bit",
+      "preparation": "none",
+      "provenance": "Packages/UI/Sources/DWorkbench/Models/Resources/text-model.json",
+      "repository": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+      "revision": "a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3",
+      "title": "Qwen2.5 0.5B Instruct · 4-bit",
+      "workflowIdentity": "text:a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3",
+      "workflowProfileID": "d.model.language"
+    },
+    {
+      "files": [
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "README.md",
+          "sha256": "0a8005b4dede12c63ec8edfaa107c2e5af23cdef",
+          "size": 748
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "added_tokens.json",
+          "sha256": "482ced4679301bf287ebb310bdd1790eb4514232",
+          "size": 605
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "config.json",
+          "sha256": "d2741b5d6d48fa6f2ada841a2d6deb8a20137e5f",
+          "size": 784
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "merges.txt",
+          "sha256": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+          "size": 1671853
+        },
+        {
+          "digestAlgorithm": "sha256",
+          "path": "model.safetensors",
+          "sha256": "0979f33d1bc58afcf696d13f57977644e7b11a6f0eec3e631d8e9463d18c0717",
+          "size": 868628559
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "model.safetensors.index.json",
+          "sha256": "87eb58d416654c6c0ef987be30f6981a3176ffae",
+          "size": 51569
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "special_tokens_map.json",
+          "sha256": "ac23c0aaa2434523c494330aeb79c58395378103",
+          "size": 613
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "tokenizer.json",
+          "sha256": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e",
+          "size": 7031673
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "tokenizer_config.json",
+          "sha256": "482ccbc1096b0e9400e86e33f189681c2aebdab9",
+          "size": 7308
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "vocab.json",
+          "sha256": "4783fe10ac3adce15ac8f358ef5462739852c569",
+          "size": 2776833
+        }
+      ],
+      "id": "qwen25-1.5b-q4",
+      "memoryGuidance": "运行所需内存取决于设备与任务。",
+      "modelSpec": "4-bit",
+      "preparation": "none",
+      "provenance": "Packages/UI/Sources/DWorkbench/Models/Resources/text-model-1_5b.json",
+      "repository": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "title": "Qwen2.5 1.5B Instruct · 4-bit",
+      "workflowIdentity": "text:8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "workflowProfileID": "d.model.language"
+    },
+    {
+      "files": [
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "README.md",
+          "sha256": "489ab8c8d3cac6fb0d0ac178febdbf39be363e9e",
+          "size": 732
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "added_tokens.json",
+          "sha256": "482ced4679301bf287ebb310bdd1790eb4514232",
+          "size": 605
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "config.json",
+          "sha256": "f9dd0a512675c68d5d8d18f7e44d9f29141af60d",
+          "size": 787
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "merges.txt",
+          "sha256": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+          "size": 1671853
+        },
+        {
+          "digestAlgorithm": "sha256",
+          "path": "model.safetensors",
+          "sha256": "86110f368236b53cf4c2336f991a85703b17bcc60bb75f292b4002ec0219f071",
+          "size": 4284346255
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "model.safetensors.index.json",
+          "sha256": "669ba50dd3bc0e1ed5f31cd939a54d5dd37c3c85",
+          "size": 51711
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "special_tokens_map.json",
+          "sha256": "ac23c0aaa2434523c494330aeb79c58395378103",
+          "size": 613
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "tokenizer.json",
+          "sha256": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e",
+          "size": 7031673
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "tokenizer_config.json",
+          "sha256": "816372d7ae55ff163ebec9e9d2286c6b462539be",
+          "size": 7280
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "vocab.json",
+          "sha256": "4783fe10ac3adce15ac8f358ef5462739852c569",
+          "size": 2776833
+        }
+      ],
+      "id": "qwen25-7b-q4",
+      "memoryGuidance": "运行所需内存取决于设备与任务。",
+      "modelSpec": "4-bit",
+      "preparation": "none",
+      "provenance": "Packages/UI/Sources/DWorkbench/Models/Resources/text-model-7b.json",
+      "repository": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+      "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+      "title": "Qwen2.5 7B Instruct · 4-bit",
+      "workflowIdentity": "text:c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+      "workflowProfileID": "d.model.language"
+    },
+    {
+      "files": [
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "README.md",
+          "sha256": "67f4f5b95e3e5f69a6be8e3f0cff0eb17804c49c",
+          "size": 740
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "added_tokens.json",
+          "sha256": "482ced4679301bf287ebb310bdd1790eb4514232",
+          "size": 605
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "config.json",
+          "sha256": "898bd81a540a54dfbd50e052e60ed01d10244a8a",
+          "size": 787
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "merges.txt",
+          "sha256": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+          "size": 1671853
+        },
+        {
+          "digestAlgorithm": "sha256",
+          "path": "model-00001-of-00004.safetensors",
+          "sha256": "3187f89267bdebe362410a3b23c2767d9d0707f4ffbbf7a945e5cd0abf535a21",
+          "size": 5366582717
+        },
+        {
+          "digestAlgorithm": "sha256",
+          "path": "model-00002-of-00004.safetensors",
+          "sha256": "31547d7a3e6583eea8bcc1b7230680f8132143c43c19cab3eab75f6b31d33e33",
+          "size": 5335712920
+        },
+        {
+          "digestAlgorithm": "sha256",
+          "path": "model-00003-of-00004.safetensors",
+          "sha256": "d00aec153b1ea6540446c1769ef76004e4ee11855844919f48434f0d4f77b33f",
+          "size": 5366641934
+        },
+        {
+          "digestAlgorithm": "sha256",
+          "path": "model-00004-of-00004.safetensors",
+          "sha256": "4dae2dd0355ac7ad5440ccd4d5f60a08084cda924c058402b979654359150743",
+          "size": 2362540888
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "model.safetensors.index.json",
+          "sha256": "7949fa6067e06f908f1c2ec24cc73fc3c74bd9c7",
+          "size": 143017
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "special_tokens_map.json",
+          "sha256": "ac23c0aaa2434523c494330aeb79c58395378103",
+          "size": 613
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "tokenizer.json",
+          "sha256": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e",
+          "size": 7031673
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "tokenizer_config.json",
+          "sha256": "482ccbc1096b0e9400e86e33f189681c2aebdab9",
+          "size": 7308
+        },
+        {
+          "digestAlgorithm": "gitBlobSHA1",
+          "path": "vocab.json",
+          "sha256": "4783fe10ac3adce15ac8f358ef5462739852c569",
+          "size": 2776833
+        }
+      ],
+      "id": "qwen25-32b-q4",
+      "memoryGuidance": "运行所需内存取决于设备与任务。",
+      "modelSpec": "4-bit",
+      "preparation": "none",
+      "provenance": "Packages/UI/Sources/DWorkbench/Models/Resources/text-model-32b.json",
+      "repository": "mlx-community/Qwen2.5-32B-Instruct-4bit",
+      "revision": "2938092373e5f97b95538884112085364c2da315",
+      "title": "Qwen2.5 32B Instruct · 4-bit",
+      "workflowIdentity": "text:2938092373e5f97b95538884112085364c2da315",
+      "workflowProfileID": "d.model.language"
+    },
+    {
+      "files": [
+        {
+          "path": "MLX/dit_sm-music_f16.npz",
+          "sha256": "8ed3f38e2597f361ee675051f1265d9aa2ae2fffce1c61acd2e9fe31e1db1cbc",
+          "size": 919193814
+        },
+        {
+          "path": "MLX/t5gemma_f16.npz",
+          "sha256": "8deb20489f36d9aec539f26c9c67321f99bc5fe300d470435ed6e76be4f16bbd",
+          "size": 567443068
+        },
+        {
+          "path": "MLX/same_s_encoder_f32.npz",
+          "sha256": "a48f80d81c30d74c45e2a3047082c4891f715e24c44645adb9c1f4f07afdaf0c",
+          "size": 214946620
+        },
+        {
+          "path": "MLX/same_s_decoder_f32.npz",
+          "sha256": "909928a8e6937c1ebe6ac4b729f0462bd3773704a11ea18278e42671dc69bfe4",
+          "size": 218090820
+        }
+      ],
+      "id": "stable-audio-small-music",
+      "memoryGuidance": "运行所需内存取决于设备与任务。",
+      "modelSpec": "FP16 / FP32",
+      "preparation": "none",
+      "provenance": "Backends/Audio/Models/sm-music.json",
+      "repository": "stabilityai/stable-audio-3-optimized",
+      "revision": "da6edc54ddba10bfd79a077102ded687f80e882b",
+      "title": "Stable Audio Small Music"
     }
   ],
   "schemaVersion": 1

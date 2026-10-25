@@ -70,6 +70,7 @@ struct ChatLibraryAttachmentButton: View {
 struct ChatProjectAttachmentSheet: View {
     let chat: ChatController
     let sessionID: UUID
+    var resolveSession: (() throws -> UUID)? = nil
     @Environment(\.dLanguageStore) private var copyLanguage
     let wording: (String, String) -> String
     let close: () -> Void
@@ -84,7 +85,7 @@ struct ChatProjectAttachmentSheet: View {
             HStack {
                 Text(workflowText(copyLanguage, "chat.projectAttachmentSheet.projectAssets")).font(.headline)
                 Spacer()
-                Button(workflowText(copyLanguage, "workflow.action.close")) { task?.cancel(); close() }.keyboardShortcut(.cancelAction)
+                WorkbenchRequestCloseButton(title: workflowText(copyLanguage, "workflow.action.close"), fallback: close).keyboardShortcut(.cancelAction)
             }
             Text(workflowText(copyLanguage, "chat.projectAttachmentSheet.chooseAPublishedTextImageVideoOrDocumentVersionIt"))
                 .font(.caption).foregroundStyle(.secondary)
@@ -103,7 +104,8 @@ struct ChatProjectAttachmentSheet: View {
                 task = Task { @MainActor in
                     defer { task = nil }
                     do {
-                        try await choice.adopt(in: chat, sessionID: sessionID)
+                        let target = try resolveSession?() ?? sessionID
+                        try await choice.adopt(in: chat, sessionID: target)
                         try Task.checkCancellation()
                         close()
                     }
@@ -111,7 +113,8 @@ struct ChatProjectAttachmentSheet: View {
                 }
             }.disabled(task != nil || selected == nil)
                 .accessibilityIdentifier("chat-project-attachment-add")
-        }.padding(20).frame(minWidth: 560, minHeight: 360)
+        }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
+            .workbenchCloseProtection(isDirty: selected != nil, isSaving: task != nil)
             .task {
                 do { choices = try await ChatProjectAttachmentChoice.load(from: chat.store) }
                 catch { issue = error.localizedDescription }

@@ -268,7 +268,16 @@ extension ModelLibraryPresentationTests {
     @Test func nodeDraftDownloadJoinUsesExactRouteAndIdentity() throws {
         let catalog = try ModelCatalog.entries()
         for entry in catalog {
+            if entry.id == "stable-audio-small-music" {
+                #expect(entry.workflowProfileID == nil && entry.workflowIdentity == nil)
+                #expect(ModelLibraryModel.nodeDownloadEntry(operationID: "d.music.generate", identity: "music:" + entry.revision, catalog: catalog) == nil)
+                continue
+            }
             let operation = try #require(entry.workflowProfileID), identity = try #require(entry.workflowIdentity)
+            if operation == "d.model.language" {
+                #expect(ModelLibraryModel.nodeDownloadEntry(operationID: "d.text.rewrite", identity: identity, catalog: catalog)?.id == entry.id)
+                #expect(ModelLibraryModel.nodeDownloadEntry(operationID: WorkflowModelRoutes.qwen35, identity: identity, catalog: catalog) == nil)
+            }
             #expect(ModelLibraryModel.nodeDownloadEntry(operationID: operation, identity: identity, catalog: catalog)?.id == entry.id)
             #expect(ModelLibraryModel.nodeDownloadEntry(operationID: "d.text.input", identity: identity, catalog: catalog) == nil)
             #expect(ModelLibraryModel.nodeDownloadEntry(operationID: operation, identity: identity + "-other", catalog: catalog) == nil)

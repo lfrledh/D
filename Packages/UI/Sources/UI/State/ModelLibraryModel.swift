@@ -157,6 +157,15 @@ public final class ModelLibraryModel {
         !isChoosingLocation && globalOperation == nil && pendingActions.isEmpty && !hasActiveWork
     }
 
+    public func connectDownloadToken(_ token: String, saveToKeychain: Bool) async throws {
+        guard canChangeDownloadCredential else { throw WorkflowIssue(managementText("credentialBusy", "请等待当前模型操作完成后设置访问令牌。")) }
+        globalOperation = .choosingCredential
+        defer { globalOperation = nil }
+        do { try await library.connectDownloadToken(token, saveToKeychain: saveToKeychain) }
+        catch { await refresh(); throw error }
+        await refresh()
+    }
+
     public func chooseDownloadCredential() async {
         guard canChangeDownloadCredential else { return }
         isChoosingLocation = true
@@ -477,8 +486,13 @@ public final class ModelLibraryModel {
         await refresh()
     }
 
+    func credentialMessage(_ error: Error) -> String {
+        guard let issue = error as? ModelCredentialIssue else { return error.localizedDescription }
+        let message = managementText("accessError." + issue.localizationKey)
+        return issue.statusCode.map { message.replacingOccurrences(of: "{code}", with: String($0)) } ?? message
+    }
     private func report(_ error: Error, context: String) {
-        errorMessage = "\(context)。\n\(error.localizedDescription)"
+        errorMessage = "\(context)。\n\(credentialMessage(error))"
     }
 }
 
@@ -544,7 +558,7 @@ extension ModelLibraryModel {
                                   catalog: [ModelCatalogEntry]) -> ModelCatalogEntry? {
         guard let choice = WorkflowModelRoutes.draftChoice(operationID: operationID, modelID: identity),
               WorkflowRegistry.standard.operation(operationID)?.definition.modelKind == choice.kind else { return nil }
-        let matches = catalog.filter { $0.workflowIdentity == identity && $0.workflowProfileID == operationID }
+        let matches = catalog.filter { WorkflowModelRoutes.supports($0, operationID: operationID, identity: identity) }
         return matches.count == 1 ? matches.first : nil
     }
 

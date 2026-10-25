@@ -5,6 +5,7 @@ import SwiftUI
 struct WorkflowToolPanel: View {
     let controller: WorkflowController
     var selectionOnly = false
+    @State private var baseline = ""
     @State private var name = ""
     @State private var purpose = ""
     @State private var detail = ""
@@ -13,7 +14,8 @@ struct WorkflowToolPanel: View {
     @State private var publishing = false
     @State private var publicationError: String?
     @State private var boundary: ToolBoundaryDraft?
-    @Environment(\.dismiss) private var dismiss
+    @WorkbenchDismiss private var dismiss
+    @Environment(\.workbenchChildClose) private var closeGate
     @Environment(\.dLanguageStore) private var language
     var body: some View {
         ScrollView {
@@ -24,10 +26,10 @@ struct WorkflowToolPanel: View {
                     HStack {
                         Text(tool.name + " · v\(tool.version)")
                         Spacer()
-                        Button(t("insert", "插入实例")) { controller.addTool(tool); dismiss() }.disabled(!controller.canEditCanvas)
+                        Button(t("insert", "插入实例")) { afterClosing { controller.addTool(tool) } }.disabled(!controller.canEditCanvas)
                         Button(t("copy", "展开为编辑副本")) {
                             guard let digest = try? WorkflowPlanCompiler.digest(tool) else { return }
-                            controller.openToolCopy(.init(id: tool.id, version: tool.version, digest: digest)); dismiss()
+                            afterClosing { controller.openToolCopy(.init(id: tool.id, version: tool.version, digest: digest)) }
                         }.disabled(!controller.canEditCanvas)
                     }
                 }
@@ -43,7 +45,7 @@ struct WorkflowToolPanel: View {
                             outputLabels: outputLabels.filter { label in graph.interface?.outputs.contains(where: { $0.name == label.key }) == true })
                         Task {
                             defer { publishing = false }
-                            do { try await controller.publishGraphTool(name: name, registration: registration, expectedGraphID: graph.id, expectedRevision: graph.revision); dismiss() }
+                            do { try await controller.publishGraphTool(name: name, registration: registration, expectedGraphID: graph.id, expectedRevision: graph.revision); $dismiss() }
                             catch { publicationError = error.localizedDescription }
                         }
                     }.disabled(!controller.canEditCanvas || purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -73,9 +75,10 @@ struct WorkflowToolPanel: View {
                 }
                 if let publicationError { Text(publicationError).foregroundStyle(.red) }
                 if boundary != nil { boundaryEditor }
-                Button(selectionOnly ? t("cancel", "取消") : t("done", "完成")) { dismiss() }.disabled(publishing)
+                Button(selectionOnly ? t("cancel", "取消") : workflowText(language, "childPanel.close")) { dismiss() }.disabled(publishing)
             }.padding(20).disabled(publishing)
-        }.frame(minWidth: 680, minHeight: 520)
+        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            .workbenchCloseProtection(isDirty: formIdentity != baseline, isSaving: publishing)
             .onAppear {
                 if name.isEmpty, let graph = controller.graph, let source = graph.toolSource,
                    let tool = controller.tools.first(where: { $0.id == source.id && $0.version == source.version }) {
@@ -85,8 +88,19 @@ struct WorkflowToolPanel: View {
                 if selectionOnly, boundary == nil, let graph = controller.graph {
                     boundary = ToolBoundaryDraft(graph: graph, selected: controller.selectedNodeIDs, registry: controller.registry, tools: controller.tools)
                 }
+                baseline = formIdentity
             }
     }
+    private func afterClosing(_ action: @escaping @MainActor () -> Void) {
+        let graph = controller.graph?.id, revision = controller.graph?.revision
+        let validated = { @MainActor in
+            guard controller.canEditCanvas, controller.graph?.id == graph, controller.graph?.revision == revision else { return }
+            action()
+        }
+        if let closeGate { closeGate.afterClose = validated; closeGate.requestClose() }
+        else { validated(); $dismiss() }
+    }
+    private var formIdentity: String { name + "\u{0}" + purpose + "\u{0}" + detail + String(describing: inputLabels.sorted { $0.key < $1.key }) + String(describing: outputLabels.sorted { $0.key < $1.key }) + (boundary.map { String(describing: $0.inputs) + String(describing: $0.outputs) + String(describing: $0.unconfirmed.sorted()) } ?? "") }
     private func dependencyGraph(_ graph: WorkflowGraph, selected: Set<UUID>) -> WorkflowGraph {
         var result = graph; result.nodes.removeAll { !selected.contains($0.id) }; return result
     }
@@ -128,7 +142,7 @@ struct WorkflowToolPanel: View {
                     do {
                         try await controller.publishSelection(name: name, registration: registration,
                             inputs: draft.inputs, outputs: outputs, expectedGraphID: draft.graphID, expectedRevision: draft.revision)
-                        boundary = nil; dismiss()
+                        boundary = nil; $dismiss()
                     } catch { publicationError = error.localizedDescription }
                 }
             }.buttonStyle(WorkbenchPrimaryButtonStyle())

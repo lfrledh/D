@@ -180,13 +180,13 @@ struct QuickGenerationView: View {
         .background(WorkbenchCommandWindow(scope: commandScope))
         .focusedSceneValue(\.workbenchAssetExport, exportMenuCommand)
         .environment(\.workbenchMenuContext, "quick:\(ObjectIdentifier(quick)):\(quick.draft?.id ?? "none")")
-        .sheet(item: $detailRun, onDismiss: {
+        .workbenchSheet(item: $detailRun, title: workflowText(language, "childPanel.name.tasks"), onDismiss: {
             if let pendingPreview { preview = pendingPreview; self.pendingPreview = nil }
         }) { run in
             VStack { HStack { Text(refinementText("resultDetails", fallback: "结果详情")).font(.headline); Spacer(); Button(refinementText("done", fallback: "完成")) { detailRun = nil }.keyboardShortcut(.cancelAction) }; WorkbenchScrollView { runCard(run) } }
                 .padding(20).frame(minWidth: 580, minHeight: 420)
         }
-        .sheet(isPresented: Binding(get: { preview != nil }, set: { if !$0 { preview = nil } })) {
+        .workbenchSheet(isPresented: Binding(get: { preview != nil }, set: { if !$0 { preview = nil } }), title: workflowText(language, "childPanel.name.preview")) {
             if let reference = preview { VStack {
                 HStack { Button(baselineText(language, "label.572cf45ba436")) { preview = nil }.keyboardShortcut(.cancelAction); Spacer() }
                 QuickAssetPreview(store: quick.store, reference: reference, compact: false)

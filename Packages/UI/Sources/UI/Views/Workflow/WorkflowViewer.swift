@@ -270,41 +270,42 @@ struct WorkflowViewerCallIdentity:Hashable {
 }
 
 @MainActor final class WorkflowViewerCoordinator {
-    @MainActor private final class Window: NSObject, NSWindowDelegate {
-        let session:WorkflowViewerSession
-        let window:NSWindow
-        var didClose:(() -> Void)?
-        init(session:WorkflowViewerSession,content:AnyView) {
-            self.session=session
-            window=NSWindow(contentRect:CGRect(x:0,y:0,width:800,height:640),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
-            super.init();window.isReleasedWhenClosed=false;window.delegate=self
-            window.contentMinSize=CGSize(width:480,height:360);window.contentView=NSHostingView(rootView:content)
-            window.title=session.target.title;window.center()
+    @MainActor private final class Window {
+        let session: WorkflowViewerSession
+        let panel: WorkbenchChildPanelHandle
+        weak var ownerWindow: NSWindow?
+        var didClose: (() -> Void)?
+        init?(session: WorkflowViewerSession, owner: NSWindow, content: AnyView, preferences: ChatDisplayPreferencesState, language: UILanguageStore?) {
+            guard let panel = WorkbenchChildPanelHandle(owner: owner, title: session.target.title, content: content, preferences: preferences, language: language) else { return nil }
+            self.session = session; self.panel = panel; ownerWindow = owner
+            panel.didClose = { [weak self] in self?.session.stop(); self?.didClose?() }
         }
-        func windowWillClose(_ notification:Notification) { session.stop();window.contentView=nil;didClose?() }
-        func windowShouldClose(_ sender: NSWindow) -> Bool { !session.editingAnnotations }
     }
     var library:SharedLibraryStore?
     private var windows:[UUID:Window]=[:]
     private var primary:UUID?
     static let limit=4
     var count:Int { windows.count }
-    func open(_ target:WorkflowViewerTarget,model:WorkbenchModel,language:UILanguageStore?,newWindow:Bool=false) throws {
+    func open(_ target:WorkflowViewerTarget,model:WorkbenchModel,language:UILanguageStore?,newWindow:Bool=false,ownerWindow capturedWindow:NSWindow?=nil) throws {
+        guard let ownerWindow = capturedWindow ?? NSApp.keyWindow, WorkbenchChildPanels.isOwner(ownerWindow),
+              ownerWindow.attachedSheet == nil, NSApp.modalWindow == nil, !(ownerWindow is NSSavePanel) else {
+            throw WorkflowIssue("所属窗口不可用；未打开查看器。")
+        }
         let owner=model.projectSession
         guard owner.canEditLibraryMetadata,let store=owner.currentStore, let project=owner.manifest?.id,let instance=owner.manifest?.effectiveInstanceID else { throw WorkflowIssue("Source instance unavailable / 所属项目实例不可访问。") }
         reconcile()
-        if !newWindow,let primary,let existing=windows[primary],existing.session.owner === owner,
+        if !newWindow,let primary,let existing=windows[primary],existing.session.owner === owner,existing.ownerWindow === ownerWindow,
            existing.session.store === store,existing.session.canRead,!existing.session.editingAnnotations {
-            existing.session.replace(target);existing.window.title=target.title;existing.window.makeKeyAndOrderFront(nil);return
+            existing.session.replace(target);existing.panel.setTitle(target.title);existing.panel.orderFront();return
         }
         guard windows.count < Self.limit else { throw WorkflowIssue("Close a viewer before opening another (limit 4) / 请先关闭一个查看窗口，最多同时打开 4 个。") }
         let session=WorkflowViewerSession(owner:owner,store:store,projectID:project,instanceID:instance,target:target)
         session.library=library
         let content=WorkflowViewerContent(session:session,titleChanged: { [weak self, weak session] title in
-            if let session { self?.windows[session.id]?.window.title = title }
+            if let session { self?.windows[session.id]?.panel.setTitle(title) }
         },reopen:{ [weak self,weak model] in
             guard let self,let model,session.canRead else { return }
-            do { try self.open(session.target,model:model,language:language,newWindow:true) }
+            do { try self.open(session.target,model:model,language:language,newWindow:true,ownerWindow:ownerWindow) }
             catch { model.errorMessage=error.localizedDescription }
         }).environment(\.workflowViewerOpenAsset, { [weak self,weak session] ref in
             guard let self,let session,session.canRead,!session.suspended else { return }
@@ -315,15 +316,15 @@ struct WorkflowViewerCallIdentity:Hashable {
                 if let model { session?.beginAnnotationEditing(model: model) }
             }, end: { [weak session] in session?.endAnnotationEditing() }))
             .workbenchPresentation(state:model.chatDisplaySettings)
-        let window=Window(session:session,content:AnyView(content))
+        guard let window=Window(session:session, owner: ownerWindow, content:AnyView(content), preferences: model.chatDisplaySettings, language: language) else { throw WorkflowIssue("所属窗口不可用；未打开查看器。") }
         windows[session.id]=window;if !newWindow { primary=session.id }
         window.didClose={ [weak self] in self?.windows[session.id]=nil;if self?.primary == session.id { self?.primary=nil } }
-        session.load();window.window.makeKeyAndOrderFront(nil)
+        session.load()
     }
     func navigate(_ target:WorkflowViewerTarget,in session:WorkflowViewerSession) {
         guard session.canRead,!session.suspended,!session.editingAnnotations else { return }
         session.replace(target)
-        windows[session.id]?.window.title=target.title
+        windows[session.id]?.panel.setTitle(target.title)
     }
     func suspend() { for window in windows.values { window.session.suspend() } }
     func reconcile() { for window in windows.values { window.session.reconcile() } }

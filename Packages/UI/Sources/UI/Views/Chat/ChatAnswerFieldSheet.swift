@@ -17,7 +17,7 @@ struct ChatAnswerFieldSheet: View {
             HStack {
                 Text(workflowText(copyLanguage, "chat.answerFieldSheet.structuredAnswerFields")).font(.headline)
                 Spacer()
-                Button(workflowText(copyLanguage, "workflow.action.close")) { task?.cancel(); onClose() }
+                WorkbenchRequestCloseButton(title: workflowText(copyLanguage, "workflow.action.close"), fallback: onClose)
             }
             Text(workflowText(copyLanguage, "chat.answerFieldSheet.savesTheSelectedAnswerVersionAndTypedFieldWorkflowReceives"))
                 .font(.caption).foregroundStyle(.secondary)
@@ -37,7 +37,8 @@ struct ChatAnswerFieldSheet: View {
                 Button(workflowText(copyLanguage, "chat.answerFieldSheet.saveAndSendToWorkflow")) { save(true) }
                 if task != nil { ProgressView().controlSize(.small) }
             }.disabled(task != nil || !choices.indices.contains(selected))
-        }.padding(20).frame(minWidth: 560, idealWidth: 740, minHeight: 360)
+        }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
+            .workbenchCloseProtection(isDirty: issue != nil, isSaving: task != nil)
             .onDisappear { task?.cancel() }
     }
     private func pathLabel(_ path: [String]) -> String {

@@ -27,7 +27,7 @@ struct ChatKnowledgeDirectorySheet: View {
             }
             if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
-                Button(workflowText(copyLanguage, "workflow.action.close"), action: close).disabled(importing).keyboardShortcut(.cancelAction)
+                WorkbenchRequestCloseButton(title: workflowText(copyLanguage, "workflow.action.close"), fallback: close).disabled(importing).keyboardShortcut(.cancelAction)
                 Spacer()
                 if importing { ProgressView().controlSize(.small) }
                 Button(workflowText(copyLanguage, "chat.knowledgeDirectorySheet.importSelectedCopies")) {
@@ -44,6 +44,7 @@ struct ChatKnowledgeDirectorySheet: View {
                     }
                 }.disabled(importing || selected.isEmpty)
             }
-        }.padding(20).frame(minWidth: 500, minHeight: 360).interactiveDismissDisabled(importing)
+        }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
+            .workbenchCloseProtection(isDirty: !selected.isEmpty, isSaving: importing).interactiveDismissDisabled(importing)
     }
 }

@@ -94,7 +94,7 @@ struct WorkbenchFeatureGuide: View {
     let presentation: WorkbenchHelpPresentation
     let store: WorkbenchHelpStore
     @Environment(\.dLanguageStore) private var language
-    @Environment(\.dismiss) private var dismiss
+    @WorkbenchDismiss private var dismiss
     @State private var query = ""
     @State private var selected: String?
     private let categories = ["project", "models", "build", "inspect", "organize", "view"]
@@ -156,7 +156,7 @@ struct WorkbenchFeatureGuide: View {
                     }.textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(12)
                 }
             }
-        }.padding(20).frame(minWidth: 640, idealWidth: 780, minHeight: 440, idealHeight: 580)
+        }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
             .workbenchPresentation()
     }
     private var currentReason: String? {

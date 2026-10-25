@@ -23,7 +23,18 @@ public enum WorkflowModelRoutes {
     /// Fixed descriptive routes may be placed as drafts before installation.
     /// This lookup is not registration, readiness, or runtime admission.
     public static func draftChoice(operationID: String, modelID: String) -> WorkflowModelChoice? {
-        draftRoutes.first { $0.operation == operationID && $0.choice.id == modelID }?.choice
+        draftRoutes.first { $0.choice.id == modelID && ($0.operation == operationID || legacyTextOperations(identity: modelID).contains(operationID)) }?.choice
+    }
+    /// The existing Qwen2.5 backend implements exactly these two prompt operations.
+    /// No type/title similarity grants compatibility to other models or operations.
+    public static func legacyTextOperations(identity: String) -> Set<String> {
+        legacyTextIdentities.contains(identity) ? ["d.model.language", "d.text.rewrite"] : []
+    }
+    private static let legacyTextIdentities = Set(((try? TextModelProfiles.registered()) ?? []).map { "text:" + $0.revision })
+    public static func supports(_ entry: ModelCatalogEntry, operationID: String, identity: String) -> Bool {
+        guard entry.workflowIdentity == identity else { return false }
+        if entry.workflowProfileID == operationID { return true }
+        return entry.workflowProfileID == "d.model.language" && identity == "text:" + entry.revision && legacyTextOperations(identity: identity).contains(operationID)
     }
     private static let draftRoutes: [(operation: String, choice: WorkflowModelChoice)] = {
         let textIDs = Set((((try? TextModelProfiles.registered()) ?? [])

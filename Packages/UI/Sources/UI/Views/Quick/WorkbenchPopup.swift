@@ -221,7 +221,7 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
         // popup outside that managed subtree, in the same window above content.
         popup.frame = content.convert(content.bounds, to: container)
         popup.autoresizingMask = [.width, .height]
-        container.addSubview(popup, positioned: .above, relativeTo: content)
+        container.addSubview(popup, positioned: .above, relativeTo: WorkbenchChildPanels.frontmostSurface(on: window) ?? content)
         opened.setObject(popup, forKey: window); popup.addPane(popup.entries, parent: nil)
         guard window.makeFirstResponder(popup) else { popup.cancel(restoreFocus: false); return nil }
         for name in [NSWindow.didResignKeyNotification, NSWindow.willCloseNotification] { NotificationCenter.default.addObserver(popup, selector: #selector(windowUnavailable), name: name, object: window) }

@@ -40,7 +40,7 @@ struct SharedLibraryTagSection: View {
                 if let failure = target.legacyFailure { Text(failure).font(.caption).foregroundStyle(.orange) }
                 Button(text("edit", "编辑标签…")) { editing = true }
                     .accessibilityIdentifier("organization-tags-edit")
-                    .sheet(isPresented: $editing) { SharedLibraryTagEditor(store: store, targets: [target], validateTarget: validateTarget) }
+                    .workbenchSheet(isPresented: $editing, title: workflowText(language, "childPanel.name.metadata")) { SharedLibraryTagEditor(store: store, targets: [target], validateTarget: validateTarget) }
             } else { Text(text("unavailable", "共享标签库不可用；未写入旧标签存储。")) .font(.caption).foregroundStyle(.secondary) }
         }
     }
@@ -58,7 +58,7 @@ struct SharedLibraryTagEditor: View {
     @State private var names: [String] = []
     @State private var error: (any Error)?
     @State private var invalidName = false
-    @Environment(\.dismiss) private var dismiss
+    @WorkbenchDismiss private var dismiss
     @Environment(\.metadataEditorLifecycle) private var lifecycle
     @Environment(\.dLanguageStore) private var language
 
@@ -126,24 +126,27 @@ struct SharedLibraryTagEditor: View {
                 Button(text("cancel", "取消")) { dismiss() }
                 Spacer()
                 Button(baseline.integratedKeys.isSuperset(of: Set(targets.filter { !$0.isRuntime }.map(\.key))) ? text("saveOnly", "保存标签") : text("save", "确认整合并保存标签")) {
-                    do {
-                        try validateTarget()
-                        let keys = Set(targets.filter { !$0.isRuntime }.map(\.key)).subtracting(baseline.integratedKeys)
-                        var legacy: [String: [String]] = [:]
-                        for target in targets where keys.contains(target.key) {
-                            for index in target.legacy.indices where selectedLegacy[target.id]?.contains(index) == true {
-                                let name = target.legacy[index]
-                                if !legacy[target.key, default: []].contains(where: { $0.utf8.elementsEqual(name.utf8) }) { legacy[target.key, default: []].append(name) }
-                            }
-                        }
-                        try store.editOrganizationTags(expected: baseline, add: add, remove: remove, createNames: names,
-                            selectedLegacyNames: legacy, confirmIntegration: keys)
-                        dismiss()
-                    } catch { self.error = error }
+                    do { try saveDraft(); $dismiss() }
+                    catch { self.error = error }
                 }.buttonStyle(WorkbenchPrimaryButtonStyle()).disabled(targets.isEmpty || targets.contains { $0.legacyFailure != nil && !baseline.integratedKeys.contains($0.key) } || !name.isEmpty)
             }
-        }.padding(18).frame(width: 460, height: 520).interactiveDismissDisabled()
+        }.padding(18).frame(maxWidth: .infinity, maxHeight: .infinity).interactiveDismissDisabled()
+        .workbenchCloseProtection(isDirty: !add.isEmpty || !remove.isEmpty || !names.isEmpty || !name.isEmpty || selectedLegacy.values.contains(where: { !$0.isEmpty }), save: { try saveDraft() })
         .onAppear { lifecycle.begin() }.onDisappear { lifecycle.end() }
+    }
+    private func saveDraft() throws {
+        try validateTarget()
+        guard name.isEmpty else { throw WorkflowIssue(text("invalidName", "")) }
+        let keys = Set(targets.filter { !$0.isRuntime }.map(\.key)).subtracting(baseline.integratedKeys)
+        var legacy: [String: [String]] = [:]
+        for target in targets where keys.contains(target.key) {
+            for index in target.legacy.indices where selectedLegacy[target.id]?.contains(index) == true {
+                let value = target.legacy[index]
+                if !legacy[target.key, default: []].contains(where: { $0.utf8.elementsEqual(value.utf8) }) { legacy[target.key, default: []].append(value) }
+            }
+        }
+        try store.editOrganizationTags(expected: baseline, add: add, remove: remove, createNames: names,
+            selectedLegacyNames: legacy, confirmIntegration: keys)
     }
 }
 

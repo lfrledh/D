@@ -11,7 +11,7 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
     var fallbackSize = CGSize(width: 240, height: 640)
 
     func makeNSView(context: Context) -> RetainedNativeHostingView<RetainedContentRoot<Content>> {
-        let host = RetainedNativeHostingView(rootView: RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, preparation: context.environment.workflowModelPreparation, installations: context.environment.workflowModelInstallations, featureHelp: context.environment.workbenchHelpStore, contentVisible: visible && context.environment.workbenchContentVisible))
+        let host = RetainedNativeHostingView(rootView: RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, preparation: context.environment.workflowModelPreparation, installations: context.environment.workflowModelInstallations, featureHelp: context.environment.workbenchHelpStore, contentVisible: visible && context.environment.workbenchContentVisible, childClose: context.environment.workbenchChildClose, modeSize: context.environment.workbenchModeSize))
         host.sizingOptions = []
         host.setAccessibilityIdentifier(identifier)
         host.setInitialVisibility(visible)
@@ -21,7 +21,7 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
         #if DEBUG
         WorkbenchCategoryUpdateProbe.retainedUpdate?()
         #endif
-        host.rootView = RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, preparation: context.environment.workflowModelPreparation, installations: context.environment.workflowModelInstallations, featureHelp: context.environment.workbenchHelpStore, contentVisible: visible && context.environment.workbenchContentVisible)
+        host.rootView = RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, preparation: context.environment.workflowModelPreparation, installations: context.environment.workflowModelInstallations, featureHelp: context.environment.workbenchHelpStore, contentVisible: visible && context.environment.workbenchContentVisible, childClose: context.environment.workbenchChildClose, modeSize: context.environment.workbenchModeSize)
         host.requestVisibility(visible)
     }
     static func dismantleNSView(_ host: RetainedNativeHostingView<RetainedContentRoot<Content>>, coordinator: ()) {
@@ -85,8 +85,11 @@ struct RetainedContentRoot<Content: View>: View {
     var installations: [String: ModelID] = [:]
     var featureHelp: WorkbenchHelpStore? = nil
     var contentVisible = true
+    var childClose: WorkbenchChildCloseGate? = nil
+    var modeSize = CGSize(width: 232, height: 52)
     var body: some View {
-        content.environment(\.metadataEditorLifecycle, lifecycle)
+        content.environment(\.workbenchChildClose, childClose).environment(\.metadataEditorLifecycle, lifecycle)
+            .environment(\.workbenchModeSize, modeSize)
             .environment(\.workbenchContentVisible, contentVisible)
             .environment(\.workbenchBackground, background)
             .environment(\.workbenchAppearanceState, appearance)

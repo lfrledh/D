@@ -147,11 +147,11 @@ struct WorkflowResultQueryControls: View {
         .onAppear { rememberTags() }
         .onChange(of: store.metadata) { _, _ in rememberTags() }
         .onChange(of: state.query) { _, _ in rememberTags() }
-        .popover(isPresented: $filters) {
+        .workbenchPopover(isPresented: $filters, title: workflowText(language, "childPanel.name.filters")) {
             SharedLibraryFilterEditor(query: state.query, token: token, store: store, items: Array(state.items.values), context: .init(), allowsScopeEditing: false, scopeTitle: scopeTitle,
                 current: { (state.query, token) }, apply: { query.wrappedValue = $0 }, close: { filters = false })
         }
-        .sheet(item: $saveRequest) { request in SharedLibrarySaveQuerySheet(request: request, store: store) { saveRequest = nil } }
+        .workbenchSheet(item: $saveRequest, title: workflowText(language, "childPanel.name.query")) { request in SharedLibrarySaveQuerySheet(request: request, store: store) { saveRequest = nil } }
     }
     private func rememberTags() { state.tagPresentation.observe(tags: store.metadata.tags, requested: state.query.allTagIDs.union(state.query.anyTagIDs)) }
     private func tagConditions(_ ids: Set<UUID>, path: WritableKeyPath<SharedLibraryQuery, Set<UUID>>, title: String) -> some View {
