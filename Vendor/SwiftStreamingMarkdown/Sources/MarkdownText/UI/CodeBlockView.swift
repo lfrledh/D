@@ -87,27 +87,21 @@ struct CodeBlockView: View {
           .font(config.codeBlockConfig.chromeTextFonts)
           .foregroundStyle(foregroundColor)
         Spacer()
-        HStack(alignment: .firstTextBaseline, spacing: 6.0) {
-          Image("copyIcon14", bundle: .module)
-            .renderingMode(.template)
-            .foregroundStyle(foregroundColor)
-          Text(copied ? String.codeCopiedLabel : String.codeCopyLabel)
-            .accessibilityAddTraits(.isButton)
-            .font(config.codeBlockConfig.chromeTextFonts)
-            .foregroundStyle(foregroundColor)
-            .onTapGesture {
-              copied = true
-              #if canImport(UIKit)
-              UIPasteboard.general.string = code
-              #elseif canImport(AppKit)
-              NSPasteboard.general.clearContents()
-              NSPasteboard.general.setString(code, forType: .string)
-              #endif
-              if let onCodeCopied {
-                onCodeCopied()
-              }
-            }
-        }
+        Button {
+          copied = true
+          #if canImport(UIKit)
+          UIPasteboard.general.string = code
+          #elseif canImport(AppKit)
+          NSPasteboard.general.clearContents()
+          NSPasteboard.general.setString(code, forType: .string)
+          #endif
+          onCodeCopied?()
+        } label: {
+          Image(systemName: copied ? "checkmark" : "doc.on.doc")
+            .font(.system(size: 16)).foregroundStyle(foregroundColor).frame(width: 28, height: 28).contentShape(Rectangle())
+        }.buttonStyle(.plain)
+          .help(copied ? config.codeBlockConfig.copiedLabel : config.codeBlockConfig.copyLabel)
+          .accessibilityLabel(copied ? config.codeBlockConfig.copiedLabel : config.codeBlockConfig.copyLabel)
       }.frame(maxWidth: .infinity)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

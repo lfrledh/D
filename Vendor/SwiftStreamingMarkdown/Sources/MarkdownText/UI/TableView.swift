@@ -218,6 +218,7 @@ struct TableView: View {
     })
     .frame(width: 32, height: 32)
     .contentShape(Rectangle())
+    .help(config.tableStyle.copyLabel).accessibilityLabel(config.tableStyle.copyLabel)
   }
 
   private var tableDownloadButton: some View {

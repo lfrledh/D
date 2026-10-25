@@ -17,6 +17,12 @@ import Observation
     @ObservationIgnored public var onPersistedTerminal: @MainActor (ChatAttempt) -> Void = { _ in }
     @ObservationIgnored private var pendingTerminalNotices = Set<UUID>()
 
+    /// Presentation only: the existing exact pending terminal set includes record-
+    /// save failures after asset publication, not just pending asset publication.
+    public func hasUnsavedResult(_ attemptID: UUID) -> Bool {
+        pendingSaveAttemptID == attemptID || (saveIssue != nil && pendingTerminalNotices.contains(attemptID))
+    }
+
     private func announcePersistedTerminals(_ snapshot: ChatState) {
         for attempt in snapshot.sessions.flatMap(\.attempts) where pendingTerminalNotices.contains(attempt.id) {
             guard attempt.status != .running, attempt.status != .saving, pendingSaveAttemptID != attempt.id else { continue }

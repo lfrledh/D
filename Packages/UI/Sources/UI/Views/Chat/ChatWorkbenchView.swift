@@ -95,6 +95,7 @@ private enum ChatDetail: Identifiable {
     case edit(ChatEdit), preview(WorkflowAssetReference)
     case projectAttachments(UUID)
     case request(ChatAttempt)
+    case message(ChatSession, ChatMessage, ChatAttempt?), raw(UUID, String)
     case comparison(UUID, UUID), presetImport([ChatPromptPreset], Data)
     case conversationImport(Data, String)
     case quote(UUID, ChatQuoteSource), artifact(ChatArtifactContent), fields([ChatAnswerField])
@@ -103,6 +104,8 @@ private enum ChatDetail: Identifiable {
         switch self {
         case .edit(let edit): "edit-\(edit.id)"
         case .request(let attempt): "request-\(attempt.id)"
+        case .message(let session, let message, _): "message-detail-\(session.id)-\(message.id)"
+        case .raw(let id, _): "raw-output-\(id)"
         case .projectAttachments(let owner): "project-attachments-\(owner)"
         case .preview(let reference): "preview-\(reference.assetID)"
         case .comparison(let session, let attempt): "compare-\(session)-\(attempt)"
@@ -460,7 +463,7 @@ private struct ChatReadingMarker: NSViewRepresentable {
 
 private enum ChatLayoutSpace { static let name = "chat-presentation-layout" }
 
-private extension View {
+extension View {
     @ViewBuilder
     func chatMeasured(_ id: String, probe: ((String, CGRect) -> Void)?) -> some View {
         if let probe {
@@ -739,9 +742,17 @@ struct ChatWorkbenchView: View {
             }
             if !chat.isLoaded { await chat.load() }
         }
-        .workbenchSheet(item: Binding(get: { sheets.detail }, set: { sheets.detail = $0 }), title: workflowText(language, "childPanel.name.messages")) { item in
+        .workbenchSheet(item: Binding(get: { sheets.detail }, set: { sheets.detail = $0 }), title: detailTitle) { item in
             switch item {
             case .edit(let edit): editSheet(edit)
+            case .message(let owner, let message, let attempt):
+                WorkbenchScrollView { messageDetails(message, session: owner, attempt: attempt).padding(20) }
+            case .raw(_, let text):
+                VStack(alignment: .leading, spacing: 12) {
+                    Button(clarity("copyRaw"), systemImage: "doc.on.doc") { copy(text) }
+                    WorkbenchScrollView { Text(text).font(.body.monospaced()).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
+                }.padding(20)
+
             case .request(let attempt):
                 VStack(alignment: .leading) {
                     HStack {
@@ -1061,6 +1072,7 @@ ScrollViewReader { proxy in
 
     private func conversation(_ session: ChatSession, width: CGFloat, height: CGFloat, sidebarShown: Bool) -> some View {
         let structure = chat.transcriptStructure(for: session)
+        let latestAnswerID = structure.path.last(where: { $0.role == .assistant })?.id
         let draftIsEmpty = session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 12) {
@@ -1139,8 +1151,12 @@ ScrollViewReader { proxy in
                                 canReplay: attempt.map { ChatRunAdmission.allowsReplay(session, attempt: $0,
                                     isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil) } ?? false,
                                 canAdopt: session.contextChoices?.deletedAt == nil && ChatContextCommands.canAdopt(attempt, in: chat),
-                                speech: chat.speechPlaybackState, language: language?.effectiveLanguageIdentifier ?? "")) {
-                                    messageCard(message, session: session, siblings: siblings, attempt: attempt)
+                                speech: chat.speechPlaybackState, language: language?.effectiveLanguageIdentifier ?? "",
+                                latestAnswer: message.id == latestAnswerID,
+                                pendingSave: attempt.map { chat.hasUnsavedResult($0.id) } == true,
+                                saveIssue: attempt.map { chat.hasUnsavedResult($0.id) } == true ? chat.saveIssue : nil)) {
+                                    messageCard(message, session: session, siblings: siblings, attempt: attempt,
+                                        latestAnswer: message.id == latestAnswerID)
                                 }.equatable()
                                 .modifier(ChatMessageEntrance(accepted: enteringMessages.contains(message.id)))
                                 .background(ChatReadingMarker(owner: readingMarkers, sessionID: session.id, messageID: message.id))
@@ -1733,7 +1749,21 @@ ScrollViewReader { proxy in
         return ChatActionMenuItem.grouped(result, ids: [["new", "rename", "pin", "tags"], ["organization"], ["copy", "markdown", "text", "html", "sessionPackage"], ["archive", "delete"]])
     }
 
-    private func messageMenuItems(_ message: ChatMessage, session: ChatSession, attempt: ChatAttempt?) -> [ChatActionMenuItem] {
+    private func messageMenuItems(_ message: ChatMessage, session: ChatSession, attempt: ChatAttempt?, siblings: [ChatMessage]) -> [ChatActionMenuItem] {
+        let captured = ChatMessageCommandTarget(session: session, message: message, attempt: attempt)
+        @MainActor func stillCurrent(_ strict: Bool = false) -> Bool {
+            let current = chat.state.sessions.first { $0.id == session.id }
+            return captured.isCurrent(selectedSession: chat.state.selectedSessionID, session: current,
+                displayedAttempt: current.flatMap { chat.transcriptAttempt(message.attemptID, in: $0) }, requiresUnchangedValue: strict)
+        }
+        @MainActor func currentValues() -> (ChatSession, ChatAttempt?) {
+            let owner = chat.state.sessions.first { $0.id == session.id } ?? session
+            return (owner, chat.transcriptAttempt(message.attemptID, in: owner))
+        }
+        @MainActor func displayedText() -> String {
+            let (owner, current) = currentValues()
+            return ChatMessageContent.answerText(message: message, attempt: current, selectedAnswer: owner.selectedAnswer(messageID: message.id))
+        }
         let choices = session.contextChoices
         let favorite = choices?.favoriteMessageIDs.contains(message.id) == true
         let excluded = choices?.excludedMessageIDs.contains(message.id) == true
@@ -1743,6 +1773,8 @@ ScrollViewReader { proxy in
             selectedAnswer: session.selectedAnswer(messageID: message.id))
         let canAdopt = session.contextChoices?.deletedAt == nil && ChatContextCommands.canAdopt(attempt, in: chat)
         var result: [ChatActionMenuItem] = [
+            .init(id: "copy", title: clarity(message.role == .user ? "copyMessage" : session.selectedAnswer(messageID: message.id)?.revisionID == nil && attempt.map { ChatChannelPresentation($0, checksFormat: false).isUnseparatedRaw } == true ? "copyCurrent" : "copyAnswer")) { copy(displayedText()) },
+            .init(id: "details", title: clarity("details")) { let (owner, current) = currentValues(); present(.message(owner, message, current)) },
             .init(id: "favorite", title: favorite ? newLabel("unfavorite", english: "Remove favorite", chinese: "取消收藏") : newLabel("favorite", english: "Favorite", chinese: "收藏")) {
                 changeMessageChoice(session: session) { value in
                     if value.favoriteMessageIDs.contains(message.id) { value.favoriteMessageIDs.removeAll { $0 == message.id } }
@@ -1750,7 +1782,7 @@ ScrollViewReader { proxy in
                 }
             }
         ]
-        result.append(.init(id: "quote", title: newLabel("quoteSelection", english: "Quote a selection…", chinese: "选择片段引用…"), enabled: attempt?.status != .running && attempt?.status != .saving) {
+        result.append(.init(id: "quote", title: clarity("quote"), enabled: attempt?.status != .running && attempt?.status != .saving) {
             perform(sessionID: session.id) { present(.quote(session.id, try chat.quoteSource(kind: .message, id: message.id, sessionID: session.id))) }
         })
         if ChatContextRowStatus.forMessage(message, in: session).canExclude {
@@ -1762,32 +1794,38 @@ ScrollViewReader { proxy in
             })
         }
         if message.role == .user {
+            result.append(.init(id: "edit", title: clarity("editMessage"), enabled: session.contextChoices?.deletedAt == nil && !chat.isBusy && chat.saveIssue == nil) {
+                present(.edit(ChatEdit(kind: .message, sessionID: session.id, messageID: message.id, text: message.text)))
+            })
             result.append(.init(id: "generate", title: label("generateReply", "生成回复"), enabled: canRun(session)) {
-                Task { await run(sessionID: session.id) { try await chat.regenerate(message.id, sessionID: session.id) } }
+                Task { guard stillCurrent(true) else { return }; await run(sessionID: session.id) { try await chat.regenerate(message.id, sessionID: session.id) } }
             })
         } else if let parent = message.parentID {
-            result.append(.init(id: "new-candidate", title: label("newCandidate", "生成新候选（新随机种子）"), enabled: canRun(session)) {
-                Task { await run(sessionID: session.id) { try await chat.regenerate(parent, sessionID: session.id) } }
+            result.append(.init(id: "new-candidate", title: clarity("regenerate"), enabled: canRun(session)) {
+                Task { guard stillCurrent(true) else { return }; await run(sessionID: session.id) { try await chat.regenerate(parent, sessionID: session.id) } }
             })
             if let attempt {
                 result += [
                     .init(id: "inspect", title: newLabel("inspectRequest", english: "Inspect frozen request", chinese: "检查冻结请求")) { openDataInspector(attemptID: attempt.id) },
                     .init(id: "compare", title: newLabel("compareAnswers", english: "Compare answers…", chinese: "比较回答…")) { present(.comparison(session.id, attempt.id)) },
-                    .init(id: "reproduce", title: label("replayRequest", "按原请求与种子重现"), enabled: ChatRunAdmission.allowsReplay(session, attempt: attempt, isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil)) {
-                        Task { await run(sessionID: session.id) { try await chat.reproduce(attempt.id, sessionID: session.id) } }
+                    .init(id: "reproduce", title: clarity("reproduce"), enabled: ChatRunAdmission.allowsReplay(session, attempt: attempt, isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil)) {
+                        Task { guard stillCurrent(true) else { return }; await run(sessionID: session.id) { try await chat.reproduce(attempt.id, sessionID: session.id) } }
                     }
                 ]
             }
         }
         if message.role == .assistant {
+            if message.parentID == nil {
+                result.append(.init(id: "new-candidate", title: clarity("regenerate"), enabled: false))
+            }
             result.append(.init(id: "sources", title: newLabel("viewSources", english: "View sources", chinese: "查看来源")) {
                 openSources(messageID: message.id, sessionID: session.id, attemptID: message.attemptID)
             })
             result += [
-                .init(id: "speak", title: newLabel("readAnswer", english: "Read aloud with system voice", chinese: "使用系统声音朗读"), enabled: chat.speechPlaybackState == .idle) {
-                    perform(sessionID: session.id) { try chat.speech.speak(answerText) }
+                .init(id: "speak", title: clarity("read"), enabled: chat.speechPlaybackState == .idle) {
+                    perform(sessionID: session.id) { try chat.speech.speak(displayedText()) }
                 },
-                .init(id: "adopt", title: newLabel("editAdopt", english: "Edit and adopt…", chinese: "编辑并采用…"), enabled: canAdopt) {
+                .init(id: "adopt", title: clarity("editAnswer"), enabled: canAdopt) {
                     present(.edit(ChatEdit(kind: .answer, sessionID: session.id, messageID: message.id, text: answerText)))
                 }
             ]
@@ -1808,13 +1846,14 @@ ScrollViewReader { proxy in
                 result.append(.init(id: "versions", title: newLabel("answerVersions", english: "Answer versions", chinese: "回答版本"), enabled: canAdopt, children: versions))
             }
         }
-        result.append(.init(id: "fork", title: label("forkHere", "从这里分叉")) {
+        result.append(.init(id: "fork", title: clarity("fork")) {
             perform(sessionID: session.id) { _ = try chat.forkSession(session.id, leafID: message.id) }
         })
         if session.selectedAnswer(messageID: message.id) != nil {
             result += [
-                .init(id: "artifact", title: newLabel("editArtifact", english: "Create editable artifact…", chinese: "建立可编辑成果…")) {
+                .init(id: "artifact", title: clarity("artifact")) {
                     Task { @MainActor in
+                        guard stillCurrent(true) else { return }
                         do {
                             let content = try await chat.artifactFromAnswer(message.id, sessionID: session.id)
                             onAssetsChanged()
@@ -1823,12 +1862,12 @@ ScrollViewReader { proxy in
                         } catch { issues[session.id] = error.localizedDescription }
                     }
                 },
-                .init(id: "save", title: label("saveAsset", "保存回答为素材")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: false) } },
-                .init(id: "workflow", title: label("useWorkflow", "用于工作流")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: true) } }
+                .init(id: "save", title: clarity("saveAsset")) { Task { guard stillCurrent(true) else { return }; await saveFinal(message.id, sessionID: session.id, useInWorkflow: false) } },
+                .init(id: "workflow", title: label("useWorkflow", "用于工作流")) { Task { guard stillCurrent(true) else { return }; await saveFinal(message.id, sessionID: session.id, useInWorkflow: true) } }
             ]
         }
         if session.selectedAnswer(messageID: message.id)?.attempt?.outputFormat?.kind == .schema {
-            result.append(.init(id: "fields", title: newLabel("answerFields", english: "Save / hand off structured fields…", chinese: "保存／交接结构化字段…")) {
+            result.append(.init(id: "fields", title: clarity("fields")) {
                 perform(sessionID: session.id) { present(.fields(try ChatAnswerField.choices(session: session, messageID: message.id))) }
             })
         }
@@ -1840,97 +1879,138 @@ ScrollViewReader { proxy in
         if chat.speechPlaybackState != .idle {
             result.append(.init(id: "stop-reading", title: newLabel("stopReading", english: "Stop read-aloud", chinese: "停止当前朗读")) { chat.speech.stopSpeech() })
         }
-        return ChatActionMenuItem.grouped(result, ids: [
-            ["favorite", "quote", "fork", "context"],
-            ["generate", "new-candidate", "compare", "adopt", "adopt-partial", "versions", "reproduce"],
-            ["artifact", "save", "workflow", "fields"],
-            ["speak", "pause-reading", "resume-reading", "stop-reading"], ["sources", "inspect"]])
+        if let attempt {
+            @MainActor func rawOutput() -> String {
+                let current = currentValues().1 ?? attempt
+                return current.response?.rawText ?? current.rawText
+            }
+            result.append(.init(id: "raw", title: clarity("raw"), children: [
+                .init(id: "view-raw", title: clarity("viewRaw")) { present(.raw(attempt.id, rawOutput())) },
+                .init(id: "copy-raw", title: clarity("copyRaw")) { copy(rawOutput()) }
+            ]))
+        }
+        if siblings.count > 1 {
+            result.append(.init(id: "candidates", title: clarity("candidates"), children: siblings.enumerated().map { index, sibling in
+                .init(id: sibling.id.uuidString, title: "\(index + 1) · " + branchSummary(sibling), selected: sibling.id == message.id) {
+                    perform(sessionID: session.id) { try chat.selectLeaf(sibling.id, sessionID: session.id) }
+                }
+            }))
+        }
+        return result.map { $0.validated { stillCurrent() } }
     }
 
-    private func quickMessageActions(_ message: ChatMessage, session: ChatSession, attempt: ChatAttempt?, menu: [ChatActionMenuItem]) -> [ChatMessageQuickActions.Item] {
-        var items: [ChatMessageQuickActions.Item] = [
-            .init(id: "copy", title: label("copy", "复制"), symbol: "doc.on.doc", enabled: true) {
-                copy(ChatMessageContent.answerText(message: message, attempt: attempt,
-                    selectedAnswer: session.selectedAnswer(messageID: message.id)))
-            }
-        ]
-        if message.role == .user {
-            items.append(.init(id: "edit", title: label("edit", "编辑"), symbol: "pencil", enabled: session.contextChoices?.deletedAt == nil) {
-                present(.edit(ChatEdit(kind: .message, sessionID: session.id, messageID: message.id, text: message.text)))
-            })
+    private func clarity(_ key: String) -> String { workflowText(language, "chat.clarity." + key) }
+
+    private var detailTitle: String {
+        switch sheets.detail {
+        case .raw: clarity("raw")
+        case .message: clarity("detailsTitle")
+        default: workflowText(language, "childPanel.name.messages")
         }
-        for (id, symbol) in [("new-candidate", "arrow.clockwise"), ("compare", "rectangle.split.2x1"), ("adopt", "pencil")] {
-            if let item = menu.first(where: { $0.id == id }), let action = item.action {
-                items.append(.init(id: id, title: item.title, symbol: symbol, enabled: item.enabled, action: action))
-            }
-        }
-        return items
+    }
+
+    private func messageDisabledReasons(_ message: ChatMessage, session: ChatSession) -> [String: String] {
+        let gate: String
+        if !chat.isLoaded { gate = clarity("reasonLoading") }
+        else if chat.pendingSaveAttemptID != nil || chat.saveIssue != nil { gate = clarity("reasonSaving") }
+        else if chat.isBusy { gate = clarity("reasonBusy") }
+        else if session.archived || session.contextChoices?.deletedAt != nil { gate = clarity("reasonArchived") }
+        else if session.configuration == nil { gate = clarity("reasonModel") }
+        else { gate = clarity("reasonParameters") }
+        return ["new-candidate": message.parentID == nil ? clarity("reasonNoQuestion") : gate,
+                "edit": gate, "speak": clarity("reasonSpeech")]
+    }
+
+    private func organizedMessageMenu(_ commands: [ChatActionMenuItem], user: Bool) -> [ChatActionMenuItem] {
+        ChatMessageMenuOrganization.organize(commands, contextTitle: clarity("context"),
+            generationTitle: clarity("generation"), user: user)
     }
 
     private func messageCard(_ message: ChatMessage, session: ChatSession,
-                             siblings: [ChatMessage], attempt: ChatAttempt?) -> some View {
-        let menu = messageMenuItems(message, session: session, attempt: attempt)
+                             siblings: [ChatMessage], attempt: ChatAttempt?, latestAnswer: Bool = false) -> some View {
+        let commands = messageMenuItems(message, session: session, attempt: attempt, siblings: siblings)
+        let menu = organizedMessageMenu(commands, user: message.role == .user)
         let selectedAnswer = session.selectedAnswer(messageID: message.id)
+        let noticeKeys = ChatMessageNotices.keys(attempt: attempt, edited: selectedAnswer?.revisionID != nil,
+            pendingSave: attempt.map { chat.hasUnsavedResult($0.id) } == true)
+        let context = "message:\(session.id):\(message.id):\(attempt?.id.uuidString ?? "none"):\(selectedAnswer?.revisionID?.uuidString ?? "original")"
         return ChatBubbleLayout(user: message.role == .user) {
-        ChatMessageChrome { actionsVisible in
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(message.role == .user ? label("you", "你") : label("assistant", "助手")) .font(.headline)
-                ChatActionMenu(title: newLabel("messageActionsShort", english: "Actions", chinese: "操作"),
-                    accessibilityIdentifier: "chat-message-actions-" + message.id.uuidString,
-                    items: menu, contextID: "message:\(session.id):\(message.id):\(attempt?.id.uuidString ?? "none"):\(attempt?.status.rawValue ?? "none"):\(String(describing: selectedAnswer))").fixedSize().chatMeasured("message-menu-\(message.id.uuidString)", probe: layoutProbe)
-            }.font(.caption).frame(minHeight: 24).opacity(actionsVisible ? 0 : 1).accessibilityHidden(actionsVisible)
-                if siblings.count > 1 {
-                    ChatActionMenu(title: label("branch", "分支") + " \((siblings.firstIndex(where: { $0.id == message.id }) ?? 0) + 1)/\(siblings.count)",
-                        accessibilityIdentifier: "chat-branch-" + message.id.uuidString,
-                        items: siblings.enumerated().map { index, sibling in
-                            .init(id: sibling.id.uuidString, title: "\(index + 1) · " + branchSummary(sibling), selected: sibling.id == message.id) {
-                                perform(sessionID: session.id) { try chat.selectLeaf(sibling.id, sessionID: session.id) }
-                            }
-                        } , contextID: "branch:\(session.id):\(message.id):\(message.parentID?.uuidString ?? "none"):\(session.selectedLeafID?.uuidString ?? "none")").fixedSize().chatMeasured("branch-menu-\(message.id.uuidString)", probe: layoutProbe)
+            ChatMessageChrome(user: message.role == .user, latestAnswer: latestAnswer) { open in
+                ChatMessageContent(message: message, attempt: attempt,
+                    selectedAnswer: selectedAnswer, onPreview: { present(.preview($0)) })
+                    .chatMeasured(selectedAnswer?.revisionID != nil
+                        ? "adopted-version-\(message.id.uuidString)" : "original-version-\(message.id.uuidString)", probe: layoutProbe)
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                    .workbenchPanel(cornerRadius: 18)
+                    .background {
+                        // Behind selectable text: native selection-copy keeps priority.
+                        Color.clear.workbenchContextMenu(onPresentationChange: { open.wrappedValue = $0 }) { WorkbenchMenuRows(items: menu.map(ChatActionMenu.convert)) }
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel(message.role == .user ? label("you", "你") : label("assistant", "助手"))
+            } actions: { focused, open in
+                ChatMessageTools(commands: commands, menu: menu, user: message.role == .user,
+                    contextID: context, identifier: "chat-message-actions-" + message.id.uuidString,
+                    candidateIndex: siblings.firstIndex { $0.id == message.id } ?? 0, candidateCount: siblings.count,
+                    focus: focused, menuOpen: open, moreTitle: clarity("more"), copiedTitle: clarity("copied"),
+                    regenerateHelp: clarity("regenerateHelp"), readHelp: clarity("readHelp"),
+                    disabledReasons: messageDisabledReasons(message, session: session),
+                    layoutProbe: layoutProbe, messageID: message.id)
+            } footer: {
+                if !noticeKeys.isEmpty || attempt?.issue != nil {
+                    ChatMessageNoticeView(attempt: attempt, keys: noticeKeys,
+                        openDetails: { commands.first { $0.id == "details" }?.action?() })
+                        .chatMeasured("attempt-status-\(attempt?.id.uuidString ?? "none")", probe: layoutProbe)
                 }
-            ChatMessageContent(message: message, attempt: attempt,
-                selectedAnswer: selectedAnswer, onPreview: { present(.preview($0)) })
-                .chatMeasured(selectedAnswer?.revisionID != nil
-                    ? "adopted-version-\(message.id.uuidString)" : "original-version-\(message.id.uuidString)", probe: layoutProbe)
+            }
+        }
+    }
+
+    @ViewBuilder private func messageDetails(_ message: ChatMessage, session: ChatSession, attempt: ChatAttempt?) -> some View {
+        let selected = session.selectedAnswer(messageID: message.id)
+        VStack(alignment: .leading, spacing: 12) {
+            LabeledContent(clarity("sender"), value: message.role == .user ? label("you", "你") : label("assistant", "助手"))
+            LabeledContent(clarity("time"), value: attempt?.createdAt.formatted() ?? clarity("notRecorded"))
+            LabeledContent(clarity("displayedVersion"), value: selected?.revisionID != nil ? clarity("edited") : clarity("originalVersion"))
+            if let attempt {
+                let snapshot = ChatRequestInspection(attempt: attempt)
+                Text(clarity("recordedModel")).font(.headline)
+                // Only the frozen node is used; never today's selected model.
+                let descriptor = attempt.node.parameters["modelID"]?.string.flatMap {
+                    WorkflowModelRoutes.draftChoice(operationID: attempt.node.operationID, modelID: $0)
+                }.flatMap { SharedLibraryProjection.descriptor(for: $0) }
+                LabeledContent(clarity("model"), value: descriptor?.title ?? clarity("notRecorded"))
+                LabeledContent(clarity("modelRevision"), value: descriptor?.revision ?? clarity("notRecorded"))
+                LabeledContent(clarity("precision"), value: ModelSpecificationPresentation(descriptor: descriptor, language: language).precisionValue)
+                if let parameters = snapshot.sections.first(where: { $0.id == "parameters" }) {
+                    DisclosureGroup(clarity("parameters")) { requestFields(parameters, attempt: attempt) }
+                }
+                ChatRunFeedbackView(chat: chat, attempt: attempt)
+                Divider()
+                LabeledContent(clarity("state"), value: status(attempt))
+                LabeledContent(label("finish", "结束原因"), value: attempt.response.map { finish($0.finishReason) } ?? clarity("notRecorded"))
+                if chat.hasUnsavedResult(attempt.id) || attempt.status == .saving { Text(clarity("notSaved")) }
+                if let issue = attempt.issue { WorkbenchIssueText(raw: issue).foregroundStyle(.red).textSelection(.enabled) }
+                if chat.hasUnsavedResult(attempt.id), let issue = chat.saveIssue { WorkbenchIssueText(raw: issue).textSelection(.enabled) }
+                if let report = ChatChannelPresentation(attempt).formatReport {
+                    Text(report.status == .valid ? label("validFormat", "原文符合请求的格式") : clarity("invalidFormat"))
+                    if let reason = report.reason { Text(reason).textSelection(.enabled) }
+                }
+                DisclosureGroup(clarity("technical")) { requestInspectionPanel(attempt) }
+            }
             if let excerpts = message.knowledgeExcerpts, !excerpts.isEmpty {
                 DisclosureGroup(newLabel("usedSources", english: "Source excerpts sent with this question", chinese: "本次问题使用的资料片段")) {
                     ForEach(excerpts) { excerpt in
-                        VStack(alignment: .leading) {
-                            Text(excerpt.name).font(.caption.bold())
-                            Text(excerpt.text).font(.caption).textSelection(.enabled)
-                            Button(newLabel("sourceOriginal", english: "View original", chinese: "查看原件")) { present(.preview(excerpt.source)) }
-                        }
+                        Text(excerpt.name).font(.headline)
+                        Text(excerpt.text).textSelection(.enabled)
+                        Button(newLabel("sourceOriginal", english: "View original", chinese: "查看原件")) { present(.preview(excerpt.source)) }
                     }
                 }
             }
-            if let attempt {
-                HStack {
-                    Text(status(attempt)).font(.caption).foregroundStyle(.secondary)
-                        .chatMeasured("attempt-status-\(attempt.id.uuidString)", probe: layoutProbe)
-                    if let response = attempt.response {
-                        Text(label("finish", "结束原因") + ": " + finish(response.finishReason))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                if let issue = attempt.issue {
-                    WorkbenchIssueText(raw: issue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
-                        .chatMeasured("attempt-issue-\(attempt.id.uuidString)", probe: layoutProbe)
-                }
+            if attempt == nil {
+                DisclosureGroup(clarity("technical")) { Text(message.id.uuidString).textSelection(.enabled) }
             }
-        }
-        .padding(.horizontal, 14).padding(.vertical, 12)
-        .workbenchPanel(cornerRadius: 18)
-        } actions: {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 4) {
-                    ChatMessageQuickActions(items: quickMessageActions(message, session: session, attempt: attempt, menu: menu))
-                    ChatActionMenu(title: newLabel("messageActionsShort", english: "Actions", chinese: "操作"), accessibilityIdentifier: "chat-message-hover-actions-" + message.id.uuidString, items: menu, contextID: "hover:\(session.id):\(message.id)").fixedSize()
-                }.fixedSize()
-                ChatActionMenu(title: newLabel("messageActionsShort", english: "Actions", chinese: "操作"), accessibilityIdentifier: "chat-message-compact-actions-" + message.id.uuidString, items: menu, contextID: "compact:\(session.id):\(message.id)").fixedSize()
-            }
-        }
-        }
+        }.accessibilityIdentifier("chat-message-details-" + message.id.uuidString)
     }
 
     private func settings(_ session: ChatSession) -> some View {
@@ -2336,6 +2416,7 @@ ScrollViewReader { proxy in
         catch { report(error.localizedDescription, for: owner) }
     }
     private func run(sessionID: UUID, _ action: () async throws -> Void) async {
+        guard chat.state.selectedSessionID == sessionID else { return }
         do { try await action(); report(nil, for: sessionID) }
         catch { report(error.localizedDescription, for: sessionID) }
     }
@@ -2785,28 +2866,6 @@ private struct ChatEditForm: View {
     }
 }
 
-/// A stable toolbar footprint; hovering or tab-focusing only changes emphasis,
-/// never message geometry or editor/reading identity. Native buttons remain accessible.
-private struct ChatMessageQuickActions: View {
-    struct Item: Identifiable {
-        let id: String
-        let title: String
-        let symbol: String
-        let enabled: Bool
-        let action: @MainActor () -> Void
-    }
-    let items: [Item]
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(items) { item in
-                Button(action: item.action) { Image(systemName: item.symbol).frame(width: 22, height: 22) }
-                    .buttonStyle(.plain).controlSize(.small).help(item.title).accessibilityLabel(item.title)
-                    .disabled(!item.enabled)
-            }
-        }.fixedSize()
-    }
-}
-
 /// Explicit value boundary: construction of menus/Markdown stays inside body.
 /// Independent run/speech observations used by the content still invalidate it;
 /// mutable chat.state is read only in action closures, never during this row's render.
@@ -2827,6 +2886,9 @@ struct ChatMessageRow<Content: View>: View, Equatable {
         let canAdopt: Bool
         let speech: ChatSpeechPlaybackState
         let language: String
+        var latestAnswer = false
+        var pendingSave = false
+        var saveIssue: String? = nil
     }
     let projection: Projection
     @ViewBuilder let content: () -> Content

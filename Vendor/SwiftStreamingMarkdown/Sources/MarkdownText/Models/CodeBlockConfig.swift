@@ -12,6 +12,8 @@ public struct CodeBlockConfig: Hashable, Sendable {
 
   /// D local presentation option; the copied code is never rewritten.
   public var wrapsLines = false
+  public var copyLabel = "Copy code"
+  public var copiedLabel = "Copied"
 
   /// Syntax-highlighting color theme applied to code blocks.
   ///

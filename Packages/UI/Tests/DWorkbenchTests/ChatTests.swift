@@ -17,16 +17,20 @@ private actor ChatTemplateCapture {
 private actor ChatFixtureEngine: InferenceEngine {
     private(set) var requests: [InferenceRequest] = []
     private var finishReason: TextFinishReason = .stop
+    private var completionGate: ChatOutcomeGate?
+    func setCompletionGate(_ gate: ChatOutcomeGate) { completionGate = gate }
     func setFinishReason(_ reason: TextFinishReason) { finishReason = reason }
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
         requests.append(request)
         let index = requests.count
-        let reason = finishReason
+        let reason = finishReason, gate = completionGate
+        await gate?.markSubmitted()
         let final = "reply \(index) 👩🏽‍🎨 e\u{301}"
         return .init(id: request.id, events: AsyncThrowingStream { continuation in
             continuation.yield(.textDelta(final)); continuation.finish()
         }, cancel: {}, outcome: {
-            .completed(.init(textResponse: .init(rawText: final, finalText: final, finishReason: reason)))
+            await gate?.waitOutcome()
+            return .completed(.init(textResponse: .init(rawText: final, finalText: final, finishReason: reason)))
         })
     }
 }
@@ -1382,17 +1386,49 @@ struct ChatTests {
         try await chat.send(sessionID: id); await chat.waitForCompletion()
         try #require(chat.pendingSaveAttemptID != nil)
         #expect(notices.isEmpty)
+        let savedAttempt = try #require(chat.pendingSaveAttemptID)
+        #expect(chat.hasUnsavedResult(savedAttempt))
         #expect(chat.error == WorkflowSaveFailure(reason: ProjectStoreError.io(String(cString: strerror(EACCES))).localizedDescription).localizedDescription)
         await #expect(throws: (any Error).self) { try await chat.prepareForBackup() }
         #expect(await engine.requests.count == 1)
         try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: obstruction.path)
         await chat.retrySave()
         #expect(chat.pendingSaveAttemptID == nil)
+        #expect(!chat.hasUnsavedResult(savedAttempt))
         #expect(chat.state.sessions.first?.attempts.first?.status == .completed)
         #expect(await engine.requests.count == 1)
         #expect(notices.count == 1 && notices.first?.status == .completed)
         await chat.retrySave(); try await chat.flush()
         #expect(notices.count == 1)
+        try await store.close()
+    }
+
+    @Test func publishedAnswerRecordSaveFailureHasExactUnsavedNoticeAndSaveOnlyRecovery() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        let gate = ChatOutcomeGate(); await engine.setCompletionGate(gate)
+        try chat.updateDraft("record failure fixture", sessionID: id)
+        try await chat.send(sessionID: id); await gate.waitSubmitted()
+        try await chat.flush()
+        let file = store.rootURL.appendingPathComponent("quick-chat.json")
+        let before = try Data(contentsOf: file)
+        var external = try JSONDecoder().decode(ChatState.self, from: before)
+        external.sessions[0].title = "controlled external edit"
+        try JSONEncoder().encode(external).write(to: file, options: .atomic)
+        await gate.release(); await chat.waitForCompletion()
+        let attempt = try #require(chat.selectedSession?.attempts.first)
+        #expect(attempt.output != nil && chat.pendingSaveAttemptID == nil)
+        #expect(chat.saveIssue != nil && chat.hasUnsavedResult(attempt.id))
+        #expect(!chat.hasUnsavedResult(UUID()))
+        #expect(await engine.requests.count == 1)
+        // Restore only this test-owned obstruction, never application/user state.
+        try before.write(to: file, options: .atomic)
+        await chat.retrySave()
+        #expect(chat.saveIssue == nil && !chat.hasUnsavedResult(attempt.id))
+        #expect(await engine.requests.count == 1)
+        #expect(chat.selectedSession?.attempts.first?.rawText == attempt.rawText)
+        let restored = try await store.chatState()
+        #expect(restored.sessions.first?.attempts.first?.rawText == attempt.rawText)
         try await store.close()
     }
 
@@ -1421,6 +1457,8 @@ struct ChatTests {
         try externalBytes.write(to: manifest, options: .atomic)
         await chat.retrySave()
         #expect(chat.pendingSaveAttemptID == nil)
+        #expect(!chat.hasUnsavedResult(try #require(chat.state.sessions.first?.attempts.first?.id)))
+        #expect(chat.saveIssue == nil)
         #expect(chat.state.sessions.first?.attempts.first?.status == .failed)
         #expect(chat.state.sessions.first?.attempts.first?.rawText == preview)
         #expect(chat.state.sessions.first?.attempts.first?.issue == ProjectStoreError.externalModification.localizedDescription)

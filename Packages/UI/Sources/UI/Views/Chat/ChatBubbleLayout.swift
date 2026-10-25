@@ -65,22 +65,76 @@ struct ChatMessageEntrance: ViewModifier {
     }
 }
 
-/// Hover controls are an overlay, so even an invisible toolbar cannot widen a
-/// short message. The always-visible Actions menu retains every keyboard action.
-struct ChatMessageChrome<Content: View, Actions: View>: View {
-    @ViewBuilder let content: (Bool) -> Content
-    @ViewBuilder let actions: () -> Actions
+/// Measures the body separately: action width can never enlarge its glass.
+struct ChatMessageStack: Layout {
+    let user: Bool
+    struct Geometry: Equatable {
+        let bubble: CGSize
+        let tools: CGSize
+        let foot: CGSize
+        var size: CGSize { .init(width: max(bubble.width, tools.width, foot.width), height: bubble.height + 6 + 28 + (foot.height > 0 ? 4 + foot.height : 0)) }
+        func x(_ width: CGFloat) -> CGFloat { userAlignment ? size.width - width : 0 }
+        var userAlignment = false
+    }
+    func measure(_ proposal: ProposedViewSize, _ subviews: Subviews) -> Geometry {
+        guard subviews.count == 3 else { return .init(bubble: .zero, tools: .zero, foot: .zero) }
+        let limit = proposal.width ?? 600
+        let natural = subviews[0].sizeThatFits(.unspecified)
+        let width = min(limit, max(1, natural.width.isFinite ? natural.width : limit))
+        return .init(bubble: subviews[0].sizeThatFits(.init(width: width, height: nil)),
+            tools: subviews[1].sizeThatFits(.init(width: limit, height: 28)),
+            foot: subviews[2].sizeThatFits(.init(width: limit, height: nil)), userAlignment: user)
+    }
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize { measure(proposal, subviews).size }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let g = measure(proposal, subviews)
+        guard subviews.count == 3 else { return }
+        for (i, size, y) in [(0, g.bubble, CGFloat(0)), (1, g.tools, g.bubble.height + 6), (2, g.foot, g.bubble.height + 38)] {
+            subviews[i].place(at: .init(x: bounds.minX + g.x(size.width), y: bounds.minY + y), proposal: .init(width: size.width, height: size.height))
+        }
+    }
+}
+
+struct ChatMessageIconStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        ChatMessageIconBody(configuration: configuration)
+    }
+    private struct ChatMessageIconBody: View {
+        let configuration: Configuration
+        @State private var hovered = false
+        @Environment(\.isEnabled) private var enabled
+        var body: some View {
+            configuration.label.contentShape(Rectangle())
+                .background(.primary.opacity(configuration.isPressed ? 0.12 : hovered && enabled ? 0.07 : 0), in: RoundedRectangle(cornerRadius: 6))
+                .opacity(enabled ? 1 : 0.4)
+                .onHover { hovered = $0 }
+        }
+    }
+}
+
+/// A bounded hover region includes body, the six-point bridge and the permanently
+/// allocated tool slot. No timers, reading-track-wide hit region or hidden editor.
+struct ChatMessageChrome<Content: View, Actions: View, Footer: View>: View {
+    let user: Bool
+    let latestAnswer: Bool
+    @ViewBuilder let content: (Binding<Bool>) -> Content
+    @ViewBuilder let actions: (Binding<Bool>, Binding<Bool>) -> Actions
+    @ViewBuilder let footer: () -> Footer
     @State private var hovered = false
-    @FocusState private var actionFocused: Bool
+    @State private var actionFocused = false
+    @State private var menuOpen = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.chatDisplayPreferences) private var preferences
+    private var active: Bool { hovered || actionFocused || menuOpen }
     var body: some View {
-        content(hovered || actionFocused)
-            .overlay(alignment: .topTrailing) {
-                actions().frame(maxWidth: .infinity, alignment: .trailing).frame(height: 24)
-                    .focusSection().focused($actionFocused)
-                    .opacity(hovered || actionFocused ? 1 : 0)
-                    .allowsHitTesting(hovered || actionFocused)
-                    .padding(.horizontal, 14).padding(.top, 12)
-            }
-            .onHover { hovered = $0 }
+        ChatMessageStack(user: user) {
+            content($menuOpen)
+            actions($actionFocused, $menuOpen)
+                .opacity(active ? 1 : latestAnswer ? 0.5 : 0)
+            VStack(alignment: user ? .trailing : .leading, spacing: 0) { footer() }
+        }
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
+        .animation(reduceMotion || preferences.resolvedAppearance.lightweight || preferences.resolvedAppearance.motion == 0 ? nil : .easeOut(duration: 0.12), value: active)
     }
 }

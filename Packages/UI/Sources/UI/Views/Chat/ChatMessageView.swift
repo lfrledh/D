@@ -13,7 +13,7 @@ struct ChatChannelPresentation {
     let formatReport: ChatOutputFormat.Report?
     let structuredResult: String?
 
-    init(_ attempt: ChatAttempt) {
+    init(_ attempt: ChatAttempt, checksFormat: Bool = true) {
         let runtimeActive = attempt.status == .running
         let unseparated = runtimeActive || attempt.response == nil
         let selectedText = unseparated ? attempt.rawText : (attempt.response?.finalText ?? "")
@@ -21,7 +21,7 @@ struct ChatChannelPresentation {
         isUnseparatedRaw = unseparated
         rawText = runtimeActive ? attempt.rawText : (attempt.response?.rawText ?? attempt.rawText)
         text = selectedText
-        if !unseparated, !selectedText.isEmpty, attempt.status != .saving,
+        if checksFormat, !unseparated, !selectedText.isEmpty, attempt.status != .saving,
            let format = attempt.outputFormat, [.json, .schema].contains(format.kind) {
             let checkedText = selectedText
             let report = format.check(checkedText)
@@ -67,8 +67,8 @@ struct ChatMessageContent: View {
     var selectedAnswer: ChatSelectedAnswer? = nil
     let onPreview: (WorkflowAssetReference) -> Void
 
+    @State private var reasoningExpanded = false
     @Environment(\.chatDisplayPreferences) private var displayPreferences
-    @State private var rawOutputExpanded = true
 
     @Environment(\.dLanguageStore) private var language
 
@@ -88,15 +88,9 @@ struct ChatMessageContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let selectedAnswer, let revisionID = selectedAnswer.revisionID {
-                Text(workflowText(language, "chat.messageView.adoptedManualVersion"))
-                    .font(.caption).foregroundStyle(.secondary)
+            if selectedAnswer?.revisionID != nil {
                 ChatMarkdownView(messageID: message.id, text: primaryText,
                                  rawText: primaryText, isStreaming: false)
-                    .id(revisionID)
-                DisclosureGroup(workflowText(language, "chat.messageView.originalModelOutputPreserved")) {
-                    sourceContent
-                }.accessibilityIdentifier("chat-original-version-\(message.id.uuidString)")
             } else {
                 sourceContent
             }
@@ -108,60 +102,23 @@ struct ChatMessageContent: View {
     private var sourceContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let attempt {
-                let presentation = ChatChannelPresentation(attempt)
-                if presentation.isUnseparatedRaw {
-                    DisclosureGroup(isExpanded: $rawOutputExpanded) {
-                        if !presentation.text.isEmpty {
-                            ChatMarkdownView(messageID: message.id, text: presentation.text,
-                                             rawText: presentation.rawText, isStreaming: true)
-                                .id(message.id)
-                        }
-                    } label: {
-                        Text(presentation.isStreaming
-                             ? workflowText(language, "chat.messageView.rawStreamingModelOutputAnswerAndReasoningNotSeparatedYet")
-                             : workflowText(language, "chat.messageView.unseparatedModelOutputAnswerAndReasoningUnknown"))
-                    }
-                    .accessibilityIdentifier("chat-\(presentation.isStreaming ? "stream" : "unseparated")-raw-\(message.id.uuidString)")
-                } else if !presentation.text.isEmpty {
+                let presentation = ChatChannelPresentation(attempt, checksFormat: false)
+                if !presentation.text.isEmpty {
                     ChatMarkdownView(messageID: message.id, text: presentation.text,
-                                     rawText: presentation.rawText, isStreaming: false)
+                                     rawText: presentation.rawText, isStreaming: presentation.isUnseparatedRaw)
                         .id(message.id)
-                } else {
-                    Text(workflowText(language, "chat.messageView.theModelDidNotProvideAnAnswerBody"))
-                        .font(.caption).foregroundStyle(.secondary)
-                    if !presentation.rawText.isEmpty {
-                        DisclosureGroup(workflowText(language, "chat.messageView.originalModelOutputPreserved")) {
-                            Text(presentation.rawText).textSelection(.enabled)
-                            Button(label("copyRaw", "复制原文")) {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(presentation.rawText, forType: .string)
-                            }
-                        }
-                    }
                 }
                 if !presentation.isUnseparatedRaw,
                    let reasoning = attempt.response?.reasoningText, !reasoning.isEmpty {
-                    DisclosureGroup(label("reasoning", "思考内容")) {
+                    DisclosureGroup(label("reasoning", "思考过程"), isExpanded: $reasoningExpanded) {
                         Text(reasoning).font(.system(size: CGFloat(displayPreferences.textPointSize))).textSelection(.enabled)
-                        Button(label("copyReasoning", "复制思考内容")) {
+                        Button {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(reasoning, forType: .string)
-                        }
+                        } label: { Image(systemName: "doc.on.doc").font(.system(size: 16)).frame(width: 28, height: 28) }
+                        .buttonStyle(ChatMessageIconStyle()).help(label("copyReasoning", "复制思考内容"))
+                        .accessibilityLabel(label("copyReasoning", "复制思考内容"))
                     }
-                }
-                if let report = presentation.formatReport {
-                    DisclosureGroup(label("formatCheck", "输出格式检查 · 不代表生成已完整结束")) {
-                        Text(report.status == .valid ? label("validFormat", "原文符合请求的格式") : label("invalidFormat", "原文未通过格式检查"))
-                        if let reason = report.reason { Text(reason).font(.caption).textSelection(.enabled) }
-                        Text(label("formatAdvisory", "这是生成后检查，不是受约束解码；原回答保持不变。"))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                if let result = presentation.structuredResult {
-                    DisclosureGroup(workflowText(language, "chat.messageView.structuredResultReadOnly")) {
-                        Text(result).font(.body.monospaced()).textSelection(.enabled)
-                    }
-                    .accessibilityIdentifier("chat-structured-result-\(message.id.uuidString)")
                 }
                 if !presentation.isUnseparatedRaw,
                    let calls = attempt.response?.toolCalls, !calls.isEmpty {

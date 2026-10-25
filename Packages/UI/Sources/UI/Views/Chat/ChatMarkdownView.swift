@@ -34,7 +34,7 @@ enum ChatMarkdownPresentation {
     }
 
     private struct ConfigurationKey: Equatable {
-        let size: Int; let wraps: Bool; let foreground: String; let accent: String; let panel: String
+        let size: Int; let wraps: Bool; let foreground: String; let accent: String; let panel: String; let language: String
     }
     @MainActor private static var configurations: [(ConfigurationKey, MarkdownRenderConfig)] = []
     #if DEBUG
@@ -42,10 +42,10 @@ enum ChatMarkdownPresentation {
     #endif
 
     @MainActor
-    static func config(for preferences: ChatDisplayPreferences, colorScheme: ColorScheme = .light) -> MarkdownRenderConfig {
+    static func config(for preferences: ChatDisplayPreferences, colorScheme: ColorScheme = .light, language: UILanguageStore? = nil) -> MarkdownRenderConfig {
         let palette = preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? colorScheme)
         let key = ConfigurationKey(size: preferences.textPointSize, wraps: preferences.wrapsCode,
-            foreground: palette.foreground, accent: palette.accent, panel: palette.panel)
+            foreground: palette.foreground, accent: palette.accent, panel: palette.panel, language: language?.effectiveLanguageIdentifier ?? "")
         if let cached = configurations.first(where: { $0.0 == key }) { return cached.1 }
         #if DEBUG
         configurationBuilds += 1
@@ -58,6 +58,12 @@ enum ChatMarkdownPresentation {
         var block = CodeBlockConfig(theme: .xcode, backgroundColor: palette.panelColor,
             foregroundColor: palette.foregroundColor, codeTextFonts: code, chromeTextFonts: fonts(max(12, size - 2)))
         block.wrapsLines = preferences.wrapsCode
+        block.copyLabel = workflowText(language, "chat.clarity.copyCode")
+        block.copiedLabel = workflowText(language, "chat.clarity.copied")
+        var tableStyle = MarkdownRenderConfig.MarkdownTableTextStyle(textFonts: base, headerTextColor: palette.foregroundColor,
+            regularTextColor: palette.foregroundColor, headerBackgroundColor: palette.panelColor,
+            borderColor: table.borderColor, actionButtonColor: palette.accentColor)
+        tableStyle.copyLabel = workflowText(language, "chat.clarity.copyTable")
         let minorHeading = fonts(size * 20 / 17)
         let config = MarkdownRenderConfig(
             blockQuoteStyle: .init(textFonts: base, textColor: palette.foregroundColor),
@@ -67,10 +73,7 @@ enum ChatMarkdownPresentation {
                                 textColor: palette.foregroundColor),
             orderedListStyle: .init(textFonts: base, textColor: palette.foregroundColor),
             paragraphStyle: .init(textFonts: base, textColor: palette.foregroundColor),
-            tableStyle: .init(textFonts: base, headerTextColor: palette.foregroundColor,
-                              regularTextColor: palette.foregroundColor,
-                              headerBackgroundColor: palette.panelColor,
-                              borderColor: table.borderColor, actionButtonColor: palette.accentColor),
+            tableStyle: tableStyle,
             inlineStyle: .init(boldTextColor: palette.foregroundColor, linkTextFont: base.normal,
                                linkTextColor: palette.accentColor,
                                linkUnderlineStyle: inline.linkUnderlineStyle,
@@ -155,7 +158,6 @@ struct ChatMarkdownView: View {
     @State private var parsedText: String?
     @State private var parsedKey: ParseKey?
     @State private var document: RenderableDocument?
-    @State private var showsRaw = false
     @State private var pendingLink: URL?
     @Environment(\.dLanguageStore) private var language
     @Environment(\.chatDisplayPreferences) private var displayPreferences
@@ -175,24 +177,15 @@ struct ChatMarkdownView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                if !isStreaming {
-                    Button(showsRaw ? label("rendered", "渲染") : label("raw", "原文")) { showsRaw.toggle() }
-                        .accessibilityIdentifier("chat-raw-toggle-\(messageID.uuidString)")
-                }
-                Button(label("copyRaw", "复制原文")) {
-                    NSPasteboard.general.clearContents(); NSPasteboard.general.setString(rawText, forType: .string)
-                }
-            }.font(.caption)
             if let literal = ChatMarkdownPresentation.literalText(rendered: text, raw: rawText,
-                streaming: isStreaming, showingRaw: showsRaw,
+                streaming: isStreaming, showingRaw: false,
                 parsed: parsedKey?.source == text && parsedKey?.pointSize == displayPreferences.textPointSize ? parsedText : nil, document: document) {
                 Text(literal).font(.system(size: CGFloat(displayPreferences.textPointSize)))
                     .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("chat-raw-\(messageID.uuidString)")
             } else if let document {
                 DocumentView(renderableDocument: document,
-                             config: ChatMarkdownPresentation.config(for: displayPreferences, colorScheme: colorScheme),
+                             config: ChatMarkdownPresentation.config(for: displayPreferences, colorScheme: colorScheme, language: language),
                              listener: ChatMarkdownListener())
                     .environment(\.colorScheme, displayPreferences.preferredColorScheme ?? colorScheme)
                     .environment(\.openURL, OpenURLAction { url in

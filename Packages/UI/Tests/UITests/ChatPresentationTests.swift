@@ -209,6 +209,9 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             let popupContainer = try #require(host.superview)
             let popup = try #require(views(popupContainer).compactMap { $0 as? WorkbenchPopupOverlay }.first)
             defer { popup.cancel(restoreFocus: false) }
+            let group = try #require(views(popup).compactMap { $0 as? NSButton }.first { $0.accessibilityIdentifier() == "generation" })
+            group.performClick(nil)
+            try await settle()
             let button = try #require(views(popup).compactMap { $0 as? NSButton }.first { $0.accessibilityIdentifier() == "generate" })
             return button.isEnabled
         }
@@ -970,7 +973,8 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     @Test func longMarkdownRealViewFixture() async throws {
         let source = "# 长回答\n\n| A | B |\n|---|---|\n" +
             String(repeating: "| 中文段落 | `code` 和 **强调** |\n", count: 80)
-        let session = try answeredSession(raw: source, status: .completed)
+        var session = try answeredSession(raw: source, status: .completed)
+        session.attempts[0].response = .init(rawText: source, finalText: source, finishReason: .stop)
         var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
         let (chat, model, store, root) = try await fixture(state)
         #expect(chat.selectedPath.count == 2)
@@ -979,7 +983,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         #expect(horizontallyInside(layout["transcript"], width: 900))
         #expect(horizontallyInside(layout["composer"], width: 900))
         #expect(layout["message-\(session.messages[1].id.uuidString)"] != nil)
-        #expect(layout["attempt-status-\(session.attempts[0].id.uuidString)"] != nil)
+        #expect(layout["attempt-status-\(session.attempts[0].id.uuidString)"] == nil)
         #expect(layout["composer"]!.minY >= layout["transcript"]!.maxY - 1)
         try await close(store, root: root)
     }
@@ -1050,8 +1054,8 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         }
         #expect(horizontallyInside(layout["transcript"], width: 320))
         #expect(horizontallyInside(layout["composer"], width: 320))
-        #expect(layout["attempt-issue-\(session.attempts[0].id.uuidString)"] != nil)
-        #expect(layout["branch-menu-\(session.messages[0].id.uuidString)"] != nil)
+        #expect(layout["attempt-status-\(session.attempts[0].id.uuidString)"] != nil)
+        #expect(layout["message-menu-\(session.messages[0].id.uuidString)"] != nil)
         #expect(ChatPresentationText.branchSummary(sibling, you: "你", assistant: "助手") == "修改后的提问")
         try await close(store, root: root)
     }

@@ -10,6 +10,7 @@ struct ChatActionMenuItem: Identifiable {
     let selected: Bool
     let isSeparator: Bool
     let children: [ChatActionMenuItem]?
+    var isCurrent: @MainActor () -> Bool = { true }
     let action: (@MainActor () -> Void)?
 
     init(id: String, title: String, enabled: Bool = true, selected: Bool = false,
@@ -351,8 +352,8 @@ struct ChatLegacyActionMenu: NSViewRepresentable {
             .accessibilityIdentifier(accessibilityIdentifier)
             .environment(\.workbenchMenuContext, inherited + ":" + contextID)
     }
-    private static func convert(_ item: ChatActionMenuItem) -> WorkbenchPopupItem {
+    static func convert(_ item: ChatActionMenuItem) -> WorkbenchPopupItem {
         .init(id: item.id, title: item.title, enabled: item.enabled, checked: item.selected,
-            separator: item.isSeparator, children: (item.children ?? []).map(convert), action: item.action)
+            separator: item.isSeparator, children: (item.children ?? []).map(convert), isCurrent: item.isCurrent, action: item.action)
     }
 }

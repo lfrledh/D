@@ -78,15 +78,18 @@ extension EnvironmentValues {
     let title: String
     let items: WorkbenchMenuRows
     let label: Label
+    var onPresentationChange: (Bool) -> Void = { _ in }
+    var onFocusChange: (Bool) -> Void = { _ in }
     @State private var handle = WorkbenchMenuHandle()
     @FocusState private var focused: Bool
-    init(_ title: String = "", @WorkbenchMenuBuilder content: () -> WorkbenchMenuRows, @ViewBuilder label: () -> Label) {
-        self.title = title; items = content(); self.label = label()
+    init(_ title: String = "", onPresentationChange: @escaping (Bool) -> Void = { _ in }, onFocusChange: @escaping (Bool) -> Void = { _ in }, @WorkbenchMenuBuilder content: () -> WorkbenchMenuRows, @ViewBuilder label: () -> Label) {
+        self.title = title; self.onPresentationChange = onPresentationChange; self.onFocusChange = onFocusChange; items = content(); self.label = label()
     }
     var body: some View {
         Button { handle.open?() } label: { label }
             .focused($focused)
-            .background(WorkbenchMenuAnchor(title: title, items: items.items, handle: handle, restoreTrigger: { focused = true }).allowsHitTesting(false))
+            .onChange(of: focused) { _, value in onFocusChange(value) }
+            .background(WorkbenchMenuAnchor(title: title, items: items.items, handle: handle, restoreTrigger: { focused = true }, onPresentationChange: onPresentationChange).allowsHitTesting(false))
     }
 }
 extension WorkbenchMenu where Label == Text {
@@ -114,6 +117,7 @@ struct WorkbenchSelectionMenu<Value: Hashable>: View {
     let items: [WorkbenchPopupItem]
     let handle: WorkbenchMenuHandle
     var restoreTrigger: () -> Void = {}
+    var onPresentationChange: (Bool) -> Void = { _ in }
     var contextClick = false
     @Environment(\.isEnabled) private var enabled
     @Environment(\.workbenchMenuContext) private var contextID
@@ -139,7 +143,7 @@ struct WorkbenchSelectionMenu<Value: Hashable>: View {
     func updateNSView(_ view:WorkbenchMenuAnchorView,context:Context) {
         let c=context.coordinator
         c.contextID=contextID;c.enabled=enabled;c.style=style;c.items=items;c.title=title.isEmpty ? consistencyText(language,"menu.title") : title
-        c.anchor=view; c.restoreTrigger = restoreTrigger; view.contextClick = contextClick; view.openContext = { [weak c] in c?.open() }; handle.anchor=view; handle.open={ [weak c] in c?.open() }
+        c.anchor=view; c.restoreTrigger = restoreTrigger; c.onPresentationChange = onPresentationChange; view.contextClick = contextClick; view.openContext = { [weak c] in c?.open() }; handle.anchor=view; handle.open={ [weak c] in c?.open() }
         if enabled { c.popup?.update(contextID:contextID,title:c.title,items:items,style:style) }
         else { c.popup?.cancel() }
     }
@@ -151,6 +155,7 @@ struct WorkbenchSelectionMenu<Value: Hashable>: View {
         var items:[WorkbenchPopupItem]=[]
         var title=""
         var restoreTrigger: () -> Void = {}
+        var onPresentationChange: (Bool) -> Void = { _ in }
         weak var anchor:NSView?
         weak var popup:WorkbenchPopupOverlay?
         func open() {
@@ -160,7 +165,8 @@ struct WorkbenchSelectionMenu<Value: Hashable>: View {
             popup=WorkbenchPopupOverlay.present(from:anchor,contextID:captured,title:title,items:items,style:style,validContext:{ [weak self, weak anchor] in
                 guard let self,let anchor else { return false }
                 return self.enabled && anchor.window != nil && !anchor.isHiddenOrHasHiddenAncestor && self.contextID == captured && self.style?.owner === owner
-            },restoreTrigger: { [weak self] in self?.restoreTrigger() },didClose:{ [weak self] in self?.popup=nil })
+            },restoreTrigger: { [weak self] in self?.restoreTrigger() },didClose:{ [weak self] in self?.popup=nil; self?.onPresentationChange(false) })
+            if popup != nil { onPresentationChange(true) }
         }
     }
 }
@@ -224,13 +230,14 @@ struct WorkbenchPicker<Value:Hashable>:View {
 }
 @MainActor private struct WorkbenchContextMenuModifier: ViewModifier {
     let rows: WorkbenchMenuRows
+    var onPresentationChange: (Bool) -> Void = { _ in }
     @State private var handle = WorkbenchMenuHandle()
     func body(content: Content) -> some View {
-        content.overlay(WorkbenchMenuAnchor(title: "", items: rows.items, handle: handle, contextClick: true))
+        content.overlay(WorkbenchMenuAnchor(title: "", items: rows.items, handle: handle, onPresentationChange: onPresentationChange, contextClick: true))
     }
 }
 extension View {
-    @MainActor func workbenchContextMenu(@WorkbenchMenuBuilder content: () -> WorkbenchMenuRows) -> some View {
-        modifier(WorkbenchContextMenuModifier(rows: content()))
+    @MainActor func workbenchContextMenu(onPresentationChange: @escaping (Bool) -> Void = { _ in }, @WorkbenchMenuBuilder content: () -> WorkbenchMenuRows) -> some View {
+        modifier(WorkbenchContextMenuModifier(rows: content(), onPresentationChange: onPresentationChange))
     }
 }
