@@ -13,33 +13,41 @@ actor HighlightTaskManager: ObservableObject {
   /// JavaScriptCore OOM crashes (COPILOT-IOS-3F9C, 3F7Z, 3FSQ).
   private static let sharedHighlight = Highlight()
 
-  private var latestCode: String?
-  private var latestColors: HighlightColors?
+  private struct Request {
+    let code: String
+    let colors: HighlightColors
+    let completion: @MainActor @Sendable (AttributedString) -> Void
+  }
+  private var latestRequest: Request?
   private var isProcessing = false
+  private let highlight: @Sendable (String, HighlightColors) async -> AttributedString?
 
-  func enqueueCode(_ code: String, colors: HighlightColors, completion: @escaping (AttributedString) -> Void) {
-    latestCode = code
-    latestColors = colors
+  init(highlight: @escaping @Sendable (String, HighlightColors) async -> AttributedString? = {
+    try? await HighlightTaskManager.sharedHighlight.attributedText($0, colors: $1)
+  }) {
+    self.highlight = highlight
+  }
+
+  func enqueueCode(_ code: String, colors: HighlightColors, completion: @escaping @MainActor @Sendable (AttributedString) -> Void) {
+    latestRequest = Request(code: code, colors: colors, completion: completion)
 
     if !isProcessing {
       Task {
-        await processQueue(completion: completion)
+        await processQueue()
       }
     }
   }
 
-  private func processQueue(completion: @escaping (AttributedString) -> Void) async {
+  private func processQueue() async {
     guard !isProcessing else { return }
 
     isProcessing = true
 
-    while let codeToProcess = latestCode, let colors = latestColors {
-      latestCode = nil
+    while let request = latestRequest {
+      latestRequest = nil
 
-      if let result = try? await Self.sharedHighlight.attributedText(codeToProcess, colors: colors) {
-        await MainActor.run {
-          completion(result)
-        }
+      if let result = await highlight(request.code, request.colors) {
+        await request.completion(result)
       }
     }
 

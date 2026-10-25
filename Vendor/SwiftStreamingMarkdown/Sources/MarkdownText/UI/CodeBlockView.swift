@@ -19,6 +19,16 @@ struct CodeBlockView: View {
   @State var copied: Bool = false
   @State var attributedString: AttributedString?
   @StateObject private var taskManager: HighlightTaskManager = HighlightTaskManager()
+  @State private var activeHighlight: HighlightRequest?
+
+  private struct HighlightRequest: Hashable {
+    let code: String
+    let colors: HighlightColors
+  }
+
+  private var highlightRequest: HighlightRequest {
+    HighlightRequest(code: code, colors: config.codeBlockConfig.theme.highlightColors(for: colorScheme))
+  }
 
   init(language: String, code: String, onCodeCopied: (() -> Void)? = nil) {
     self.language = language
@@ -26,9 +36,11 @@ struct CodeBlockView: View {
     self.onCodeCopied = onCodeCopied
   }
 
-  private func updateAttributedString(code: String, scheme: ColorScheme) async {
-    let colors = config.codeBlockConfig.theme.highlightColors(for: scheme)
-    await taskManager.enqueueCode(code, colors: colors) { newAttributedString in
+  private func updateAttributedString(_ request: HighlightRequest) async {
+    guard !Task.isCancelled else { return }
+    activeHighlight = request
+    await taskManager.enqueueCode(request.code, colors: request.colors) { newAttributedString in
+      guard activeHighlight == request else { return }
       self.attributedString = newAttributedString
     }
   }
@@ -130,26 +142,10 @@ struct CodeBlockView: View {
         }
       }
     })
-    .onChange(of: code, perform: { value in
-      Task {
-        await updateAttributedString(code: value, scheme: colorScheme)
-      }
-    })
-    .onChange(of: colorScheme, perform: { newValue in
-      Task {
-        await updateAttributedString(code: code, scheme: newValue)
-      }
-    })
-    .onChange(of: config, perform: { _ in
-      Task {
-        await updateAttributedString(code: code, scheme: colorScheme)
-      }
-    })
-    .onAppear(perform: {
-      Task {
-        await updateAttributedString(code: code, scheme: colorScheme)
-      }
-    })
+    // One resolved request replaces competing code/config/appearance callbacks.
+    // Font, wrapping and chrome changes do not redo syntax highlighting.
+    .task(id: highlightRequest) { await updateAttributedString(highlightRequest) }
+    .onDisappear { activeHighlight = nil }
   }
 }
 
