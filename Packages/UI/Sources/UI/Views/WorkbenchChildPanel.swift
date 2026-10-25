@@ -325,6 +325,7 @@ private struct WorkbenchChildSurface: View {
     let gate: WorkbenchChildCloseGate
     let title: String
     @Environment(\.dLanguageStore) private var language
+    private let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
     private func t(_ key: String) -> String { workflowText(language, "childPanel." + key) }
     var body: some View {
         VStack(spacing: 0) {
@@ -338,12 +339,12 @@ private struct WorkbenchChildSurface: View {
             content.frame(maxWidth: .infinity, maxHeight: .infinity).clipped().disabled(gate.saving)
         }
         .environment(\.workbenchChildClose, gate)
-        .workbenchPanel(cornerRadius: 20)
+        .workbenchPanel(in: shape)
         .onExitCommand { gate.requestClose() }
         .overlay {
             if gate.asksToClose {
                 ZStack {
-                    Color.black.opacity(0.08).contentShape(Rectangle()).onTapGesture { gate.keepEditing() }
+                    shape.fill(Color.black.opacity(0.08)).contentShape(shape).onTapGesture { gate.keepEditing() }
                     VStack(alignment: .leading, spacing: 16) {
                         Text(t(gate.save == nil ? "unsubmitted" : "unsaved")).font(.headline)
                         if let failure = gate.failure { Text(failure).foregroundStyle(.red).textSelection(.enabled) }
