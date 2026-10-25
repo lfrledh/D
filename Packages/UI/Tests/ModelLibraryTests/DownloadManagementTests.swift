@@ -845,3 +845,171 @@ extension DownloadManagementTests {
         try await cold.shutdown()
     }
 }
+
+// Approved download-manager commands: exact attempt, queue scope, durable intent.
+extension DownloadManagementTests {
+    @Test func managerSingleResumePreservesPausedQueueAndRegistrationAcrossAttempts() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let transfer = FixtureTransfer(f.contents)
+        let library = try await self.library(f, transport: transfer, catalog: [entry(f, id: "a"), entry(f, id: "b"), entry(f, id: "c")])
+        try await library.configureRoot(at: f.destination)
+        try await library.pauseQueue()
+        let tasks = try await library.enqueueDownloads(["a", "b", "c"], postAction: .register, startIfIdle: false)
+        try await library.pauseDownload(tasks[0].id)
+        try await library.pauseDownload(tasks[1].id)
+        try await library.cancelDownload(tasks[2].id)
+        let resumed = try await library.continueDownload(tasks[0].id, expectedGeneration: tasks[0].generation)
+        #expect(resumed.id == tasks[0].id && resumed.postAction == .register)
+        #expect(await library.snapshot().queueState == .paused)
+        #expect(await library.snapshot().downloads[1].state == .paused)
+        #expect(await transfer.requests == 0)
+        try await library.resumeQueue(includePaused: true)
+        let done = try await wait(library) { $0.downloads.prefix(2).allSatisfy { $0.state == .completed } }
+        #expect(done.downloads[2].state == .cancelled && done.downloads[2].attempts == 0)
+        #expect(done.resources.prefix(2).allSatisfy { $0.record.registrationState == .registered })
+        try await library.pauseQueue()
+        let restarted = try await library.continueDownload(tasks[2].id, expectedGeneration: tasks[2].generation)
+        #expect(restarted.id != tasks[2].id && restarted.resourceID == tasks[2].resourceID && restarted.postAction == .register)
+        #expect(await library.snapshot().queueState == .paused)
+        #expect(await library.snapshot().downloads.first { $0.id == tasks[2].id }?.state == .cancelled)
+        try await library.shutdown()
+    }
+
+    @Test func managerStaleAttemptCannotRestartOrEraseNewerPartial() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let transfer = FixtureTransfer(f.contents), library = try await self.library(f, transport: transfer)
+        try await library.configureRoot(at: f.destination); try await library.pauseQueue()
+        let old = try await library.enqueueDownloads([f.entry.id], postAction: .register, startIfIdle: false)[0]
+        try await library.cancelDownload(old.id)
+        let next = try await library.continueDownload(old.id, expectedGeneration: old.generation)
+        try await library.cancelDownload(next.id)
+        await #expect(throws: ModelLibraryError.self) { try await library.restartDownload(old.id, expectedGeneration: old.generation) }
+        await #expect(throws: ModelLibraryError.self) { try await library.deleteDownload(old.id, expectedGeneration: old.generation, cleanupPartial: true) }
+        #expect(await library.snapshot().downloads.count == 2)
+        #expect(await library.snapshot().resources[0].control.fileState == .partial)
+        try await library.deleteDownload(old.id, expectedGeneration: old.generation)
+        #expect(await library.snapshot().downloads.map(\.id) == [next.id])
+        #expect(await library.snapshot().resources[0].control.fileState == .partial)
+        try await library.deleteDownload(next.id, expectedGeneration: next.generation, cleanupPartial: true)
+        #expect(await library.snapshot().downloads.isEmpty)
+        #expect(await library.snapshot().resources[0].control.fileState == .deleted)
+        #expect(await transfer.requests == 0)
+        try await library.shutdown()
+    }
+
+    @Test func managerCompletedFileSurvivesStaleCleanupAndRecordDeletion() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let library = try await self.library(f, transport: FixtureTransfer(f.contents))
+        try await library.configureRoot(at: f.destination)
+        let requested = try await library.enqueueDownloads([f.entry.id])[0]
+        let done = try await wait(library) { $0.downloads.first?.state == .completed }
+        let completed = try #require(done.downloads.first), resource = try #require(done.resources.first)
+        await #expect(throws: ModelLibraryError.self) { try await library.deleteDownload(requested.id, expectedGeneration: requested.generation, cleanupPartial: true) }
+        await #expect(throws: ModelLibraryError.self) { try await library.deleteDownload(completed.id, expectedGeneration: completed.generation, cleanupPartial: true) }
+        try await library.deleteDownload(completed.id, expectedGeneration: completed.generation)
+        #expect(await library.snapshot().downloads.isEmpty)
+        #expect(await library.snapshot().resources[0].control.fileState == .verified)
+        #expect(try ModelDirectory(try #require(resource.record.directory)).verify(f.entry.files).count == f.entry.files.count)
+        try await library.shutdown()
+    }
+
+    @Test func managerEnqueueAndSingleResumeFailuresDoNotLeakUncommittedState() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let fault = FixtureFault(), library = try await self.library(f, transport: FixtureTransfer(f.contents), fault: fault)
+        try await library.configureRoot(at: f.destination); try await library.pauseQueue()
+        let task = try await library.enqueueDownloads([f.entry.id], postAction: .register, startIfIdle: false)[0]
+        try await library.cancelDownload(task.id)
+        let before = await library.snapshot()
+        fault.arm("state.beforeWrite")
+        await #expect(throws: (any Error).self) { try await library.continueDownload(task.id, expectedGeneration: task.generation) }
+        #expect(await library.snapshot().downloads == before.downloads)
+        #expect(await library.snapshot().queueState == .paused)
+        fault.clear()
+        let next = try await library.continueDownload(task.id, expectedGeneration: task.generation)
+        #expect(next.postAction == .register && next.resourceID == task.resourceID)
+        try await library.shutdown()
+    }
+
+    @Test func managerRegistrationRetryClearsSecondaryFailureWithoutDownload() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let fault = FixtureFault(), transfer = FixtureTransfer(f.contents, gated: true)
+        let library = try await self.library(f, transport: transfer, fault: fault)
+        try await library.configureRoot(at: f.destination)
+        _ = try await library.enqueueDownloads([f.entry.id], postAction: .register)
+        _ = try await wait(library) { $0.downloads.first?.attempts == 1 }
+        fault.arm("registration.beforeWrite"); await transfer.openGate()
+        let failed = try await wait(library) { $0.downloads.first?.postActionError != nil }
+        let task = try #require(failed.downloads.first), count = await transfer.requests
+        fault.arm("registration.beforeWrite")
+        await #expect(throws: (any Error).self) { try await library.retryDownloadRegistration(task.id, expectedGeneration: task.generation) }
+        #expect(await library.snapshot().downloads[0].postActionError != nil)
+        #expect(await library.snapshot().resources[0].record.registrationState != .registered)
+        fault.clear()
+        try await library.retryDownloadRegistration(task.id, expectedGeneration: task.generation)
+        #expect(await library.snapshot().downloads[0].postActionError == nil)
+        #expect(await library.snapshot().resources[0].record.registrationState == .registered)
+        #expect(await transfer.requests == count)
+        try await library.shutdown()
+    }
+}
+
+extension DownloadManagementTests {
+    @Test func managerSingleResumeCannotClearGlobalSavingErrorGate() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let transfer = FixtureTransfer(f.contents, gated: true), fault = FixtureFault()
+        let library = try await self.library(f, transport: transfer, catalog: [entry(f, id: "a"), entry(f, id: "b"), entry(f, id: "c")], fault: fault)
+        try await library.configureRoot(at: f.destination)
+        let tasks = try await library.enqueueDownloads(["a", "b", "c"])
+        _ = try await wait(library) { $0.downloads[0].attempts == 1 }
+        try await library.pauseDownload(tasks[2].id)
+        fault.arm("state.beforeWrite")
+        await #expect(throws: (any Error).self) { try await library.moveWaitingDownload(tasks[1].id, before: nil) }
+        fault.clear()
+        _ = try await library.continueDownload(tasks[2].id, expectedGeneration: tasks[2].generation)
+        #expect(await library.snapshot().queueError != nil)
+        await transfer.openGate()
+        _ = try await wait(library) { $0.downloads.first { $0.id == tasks[0].id }?.state == .completed }
+        #expect(await transfer.requestedRepositories.allSatisfy { $0 == "/fixture/a" })
+        #expect(await library.snapshot().downloads.filter { $0.id != tasks[0].id }.allSatisfy { $0.attempts == 0 })
+        try await library.resumeQueue(includePaused: true)
+        _ = try await wait(library) { $0.downloads.allSatisfy { $0.state == .completed } }
+        try await library.shutdown()
+    }
+
+    @Test(arguments: ["deleteIntent.afterRename", "deleteResult.beforeWrite", "state.beforeWrite"])
+    func managerPartialDeleteCanRecoverWithoutTouchingCompleteFiles(point: String) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let fault = FixtureFault(), library = try await self.library(f, transport: FixtureTransfer(f.contents), fault: fault)
+        try await library.configureRoot(at: f.destination); try await library.pauseQueue()
+        let task = try await library.enqueueDownloads([f.entry.id], startIfIdle: false)[0]
+        try await library.cancelDownload(task.id)
+        fault.arm(point)
+        await #expect(throws: (any Error).self) { try await library.deleteDownload(task.id, expectedGeneration: task.generation, cleanupPartial: true) }
+        #expect(await library.snapshot().downloads.contains { $0.id == task.id })
+        fault.clear()
+        try await library.deleteDownload(task.id, expectedGeneration: task.generation, cleanupPartial: true)
+        #expect(await library.snapshot().downloads.isEmpty)
+        #expect(await library.snapshot().resources[0].control.fileState == .deleted)
+        try await library.shutdown()
+    }
+
+    @Test func managerPausedRequestKeepsPolicyAfterColdOpen() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let transfer = FixtureTransfer(f.contents)
+        var library: ModelLibrary? = try await self.library(f, transport: transfer)
+        try await library!.configureRoot(at: f.destination); try await library!.pauseQueue()
+        let task = try await library!.enqueueDownloads([f.entry.id], postAction: .register, startIfIdle: false)[0]
+        try await library!.cancelDownload(task.id)
+        let next = try await library!.continueDownload(task.id, expectedGeneration: task.generation)
+        try await library!.shutdown(); library = nil
+        let reopened = try await self.library(f, transport: transfer)
+        let snapshot = await reopened.snapshot()
+        #expect(snapshot.queueState != .running && snapshot.downloads.last?.id == next.id)
+        #expect(snapshot.downloads.last?.resourceID == next.resourceID && snapshot.downloads.last?.postAction == .register)
+        #expect(await transfer.requests == 0)
+        try await reopened.resumeQueue(includePaused: true)
+        let complete = try await wait(reopened) { $0.downloads.last?.state == .completed }
+        #expect(complete.resources[0].record.registrationState == .registered)
+        try await reopened.shutdown()
+    }
+}

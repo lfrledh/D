@@ -484,3 +484,66 @@ private actor PreparationNoInference: InferenceEngine {
         submissions += 1; throw WorkflowIssue("Fixture must not infer")
     }
 }
+
+extension ModelLibraryPresentationTests {
+    @Test func explicitManagerDestinationsDoNotInheritLastPageOrSelectionTarget() async throws {
+        let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+        let root = URL(fileURLWithPath: base).appendingPathComponent("ManagerRoutes-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = try await ModelLibrary(stateDirectory: root)
+        let model = ModelLibraryModel(library: library)
+        var selected = false
+        model.presentSelection { _ in selected = true }
+        model.workspace = "downloads"; model.presentManagement()
+        #expect(model.workspace == "resources" && model.selectionAction == nil && !selected)
+        model.presentDownloads()
+        #expect(model.workspace == "downloads" && model.selectionAction == nil)
+        model.presentSelection { _ in selected = true }
+        #expect(model.workspace == "resources" && model.selectionAction != nil && !selected)
+        model.presentDownloads()
+        #expect(model.selectionAction == nil && !selected)
+        try await library.shutdown()
+    }
+}
+
+extension ModelLibraryPresentationTests {
+    @Test func downloadManagerButtonsPreserveQueueScopeAndDrainPresentation() async throws {
+        let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+        let root = URL(fileURLWithPath: base).appendingPathComponent("ManagerCommands-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bytes = Data(repeating: 0x41, count: 4096), transfer = PresentationTransfer()
+        let entry = ModelCatalogEntry(id: "manager-command", title: "Manager command fixture", repository: "fixture/ui", revision: String(repeating: "a", count: 40),
+            files: [.init(path: "payload.bin", size: UInt64(bytes.count), sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())])
+        let library = try await ModelLibrary(stateDirectory: root.appendingPathComponent("state"), catalog: [entry], transport: transfer)
+        try await library.configureRoot(at: root)
+        let model = ModelLibraryModel(library: library)
+        await model.refresh(); await model.pauseQueue(); await model.enqueue([entry.id], register: true)
+        let queued = try #require(model.snapshot?.downloads.first)
+        #expect(!model.queueIsRunning)
+        #expect(await transfer.count == 0)
+        await model.cancelTask(queued.id, keepPartial: true)
+        let stopped = try #require(model.snapshot?.downloads.first)
+        model.errorMessage = "Previous command failed"
+        await model.continueTask(stopped)
+        #expect(model.errorMessage == nil && !model.queueIsRunning)
+        let resumed = try #require(model.snapshot?.downloads.last)
+        #expect(resumed.id != stopped.id && resumed.postAction == .register)
+        await model.resumeQueue()
+        for _ in 0..<500 { if await transfer.started { break }; await Task.yield() }
+        await model.refresh()
+        let active = try #require(model.snapshot?.downloads.last)
+        let pause = Task { await model.pauseTask(active.id) }
+        for _ in 0..<500 { if model.pendingActions[active.resourceID.modelID] != nil { break }; await Task.yield() }
+        if case .pausing? = model.pendingActions[active.resourceID.modelID] { } else { Issue.record("Pause must remain pending until the transfer drains") }
+        await transfer.open(); await pause.value
+        #expect(model.pendingActions[active.resourceID.modelID] == nil)
+        #expect(model.snapshot?.downloads.last?.state == .paused)
+        await model.continueTask(try #require(model.snapshot?.downloads.last))
+        for _ in 0..<500 { await model.refresh(); if model.snapshot?.downloads.last?.state == .completed { break }; try await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.snapshot?.downloads.last?.state == .completed)
+        #expect(model.snapshot?.resources.first?.record.registrationState == .registered)
+        try await library.shutdown()
+    }
+}

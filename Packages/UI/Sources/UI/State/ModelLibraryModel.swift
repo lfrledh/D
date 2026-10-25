@@ -44,6 +44,7 @@ public final class ModelLibraryModel {
     public private(set) var isChoosingLocation = false
     public private(set) var globalOperation: GlobalOperation?
     public private(set) var pendingActions: [ModelID: PendingAction] = [:]
+    public private(set) var queueCommandPending = false
     public private(set) var pendingCatalogIDs: Set<String> = []
 
     /// Only explicit node-button requests live here. Never inferred from a draft
@@ -82,11 +83,12 @@ public final class ModelLibraryModel {
     }
 
     public enum PendingAction: Sendable {
-        case pausing, resuming, retrying, restarting, relinking, removing
+        case pausing, stopping, resuming, retrying, restarting, relinking, removing
 
         public var title: String {
             switch self {
             case .pausing: "正在暂停…"
+            case .stopping: "正在停止…"
             case .resuming: "正在恢复下载…"
             case .retrying: "正在重试…"
             case .restarting: "正在重新下载…"
@@ -98,6 +100,7 @@ public final class ModelLibraryModel {
 
     public init(library: ModelLibrary, language: UILanguageStore? = nil) { self.library = library; self.language = language }
 
+    public var queueIsRunning: Bool { snapshot?.queueState == .running && snapshot?.queueError == nil }
     public var records: [ModelRecord] { snapshot?.records ?? [] }
     public var catalog: [ModelCatalogEntry] { snapshot?.catalog ?? [] }
     public var rootURL: URL? { snapshot?.rootURL }
@@ -367,7 +370,7 @@ public final class ModelLibraryModel {
         alert.addButton(withTitle: managementText("restartButton", "重新下载"))
         alert.addButton(withTitle: managementText("keepProgress", "保留当前进度"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        await perform(.restarting, id: id) { try await self.library.restart(id) }
+        await perform(.restarting, id: id) { try await self.library.restart(id, resumeQueue: false) }
     }
 
     public func relink(_ id: ModelID) async {
@@ -440,6 +443,7 @@ public final class ModelLibraryModel {
     private func perform(_ action: PendingAction, id: ModelID,
                          operation: () async throws -> Void) async {
         guard !isChoosingLocation, pendingActions[id] == nil, globalOperation != .choosingRoot else { return }
+        errorMessage = nil
         pendingActions[id] = action
         defer { pendingActions.removeValue(forKey: id) }
         do { try await operation() }
@@ -502,7 +506,13 @@ extension ModelLibraryModel {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
     public func enqueue(_ entries: [String], register: Bool) async {
-        await command { _ = try await self.library.enqueueDownloads(entries, postAction: register ? .register : .filesOnly) }
+        guard pendingCatalogIDs.isEmpty else { return }
+        pendingCatalogIDs.formUnion(entries)
+        defer { pendingCatalogIDs.subtract(entries) }
+        await command {
+            let tasks = try await self.library.enqueueDownloads(entries, postAction: register ? .register : .filesOnly, startIfIdle: false)
+            self.selectedTask = tasks.first?.id
+        }
     }
 
     static func nodeDownloadEntry(operationID: String, identity: String,
@@ -633,19 +643,61 @@ extension ModelLibraryModel {
         await command { try await self.library.deleteOwnedCopy(resource.id); self.preparationNotice = self.managementText("deletedReceipt", "已删除此副本。登记保留但不可用；其他副本及作品保留。") }
     }
     public func continueResource(_ resource: ModelResource) async {
-        await command { _ = try await self.library.continuePartial(resource.id) }
+        if let task = snapshot?.downloads.last(where: { $0.resourceID == resource.id }) { await continueTask(task) }
     }
-    public func pauseTask(_ id: UUID) async { await command { try await self.library.pauseDownload(id) } }
+    public func continueTask(_ task: ModelDownloadTask) async {
+        await perform(task.state == .failed ? .retrying : .resuming, id: task.resourceID.modelID) {
+            let next = try await self.library.continueDownload(task.id, expectedGeneration: task.generation)
+            self.selectedTask = next.id
+        }
+    }
+    public func retryRegistration(_ task: ModelDownloadTask) async {
+        await perform(.retrying, id: task.resourceID.modelID) { try await self.library.retryDownloadRegistration(task.id, expectedGeneration: task.generation) }
+    }
+    public func restartTask(_ task: ModelDownloadTask) async {
+        guard pendingActions[task.resourceID.modelID] == nil else { return }
+        let alert = NSAlert()
+        alert.messageText = managementText("restartTitle")
+        alert.informativeText = managementText("restartMessage") + Self.formatBytes(records.first(where: { $0.id == task.resourceID.modelID })?.downloadedBytes ?? 0)
+        alert.addButton(withTitle: managementText("restartButton")); alert.addButton(withTitle: managementText("keepProgress"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        await perform(.restarting, id: task.resourceID.modelID) { try await self.library.restartDownload(task.id, expectedGeneration: task.generation) }
+    }
+    public func pauseTask(_ id: UUID) async {
+        guard let task = snapshot?.downloads.first(where: { $0.id == id }) else { return }
+        await perform(.pausing, id: task.resourceID.modelID) { try await self.library.pauseDownload(id) }
+    }
+    public func deleteTask(_ task: ModelDownloadTask, cleanupPartial: Bool) async {
+        revokeNodePreparation(task.resourceID)
+        await perform(.removing, id: task.resourceID.modelID) { try await self.library.deleteDownload(task.id, expectedGeneration: task.generation, cleanupPartial: cleanupPartial) }
+    }
     public func cancelTask(_ id: UUID, keepPartial: Bool) async {
         if let resource = snapshot?.downloads.first(where: { $0.id == id })?.resourceID { revokeNodePreparation(resource) }
-        await command { try await self.library.cancelDownload(id, keepPartial: keepPartial) } }
+        guard let task = snapshot?.downloads.first(where: { $0.id == id }) else { return }
+        await perform(.stopping, id: task.resourceID.modelID) { try await self.library.cancelDownload(id, keepPartial: keepPartial) }
+    }
     public func clearTask(_ id: UUID) async {
         if let task = snapshot?.downloads.first(where: { $0.id == id }), task.state == .failed || task.state == .cancelled {
             revokeNodePreparation(task.resourceID)
         }
         await command { try await self.library.clearDownloadHistory([id]); self.preparationNotice = self.managementText("clearedReceipt", "已清除一条下载历史。文件、登记和资源来源信息保留。") } }
-    public func pauseQueue() async { await command { try await self.library.pauseQueue() } }
-    public func resumeQueue() async { await command { try await self.library.resumeQueue() } }
+    public func pauseQueue() async {
+        guard !queueCommandPending else { return }; queueCommandPending = true
+        defer { queueCommandPending = false }
+        await command { try await self.library.pauseQueue() }
+    }
+    public func resumeQueue() async {
+        guard !queueCommandPending else { return }; queueCommandPending = true
+        defer { queueCommandPending = false }
+        await command { try await self.library.resumeQueue(includePaused: true) }
+    }
+    static func additionalDownloadBytes(_ entry: ModelCatalogEntry, resource: ModelResource?) -> UInt64? {
+        guard let resource else { return entry.totalBytes }
+        if resource.control.fileState == .verified { return 0 }
+        let saved = resource.record.downloadedBytes
+        guard saved < entry.totalBytes, resource.record.state != .failed || saved == 0 else { return nil }
+        return entry.totalBytes - saved
+    }
     public func moveNext(_ id: UUID) async {
         let next = snapshot?.downloads.first { $0.id != id && $0.state == .queued && $0.attempts == 0 }?.id
         await command { try await self.library.moveWaitingDownload(id, before: next) }

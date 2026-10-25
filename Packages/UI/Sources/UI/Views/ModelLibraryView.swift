@@ -15,10 +15,13 @@ public struct ModelLibraryView: View {
     @State private var importCatalogID = ""
     @State private var importKind: WorkflowModelKind = .text
     @State private var importStorage: ModelStorageKind = .external
-    @State private var settingsVisible = false
+    @State private var acquisitionSearch = ""
+    @State private var deletingTask: ModelDownloadTask?
+    @State private var cleanupPartial = false
     @State private var downloadSelection: Set<String> = []
     @State private var registerAfterDownload = false
     @State private var narrowDetail = false
+    @State private var preparableResource: ModelID?
     @State private var confirmation: Confirmation?
     private enum Confirmation: Identifiable {
         case unregister(ModelResource), delete(ModelResource), clear(ModelDownloadTask), discard(ModelDownloadTask)
@@ -65,18 +68,11 @@ public struct ModelLibraryView: View {
     public var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(text("title", "模型与下载")).font(.title2.bold())
+                Text(text(model.workspace == "downloads" ? "downloadTitle" : "modelTitle", "模型管理")).font(.title2.bold())
                 Spacer()
-                Button(text("acquire", "获取模型…")) { acquireVisible = true }.accessibilityIdentifier("model-manager-acquire").workbenchHelp("MODELS-DOWNLOAD")
-                Button(text("import", "登记已有…")) { importVisible = true }.accessibilityIdentifier("model-manager-import").workbenchHelp("MODELS-REGISTER")
-                Button(text("settings", "存储与访问…")) { settingsVisible = true }
                 WorkbenchFeatureGuideButton(store: featureHelp)
                 Button(text("close", "完成")) { dismiss() }.keyboardShortcut(.cancelAction)
             }.padding(20)
-            WorkbenchGlassSegments(title: text("workspace", "工作面"),
-                selection: Binding(get: { model.workspace }, set: { model.workspace = $0; narrowDetail = false }),
-                choices: [("resources", text("resources", "模型与文件")), ("downloads", text("downloads", "下载任务"))], owner: AnyHashable(ObjectIdentifier(model))).padding(.horizontal, 20).padding(.bottom, 14)
-                .accessibilityIdentifier("model-manager-workspace")
             if let error = model.errorMessage ?? model.snapshot?.queueError {
                 HStack { Image(systemName: "exclamationmark.triangle"); Text(error).textSelection(.enabled); Spacer(); Button(text("dismiss", "收起")) { model.clearError() } }
                     .font(.callout).padding(12).background(.orange.opacity(0.1))
@@ -109,10 +105,12 @@ public struct ModelLibraryView: View {
             }
             Divider()
             HStack {
-                Text(text("background", "关闭面板后任务继续；退出后等待下次明确恢复。"))
-                Spacer()
-                Text(text("logical", "大小为逻辑文件字节，不保证等量释放空间。"))
-            }.font(.caption).foregroundStyle(.secondary).padding(12)
+                if model.workspace == "downloads" {
+                    Text(text("queue." + (model.snapshot?.queueState.rawValue ?? "waitingForResume"), "等待队列开始"))
+                    Spacer()
+                    Text(text("background", "关闭面板后，下载继续。"))
+                } else { Text(text("logical", "大小为逻辑文件字节，不保证等量释放空间。")); Spacer() }
+            }.font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 16)
         }
         .presentationSizing(.fitted)
         .frame(minWidth: 760, idealWidth: 1080, maxWidth: .infinity,
@@ -125,35 +123,42 @@ public struct ModelLibraryView: View {
         .onDisappear { model.clearSelectionContext() }
         .sheet(isPresented: $acquireVisible) { acquisition }
         .sheet(isPresented: $importVisible) { localImport }
-        .sheet(isPresented: $settingsVisible) { settings }
+        .sheet(item: $deletingTask) { task in deleteConfirmation(task) }
         .alert(text("confirm", "确认操作"), isPresented: Binding(get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }), presenting: confirmation) { action in
             Button(confirmationTitle(action), role: .destructive) { Task { await confirm(action) } }
             Button(text("keep", "保留"), role: .cancel) { }
         } message: { action in Text(confirmationMessage(action)) }
     }
     private var controls: some View {
-        HStack {
+        HStack(spacing: 8) {
             if model.workspace == "resources" {
-                TextField(text("searchResources", "搜索名称、版本或位置"), text: $model.resourceSearch)
-                    .textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("model-manager-resource-search")
+                Button(text("import", "登记模型…")) { importVisible = true }.accessibilityIdentifier("model-manager-import")
+            }
+            Button(text("acquire", "新建下载…")) { downloadSelection = []; registerAfterDownload = false; acquisitionSearch = ""; acquireVisible = true }
+                .accessibilityIdentifier("model-manager-acquire")
+            if model.workspace == "downloads" {
+                Button(text(model.queueIsRunning ? "pauseQueue" : "resumeQueue", "开始全部")) {
+                    Task { if model.queueIsRunning { await model.pauseQueue() } else { await model.resumeQueue() } }
+                }.disabled(model.rootURL == nil || model.queueCommandPending)
+            }
+            Spacer(minLength: 8)
+            if model.workspace == "resources" {
+                TextField(text("searchResources", "搜索模型"), text: $model.resourceSearch).textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("model-manager-resource-search")
                 WorkbenchPicker(text("filter", "筛选"), selection: $model.resourceFilter) {
-                    WorkbenchChoice(text("all", "全部"), value:"all"); WorkbenchChoice(text("registered", "已登记"), value:"registered"); WorkbenchChoice(text("unregistered", "未登记／待处理"), value:"unregistered")
-                    WorkbenchChoice(text("attention", "需要处理"), value:"attention"); WorkbenchChoice(text("unavailable", "暂不可访问"), value:"unavailable")
-                }.frame(width: 190)
+                    WorkbenchChoice(text("all", "全部"), value: "all"); WorkbenchChoice(text("registered", "已登记"), value: "registered")
+                    WorkbenchChoice(text("unregistered", "未登记"), value: "unregistered"); WorkbenchChoice(text("attention", "需要处理"), value: "attention")
+                    WorkbenchChoice(text("unavailable", "暂不可访问"), value: "unavailable")
+                }.frame(width: 150)
             } else {
-                TextField(text("searchDownloads", "搜索下载任务"), text: $model.taskSearch).textFieldStyle(WorkbenchGlassTextFieldStyle())
+                TextField(text("searchDownloads", "搜索下载任务"), text: $model.taskSearch).textFieldStyle(.roundedBorder)
                     .accessibilityIdentifier("model-manager-task-search")
                 WorkbenchPicker(text("filter", "筛选"), selection: $model.taskFilter) {
-                    WorkbenchChoice(text("all", "全部"), value:"all"); WorkbenchChoice(text("pending", "待处理"), value:"active"); WorkbenchChoice(text("history", "历史"), value:"history")
-                }.frame(width: 150)
-                Text(text("queue." + (model.snapshot?.queueState.rawValue ?? "waitingForResume"), "等待你恢复")).font(.caption)
-                if model.snapshot?.queueState == .running {
-                    Button(text("pauseQueue", "暂停队列")) { Task { await model.pauseQueue() } }
-                } else {
-                    Button(text("resumeQueue", "继续队列") + " (\(model.snapshot?.downloads.filter { $0.state == .queued || $0.state == .waitingRetry }.count ?? 0))") { Task { await model.resumeQueue() } }
-                }
+                    WorkbenchChoice(text("all", "全部"), value: "all"); WorkbenchChoice(text("pending", "进行中"), value: "active")
+                    WorkbenchChoice(text("history", "已结束"), value: "history")
+                }.frame(width: 130)
             }
-        }.padding(.horizontal, 20).padding(.vertical, 12)
+        }.buttonStyle(.bordered).controlSize(.regular).frame(minHeight: 32).padding(.horizontal, 20).padding(.bottom, 12)
     }
     @ViewBuilder private var inventoryList: some View {
         if model.workspace == "resources" {
@@ -161,7 +166,7 @@ public struct ModelLibraryView: View {
                 ForEach(resources) { resource in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(resourceTitle(resource)).font(.headline)
-                        Text(model.presentationEntry(for: resource.record).map { catalogText($0, field: "spec") } ?? text("unrecordedVariant", "此版本规格未记录")).font(.caption)
+                        ModelSpecificationFields(descriptor: descriptor(model.presentationEntry(for: resource.record)), font: .caption)
                         HStack {
                             Text(fileState(resource)); Text("·"); Text(registration(resource.record.registrationState)); Text("·"); Text(preparation(resource)); Spacer()
                             Text(ModelLibraryModel.formatBytes(resource.record.totalBytes))
@@ -170,11 +175,12 @@ public struct ModelLibraryView: View {
                     }.padding(.vertical, 7).tag(resource.id).contentShape(Rectangle())
                         .onTapGesture { model.selectedResource = resource.id; narrowDetail = true }
                 }
-                if !model.readOnlyConfigurations.isEmpty {
+                if model.resourceFilter == "all", !model.readOnlyConfigurations.isEmpty {
                     Section(text("configured", "已有配置 · 只读")) {
                         ForEach(model.readOnlyConfigurations.filter { model.resourceSearch.isEmpty || $0.title.localizedStandardContains(model.resourceSearch) || $0.identity.localizedStandardContains(model.resourceSearch) }) { item in
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(item.title).font(.headline)
+                                ModelSpecificationFields(descriptor: ModelNodeCatalog.entries.first { $0.id == item.identity }, font: .caption)
                                 WorkflowTechnicalDetails(value: item.identity)
                                 Text(item.location?.path ?? text("locationUnread", "位置尚未读取")).font(.caption).textSelection(.enabled)
                                 Text(text("readOnlyHelp", "保留既有能力；此配置不由下载库直接管理。无文件扫描或虚构下载历史。")).font(.caption).foregroundStyle(.secondary)
@@ -194,16 +200,22 @@ public struct ModelLibraryView: View {
                   if !tasks.isEmpty {
                     Section(text("group.\(group)", "下载任务") + " (\(tasks.count))") {
                       ForEach(tasks) { task in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(model.catalog.first { $0.id == task.catalogID }?.title ?? task.catalogID).font(.headline)
-                        Text(model.snapshot?.resources.first(where: { $0.id == task.resourceID }).map(shortLocation) ?? text("unknownLocation", "位置尚未确认")).font(.caption).lineLimit(1)
-                        HStack { Text(downloadState(task.state)); Spacer(); Text(task.postAction == .register ? text("downloadRegister", "下载后登记") : text("filesOnly", "仅下载文件")) }.font(.caption)
-                        if let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) {
-                            ProgressView(value: Double(resource.record.downloadedBytes), total: Double(max(1, resource.record.totalBytes)))
-                            Text(ModelLibraryModel.formatBytes(resource.record.downloadedBytes) + " / " + ModelLibraryModel.formatBytes(resource.record.totalBytes)).font(.caption.monospacedDigit())
-                        }
-                    }.padding(.vertical, 7).tag(task.id).contentShape(Rectangle())
-                        .onTapGesture { model.selectedTask = task.id; narrowDetail = true }
+                    HStack(alignment: .center, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            let entry = model.catalog.first { $0.id == task.catalogID }
+                            Text(entry?.title ?? task.catalogID).font(.headline).lineLimit(1).help(entry?.title ?? task.catalogID)
+                            ModelSpecificationFields(descriptor: descriptor(entry), font: .caption)
+                            if let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) {
+                                ProgressView(value: Double(resource.record.downloadedBytes), total: Double(max(1, resource.record.totalBytes)))
+                                Text(ModelLibraryModel.formatBytes(resource.record.downloadedBytes) + " / " + ModelLibraryModel.formatBytes(resource.record.totalBytes)).font(.caption.monospacedDigit())
+                            }
+                            Text(taskStatus(task)).font(.caption).foregroundStyle(.secondary)
+                        }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                            .onTapGesture { model.selectedTask = task.id; narrowDetail = true }
+                        taskPrimary(task)
+                        taskMenu(task)
+                    }.padding(.vertical, 7).tag(task.id)
+
                       }
                     }
                   }
@@ -230,7 +242,7 @@ public struct ModelLibraryView: View {
             LabeledContent(text("files", "文件"), value: fileState(resource))
             LabeledContent(text("registration", "登记"), value: registration(record.registrationState))
             LabeledContent(text("preparation", "准备"), value: preparation(resource))
-            Text(entry.map { catalogText($0, field: "spec") } ?? "").font(.callout)
+            ModelSpecificationSummary(descriptor: descriptor(entry))
             Text(entry.map { catalogText($0, field: "memory") } ?? "").font(.caption).foregroundStyle(.secondary)
             field("location", "位置", resourceLocation(resource))
             field("ownership", "文件控制", record.storage == .managed ? text("managed", "D 管理的确切副本") : text("external", "外部原件：不提供直接删除"))
@@ -245,18 +257,17 @@ public struct ModelLibraryView: View {
                     Button(text("reverify", "重新校验文件")) { Task { await model.reverify(resource) } }.disabled(record.activeLeaseCount > 0 || model.hasActiveWork || model.globalOperation != nil)
                 }
                 if resource.control.fileState == .deleted {
-                    Button(text("getSame", "获取同版本文件…")) { downloadSelection = [record.catalogID]; acquireVisible = true }
+                    Button(text("getSame", "新建下载…")) { downloadSelection = [record.catalogID]; registerAfterDownload = false; acquisitionSearch = ""; acquireVisible = true }
                 }
                 if record.registrationState != .registered {
                     Button(text("register", "登记此资源")) { Task { await model.registerResource(resource) } }.workbenchHelp("MODELS-REGISTER", unavailableReason: model.globalOperation != nil ? consistencyText(language, "help.reason.modelOperation") : resource.control.fileState != .verified ? consistencyText(language, "help.reason.unverified") : record.state == .preparationRequired ? consistencyText(language, "help.reason.prepare") : nil, target: "resource:\(resource.id):\(record.revision)")
                         .disabled(resource.control.fileState != .verified || record.state == .preparationRequired || model.globalOperation != nil)
                 }
-                if record.state == .preparationRequired {
+                if record.state == .preparationRequired, preparableResource == record.id {
                     Button(text("prepare", "准备独立执行包…")) { Task { await model.prepareResource(record.id) } }.disabled(!model.canChooseRoot)
                 }
-                if resource.control.fileState == .partial || record.state == .failed {
-                    Button(text("continue", "继续保留的下载")) { Task { await model.continueResource(resource) } }.disabled(record.storage != .managed)
-                    Button(text("restart", "重新下载并丢弃现有进度…")) { Task { await model.restart(record.id) } }.disabled(record.storage != .managed)
+                if let task = model.snapshot?.downloads.last(where: { $0.resourceID == resource.id }) {
+                    Button(text("viewDownload", "查看下载任务")) { model.selectedTask = task.id; model.workspace = "downloads"; narrowDetail = true }
                 }
                 if record.storage == .external {
                     if resource.control.role != .execution {
@@ -276,9 +287,6 @@ public struct ModelLibraryView: View {
                     WorkbenchMenuDivider()
                     if record.registrationState == .registered {
                         WorkbenchMenuAction(consistencyText(language, "menu.model.unregister")) { confirmation = .unregister(resource) }.featureHelp("MODELS-UNREGISTER", language: language, unavailableReason: record.activeLeaseCount > 0 ? consistencyText(language, "help.reason.leased") : nil).disabled(record.activeLeaseCount > 0)
-                    }
-                    WorkbenchMenuForEach(model.snapshot?.downloads.filter { $0.resourceID == resource.id && $0.state.isTerminal } ?? []) { task in
-                        WorkbenchMenuAction(consistencyText(language, "menu.model.clearHistory") + " · " + (task.createdAt?.formatted() ?? text("unknown", "未知"))) { confirmation = .clear(task) }.featureHelp("MODELS-HISTORY", language: language)
                     }
                     WorkbenchMenuDivider()
                     if record.storage == .managed, resource.control.fileState != .deleted {
@@ -311,12 +319,17 @@ public struct ModelLibraryView: View {
             ForEach(resource.control.events.reversed()) { event in
                 Text(text("event." + event.action, event.action) + " · " + (event.date?.formatted() ?? text("unknown", "未知"))).font(.caption)
             }
+        }.task(id: "\(record.id):\(record.state):\(resource.control.fileState)") {
+            preparableResource = nil
+            let supported = (try? await model.library.canPrepareVideo(record.id)) == true
+            guard !Task.isCancelled, model.selectedResource == resource.id, model.workspace == "resources" else { return }
+            preparableResource = supported ? record.id : nil
         }
     }
     private func downloadDetail(_ task: ModelDownloadTask) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(model.catalog.first { $0.id == task.catalogID }?.title ?? task.catalogID).font(.title2.bold())
-            Text(downloadState(task.state)).font(.headline)
+            Text(taskStatus(task)).font(.headline)
             if let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) {
                 ProgressView(value: Double(resource.record.downloadedBytes), total: Double(max(1, resource.record.totalBytes)))
                 Text(ModelLibraryModel.formatBytes(resource.record.downloadedBytes) + " / " + ModelLibraryModel.formatBytes(resource.record.totalBytes)).font(.caption.monospacedDigit())
@@ -327,59 +340,59 @@ public struct ModelLibraryView: View {
             if let error = task.error { field("latestError", "最近错误", error) }
             if let error = task.postActionError { field("postError", "文件已完成，后续动作待处理", error) }
             field("location", "来源与目标", taskLocation(task))
-            if task.state == .queued && task.attempts == 0 {
-                HStack {
-                    Button(text("up", "上移")) { Task { await model.move(task.id, by: -1) } }
-                    Button(text("down", "下移")) { Task { await model.move(task.id, by: 1) } }
-                    Button(text("next", "移到下一项")) { Task { await model.moveNext(task.id) } }
-                }
-            }
+            HStack { taskPrimary(task); taskMenu(task) }
             if let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) {
-                Button(text("viewResource", "查看资源与登记")) { model.selectedResource = resource.id; model.workspace = "resources"; narrowDetail = true }
-            }
-            if !task.state.isTerminal {
-                if task.state != .paused { Button(text("pauseTask", "暂停此项")) { Task { await model.pauseTask(task.id) } } }
-                Button(text("cancelKeep", "取消并保留断点")) { Task { await model.cancelTask(task.id, keepPartial: true) } }
-                Button(text("cancelDiscard", "取消并清理本项暂存…"), role: .destructive) { confirmation = .discard(task) }
-            }
-            if task.state == .paused || task.state == .failed || task.state == .cancelled {
-                Button(text("continue", "继续保留的下载")) {
-                    if let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) { Task { await model.continueResource(resource) } }
+                Button(text("viewResource", "查看对应模型")) { model.selectedResource = resource.id; model.workspace = "resources"; narrowDetail = true }
+                if task.state == .completed, task.postActionError != nil, resource.record.registrationState != .registered {
+                    Button(text("retryRegistration", "重试登记")) { Task { await model.retryRegistration(task) } }
+                        .disabled(resource.record.state == .preparationRequired || model.globalOperation != nil)
                 }
             }
-            if task.state.isTerminal { Button(text("clearHistory", "清除此下载记录…")) { confirmation = .clear(task) } }
             WorkflowTechnicalDetails(value: ["Task: " + task.id.uuidString, "Resource: " + task.resourceID.description, "Attempt: " + task.attemptID.uuidString, "Attempts: " + String(task.attempts), "Generation: " + task.generation.uuidString].joined(separator: "\n"))
 
-        }.buttonStyle(WorkbenchGlassButtonStyle())
+        }.buttonStyle(.bordered)
     }
     private var acquisition: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack { Text(text("acquire", "获取模型…")).font(.title2.bold()); Spacer(); Button(text("close", "完成")) { acquireVisible = false } }
-            Text(text("frozenCatalog", "仅显示当前版本已支持的固定配方。模型资格与令牌需自行确认；不会自动选用或推理。")).font(.callout)
-            List(model.catalog) { entry in
+            Text(text("acquire", "新建下载…")).font(.title2.bold())
+            TextField(text("searchCatalog", "搜索支持的模型"), text: $acquisitionSearch).textFieldStyle(.roundedBorder)
+            List(model.catalog.filter { acquisitionSearch.isEmpty || $0.title.localizedStandardContains(acquisitionSearch) }) { entry in
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle(entry.title, isOn: Binding(get: { downloadSelection.contains(entry.id) }, set: { if $0 { downloadSelection.insert(entry.id) } else { downloadSelection.remove(entry.id) } }))
-                    Text(catalogText(entry, field: "spec") + " · " + ModelLibraryModel.formatBytes(entry.totalBytes)).font(.caption)
-                    WorkflowTechnicalDetails(value: entry.id + "\n" + entry.revision)
-                    Text(catalogText(entry, field: "memory")).font(.caption).foregroundStyle(.secondary)
-                    Text(entry.repository).font(.caption)
+                        .disabled(existingResource(entry)?.control.fileState == .verified || existingTask(entry) != nil || retryDeadline(entry) != nil)
+                    ModelSpecificationFields(descriptor: descriptor(entry), font: .caption)
+                    Text(ModelLibraryModel.formatBytes(entry.totalBytes)).font(.caption)
                     Text(acquisitionState(entry)).font(.caption).foregroundStyle(.secondary)
+                    if let resource = existingResource(entry), resource.control.fileState == .verified {
+                        Button(text("viewResource", "查看对应模型")) { model.selectedResource = resource.id; model.workspace = "resources"; narrowDetail = true; acquireVisible = false }
+                    } else if let task = existingTask(entry) {
+                        Button(text("viewDownload", "查看下载任务")) { model.selectedTask = task.id; model.workspace = "downloads"; narrowDetail = true; acquireVisible = false }
+                    }
+                    DisclosureGroup(text("technical", "身份与来源详情")) {
+                        Text(entry.repository).textSelection(.enabled)
+                        WorkflowTechnicalDetails(value: entry.id + "\n" + entry.revision)
+                        Text(catalogText(entry, field: "memory")).font(.caption)
+                    }
                 }.padding(.vertical, 6)
             }
-            Text(model.rootURL?.path ?? text("noRoot", "尚未选择模型库位置")).font(.caption).textSelection(.enabled)
-            Text(text("newTasks", "需新增任务") + ": \(newDownloads.count) · " + text("newBytes", "新增下载字节上限") + ": " + ModelLibraryModel.formatBytes(newDownloads.reduce(0) { $0 + additionalBytes($1) })).font(.callout)
-            Text(text("spaceHelp", "空间在提交及传输时再次核对；下载、校验及准备可能需要额外空间。已有完整包和任务会复用。")).font(.caption)
-            Toggle(text("downloadRegister", "下载后登记"), isOn: $registerAfterDownload)
-            Text(text("downloadDefault", "默认仅下载。需要准备的原始包会保留为待处理，队列继续其他项目。")).font(.caption)
             HStack {
-                if model.rootURL == nil { Button(text("chooseRoot", "选择存储位置…")) { Task { await model.chooseRoot() } } }
+                Text(model.rootURL?.path ?? text("noRoot", "尚未选择模型库位置")).font(.caption).textSelection(.enabled)
                 Spacer()
-                Button(text("enqueue", "确认获取意图") + " (\(newDownloads.count))") {
-                    let ids = model.catalog.filter { downloadSelection.contains($0.id) }.map(\.id)
-                    Task { await model.enqueue(ids, register: registerAfterDownload); if model.errorMessage == nil { acquireVisible = false; model.workspace = "downloads" } }
-                }.disabled(downloadSelection.isEmpty || model.rootURL == nil)
+                Button(text("chooseRoot", "选择文件夹…")) { Task { await model.chooseRoot() } }.disabled(!model.canChooseRoot)
             }
-        }.padding(22).frame(minWidth: 620, idealWidth: 760, minHeight: 500, idealHeight: 620)
+            Toggle(text("downloadRegister", "下载完成后自动登记模型"), isOn: $registerAfterDownload)
+            Text(text("newTasks", "需要下载") + ": \(newDownloads.count) · " + text("newBytes", "预计新增下载量") + ": " + additionalBytesLabel).font(.callout)
+            if !model.queueIsRunning { Text(text("queuePausedHelp", "下载已暂停，开始全部后将继续。")).font(.caption) }
+            if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
+            HStack {
+                Button(text("cancel", "取消")) { acquireVisible = false }
+                Spacer()
+                Button(workflowText(language, "modelManagement." + (model.queueIsRunning ? "enqueue" : "enqueuePaused"), arguments: ["count": String(newDownloads.count)])) {
+                    let ids = newDownloads.map(\.id)
+                    Task { await model.enqueue(ids, register: registerAfterDownload); if model.errorMessage == nil { acquireVisible = false; model.workspace = "downloads"; narrowDetail = false } }
+                }.disabled(newDownloads.isEmpty || model.rootURL == nil || !model.pendingCatalogIDs.isEmpty)
+            }
+        }.buttonStyle(.bordered).padding(20).frame(minWidth: 620, idealWidth: 760, minHeight: 500, idealHeight: 620)
     }
     private var localImport: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -410,20 +423,6 @@ public struct ModelLibraryView: View {
             if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
         }.padding(24).frame(width: 650)
     }
-    private var settings: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text(text("settings", "存储与凭据…")).font(.title2.bold())
-            Text(model.rootURL?.path ?? text("noRoot", "尚未选择模型库位置")).textSelection(.enabled)
-            Button(text("chooseRoot", "选择存储位置…")) { Task { await model.chooseRoot() } }.disabled(!model.canChooseRoot)
-            Text(text("rootHelp", "重新定位仅支持原模型库在同卷移动；不扫描或迁移其他目录。")).font(.caption)
-            Divider()
-            Text(model.downloadCredentialConnected ? text("credentialConnected", "已连接令牌文件") : text("credentialMissing", "未连接令牌文件"))
-            Button(text("credentialChoose", "连接令牌文件…")) { Task { await model.chooseDownloadCredential() } }.disabled(!model.canChangeDownloadCredential)
-            if model.downloadCredentialConnected { Button(text("credentialRemove", "断开令牌文件")) { Task { await model.removeDownloadCredential() } }.disabled(!model.canChangeDownloadCredential) }
-            Text(text("credentialHelp", "只保存文件授权。不会展示或导出令牌，也不新增账号存储。")).font(.caption)
-            HStack { Spacer(); Button(text("close", "完成")) { settingsVisible = false } }
-        }.padding(24).frame(width: 600)
-    }
     private func field(_ key: String, _ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) { Text(text(key, title)).font(.caption).foregroundStyle(.secondary); Text(value).font(.callout).textSelection(.enabled) }
     }
@@ -445,6 +444,81 @@ public struct ModelLibraryView: View {
         let location = model.snapshot?.resources.first { $0.id == task.resourceID }.map(resourceLocation) ?? text("unknownLocation", "位置尚未确认")
         return source + " · " + location
     }
+    private func descriptor(_ entry: ModelCatalogEntry?) -> ModelNodeDescriptor? {
+        guard let entry else { return nil }
+        return ModelNodeCatalog.entries.first { $0.revision == entry.revision && ($0.id == entry.workflowIdentity || $0.modelIdentity == entry.repository) }
+    }
+    private func taskStatus(_ task: ModelDownloadTask) -> String {
+        if let pending = model.pendingActions[task.resourceID.modelID] { return text("pending." + String(describing: pending), pending.title) }
+        if task.state == .queued, !model.queueIsRunning { return text("waitingQueue", "等待队列开始") }
+        if task.state == .completed, task.postActionError != nil, model.snapshot?.resources.first(where: { $0.id == task.resourceID })?.record.registrationState != .registered { return text("registrationIncomplete", "下载完成 · 登记未完成") }
+        return downloadState(task.state)
+    }
+    @ViewBuilder private func taskPrimary(_ task: ModelDownloadTask) -> some View {
+        if model.pendingActions[task.resourceID.modelID] != nil { ProgressView().controlSize(.small) }
+        else {
+            switch task.state {
+            case .downloading, .verifying, .publishing:
+                Button(text("pauseTask", "暂停")) { Task { await model.pauseTask(task.id) } }.help(text("pauseHelp", "暂时暂停，可继续下载。"))
+            case .paused, .cancelled, .failed:
+                Button(text(!model.queueIsRunning ? "queueOne" : task.state == .paused ? "continue" : task.state == .failed ? "retry" : "start", "继续")) { Task { await model.continueTask(task) } }
+                    .disabled((task.earliestRetry ?? .distantPast) > Date())
+            case .completed:
+                let resource = model.snapshot?.resources.first { $0.id == task.resourceID }
+                Button(text("showFile", "查看文件")) { if let resource { model.reveal(resource) } }
+                    .disabled(resource?.record.directory == nil || resource?.record.availability != .available)
+            case .queued, .waitingRetry: EmptyView()
+            }
+        }
+    }
+    private func taskMenu(_ task: ModelDownloadTask) -> some View {
+        WorkbenchMenu(consistencyText(language, "copy.more"), systemImage: "ellipsis") {
+            if !task.state.isTerminal {
+                WorkbenchMenuAction(text("stop", "停止")) { Task { await model.cancelTask(task.id, keepPartial: true) } }.help(text("stopHelp", "结束本次下载，保留已下载部分。"))
+            }
+            if task.state == .queued && task.attempts == 0 {
+                WorkbenchMenuAction(text("up", "上移")) { Task { await model.move(task.id, by: -1) } }
+                WorkbenchMenuAction(text("down", "下移")) { Task { await model.move(task.id, by: 1) } }
+            }
+            if task.state == .failed {
+                WorkbenchMenuAction(text("viewError", "查看错误")) { model.selectedTask = task.id; narrowDetail = true }
+            }
+            if task.state == .failed || task.state == .cancelled {
+                WorkbenchMenuAction(text("restart", "重新下载…")) { Task { await model.restartTask(task) } }
+            }
+            if task.state == .completed, let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) {
+                WorkbenchMenuAction(text("viewResource", "查看对应模型")) { model.selectedResource = resource.id; model.workspace = "resources"; narrowDetail = true }
+            }
+            WorkbenchMenuDivider()
+            WorkbenchMenuAction(text(task.state == .completed ? "deleteRecord" : "deleteTask", "删除…"), role: .destructive) {
+                cleanupPartial = false; deletingTask = task
+            }
+        }.disabled(model.pendingActions[task.resourceID.modelID] != nil)
+            .environment(\.workbenchMenuContext, "download:\(task.id):\(task.generation):\(task.state)")
+            .buttonStyle(.plain)
+    }
+    private func canCleanPartial(_ task: ModelDownloadTask) -> Bool {
+        guard task.state != .completed, let resource = model.snapshot?.resources.first(where: { $0.id == task.resourceID }) else { return false }
+        return resource.record.storage == .managed && ([.partial, .invalid].contains(resource.control.fileState) || resource.control.fileState == .deleting && ![.installed, .preparationRequired].contains(resource.record.state)) && resource.record.activeLeaseCount == 0
+    }
+    private func deleteConfirmation(_ task: ModelDownloadTask) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(text("deleteTaskTitle", "删除这条下载记录？")).font(.title2.bold())
+            Text(model.catalog.first(where: { $0.id == task.catalogID })?.title ?? task.catalogID)
+            Text(text("deleteTaskHelp", "不会删除已完成的模型文件。"))
+            if !task.state.isTerminal { Text(text("deleteActiveHelp", "此任务会先停止，正在写入的内容处理结束后再删除记录。")) }
+            if canCleanPartial(task) { Toggle(text("cleanupPartial", "同时删除这项任务未完成的下载文件"), isOn: $cleanupPartial) }
+            if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
+            HStack {
+                Button(text("cancel", "取消")) { deletingTask = nil }
+                Spacer()
+                Button(text("deleteConfirm", "删除"), role: .destructive) {
+                    let clean = cleanupPartial
+                    Task { await model.deleteTask(task, cleanupPartial: clean); if model.errorMessage == nil { deletingTask = nil } }
+                }.disabled(model.pendingActions[task.resourceID.modelID] != nil)
+            }
+        }.padding(24).frame(width: 520).buttonStyle(.bordered)
+    }
     private func taskGroup(_ task: ModelDownloadTask) -> Int {
         switch task.state {
         case .downloading, .verifying, .publishing: 0
@@ -461,13 +535,19 @@ public struct ModelLibraryView: View {
         return model.snapshot?.downloads.first { $0.resourceID == resource.id && !$0.state.isTerminal }
     }
     private var newDownloads: [ModelCatalogEntry] {
-        model.catalog.filter { downloadSelection.contains($0.id) && existingResource($0)?.control.fileState != .verified && existingTask($0) == nil }
+        model.catalog.filter { downloadSelection.contains($0.id) && existingResource($0)?.control.fileState != .verified && existingTask($0) == nil && retryDeadline($0) == nil }
     }
-    private func additionalBytes(_ entry: ModelCatalogEntry) -> UInt64 {
-        let saved = existingResource(entry)?.record.downloadedBytes ?? 0
-        return entry.totalBytes > saved ? entry.totalBytes - saved : 0
+    private func retryDeadline(_ entry: ModelCatalogEntry) -> Date? {
+        guard let date = existingResource(entry)?.control.retryNotBefore, date > Date() else { return nil }
+        return date
+    }
+    private var additionalBytesLabel: String {
+        let values = newDownloads.map { ModelLibraryModel.additionalDownloadBytes($0, resource: existingResource($0)) }
+        guard values.allSatisfy({ $0 != nil }) else { return text("unknownAdditionalBytes", "待核实；已有进度尚未通过完整校验") }
+        return ModelLibraryModel.formatBytes(values.compactMap { $0 }.reduce(0, +))
     }
     private func acquisitionState(_ entry: ModelCatalogEntry) -> String {
+        if let deadline = retryDeadline(entry) { return workflowText(language, "modelManagement.retryAfter", arguments: ["time": deadline.formatted()]) }
         if existingResource(entry)?.control.fileState == .verified { return text("reuseComplete", "已有完整副本：复用文件，可另行登记或查看") }
         if existingTask(entry) != nil { return text("reuseTask", "已有任务：保留原任务及完成后动作") }
         return text("newDownload", "需要新增下载任务")
@@ -522,5 +602,28 @@ public struct ModelLibraryView: View {
         case .clear(let task): await model.clearTask(task.id)
         case .discard(let task): await model.cancelTask(task.id, keepPartial: false)
         }
+    }
+}
+
+/// The settings destination owns preferences only; inventory and queue stay in
+/// their explicit manager routes and share the same application service.
+struct ModelStorageDownloadSettings: View {
+    @Bindable var model: ModelLibraryModel
+    @Environment(\.dLanguageStore) private var language
+    private func text(_ key: String) -> String { workflowText(language, "modelManagement." + key) }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(text("storageTitle")).font(.headline)
+            Text(model.rootURL?.path ?? text("noRoot")).textSelection(.enabled)
+            Button(text("chooseRoot")) { Task { await model.chooseRoot() } }.disabled(!model.canChooseRoot)
+            Text(text("rootHelp")).font(.caption).foregroundStyle(.secondary)
+            Divider()
+            Text(text("accessToken")).font(.headline)
+            Text(model.downloadCredentialConnected ? text("credentialConnected") : text("credentialMissing"))
+            Button(text("credentialChoose")) { Task { await model.chooseDownloadCredential() } }.disabled(!model.canChangeDownloadCredential)
+            if model.downloadCredentialConnected { Button(text("credentialRemove")) { Task { await model.removeDownloadCredential() } }.disabled(!model.canChangeDownloadCredential) }
+            Text(text("credentialHelp")).font(.caption).foregroundStyle(.secondary)
+            if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
+        }.buttonStyle(.bordered).frame(maxWidth: .infinity, alignment: .leading)
     }
 }

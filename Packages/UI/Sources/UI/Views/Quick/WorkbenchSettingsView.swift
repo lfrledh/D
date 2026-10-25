@@ -5,7 +5,7 @@ import SwiftUI
 /// Application preferences have one owner; project actions use the captured
 /// destination shown here and are dispatched only after this sheet dismisses.
 public struct WorkbenchSettingsView: View {
-    private enum Section: String, CaseIterable { case appearance, language, assistance, defaults, voice, files, network }
+    private enum Section: String, CaseIterable { case appearance, language, assistance, defaults, voice, files, models, network }
     let model: WorkbenchModel
     let library: ModelLibraryModel
     let language: UILanguageStore
@@ -19,7 +19,6 @@ public struct WorkbenchSettingsView: View {
     @State private var selected: Section = .appearance
     @State private var visited: Set<Section> = [.appearance]
     @Environment(\.colorScheme) private var colorScheme
-    @State private var modelsVisible = false
     @Environment(\.dismiss) private var dismiss
 
     public init(model: WorkbenchModel, library: ModelLibraryModel, language: UILanguageStore,
@@ -41,7 +40,8 @@ public struct WorkbenchSettingsView: View {
     private func title(_ section: Section) -> String {
         switch section {
         case .appearance: text("appearance", "Appearance", "外观")
-        case .files: text("filesAndModels", "Files and models", "文件与模型")
+        case .files: text("files", "Files", "文件")
+        case .models: workflowText(language, "modelManagement.storageTitle")
         case .network: text("networkCredentials", "Network and access", "网络与访问")
         case .defaults: text("chatDefaults", "Chat", "聊天")
         case .voice: text("voice", "Sound", "声音")
@@ -60,11 +60,6 @@ public struct WorkbenchSettingsView: View {
                     case .language: LanguageSettingsView(store: language).workbenchHelp("SETTINGS-LANGUAGE")
                     case .files:
                         Form {
-                            LabeledContent(text("modelLibrary", "Model library", "模型库"),
-                                value: library.rootURL?.path ?? text("notSet", "Not set", "尚未指定"))
-                            Button(text("chooseModelLocation", "Choose model library location…", "选择模型库位置…")) {
-                                Task { await library.chooseRoot() }
-                            }.disabled(!library.canChooseRoot)
                             if let projectPath {
                                 LabeledContent(text("targetProject", "Target project", "目标项目"), value: projectPath)
                                 Button(text("projectFiles", "Project files, locations and backups…", "项目文件、位置与备份…"), action: { onProjectFiles?() })
@@ -83,24 +78,12 @@ public struct WorkbenchSettingsView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                             if let error = library.errorMessage { Text(error).foregroundStyle(.red) }
                         }.formStyle(.grouped)
+                    case .models:
+                        ScrollView { ModelStorageDownloadSettings(model: library).padding(20) }
                     case .network:
                         ScrollView {
                             VStack(alignment: .leading, spacing: 16) {
-                                Text(text("downloadNote", "Opening Settings does not connect or load a model.", "打开设置不会联网或加载模型。")).font(.caption)
-                                Button(text("downloadManager", "Downloads and installation…", "下载与安装管理…")) { library.clearSelectionContext(); library.loadInventory(); modelsVisible = true }
                                 Text(text("proxyNote", "D uses the system network configuration.", "沿用系统网络配置。")).font(.caption).foregroundStyle(.secondary)
-                            Text(text("hf", "Hugging Face download credentials", "Hugging Face 下载凭据")).font(.headline)
-                            Text(library.downloadCredentialConnected
-                                ? text("connected", "Local token file connected", "已连接本地令牌文件")
-                                : text("disconnected", "Not connected; public files remain available", "未连接；公开文件仍可下载"))
-                            Button(text("chooseCredential", "Choose credential file…", "选择凭据文件…")) {
-                                Task { await library.chooseDownloadCredential() }
-                            }.disabled(!library.canChangeDownloadCredential)
-                            if library.downloadCredentialConnected {
-                                Button(text("removeConnection", "Remove connection", "移除连接")) {
-                                    Task { await library.removeDownloadCredential() }
-                                }.disabled(!library.canChangeDownloadCredential)
-                            }
                                 Divider()
                                 if let chat { ChatSearchCredentialsPanel(chat: chat, isAvailable: isChatContextValid).disabled(!isChatContextValid()) } else { unavailableChat }
                             }.padding(20)
@@ -218,7 +201,6 @@ public struct WorkbenchSettingsView: View {
             .environment(\.dLanguageStore, language)
             .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
             .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
-            .sheet(isPresented: $modelsVisible) { ModelLibraryView(model: library).workbenchPresentation(state: model.chatDisplaySettings)
-                .environment(\.dLanguageStore, language) }
+
     }
 }
