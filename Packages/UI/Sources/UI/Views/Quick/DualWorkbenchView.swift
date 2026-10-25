@@ -64,7 +64,7 @@ public struct DualWorkbenchView: View {
     }
     @State private var filesRoute: FilesRoute?
     @State private var pendingFilesRoute: FilesRoute?
-    private enum LibraryDestination { case asset(LibraryAssetPreview), info(SharedLibraryBrowserEntry), models }
+    private enum LibraryDestination { case asset(LibraryAssetPreview), info(SharedLibraryBrowserEntry), models, modelSelection(@MainActor () -> Void) }
     @State private var pendingLibraryDestination: LibraryDestination?
     @State private var returnToLibrary = false
     @State private var libraryInfo: SharedLibraryBrowserEntry?
@@ -146,7 +146,7 @@ public struct DualWorkbenchView: View {
     @Environment(\.dLanguageStore) private var language
     private var canvasModel: WorkbenchModel { model.manifest == nil ? automaticQuickModel : model }
     private var installationStates: [String] {
-        library.records.map { "\($0.id):\($0.state.rawValue):\($0.availability.rawValue)" }.sorted()
+        library.records.map { "\($0.id):\($0.state.rawValue):\($0.availability.rawValue):\($0.registrationState.rawValue)" }.sorted()
     }
     private var quickModelIdentity: String? {
         if quick.category == .text, quick.textPresentation == .chat, let modelID = chat?.selectedSession?.configuration?.parameters["modelID"]?.string {
@@ -221,17 +221,23 @@ public struct DualWorkbenchView: View {
         let owner = selectionModel.projectSession, temporary = usesTemporaryChat, controller = quick
         let store = owner.currentStore
         let selectedDraftID = controller.draft?.id, selectedChatID = chat?.state.selectedSessionID
+        let selectedIdentity = quickModelIdentity, selectedConfiguration = chat?.selectedSession?.configuration
+        let intent = navigationIntent, sourceEntry = entry
         library.presentSelection(selected: owner.workflowInstallationID(for: quickModelIdentity)) { id in
             do {
                 guard !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
                       temporary == usesTemporaryChat, quick === controller,
-                      controller.draft?.id == selectedDraftID, chat?.state.selectedSessionID == selectedChatID else {
+                      controller.draft?.id == selectedDraftID, chat?.state.selectedSessionID == selectedChatID,
+                      quickModelIdentity == selectedIdentity, chat?.selectedSession?.configuration == selectedConfiguration,
+                      navigationIntent == intent, entry == sourceEntry else {
                     throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。"))
                 }
                 let choice = try await owner.selectWorkflowInstallation(id: id) { choice in
                     guard !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
                           temporary == usesTemporaryChat, quick === controller,
-                          controller.draft?.id == selectedDraftID, chat?.state.selectedSessionID == selectedChatID else {
+                          controller.draft?.id == selectedDraftID, chat?.state.selectedSessionID == selectedChatID,
+                          quickModelIdentity == selectedIdentity, chat?.selectedSession?.configuration == selectedConfiguration,
+                          navigationIntent == intent, entry == sourceEntry else {
                         throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。"))
                     }
                     guard let operation = WorkflowModelRoutes.operation(for: choice),
@@ -239,7 +245,9 @@ public struct DualWorkbenchView: View {
                 }
                 guard !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
                       temporary == usesTemporaryChat, quick === controller,
-                      controller.draft?.id == selectedDraftID, chat?.state.selectedSessionID == selectedChatID else {
+                      controller.draft?.id == selectedDraftID, chat?.state.selectedSessionID == selectedChatID,
+                      quickModelIdentity == selectedIdentity, chat?.selectedSession?.configuration == selectedConfiguration,
+                      navigationIntent == intent, entry == sourceEntry else {
                     throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。"))
                 }
                 guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue(library.managementText("noRoute", "此配置没有可用的共享操作。")) }
@@ -253,12 +261,16 @@ public struct DualWorkbenchView: View {
             !quickOwnerIsChanging && selectionModel.projectSession === owner && owner.currentStore === store
                 && temporary == usesTemporaryChat && quick === controller
                 && controller.draft?.id == selectedDraftID && chat?.state.selectedSessionID == selectedChatID
+                && quickModelIdentity == selectedIdentity && chat?.selectedSession?.configuration == selectedConfiguration
+                && navigationIntent == intent && entry == sourceEntry
         }
         library.configurationSelectionAction = { item in
             do {
                 guard !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
                       temporary == usesTemporaryChat, quick === controller,
                       controller.draft?.id == selectedDraftID, chat?.state.selectedSessionID == selectedChatID,
+                      quickModelIdentity == selectedIdentity, chat?.selectedSession?.configuration == selectedConfiguration,
+                      navigationIntent == intent, entry == sourceEntry,
                       item.selectable, try owner.modelInventoryConfigurations().contains(item),
                       let prefix = item.identity.split(separator: ":").first,
                       let kind = WorkflowModelKind(rawValue: String(prefix)) else { throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。")) }
@@ -788,6 +800,7 @@ public struct DualWorkbenchView: View {
         case .asset(let preview): previewAsset = preview
         case .info(let item): libraryInfo = item
         case .models: library.presentManagement()
+        case .modelSelection(let open): open()
         }
     }
     private func restoreLibraryIfNeeded() {
@@ -1008,7 +1021,24 @@ public struct DualWorkbenchView: View {
               let id, WorkflowRegistry.standard.operation(operation)?.definition.modelKind != nil else { presentLibraryDestination(.info(value)); return }
         do { try selectModel(operation: operation, identity: id) }
         catch { issue = error.localizedDescription; return }
-        libraryVisible = false; navigate(to: .quick)
+        navigate(to: .quick)
+        let owner = selectionModel.projectSession
+        if owner.explicitModelReadiness[id] != .available {
+            // A catalog identity chooses a draft, not an installed copy. Keep the
+            // explicit copy picker reachable from ordinary Chat/Quick selection.
+            // Capture before the catalog closes; never retarget during dismissal.
+            let store = owner.currentStore, controller = quick, draftID = quick.draft?.id
+            let sessionID = chat?.state.selectedSessionID, temporary = usesTemporaryChat, intent = navigationIntent
+            presentLibraryDestination(.modelSelection {
+                guard !quickOwnerIsChanging, navigationIntent == intent,
+                      selectionModel.projectSession === owner, owner.currentStore === store,
+                      quick === controller, quick.draft?.id == draftID,
+                      chat?.state.selectedSessionID == sessionID, usesTemporaryChat == temporary,
+                      quickModelIdentity == id else { issue = t("targetChanged"); return }
+                presentQuickModelSelection()
+            })
+            returnToLibrary = false
+        } else { libraryVisible = false }
     }
     private func useNode(_ node: WorkflowNode) {
         guard !quickOwnerIsChanging else { issue = "项目正在切换，当前快速草稿未改变。"; return }
