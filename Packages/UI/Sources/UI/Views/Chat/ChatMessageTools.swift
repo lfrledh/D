@@ -109,15 +109,15 @@ struct ChatMessageTools: View {
         HStack(spacing: 4) {
             ForEach(ChatMessageMenuOrganization.primaryIDs(user: user, compact: compact), id: \.self) { id in
                 if let item = commands.first(where: { $0.id == id }) {
-                    Button {
-                        guard item.isCurrent() else { return }
-                        item.action?()
-                        if id == "copy" { copied = true; copyGeneration += 1 }
-                    } label: {
+                    Button { activate(item) } label: {
                         Image(systemName: id == "copy" && copied ? "checkmark" : ChatMessageMenuOrganization.symbols(id))
                             .font(.system(size: 16)).frame(width: 28, height: 28).opacity(toolOpacity)
                     }
                     .buttonStyle(ChatMessageIconStyle()).focusable(interactions: [.edit, .activate]).focused($focusedItem, equals: id)
+                    .onKeyPress(phases: .down) { press in
+                        guard focusedItem == id, press.modifiers.isEmpty, press.key == .space || press.key == .return else { return .ignored }
+                        activate(item); return .handled
+                    }
                     .disabled(!item.enabled)
                     .help(help(item)).accessibilityLabel(id == "copy" && copied ? copiedTitle : item.title)
                     .accessibilityIdentifier(identifier + "-" + id)
@@ -139,10 +139,19 @@ struct ChatMessageTools: View {
             }
         }
     }
+    private func activate(_ item: ChatActionMenuItem) {
+        guard item.enabled, item.isCurrent() else { return }
+        item.action?()
+        if item.id == "copy" { copied = true; copyGeneration += 1 }
+    }
     private func candidateButton(_ symbol: String, item: ChatActionMenuItem, enabled: Bool) -> some View {
         Button { item.action?() } label: { Image(systemName: symbol).font(.system(size: 12)).frame(width: 28, height: 28).opacity(toolOpacity) }
             .buttonStyle(ChatMessageIconStyle())
-            .focusable(interactions: [.edit, .activate]).focused($focusedItem, equals: symbol).disabled(!enabled).help(item.title).accessibilityLabel(item.title)
+            .focusable(interactions: [.edit, .activate]).focused($focusedItem, equals: symbol)
+            .onKeyPress(phases: .down) { press in
+                guard focusedItem == symbol, press.modifiers.isEmpty, press.key == .space || press.key == .return else { return .ignored }
+                if enabled { activate(item) }; return .handled
+            }.disabled(!enabled).help(item.title).accessibilityLabel(item.title)
     }
     private func help(_ item: ChatActionMenuItem) -> String {
         if item.id == "copy", copied { return copiedTitle }

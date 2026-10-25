@@ -91,6 +91,10 @@ extension EnvironmentValues {
         Button { handle.open?() } label: { label }
             .modifier(WorkbenchMenuTabFocus(enabled: keyboardFocusable))
             .focused($focused)
+            .onKeyPress(phases: .down) { press in
+                guard keyboardFocusable, focused, press.modifiers.isEmpty, press.key == .space || press.key == .return else { return .ignored }
+                handle.open?(); return .handled
+            }
             .onChange(of: focused) { _, value in onFocusChange(value) }
             .background(WorkbenchMenuAnchor(title: title, items: items.items, handle: handle, restoreTrigger: { focused = true }, onPresentationChange: onPresentationChange).allowsHitTesting(false))
     }
