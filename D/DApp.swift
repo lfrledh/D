@@ -184,8 +184,7 @@ private struct WorkbenchCommands: Commands {
         }
         CommandGroup(after: .undoRedo) {
             Menu(label("workflow.dock.nodeEditing")) {
-                ForEach((canvas?.edit ?? []).indices, id: \.self) { i in
-                    let command = canvas!.edit[i]
+                ForEach(Array((canvas?.edit ?? []).enumerated()), id: \.offset) { _, command in
                     Button(command.title, action: command.action).disabled(!command.isEnabled || NSApp.keyWindow?.firstResponder is NSTextView)
                 }
             }.disabled(canvas == nil || NSApp.keyWindow?.firstResponder is NSTextView)
@@ -221,10 +220,14 @@ private struct WorkbenchCommands: Commands {
                 Menu(label("workflow.management.switch")) { choices(canvas?.workflowChoices ?? []) }
                 Divider()
                 button(canvas?.workflow.first, title: text("blankFlow"))
-                Menu(text("templates")) { ForEach((canvas?.templates ?? []).indices, id: \.self) { i in button(canvas!.templates[i], title: "") } }
+                // Menu children can update after the key window is lost. Keep
+                // the offered values; each action still revalidates its scope.
+                Menu(text("templates")) {
+                    ForEach(Array((canvas?.templates ?? []).enumerated()), id: \.offset) { _, command in button(command, title: "") }
+                }
                 Divider()
                 button(canvas?.save, title: label("layoutInteraction.save"))
-                ForEach(Array((canvas?.workflow ?? []).dropFirst()).indices, id: \.self) { i in button(canvas!.workflow[i+1], title: "") }
+                ForEach(Array((canvas?.workflow ?? []).dropFirst().enumerated()), id: \.offset) { _, command in button(command, title: "") }
             }.disabled(canvas == nil)
             Divider()
             button(canvas?.manageNodes, title: label("layoutInteraction.manageNodes"))
