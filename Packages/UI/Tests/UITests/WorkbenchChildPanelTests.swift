@@ -165,3 +165,40 @@ extension WorkbenchChildPanelTests {
         gate.requestClose(); #expect(closes == 1)
     }
 }
+
+
+extension WorkbenchChildPanelTests {
+    @Test func orphanedEscapeIsBoundToOwnerAndNeverStealsChildInput() throws {
+        let window = NSWindow(contentRect: .init(x:0,y:0,width:1080,height:740), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = NSView()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-orphan-escape-" + UUID().uuidString)
+        defer { window.close(); try? FileManager.default.removeItem(at: root) }
+        let preferences = ChatDisplayPreferencesState(appearanceDirectory: root)
+        let panel = try #require(WorkbenchChildPanelHandle(owner: window, title: "Controlled", content: AnyView(Text("Panel")), preferences: preferences, language: nil))
+        let host = try #require(WorkbenchChildPanels.frontmostSurface(on: window)?.subviews.compactMap { $0 as? WorkbenchChildHostingView }.first)
+        func key(_ code: UInt16 = 53, _ modifiers: NSEvent.ModifierFlags = []) throws -> NSEvent {
+            try #require(NSEvent.keyEvent(with: .keyDown, location:.zero, modifierFlags:modifiers, timestamp:0, windowNumber:window.windowNumber,
+                context:nil, characters:"\u{1b}", charactersIgnoringModifiers:"\u{1b}", isARepeat:false, keyCode:code))
+        }
+        window.makeFirstResponder(window)
+        #expect(WorkbenchChildPanels.orphanedEscapeTarget(try key(), on:window) === host.closeGate)
+        #expect(WorkbenchChildPanels.orphanedEscapeTarget(try key(53,.command), on:window) == nil)
+        #expect(WorkbenchChildPanels.orphanedEscapeTarget(try key(36), on:window) == nil)
+        #expect(WorkbenchChildPanels.orphanedEscapeTarget(try key(), on:nil) == nil)
+        window.makeFirstResponder(host)
+        #expect(WorkbenchChildPanels.orphanedEscapeTarget(try key(), on:window) == nil)
+        let editor = NSTextView(); window.contentView?.addSubview(editor); window.makeFirstResponder(editor)
+        #expect(WorkbenchChildPanels.orphanedEscapeTarget(try key(), on:window) == nil)
+        let popup = try #require(WorkbenchPopupOverlay.present(from:host,contextID:"child-menu",title:"Menu",items:[.init(id:"one",title:"One",action:{})],
+            style:.init(owner:nil,palette:.defaultLight,strength:0.55,drawsGlass:true,legacyFill:nil,readability:.init()),validContext:{true}))
+        window.makeFirstResponder(window) // A menu remains the Escape owner even if its focus is displaced.
+        #expect(WorkbenchChildPanels.orphanedEscapeTarget(try key(), on:window) == nil)
+        popup.keyDown(with:try key())
+        #expect(!WorkbenchPopupOverlay.isPresented(on:window))
+        window.makeFirstResponder(window)
+        let nested = try #require(WorkbenchChildPanelHandle(owner:window,title:"Nested",content:AnyView(Text("Child")),preferences:preferences,language:nil))
+        #expect(WorkbenchChildPanels.orphanedEscapeTarget(try key(), on:window) !== host.closeGate)
+        nested.close(); panel.close()
+        #expect(WorkbenchChildPanels.orphanedEscapeTarget(try key(), on:window) == nil)
+    }
+}

@@ -174,6 +174,10 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
 }
 @MainActor final class WorkbenchPopupOverlay: NSView {
     private static let opened = NSMapTable<NSWindow, WorkbenchPopupOverlay>.weakToWeakObjects()
+    static func isPresented(on window: NSWindow) -> Bool {
+        guard let popup = opened.object(forKey: window) else { return false }
+        return !popup.closed && popup.window === window && popup.superview != nil
+    }
     let contextID: AnyHashable
     private let entries: [WorkbenchPopupEntry]
     private let validContext: () -> Bool

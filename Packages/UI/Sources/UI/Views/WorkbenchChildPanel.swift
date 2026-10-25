@@ -116,6 +116,7 @@ public struct WorkbenchChildPanelSize: Equatable {
 @MainActor public enum WorkbenchChildPanels {
     private static var mounted: [WeakPanel] = []
     private static let owners = NSHashTable<NSWindow>.weakObjects()
+    private static var escapeMonitor: Any?
     public static func registerOwner(_ window: NSWindow) { owners.add(window) }
     static func isOwner(_ window: NSWindow) -> Bool { owners.contains(window) }
     private final class WeakPanel {
@@ -124,8 +125,33 @@ public struct WorkbenchChildPanelSize: Equatable {
     }
     fileprivate static func add(_ view: WorkbenchChildOverlay) {
         mounted.removeAll { $0.view == nil }; mounted.append(WeakPanel(view))
+        if escapeMonitor == nil {
+            escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                guard event.window === NSApp.keyWindow, RunLoop.current.currentMode != .eventTracking,
+                      let gate = orphanedEscapeTarget(event, on: event.window) else { return event }
+                gate.requestClose(); return nil
+            }
+        }
     }
-    fileprivate static func remove(_ view: WorkbenchChildOverlay) { mounted.removeAll { $0.view == nil || $0.view === view } }
+    fileprivate static func remove(_ view: WorkbenchChildOverlay) {
+        mounted.removeAll { $0.view == nil || $0.view === view }
+        if mounted.isEmpty, let escapeMonitor { NSEvent.removeMonitor(escapeMonitor); self.escapeMonitor = nil }
+    }
+    /// A removed/folded editor can leave the window/root as responder. Only that
+    /// orphaned path needs a fallback; live child controls, menus and composition
+    /// keep their own cancellation, with no focus repair or event replay.
+    static func orphanedEscapeTarget(_ event: NSEvent, on window: NSWindow?) -> WorkbenchChildCloseGate? {
+        guard event.type == .keyDown, event.keyCode == 53, !event.isARepeat,
+              event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
+              let window, event.window === window, window.attachedSheet == nil,
+              NSApp.modalWindow == nil, !(NSApp.keyWindow is NSSavePanel), !WorkbenchPopupOverlay.isPresented(on: window), let panel = top(on: window) else { return nil }
+        let responder = window.firstResponder
+        if let client = responder as? NSTextInputClient, client.hasMarkedText() { return nil }
+        if let view = responder as? NSView, view.window === window, !view.isHiddenOrHasHiddenAncestor {
+            if view.isDescendant(of: panel.host) || responder is NSTextInputClient { return nil }
+        }
+        return panel.gate
+    }
     fileprivate static func top(on window: NSWindow?) -> WorkbenchChildOverlay? {
         guard let window else { return nil }
         return mounted.reversed().compactMap(\.view).first { $0.window === window && !$0.isHidden }
