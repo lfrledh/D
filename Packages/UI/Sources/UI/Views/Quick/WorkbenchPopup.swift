@@ -321,7 +321,11 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
         case 126:move(-1)
         case 123:if activeDepth>0 { trim(to:activeDepth);activeDepth=panes.count-1 }
         case 124:if let index=panes[activeDepth].focused { showChildren(depth:activeDepth,index:index,enter:true) }
-        case 36,76,49:if let index=panes[activeDepth].focused { activate(depth:activeDepth,index:index) }
+        case 36,76,49:
+            // Opening a menu transfers first responder before a held activation
+            // key stops repeating. Repeats must not execute its first command.
+            guard !event.isARepeat else { return }
+            if let index=panes[activeDepth].focused { activate(depth:activeDepth,index:index) }
         case 115:trim(to:activeDepth+1);panes[activeDepth].focus(panes[activeDepth].entries.firstIndex { $0.eligible })
         case 119:trim(to:activeDepth+1);panes[activeDepth].focus(panes[activeDepth].entries.lastIndex { $0.eligible })
         default:

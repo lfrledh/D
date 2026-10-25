@@ -145,7 +145,7 @@ struct ChatMessageTools: View {
         if item.id == "copy" { copied = true; copyGeneration += 1 }
     }
     private func candidateButton(_ symbol: String, item: ChatActionMenuItem, enabled: Bool) -> some View {
-        Button { item.action?() } label: { Image(systemName: symbol).font(.system(size: 12)).frame(width: 28, height: 28).opacity(toolOpacity) }
+        Button { if enabled { activate(item) } } label: { Image(systemName: symbol).font(.system(size: 12)).frame(width: 28, height: 28).opacity(toolOpacity) }
             .buttonStyle(ChatMessageIconStyle())
             .focusable(interactions: [.edit, .activate]).focused($focusedItem, equals: symbol)
             .onKeyPress(phases: .down) { press in

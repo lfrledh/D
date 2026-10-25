@@ -194,6 +194,25 @@ import Testing
         #expect(count == 0); popup.cancel()
     }
 
+    @Test(arguments: [UInt16(36), UInt16(76), UInt16(49)])
+    func heldMenuActivationDoesNotExecuteInitialCommand(code: UInt16) async throws {
+        let w = window(); defer { w.close() }
+        let anchor = NSView(frame: .init(x: 10, y: 10, width: 40, height: 30)); w.contentView?.addSubview(anchor)
+        var count = 0
+        let popup = try #require(WorkbenchPopupOverlay.present(from: anchor, contextID: "A", title: "Menu",
+            items: [.init(id: "first", title: "First", action: { count += 1 })], style: style(), validContext: { true }))
+        let held = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: w.windowNumber, context: nil, characters: " ", charactersIgnoringModifiers: " ", isARepeat: true, keyCode: code))
+        for _ in 0..<3 { popup.keyDown(with: held) }
+        await Task.yield()
+        #expect(count == 0 && popup.superview != nil)
+        popup.keyDown(with: try key(code))
+        try await Task.sleep(for: .milliseconds(10))
+        #expect(count == 1 && popup.superview == nil)
+        popup.keyDown(with: held)
+        await Task.yield(); #expect(count == 1)
+    }
+
     @Test func submenuKeyboardBackAndHomeCloseOnlyTheAppropriateLevel() throws {
         let w = window(); defer { w.close() }
         let anchor = NSView(frame: .init(x: 700,y: 500,width: 40,height: 30)); w.contentView?.addSubview(anchor)
