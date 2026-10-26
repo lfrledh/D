@@ -106,7 +106,7 @@ struct WorkflowHostView: View {
                 }) == true
         }
         Task {
-            await library.prepareNode(operationID: node.operationID, identity: identity, isCurrent: isCurrent) { id, stillAuthorized in
+            await library.requestNodeAcquisition(operationID: node.operationID, identity: identity, title: node.title, isCurrent: isCurrent) { id, stillAuthorized in
                 guard stillAuthorized(), isCurrent() else { throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。")) }
                 _ = try await owner.selectWorkflowInstallation(id: id) { prepared in
                     guard stillAuthorized(), isCurrent(), prepared.id == identity, prepared.kind == choice.kind else {

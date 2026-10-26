@@ -124,11 +124,11 @@ public struct WorkbenchView: View {
                 .shadow(color: .black.opacity(0.10), radius: 20, y: 8)
             }
         }
-        .alert(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.2"), isPresented: Binding(
+        .workbenchConfirmation(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.2"), isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.clearError() } }
         )) {
-            Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.3"), role: .cancel) { model.clearError() }
+            Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.3"), role: .cancel) { model.clearError() }.keyboardShortcut(.defaultAction)
         } message: {
             Text(model.errorMessage ?? "")
         }

@@ -52,15 +52,8 @@ public actor MLXMRT2Backend: InferenceBackend {
                 "MRT2 accepts only fixed-v1 note-conditioned audio requests.")
         }
 
-        var acknowledged = inventory.configuration.licenseAcknowledged
-        if !acknowledged, let check = configuration.modelUseAcknowledged {
-            acknowledged = await check()
-        }
+        // Licensing is disclosed by the host; a local checkbox cannot grant rights.
         try Task.checkCancellation()
-        guard acknowledged else {
-            throw InferenceFailure.invalidRequest(
-                "MRT2 model use must be explicitly acknowledged by an authorized caller.")
-        }
         try inventory.confirmUnchanged()
         try Task.checkCancellation()
 

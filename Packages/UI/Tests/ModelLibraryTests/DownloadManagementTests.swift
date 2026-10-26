@@ -1238,3 +1238,84 @@ extension DownloadManagementTests {
         try await cold.shutdown()
     }
 }
+
+extension DownloadManagementTests {
+    @Test func acquisitionSnapshotSurvivesRetryReopenAndCatalogDisplayChanges() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let transfer = FixtureTransfer(f.contents)
+        var owner: ModelLibrary? = try await library(f, transport: transfer)
+        try await owner!.configureRoot(at: f.destination)
+        try await owner!.pauseQueue()
+        let original = try await owner!.enqueueDownloads([f.entry.id], postAction: .register)[0]
+        let disclosure = try #require(original.acquisitionSnapshot)
+        #expect(disclosure.catalogID == f.entry.id && disclosure.revision == f.entry.revision)
+        #expect(disclosure.recipeIdentity == original.recipeIdentity && disclosure.disclosureSHA256.count == 64)
+        try await owner!.cancelDownload(original.id)
+        let retry = try await owner!.continuePartial(original.resourceID, resumeQueue: false)
+        #expect(retry.id != original.id && retry.postAction == .register && retry.acquisitionSnapshot == disclosure)
+        #expect(await owner!.snapshot().queueState == .paused)
+        try await owner!.shutdown(); owner = nil
+        let changed = ModelCatalogEntry(id: f.entry.id, title: "Changed display title", repository: f.entry.repository,
+            revision: f.entry.revision, files: f.entry.files, imageProfile: f.entry.imageProfile, modelSpec: "Changed display specification", acquisitionDisclosure: try ModelCatalog.entries().first!.acquisitionDisclosure)
+        let reopened = try await library(f, transport: transfer, catalog: [changed])
+        let snapshot = await reopened.snapshot()
+        #expect(changed.acquisitionDisclosure != disclosure.disclosure)
+        #expect(snapshot.downloads.first { $0.id == retry.id }?.acquisitionSnapshot == disclosure)
+        #expect(snapshot.queueState == .waitingForResume && snapshot.downloads.count == 2)
+        #expect(await transfer.requests == 0)
+        var legacyJSON = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(retry)) as? [String: Any])
+        legacyJSON.removeValue(forKey: "acquisitionSnapshot")
+        let legacy = try JSONDecoder().decode(ModelDownloadTask.self, from: JSONSerialization.data(withJSONObject: legacyJSON))
+        #expect(legacy.acquisitionSnapshot == nil && legacy.postAction == retry.postAction && legacy.id == retry.id)
+        try await reopened.shutdown()
+    }
+
+    @Test func aceSourceCorrectionKeepsExactFilesTaskAndSnapshot() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let current = try #require(ModelCatalog.entries().first { $0.id == "ace-step-1.5-xl-sft-f32-no-lm" })
+        let old = ModelLibrary.legacyACESourceEntry(current), transport = FixtureTransfer([:])
+        #expect(zip(old.files, current.files).allSatisfy { $0.path == $1.path && $0.size == $1.size && $0.sha256 == $1.sha256 })
+        var owner: ModelLibrary? = try await ModelLibrary(stateDirectory: f.state, catalog: [old], transport: transport, availableBytesOverride: UInt64.max / 2)
+        try await owner!.configureRoot(at: f.destination); try await owner!.pauseQueue()
+        let original = try await owner!.enqueueDownloads([old.id], postAction: .filesOnly)[0]
+        try await owner!.shutdown(); owner = nil
+        let reopened = try await ModelLibrary(stateDirectory: f.state, catalog: [current], transport: transport, availableBytesOverride: UInt64.max / 2)
+        let snapshot = await reopened.snapshot(), task = try #require(snapshot.downloads.first)
+        #expect(task.id == original.id && task.resourceID == original.resourceID && task.postAction == original.postAction)
+        #expect(task.recipeIdentity != original.recipeIdentity && task.generation != original.generation)
+        #expect(task.acquisitionSnapshot == original.acquisitionSnapshot && snapshot.queueState == .waitingForResume)
+        #expect(FileManager.default.fileExists(atPath: f.state.appendingPathComponent("index.ace-source-v1.backup.json").path))
+        #expect(await transport.requests == 0)
+        try await reopened.shutdown()
+    }
+    @Test(arguments: ["aceSourceCorrection.backup", "state.beforeWrite", "state.afterRename"])
+    func aceSourceCorrectionFailureKeepsRecoverableIndex(point: String) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let current = try #require(ModelCatalog.entries().first { $0.id == "ace-step-1.5-xl-sft-f32-no-lm" })
+        let old = ModelLibrary.legacyACESourceEntry(current), transport = FixtureTransfer([:])
+        var first: ModelLibrary? = try await ModelLibrary(stateDirectory: f.state, catalog: [old], transport: transport, availableBytesOverride: UInt64.max / 2)
+        try await first!.configureRoot(at: f.destination); try await first!.pauseQueue()
+        let task = try await first!.enqueueDownloads([old.id], postAction: .register)[0]
+        try await first!.cancelDownload(task.id) // terminal history must retain its frozen recipe
+        try await first!.shutdown(); first = nil
+        let index = f.state.appendingPathComponent("index.json"), bytes = try Data(contentsOf: f.state.appendingPathComponent("index.json"))
+        let fault = FixtureFault(); fault.arm(point)
+        await #expect(throws: (any Error).self) {
+            try await ModelLibrary(stateDirectory: f.state, catalog: [current], transport: transport,
+                availableBytesOverride: UInt64.max / 2, checkpoint: { try fault.check($0) })
+        }
+        if point != "state.afterRename" { #expect(try Data(contentsOf: index) == bytes) }
+        if point != "aceSourceCorrection.backup" { #expect(try Data(contentsOf: f.state.appendingPathComponent("index.ace-source-v1.backup.json")) == bytes) }
+        fault.clear()
+        for _ in 0..<2 {
+            let cold = try await ModelLibrary(stateDirectory: f.state, catalog: [current], transport: transport, availableBytesOverride: UInt64.max / 2)
+            let snapshot = await cold.snapshot()
+            #expect(snapshot.resources.count == 1 && snapshot.downloads.count == 1)
+            #expect(snapshot.downloads[0].id == task.id && snapshot.downloads[0].recipeIdentity == task.recipeIdentity)
+            #expect(snapshot.downloads[0].postAction == .register && snapshot.downloads[0].state == .cancelled)
+            try await cold.shutdown()
+        }
+        #expect(await transport.requests == 0)
+    }
+
+}

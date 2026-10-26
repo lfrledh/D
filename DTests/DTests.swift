@@ -72,7 +72,6 @@ struct AudioDeploymentIsolationTests {
         let session = try await AppSessionFactory.makeSession(
             artifactDirectory: fixture.root.appendingPathComponent("tasks"),
             bundledMusicEngine: fixture.engine,
-            musicConsent: AudioModelUsePermission(settings: settings, model: .mrt2Music),
             audioAccessRoot: fixture.root.appendingPathComponent("access"))
         #expect(session.textBackendID != nil)
         #expect(session.audioBackendID == nil)
@@ -105,17 +104,16 @@ struct AudioDeploymentIsolationTests {
         #expect(throws: (any Error).self) { try BundledAudioEngine.resolve(resourceDirectory: resources) }
     }
 
-    @Test func audioModelUseAcknowledgementsDoNotCrossModelFamilies() throws {
-        let suite = "D.Tests.ModelUse." + UUID().uuidString
-        let settings = try #require(UserDefaults(suiteName: suite))
-        defer { settings.removePersistentDomain(forName: suite) }
-        let audio = AudioModelUsePermission(settings: settings)
-        let music = AudioModelUsePermission(settings: settings, model: .mrt2Music)
-        #expect(!audio.isAcknowledged && !music.isAcknowledged)
-        settings.set(true, forKey: "audio.model-use.sm-music." + AudioBackendConfiguration.registeredModelRevision)
-        #expect(audio.isAcknowledged && !music.isAcknowledged)
-        settings.set(true, forKey: "audio.model-use.mrt2-small." + MRT2BackendConfiguration.registeredModelRevision)
-        #expect(audio.isAcknowledged && music.isAcknowledged)
+    @Test func audioBackendsAssembleWithoutLocalRightsAssertions() async throws {
+        let audio = try TinyBundledEngine(), music = try TinyBundledEngine(family: .mrt2Music)
+        defer { audio.remove(); music.remove() }
+        let session = try await AppSessionFactory.makeSession(artifactDirectory: audio.root.appendingPathComponent("tasks"),
+            bundledAudioEngine: audio.engine, bundledMusicEngine: music.engine,
+            audioAccessRoot: audio.root.appendingPathComponent("access"))
+        #expect(session.audioBackendID == "mlx.audio.sa3")
+        #expect(session.musicBackendID == "mlx.audio.mrt2")
+        #expect(session.validateAudioModel != nil && session.validateMusicModel != nil)
+        await session.shutdown()
     }
 
     @Test func accessDirectoryFailureKeepsNonAudioSessionAvailable() async throws {
@@ -141,7 +139,7 @@ struct AudioDeploymentIsolationTests {
         let settings = try #require(UserDefaults(suiteName: suite))
         defer { settings.removePersistentDomain(forName: suite) }
         let session = try await AppSessionFactory.makeSession(artifactDirectory: fixture.root.appendingPathComponent("tasks"),
-            bundledAudioEngine: fixture.engine, audioConsent: AudioModelUsePermission(settings: settings),
+            bundledAudioEngine: fixture.engine,
             audioAccessRoot: fixture.root.appendingPathComponent("access"))
         #expect(session.textBackendID != nil)
         #expect(session.audioBackendID != nil)

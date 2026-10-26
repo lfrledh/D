@@ -118,6 +118,8 @@ public struct DualWorkbenchView: View {
     }
     private func openModelChoices(_ category: QuickCategory) {
         expandedLibraryMode = .nodes; expandedLibraryForCanvas = false; expandedLibraryContext = nil; clearExpandedContext = {}
+        canvasLibraryStates[.nodes]?.modelPathMigrated = true
+        canvasLibraryStates[.nodes]?.modelModality = CreatorMode(rawValue: category.rawValue)
         modelPickerCategory = category; libraryVisible = true
     }
     private func openLegacy() {
@@ -708,8 +710,8 @@ public struct DualWorkbenchView: View {
             }.padding().frame(maxWidth: .infinity, maxHeight: .infinity)
             .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
-        .alert(consistencyText(language, "error.incomplete"), isPresented: Binding(get: { issue != nil }, set: { if !$0 { issue = nil; failedAssetRoute = nil } })) {
-            Button(baselineText(language, "label.f867f3417859")) { issue = nil; failedAssetRoute = nil }
+        .workbenchConfirmation(consistencyText(language, "error.incomplete"), isPresented: Binding(get: { issue != nil }, set: { if !$0 { issue = nil; failedAssetRoute = nil } })) {
+            Button(baselineText(language, "label.f867f3417859")) { issue = nil; failedAssetRoute = nil }.keyboardShortcut(.defaultAction)
             if let failedAssetRoute {
                 Button(baselineText(language, "files.inspect", fallback: "查看文件位置")) {
                     issue = nil; self.failedAssetRoute = nil
@@ -733,13 +735,13 @@ public struct DualWorkbenchView: View {
         .onChange(of: installationStates) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .onChange(of: model.manifest?.effectiveInstanceID) { _, _ in useProjectQuick = true; model.viewers.reconcile() }
         .onChange(of: automaticQuickModel.manifest?.effectiveInstanceID) { _,_ in automaticQuickModel.viewers.reconcile() }
-        .alert(workspaceText(language, "pinLegacy"),isPresented:Binding(get:{pendingLegacyPreview != nil},set:{if !$0 {pendingLegacyPreview=nil}})) {
+        .workbenchConfirmation(workspaceText(language, "pinLegacy"),isPresented:Binding(get:{pendingLegacyPreview != nil},set:{if !$0 {pendingLegacyPreview=nil}})) {
             if let value=pendingLegacyPreview {
                 Button(workspaceText(language, "pinAndView")) {
                     pendingLegacyPreview=nil;Task { await previewLibraryEntry(value,allowPin:true) }
-                }
+                }.keyboardShortcut(.defaultAction)
             }
-            Button(workspaceText(language, "cancel"),role:.cancel) { pendingLegacyPreview=nil }
+            Button(workspaceText(language, "cancel"),role:.cancel) { pendingLegacyPreview=nil }.keyboardShortcut(.cancelAction)
         } message: { Text(workspaceText(language, "pinExplanation")) }
         .onChange(of: model.manifest?.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .onChange(of: quickModelIdentity) { _, _ in Task { await checkDemandReadiness() } }
@@ -827,7 +829,7 @@ public struct DualWorkbenchView: View {
                     return workspaceAssetEntries.filter { $0.item.kind == .asset && category.contains($0.item.contentKind) }
                 }
                 _ = entries // Refresh the complete semantic inputs before selecting.
-                return libraryProjection.selection(canvasMode: canvasMode, family: compact ? nil : modelPickerCategory)
+                return libraryProjection.selection(canvasMode: canvasMode, family: canvasMode == .nodes || compact ? nil : modelPickerCategory)
             }()
             SharedLibraryBrowser(entries: sourceEntries, store: metadata, compact: compact, allowsImport: canvasMode?.resourceCategory != nil, canvasMode:canvasMode,
                 scopeDescription: ([model.manifest?.name, automaticQuickModel.manifest == nil ? nil : layoutText(language, "independent")].compactMap { $0 }).joined(separator: " · "),
@@ -1197,10 +1199,34 @@ public struct DualWorkbenchView: View {
         } catch { issue = error.localizedDescription }
     }
     private func prepareModel(_ value: SharedLibraryBrowserEntry) async {
-        guard case .operation(let id, _) = value.selection, let kind = WorkflowRegistry.standard.operation(id)?.definition.modelKind else { presentLibraryDestination(.info(value)); return }
-        if [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38, WorkflowModelRoutes.fluxDev,
-            WorkflowModelRoutes.ace, "d.image.generate", "d.music.generate", "d.music.pitch"].contains(id) {
-            presentLibraryDestination(.models); return
+        guard case .operation(let id, let modelID) = value.selection, let kind = WorkflowRegistry.standard.operation(id)?.definition.modelKind else { presentLibraryDestination(.info(value)); return }
+        if let modelID, let catalog = ModelLibraryModel.nodeDownloadEntry(operationID: id, identity: modelID, catalog: library.catalog) {
+            let owner = selectionModel.projectSession, controller = quick, store = selectionModel.projectSession.currentStore
+            let draft = controller.draft, temporary = usesTemporaryChat, selectedChatID = chat?.state.selectedSessionID
+            let configuration = chat?.selectedSession?.configuration, intent = navigationIntent, sourceEntry = entry
+            let identity = quickModelIdentity, presentation = controller.textPresentation, category = controller.category
+            let selectedOperation = category == .text && presentation == .chat ? configuration?.operationID ?? draft?.node.operationID : draft?.node.operationID
+            let matchesDraft = sourceEntry == .quick && !temporary && selectedOperation == id && identity == modelID
+            let isCurrent: @MainActor () -> Bool = {
+                !quickOwnerIsChanging && !temporaryChatChanging && selectionModel.projectSession === owner && owner.currentStore === store && quick === controller
+                    && temporary == usesTemporaryChat && controller.draft?.id == draft?.id && quickModelIdentity == identity
+                    && chat?.state.selectedSessionID == selectedChatID && chat?.selectedSession?.configuration == configuration
+                    && navigationIntent == intent && entry == sourceEntry && controller.textPresentation == presentation && controller.category == category
+            }
+            presentLibraryDestination(.modelSelection {
+                if matchesDraft {
+                    Task {
+                        await library.requestNodeAcquisition(operationID: id, identity: modelID, title: value.item.title, isCurrent: isCurrent) { installation, authorized in
+                            guard authorized(), isCurrent() else { throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。")) }
+                            _ = try await owner.selectWorkflowInstallation(id: installation) { choice in
+                                guard authorized(), isCurrent(), choice.id == modelID, choice.kind == kind else { throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。")) }
+                            }
+                            // The draft already names this exact variant. Do not select a different draft or infer.
+                        }
+                    }
+                } else { library.requestAcquisition(catalogIDs: [catalog.id]) }
+            })
+            return
         }
         guard !usesTemporaryChat else {
             issue = t("temporaryModelUnavailable")

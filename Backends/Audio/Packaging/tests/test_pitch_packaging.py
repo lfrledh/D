@@ -55,6 +55,7 @@ class PitchPackagingTests(unittest.TestCase):
             MODEL_SIZE_BYTES=len(SIMULATED_MODEL),
             CORE_SHA256=hashlib.sha256(SIMULATED_CORE.encode()).hexdigest(),
             PATCHED_CORE_SHA256=hashlib.sha256(SIMULATED_PATCHED_CORE.encode()).hexdigest(),
+            ORT_EXAMPLES={"onnxruntime/datasets/mul_1.onnx": (7, hashlib.sha256(b"example").hexdigest())},
         )
         self.constants.start()
         self.addCleanup(self.constants.stop)
@@ -81,7 +82,8 @@ class PitchPackagingTests(unittest.TestCase):
             (package / "__init__.py").write_text("", encoding="utf-8")
         (site / "swift_f0/model.onnx").write_bytes(SIMULATED_MODEL)
         (site / "swift_f0/core.py").write_text(SIMULATED_CORE, encoding="utf-8")
-        (site / "onnxruntime/tiny.ONNX").write_bytes(b"dependency test model")
+        (site / "onnxruntime/datasets").mkdir()
+        (site / "onnxruntime/datasets/mul_1.onnx").write_bytes(b"example")
         (site / "numpy.libs").mkdir()
         (site / "numpy.libs/libfixture.dylib").write_bytes(b"not a Mach-O")
         (site / "google/protobuf").mkdir(parents=True)
@@ -111,6 +113,21 @@ class PitchPackagingTests(unittest.TestCase):
             (provider / name).write_text("# controlled provider fixture\n", encoding="utf-8")
         (provider / "must_not_be_copied.py").write_text("", encoding="utf-8")
         return provider
+
+    def test_unknown_onnx_is_rejected_without_mutating_source(self) -> None:
+        site = self._site_packages()
+        unexpected = site / "onnxruntime/unreviewed.ONNX"
+        unexpected.write_bytes(b"unknown graph")
+        with self.assertRaisesRegex(prepare_pitch_engine.PackagingError, "unrecognized ONNX"):
+            prepare_pitch_engine._copy_selected_site(site, self.root / "copied")
+        self.assertEqual(unexpected.read_bytes(), b"unknown graph")
+        self.assertEqual((site / "swift_f0/model.onnx").read_bytes(), SIMULATED_MODEL)
+
+    def test_changed_known_example_is_rejected(self) -> None:
+        site = self._site_packages()
+        (site / "onnxruntime/datasets/mul_1.onnx").write_bytes(b"changed")
+        with self.assertRaisesRegex(prepare_pitch_engine.PackagingError, "unrecognized ONNX"):
+            prepare_pitch_engine._copy_selected_site(site, self.root / "copied")
 
     def _prepare_args(self, output: Path, *, ack: bool = True) -> argparse.Namespace:
         return argparse.Namespace(

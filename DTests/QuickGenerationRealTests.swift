@@ -33,10 +33,10 @@ struct QuickGenerationRealTests {
             try #require(env["D_NODE_LANGUAGE_MUSIC_ACKNOWLEDGED"] == "1")
             let authorization = try #require(env["D_NODE_LANGUAGE_MUSIC_AUTHORIZATION_SOURCE"])
             try #require(FileManager.default.isReadableFile(atPath: authorization))
-            settings.set(true, forKey: "audio.model-use.mrt2-small." + MRT2BackendConfiguration.registeredModelRevision)
+
         }
         let session = try await AppSessionFactory.makeSession(artifactDirectory: store.artifactDirectory,
-            bundledMusicEngine: musicEngine, musicConsent: AudioModelUsePermission(settings: settings, model: .mrt2Music),
+            bundledMusicEngine: musicEngine,
             audioAccessRoot: access, bundledVideoEngine: videoEngine, videoAccessRoot: access)
         let start = Date()
         do {

@@ -102,7 +102,33 @@
       "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
       "title": "Qwen3.5-9B · BF16",
       "workflowIdentity": "text:c202236235762e1c871ad0ccb60c8ee5ba337b9a",
-      "workflowProfileID": "d.model.qwen35-9b"
+      "workflowProfileID": "d.model.qwen35-9b",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "royaltyFreeWithinTerms",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.apache",
+        "components": [
+          {
+            "id": "weights",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.apache",
+            "sources": [
+              {
+                "url": "https://huggingface.co/Qwen/Qwen3.5-9B/raw/c202236235762e1c871ad0ccb60c8ee5ba337b9a/LICENSE",
+                "sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+                "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -188,7 +214,58 @@
       "revision": "8b2b98c00a6b4d291155e4890773ca8f769aee53",
       "title": "Qwen3.5-9B · Q4",
       "workflowIdentity": "text:8b2b98c00a6b4d291155e4890773ca8f769aee53",
-      "workflowProfileID": "d.model.qwen35-9b"
+      "workflowProfileID": "d.model.qwen35-9b",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "royaltyFreeWithinTerms",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.quantizedApache",
+        "components": [
+          {
+            "id": "weights",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.apache",
+            "sources": [
+              {
+                "url": "https://huggingface.co/mlx-community/Qwen3.5-9B-4bit/raw/8b2b98c00a6b4d291155e4890773ca8f769aee53/README.md",
+                "sha256": "1407e3e3337063c280b2fe1a63724908a5051cfbf26cd8b98f247432b0382537",
+                "revision": "8b2b98c00a6b4d291155e4890773ca8f769aee53",
+                "evidence": "fixedPublisherModelCard"
+              }
+            ]
+          },
+          {
+            "id": "declared-upstream",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.upstreamIdentityUnknown",
+            "sources": [
+              {
+                "url": "https://huggingface.co/Qwen/Qwen3.5-9B/raw/c202236235762e1c871ad0ccb60c8ee5ba337b9a/LICENSE",
+                "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+                "sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          },
+          {
+            "id": "readme-disagreement",
+            "scopes": [
+              "weights"
+            ],
+            "license": null,
+            "summaryKey": "modelAcquisition.summary.baseNameDisagreement",
+            "sources": []
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -388,7 +465,33 @@
       "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
       "title": "Qwen3.8-27B · BF16",
       "workflowIdentity": "text:1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
-      "workflowProfileID": "d.model.qwen38-27b"
+      "workflowProfileID": "d.model.qwen38-27b",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "royaltyFreeWithinTerms",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.apache",
+        "components": [
+          {
+            "id": "weights",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.apache",
+            "sources": [
+              {
+                "url": "https://huggingface.co/Qwen/Qwen3.8-27B/raw/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/LICENSE",
+                "sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+                "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -486,7 +589,49 @@
       "revision": "10c35caafbb80f7dc6a7a432cdd11af10a6d4818",
       "title": "Qwen3.8-27B · Q4",
       "workflowIdentity": "text:10c35caafbb80f7dc6a7a432cdd11af10a6d4818",
-      "workflowProfileID": "d.model.qwen38-27b"
+      "workflowProfileID": "d.model.qwen38-27b",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "royaltyFreeWithinTerms",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.quantizedApache",
+        "components": [
+          {
+            "id": "weights",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.apache",
+            "sources": [
+              {
+                "url": "https://huggingface.co/mlx-community/Qwen3.8-27B-4bit/raw/10c35caafbb80f7dc6a7a432cdd11af10a6d4818/README.md",
+                "sha256": "860ff845b4746d0b3e1d1afa4f13aac691ef49c7165054cedfb199371568c4c2",
+                "revision": "10c35caafbb80f7dc6a7a432cdd11af10a6d4818",
+                "evidence": "fixedPublisherModelCard"
+              }
+            ]
+          },
+          {
+            "id": "declared-upstream",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.upstreamIdentityUnknown",
+            "sources": [
+              {
+                "url": "https://huggingface.co/Qwen/Qwen3.8-27B/raw/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/LICENSE",
+                "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+                "sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -616,7 +761,33 @@
       "revision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7",
       "title": "FLUX.2 Klein 4B · Q8",
       "workflowIdentity": "image:ef52ee019fd1d0e75ae4deb40476ba65989716d7",
-      "workflowProfileID": "d.image.generate"
+      "workflowProfileID": "d.image.generate",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "unverified",
+        "licenseFee": "notStated",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.quantizedUnknown",
+        "components": [
+          {
+            "id": "weights",
+            "scopes": [
+              "weights"
+            ],
+            "license": null,
+            "summaryKey": "modelAcquisition.summary.quantizedUnknown",
+            "sources": [
+              {
+                "url": "https://huggingface.co/mzbac/FLUX.2-klein-4B-q8/tree/ef52ee019fd1d0e75ae4deb40476ba65989716d7",
+                "sha256": null,
+                "revision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7",
+                "evidence": "unverified"
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -738,7 +909,33 @@
       "revision": "e7b7dc27f91deacad38e78976d1f2b499d76a294",
       "title": "FLUX.2 Klein 4B · BF16",
       "workflowIdentity": "image:e7b7dc27f91deacad38e78976d1f2b499d76a294",
-      "workflowProfileID": "d.image.generate"
+      "workflowProfileID": "d.image.generate",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "royaltyFreeWithinTerms",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.apache",
+        "components": [
+          {
+            "id": "weights",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.apache",
+            "sources": [
+              {
+                "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B/raw/e7b7dc27f91deacad38e78976d1f2b499d76a294/LICENSE.md",
+                "sha256": "ca02bc51900ab07789d1b70283329e7137f5af98f5161c23a1c81fc38a4af1fe",
+                "revision": "e7b7dc27f91deacad38e78976d1f2b499d76a294",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -944,7 +1141,44 @@
       "revision": "26afe3a78bb242c0a8bb181dcc8937bb16e5c66c",
       "title": "FLUX.2 Dev · BF16",
       "workflowIdentity": "image:26afe3a78bb242c0a8bb181dcc8937bb16e5c66c",
-      "workflowProfileID": "d.image.flux2-dev"
+      "workflowProfileID": "d.image.flux2-dev",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "separateCommercialLicense",
+        "licenseFee": "additionalLicenseMayRequireFee",
+        "access": "sourceWebsiteApproval",
+        "summaryKey": "modelAcquisition.summary.flux",
+        "components": [
+          {
+            "id": "base",
+            "scopes": [
+              "weights",
+              "code",
+              "outputs"
+            ],
+            "license": "FLUX Non-Commercial License v2",
+            "summaryKey": "modelAcquisition.summary.flux",
+            "sources": [
+              {
+                "url": "https://raw.githubusercontent.com/black-forest-labs/flux2/main/model_licenses/LICENSE-FLUX-DEV",
+                "sha256": "49d6e28784b26ba85d2849a68c2d1144600f0bf52136878cd152f604c65580a8",
+                "revision": null,
+                "evidence": "currentOfficialFamilyTerms"
+              }
+            ]
+          },
+          {
+            "id": "exact-copy",
+            "scopes": [
+              "weights"
+            ],
+            "license": null,
+            "summaryKey": "modelAcquisition.summary.exactCopyUnknown",
+            "sources": []
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -1186,7 +1420,35 @@
       "revision": "42ed227ee7df40d41602854ae760620d6eb651fe",
       "title": "MiniMax H3 Base · FL2VA BF16",
       "workflowIdentity": "video:minimax-h3-fl2va-bf16-full-v1@42ed227ee7df40d41602854ae760620d6eb651fe",
-      "workflowProfileID": "d.video.minimax-h3-fl2va-bf16-full-v1"
+      "workflowProfileID": "d.video.minimax-h3-fl2va-bf16-full-v1",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "royaltyFreeWithinTerms",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.minimax",
+        "components": [
+          {
+            "id": "model",
+            "scopes": [
+              "weights",
+              "code",
+              "outputs"
+            ],
+            "license": "MiniMax-H3 Community License",
+            "summaryKey": "modelAcquisition.summary.minimax",
+            "sources": [
+              {
+                "url": "https://huggingface.co/MiniMaxAI/MiniMax-H3/raw/42ed227ee7df40d41602854ae760620d6eb651fe/LICENSE",
+                "sha256": "59b99642b95ea21630e311198ddbfffbfe05aadba0c2f5d884cbdf4efcc90f44",
+                "revision": "42ed227ee7df40d41602854ae760620d6eb651fe",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -1314,7 +1576,46 @@
       "revision": "e378b7e1b50fcb1795fce74219b40bb0b1ede1e2",
       "title": "LTX-2.5 · BF16",
       "workflowIdentity": "video:ltx-2.5-dev-bf16-full-v1@e378b7e1b50fcb1795fce74219b40bb0b1ede1e2",
-      "workflowProfileID": "d.video.ltx-2.5-dev-bf16-full-v1"
+      "workflowProfileID": "d.video.ltx-2.5-dev-bf16-full-v1",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "unverified",
+        "licenseFee": "additionalLicenseMayRequireFee",
+        "access": "sourceWebsiteApproval",
+        "summaryKey": "modelAcquisition.summary.ltx",
+        "components": [
+          {
+            "id": "base",
+            "scopes": [
+              "weights",
+              "code",
+              "outputs"
+            ],
+            "license": "LTX-2.x Community License",
+            "summaryKey": "modelAcquisition.summary.ltx",
+            "sources": [
+              {
+                "url": "https://raw.githubusercontent.com/Lightricks/LTX-2/main/LICENSE-2_x",
+                "sha256": "ee5b0c880c1516e15bd51c8576a05ea1d2c6e5bb2d070ca098e847e42a75af34",
+                "revision": null,
+                "evidence": "currentOfficialFamilyTerms"
+              }
+            ]
+          },
+          {
+            "id": "converted-components",
+            "scopes": [
+              "weights",
+              "textEncoder",
+              "vae"
+            ],
+            "license": null,
+            "summaryKey": "modelAcquisition.summary.exactCopyUnknown",
+            "sources": []
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -1366,7 +1667,33 @@
       "revision": "37ec512624d61f7aa208f7ea8140a131f93afc9a",
       "title": "Wan2.1 T2V 1.3B · BF16",
       "workflowIdentity": "video:37ec512624d61f7aa208f7ea8140a131f93afc9a",
-      "workflowProfileID": "d.video.generate"
+      "workflowProfileID": "d.video.generate",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "royaltyFreeWithinTerms",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.apache",
+        "components": [
+          {
+            "id": "weights",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.apache",
+            "sources": [
+              {
+                "url": "https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B/raw/37ec512624d61f7aa208f7ea8140a131f93afc9a/LICENSE.txt",
+                "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+                "revision": "37ec512624d61f7aa208f7ea8140a131f93afc9a",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -1416,7 +1743,35 @@
       "revision": "010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc",
       "title": "Magenta Realtime 2 · small",
       "workflowIdentity": "music:010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc",
-      "workflowProfileID": "d.music.generate"
+      "workflowProfileID": "d.music.generate",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "royaltyFreeWithinTerms",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.magenta",
+        "components": [
+          {
+            "id": "model",
+            "scopes": [
+              "weights",
+              "code",
+              "outputs"
+            ],
+            "license": "CC-BY-4.0 / Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.magenta",
+            "sources": [
+              {
+                "url": "https://huggingface.co/google/magenta-realtime-2/raw/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/README.md",
+                "sha256": "432cb52a3c115ac32ba1664713ebe061218cfaeffd008e97ff26f6dc0ddf4c71",
+                "revision": "010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc",
+                "evidence": "fixedPublisherModelCard"
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -1522,7 +1877,7 @@
         {
           "digestAlgorithm": "sha256",
           "path": "checkpoints/Qwen3-Embedding-0.6B/added_tokens.json",
-          "remotePath": "checkpoints/Qwen3-Embedding-0.6B/added_tokens.json",
+          "remotePath": "Qwen3-Embedding-0.6B/added_tokens.json",
           "sha256": "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680",
           "size": 707,
           "sourceRepository": "ACE-Step/Ace-Step1.5",
@@ -1531,7 +1886,7 @@
         {
           "digestAlgorithm": "sha256",
           "path": "checkpoints/Qwen3-Embedding-0.6B/chat_template.jinja",
-          "remotePath": "checkpoints/Qwen3-Embedding-0.6B/chat_template.jinja",
+          "remotePath": "Qwen3-Embedding-0.6B/chat_template.jinja",
           "sha256": "87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5",
           "size": 4116,
           "sourceRepository": "ACE-Step/Ace-Step1.5",
@@ -1540,7 +1895,7 @@
         {
           "digestAlgorithm": "sha256",
           "path": "checkpoints/Qwen3-Embedding-0.6B/config.json",
-          "remotePath": "checkpoints/Qwen3-Embedding-0.6B/config.json",
+          "remotePath": "Qwen3-Embedding-0.6B/config.json",
           "sha256": "bb23c1607cfe059a58d8f0196cf1cebb52082b1056b8e358a579da80a5759420",
           "size": 1359,
           "sourceRepository": "ACE-Step/Ace-Step1.5",
@@ -1549,7 +1904,7 @@
         {
           "digestAlgorithm": "sha256",
           "path": "checkpoints/Qwen3-Embedding-0.6B/merges.txt",
-          "remotePath": "checkpoints/Qwen3-Embedding-0.6B/merges.txt",
+          "remotePath": "Qwen3-Embedding-0.6B/merges.txt",
           "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
           "size": 1671853,
           "sourceRepository": "ACE-Step/Ace-Step1.5",
@@ -1558,7 +1913,7 @@
         {
           "digestAlgorithm": "sha256",
           "path": "checkpoints/Qwen3-Embedding-0.6B/model.safetensors",
-          "remotePath": "checkpoints/Qwen3-Embedding-0.6B/model.safetensors",
+          "remotePath": "Qwen3-Embedding-0.6B/model.safetensors",
           "sha256": "0437e45c94563b09e13cb7a64478fc406947a93cb34a7e05870fc8dcd48e23fd",
           "size": 1191586416,
           "sourceRepository": "ACE-Step/Ace-Step1.5",
@@ -1567,7 +1922,7 @@
         {
           "digestAlgorithm": "sha256",
           "path": "checkpoints/Qwen3-Embedding-0.6B/special_tokens_map.json",
-          "remotePath": "checkpoints/Qwen3-Embedding-0.6B/special_tokens_map.json",
+          "remotePath": "Qwen3-Embedding-0.6B/special_tokens_map.json",
           "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
           "size": 613,
           "sourceRepository": "ACE-Step/Ace-Step1.5",
@@ -1576,7 +1931,7 @@
         {
           "digestAlgorithm": "sha256",
           "path": "checkpoints/Qwen3-Embedding-0.6B/tokenizer.json",
-          "remotePath": "checkpoints/Qwen3-Embedding-0.6B/tokenizer.json",
+          "remotePath": "Qwen3-Embedding-0.6B/tokenizer.json",
           "sha256": "def76fb086971c7867b829c23a26261e38d9d74e02139253b38aeb9df8b4b50a",
           "size": 11423705,
           "sourceRepository": "ACE-Step/Ace-Step1.5",
@@ -1585,7 +1940,7 @@
         {
           "digestAlgorithm": "sha256",
           "path": "checkpoints/Qwen3-Embedding-0.6B/tokenizer_config.json",
-          "remotePath": "checkpoints/Qwen3-Embedding-0.6B/tokenizer_config.json",
+          "remotePath": "Qwen3-Embedding-0.6B/tokenizer_config.json",
           "sha256": "443bfa629eb16387a12edbf92a76f6a6f10b2af3b53d87ba1550adfcf45f7fa0",
           "size": 5404,
           "sourceRepository": "ACE-Step/Ace-Step1.5",
@@ -1594,7 +1949,7 @@
         {
           "digestAlgorithm": "sha256",
           "path": "checkpoints/Qwen3-Embedding-0.6B/vocab.json",
-          "remotePath": "checkpoints/Qwen3-Embedding-0.6B/vocab.json",
+          "remotePath": "Qwen3-Embedding-0.6B/vocab.json",
           "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
           "size": 2776833,
           "sourceRepository": "ACE-Step/Ace-Step1.5",
@@ -1603,7 +1958,7 @@
         {
           "digestAlgorithm": "sha256",
           "path": "checkpoints/vae/config.json",
-          "remotePath": "checkpoints/vae/config.json",
+          "remotePath": "vae/config.json",
           "sha256": "14e019904df567f26df750317a70e2bd08f9f8f3c40ff4a24c97d1cd3f20ccd2",
           "size": 425,
           "sourceRepository": "ACE-Step/Ace-Step1.5",
@@ -1612,7 +1967,7 @@
         {
           "digestAlgorithm": "sha256",
           "path": "checkpoints/vae/diffusion_pytorch_model.safetensors",
-          "remotePath": "checkpoints/vae/diffusion_pytorch_model.safetensors",
+          "remotePath": "vae/diffusion_pytorch_model.safetensors",
           "sha256": "da17edb604c40deaf09e9b24974e590d1ca83a374070e5d0884cfa4bed9a99b0",
           "size": 337431388,
           "sourceRepository": "ACE-Step/Ace-Step1.5",
@@ -1628,7 +1983,66 @@
       "revision": "d06de46b4622f781cf07f4a013a67d591ca52819",
       "title": "ACE-Step 1.5 XL SFT · F32 / no-LM",
       "workflowIdentity": "music:d06de46b4622f781cf07f4a013a67d591ca52819",
-      "workflowProfileID": "d.music.ace-step-1.5-xl-sft"
+      "workflowProfileID": "d.music.ace-step-1.5-xl-sft",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "royaltyFreeWithinTerms",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.ace",
+        "components": [
+          {
+            "id": "main",
+            "scopes": [
+              "weights",
+              "outputs"
+            ],
+            "license": "MIT",
+            "summaryKey": "modelAcquisition.summary.ace",
+            "sources": [
+              {
+                "url": "https://huggingface.co/ACE-Step/acestep-v15-xl-sft/raw/d06de46b4622f781cf07f4a013a67d591ca52819/README.md",
+                "sha256": "6cfd536f953f5171283d84baf223c68d88979d8215cac9209324d04c331988e2",
+                "revision": "d06de46b4622f781cf07f4a013a67d591ca52819",
+                "evidence": "fixedPublisherModelCard"
+              }
+            ]
+          },
+          {
+            "id": "vae",
+            "scopes": [
+              "vae"
+            ],
+            "license": "MIT",
+            "summaryKey": "modelAcquisition.summary.aceVAE",
+            "sources": [
+              {
+                "url": "https://huggingface.co/ACE-Step/Ace-Step1.5/raw/19671f406d603126926c1b7e2adc169acbcade22/README.md",
+                "sha256": "69d69b89e313706b93b420b13aa6232259b207a1cd19b0b70358d166e8e451a0",
+                "revision": "19671f406d603126926c1b7e2adc169acbcade22",
+                "evidence": "fixedPublisherModelCard"
+              }
+            ]
+          },
+          {
+            "id": "qwen3",
+            "scopes": [
+              "textEncoder"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.apache",
+            "sources": [
+              {
+                "url": "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B/blob/97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3/README.md",
+                "sha256": null,
+                "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+                "evidence": "fixedPublisherModelCard"
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -1702,7 +2116,58 @@
       "revision": "a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3",
       "title": "Qwen2.5 0.5B Instruct · 4-bit",
       "workflowIdentity": "text:a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3",
-      "workflowProfileID": "d.model.language"
+      "workflowProfileID": "d.model.language",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "royaltyFreeWithinTerms",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.quantizedApache",
+        "components": [
+          {
+            "id": "weights",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.apache",
+            "sources": [
+              {
+                "url": "https://huggingface.co/mlx-community/Qwen2.5-0.5B-Instruct-4bit/raw/a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3/README.md",
+                "sha256": "8cd48183a9d10279e02291f12f03a2db5585c222a0cf77f97dca3c87f79bd5e1",
+                "revision": "a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3",
+                "evidence": "fixedPublisherModelCard"
+              }
+            ]
+          },
+          {
+            "id": "declared-upstream",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.upstreamIdentityUnknown",
+            "sources": [
+              {
+                "url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/raw/7ae557604adf67be50417f59c2c2f167def9a775/LICENSE",
+                "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+                "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          },
+          {
+            "id": "readme-disagreement",
+            "scopes": [
+              "weights"
+            ],
+            "license": null,
+            "summaryKey": "modelAcquisition.summary.baseNameDisagreement",
+            "sources": []
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -1776,7 +2241,58 @@
       "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
       "title": "Qwen2.5 1.5B Instruct · 4-bit",
       "workflowIdentity": "text:8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
-      "workflowProfileID": "d.model.language"
+      "workflowProfileID": "d.model.language",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "royaltyFreeWithinTerms",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.quantizedApache",
+        "components": [
+          {
+            "id": "weights",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.apache",
+            "sources": [
+              {
+                "url": "https://huggingface.co/mlx-community/Qwen2.5-1.5B-Instruct-4bit/raw/8b403126fc14f14cfc99bb4cfa72ecbc129ea677/README.md",
+                "sha256": "a92215db397e14395a74b850e8e83d4f15d87551ecc4adc0093b671d556308ce",
+                "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+                "evidence": "fixedPublisherModelCard"
+              }
+            ]
+          },
+          {
+            "id": "declared-upstream",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.upstreamIdentityUnknown",
+            "sources": [
+              {
+                "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/raw/989aa7980e4cf806f80c7fef2b1adb7bc71aa306/LICENSE",
+                "revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+                "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          },
+          {
+            "id": "readme-disagreement",
+            "scopes": [
+              "weights"
+            ],
+            "license": null,
+            "summaryKey": "modelAcquisition.summary.baseNameDisagreement",
+            "sources": []
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -1850,7 +2366,58 @@
       "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
       "title": "Qwen2.5 7B Instruct · 4-bit",
       "workflowIdentity": "text:c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
-      "workflowProfileID": "d.model.language"
+      "workflowProfileID": "d.model.language",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "royaltyFreeWithinTerms",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.quantizedApache",
+        "components": [
+          {
+            "id": "weights",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.apache",
+            "sources": [
+              {
+                "url": "https://huggingface.co/mlx-community/Qwen2.5-7B-Instruct-4bit/raw/c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed/README.md",
+                "sha256": "bcc928c815d856439e238f1977b50c93580ec5e79118e588b20f03aba1a215f5",
+                "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+                "evidence": "fixedPublisherModelCard"
+              }
+            ]
+          },
+          {
+            "id": "declared-upstream",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.upstreamIdentityUnknown",
+            "sources": [
+              {
+                "url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/raw/a09a35458c702b33eeacc393d103063234e8bc28/LICENSE",
+                "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+                "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          },
+          {
+            "id": "readme-disagreement",
+            "scopes": [
+              "weights"
+            ],
+            "license": null,
+            "summaryKey": "modelAcquisition.summary.baseNameDisagreement",
+            "sources": []
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -1942,7 +2509,58 @@
       "revision": "2938092373e5f97b95538884112085364c2da315",
       "title": "Qwen2.5 32B Instruct · 4-bit",
       "workflowIdentity": "text:2938092373e5f97b95538884112085364c2da315",
-      "workflowProfileID": "d.model.language"
+      "workflowProfileID": "d.model.language",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "royaltyFreeWithinTerms",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.quantizedApache",
+        "components": [
+          {
+            "id": "weights",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.apache",
+            "sources": [
+              {
+                "url": "https://huggingface.co/mlx-community/Qwen2.5-32B-Instruct-4bit/raw/2938092373e5f97b95538884112085364c2da315/README.md",
+                "sha256": "bd83290d21af83f3d47149e1ddc44f0fdfb8e108bb7d6c68ae1e68b20334851b",
+                "revision": "2938092373e5f97b95538884112085364c2da315",
+                "evidence": "fixedPublisherModelCard"
+              }
+            ]
+          },
+          {
+            "id": "declared-upstream",
+            "scopes": [
+              "weights"
+            ],
+            "license": "Apache-2.0",
+            "summaryKey": "modelAcquisition.summary.upstreamIdentityUnknown",
+            "sources": [
+              {
+                "url": "https://huggingface.co/Qwen/Qwen2.5-32B-Instruct/raw/5ede1c97bbab6ce5cda5812749b4c0bdf79b18dd/LICENSE",
+                "revision": "5ede1c97bbab6ce5cda5812749b4c0bdf79b18dd",
+                "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          },
+          {
+            "id": "readme-disagreement",
+            "scopes": [
+              "weights"
+            ],
+            "license": null,
+            "summaryKey": "modelAcquisition.summary.baseNameDisagreement",
+            "sources": []
+          }
+        ]
+      }
     },
     {
       "files": [
@@ -1974,7 +2592,51 @@
       "provenance": "Backends/Audio/Models/sm-music.json",
       "repository": "stabilityai/stable-audio-3-optimized",
       "revision": "da6edc54ddba10bfd79a077102ded687f80e882b",
-      "title": "Stable Audio Small Music"
+      "title": "Stable Audio Small Music",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "permittedWithConditions",
+        "licenseFee": "additionalLicenseMayRequireFee",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.stability",
+        "components": [
+          {
+            "id": "main",
+            "scopes": [
+              "weights",
+              "code",
+              "outputs"
+            ],
+            "license": "Stability AI Community License",
+            "summaryKey": "modelAcquisition.summary.stability",
+            "sources": [
+              {
+                "url": "https://huggingface.co/stabilityai/stable-audio-3-optimized/raw/da6edc54ddba10bfd79a077102ded687f80e882b/LICENSE.md",
+                "sha256": "d6f6b1a4dce5c852bd6d7d9482d002baf0ccdb71e662250b73be9eec8764ee8d",
+                "revision": "da6edc54ddba10bfd79a077102ded687f80e882b",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          },
+          {
+            "id": "t5gemma",
+            "scopes": [
+              "textEncoder"
+            ],
+            "license": "Gemma Terms",
+            "summaryKey": "modelAcquisition.summary.gemma",
+            "sources": [
+              {
+                "url": "https://huggingface.co/stabilityai/stable-audio-3-optimized/raw/da6edc54ddba10bfd79a077102ded687f80e882b/LICENSE_GEMMA.md",
+                "sha256": "e77acc0d3163bb7534675045c584b4d04b387b529239fc4b3647da0a01ba4745",
+                "revision": "da6edc54ddba10bfd79a077102ded687f80e882b",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "id": "swift-f0-0.1.2-cpu-v1",
@@ -1995,7 +2657,43 @@
       "preparation": "none",
       "modelSpec": "SwiftF0 0.1.2 · ONNX · CPU",
       "memoryGuidance": "CPU 音高分析；256 MiB 估计工作预算。",
-      "provenance": "https://github.com/lars76/swift-f0/tree/8e968fe53b818da318d46e14b84b3d0b41192ad1 · MIT (code and models)"
+      "provenance": "SwiftF0 0.1.2 · fixed code and model source; package MIT; separate weight/output terms not verified.",
+      "acquisitionDisclosure": {
+        "version": 1,
+        "checkedAt": "2026-10-26",
+        "commercialUse": "unverified",
+        "licenseFee": "notStated",
+        "access": "publicRepository",
+        "summaryKey": "modelAcquisition.summary.swift",
+        "components": [
+          {
+            "id": "package",
+            "scopes": [
+              "code"
+            ],
+            "license": "MIT",
+            "summaryKey": "modelAcquisition.summary.swiftCode",
+            "sources": [
+              {
+                "url": "https://raw.githubusercontent.com/lars76/swift-f0/8e968fe53b818da318d46e14b84b3d0b41192ad1/LICENSE",
+                "sha256": "3e1e1a059f12dfb08ec39d7eb0bdb19ba57b937410457b9e4fe008f545bd8891",
+                "revision": "8e968fe53b818da318d46e14b84b3d0b41192ad1",
+                "evidence": "fixedLicenseText"
+              }
+            ]
+          },
+          {
+            "id": "weights",
+            "scopes": [
+              "weights",
+              "outputs"
+            ],
+            "license": null,
+            "summaryKey": "modelAcquisition.summary.swift",
+            "sources": []
+          }
+        ]
+      }
     }
   ],
   "schemaVersion": 1

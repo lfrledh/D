@@ -12,11 +12,13 @@ public struct MRT2BackendConfiguration: Sendable {
     public let vendorDirectory: URL
     public let modelManifest: URL
     public let artifactDirectory: URL
+    /// Legacy source compatibility only. Not evidence of rights and not an execution gate.
     public let licenseAcknowledged: Bool
     public let timeoutSeconds: Double
     public let cancellationGraceSeconds: Double
     public let accessBootstrapRoot: URL?
     public let confirmDeployment: (@Sendable () throws -> Void)?
+    /// Legacy callback retained for source compatibility; the backend does not invoke it.
     public let modelUseAcknowledged: (@Sendable () async -> Bool)?
 
     public init(
@@ -52,7 +54,6 @@ struct ValidatedMRT2Configuration: Sendable {
     let vendorDirectory: URL
     let modelManifest: URL
     let artifactDirectory: URL
-    let licenseAcknowledged: Bool
     let timeoutSeconds: Double
     let cancellationGraceSeconds: Double
     let providerIdentity: AudioFileSystem.Identity
@@ -126,7 +127,6 @@ extension AudioFileSystem {
         return ValidatedMRT2Configuration(
             pythonExecutable: python, providerScript: provider, vendorDirectory: vendor,
             modelManifest: manifest, artifactDirectory: artifacts,
-            licenseAcknowledged: configuration.licenseAcknowledged,
             timeoutSeconds: configuration.timeoutSeconds,
             cancellationGraceSeconds: configuration.cancellationGraceSeconds,
             providerIdentity: providerIdentity, manifestIdentity: manifestIdentity,

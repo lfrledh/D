@@ -37,7 +37,7 @@ struct NodeQualityRealTests {
             let source = try #require(env["D_NODE_LANGUAGE_MUSIC_AUTHORIZATION_SOURCE"])
             try #require(FileManager.default.isReadableFile(atPath: source))
             // Reflect only the existing same-model development authorization in this test suite.
-            settings.set(true, forKey: "audio.model-use.mrt2-small." + MRT2BackendConfiguration.registeredModelRevision)
+
         }
         let store = try await ProjectStore.create(at: project, name: "Quality checks")
         var runtime: WorkbenchSession?
@@ -45,7 +45,6 @@ struct NodeQualityRealTests {
         do {
             let session = try await AppSessionFactory.makeSession(artifactDirectory: store.artifactDirectory,
                 bundledMusicEngine: kind == .music ? engine : nil,
-                musicConsent: AudioModelUsePermission(settings: settings, model: .mrt2Music),
                 audioAccessRoot: kind == .music ? access : nil,
                 bundledVideoEngine: kind == .video ? engine : nil,
                 videoAccessRoot: kind == .video ? access : nil)

@@ -215,18 +215,19 @@ struct AudioBackendTests {
         }
     }
 
-    @Test("Missing license acknowledgement creates no run or child")
-    func licenseGate() async throws {
-        let fixture = try AudioFixture()
-        defer { fixture.remove() }
-        let denied = AudioBackendConfiguration(
+    @Test("A local rights assertion is not an execution credential")
+    func legacyAcknowledgementDoesNotGateExecution() async throws {
+        let fixture = try AudioFixture(); defer { fixture.remove() }
+        let configuration = AudioBackendConfiguration(
             pythonExecutable: URL(fileURLWithPath: "/usr/bin/python3"), providerScript: fixture.script,
             vendorDirectory: fixture.vendor, modelManifest: fixture.manifest,
-            artifactDirectory: fixture.artifacts, profile: .smMusic)
-        let backend = try MLXAudioBackend(configuration: denied)
-        do { _ = try await backend.execute(fixture.request()) { _ in }; Issue.record("License gate was bypassed") }
-        catch InferenceFailure.invalidRequest {} catch { Issue.record("Unexpected license failure: \(error)") }
-        #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.artifacts.path).isEmpty)
+            artifactDirectory: fixture.artifacts, profile: .smMusic,
+            modelUseAcknowledged: { Issue.record("Obsolete rights callback was invoked"); return false })
+        let backend = try MLXAudioBackend(configuration: configuration)
+        let result = try await backend.execute(fixture.request()) { _ in }
+        await backend.release()
+        #expect(result.artifacts.count == 1)
+        #expect(FileManager.default.fileExists(atPath: try #require(result.artifacts.first).url.path))
     }
 
     @Test("Valid fixture drains, validates float32 WAV, emits once, and survives release",
@@ -450,18 +451,11 @@ struct AudioBackendTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: bootstrap.path).isEmpty)
     }
 
-    @Test("Dynamic model acknowledgement and deployment failure reject before creating run data")
+    @Test("Deployment failure rejects before run data; legacy rights callback is not invoked")
     func applicationAdmissionChecks() async throws {
         let fixture = try AudioFixture(); defer { fixture.remove() }
         let bootstrap = fixture.root.appendingPathComponent("private-access")
         try FileManager.default.createDirectory(at: bootstrap, withIntermediateDirectories: false)
-        let denied = try MLXAudioBackend(configuration: fixture.accessConfiguration(
-            root: bootstrap, acknowledged: false, check: { false }))
-        do { _ = try await denied.execute(fixture.request()) { _ in }; Issue.record("Expected acknowledgement refusal") }
-        catch InferenceFailure.invalidRequest {} catch { Issue.record("Unexpected error: \(error)") }
-        await denied.release()
-        #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.artifacts.path).isEmpty)
-        #expect(try FileManager.default.contentsOfDirectory(atPath: bootstrap.path).isEmpty)
         let invalid = try MLXAudioBackend(configuration: fixture.accessConfiguration(
             root: bootstrap, deployment: { throw FixtureError.consumer }))
         do { _ = try await invalid.execute(fixture.request()) { _ in }; Issue.record("Expected deployment refusal") }
@@ -470,7 +464,7 @@ struct AudioBackendTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.artifacts.path).isEmpty)
         try fixture.installAccessAssertions()
         let granted = try MLXAudioBackend(configuration: fixture.accessConfiguration(
-            root: bootstrap, acknowledged: false, check: { true }))
+            root: bootstrap, acknowledged: false, check: { Issue.record("Obsolete rights callback was invoked"); return false }))
         _ = try await granted.execute(fixture.request()) { _ in }
         await granted.release()
         #expect(try FileManager.default.contentsOfDirectory(atPath: bootstrap.path).isEmpty)

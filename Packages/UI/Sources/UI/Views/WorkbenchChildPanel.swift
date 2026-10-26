@@ -283,14 +283,19 @@ public struct WorkbenchChildPanelSize: Equatable {
     private let preferences: ChatDisplayPreferencesState
     private let language: UILanguageStore?
     private var title: String
+    private var visualContext: WorkbenchVisualContext
     private var observer: NSObjectProtocol?
     var didClose: (() -> Void)?
     var isVisible: Bool { overlay.superview != nil }
     init?(owner: NSWindow, title: String, content: AnyView, preferences: ChatDisplayPreferencesState, language: UILanguageStore?, size: WorkbenchChildPanelSize = .init(width: 800, height: 640)) {
         guard let root = owner.contentView, let parent = root.superview else { return nil }
         self.content = content; self.title = title; self.preferences = preferences; self.language = language
+        var visual = WorkbenchVisualContext()
+        visual.state = preferences; visual.language = language
+        visual.background = WorkbenchBackgroundOwner.attachedCanvas(in: owner)
+        visualContext = visual
         let gate = WorkbenchChildCloseGate()
-        overlay = WorkbenchChildOverlay(content: AnyView(WorkbenchChildSurface(content: content, gate: gate, title: title).environment(\.dLanguageStore, language).environment(\.chatDisplayPreferences, preferences.preferences).preferredColorScheme(preferences.preferences.preferredColorScheme)), gate: gate, size: size)
+        overlay = WorkbenchChildOverlay(content: AnyView(WorkbenchChildSurface(content: content, gate: gate, title: title).modifier(WorkbenchVisualBridge(context: visual))), gate: gate, size: size)
         gate.commit = { [weak self] in self?.close() }
         overlay.captureFocus(owner)
         overlay.frame = root.convert(root.bounds, to: parent)
@@ -306,7 +311,7 @@ public struct WorkbenchChildPanelSize: Equatable {
     }
     func setTitle(_ title: String) {
         self.title = title
-        overlay.host.rootView = AnyView(WorkbenchChildSurface(content: content, gate: overlay.gate, title: title).environment(\.dLanguageStore, language).environment(\.chatDisplayPreferences, preferences.preferences).preferredColorScheme(preferences.preferences.preferredColorScheme))
+        overlay.host.rootView = AnyView(WorkbenchChildSurface(content: content, gate: overlay.gate, title: title).modifier(WorkbenchVisualBridge(context: visualContext)))
     }
     func orderFront() {
         guard let parent = overlay.superview else { return }
@@ -334,7 +339,7 @@ private struct WorkbenchChildSurface: View {
     let gate: WorkbenchChildCloseGate
     let title: String
     @Environment(\.dLanguageStore) private var language
-    private let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+    private let shape = RoundedRectangle(cornerRadius: WorkbenchSurfaceMetrics.childRadius, style: .continuous)
     private func t(_ key: String) -> String { workflowText(language, "childPanel." + key) }
     var body: some View {
         VStack(spacing: 0) {
@@ -342,12 +347,13 @@ private struct WorkbenchChildSurface: View {
                 Text(title).font(.headline).lineLimit(2)
                 Spacer(minLength: 12)
                 Button { gate.requestClose() } label: { Image(systemName: "xmark").frame(width: 32, height: 32).contentShape(Rectangle()) }
-                    .buttonStyle(.plain).accessibilityLabel(title.isEmpty ? t("close") : t("closeNamed").replacingOccurrences(of: "{name}", with: title))
+                    .buttonStyle(WorkbenchIconButtonStyle(diameter: 32)).accessibilityLabel(title.isEmpty ? t("close") : t("closeNamed").replacingOccurrences(of: "{name}", with: title))
                     .help(t("close")).accessibilityIdentifier("child-panel-close")
             }.padding(.horizontal, 16).frame(height: 52)
             content.frame(maxWidth: .infinity, maxHeight: .infinity).clipped().disabled(gate.saving)
         }
         .environment(\.workbenchChildClose, gate)
+        .workbenchTheme(paintsCanvas: false)
         .workbenchPanel(in: shape)
         .onExitCommand { gate.requestClose() }
         .overlay {
@@ -362,11 +368,66 @@ private struct WorkbenchChildSurface: View {
                             Button(t("keep")) { gate.keepEditing() }.keyboardShortcut(.cancelAction)
                             Spacer()
                             if gate.allowsDiscard { Button(t(gate.save == nil ? "discard" : "withoutSaving"), role: .destructive) { gate.discard() } }
-                            if gate.save != nil { Button(t("save")) { gate.saveAndClose() }.keyboardShortcut(.defaultAction) }
-                        }.disabled(gate.saving)
+                            if gate.save != nil { Button(t("save")) { gate.saveAndClose() }.buttonStyle(WorkbenchPrimaryButtonStyle()).frame(minHeight: 36).keyboardShortcut(.defaultAction) }
+                        }.environment(\.workbenchActionHeight, 36).disabled(gate.saving)
                     }.padding(24).frame(maxWidth: 520).workbenchPanel(cornerRadius: 16)
                 }.accessibilityIdentifier("child-panel-unsaved")
             }
+        }
+    }
+}
+
+/// Existing imperative commands keep their NSAlert response contract. In an
+/// owned D window, only presentation is adapted to the shared child surface.
+/// Startup/termination without a canvas retains native presentation and gates.
+@MainActor public enum WorkbenchConfirmation {
+    public static func present(_ alert: NSAlert, owner: NSWindow?,
+                               cancelResponse: NSApplication.ModalResponse = .alertSecondButtonReturn,
+                               destructiveIndices: Set<Int> = []) async -> NSApplication.ModalResponse {
+        guard let owner, let canvas = WorkbenchBackgroundOwner.attachedCanvas(in: owner),
+              let state = canvas.presentationState else {
+            if let owner { return await alert.beginSheetModal(for: owner) }
+            return alert.runModal()
+        }
+        let request = Pending()
+        return await withCheckedContinuation { continuation in
+            request.continuation = continuation
+            let buttons = alert.buttons.enumerated().map { index, button in
+                Choice(id: index, title: button.title, isDefault: button.keyEquivalent == "\r",
+                    destructive: destructiveIndices.contains(index))
+            }
+            let body = VStack(alignment: .leading, spacing: 16) {
+                ScrollView { Text(alert.informativeText).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
+                HStack(spacing: 8) {
+                    ForEach(buttons) { choice in
+                        Button(choice.title, role: choice.destructive ? .destructive : nil) {
+                            request.finish(.init(rawValue: NSApplication.ModalResponse.alertFirstButtonReturn.rawValue + choice.id))
+                        }.buttonStyle(WorkbenchGlassButtonStyle(prominent: choice.isDefault && !choice.destructive))
+                            .modifier(DefaultAction(enabled: choice.isDefault)).frame(minHeight: 36)
+                    }
+                }.environment(\.workbenchActionHeight, 36).frame(maxWidth: .infinity, alignment: .trailing)
+            }.padding(20)
+            request.panel = WorkbenchChildPanelHandle(owner: owner, title: alert.messageText, content: AnyView(body),
+                preferences: state, language: canvas.presentationLanguage, size: .init(width: 560, height: 300))
+            request.panel?.didClose = { request.finish(cancelResponse) }
+            if request.panel == nil { request.finish(cancelResponse) }
+        }
+    }
+    private struct Choice: Identifiable { let id: Int; let title: String; let isDefault: Bool; let destructive: Bool }
+    private struct DefaultAction: ViewModifier {
+        let enabled: Bool
+        @ViewBuilder func body(content: Content) -> some View {
+            if enabled { content.keyboardShortcut(.defaultAction) } else { content }
+        }
+    }
+    @MainActor private final class Pending {
+        var continuation: CheckedContinuation<NSApplication.ModalResponse, Never>?
+        var panel: WorkbenchChildPanelHandle?
+        func finish(_ response: NSApplication.ModalResponse) {
+            guard let continuation else { return }
+            self.continuation = nil
+            let closing = panel; panel = nil; closing?.didClose = nil; closing?.close()
+            continuation.resume(returning: response)
         }
     }
 }
@@ -468,6 +529,30 @@ private struct ChildPresentation: NSViewRepresentable {
 }
 
 extension View {
+    /// D-owned confirmations use the same owner/environment/close barrier as
+    /// other child surfaces. Actions retain their captured object and explicitly
+    /// clear the presenting binding; no command reflection or redispatch.
+    func workbenchConfirmation<Actions: View, Message: View>(_ title: String,
+        isPresented: Binding<Bool>, @ViewBuilder actions: () -> Actions,
+        @ViewBuilder message: () -> Message) -> some View {
+        workbenchSheet(isPresented: isPresented, title: title, size: .init(width: 560, height: 300)) {
+            VStack(alignment: .leading, spacing: 16) {
+                ScrollView { message().textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
+                HStack(spacing: 8) { actions() }.environment(\.workbenchActionHeight, 36).frame(maxWidth: .infinity, alignment: .trailing)
+            }.padding(20)
+        }
+    }
+    func workbenchConfirmation<Value, Actions: View, Message: View>(_ title: String,
+        isPresented: Binding<Bool>, presenting value: Value?, @ViewBuilder actions: (Value) -> Actions,
+        @ViewBuilder message: (Value) -> Message) -> some View {
+        workbenchConfirmation(title, isPresented: isPresented) {
+            if let value { actions(value) }
+        } message: { if let value { message(value) } }
+    }
+    func workbenchConfirmation<Actions: View>(_ title: String, isPresented: Binding<Bool>,
+        @ViewBuilder actions: () -> Actions) -> some View {
+        workbenchConfirmation(title, isPresented: isPresented, actions: actions, message: { EmptyView() })
+    }
     func workbenchCloseProtection(isDirty: Bool, isSaving: Bool = false, allowsDiscard: Bool = true, save: (() async throws -> Void)? = nil) -> some View {
         background(ChildProtection(dirty: isDirty, busy: isSaving, allowsDiscard: allowsDiscard, save: save).frame(width: 0, height: 0))
     }

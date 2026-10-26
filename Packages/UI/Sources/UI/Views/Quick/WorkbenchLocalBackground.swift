@@ -320,6 +320,19 @@ enum WorkbenchLocalRenderer {
 /// or business state. At most three bounded 2048px images are retained: source,
 /// blur and one lazily prepared opaque glass source, independent of node count.
 @MainActor final class WorkbenchBackgroundOwner {
+    weak var presentationState: ChatDisplayPreferencesState?
+    weak var presentationLanguage: UILanguageStore?
+    /// Resolve once when creating a command-driven child, from its captured
+    /// owner window. Never guess the last key window or walk the tree per frame.
+    static func attachedCanvas(in window: NSWindow) -> WorkbenchBackgroundOwner? {
+        func find(_ view: NSView) -> WorkbenchBackgroundOwner? {
+            if let surface = view as? WorkbenchBackgroundNSView, surface.isCanvas,
+               surface.stylesWindowTitlebar, surface.owner?.root === surface { return surface.owner }
+            for child in view.subviews { if let owner = find(child) { return owner } }
+            return nil
+        }
+        return window.contentView.flatMap(find)
+    }
     weak var root: WorkbenchBackgroundNSView?
     weak var windowControls: WorkbenchWindowControlHost?
     let surfaces = NSHashTable<WorkbenchBackgroundNSView>.weakObjects()
@@ -643,6 +656,7 @@ struct WorkbenchCanvasModifier: ViewModifier {
     var stylesWindowTitlebar = false
     @State private var owner = WorkbenchBackgroundOwner()
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dLanguageStore) private var language
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
     private var usesCanvasBlend: Bool {
@@ -673,6 +687,7 @@ struct WorkbenchCanvasModifier: ViewModifier {
             .onDisappear { owner.load(nil) }
     }
     private func prepare() {
+        owner.presentationState = state; owner.presentationLanguage = language
         owner.failure = { [weak state] in state?.markWallpaperUnavailable() }
         owner.load(state.wallpaperURL(), blur: preparesBlur, cache: state.backgroundTextures)
     }

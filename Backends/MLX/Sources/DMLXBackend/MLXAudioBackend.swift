@@ -45,15 +45,8 @@ public actor MLXAudioBackend: InferenceBackend {
 
         try configuration.confirmDeployment?()
         let inventory = try AudioModelInventory.inspect(request, configuration: configuration)
-        var acknowledged = inventory.configuration.licenseAcknowledged
-        if !acknowledged, let check = configuration.modelUseAcknowledged {
-            acknowledged = await check()
-        }
+        // Licensing is disclosed by the host; a local checkbox cannot grant rights.
         try Task.checkCancellation()
-        guard acknowledged else {
-            throw InferenceFailure.invalidRequest(
-                "Audio model license acknowledgement must be explicitly supplied by a caller that already has rights.")
-        }
         guard case .audio(let audio) = request.input else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
         }

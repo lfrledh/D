@@ -36,6 +36,18 @@ import SwiftUI
         return colorScheme == .dark ? .darkAqua : .aqua
     }
     var foreground: NSColor { NSColor(palette.foregroundColor) }
+    var accent: NSColor { NSColor(palette.accentColor) }
+    var nativeTint: NSColor { NSColor(palette.canvasColor).withAlphaComponent(WorkbenchResolvedAppearance.nativeTintOpacity(strength: strength)) }
+    static func resolved(owner: WorkbenchBackgroundOwner?, preferences: ChatDisplayPreferences,
+                         scheme: ColorScheme, reduceMotion: Bool, reduceTransparency: Bool,
+                         increasedContrast: Bool) -> Self {
+        let value = WorkbenchResolvedAppearance(preferences: preferences, scheme: scheme,
+            reduceMotion: reduceMotion, reduceTransparency: reduceTransparency, increasedContrast: increasedContrast)
+        return .init(owner: owner, palette: value.palette, strength: value.strength,
+            drawsGlass: value.nativeGlass, legacyFill: value.legacyBlend.map { NSColor(value.palette.panelFill(canvasBlend: $0)) },
+            readability: value.readability, nativeGlass: value.nativeGlass,
+            colorScheme: value.scheme, increasedContrast: value.increasedContrast)
+    }
 }
 @MainActor private final class WorkbenchPopupEntry {
     let captured: WorkbenchPopupItem
@@ -58,6 +70,7 @@ import SwiftUI
     let index: Int
     var menuHighlighted = false { didSet { needsDisplay = true } }
     var foreground = NSColor.labelColor
+    var accent = NSColor.controlAccentColor
     private var tracking: NSTrackingArea?
     init(entry: WorkbenchPopupEntry, depth: Int, index: Int) {
         self.entry = entry; self.depth = depth; self.index = index
@@ -70,6 +83,7 @@ import SwiftUI
     override var acceptsFirstResponder: Bool { false }
     func refresh() {
         title = entry.display.title; isEnabled = entry.eligible
+        toolTip = [entry.display.title, entry.display.help].compactMap { $0 }.joined(separator: "\n")
         setAccessibilityLabel(title); setAccessibilityValue(entry.display.checked ? NSNumber(value: true) : nil)
         setAccessibilityHelp([entry.display.help, entry.display.shortcut].compactMap { $0 }.joined(separator: "; ")); needsDisplay = true
     }
@@ -83,7 +97,7 @@ import SwiftUI
     @objc private func pressed() { popup?.activate(depth: depth, index: index) }
     override func draw(_ dirtyRect: NSRect) {
         if menuHighlighted && entry.eligible {
-            NSColor.controlAccentColor.withAlphaComponent(0.16).setFill()
+            accent.withAlphaComponent(0.16).setFill()
             NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 1), xRadius: 6, yRadius: 6).fill()
         }
         let ink = (entry.display.role == .destructive ? NSColor.systemRed : foreground).withAlphaComponent(entry.eligible ? 1 : 0.42)
@@ -115,9 +129,9 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
     weak var parentRow: WorkbenchPopupRow?
     init(entries: [WorkbenchPopupEntry], depth: Int, style: WorkbenchPopupStyle, popup: WorkbenchPopupOverlay) {
         self.entries = entries; super.init(frame: .zero)
-        wantsLayer = true; layer?.cornerRadius = 11; layer?.masksToBounds = false; layer?.borderWidth = 0.6
+        wantsLayer = true; layer?.cornerRadius = WorkbenchSurfaceMetrics.menuRadius; layer?.masksToBounds = false; layer?.borderWidth = 0.6
         setAccessibilityElement(false); glass.setAccessibilityElement(false); addSubview(glass)
-        nativeGlass.cornerRadius = 11; nativeGlass.style = .regular
+        nativeGlass.cornerRadius = WorkbenchSurfaceMetrics.menuRadius; nativeGlass.style = .regular
         nativeGlass.setAccessibilityElement(false); foreground.setAccessibilityElement(false)
         addSubview(nativeGlass); nativeGlass.contentView = foreground
         scroll.drawsBackground = false; scroll.contentView.drawsBackground = false; scroll.borderType = .noBorder
@@ -140,6 +154,7 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
         usesNativeGlass = style.nativeGlass
         layer?.masksToBounds = !usesNativeGlass
         nativeGlass.isHidden = !usesNativeGlass
+        nativeGlass.tintColor = style.nativeTint
         if usesNativeGlass {
             if nativeGlass.contentView !== foreground { nativeGlass.contentView = foreground }
             glass.isHidden = true; layer?.backgroundColor = nil; layer?.borderWidth = 0
@@ -147,12 +162,12 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
             if foreground.superview !== self { nativeGlass.contentView = nil; addSubview(foreground) }
             glass.owner = style.owner; glass.palette = style.palette; glass.strength = style.strength; glass.drawsGlass = style.drawsGlass
             glass.isCanvas = false; glass.surfaceRole = .popup; glass.surfaceGroup = "popup-\(ObjectIdentifier(self))"; glass.readability = style.readability
-            glass.contour = { rect, inset in CGPath(roundedRect: rect.insetBy(dx: inset, dy: inset), cornerWidth: max(0,11-inset), cornerHeight: max(0,11-inset), transform: nil) }
+            glass.contour = { rect, inset in CGPath(roundedRect: rect.insetBy(dx: inset, dy: inset), cornerWidth: max(0,WorkbenchSurfaceMetrics.menuRadius-inset), cornerHeight: max(0,WorkbenchSurfaceMetrics.menuRadius-inset), transform: nil) }
             glass.isHidden = style.legacyFill != nil; layer?.backgroundColor = style.legacyFill?.cgColor
             layer?.borderWidth = 0.6; layer?.borderColor = style.foreground.withAlphaComponent(0.22).cgColor
             style.owner?.surfaces.add(glass); glass.needsDisplay = true
         }
-        for row in rows.compactMap({ $0 }) { row.foreground = style.foreground; row.refresh() }
+        for row in rows.compactMap({ $0 }) { row.foreground = style.foreground; row.accent = style.accent; row.refresh() }
         needsLayout = true
     }
     func detach() { glass.owner?.readability.remove(glass); glass.owner?.surfaces.remove(glass); glass.owner = nil }

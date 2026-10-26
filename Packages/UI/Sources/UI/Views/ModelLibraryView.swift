@@ -13,16 +13,12 @@ public struct ModelLibraryView: View {
     @State private var tokenVisible = false
     @State private var accessChecking: UUID?
     @State private var accessMessage: [UUID: String] = [:]
-    @State private var acquireVisible = false
     @State private var importVisible = false
     @State private var importCatalogID = ""
     @State private var importKind: WorkflowModelKind = .text
     @State private var importStorage: ModelStorageKind = .external
-    @State private var acquisitionSearch = ""
     @State private var deletingTask: ModelDownloadTask?
     @State private var cleanupPartial = false
-    @State private var downloadSelection: Set<String> = []
-    @State private var registerAfterDownload = false
     @State private var narrowDetail = false
     @State private var expandedTask: UUID?
     @FocusState private var focusedTask: UUID?
@@ -118,23 +114,23 @@ public struct ModelLibraryView: View {
         .onChange(of: model.snapshot?.revision, initial: true) { _, _ in sampleTransfer() }
         .onChange(of: model.workspace) { _, _ in rate = .init(); sampleTransfer() }
         .workbenchSheet(isPresented: $tokenVisible, title: text("accessToken"), size: .init(width: 600, height: 380)) { ModelAccessTokenEditor(model: model) }
-        .workbenchSheet(isPresented: $acquireVisible, title: text("acquire", "新建下载…"), size: .init(width: 760, height: 600)) {
-            acquisition.workbenchCloseProtection(isDirty: !downloadSelection.isEmpty || registerAfterDownload, isSaving: !model.pendingCatalogIDs.isEmpty)
+        .workbenchSheet(item: $model.acquisitionRequest, title: workflowText(language, "modelAcquisition.title"), size: .init(width: 760, height: 600, download: true)) { request in
+            ModelAcquisitionView(model: model, request: request)
         }
         .workbenchSheet(isPresented: $importVisible, title: text("import", "登记模型…"), size: .init(width: 680, height: 520)) {
             localImport.workbenchCloseProtection(isDirty: !importCatalogID.isEmpty || importStorage != .external)
         }
         .workbenchSheet(item: $deletingTask, title: workflowText(language, "childPanel.name.delete")) { task in deleteConfirmation(task) }
-        .alert(text("confirm", "确认操作"), isPresented: Binding(get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }), presenting: confirmation) { action in
-            Button(confirmationTitle(action), role: .destructive) { Task { await confirm(action) } }
-            Button(text("keep", "保留"), role: .cancel) { }
+        .workbenchConfirmation(text("confirm", "确认操作"), isPresented: Binding(get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }), presenting: confirmation) { action in
+            Button(confirmationTitle(action), role: .destructive) { confirmation = nil; Task { await confirm(action) } }
+            Button(text("keep", "保留"), role: .cancel) { confirmation = nil }.keyboardShortcut(.cancelAction)
         } message: { action in Text(confirmationMessage(action)) }
     }
     private var downloadWorkspace: some View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
-                    Button(text("acquire", "新建下载…")) { downloadSelection = []; registerAfterDownload = false; acquisitionSearch = ""; acquireVisible = true }
+                    Button(text("acquire", "新建下载…")) { model.requestAcquisition() }
                         .accessibilityIdentifier("model-manager-acquire")
                     if geometry.size.width < 720 {
                         WorkbenchPicker(text("statusFilter", "状态"), selection: $model.taskFilter) {
@@ -143,10 +139,10 @@ public struct ModelLibraryView: View {
                     }
                     Spacer(minLength: 8)
                     TextField(text("searchDownloads", "搜索下载任务"), text: $model.taskSearch)
-                        .textFieldStyle(.roundedBorder).frame(maxWidth: 240).accessibilityIdentifier("model-manager-task-search")
+                        .textFieldStyle(WorkbenchGlassTextFieldStyle()).frame(maxWidth: 240).accessibilityIdentifier("model-manager-task-search")
                     refreshButton
                     WorkbenchFeatureGuideButton(store: featureHelp)
-                }.buttonStyle(.bordered).padding(.horizontal, 16).frame(height: 44)
+                }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 16).frame(height: 44)
                 Divider()
                 HStack(spacing: 0) {
                     if geometry.size.width >= 720 {
@@ -173,7 +169,7 @@ public struct ModelLibraryView: View {
                         Task { if model.queueIsRunning { await model.pauseQueue() } else { await model.resumeQueue() } }
                     }.disabled(model.rootURL == nil || model.queueCommandPending)
                         .help(text("background", "关闭面板后，下载继续。"))
-                }.font(.caption).buttonStyle(.bordered).padding(.horizontal, 16).padding(.bottom, 16).padding(.top, 8)
+                }.font(.caption).buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 16).padding(.bottom, 16).padding(.top, 8)
             }
         }
     }
@@ -257,7 +253,7 @@ public struct ModelLibraryView: View {
             if model.workspace == "resources" {
                 Button(text("import", "登记模型…")) { importVisible = true }.accessibilityIdentifier("model-manager-import")
             }
-            Button(text("acquire", "新建下载…")) { downloadSelection = []; registerAfterDownload = false; acquisitionSearch = ""; acquireVisible = true }
+            Button(text("acquire", "新建下载…")) { model.requestAcquisition() }
                 .accessibilityIdentifier("model-manager-acquire")
             if model.workspace == "downloads" {
                 Button(text(model.queueIsRunning ? "pauseQueue" : "resumeQueue", "开始全部")) {
@@ -266,7 +262,7 @@ public struct ModelLibraryView: View {
             }
             Spacer(minLength: 8)
             if model.workspace == "resources" {
-                TextField(text("searchResources", "搜索模型"), text: $model.resourceSearch).textFieldStyle(.roundedBorder)
+                TextField(text("searchResources", "搜索模型"), text: $model.resourceSearch).textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .accessibilityIdentifier("model-manager-resource-search")
                 WorkbenchPicker(text("filter", "筛选"), selection: $model.resourceFilter) {
                     WorkbenchChoice(text("all", "全部"), value: "all"); WorkbenchChoice(text("registered", "已登记"), value: "registered")
@@ -274,14 +270,14 @@ public struct ModelLibraryView: View {
                     WorkbenchChoice(text("unavailable", "暂不可访问"), value: "unavailable")
                 }.frame(width: 150)
             } else {
-                TextField(text("searchDownloads", "搜索下载任务"), text: $model.taskSearch).textFieldStyle(.roundedBorder)
+                TextField(text("searchDownloads", "搜索下载任务"), text: $model.taskSearch).textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .accessibilityIdentifier("model-manager-task-search")
                 WorkbenchPicker(text("filter", "筛选"), selection: $model.taskFilter) {
                     WorkbenchChoice(text("all", "全部"), value: "all"); WorkbenchChoice(text("pending", "进行中"), value: "active")
                     WorkbenchChoice(text("history", "已结束"), value: "history")
                 }.frame(width: 130)
             }
-        }.buttonStyle(.bordered).controlSize(.regular).frame(minHeight: 32).padding(.horizontal, 20).padding(.bottom, 12)
+        }.buttonStyle(WorkbenchGlassButtonStyle()).controlSize(.regular).frame(minHeight: 32).padding(.horizontal, 20).padding(.bottom, 12)
     }
     @ViewBuilder private var inventoryList: some View {
         if model.workspace == "resources" {
@@ -362,7 +358,7 @@ public struct ModelLibraryView: View {
                     Button(text("reverify", "重新校验文件")) { Task { await model.reverify(resource) } }.disabled(record.activeLeaseCount > 0 || model.hasActiveWork || model.globalOperation != nil)
                 }
                 if resource.control.fileState == .deleted {
-                    Button(text("getSame", "新建下载…")) { downloadSelection = [record.catalogID]; registerAfterDownload = false; acquisitionSearch = ""; acquireVisible = true }
+                    Button(text("getSame", "新建下载…")) { model.requestAcquisition(catalogIDs: [record.catalogID]) }
                 }
                 if record.registrationState != .registered {
                     Button(text("register", "登记此资源")) { Task { await model.registerResource(resource) } }.workbenchHelp("MODELS-REGISTER", unavailableReason: model.globalOperation != nil ? consistencyText(language, "help.reason.modelOperation") : resource.control.fileState != .verified ? consistencyText(language, "help.reason.unverified") : record.state == .preparationRequired ? consistencyText(language, "help.reason.prepare") : nil, target: "resource:\(resource.id):\(record.revision)")
@@ -480,56 +476,17 @@ public struct ModelLibraryView: View {
             }
             WorkflowTechnicalDetails(value: ["Task: " + task.id.uuidString, "Resource: " + task.resourceID.description, "Attempt: " + task.attemptID.uuidString, "Attempts: " + String(task.attempts), "Generation: " + task.generation.uuidString].joined(separator: "\n"))
 
-        }.buttonStyle(.bordered)
-    }
-    private var acquisition: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            TextField(text("searchCatalog", "搜索支持的模型"), text: $acquisitionSearch).textFieldStyle(.roundedBorder)
-            List(model.catalog.filter { acquisitionSearch.isEmpty || $0.title.localizedStandardContains(acquisitionSearch) }) { entry in
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle(entry.title, isOn: Binding(get: { downloadSelection.contains(entry.id) }, set: { if $0 { downloadSelection.insert(entry.id) } else { downloadSelection.remove(entry.id) } }))
-                        .disabled(existingResource(entry)?.control.fileState == .verified || existingTask(entry) != nil || retryDeadline(entry) != nil)
-                    ModelSpecificationFields(descriptor: descriptor(entry), font: .caption)
-                    Text(ModelLibraryModel.formatBytes(entry.totalBytes)).font(.caption)
-                    Text(acquisitionState(entry)).font(.caption).foregroundStyle(.secondary)
-                    if let resource = existingResource(entry), resource.control.fileState == .verified {
-                        Button(text("viewResource", "查看对应模型")) { model.selectedResource = resource.id; model.workspace = "resources"; narrowDetail = true; acquireVisible = false }
-                    } else if let task = existingTask(entry) {
-                        Button(text("viewDownload", "查看下载任务")) { model.selectedTask = task.id; model.workspace = "downloads"; expandedTask = task.id; narrowDetail = false; acquireVisible = false }
-                    }
-                    DisclosureGroup(text("technical", "身份与来源详情")) {
-                        Text(entry.repository).textSelection(.enabled)
-                        WorkflowTechnicalDetails(value: entry.id + "\n" + entry.revision)
-                        Text(catalogText(entry, field: "memory")).font(.caption)
-                    }
-                }.padding(.vertical, 6)
-            }
-            HStack {
-                Text(model.rootURL?.path ?? text("noRoot", "尚未选择模型库位置")).font(.caption).textSelection(.enabled)
-                Spacer()
-                Button(text("chooseRoot", "选择文件夹…")) { Task { await model.chooseRoot() } }.disabled(!model.canChooseRoot)
-            }
-            Toggle(text("downloadRegister", "下载完成后自动登记模型"), isOn: $registerAfterDownload)
-            Text(text("newTasks", "需要下载") + ": \(newDownloads.count) · " + text("newBytes", "预计新增下载量") + ": " + additionalBytesLabel).font(.callout)
-            if !model.queueIsRunning { Text(text("queuePausedHelp", "下载已暂停，开始全部后将继续。")).font(.caption) }
-            if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
-            HStack {
-                WorkbenchRequestCloseButton(title: text("cancel", "取消"), fallback: { acquireVisible = false })
-                Spacer()
-                Button(workflowText(language, "modelManagement." + (model.queueIsRunning ? "enqueue" : "enqueuePaused"), arguments: ["count": String(newDownloads.count)])) {
-                    let ids = newDownloads.map(\.id)
-                    Task { await model.enqueue(ids, register: registerAfterDownload); if model.errorMessage == nil { acquireVisible = false; model.workspace = "downloads"; narrowDetail = false } }
-                }.disabled(newDownloads.isEmpty || model.rootURL == nil || !model.pendingCatalogIDs.isEmpty)
-            }
-        }.buttonStyle(.bordered).padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
+        }.buttonStyle(WorkbenchGlassButtonStyle())
     }
     private var localImport: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        ScrollView { VStack(alignment: .leading, spacing: 16) {
             WorkbenchPicker(text("configuration", "配置"), selection: $importCatalogID) {
                 WorkbenchChoice(text("existingRoute", "已有引擎支持的精确配置"), value:"")
                 WorkbenchChoiceForEach(model.catalog) { WorkbenchChoice($0.title, value:$0.id) }
             }
+            if let entry = model.catalog.first(where: { $0.id == importCatalogID }) { ModelAcquisitionInformation(entry: entry) }
             if importCatalogID.isEmpty {
+                Text(workflowText(language, "modelAcquisition.summary.unknown")).font(.callout)
                 WorkbenchPicker(text("kind", "用途"), selection: $importKind) {
                     WorkbenchChoiceForEach([WorkflowModelKind.text, .image, .music, .video], id: \.rawValue) { kind in WorkbenchChoice(text("kind." + kind.rawValue, kind.rawValue), value:kind) }
                 }
@@ -549,7 +506,7 @@ public struct ModelLibraryView: View {
                     .disabled(model.hasActiveWork || model.globalOperation != nil || (importStorage == .managed && model.rootURL == nil))
             }
             if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
-        }.padding(24).frame(maxWidth: .infinity)
+        }.padding(20).frame(maxWidth: .infinity) }
     }
     private func field(_ key: String, _ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) { Text(text(key, title)).font(.caption).foregroundStyle(.secondary); Text(value).font(.callout).textSelection(.enabled) }
@@ -649,7 +606,7 @@ public struct ModelLibraryView: View {
                     Task { await model.deleteTask(task, cleanupPartial: clean); if model.errorMessage == nil { deletingTask = nil } }
                 }.disabled(model.pendingActions[task.resourceID.modelID] != nil)
             }
-        }.padding(24).frame(width: 520).buttonStyle(.bordered)
+        }.padding(24).frame(width: 520).buttonStyle(WorkbenchGlassButtonStyle())
     }
     private func taskGroup(_ task: ModelDownloadTask) -> Int {
         switch task.state {
@@ -665,24 +622,6 @@ public struct ModelLibraryView: View {
     private func existingTask(_ entry: ModelCatalogEntry) -> ModelDownloadTask? {
         guard let resource = existingResource(entry) else { return nil }
         return model.snapshot?.downloads.first { $0.resourceID == resource.id && !$0.state.isTerminal }
-    }
-    private var newDownloads: [ModelCatalogEntry] {
-        model.catalog.filter { downloadSelection.contains($0.id) && existingResource($0)?.control.fileState != .verified && existingTask($0) == nil && retryDeadline($0) == nil }
-    }
-    private func retryDeadline(_ entry: ModelCatalogEntry) -> Date? {
-        guard let date = existingResource(entry)?.control.retryNotBefore, date > Date() else { return nil }
-        return date
-    }
-    private var additionalBytesLabel: String {
-        let values = newDownloads.map { ModelLibraryModel.additionalDownloadBytes($0, resource: existingResource($0)) }
-        guard values.allSatisfy({ $0 != nil }) else { return text("unknownAdditionalBytes", "待核实；已有进度尚未通过完整校验") }
-        return ModelLibraryModel.formatBytes(values.compactMap { $0 }.reduce(0, +))
-    }
-    private func acquisitionState(_ entry: ModelCatalogEntry) -> String {
-        if let deadline = retryDeadline(entry) { return workflowText(language, "modelManagement.retryAfter", arguments: ["time": deadline.formatted()]) }
-        if existingResource(entry)?.control.fileState == .verified { return text("reuseComplete", "已有完整副本：复用文件，可另行登记或查看") }
-        if existingTask(entry) != nil { return text("reuseTask", "已有任务：保留原任务及完成后动作") }
-        return text("newDownload", "需要新增下载任务")
     }
     private func resourceTitle(_ resource: ModelResource) -> String {
         let base = model.presentationEntry(for: resource.record)?.title ?? text("recordedResource", "已登记资源")
@@ -761,7 +700,7 @@ struct ModelStorageDownloadSettings: View {
                 .disabled(!model.canChangeDownloadCredential).accessibilityIdentifier("model-credential-remove")
             Text(text("credentialHelp")).font(.caption).foregroundStyle(.secondary)
             if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
-        }.buttonStyle(.bordered).frame(maxWidth: .infinity, alignment: .leading)
+        }.buttonStyle(WorkbenchGlassButtonStyle()).frame(maxWidth: .infinity, alignment: .leading)
         .workbenchSheet(isPresented: $tokenVisible, title: text("accessToken"), size: .init(width: 600, height: 380)) { ModelAccessTokenEditor(model: model) }
     }
 }

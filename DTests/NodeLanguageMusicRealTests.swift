@@ -121,11 +121,11 @@ struct NodeLanguageMusicRealTests {
         defer { settings.removePersistentDomain(forName: suite) }
         // The caller must explicitly cite the existing same-revision development authorization.
         // This fixture does not accept a third-party license or claim a new GUI confirmation.
-        settings.set(true, forKey: "audio.model-use.mrt2-small." + MRT2BackendConfiguration.registeredModelRevision)
-        let consent = AudioModelUsePermission(settings: settings, model: .mrt2Music)
+
+
         let store = try await ProjectStore.create(at: project, name: "Real E03 music")
         let runtime = try await AppSessionFactory.makeSession(artifactDirectory: store.artifactDirectory,
-            bundledMusicEngine: musicEngine, musicConsent: consent, audioAccessRoot: access, bundledPitchEngine: pitchEngine)
+            bundledMusicEngine: musicEngine, audioAccessRoot: access, bundledPitchEngine: pitchEngine)
         let started = Date()
         do {
             let validator = try #require(runtime.validateMusicModel)

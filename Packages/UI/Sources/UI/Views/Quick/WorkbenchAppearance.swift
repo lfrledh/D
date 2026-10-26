@@ -109,6 +109,80 @@ struct WorkbenchEffectsPolicy {
     }
 }
 
+/// One value resolution for SwiftUI surfaces and AppKit popup panes. This is
+/// presentation data, not another preference owner or a runtime progress model.
+struct WorkbenchResolvedAppearance {
+    let palette: WorkbenchPalette
+    let scheme: ColorScheme
+    let increasedContrast: Bool
+    let effects: WorkbenchEffectsPolicy
+    let nativeGlass: Bool
+    let strength: Double
+    let legacyBlend: Double?
+    let readability: WorkbenchReadabilitySettings
+    var nativeTintOpacity: Double { Self.nativeTintOpacity(strength: strength) }
+    static func nativeTintOpacity(strength: Double) -> Double { (1 - min(1, max(0, strength))) * 0.35 }
+
+    init(preferences: ChatDisplayPreferences, scheme: ColorScheme, reduceMotion: Bool,
+         reduceTransparency: Bool, increasedContrast: Bool) {
+        let appearance = preferences.resolvedAppearance
+        self.scheme = preferences.preferredColorScheme ?? scheme
+        self.increasedContrast = increasedContrast
+        palette = appearance.palette(for: self.scheme)
+        effects = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: reduceMotion,
+            reduceTransparency: reduceTransparency, increasedContrast: increasedContrast)
+        strength = appearance.local?.strength ?? 0.55
+        nativeGlass = effects.usesCanvasBlend && appearance.local?.material == .glass
+        legacyBlend = appearance.local == nil ? (effects.usesCanvasBlend ? appearance.backgroundTransparency : 0) : nil
+        readability = effects.usesCanvasBlend ? appearance.resolvedReadability : .init()
+    }
+}
+
+enum WorkbenchSurfaceMetrics {
+    static let childRadius: CGFloat = 20
+    static let menuRadius: CGFloat = 12
+    static let menuPadding: CGFloat = 6
+    static let menuRowHeight: CGFloat = 32
+    static let actionRadius: CGFloat = 8
+}
+
+/// Native hosts preserve the inherited environment (including read-only system
+/// accessibility values); visual preferences still come from their live owner.
+struct WorkbenchVisualContext {
+    var state: ChatDisplayPreferencesState? = nil
+    var background: WorkbenchBackgroundOwner? = nil
+    var language: UILanguageStore? = nil
+    var fallback = ChatDisplayPreferences()
+    var scheme: ColorScheme? = nil
+    var inherited: EnvironmentValues? = nil
+
+    init() {}
+    init(_ environment: EnvironmentValues) {
+        state = environment.workbenchAppearanceState; background = environment.workbenchBackground
+        language = environment.dLanguageStore; fallback = environment.chatDisplayPreferences
+        scheme = environment.colorScheme; inherited = environment
+    }
+}
+
+struct WorkbenchVisualBridge: ViewModifier {
+    let context: WorkbenchVisualContext
+    @Environment(\.self) private var environment
+    func body(content: Content) -> some View {
+        let preferences = context.state?.preferences ?? context.fallback
+        content.workbenchTheme(paintsCanvas: false)
+            .environment(\.workbenchAppearanceState, context.state)
+            .environment(\.workbenchBackground, context.background)
+            .environment(\.chatDisplayPreferences, preferences)
+            .environment(\.dLanguageStore, context.language)
+            .environment(\.locale, Locale(identifier: context.language?.effectiveLanguageIdentifier ?? Locale.current.identifier))
+            .transformEnvironment(\.colorScheme) { value in
+                if let scheme = preferences.preferredColorScheme ?? context.scheme { value = scheme }
+            }
+            .preferredColorScheme(preferences.preferredColorScheme)
+            .environment(\.self, context.inherited ?? environment)
+    }
+}
+
 /// Keep the accepted travel curve and finite clock. Amplify only its small
 /// overshoot to the previous spring's peak, without reintroducing its long tail.
 struct WorkbenchRebound: CustomAnimation {
@@ -230,11 +304,9 @@ private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
 
     func body(content: Content) -> some View {
         let appearance = preferences.resolvedAppearance
-        let palette = appearance.palette(for: colorScheme)
-        let effects = WorkbenchEffectsPolicy(
-            appearance: appearance, reduceMotion: reduceMotion,
-            reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased)
-        let native = effects.usesCanvasBlend && appearance.local?.material == .glass
+        let resolved = WorkbenchResolvedAppearance(preferences: preferences, scheme: colorScheme,
+            reduceMotion: reduceMotion, reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased)
+        let palette = resolved.palette, effects = resolved.effects, native = resolved.nativeGlass
         content
             .environment(\.workbenchSurfaceGroup, inheritedGroup ?? group)
             .foregroundStyle(palette.foregroundColor)
@@ -245,7 +317,7 @@ private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
                         WorkbenchLocalSurface(owner: background, palette: palette, strength: local.strength,
                             drawsGlass: effects.usesCanvasBlend && local.material == .glass,
                             surfaceGroup: inheritedGroup ?? group, surfaceRole: role,
-                            readability: effects.usesCanvasBlend ? appearance.resolvedReadability : .init(),
+                            readability: resolved.readability,
                             contour: { rect, inset in shape.inset(by: inset).path(in: rect).cgPath })
                             .clipShape(shape)
                     } else {
@@ -269,7 +341,7 @@ private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
                             radius: effects.usesCanvasBlend ? 8 : 0, y: effects.usesCanvasBlend ? 2 : 0)
                     .allowsHitTesting(false)
             }
-            .glassEffect(native ? .regular.tint(palette.canvasColor.opacity((1 - (appearance.local?.strength ?? 0.55)) * 0.35)) : .identity, in: shape)
+            .glassEffect(native ? .regular.tint(palette.canvasColor.opacity(resolved.nativeTintOpacity)) : .identity, in: shape)
             .animation(effects.duration.map { .easeInOut(duration: $0) }, value: palette)
     }
 }
@@ -333,8 +405,15 @@ extension View {
     }
 }
 
-/// All D action buttons share the same local lens as panels. Accent and role
-/// are ink/edge cues; the action, focus, keyboard shortcut and enabled state stay native.
+/// Ordinary actions use a quiet plate inside their owning surface. The legacy
+/// name remains source-compatible; it no longer adds an independent glass lens.
+private struct WorkbenchActionHeightKey: EnvironmentKey { static let defaultValue: CGFloat = 32 }
+extension EnvironmentValues {
+    var workbenchActionHeight: CGFloat {
+        get { self[WorkbenchActionHeightKey.self] }
+        set { self[WorkbenchActionHeightKey.self] = newValue }
+    }
+}
 struct WorkbenchGlassButtonStyle: ButtonStyle {
     var prominent = false
     var compact = false
@@ -349,17 +428,19 @@ private struct WorkbenchGlassButtonBody: View {
     @Environment(\.chatDisplayPreferences) private var preferences
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.controlSize) private var size
+    @Environment(\.workbenchActionHeight) private var actionHeight
     var body: some View {
         let palette = preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? scheme)
-        let ink = configuration.role == .destructive ? Color.red : prominent ? palette.accentColor : palette.foregroundColor
+        let destructive = configuration.role == .destructive
+        let fill = prominent ? (destructive ? Color.red : palette.accentColor) : palette.foregroundColor.opacity(0.06)
+        let ink = prominent ? palette.canvasColor : destructive ? .red : palette.foregroundColor
+        let shape = RoundedRectangle(cornerRadius: WorkbenchSurfaceMetrics.actionRadius, style: .continuous)
         configuration.label
-            .padding(.horizontal, compact ? 0 : size == .mini || size == .small ? 7 : 12)
-            .padding(.vertical, compact ? 0 : size == .mini || size == .small ? 3 : 6)
+            .padding(.horizontal, compact ? 0 : 12)
+            .frame(minHeight: compact ? 28 : actionHeight)
             .foregroundStyle(ink)
-            .workbenchPanel(in: Capsule())
-            .overlay { Capsule().strokeBorder(ink.opacity(prominent ? 0.5 : 0), lineWidth: 1).allowsHitTesting(false) }
-            .modifier(WorkbenchButtonFeedback(shape: Capsule(), isPressed: configuration.isPressed, ink: ink))
+            .background(fill, in: shape)
+            .modifier(WorkbenchButtonFeedback(shape: shape, isPressed: configuration.isPressed, ink: ink))
             .opacity(isEnabled ? 1 : 0.45)
     }
 }
@@ -528,8 +609,8 @@ private struct WorkbenchSpecifiedPresentation: ViewModifier {
 struct WorkbenchGlassMenuStyle: MenuStyle {
     func makeBody(configuration: Configuration) -> some View {
         Menu(configuration).menuStyle(.borderlessButton)
-            .padding(.horizontal, 8).padding(.vertical, 5)
-            .workbenchPanel(in: Capsule())
+            .padding(.horizontal, 12).frame(minHeight: 32)
+            .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: WorkbenchSurfaceMetrics.actionRadius))
     }
 }
 struct WorkbenchPrimaryButtonStyle: ButtonStyle {
@@ -546,10 +627,16 @@ struct WorkbenchIconButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.frame(width: diameter, height: diameter)
-            .workbenchPanel(in: Circle())
-        .modifier(WorkbenchButtonFeedback(shape: Circle(), isPressed: configuration.isPressed))
-        .opacity(isEnabled ? 1 : 0.45)
+        Group {
+            if panel {
+                configuration.label.font(.system(size: 16)).frame(width: diameter, height: diameter)
+                    .workbenchPanel(in: Circle())
+                    .modifier(WorkbenchButtonFeedback(shape: Circle(), isPressed: configuration.isPressed))
+            } else {
+                configuration.label.font(.system(size: 16)).frame(width: diameter, height: diameter)
+                    .modifier(WorkbenchButtonFeedback(shape: RoundedRectangle(cornerRadius: 8), isPressed: configuration.isPressed))
+            }
+        }.opacity(isEnabled ? 1 : 0.45)
     }
 }
 
@@ -574,7 +661,7 @@ struct WorkbenchRowButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .workbenchPanel(cornerRadius: cornerRadius)
+            .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: cornerRadius))
             .modifier(WorkbenchButtonFeedback(shape: RoundedRectangle(cornerRadius: cornerRadius),
                 isPressed: configuration.isPressed))
             .opacity(isEnabled ? 1 : 0.45)
@@ -606,8 +693,8 @@ private struct WorkbenchButtonFeedback<S: InsettableShape>: ViewModifier {
 }
 
 
-/// Keep the native field and its binding. Only the shell samples D's background;
-/// the field editor, marked text, selection and Undo never enter the renderer.
+/// Keep the native field, marked text, selection and Undo. The quiet input plate
+/// sits inside the owning surface and does not add another glass effect.
 struct WorkbenchGlassTextFieldStyle: TextFieldStyle {
     func _body(configuration: TextField<Self._Label>) -> some View {
         configuration.textFieldStyle(.plain)
@@ -618,7 +705,9 @@ struct WorkbenchGlassTextFieldStyle: TextFieldStyle {
 
 private struct WorkbenchInputSurface: ViewModifier {
     func body(content: Content) -> some View {
-        content.scrollContentBackground(.hidden).workbenchPanel(cornerRadius: 8)
+        content.scrollContentBackground(.hidden)
+            .background(.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+            .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.13), lineWidth: 0.6).allowsHitTesting(false) }
     }
 }
 

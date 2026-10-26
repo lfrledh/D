@@ -52,11 +52,7 @@ struct NodeLanguageMusicCancellationTests {
         defer { settings.removePersistentDomain(forName: settingsSuite) }
         // This isolated fixture reflects the caller's existing same-revision authorization.
         // It neither accepts a license nor substitutes for a user confirmation.
-        settings.set(
-            true,
-            forKey: "audio.model-use.mrt2-small." + MRT2BackendConfiguration.registeredModelRevision
-        )
-        let consent = AudioModelUsePermission(settings: settings, model: .mrt2Music)
+
         let preservedTextData = Data("music cancellation fixture".utf8)
         var ownedStore: ProjectStore?
         var reopenedStore: ProjectStore?

@@ -58,6 +58,21 @@ public final class SharedLibraryBrowserState {
     public var query: SharedLibraryQuery
     public var draftText: String
     public var operationPath: [String] = []
+    var modelModality: CreatorMode?
+    var collapsedModelFamilies: Set<String> = []
+    var expandedModelFunctions: Set<String> = []
+    @ObservationIgnored let modelGroupsCache = SharedModelGroupCache()
+    var modelPathMigrated = false
+    var modelScrollKey: String { "models:" + (modelModality?.rawValue ?? "all") + (query.text.isEmpty ? "" : ":search") }
+    func migrateModelPath() {
+        guard !modelPathMigrated else { return }
+        modelPathMigrated = true
+        modelModality = CreatorMode.allCases.first { mode in operationPath.contains { $0.hasSuffix("/mode:" + mode.rawValue) } }
+        if let family = operationPath.last(where: { $0.contains("/family:") }) {
+            var position = ScrollPosition(idType: String.self); position.scrollTo(id: family, anchor: .top)
+            navigationScrolls[modelScrollKey] = position
+        }
+    }
     // Browser-owned, bounded navigation positions; dropped with this surface owner.
     var navigationScrolls: [String: ScrollPosition] = [:]
     var previewCache = WorkflowLibraryPreviewCache()
@@ -388,6 +403,7 @@ public struct SharedLibraryBrowser: View {
     @State private var tagSearch = ""
     @State private var selectedQueryID: UUID?
     @State private var parentID: UUID?
+    @State private var modelResultsWidth: CGFloat = 0
 
     public init(
         entries: [SharedLibraryBrowserEntry], store: SharedLibraryStore, compact: Bool = false, allowsImport: Bool = true, canvasMode: WorkflowCanvasLibraryMode? = nil, scopeDescription: String = "", importTargetDescription: String = "",
@@ -456,10 +472,15 @@ public struct SharedLibraryBrowser: View {
         entries.first { $0.id == focusedKey } ?? entries.first { validSelection.contains($0.id) }
     }
     private var visibleResult: Result<[SharedLibraryBrowserEntry], Error> {
-        Result { try SharedLibraryBrowserLogic.visibleEntries(entries.filter { entry in
-            guard let workflowContext else { return true }
-            return insertionController.map { workflowContext.isCurrent(in: $0) } == true && workflowContext.includes(entry)
-        }, store: store, query: query, scope: scope, context: queryContext) }
+        Result {
+            let eligible = entries.filter { entry in
+                guard let workflowContext else { return true }
+                return insertionController.map { workflowContext.isCurrent(in: $0) } == true && workflowContext.includes(entry)
+            }
+            let search = canvasMode == .nodes ? eligible.map { SharedModelLibraryCard.searchEntry($0, language: language) } : eligible
+            let ids = Set(try SharedLibraryBrowserLogic.visibleEntries(search, store: store, query: query, scope: scope, context: queryContext).map(\.id))
+            return eligible.filter { ids.contains($0.id) }
+        }
     }
     private var visible: [SharedLibraryBrowserEntry] { (try? visibleResult.get()) ?? [] }
 
@@ -559,7 +580,10 @@ public struct SharedLibraryBrowser: View {
                 }.padding(16).frame(minWidth: 300, minHeight: 320)
             }
         }
-        .onAppear { state.reconcile(using: store) }
+        .onAppear {
+            state.reconcile(using: store)
+            if canvasMode == .nodes { state.migrateModelPath() }
+        }
         .onChange(of: store.metadata) { _, _ in state.reconcile(using: store) }
         .onChange(of: entries) { _, current in
             if compactDetailKey != nil,
@@ -596,7 +620,7 @@ public struct SharedLibraryBrowser: View {
     }
 
     private var navigationScroll: Binding<ScrollPosition> {
-        let key = query.text.isEmpty ? state.operationPath.joined(separator: "/") : "search"
+        let key = canvasMode == .nodes ? state.modelScrollKey : query.text.isEmpty ? state.operationPath.joined(separator: "/") : "search"
         return Binding(get: { state.navigationScrolls[key] ?? ScrollPosition() }, set: { value in
             if state.navigationScrolls[key] == nil, state.navigationScrolls.count >= 32,
                let oldest = state.navigationScrolls.keys.sorted().first { state.navigationScrolls.removeValue(forKey: oldest) }
@@ -609,7 +633,8 @@ public struct SharedLibraryBrowser: View {
             if !validSelection.isEmpty { bulkControls }
             WorkbenchScrollView {
                 LazyVStack(spacing: 6) {
-                    if (canvasMode == .nodes || canvasMode == .programs), query.text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
+                    if canvasMode == .nodes { modelGroups }
+                    else if canvasMode == .programs, query.text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
                         operationNavigation
 
                     } else if canvasMode == .image || canvasMode == .video { resourceGrid }
@@ -645,6 +670,69 @@ public struct SharedLibraryBrowser: View {
                 }
             }
         }
+    }
+
+    private var modelGroups: some View {
+        let models = visible.filter { $0.item.kind == .model && (state.modelModality == nil || SharedModelLibraryCard.descriptor($0)?.modality == state.modelModality) }
+        let modes = state.modelGroupsCache.tree(models, language: language)
+        return VStack(alignment: .leading, spacing: 16) {
+            ScrollView(.horizontal) {
+                HStack(spacing: 4) {
+                    modelFilter(nil, title: word("all", "全部"))
+                    ForEach(CreatorMode.allCases, id: \.self) { mode in modelFilter(mode, title: workspaceText(language, mode.rawValue)) }
+                }
+            }.scrollIndicators(.hidden)
+            ForEach(modes) { mode in
+                if state.modelModality == nil { Text(mode.title).font(.title3).frame(maxWidth: .infinity, alignment: .leading) }
+                ForEach(mode.children?.contains(where: { $0.entry != nil }) == true ? [mode] : mode.children ?? []) { group in
+                    modelFamily(group)
+                }
+            }
+            if models.isEmpty { Text(word("empty", "没有符合条件的条目")).foregroundStyle(.secondary) }
+        }.scrollTargetLayout().frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { modelResultsWidth = $0 }
+    }
+    private func modelFamily(_ group: WorkflowOperationTree) -> some View {
+        let leaves = group.children?.compactMap(\.entry) ?? []
+        let open = !state.collapsedModelFamilies.contains(group.id) || !query.text.isEmpty
+        return VStack(alignment: .leading, spacing: 10) {
+            Button {
+                if !state.collapsedModelFamilies.insert(group.id).inserted { state.collapsedModelFamilies.remove(group.id) }
+            } label: {
+                HStack { Text(group.title + " (" + String(leaves.count) + ")").font(.headline); Spacer(); Image(systemName: open ? "chevron.down" : "chevron.right") }.contentShape(Rectangle())
+            }.buttonStyle(WorkbenchGlassButtonStyle())
+            if open {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: modelResultsWidth >= 572 ? 280 : 1), spacing: 12, alignment: .top), count: modelResultsWidth >= 572 ? 2 : 1), alignment: .leading, spacing: 10) {
+                    ForEach(leaves) { entry in modelCard(entry) }
+                }
+            }
+        }.id(group.id)
+    }
+    private func modelFilter(_ mode: CreatorMode?, title: String) -> some View {
+        Button { state.modelModality = mode } label: {
+            Text(title).padding(.horizontal, 10).frame(minHeight: 28)
+                .background(state.modelModality == mode ? Color.accentColor.opacity(0.16) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+        }.buttonStyle(.plain).accessibilityAddTraits(state.modelModality == mode ? .isSelected : [])
+    }
+    private func modelCard(_ entry: SharedLibraryBrowserEntry) -> some View {
+        SharedModelVariantCard(entry: entry, selected: selectedKeys.contains(entry.id), focused: entryKeyboardFocus == entry.id,
+            readiness: readinessName(entry.item.readiness), query: query.text,
+            expanded: Binding(get: { state.expandedModelFunctions.contains(entry.id) }, set: { if $0 { state.expandedModelFunctions.insert(entry.id) } else { state.expandedModelFunctions.remove(entry.id) } }),
+            choose: { selectedKeys = [entry.id]; focusedKey = entry.id; entryKeyboardFocus = entry.id },
+            info: { selectedKeys = [entry.id]; focusedKey = entry.id; compactDetailKey = entry.id },
+            add: { function in
+                guard let current = SharedModelLibraryCard.resolve(entry, function: function, current: entries), canAdd(current) else { errorMessage = word("staleEntry", "条目已变化，请重新选择。"); return }
+                onAdd(current)
+            }, drag: { function in
+                guard let current = SharedModelLibraryCard.resolve(entry, function: function, current: entries), canAdd(current) else { return NSItemProvider() }
+                return SharedLibraryBrowserLogic.dragProvider(for: current, controller: insertionController)
+            }, insertionIssue: { function in
+                guard let current = SharedModelLibraryCard.resolve(entry, function: function, current: entries), SharedLibraryBrowserLogic.allows(.add, entry: current) else { return word("unavailable", "当前不可用") }
+                return insertionIssue(current)
+            }, prepare: { dispatch(.prepare, key: entry.id) },
+            prepareTitle: SharedLibraryBrowserLogic.allows(.prepare, entry: entry) ? prepareLabel(for: entry) : nil)
+            .focusable().focused($entryKeyboardFocus, equals: entry.id).focusEffectDisabled()
+            .workbenchContextMenu { resourceActions(entry) }
     }
 
     private var operationNavigation: some View {
@@ -724,7 +812,9 @@ public struct SharedLibraryBrowser: View {
             searchControls
             Text(word("legend", "能力 / 我的标签")).font(.caption2).foregroundStyle(.secondary)
             bulkControls
-            if (canvasMode == .nodes || canvasMode == .programs), query.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if canvasMode == .nodes {
+                WorkbenchScrollView { modelGroups.padding(.bottom, 16) }.scrollPosition(navigationScroll)
+            } else if canvasMode == .programs, query.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 WorkbenchScrollView { operationNavigation.padding(.bottom, 16) }.scrollPosition(navigationScroll)
             } else if case .failure = visibleResult {
                 Spacer()
@@ -985,7 +1075,7 @@ public struct SharedLibraryBrowser: View {
             }
         }
         if SharedLibraryBrowserLogic.allows(.location, entry: entry) { WorkbenchMenuAction(word("location", "在访达显示来源")) { dispatch(.location, key: entry.id) } }
-        if SharedLibraryBrowserLogic.allows(.add, entry: entry) { WorkbenchMenuAction(word("addCanvas", "添加画布")) { dispatch(.add, key: entry.id) }.disabled(!canAdd(entry)) }
+        if SharedModelLibraryCard.functions(entry).count <= 1, SharedLibraryBrowserLogic.allows(.add, entry: entry) { WorkbenchMenuAction(word("addCanvas", "添加画布")) { dispatch(.add, key: entry.id) }.disabled(!canAdd(entry)) }
     }
 
     private var detailPane: some View {
@@ -1004,7 +1094,20 @@ public struct SharedLibraryBrowser: View {
             Text(entry.item.detail).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
             Text(word("legend", "能力 / 我的标签")).font(.caption2).foregroundStyle(.secondary)
             Divider()
-            if canUse(entry) {
+            let functions = entry.item.kind == .model ? SharedModelLibraryCard.functions(entry) : []
+            if functions.count > 1 {
+                ForEach(functions, id: \.id) { function in
+                    HStack {
+                        Text(WorkflowCanvasPresentation.operationTitle(function, language: language))
+                        Spacer()
+                        Button(word("quickUse", "快速用")) { dispatchFunction(.use, entry: entry, function: function.id) }
+                            .disabled(!canUse(entry))
+                        Button(word("addCanvas", "添加画布")) { dispatchFunction(.add, entry: entry, function: function.id) }
+                            .disabled(SharedModelLibraryCard.resolve(entry, function: function.id, current: entries).map { !canAdd($0) } ?? true)
+                    }
+                }
+            }
+            if functions.count <= 1, canUse(entry) {
                 Button(word("quickUse", "快速用")) { dispatch(.use, key: entry.id) }
                     .accessibilityIdentifier("shared-library-use")
                 if entry.item.readiness != .available {
@@ -1012,7 +1115,7 @@ public struct SharedLibraryBrowser: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            if SharedLibraryBrowserLogic.allows(.add, entry: entry) {
+            if functions.count <= 1, SharedLibraryBrowserLogic.allows(.add, entry: entry) {
                 Button(word("addCanvas", "添加画布")) { dispatch(.add, key: entry.id) }
                     .accessibilityIdentifier("shared-library-add").workbenchHelp("LIB-ENTRY-ADD", target: "entry:\(entry.id):\(entry.selection):\(entry.metadataSnapshot?.instanceID)")
                     .disabled(!canAdd(entry))
@@ -1459,6 +1562,15 @@ public struct SharedLibraryBrowser: View {
             return true
         }
         catch { errorMessage = sharedLibraryErrorText(error, language: language); return false }
+    }
+    private func dispatchFunction(_ action: SharedLibraryBrowserAction, entry: SharedLibraryBrowserEntry, function: String) {
+        guard let current = SharedModelLibraryCard.resolve(entry, function: function, current: entries),
+              SharedLibraryBrowserLogic.allows(action, entry: current) else {
+            errorMessage = word("staleEntry", "条目已变化，请重新选择。"); return
+        }
+        if case .add = action {
+            if let reason = insertionIssue(current) { errorMessage = reason; return }; onAdd(current)
+        } else if case .use = action { onUse(current) }
     }
     private func dispatch(_ action: SharedLibraryBrowserAction, key: String) {
         guard let current = SharedLibraryBrowserLogic.currentEntry(

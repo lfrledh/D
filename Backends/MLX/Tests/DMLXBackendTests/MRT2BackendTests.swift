@@ -370,21 +370,18 @@ struct MRT2BackendTests {
         #expect(next.artifacts.count == 1)
     }
 
-    @Test("License denial asks only at execute and creates no run")
-    func licenseGate() async throws {
-        let fixture = try MRT2Fixture()
-        defer { fixture.remove() }
-        let denied = try MLXMRT2Backend(configuration: fixture.configuration(
-            acknowledged: false, acknowledgement: { false }))
-        _ = try await denied.estimate(fixture.request())
-        do {
-            _ = try await denied.execute(fixture.request()) { _ in }
-            Issue.record("MRT2 license gate was bypassed")
-        } catch InferenceFailure.invalidRequest {} catch {
-            Issue.record("Unexpected MRT2 license failure: \(error)")
-        }
-        #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.artifacts.path).isEmpty)
+    @Test("No local rights assertion is required; execution still drains and releases")
+    func legacyAcknowledgementDoesNotGateExecution() async throws {
+        let fixture = try MRT2Fixture(); defer { fixture.remove() }
+        let backend = try MLXMRT2Backend(configuration: fixture.configuration(
+            acknowledged: false, acknowledgement: { Issue.record("Obsolete rights callback was invoked"); return false }))
+        _ = try await backend.estimate(fixture.request())
+        let result = try await backend.execute(fixture.request()) { _ in }
+        await backend.release()
+        #expect(result.artifacts.count == 1)
+        #expect(FileManager.default.fileExists(atPath: try #require(result.artifacts.first).url.path))
     }
+
 }
 
 private enum MRT2FixtureError: Error { case consumer, accessFinish }

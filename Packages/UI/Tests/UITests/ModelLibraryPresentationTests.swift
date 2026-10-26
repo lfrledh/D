@@ -751,3 +751,76 @@ extension ModelLibraryPresentationTests {
         try await library.shutdown()
     }
 }
+
+extension ModelLibraryPresentationTests {
+    @Test func acquisitionRequestDefaultsAndFailureDoNotEnqueueOrLoseSelection() async throws {
+        let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+        let root = URL(fileURLWithPath: base).appendingPathComponent("Acquisition-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bytes = Data(repeating: 0x41, count: 4096), transfer = PresentationTransfer()
+        let fixed = try #require(ModelCatalog.entries().first { $0.id == ModelCatalog.flux2ID })
+        let entry = ModelCatalogEntry(id: fixed.id, title: "Isolated request", repository: "fixture/request", revision: fixed.revision,
+            files: [.init(path: "payload.bin", size: UInt64(bytes.count), sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())],
+            workflowProfileID: fixed.workflowProfileID, workflowIdentity: fixed.workflowIdentity)
+        let fault = Mutex(true)
+        let library = try await ModelLibrary(stateDirectory: root.appendingPathComponent("state"), catalog: [entry], transport: transfer,
+            checkpoint: { phase in if phase == "enqueue.beforeWrite", fault.withLock({ $0 }) { throw ModelLibraryError.storage("isolated enqueue failure") } })
+        try await library.configureRoot(at: root); try await library.pauseQueue()
+        let model = ModelLibraryModel(library: library); await model.refresh()
+        var bound = false
+        await model.requestNodeAcquisition(operationID: try #require(entry.workflowProfileID), identity: try #require(entry.workflowIdentity), title: "Captured node", isCurrent: { true }) { _, _ in bound = true }
+        let request = try #require(model.acquisitionRequest)
+        #expect(request.catalogIDs == [entry.id] && request.target?.title == "Captured node")
+        #expect(await library.snapshot().downloads.isEmpty && !bound)
+        model.requestAcquisition(catalogIDs: []) // Cannot replace an unsubmitted request.
+        #expect(model.acquisitionRequest?.id == request.id)
+        await model.confirmAcquisition(requestID: request.id, entries: [entry], register: false, useTarget: false)
+        #expect(model.acquisitionRequest?.id == request.id && model.errorMessage != nil)
+        #expect(await library.snapshot().downloads.isEmpty && !bound)
+        fault.withLock { $0 = false }
+        await model.confirmAcquisition(requestID: request.id, entries: [entry], register: false, useTarget: false)
+        let snapshot = await library.snapshot(), task = try #require(snapshot.downloads.first)
+        #expect(task.postAction == .filesOnly && task.acquisitionSnapshot != nil && snapshot.queueState == .paused && !bound)
+        #expect(model.acquisitionRequest == nil)
+        model.requestAcquisition(catalogIDs: [entry.id]); let next = try #require(model.acquisitionRequest)
+        await model.confirmAcquisition(requestID: request.id, entries: [entry], register: true, useTarget: false)
+        let afterStale = await library.snapshot()
+        #expect(model.acquisitionRequest?.id == next.id && afterStale.downloads.first?.postAction == .filesOnly)
+        try await library.shutdown()
+    }
+}
+
+
+extension ModelLibraryPresentationTests {
+    @Test func acquisitionUsesVerifiedExternalCopyWithoutManagedDownload() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("AcquisitionExternal-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fixed = try #require(ModelCatalog.entries().first { $0.id == ModelCatalog.flux2ID })
+        let bytes = Data(repeating: 0x41, count: 4096), transfer = PresentationTransfer()
+        let entry = ModelCatalogEntry(id: fixed.id, title: "Exact fixture", repository: "fixture/external", revision: fixed.revision,
+            files: [.init(path: "payload.bin", size: UInt64(bytes.count), sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())],
+            workflowProfileID: fixed.workflowProfileID, workflowIdentity: fixed.workflowIdentity)
+        let source = root.appendingPathComponent("source"); try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try bytes.write(to: source.appendingPathComponent("payload.bin"))
+        let library = try await ModelLibrary(stateDirectory: root.appendingPathComponent("state"), catalog: [entry], transport: transfer)
+        let id = try await library.registerExisting(at: source, catalogID: entry.id)
+        let model = ModelLibraryModel(library: library); await model.refresh()
+        let resources = ModelLibraryModel.acquisitionResources(entry, snapshot: model.snapshot)
+        #expect(resources.count == 1 && resources[0].record.storage == .external)
+        var bound: ModelID?
+        await model.requestNodeAcquisition(operationID: try #require(entry.workflowProfileID), identity: try #require(entry.workflowIdentity),
+            title: "Exact fixture", isCurrent: { true }) { selected, authorized in
+            #expect(authorized()); bound = selected
+        }
+        let request = try #require(model.acquisitionRequest)
+        await model.confirmExistingRegistration(requestID: request.id, resource: resources[0], useTarget: true)
+        #expect(bound == id && model.acquisitionRequest == nil && model.errorMessage == nil)
+        #expect(model.snapshot?.downloads.isEmpty == true && model.snapshot?.resources.count == 1)
+        #expect(await transfer.count == 0)
+        #expect(try Data(contentsOf: source.appendingPathComponent("payload.bin")) == bytes)
+        try await library.shutdown()
+    }
+}

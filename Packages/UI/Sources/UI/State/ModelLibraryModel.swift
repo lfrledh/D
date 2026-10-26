@@ -9,6 +9,93 @@ import SwiftUI
 /// dismissing a sheet does not cancel, pause, or detach any of that work.
 @MainActor @Observable
 public final class ModelLibraryModel {
+    /// A bounded presentation request, distinct from a download task or license grant.
+    struct AcquisitionRequest: Identifiable {
+        struct Target {
+            let title: String
+            let operationID: String
+            let identity: String
+            let isCurrent: @MainActor () -> Bool
+            let bind: @MainActor (ModelID, @escaping @MainActor () -> Bool) async throws -> Void
+        }
+        let id = UUID()
+        let catalogIDs: [String]
+        let target: Target?
+    }
+    var acquisitionRequest: AcquisitionRequest?
+    private(set) var acquisitionSubmissionID: UUID?
+    @ObservationIgnored private var acquisitionIntent = UUID()
+    func requestAcquisition(catalogIDs: [String] = []) {
+        guard acquisitionRequest == nil, acquisitionSubmissionID == nil else { return }
+        acquisitionIntent = UUID()
+        acquisitionRequest = .init(catalogIDs: catalogIDs, target: nil)
+        workspace = "downloads"; isPresented = true
+    }
+    func requestNodeAcquisition(operationID: String, identity: String, title: String,
+                                isCurrent: @escaping @MainActor () -> Bool,
+                                bind: @escaping @MainActor (ModelID, @escaping @MainActor () -> Bool) async throws -> Void) async {
+        guard acquisitionRequest == nil, acquisitionSubmissionID == nil else { return }
+        let intent = UUID(); acquisitionIntent = intent
+        await refresh()
+        guard acquisitionIntent == intent, acquisitionRequest == nil else { return }
+        guard isCurrent(), let entry = Self.nodeDownloadEntry(operationID: operationID, identity: identity, catalog: catalog) else {
+            errorMessage = nodeText("targetChanged", "目标已改变；文件保留，未绑定到其他节点。")
+            return
+        }
+        acquisitionRequest = .init(catalogIDs: [entry.id], target: .init(title: title, operationID: operationID,
+            identity: identity, isCurrent: isCurrent, bind: bind))
+        workspace = "downloads"; isPresented = true
+    }
+    func confirmAcquisition(requestID: UUID, entries: [ModelCatalogEntry], register: Bool, useTarget: Bool) async {
+        guard acquisitionSubmissionID == nil, pendingCatalogIDs.isEmpty, globalOperation == nil, !isChoosingLocation else { return }
+        guard let request = acquisitionRequest, request.id == requestID else { return }
+        guard !entries.isEmpty, entries.allSatisfy({ catalog.contains($0) }) else {
+            errorMessage = managementText("targetChanged", "选用目标或配置已改变，资源保留。")
+            return
+        }
+        acquisitionSubmissionID = requestID
+        defer { if acquisitionSubmissionID == requestID { acquisitionSubmissionID = nil } }
+        errorMessage = nil
+        let accepted: Bool
+        if useTarget {
+            guard register, let target = request.target, target.isCurrent(), entries.count == 1,
+                  Self.nodeDownloadEntry(operationID: target.operationID, identity: target.identity, catalog: catalog) == entries[0] else {
+                errorMessage = managementText("targetChanged", "选用目标或配置已改变，资源保留。")
+                return
+            }
+            accepted = await prepareNode(operationID: target.operationID, identity: target.identity, isCurrent: target.isCurrent, bind: target.bind)
+        } else { accepted = await enqueue(entries.map(\.id), register: register) }
+        if accepted, errorMessage == nil, acquisitionRequest?.id == requestID { acquisitionRequest = nil; workspace = "downloads" }
+    }
+    static func acquisitionResources(_ entry: ModelCatalogEntry, snapshot: ModelLibrarySnapshot?) -> [ModelResource] {
+        (snapshot?.resources ?? []).filter {
+            $0.record.catalogID == entry.id && $0.record.revision == entry.revision && $0.control.role == .original &&
+            ![.deleted, .deleting].contains($0.control.fileState) &&
+            ($0.record.storage == .managed || $0.control.fileState == .verified)
+        }
+    }
+    func confirmExistingRegistration(requestID: UUID, resource: ModelResource, useTarget: Bool = false) async {
+        guard let request = acquisitionRequest, request.id == requestID, acquisitionSubmissionID == nil,
+              globalOperation == nil, pendingCatalogIDs.isEmpty else { return }
+        guard snapshot?.resources.contains(resource) == true, resource.control.fileState == .verified,
+              let entry = catalog.first(where: { $0.id == resource.record.catalogID && $0.revision == resource.record.revision }),
+              !useTarget || (request.target?.isCurrent() == true && request.target.map {
+                  Self.nodeDownloadEntry(operationID: $0.operationID, identity: $0.identity, catalog: catalog) == entry
+              } == true) else { errorMessage = managementText("targetChanged", "选用目标或配置已改变，资源保留。"); return }
+        acquisitionSubmissionID = requestID
+        defer { if acquisitionSubmissionID == requestID { acquisitionSubmissionID = nil } }
+        errorMessage = nil
+        await registerResource(resource)
+        guard acquisitionRequest?.id == requestID, errorMessage == nil else { return }
+        if useTarget, let target = request.target {
+            do {
+                guard target.isCurrent() else { throw WorkflowIssue(managementText("targetChanged", "选用目标或配置已改变，资源保留。")) }
+                try await target.bind(resource.record.id) { [weak self] in self?.acquisitionRequest?.id == requestID && target.isCurrent() }
+            } catch { errorMessage = error.localizedDescription; return }
+            guard acquisitionRequest?.id == requestID else { return }
+        }
+        acquisitionRequest = nil; workspace = "resources"; selectedResource = resource.id
+    }
     public var isPresented = false
     public var workspace = "resources"
     public var resourceSearch = ""
@@ -447,12 +534,8 @@ public final class ModelLibraryModel {
     }
     public func cancelPreparation() { preparation?.cancel() }
     public func install(catalogID: String) async {
-        guard !isChoosingLocation, rootURL != nil, globalOperation == nil, !pendingCatalogIDs.contains(catalogID) else { return }
-        pendingCatalogIDs.insert(catalogID)
-        defer { pendingCatalogIDs.remove(catalogID) }
-        do { _ = try await library.install(catalogID: catalogID) }
-        catch { report(error, context: managementText("installFailed", "未能开始安装")) }
-        await refresh()
+        // Compatibility entry: presentation always precedes a new acquisition.
+        requestAcquisition(catalogIDs: [catalogID])
     }
 
     public func pause(_ id: ModelID) async {
@@ -474,7 +557,7 @@ public final class ModelLibraryModel {
         alert.informativeText = managementText("restartMessage", "清除本项已保存进度后从头下载。已保存字节：") + Self.formatBytes(record.downloadedBytes)
         alert.addButton(withTitle: managementText("restartButton", "重新下载"))
         alert.addButton(withTitle: managementText("keepProgress", "保留当前进度"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard await WorkbenchConfirmation.present(alert, owner: NSApp.keyWindow ?? NSApp.mainWindow, destructiveIndices: [0]) == .alertFirstButtonReturn else { return }
         await perform(.restarting, id: id) { try await self.library.restart(id, resumeQueue: false) }
     }
 
@@ -510,7 +593,7 @@ public final class ModelLibraryModel {
             : managementText("removeExternalMessage")
         alert.addButton(withTitle: managed ? managementText("removeManaged") : managementText("removeExternal"))
         alert.addButton(withTitle: managementText("keep"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard await WorkbenchConfirmation.present(alert, owner: NSApp.keyWindow ?? NSApp.mainWindow, destructiveIndices: [0]) == .alertFirstButtonReturn else { return }
         await perform(.removing, id: id) { try await self.library.remove(id) }
     }
 
@@ -615,14 +698,15 @@ extension ModelLibraryModel {
         guard let url = resource.record.directory else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
-    public func enqueue(_ entries: [String], register: Bool) async {
-        guard pendingCatalogIDs.isEmpty else { return }
+    @discardableResult public func enqueue(_ entries: [String], register: Bool) async -> Bool {
+        guard pendingCatalogIDs.isEmpty else { return false }
         pendingCatalogIDs.formUnion(entries)
         defer { pendingCatalogIDs.subtract(entries) }
         await command {
-            let tasks = try await self.library.enqueueDownloads(entries, postAction: register ? .register : .filesOnly, startIfIdle: false)
+            let tasks = try await self.library.enqueueDownloads(entries, postAction: register ? .register : .filesOnly, startIfIdle: true)
             self.selectedTask = tasks.first?.id
         }
+        return errorMessage == nil
     }
 
     static func nodeDownloadEntry(operationID: String, identity: String,
@@ -633,10 +717,10 @@ extension ModelLibraryModel {
         return matches.count == 1 ? matches.first : nil
     }
 
-    func prepareNode(operationID: String, identity: String,
+    @discardableResult func prepareNode(operationID: String, identity: String,
                      isCurrent: @escaping @MainActor () -> Bool,
-                     bind: @escaping @MainActor (ModelID, @escaping @MainActor () -> Bool) async throws -> Void) async {
-        guard isCurrent(), !preparingNodeIdentities.contains(identity) else { return }
+                     bind: @escaping @MainActor (ModelID, @escaping @MainActor () -> Bool) async throws -> Void) async -> Bool {
+        guard isCurrent(), !preparingNodeIdentities.contains(identity) else { return false }
         preparingNodeIdentities.insert(identity)
         let revocations = nodePreparationRevocations
         defer { if nodePreparations[identity] == nil { preparingNodeIdentities.remove(identity) } }
@@ -646,14 +730,14 @@ extension ModelLibraryModel {
                 throw WorkflowIssue(nodeText("unavailable", "此配置没有内置下载，或目标已改变。已有文件和节点保留。"))
             }
             if rootURL == nil { await chooseRoot() }
-            guard isCurrent(), rootURL != nil else { return }
+            guard isCurrent(), rootURL != nil else { return false }
             guard !isChoosingLocation, globalOperation == nil else {
                 throw WorkflowIssue(nodeText("busy", "请等待当前模型库操作完成后重试。"))
             }
             // Initialization can suspend in refresh or directory authorization.
             // Until the exact copy is known, any explicit revocation invalidates
             // this pending request before enqueue can register an existing copy.
-            guard nodePreparationRevocations == revocations else { return }
+            guard nodePreparationRevocations == revocations else { return false }
             // The original queue/post-action remains authoritative. An existing
             // files-only task is not silently rewritten by enqueueDownloads.
             let tasks = try await library.enqueueDownloads([entry.id], postAction: .register)
@@ -668,12 +752,14 @@ extension ModelLibraryModel {
             guard let resource, candidates.contains(where: { $0.id == resource }) else {
                 throw WorkflowIssue(nodeText("copyChanged", "模型副本无法唯一确认；资源保留，请在模型与下载中检查。"))
             }
-            guard nodePreparationRevocations[resource, default: 0] == revocations[resource, default: 0] else { return }
+            guard nodePreparationRevocations[resource, default: 0] == revocations[resource, default: 0] else { return false }
             nodePreparations[identity] = .init(entry: entry, resource: resource, isCurrent: isCurrent, bind: bind)
             selectedResource = resource; selectedTask = tasks.first?.id; workspace = "downloads"
             await refresh()
+            return errorMessage == nil
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 
@@ -786,7 +872,7 @@ extension ModelLibraryModel {
         alert.messageText = managementText("restartTitle")
         alert.informativeText = managementText("restartMessage") + Self.formatBytes(resource.record.downloadedBytes)
         alert.addButton(withTitle: managementText("restartButton")); alert.addButton(withTitle: managementText("keepProgress"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard await WorkbenchConfirmation.present(alert, owner: NSApp.keyWindow ?? NSApp.mainWindow, destructiveIndices: [0]) == .alertFirstButtonReturn else { return }
         await perform(.restarting, id: task.resourceID.modelID) { try await self.library.restartDownload(task.id, expectedGeneration: task.generation) }
     }
     public func pauseTask(_ id: UUID) async {

@@ -18,6 +18,7 @@ public struct AudioBackendConfiguration: Sendable {
     public let modelManifest: URL
     public let artifactDirectory: URL
     public let profile: AudioBackendProfile
+    /// Legacy source compatibility only. Not evidence of rights and not an execution gate.
     public let licenseAcknowledged: Bool
     public let timeoutSeconds: Double
     public let cancellationGraceSeconds: Double
@@ -25,6 +26,7 @@ public struct AudioBackendConfiguration: Sendable {
     public let accessBootstrapRoot: URL?
     /// Host-owned checks; neither closure requests new system permissions.
     public let confirmDeployment: (@Sendable () throws -> Void)?
+    /// Legacy callback retained for source compatibility; the backend does not invoke it.
     public let modelUseAcknowledged: (@Sendable () async -> Bool)?
 
     public init(
@@ -63,7 +65,6 @@ struct ValidatedAudioConfiguration: Sendable {
     let modelManifest: URL
     let artifactDirectory: URL
     let profile: AudioBackendProfile
-    let licenseAcknowledged: Bool
     let timeoutSeconds: Double
     let cancellationGraceSeconds: Double
 }
@@ -139,7 +140,6 @@ enum AudioFileSystem {
         return ValidatedAudioConfiguration(
             pythonExecutable: python, providerScript: provider, vendorDirectory: vendor,
             modelManifest: manifest, artifactDirectory: artifacts, profile: configuration.profile,
-            licenseAcknowledged: configuration.licenseAcknowledged,
             timeoutSeconds: configuration.timeoutSeconds,
             cancellationGraceSeconds: configuration.cancellationGraceSeconds)
     }

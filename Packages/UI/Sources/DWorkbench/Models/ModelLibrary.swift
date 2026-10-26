@@ -112,6 +112,7 @@ public actor ModelLibrary {
             }
         } else { disk = DiskState() }
         var migratedWanIDs = Set<ModelID>()
+        var correctedACESourceIDs = Set<ModelID>()
         for index in disk.records.indices {
             let value = disk.records[index]
             guard let entry = catalog.first(where: { $0.id == value.record.catalogID }), entry.revision == value.record.revision,
@@ -121,6 +122,11 @@ public actor ModelLibrary {
             let identity = try Self.recipeIdentity(entry)
             if let recorded = value.recipeIdentity {
                 if recorded != identity {
+                    if try Self.isACESourceCorrection(from: recorded, to: entry) {
+                        correctedACESourceIDs.insert(value.record.id)
+                        disk.records[index].precedingRecipeIdentity = recorded
+                        disk.records[index].recipeIdentity = identity
+                    } else {
                     guard try Self.isWanTokenizerUpgrade(from: recorded, to: entry) else {
                         throw ModelLibraryError.integrity("固定下载配方已改变；保留已有文件，拒绝混合断点。")
                     }
@@ -137,6 +143,7 @@ public actor ModelLibrary {
                         disk.records[index].record.error = value.record.error
                         disk.records[index].control?.fileState = .partial
                         disk.records[index].control?.requiresTokenizerUpgrade = true
+                    }
                     }
                 }
             } else {
@@ -182,6 +189,15 @@ public actor ModelLibrary {
                 }
             } else { try directory.atomicWrite(originalIndex, to: backup) }
         }
+        if !correctedACESourceIDs.isEmpty, let originalIndex {
+            try checkpoint("aceSourceCorrection.backup")
+            let backup = "index.ace-source-v1.backup.json"
+            if try Self.exists(backup, in: directory) {
+                guard try directory.read(backup, maximum: 32 * 1024 * 1024) == originalIndex else {
+                    throw ModelLibraryError.integrity("ACE source backup differs; existing files and index were not replaced.")
+                }
+            } else { try directory.atomicWrite(originalIndex, to: backup) }
+        }
         if disk.schemaVersion == 1, let originalIndex {
             try checkpoint("migration.backup")
             let backup = "index.v1.backup.json"
@@ -199,7 +215,7 @@ public actor ModelLibrary {
         for index in disk.downloads!.indices {
             var task = disk.downloads![index]
             let resource = try stored(task.resourceID.modelID)
-            if migratedWanIDs.contains(task.resourceID.modelID), task.recipeIdentity == resource.precedingRecipeIdentity,
+            if migratedWanIDs.contains(task.resourceID.modelID) || correctedACESourceIDs.contains(task.resourceID.modelID), task.recipeIdentity == resource.precedingRecipeIdentity,
                !task.state.isTerminal, let recipe = resource.recipeIdentity {
                 task = task.upgradingRecipe(recipe); task.state = .paused
                 disk.downloads![index] = task
@@ -375,17 +391,24 @@ public actor ModelLibrary {
               let entry = catalog.first(where: { $0.id == task.catalogID }), !entry.files.isEmpty, sourceBaseURL == nil else {
             throw ModelLibraryError.accessDenied("当前任务没有可核对的固定模型来源。")
         }
-        let intent = credentialIntent
-        let credential = downloadCredential
+        try await checkCatalogAccess(catalogID: entry.id)
+        guard disk.downloads?.contains(where: { $0.id == task.id && $0.generation == task.generation && $0.attemptID == task.attemptID }) == true else {
+            throw ModelLibraryError.busy("下载任务已改变；请重新选择当前任务。")
+        }
+    }
+
+    /// Explicit access recheck before enqueue. Never called by rendering or progress projection.
+    public func checkCatalogAccess(catalogID: String) async throws {
+        try requireAdmission()
+        let entry = try catalogEntry(catalogID)
+        guard !entry.files.isEmpty, sourceBaseURL == nil else { throw ModelLibraryError.accessDenied("当前配置没有可核对的固定模型来源。") }
+        let intent = credentialIntent, credential = downloadCredential
         let groups = Dictionary(grouping: entry.files) { ($0.source?.rawValue ?? "huggingFace") + ":" + ($0.sourceRepository ?? entry.repository) + "@" + ($0.sourceRevision ?? entry.revision) }
         for key in groups.keys.sorted() {
             guard let file = groups[key]?.max(by: { $0.size < $1.size }) else { continue }
             try await ModelSourceAccessProbe.check(sourceURL(entry: entry, file: file, start: 0), credential: file.source == .githubRaw ? nil : credential)
-            try Task.checkCancellation()
-            guard intent == credentialIntent else { throw CancellationError() }
-            guard disk.downloads?.contains(where: { $0.id == task.id && $0.generation == task.generation && $0.attemptID == task.attemptID }) == true else {
-                throw ModelLibraryError.busy("下载任务已改变；请重新选择当前任务。")
-            }
+            try Task.checkCancellation(); try requireAdmission()
+            guard intent == credentialIntent, try catalogEntry(catalogID) == entry else { throw CancellationError() }
         }
     }
 
@@ -1444,6 +1467,25 @@ public actor ModelLibrary {
         return try recipeIdentity(old) == recorded
     }
 
+    /// Only the eleven fixed companion-file URLs change. Local paths, bytes,
+    /// digests, model identity and preparation are identical; no content rewrite.
+    static func legacyACESourceEntry(_ entry: ModelCatalogEntry) -> ModelCatalogEntry {
+        let files = entry.files.map { file in
+            guard file.sourceRepository == "ACE-Step/Ace-Step1.5", let remote = file.remotePath else { return file }
+            return ModelFile(path: file.path, size: file.size, sha256: file.sha256, digestAlgorithm: file.digestAlgorithm,
+                sourceRepository: file.sourceRepository, sourceRevision: file.sourceRevision,
+                remotePath: "checkpoints/" + remote, source: file.source)
+        }
+        return .init(id: entry.id, title: entry.title, repository: entry.repository, revision: entry.revision,
+            files: files, imageProfile: entry.imageProfile, workflowProfileID: entry.workflowProfileID,
+            workflowIdentity: entry.workflowIdentity, preparation: entry.preparation)
+    }
+    private static func isACESourceCorrection(from recorded: String, to entry: ModelCatalogEntry) throws -> Bool {
+        guard entry.id == "ace-step-1.5-xl-sft-f32-no-lm",
+              let frozen = try ModelCatalog.entries().first(where: { $0.id == entry.id }), entry == frozen else { return false }
+        return try recipeIdentity(legacyACESourceEntry(entry)) == recorded
+    }
+
     private static func recipeIdentity(_ entry: ModelCatalogEntry) throws -> String {
         struct Recipe: Encodable {
             let id: String
@@ -1601,7 +1643,7 @@ extension ModelLibrary {
                 if let prior = downloadForResource(id) { result.append(prior) }
                 continue // do not invent another successful download for existing files
             }
-            let task = ModelDownloadTask(resourceID: .init(rawValue: id.rawValue), catalogID: catalogID, recipeIdentity: recipe, postAction: postAction, createdAt: now())
+            let task = ModelDownloadTask(resourceID: .init(rawValue: id.rawValue), catalogID: catalogID, recipeIdentity: recipe, postAction: postAction, createdAt: now(), acquisitionSnapshot: try .init(entry: entry, recipeIdentity: recipe))
             disk.downloads = (disk.downloads ?? []) + [task]; result.append(task)
             mutate(id) { $0.control?.downloadOwner = .init(task) }
             event(id, "downloadRequested")
@@ -1721,7 +1763,8 @@ extension ModelLibrary {
             disk.downloads![index].earliestRetry = nil
         } else {
             var task = ModelDownloadTask(resourceID: resource, catalogID: value.record.catalogID,
-                recipeIdentity: value.recipeIdentity!, postAction: postAction ?? downloadForResource(resource.modelID)?.postAction ?? .filesOnly, createdAt: now())
+                recipeIdentity: value.recipeIdentity!, postAction: postAction ?? downloadForResource(resource.modelID)?.postAction ?? .filesOnly, createdAt: now(),
+                acquisitionSnapshot: downloadForResource(resource.modelID)?.acquisitionSnapshot)
             if value.control?.fileState == .verified { task.state = .completed; task.completedAt = now() }
             if let earliest = downloadForResource(resource.modelID)?.earliestRetry, earliest > now() {
                 throw ModelLibraryError.busy("来源要求等待至 \(earliest.formatted()) 后再试。")

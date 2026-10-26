@@ -244,19 +244,19 @@ struct ProjectFilesView: View {
             }
         }
         .onDisappear { job?.cancel() }
-        .alert(word("incomplete", "备份缺少文件"), isPresented: Binding(get: { pendingBackup != nil }, set: { if !$0 { pendingBackup = nil } })) {
-            Button(word("cancel", "取消"), role: .cancel) { pendingBackup = nil }
+        .workbenchConfirmation(word("incomplete", "备份缺少文件"), isPresented: Binding(get: { pendingBackup != nil }, set: { if !$0 { pendingBackup = nil } })) {
+            Button(word("cancel", "取消"), role: .cancel) { pendingBackup = nil }.keyboardShortcut(.cancelAction)
             Button(word("continueIncomplete", "明确创建不完整备份")) {
                 if let pendingBackup { runBackup(at: pendingBackup.0, models: pendingBackup.1, allowIncomplete: true) }
                 pendingBackup = nil
-            }
+            }.keyboardShortcut(.defaultAction)
         } message: { Text(pendingBackup?.2.joined(separator: "\n") ?? "") }
-        .alert(word("restoreIncomplete", "恢复可能缺少文件"), isPresented: Binding(get: { pendingRestore != nil }, set: { if !$0 { pendingRestore = nil } })) {
-            Button(word("cancel", "取消"), role: .cancel) { pendingRestore = nil }
+        .workbenchConfirmation(word("restoreIncomplete", "恢复可能缺少文件"), isPresented: Binding(get: { pendingRestore != nil }, set: { if !$0 { pendingRestore = nil } })) {
+            Button(word("cancel", "取消"), role: .cancel) { pendingRestore = nil }.keyboardShortcut(.cancelAction)
             Button(word("continueIncomplete", "明确恢复不完整备份")) {
                 if let pendingRestore { runRestore(from: pendingRestore.0, to: pendingRestore.1, allowIncomplete: true) }
                 pendingRestore = nil
-            }
+            }.keyboardShortcut(.defaultAction)
         } message: { Text(word("restoreWarning", "仅显式继续才会保留缺失项；结果将标为不完整。")) }
     }
     @ViewBuilder private func inspector(_ item: AssetLocationOverview) -> some View {

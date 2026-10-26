@@ -89,7 +89,7 @@ struct WorkflowCanvasCornerZoom: View {
     private func text(_ key: String) -> String { workflowText(language, "workflow.dock." + key) }
     var body: some View {
         Button { zoom = 1 } label: { Text("100%").font(.system(size: 10, weight: .semibold)) }
-            .buttonStyle(WorkbenchIconButtonStyle(diameter: 40)).disabled(locked)
+            .buttonStyle(WorkbenchIconButtonStyle(diameter: 40, panel: true)).disabled(locked)
             .accessibilityIdentifier("workflow-canvas-reset-zoom")
             .accessibilityLabel(text("resetZoom"))
             .help(text("resetZoom") + " · \(Int((zoom * 100).rounded()))%")

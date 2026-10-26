@@ -86,20 +86,21 @@ public struct ModelCatalogEntry: Identifiable, Codable, Sendable, Equatable {
     public let modelSpec: String
     public let memoryGuidance: String
     public let provenance: String?
+    public let acquisitionDisclosure: ModelAcquisitionDisclosure?
     public var totalBytes: UInt64 { files.reduce(0) { $0 + $1.size } }
     public init(id: String, title: String, repository: String, revision: String, files: [ModelFile],
                 imageProfile: ImageModelProfile? = nil, workflowProfileID: String? = nil,
                 workflowIdentity: String? = nil, preparation: ModelPreparation = .none,
                 modelSpec: String = "固定版本模型文件", memoryGuidance: String = "运行所需内存取决于所选设备与任务；安装后仍需验证执行引擎。",
-                provenance: String? = nil) {
+                provenance: String? = nil, acquisitionDisclosure: ModelAcquisitionDisclosure? = nil) {
         self.id = id; self.title = title; self.repository = repository; self.revision = revision
         self.files = files; self.imageProfile = imageProfile; self.workflowProfileID = workflowProfileID
         self.workflowIdentity = workflowIdentity; self.preparation = preparation
-        self.modelSpec = modelSpec; self.memoryGuidance = memoryGuidance; self.provenance = provenance
+        self.modelSpec = modelSpec; self.memoryGuidance = memoryGuidance; self.provenance = provenance; self.acquisitionDisclosure = acquisitionDisclosure
     }
     private enum CodingKeys: String, CodingKey {
         case id, title, repository, revision, files, imageProfile, workflowProfileID, workflowIdentity
-        case preparation, modelSpec, memoryGuidance, provenance
+        case preparation, modelSpec, memoryGuidance, provenance, acquisitionDisclosure
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -112,7 +113,8 @@ public struct ModelCatalogEntry: Identifiable, Codable, Sendable, Equatable {
                   preparation: try values.decodeIfPresent(ModelPreparation.self, forKey: .preparation) ?? .none,
                   modelSpec: try values.decodeIfPresent(String.self, forKey: .modelSpec) ?? "固定版本模型文件",
                   memoryGuidance: try values.decodeIfPresent(String.self, forKey: .memoryGuidance) ?? "运行所需内存取决于设备与任务。",
-                  provenance: try values.decodeIfPresent(String.self, forKey: .provenance))
+                  provenance: try values.decodeIfPresent(String.self, forKey: .provenance),
+                  acquisitionDisclosure: try values.decodeIfPresent(ModelAcquisitionDisclosure.self, forKey: .acquisitionDisclosure))
     }
 }
 
@@ -341,6 +343,7 @@ public struct ModelDownloadTask: Identifiable, Codable, Sendable, Equatable {
     public var firstError: String?
     public var postActionError: String?
     public let createdAt: Date?
+    public let acquisitionSnapshot: ModelAcquisitionSnapshot?
     public var completedAt: Date?
     func upgradingRecipe(_ value: String) -> Self {
         var copy = self; copy.recipeIdentity = value
@@ -350,10 +353,10 @@ public struct ModelDownloadTask: Identifiable, Codable, Sendable, Equatable {
         return copy
     }
     public init(resourceID: ModelResourceID, catalogID: String, recipeIdentity: String,
-                postAction: ModelDownloadPostAction, createdAt: Date? = Date()) {
+                postAction: ModelDownloadPostAction, createdAt: Date? = Date(), acquisitionSnapshot: ModelAcquisitionSnapshot? = nil) {
         id = UUID(); self.resourceID = resourceID; self.catalogID = catalogID; self.recipeIdentity = recipeIdentity
         state = .queued; self.postAction = postAction; attemptID = UUID(); generation = UUID()
-        attempts = 0; automaticRetries = 0; self.createdAt = createdAt
+        attempts = 0; automaticRetries = 0; self.createdAt = createdAt; self.acquisitionSnapshot = acquisitionSnapshot
     }
 }
 

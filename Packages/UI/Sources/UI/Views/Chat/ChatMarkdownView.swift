@@ -194,10 +194,10 @@ struct ChatMarkdownView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .alert(label("externalLink", "在浏览器中打开链接？"), isPresented: Binding(
+        .workbenchConfirmation(label("externalLink", "在浏览器中打开链接？"), isPresented: Binding(
             get: { pendingLink != nil }, set: { if !$0 { pendingLink = nil } }), presenting: pendingLink) { url in
-            Button(label("openBrowser", "打开浏览器")) { NSWorkspace.shared.open(url); pendingLink = nil }
-            Button(label("cancel", "取消"), role: .cancel) { pendingLink = nil }
+            Button(label("openBrowser", "打开浏览器")) { NSWorkspace.shared.open(url); pendingLink = nil }.keyboardShortcut(.defaultAction)
+            Button(label("cancel", "取消"), role: .cancel) { pendingLink = nil }.keyboardShortcut(.cancelAction)
         } message: { url in
             Text(label("externalLinkNotice", "这是回答中的外部地址。打开后将由浏览器访问该网站：") + "\n\n" + url.absoluteString)
         }

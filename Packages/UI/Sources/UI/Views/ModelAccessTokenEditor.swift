@@ -12,7 +12,7 @@ struct ModelAccessTokenEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(t("tokenReadScope")).fixedSize(horizontal: false, vertical: true)
-            SecureField(t("accessToken"), text: $token).textFieldStyle(.roundedBorder)
+            SecureField(t("accessToken"), text: $token).textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .accessibilityIdentifier("model-access-token")
             Toggle(t("saveKeychain"), isOn: $persistent)
             Text(t("tokenLifetime")).font(.caption).foregroundStyle(.secondary)

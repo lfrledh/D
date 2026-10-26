@@ -22,15 +22,8 @@ struct WorkflowConnectionReceiver: NSViewRepresentable {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
     private var popupStyle: WorkbenchPopupStyle {
-        let appearance = preferences.resolvedAppearance, palette = appearance.palette(for: scheme)
-        let effects = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: reduceMotion,
-            reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased)
-        return .init(owner: background, palette: palette, strength: appearance.local?.strength ?? 0,
-            drawsGlass: effects.usesCanvasBlend && appearance.local?.material == .glass,
-            legacyFill: appearance.local == nil ? NSColor(palette.panelFill(canvasBlend: effects.usesCanvasBlend ? appearance.backgroundTransparency : 0)) : nil,
-            readability: effects.usesCanvasBlend ? appearance.resolvedReadability : .init(),
-            nativeGlass: effects.usesCanvasBlend && appearance.local?.material == .glass,
-            colorScheme: scheme, increasedContrast: contrast == .increased)
+        .resolved(owner: background, preferences: preferences, scheme: scheme,
+            reduceMotion: reduceMotion, reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased)
     }
     static func dismantleNSView(_ view: WorkflowConnectionHitView, coordinator: ()) { view.closePopup() }
     func makeNSView(context: Context) -> WorkflowConnectionHitView { WorkflowConnectionHitView() }

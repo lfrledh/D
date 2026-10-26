@@ -20,6 +20,14 @@ import prepare_engine
 PackagingError = prepare_engine.PackagingError
 MODEL_SHA256 = "fa91bb45512b90339cf4b00a599ba8fe3a253c46419fcfe6b46df77a8a8336a5"
 MODEL_SIZE_BYTES = 399_114
+# Verified byte-for-byte against ONNXRuntime v1.22.1 / 89746dc19a0a1ae59ebf4b16df9acab8f99f3925.
+# The last two are demonstration graphs, not learned audio parameters. None is
+# used by the shipped provider; never silently remove an unrecognized payload.
+ORT_EXAMPLES = {
+    "onnxruntime/datasets/logreg_iris.onnx": (670, "8224784c98d73412d9fd99abcd57a38568bd590980d0fbe5916464531c52e8fc"),
+    "onnxruntime/datasets/mul_1.onnx": (130, "71f431c4e9321ec6fbeb158d02ed240459a7dcc98673fa79a4f439ce42efaf10"),
+    "onnxruntime/datasets/sigmoid.onnx": (103, "5340aba67a7e3475162ad794378af55f1718f55f9a5d74b4af60ecc7f7a624b6"),
+}
 INSTALLATION_RECORDS = frozenset({"INSTALLER", "RECORD", "REQUESTED", "direct_url.json"})
 PROVIDERS = ("d_pitch_analysis_backend.py", "d_audio_access.py")
 DISTRIBUTIONS = {
@@ -184,11 +192,15 @@ def _copy_selected_site(site: Path, destination: Path) -> None:
         if prepare_engine._lexists(target):
             raise PackagingError(f"duplicate selected site-packages entry: {relative.as_posix()}")
         prepare_engine._copy_tree(source, target)
-        # Distribution policy has no small/test-model exemption. This is an
-        # owned staging copy; installed/user models and source trees are untouched.
+        # Only the identified runtime weight and three verified examples are
+        # excluded, in the owned staging copy. Unknown files fail closed.
         for weight in target.rglob("*"):
             if weight.suffix.lower() != ".onnx": continue
-            _regular(weight, "copied ONNX payload")
+            key = weight.relative_to(destination).as_posix()
+            expected = (MODEL_SIZE_BYTES, MODEL_SHA256) if key == "swift_f0/model.onnx" else ORT_EXAMPLES.get(key)
+            info = _regular(weight, "copied ONNX payload")
+            if expected is None or info.st_size != expected[0] or hashlib.sha256(weight.read_bytes()).hexdigest() != expected[1]:
+                raise PackagingError(f"unrecognized ONNX payload; source review required: {key}")
             weight.unlink()
         if relative.name.endswith(".dist-info"):
             for name in INSTALLATION_RECORDS:

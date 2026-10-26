@@ -268,11 +268,11 @@ public struct WorkflowCanvasView: View {
         #endif
         canvasContent
         .environment(\.workbenchMenuContext, canvasMenuContext)
-        .alert(text("workflow.scope.rerunCall","重新运行具体调用"),isPresented:Binding(get:{pendingHistoryRetry != nil},set:{if !$0 { pendingHistoryRetry=nil }})) {
+        .workbenchConfirmation(text("workflow.scope.rerunCall","重新运行具体调用"),isPresented:Binding(get:{pendingHistoryRetry != nil},set:{if !$0 { pendingHistoryRetry=nil }})) {
             Button(workspaceText(languageStore, "retryFrozen")) {
                 if let call=pendingHistoryRetry { pendingHistoryRetry=nil;Task { await controller.rerunCall(call) } }
-            }
-            Button(workspaceText(languageStore, "cancel"),role:.cancel) { pendingHistoryRetry=nil }
+            }.keyboardShortcut(.defaultAction)
+            Button(workspaceText(languageStore, "cancel"),role:.cancel) { pendingHistoryRetry=nil }.keyboardShortcut(.cancelAction)
         } message: { Text(workspaceText(languageStore, "retryHistoryExplanation")) }
         .workbenchSheet(isPresented: $toolsPresented, title: workflowText(languageStore, "childPanel.name.tools")) {
             VStack(alignment: .leading) {
@@ -1288,7 +1288,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             } label: {
                 Image(systemName: "hand.draw").foregroundStyle(canvasTool == .hand ? Color.accentColor : .primary)
                     .overlay { Circle().strokeBorder(Color.accentColor.opacity(canvasTool == .hand ? 0.7 : 0), lineWidth: 1.5).frame(width: 36, height: 36) }
-            }.buttonStyle(WorkbenchIconButtonStyle(diameter: 40))
+            }.buttonStyle(WorkbenchIconButtonStyle(diameter: 40, panel: true))
                 .disabled(viewportInteractionLocked).accessibilityLabel(text("refinement.workflow.hand", "手形"))
                 .accessibilityAddTraits(canvasTool == .hand ? .isSelected : [])
                 .accessibilityIdentifier("workflow-canvas-hand")
@@ -1578,13 +1578,13 @@ private struct WorkflowNodeInspector: View {
                     onOpenTool(request.reference)
                 })
         }
-        .alert(workflowText(languageStore, "workflow.scope.rerunCall"),
+        .workbenchConfirmation(workflowText(languageStore, "workflow.scope.rerunCall"),
                isPresented: Binding(get: { pendingCall != nil }, set: { if !$0 { pendingCall = nil } })) {
             Button(workflowText(languageStore, "workflow.scope.run")) {
                 if let reference = pendingCall { Task { await controller.rerunCall(reference) } }
                 pendingCall = nil
-            }
-            Button(workflowText(languageStore, "workflow.scope.cancel"), role: .cancel) { pendingCall = nil }
+            }.keyboardShortcut(.defaultAction)
+            Button(workflowText(languageStore, "workflow.scope.cancel"), role: .cancel) { pendingCall = nil }.keyboardShortcut(.cancelAction)
         } message: {
             Text(workflowText(languageStore, "workflow.scope.callExplanation"))
         }

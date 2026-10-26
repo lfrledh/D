@@ -423,7 +423,7 @@ public final class WorkbenchModel {
             alert.informativeText = warning
             alert.addButton(withTitle: nativeText("fork.continue"))
             alert.addButton(withTitle: nativeText("fork.cancel"))
-            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            guard await WorkbenchConfirmation.present(alert, owner: NSApp.keyWindow ?? NSApp.mainWindow) == .alertFirstButtonReturn else { return }
             acknowledged = true
         }
         guard originalProjectID == manifest?.id,
@@ -851,7 +851,7 @@ public final class WorkbenchModel {
         alert.addButton(withTitle: workflowText(language, "workbench.native." + "projectClose.wait"))
         alert.addButton(withTitle: workflowText(language, "workbench.native." + "projectClose.cancelTasks"))
         alert.addButton(withTitle: workflowText(language, "workbench.native." + "projectClose.keepEditing"))
-        switch alert.runModal() {
+        switch await WorkbenchConfirmation.present(alert, owner: NSApp.keyWindow ?? NSApp.mainWindow, cancelResponse: .alertThirdButtonReturn) {
         case .alertFirstButtonReturn: return .wait
         case .alertSecondButtonReturn: return .cancel
         default: return .keepOpen

@@ -317,12 +317,12 @@ struct ChatArtifactEditor: View {
             if let issue = state.issue { throw WorkflowIssue(issue) }
             guard !state.isDirty else { throw WorkflowIssue(workflowText(language, "chat.artifactEditor.discardUnsavedEdits")) }
         })
-        .confirmationDialog(workflowText(language, "chat.artifactEditor.discardUnsavedEdits"),
+        .workbenchConfirmation(workflowText(language, "chat.artifactEditor.discardUnsavedEdits"),
                             isPresented: $state.asksToDiscard) {
             Button(workflowText(language, "chat.artifactEditor.discardEdits"), role: .destructive) {
-                state.discardAndClose(onClose)
+                state.asksToDiscard = false; state.discardAndClose(onClose)
             }
-            Button(workflowText(language, "chat.artifactEditor.keepEditing"), role: .cancel) {}
+            Button(workflowText(language, "chat.artifactEditor.keepEditing"), role: .cancel) { state.asksToDiscard = false }.keyboardShortcut(.cancelAction)
         }
     }
 

@@ -128,7 +128,6 @@ final class WorkbenchBootstrap {
             nodeTags = ModelNodeTagStore(settings: settings)
             do { sharedLibrary = try SharedLibraryStore(fileURL: libraryDirectory.deletingLastPathComponent().appendingPathComponent("shared-library.json")) }
             catch { sharedLibraryIssue = "资料整理记录无法读取，已保留原件：" + error.localizedDescription }
-            let consent = AudioModelUsePermission(settings: settings)
             let accessRoot = libraryDirectory.deletingLastPathComponent()
                 .appendingPathComponent("AudioProcessAccess", isDirectory: true)
             let availability = Self.prepareAudioEngine(resolve: {
@@ -139,7 +138,6 @@ final class WorkbenchBootstrap {
                     attributes: [.posixPermissions: 0o700])
             })
             let engine = availability.engine
-            let musicConsent = AudioModelUsePermission(settings: settings, model: .mrt2Music)
             let musicAvailability = Self.prepareAudioEngine(resolve: {
                 guard let resources = Bundle.main.resourceURL else { return nil }
                 return try BundledAudioEngine.resolve(resourceDirectory: resources, family: .mrt2Music)
@@ -225,8 +223,8 @@ final class WorkbenchBootstrap {
                 let observer = ModelLibraryModel(library: library, language: languageStore); self.libraryModel = observer
                 self.model = WorkbenchModel(sessionFactory: { artifactDirectory in
                     let created = try await AppSessionFactory.makeSession(artifactDirectory: artifactDirectory,
-                        bundledAudioEngine: engine, audioConsent: consent, bundledMusicEngine: musicEngine,
-                        musicConsent: musicConsent, audioAccessRoot: accessRoot, bundledVideoEngine: videoEngine,
+                        bundledAudioEngine: engine, bundledMusicEngine: musicEngine,
+                        audioAccessRoot: accessRoot, bundledVideoEngine: videoEngine,
                         videoAccessRoot: videoAccessRoot, bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine, bundledACEEngine: aceAvailability.engine, modelLibrary: library)
                     await MainActor.run { observer.preparedValidator = Self.downloadPreparedValidator(created) }
                     return created
@@ -242,8 +240,8 @@ final class WorkbenchBootstrap {
                 return
             }
             let shared = try await AppSessionFactory.makeSession(artifactDirectory: quickStore.artifactDirectory,
-                bundledAudioEngine: engine, audioConsent: consent,
-                bundledMusicEngine: musicEngine, musicConsent: musicConsent, audioAccessRoot: accessRoot,
+                bundledAudioEngine: engine,
+                bundledMusicEngine: musicEngine, audioAccessRoot: accessRoot,
                 bundledVideoEngine: videoEngine, videoAccessRoot: videoAccessRoot,
                 bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine, bundledACEEngine: aceAvailability.engine, modelLibrary: library)
             let borrowed = shared.borrowed(artifactStore: quickStore)
@@ -352,7 +350,7 @@ final class WorkbenchBootstrap {
             alert.messageText = languageStore.text("app.quit.editing", fallback: "")
             alert.informativeText = languageStore.text("app.quit.editingHelp", fallback: "")
             alert.addButton(withTitle: languageStore.text("app.quit.continue", fallback: ""))
-            alert.runModal()
+            _ = await WorkbenchConfirmation.present(alert, owner: NSApp.keyWindow ?? NSApp.mainWindow, cancelResponse: .alertFirstButtonReturn)
             return false
         }
         do {
@@ -363,7 +361,7 @@ final class WorkbenchBootstrap {
                 alert.addButton(withTitle: languageStore.text("app.quit.wait", fallback: ""))
                 alert.addButton(withTitle: languageStore.text("app.quit.continue", fallback: ""))
                 alert.addButton(withTitle: languageStore.text("app.quit.cancel", fallback: ""))
-                let response = alert.runModal()
+                let response = await WorkbenchConfirmation.present(alert, owner: NSApp.keyWindow ?? NSApp.mainWindow)
                 if response == .alertSecondButtonReturn { isTerminating = false; return false }
                 if response == .alertThirdButtonReturn { await quick.cancel() }
                 else { await quick.waitForCompletion() }
@@ -381,7 +379,7 @@ final class WorkbenchBootstrap {
             startupError = error.localizedDescription
             let alert = NSAlert(); alert.messageText = languageStore.text("app.quit.quickUnsaved", fallback: "")
             alert.informativeText = error.localizedDescription; alert.addButton(withTitle: languageStore.text("app.quit.continue", fallback: ""))
-            alert.runModal()
+            _ = await WorkbenchConfirmation.present(alert, owner: NSApp.keyWindow ?? NSApp.mainWindow, cancelResponse: .alertFirstButtonReturn)
             return false
         }
     }
@@ -413,11 +411,7 @@ final class WorkbenchBootstrap {
             alert.messageText = "模型安装进度暂未保存"
             alert.informativeText = "\(error.localizedDescription)\n请恢复磁盘访问后再次退出。"
             alert.addButton(withTitle: "继续使用 D")
-            if let window = NSApp.keyWindow ?? NSApp.mainWindow {
-                await alert.beginSheetModal(for: window)
-            } else {
-                alert.runModal()
-            }
+            _ = await WorkbenchConfirmation.present(alert, owner: NSApp.keyWindow ?? NSApp.mainWindow, cancelResponse: .alertFirstButtonReturn)
             return false
         }
     }

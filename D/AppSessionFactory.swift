@@ -9,9 +9,7 @@ import UI
 enum AppSessionFactory {
     nonisolated static func makeSession(artifactDirectory: URL,
         bundledAudioEngine: BundledAudioEngine? = nil,
-        audioConsent: AudioModelUsePermission? = nil,
         bundledMusicEngine: BundledAudioEngine? = nil,
-        musicConsent: AudioModelUsePermission? = nil,
         audioAccessRoot: URL? = nil,
         bundledVideoEngine: BundledAudioEngine? = nil, videoAccessRoot: URL? = nil,
         bundledPitchEngine: BundledAudioEngine? = nil,
@@ -56,23 +54,21 @@ enum AppSessionFactory {
                 backendID: implementation.descriptor.id, validateModel: { try await implementation.validateModel(at: $0) }))
         } else { aceBackend = nil }
         let audioBackend: MLXAudioBackend?
-        if let engine = bundledAudioEngine, let consent = audioConsent, let accessRoot = audioAccessRoot {
+        if let engine = bundledAudioEngine, let accessRoot = audioAccessRoot {
             audioBackend = try MLXAudioBackend(configuration: .init(
                 pythonExecutable: engine.pythonExecutable, providerScript: engine.providerScript,
                 vendorDirectory: engine.vendorDirectory, modelManifest: engine.modelManifest,
                 artifactDirectory: artifactDirectory, profile: .smMusic,
                 accessBootstrapRoot: accessRoot,
-                confirmDeployment: { try engine.confirmUnchanged() },
-                modelUseAcknowledged: { await consent.isAcknowledged }))
+                confirmDeployment: { try engine.confirmUnchanged() }))
         } else { audioBackend = try makeAudioBackend(artifactDirectory: artifactDirectory) }
         let musicBackend: MLXMRT2Backend?
-        if let engine = bundledMusicEngine, let consent = musicConsent, let accessRoot = audioAccessRoot {
+        if let engine = bundledMusicEngine, let accessRoot = audioAccessRoot {
             musicBackend = try MLXMRT2Backend(configuration: .init(
                 pythonExecutable: engine.pythonExecutable, providerScript: engine.providerScript,
                 vendorDirectory: engine.vendorDirectory, modelManifest: engine.modelManifest,
                 artifactDirectory: artifactDirectory, accessBootstrapRoot: accessRoot,
-                confirmDeployment: { try engine.confirmUnchanged() },
-                modelUseAcknowledged: { await consent.isAcknowledged }))
+                confirmDeployment: { try engine.confirmUnchanged() }))
         } else { musicBackend = nil }
         let memoryBudgetBytes = ResourceBudgetPolicy().inferenceBudgetBytes(
             physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory)
@@ -135,9 +131,6 @@ enum AppSessionFactory {
                 let request = AudioRequest(operation: .generate, prompt: "Model registration",
                                            durationSeconds: 6, seed: 42, steps: 8)
                 _ = try await audioBackend.estimate(InferenceRequest(model: reference, input: .audio(request)))
-                if bundledAudioEngine != nil, let audioConsent {
-                    guard await audioConsent.confirm() else { throw CancellationError() }
-                }
                 return reference
             }
         } else {
@@ -150,7 +143,6 @@ enum AppSessionFactory {
                 let audio = AudioRequest(prompt: "Model registration", seed: 42,
                                          noteSequence: .init(durationFrames: 100, notes: nil))
                 _ = try await musicBackend.estimate(InferenceRequest(model: reference, input: .audio(audio)))
-                if let musicConsent { guard await musicConsent.confirm() else { throw CancellationError() } }
                 return reference
             }
         } else { validateMusicModel = nil }
@@ -216,7 +208,7 @@ enum AppSessionFactory {
             let vendorDirectory: URL
             let modelManifest: URL
             let profile: AudioBackendProfile
-            let licenseAcknowledged: Bool
+            let licenseAcknowledged: Bool? // Legacy config field; not a rights or execution gate.
         }
         let url = URL(fileURLWithPath: path)
         let handle = try FileHandle(forReadingFrom: url)
@@ -226,13 +218,10 @@ enum AppSessionFactory {
             throw InferenceFailure.invalidRequest("Local audio engine configuration is too large.")
         }
         let host = try JSONDecoder().decode(HostAudioConfiguration.self, from: data)
-        guard host.licenseAcknowledged else {
-            throw InferenceFailure.invalidRequest("The configured audio model usage has not been acknowledged.")
-        }
         return try MLXAudioBackend(configuration: .init(pythonExecutable: host.pythonExecutable,
             providerScript: host.providerScript, vendorDirectory: host.vendorDirectory,
             modelManifest: host.modelManifest, artifactDirectory: artifactDirectory,
-            profile: host.profile, licenseAcknowledged: host.licenseAcknowledged))
+            profile: host.profile))
         #else
         return nil
         #endif
