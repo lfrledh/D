@@ -35,6 +35,64 @@ private actor ReadinessValidator {
 
 @Suite(.serialized) @MainActor
 struct WorkflowModelReadinessTests {
+    @Test func quitDrainsInvalidatedReadinessAndCanResumeAfterRefusal() async throws {
+        defer { ProjectSession.resumeModelReadinessAfterTerminationCancelled() }
+        let validator = ReadinessValidator()
+        let key = WorkflowModelReadiness.Key(bookmark: Data(UUID().uuidString.utf8), identity: "quit-fixture")
+        await validator.arm(fail: false)
+        let check = Task { try await WorkflowModelReadiness.check(key, stamps: [], force: true) { try await validator.validate() } }
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !(await validator.waiting) && ContinuousClock.now < deadline { await Task.yield() }
+        try #require(await validator.waiting)
+        WorkflowModelReadiness.invalidate(key)
+        var drainFinished = false
+        let drain = Task { await ProjectSession.drainModelReadinessForTermination(); drainFinished = true }
+        // An invalidated job is still real work; Quit must wait for its validator.
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!drainFinished)
+        await #expect(throws: CancellationError.self) {
+            try await WorkflowModelReadiness.check(key, stamps: [], force: true) { try await validator.validate() }
+        }
+        await #expect(throws: CancellationError.self) {
+            try await WorkflowModelReadiness.checkUncached { try await validator.validate() }
+        }
+        await validator.finish(); _ = try await check.value; await drain.value
+        #expect(drainFinished)
+        #expect(await validator.calls == 1)
+        ProjectSession.resumeModelReadinessAfterTerminationCancelled()
+        try await WorkflowModelReadiness.check(key, stamps: [], force: true) { try await validator.validate() }
+        #expect(await validator.calls == 2)
+        WorkflowModelReadiness.invalidate(key)
+    }
+
+    @Test func quitWaitsForColdValidationLeaseAndPreservesRealUsageGate() async throws {
+        defer { ProjectSession.resumeModelReadinessAfterTerminationCancelled() }
+        try await withColdFixture { fixture in
+            let owner = await fixture.owner(at: "quit-owner")
+            owner.refreshWorkflowModels()
+            await fixture.validator.arm(fail: false)
+            let check = Task { await owner.checkExplicitModelReadiness(for: [fixture.identity]) }
+            let deadline = ContinuousClock.now + .seconds(3)
+            while !(await fixture.validator.waiting) && ContinuousClock.now < deadline { await Task.yield() }
+            try #require(await fixture.validator.waiting)
+            #expect(await fixture.library.snapshot().records.contains { $0.activeLeaseCount == 1 })
+            #expect(await owner.requestClose())
+            var drained = false
+            let drain = Task { await ProjectSession.drainModelReadinessForTermination(); drained = true }
+            for _ in 0..<20 { await Task.yield() }
+            #expect(!drained)
+            await fixture.validator.finish(); await check.value; await drain.value
+            #expect(drained)
+            #expect(await fixture.library.snapshot().records.allSatisfy { $0.activeLeaseCount == 0 })
+            #expect(await fixture.engine.submissions == 0)
+            let id = try #require(try WorkflowModelBookmarks(settings: fixture.settings).installation(for: fixture.identity))
+            let actualUsage = try await fixture.library.acquire(id)
+            await #expect(throws: ModelLibraryError.self) { try await fixture.library.shutdown() }
+            await fixture.library.release(actualUsage)
+            ProjectSession.resumeModelReadinessAfterTerminationCancelled()
+        }
+    }
+
     @Test func pureRegistrationCannotReplaceExistingSharedInstallation() async throws {
         try await withColdFixture { fixture in
             let second = fixture.root.appendingPathComponent("register-copy")

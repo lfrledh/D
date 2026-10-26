@@ -383,11 +383,15 @@ final class WorkbenchBootstrap {
             return false
         }
     }
-    func cancelTermination() { isTerminating = false }
+    func cancelTermination() {
+        isTerminating = false
+        ProjectSession.resumeModelReadinessAfterTerminationCancelled()
+    }
 
     func prepareLibraryForTermination() async -> Bool {
         isTerminating = true
         do {
+            await ProjectSession.drainModelReadinessForTermination()
             try await library?.shutdown()
             // Every fallible admission/save gate has now accepted Quit. Only here
             // discard temporary conversations; an earlier refusal keeps them intact.

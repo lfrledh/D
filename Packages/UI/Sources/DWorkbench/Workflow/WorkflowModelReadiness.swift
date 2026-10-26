@@ -33,6 +33,25 @@ import Foundation
     }
     private static var successful: [Key: [FileStamp]] = [:]
     private static var pending: [Key: Pending] = [:]
+    // Latest-key cache entries may be invalidated while their validator still owns
+    // a model lease. Termination drains actual work, including those older jobs.
+    private static var activeChecks: [UUID: Task<Void, Error>] = [:]
+    private static var terminationAdmissionClosed = false
+
+    static func suspendAndDrain() async {
+        terminationAdmissionClosed = true
+        let captured = Array(activeChecks.values)
+        for task in captured { _ = await task.result }
+    }
+    static func resumeAdmission() { terminationAdmissionClosed = false }
+
+    static func checkUncached(validate: @escaping @MainActor () async throws -> Void) async throws {
+        guard !terminationAdmissionClosed else { throw CancellationError() }
+        let token = UUID(), task = Task { try await validate() }
+        activeChecks[token] = task
+        defer { activeChecks[token] = nil }
+        try await task.value
+    }
 
     /// Metadata is deliberately cheap; ModelLibrary owns the strict file and
     /// installation checks. A missing file cannot match a cached success.
@@ -104,6 +123,7 @@ import Foundation
 
     static func check(_ key: Key, stamps: [FileStamp], force: Bool,
                       validate: @escaping @MainActor () async throws -> Void) async throws {
+        guard !terminationAdmissionClosed else { throw CancellationError() }
         if !force, successful[key] == stamps { return }
         if let current = pending[key], current.stamps == stamps {
             try await current.task.value
@@ -112,6 +132,8 @@ import Foundation
         successful[key] = nil
         let token = UUID()
         let task = Task { try await validate() }
+        activeChecks[token] = task
+        defer { activeChecks[token] = nil }
         pending[key] = Pending(token: token, stamps: stamps, task: task)
         do {
             try await task.value

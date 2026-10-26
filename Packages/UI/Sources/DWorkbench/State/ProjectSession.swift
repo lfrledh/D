@@ -1585,8 +1585,10 @@ public final class ProjectSession {
                     explicitModelChecking.insert(choice.id)
                     explicitModelReadiness[choice.id] = .unknown
                     explicitModelIssues[choice.id] = "正在核验模型文件与执行适配。"
-                    let binding = try await resolveWorkflowModel(choice.kind, identity: choice.id, session: session)
-                    await binding.release()
+                    try await WorkflowModelReadiness.checkUncached {
+                        let binding = try await self.resolveWorkflowModel(choice.kind, identity: choice.id, session: session)
+                        await binding.release()
+                    }
                 }
                 guard !Task.isCancelled, modelReadinessRequests[choice.id] == request,
                       workflowBindingMatches(choice, installation: checkedInstallation, bookmark: checkedBookmark),
@@ -2676,6 +2678,11 @@ public final class ProjectSession {
     }
 
     public func closeProject() async { _ = await requestClose() }
+
+    /// App-level Quit only: do not confuse a read-only model validation lease
+    /// with an active inference. Reopen admission if any later save gate refuses.
+    public static func drainModelReadinessForTermination() async { await WorkflowModelReadiness.suspendAndDrain() }
+    public static func resumeModelReadinessAfterTerminationCancelled() { WorkflowModelReadiness.resumeAdmission() }
 
     /// App termination's reversible preflight for the automatic workspace. Keep its Store
     /// and borrowed runtime usable until every other application owner has accepted Quit.
