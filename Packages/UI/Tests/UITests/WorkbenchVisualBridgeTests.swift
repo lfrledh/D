@@ -41,6 +41,37 @@ import Testing
     }
     private func settle() { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.15)) }
 
+    @Test func persistedGlassReachesFirstChildAndRetainedRenderWithoutPreferenceWrite() throws {
+        let suite = "D.VisualBridge.Cold.\(UUID().uuidString)"
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        var saved = ChatDisplayPreferences(); saved.theme = .dark
+        var appearance = WorkbenchAppearance(); appearance.local = .init()
+        appearance.local?.material = .glass; appearance.local?.strength = 0.55
+        saved.appearance = appearance
+        let bytes = try JSONEncoder().encode(saved)
+        settings.set(bytes, forKey: ChatDisplayPreferences.storageKey)
+        let state = ChatDisplayPreferencesState(settings: settings)
+        let (window, owner) = window(), childRecord = VisualRecord(), retainedRecord = VisualRecord()
+        let child = try #require(WorkbenchChildPanelHandle(owner: window, title: "Cold glass", content: AnyView(VisualEditor(record: childRecord)), preferences: state, language: nil))
+        let content = RetainedContentHost(content: VisualEditor(record: retainedRecord), visible: true, identifier: "cold-retained")
+            .environment(\.workbenchAppearanceState, state).environment(\.workbenchBackground, owner)
+        let host = NSHostingView(rootView: content)
+        window.contentView?.addSubview(host); host.frame = .init(x: 0, y: 0, width: 400, height: 400)
+        defer { child.close(); window.close() }
+        settle()
+        for record in [childRecord, retainedRecord] {
+            let preferences = try #require(record.preferences)
+            #expect(preferences == saved && record.background === owner)
+            #expect(record.firstPreferences == saved && record.firstBackground === owner)
+            // Policy assertion only; native glass pixels/activation are checked
+            // separately in the normal App, not inferred from this host test.
+            #expect(WorkbenchResolvedAppearance(preferences: preferences, scheme: .light,
+                reduceMotion: false, reduceTransparency: false, increasedContrast: false).nativeGlass)
+        }
+        #expect(settings.data(forKey: ChatDisplayPreferences.storageKey) == bytes)
+    }
+
     @Test func commandChildUpdatesWithoutRetitlingAndKeepsExactOwnerAndEditor() throws {
         let (first, firstOwner) = window(), (second, secondOwner) = window()
         let firstState = ChatDisplayPreferencesState(), secondState = ChatDisplayPreferencesState()
@@ -101,6 +132,8 @@ import Testing
     weak var editor: NSTextView?
     var preferences: ChatDisplayPreferences?
     weak var background: WorkbenchBackgroundOwner?
+    var firstPreferences: ChatDisplayPreferences?
+    weak var firstBackground: WorkbenchBackgroundOwner?
 }
 private struct VisualEditor: NSViewRepresentable {
     let record: VisualRecord
@@ -110,6 +143,9 @@ private struct VisualEditor: NSViewRepresentable {
         let view = NSTextView(); view.allowsUndo = true; record.editor = view; return view
     }
     func updateNSView(_ view: NSTextView, context: Context) {
+        if record.firstPreferences == nil {
+            record.firstPreferences = preferences; record.firstBackground = background
+        }
         record.preferences = preferences; record.background = background
     }
 }
