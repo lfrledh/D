@@ -4843,6 +4843,12 @@
     "modelLibrary.cards.add": "Add this function to canvas",
     "modelAcquisition.summary.quantizedApache": "The quantization publisher declares Apache-2.0, and the cited official model’s license has been checked. The exact upstream commit used for conversion is not recorded.",
     "modelAcquisition.summary.upstreamIdentityUnknown": "This fixed official commit is license evidence, not a verified conversion parent. D registers the exact quantized copy; it does not establish the conversion relationship.",
-    "modelAcquisition.summary.baseNameDisagreement": "The fixed quantization card’s base_model differs from the model cited in its body. This discrepancy is retained; the exact conversion parent is not inferred."
+    "modelAcquisition.summary.baseNameDisagreement": "The fixed quantization card’s base_model differs from the model cited in its body. This discrepancy is retained; the exact conversion parent is not inferred.",
+    "modelManagement.catalog.qwen25-0.5b-q4.memory": "Memory requirements depend on the device and task.",
+    "modelManagement.catalog.qwen25-1.5b-q4.memory": "Memory requirements depend on the device and task.",
+    "modelManagement.catalog.qwen25-7b-q4.memory": "Memory requirements depend on the device and task.",
+    "modelManagement.catalog.qwen25-32b-q4.memory": "Memory requirements depend on the device and task.",
+    "modelManagement.catalog.stable-audio-small-music.memory": "Memory requirements depend on the device and task.",
+    "modelManagement.catalog.swift-f0-0.1.2-cpu-v1.memory": "CPU pitch analysis; estimated 256 MiB working memory."
   }
 }

@@ -202,7 +202,7 @@ struct ModelAcquisitionInformation: View {
             Text(entry.title).font(.headline)
             Text(entry.repository).font(.caption).foregroundStyle(.secondary)
             ModelSpecificationFields(descriptor: Self.descriptor(entry))
-            if let descriptor = Self.descriptor(entry) { Text(ModelNodeUILocalization.owned(descriptor.summary, language: language)).font(.callout) }
+            if let descriptor = Self.descriptor(entry) { Text(ModelNodeUILocalization.display(descriptor, language: language).summary).font(.callout) }
             Text(t("licenseAccess")).font(.headline).padding(.top, 8)
             field("commercial", "commercial." + disclosure.commercialUse.rawValue)
             field("fee", "fee." + disclosure.licenseFee.rawValue)

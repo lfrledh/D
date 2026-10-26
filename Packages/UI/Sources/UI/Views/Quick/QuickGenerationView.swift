@@ -286,7 +286,7 @@ struct QuickGenerationView: View {
                                     HStack(spacing: 8) {
                                         Text(inputLabel("dropFiles", english: "Drop Finder files", chinese: "拖入 Finder 文件"))
                                             .frame(maxWidth: .infinity, minHeight: 34)
-                                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                                            .workbenchInputSurface()
                                             .dropDestination(for: URL.self) { urls, _ in
                                                 guard !urls.isEmpty else { return false }
                                                 return startInputAction { ticket in
@@ -295,7 +295,7 @@ struct QuickGenerationView: View {
                                             }
                                         Text(inputLabel("dropAssets", english: "Drop library assets", chinese: "拖入资料库素材"))
                                             .frame(maxWidth: .infinity, minHeight: 34)
-                                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                                            .workbenchInputSurface()
                                             .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
                                                 guard !items.isEmpty else { return false }
                                                 return startInputAction { ticket in

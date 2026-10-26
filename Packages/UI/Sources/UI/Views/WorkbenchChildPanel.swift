@@ -369,7 +369,8 @@ private struct WorkbenchChildSurface: View {
                             Spacer()
                             if gate.allowsDiscard { Button(t(gate.save == nil ? "discard" : "withoutSaving"), role: .destructive) { gate.discard() } }
                             if gate.save != nil { Button(t("save")) { gate.saveAndClose() }.buttonStyle(WorkbenchPrimaryButtonStyle()).frame(minHeight: 36).keyboardShortcut(.defaultAction) }
-                        }.environment(\.workbenchActionHeight, 36).disabled(gate.saving)
+                        }.buttonStyle(WorkbenchGlassButtonStyle())
+                        .environment(\.workbenchActionHeight, 36).disabled(gate.saving)
                     }.padding(24).frame(maxWidth: 520).workbenchPanel(cornerRadius: 16)
                 }.accessibilityIdentifier("child-panel-unsaved")
             }

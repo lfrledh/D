@@ -4843,6 +4843,12 @@
     "modelLibrary.cards.add": "添加此功能到画布",
     "modelAcquisition.summary.quantizedApache": "量化发布方声明 Apache-2.0，所指官方模型的许可原文已核对；量化时使用的准确上游提交未记录。",
     "modelAcquisition.summary.upstreamIdentityUnknown": "此固定官方提交用于许可取证，不是已证实的量化父提交；D 登记的是准确量化副本，不证明转换关系。",
-    "modelAcquisition.summary.baseNameDisagreement": "固定量化说明的 base_model 与正文所指模型不一致；保留该差异，不推定准确转换父版本。"
+    "modelAcquisition.summary.baseNameDisagreement": "固定量化说明的 base_model 与正文所指模型不一致；保留该差异，不推定准确转换父版本。",
+    "modelManagement.catalog.qwen25-0.5b-q4.memory": "运行所需内存取决于设备与任务。",
+    "modelManagement.catalog.qwen25-1.5b-q4.memory": "运行所需内存取决于设备与任务。",
+    "modelManagement.catalog.qwen25-7b-q4.memory": "运行所需内存取决于设备与任务。",
+    "modelManagement.catalog.qwen25-32b-q4.memory": "运行所需内存取决于设备与任务。",
+    "modelManagement.catalog.stable-audio-small-music.memory": "运行所需内存取决于设备与任务。",
+    "modelManagement.catalog.swift-f0-0.1.2-cpu-v1.memory": "CPU 音高分析；256 MiB 估计工作预算。"
   }
 }

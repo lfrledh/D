@@ -8,6 +8,9 @@ import DWorkbench
         let entries = try ModelCatalog.entries()
         let zh = UILanguageStore(preferredLanguages: ["zh-Hans"]), en = UILanguageStore(preferredLanguages: ["en"])
         for entry in entries {
+            let memoryKey = "modelManagement.catalog." + entry.id + ".memory"
+            #expect(en.text(memoryKey, fallback: "MISSING") != "MISSING")
+            #expect(zh.text(memoryKey, fallback: "MISSING") != "MISSING")
             let disclosure = try #require(entry.acquisitionDisclosure)
             #expect(disclosure.version == 1 && disclosure.checkedAt == "2026-10-26")
             #expect(!disclosure.components.isEmpty)
@@ -26,6 +29,19 @@ import DWorkbench
         #expect(pitch.commercialUse == .unverified && pitch.access == .publicRepository)
         let gated = try #require(entries.first { $0.id == "flux2-dev-bf16" }?.acquisitionDisclosure)
         #expect(gated.access == .sourceWebsiteApproval && gated.commercialUse == .separateCommercialLicense)
+    }
+
+    @Test func acquisitionAndCardPurposeUsesCanonicalOperationTranslation() throws {
+        let entry = try #require(ModelCatalog.entries().first { $0.id == "qwen35-9b-q4" })
+        let source = try #require(ModelAcquisitionInformation.descriptor(entry))
+        let en = UILanguageStore(preferredLanguages: ["en"])
+        let zh = UILanguageStore(preferredLanguages: ["zh-Hans"])
+        let localized = ModelNodeUILocalization.display(source, language: en)
+        #expect(localized.summary == en.text("workflow.operation.d.model.qwen35-9b.detail", fallback: "MISSING"))
+        #expect(localized.summary != source.summary)
+        #expect(ModelNodeUILocalization.display(source, language: zh).summary == source.summary)
+        #expect(localized.id == source.id && localized.modelIdentity == source.modelIdentity && localized.revision == source.revision)
+        #expect(ModelAcquisitionInformation.descriptor(entry) == source)
     }
 
     @Test func exactModelFunctionsDoNotCrossFamiliesOrDuplicateMetadata() throws {
