@@ -845,3 +845,37 @@ extension SharedLibraryBrowserTests {
         #expect(item.value == value && record.step == step)
     }
 }
+
+
+extension SharedLibraryBrowserTests {
+    @Test func runtimeClassificationUsesExactAnnotationKeyAndValidatesBeforeMutation() throws {
+        let value = WorkflowLibraryValue(projectID: UUID(), instanceID: UUID(),
+            call: .init(address: .init(runID: UUID()), stepID: UUID()), port: "text",
+            value: .data(.text("frozen content")), createdAt: Date())
+        let identity = try #require(value.annotationIdentity)
+        var entry = SharedLibraryBrowserEntry(item: .init(key: identity.storageKey, title: "output", kind: .asset), selection: .unavailable("runtime"))
+        entry.runtimeValue = value
+        let selected = SharedLibraryBrowserLogic.tagEditEntries([entry.id], in: [entry])
+        let library = try SharedLibraryStore(fileURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("json"))
+        let folder = try library.createFolder(name: "Selected outputs", parentID: nil)
+        var current = true
+        let validations: [() throws -> Void] = [{ if !current { throw SharedLibraryError.staleAnnotation } }]
+        let keys = try SharedLibraryBrowserLogic.validatedOrganizationKeys(selected, validations: validations)
+        #expect(keys == [identity.storageKey])
+        try library.addMembers(keys, to: folder)
+        #expect(library.metadata.folders[folder]?.memberKeys == keys)
+        try library.removeMembers(try SharedLibraryBrowserLogic.validatedOrganizationKeys(selected, validations: validations), from: folder)
+        #expect(library.metadata.folders[folder]?.memberKeys.isEmpty == true)
+        try library.undo(); #expect(library.metadata.folders[folder]?.memberKeys == keys)
+        current = false
+        #expect(throws: SharedLibraryError.staleAnnotation) {
+            try library.removeMembers(try SharedLibraryBrowserLogic.validatedOrganizationKeys(selected, validations: validations), from: folder)
+        }
+        #expect(library.metadata.folders[folder]?.memberKeys == keys && entry.runtimeValue == value)
+        var forged = SharedLibraryBrowserEntry(item: .init(key: "wrong output", title: "output", kind: .asset), selection: .unavailable("runtime"))
+        forged.runtimeValue = value
+        #expect(throws: SharedLibraryError.staleAnnotation) {
+            try SharedLibraryBrowserLogic.validatedOrganizationKeys([forged], validations: [{}])
+        }
+    }
+}

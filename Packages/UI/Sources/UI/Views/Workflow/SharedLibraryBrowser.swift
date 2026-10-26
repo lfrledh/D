@@ -257,6 +257,17 @@ struct SharedLibraryBrowserRenameDrafts {
         entries.filter { ids.contains($0.id) && ($0.runtimeValue == nil || $0.runtimeValue?.annotationIdentity != nil) }
     }
 
+    static func validatedOrganizationKeys(_ entries: [SharedLibraryBrowserEntry], validations: [() throws -> Void]) throws -> Set<String> {
+        guard !entries.isEmpty, entries.count == validations.count else { throw SharedLibraryError.staleAnnotation }
+        for (entry, validate) in zip(entries, validations) {
+            if let runtime = entry.runtimeValue {
+                guard runtime.annotationIdentity?.storageKey == entry.item.key else { throw SharedLibraryError.staleAnnotation }
+            }
+            try validate()
+        }
+        return Set(entries.map { $0.item.key })
+    }
+
     static func validatedDropKeys(_ candidates: [String], entries: [SharedLibraryBrowserEntry]) -> Set<String>? {
         guard !candidates.isEmpty, candidates.count <= 128 else { return nil }
         let known = Set(entries.map(\.id))
@@ -496,7 +507,8 @@ public struct SharedLibraryBrowser: View {
     private var saved: [SharedLibrarySavedQuery] { store.metadata.savedQueries.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } }
     private var validSelection: Set<String> { selectedKeys.intersection(Set(entries.map(\.id))) }
     private var selectedTagKeys: Set<String> { Set(SharedLibraryBrowserLogic.tagEditEntries(validSelection, in: entries).map { $0.item.key }) }
-    private var selectedMetadataKeys: Set<String> { Set(entries.filter { validSelection.contains($0.id) && $0.runtimeValue == nil }.map { $0.item.key }) }
+    private var selectedMetadataEntries: [SharedLibraryBrowserEntry] { SharedLibraryBrowserLogic.tagEditEntries(validSelection, in: entries) }
+    private var selectedMetadataKeys: Set<String> { Set(selectedMetadataEntries.map { $0.item.key }) }
     private var selectedEntry: SharedLibraryBrowserEntry? {
         entries.first { $0.id == focusedKey } ?? entries.first { validSelection.contains($0.id) }
     }
@@ -963,6 +975,15 @@ public struct SharedLibraryBrowser: View {
                         WorkbenchMenuDivider()
                         WorkbenchMenuAction(word("undo", "撤销")) { perform { try store.undo() } }.disabled(!store.canUndo)
                         WorkbenchMenuAction(word("redo", "重做")) { perform { try store.redo() } }.disabled(!store.canRedo)
+                        if onCollect != nil, let controller = insertionController, let owner = controller.assetLibraryOwner {
+                            WorkbenchMenuDivider()
+                            WorkbenchMenuAction(workflowText(language, "container.library.undoCollection")) {
+                                updateCollectionHistory(controller, owner: owner, redo: false)
+                            }.disabled(!controller.canUndoCollection)
+                            WorkbenchMenuAction(workflowText(language, "container.library.redoCollection")) {
+                                updateCollectionHistory(controller, owner: owner, redo: true)
+                            }.disabled(!controller.canRedoCollection)
+                        }
                     } label: { Image(systemName: "ellipsis.circle") }
                         .accessibilityLabel(word("more", "更多"))
                         .accessibilityIdentifier("shared-library-more")
@@ -1064,9 +1085,27 @@ public struct SharedLibraryBrowser: View {
         ForEach(Array(values).sorted { label($0) < label($1) }, id: \.self) { value in token(label(value)) { query[keyPath: path].remove(value) } }
     }
 
+    private func updateCollectionHistory(_ controller: WorkflowController, owner: WorkflowAssetLibraryOwner, redo: Bool) {
+        Task {
+            do {
+                guard insertionController === controller, controller.assetLibraryOwner == owner,
+                      controller.canEditLibraryMetadata else { throw SharedLibraryError.staleAnnotation }
+                if redo { try await controller.redoCollection() } else { try await controller.undoCollection() }
+            } catch { errorMessage = error.localizedDescription }
+        }
+    }
+    private func editFolderMembership(_ values: [SharedLibraryBrowserEntry], validations: [() throws -> Void], folder: UUID, adding: Bool) {
+        perform {
+            let keys = try SharedLibraryBrowserLogic.validatedOrganizationKeys(values, validations: validations)
+            if adding { try store.addMembers(keys, to: folder) } else { try store.removeMembers(keys, from: folder) }
+        }
+    }
+
     private var bulkControls: some View {
         let capturedSelection = validSelection
-        let capturedKeys = selectedMetadataKeys
+        let capturedEntries = selectedMetadataEntries
+        let capturedKeys = Set(capturedEntries.map { $0.item.key })
+        let validations = capturedEntries.map(tagValidation)
         return HStack(spacing: 6) {
             Text(word("selected", "已选") + " \(validSelection.count)").font(.caption).foregroundStyle(.secondary)
             Spacer()
@@ -1086,10 +1125,10 @@ public struct SharedLibraryBrowser: View {
             WorkbenchMenu {
                 WorkbenchMenuForEach(folders) { folder in
                     WorkbenchMenuAction(word("addToFolder", "加入分类") + " · " + folder.name) {
-                        perform { try store.addMembers(capturedKeys, to: folder.id) }
+                        editFolderMembership(capturedEntries, validations: validations, folder: folder.id, adding: true)
                     }
                     WorkbenchMenuAction(word("removeFromFolder", "移出分类") + " · " + folder.name) {
-                        perform { try store.removeMembers(capturedKeys, from: folder.id) }
+                        editFolderMembership(capturedEntries, validations: validations, folder: folder.id, adding: false)
                     }
                 }
                 if folders.isEmpty { WorkbenchMenuText(word("noFolders", "尚无分类")) }
@@ -1575,10 +1614,12 @@ public struct SharedLibraryBrowser: View {
             if let id = selectedFolderID {
                 HStack {
                     Button(word("addSelected", "给已选条目添加")) {
-                        perform { try store.addMembers(selectedMetadataKeys, to: id) }
+                        let values = selectedMetadataEntries
+                        editFolderMembership(values, validations: values.map(tagValidation), folder: id, adding: true)
                     }
                     Button(word("removeSelected", "从已选条目移除")) {
-                        perform { try store.removeMembers(selectedMetadataKeys, from: id) }
+                        let values = selectedMetadataEntries
+                        editFolderMembership(values, validations: values.map(tagValidation), folder: id, adding: false)
                     }
                 }.disabled(selectedMetadataKeys.isEmpty)
             }

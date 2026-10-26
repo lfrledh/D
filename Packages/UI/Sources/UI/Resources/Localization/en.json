@@ -4915,11 +4915,13 @@
     "container.confirm": "Confirm selection",
     "container.dropTarget": "Drop one asset onto a compatible empty input, or onto blank canvas to create a source container.",
     "container.hiddenSelection": "Some selected items are hidden by the current filters. Clear the selection or filters before dragging.",
-    "container.importedTargetChanged": "The asset was imported and saved, but the canvas target changed. It was not inserted into another workflow."
-  },
+    "container.importedTargetChanged": "The asset was imported and saved, but the canvas target changed. It was not inserted into another workflow.",
     "container.library.tags": "Tags",
     "container.sort.title": "Sort",
     "container.sort.source": "Original order",
     "container.sort.nameAscending": "Name: ascending",
-    "container.sort.nameDescending": "Name: descending"
+    "container.sort.nameDescending": "Name: descending",
+    "container.library.undoCollection": "Undo library collection change",
+    "container.library.redoCollection": "Redo library collection change"
+  }
 }

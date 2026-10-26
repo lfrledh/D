@@ -861,13 +861,13 @@ public struct DualWorkbenchView: View {
     @ViewBuilder private func libraryBrowser(compact: Bool, at point: @escaping () -> CGPoint?, onBack: (() -> Void)? = nil, canvasMode: WorkflowCanvasLibraryMode? = nil, forCanvas: Bool = false, headerOnly: Bool = false) -> some View {
         if let metadata {
             let sourceEntries: [SharedLibraryBrowserEntry] = {
-                if let category = canvasMode?.resourceCategory {
+                if forCanvas, let category = canvasMode?.resourceCategory {
                     return workspaceAssetEntries.filter { $0.item.kind == .asset && category.contains($0.item.contentKind) }
                 }
                 _ = entries // Refresh the complete semantic inputs before selecting.
                 return libraryProjection.selection(canvasMode: canvasMode, family: canvasMode == .nodes || compact ? nil : modelPickerCategory)
             }()
-            let collectAction: (([SharedLibraryBrowserEntry], Bool) -> Void)? = canvasMode?.resourceCategory == nil ? nil : { values, collect in collectLibraryEntries(values, collect) }
+            let collectAction: (([SharedLibraryBrowserEntry], Bool) -> Void)? = !forCanvas || canvasMode?.resourceCategory == nil ? nil : { values, collect in collectLibraryEntries(values, collect) }
             SharedLibraryBrowser(entries: sourceEntries, store: metadata, compact: compact, allowsImport: canvasMode?.resourceCategory != nil, canvasMode:canvasMode,
                 scopeDescription: ([model.manifest?.name, automaticQuickModel.manifest == nil ? nil : layoutText(language, "independent")].compactMap { $0 }).joined(separator: " · "),
                 importTargetDescription: forCanvas ? canvasModel.manifest?.name ?? "—" : quickImportTitle,

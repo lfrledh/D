@@ -356,3 +356,18 @@ private struct LocalizationFixture {
         try? FileManager.default.removeItem(at: directory)
     }
 }
+
+
+extension UILocalizationTests {
+    @Test func containerLibraryActionsResolveFromOfficialLanguageResources() throws {
+        let keys = ["container.library.tags", "container.sort.title", "container.sort.source", "container.sort.nameAscending", "container.sort.nameDescending", "container.library.undoCollection", "container.library.redoCollection"]
+        for locale in ["zh-Hans", "en"] {
+            let language = UILanguageStore(preferredLanguages: [locale]); try language.select(locale)
+            for key in keys {
+                let text = language.text(key, fallback: "MISSING")
+                #expect(text != "MISSING" && text != key && !text.isEmpty)
+            }
+            #expect(language.text("container.library.undoCollection", fallback: "MISSING") == (locale == "en" ? "Undo library collection change" : "撤销收录变更"))
+        }
+    }
+}

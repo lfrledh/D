@@ -4915,11 +4915,13 @@
     "container.confirm": "确认选择",
     "container.dropTarget": "请将单项资产放到兼容的空输入端口，或放到画布空白处建立来源容器。",
     "container.hiddenSelection": "当前筛选隐藏了部分已选项。请清空选择或清除筛选后再拖动。",
-    "container.importedTargetChanged": "资产已导入并保存，但目标画布已改变；没有插入其他工作流。"
-  },
+    "container.importedTargetChanged": "资产已导入并保存，但目标画布已改变；没有插入其他工作流。",
     "container.library.tags": "标签",
     "container.sort.title": "排序",
     "container.sort.source": "原有顺序",
     "container.sort.nameAscending": "名称：升序",
-    "container.sort.nameDescending": "名称：降序"
+    "container.sort.nameDescending": "名称：降序",
+    "container.library.undoCollection": "撤销收录变更",
+    "container.library.redoCollection": "重做收录变更"
+  }
 }

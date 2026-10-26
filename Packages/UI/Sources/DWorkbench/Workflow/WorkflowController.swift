@@ -45,7 +45,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public var containerGeneration: UInt64 { contentGeneration }
     public func canEditContainerCall(_ call: WorkflowCallReference) -> Bool { !closed && !closing && activeRunID != call.address.runID }
     public private(set) var assetCollection: WorkflowAssetCollection?
-    @ObservationIgnored private var collectionWriting = false
+    private var collectionWriting = false
     @ObservationIgnored private var collectionUndo: [WorkflowAssetCollection] = []
     @ObservationIgnored private var collectionRedo: [WorkflowAssetCollection] = []
     public private(set) var availableAssets: [ProjectAsset] = [] { didSet { displayAssetGeneration &+= 1 } }
@@ -117,8 +117,8 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public var presentationCopySourceID: UUID? { editingCopies.first(where: { $0.value == rootGraph?.id })?.key }
     private var editingOriginalID: UUID?
     @ObservationIgnored private var editingCopies: [UUID: UUID] = [:]
-    @ObservationIgnored private var closed = false
-    @ObservationIgnored private var closing = false
+    private var closed = false
+    private var closing = false
     @ObservationIgnored private var writeTail: Task<Void, Error>?
     // Internal fault injection at the actual history transaction, used only by CPU tests.
     @ObservationIgnored var beforeHistorySave: () throws -> Void = {}
@@ -345,14 +345,23 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         if completed.count > 128 { let remove = Set(completed.prefix(completed.count - 128)); collectionRequests.removeAll { remove.contains($0.id) } }
         collectionRequests.append(request); try await persist(); return request.id
     }
+    // The existing UI task observes readiness so a save/organization write
+    // releasing ownership wakes pending work; no timer or second queue.
+    public var collectionDrainReady: Bool {
+        !isRunning && !isSaving && !hasPendingSaves && !collectionWriting && !closed && !closing
+    }
     public func processCollectionRequests(retryFailed: Bool = false,
         classify: @MainActor (WorkflowAssetCollectionRequest) async throws -> Void) async {
-        guard !isRunning, !isSaving, !hasPendingSaves, !collectingAssets, !collectionWriting, !closed, !closing else { return }
+        guard collectionDrainReady, !collectingAssets else { return }
         collectingAssets = true; defer { collectingAssets = false }
-        let ids = collectionRequests.filter { !$0.completed && (retryFailed || $0.error == nil) }.map(\.id)
-        for id in ids {
-            guard let index = collectionRequests.firstIndex(where: { $0.id == id }), !isRunning else { break }
-            let request = collectionRequests[index]
+        var attempted: Set<String> = []
+        // A new request can arrive while classification suspends. The active
+        // owner drains it too; failed requests are attempted only once per call.
+        // A SwiftUI task-ID cancellation is not a user cancel of this ledger.
+        while collectionDrainReady, let request = collectionRequests.first(where: {
+            !$0.completed && !attempted.contains($0.id) && (retryFailed || $0.error == nil)
+        }) {
+            attempted.insert(request.id)
             do {
                 guard assetLibraryOwner == request.owner else { throw WorkflowIssue("Collection belongs to another project instance.") }
                 try await setCollected(request.sources, collected: true, owner: request.owner)

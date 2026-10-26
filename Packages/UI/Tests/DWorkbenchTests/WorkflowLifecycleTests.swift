@@ -4,6 +4,8 @@ import Foundation
 import ImageIO
 import CoreGraphics
 import Testing
+import Observation
+import Synchronization
 import UniformTypeIdentifiers
 @testable import DWorkbench
 
@@ -3681,6 +3683,56 @@ extension WorkflowLifecycleTests {
         let last = try #require(c.runs.last?.planCheckpoint?.records.first { $0.step.node.id == b.id })
         #expect(last.step.status == .waiting && last.step.inputs["input"] == .data(.text("approved")))
         #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+}
+
+
+extension WorkflowLifecycleTests {
+    @Test func collectionDrainIncludesRequestsArrivingDuringClassification() async throws {
+        let (store, engine, c, a, _, stage) = try await containerFixture()
+        let calls = try c.containerSnapshot(.init(stageID: stage, path: [.node(a.id)])).calls
+        let owner = try #require(c.assetLibraryOwner)
+        let first = WorkflowLibrarySource.runtime(try .capture(try #require(calls.first), port: "preview"))
+        let second = WorkflowLibrarySource.runtime(try .capture(try #require(calls.last), port: "preview"))
+        let firstID = try await c.requestCollection([first], owner: owner, folderID: nil, requestID: UUID())
+        let gate = WorkflowSubmitGate()
+        var classified: [String] = []
+        let drain = Task {
+            await c.processCollectionRequests { request in
+                classified.append(request.id)
+                if request.id == firstID { await gate.wait() }
+            }
+        }
+        try await waitForRepairGate(gate)
+        let secondID = try await c.requestCollection([second], owner: owner, folderID: nil, requestID: UUID())
+        await c.processCollectionRequests { _ in Issue.record("A competing drain acquired ownership") }
+        await gate.open(); await drain.value
+        #expect(classified == [firstID, secondID])
+        #expect(c.collectionRequests.count == 2 && c.collectionRequests.allSatisfy(\.completed))
+        let frozen = c.runs
+        await c.processCollectionRequests { _ in Issue.record("Completed collection ran twice") }
+        #expect(c.runs == frozen && !c.collectingAssets)
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+}
+
+
+extension WorkflowLifecycleTests {
+    @Test func cancellingCloseNotifiesPendingCollectionReadiness() async throws {
+        let (store, _, c, a, _, stage) = try await containerFixture()
+        let call = try #require(c.containerSnapshot(.init(stageID: stage, path: [.node(a.id)])).calls.first)
+        _ = try await c.requestCollection([.runtime(try .capture(call, port: "preview"))], owner: try #require(c.assetLibraryOwner), folderID: nil, requestID: UUID())
+        try await c.prepareForClose()
+        #expect(!c.collectionDrainReady)
+        let changed = Mutex(false)
+        withObservationTracking { _ = c.collectionDrainReady } onChange: { changed.withLock { $0 = true } }
+        c.cancelClosing()
+        #expect(changed.withLock { $0 } && c.collectionDrainReady)
+        await c.processCollectionRequests { _ in }
+        let completed = c.collectionRequests.allSatisfy { $0.completed }
+        #expect(completed)
         try await c.close(); try await store.close()
     }
 }

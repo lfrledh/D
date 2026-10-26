@@ -63,7 +63,7 @@ struct WorkflowHostView: View {
                     .expandingLibrary(onExpandLibrary)
                     .environment(\.workflowViewerModel,model)
                     .environment(\.workflowContainerLibrary,metadata)
-                    .task(id: "collection:\(controller.collectionRequests.last?.id ?? "none"):\(controller.isRunning):\(controller.hasPendingSaves)") {
+                    .task(id: "collection:\(controller.collectionRequests.last?.id ?? "none"):\(controller.collectionDrainReady)") {
                         await controller.processCollectionRequests { request in
                             guard let folder = request.folderID else { return }
                             guard let metadata, model.projectSession.workflow === controller, controller.assetLibraryOwner == request.owner else { throw SharedLibraryError.staleAnnotation }
