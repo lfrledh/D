@@ -582,7 +582,8 @@ public struct DualWorkbenchView: View {
             }
         }
         .onChange(of: libraryVisible) { _, shown in if shown { navigationIntent = UUID() } }
-        .workbenchSheet(isPresented: $libraryVisible, title: workflowText(language, "childPanel.name.library"), onDismiss: finishLibraryDismissal) {
+        .workbenchSheet(isPresented: $libraryVisible, title: workflowText(language, "childPanel.name.library"),
+            size: .init(width: expandedLibraryMode == .nodes ? 1160 : 840), onDismiss: finishLibraryDismissal) {
             VStack(spacing: 0) {
                 if !quickModel.projectSession.explicitModelChecking.isEmpty {
                     Text(t("checkingModel"))
