@@ -1,5 +1,326 @@
 # D-UI-CONSOLIDATED-01
 
+## 统一视觉、模型取得与节点库（2026-10-26，交审）
+
+本包00/01/02/03已读；旧参考2d8f的实际后继为本地/远端 **4bf4356ad3bd0ba7617e7a117cee1c11a38f1e3a**、生产2f559b34。原树/分支接续、祖先检查0，起点无未提交内容，Lead唯一写入/桌面，三名只读复核者。起点时PID18548/CurrentD/AppStore-v2-20261026的正常Release仅为修前；不覆盖运行包。规格及原始证据留`run-20261026-unified-visual`，本节不是第二份活动问题清单。
+
+### 实际入口盘点（源码，不等于原生已验）
+
+| 入口 | 创建/传播边界 | 本轮处理 / 系统例外 |
+|---|---|---|
+| U01 Quick四模态、Chat、节点两栏与底部 | Dual/Sidebar → RetainedContentHost，偏好Store/所属canvas | 共享视觉桥，固定Root与延后隐藏；独立40pt圆工具保留玻璃 |
+| U02 工作流/模板/历史/节点右键各级 | WorkbenchMenu/Picker/Context → Popup每级pane | 共用解析、12pt/6pt/32pt、tint/强调色；捕获动作不换对象 |
+| U02 连线右键 | ConnectionReceiver直接构造PopupStyle | 同一解析入口，不能只修MenuAnchor |
+| U03 下载器→新建下载→许可/令牌 | ModelLibraryView声明式ChildPresentation | 共用确认/来源摘要；原库存/队列所有者；令牌保留SecureField/未提交保护 |
+| U03 删除记录/取消登记/删除副本 | ModelLibraryView确认、ModelLibraryModel.restartTask | 盘点自有alert并迁共享确认，精确对象再校验保持 |
+| U04 模型选择/管理→本地登记/位置恢复 | ModelLibraryView与NSOpenPanel | D表单共用外观；OS目录准入是明确原生例外 |
+| U05 设置语言/外观/路径/凭据 | WorkbenchSettingsView保留页与嵌套Child | 活读原Store，跨宿主语言/颜色更新，不重建编辑器 |
+| U06 完整节点/资产库→帮助/标签/筛选/编辑 | SharedLibraryBrowser声明式Child、Popup | 模型分支减层；程序节点/资产分类/保存查询保持 |
+| U07 Workflow资产Viewer/信息/副本 | WorkflowViewerCoordinator → 命令式ChildPanelHandle | 明确owner找canvas；活读偏好/语言，不依赖setTitle刷新 |
+| U07 Chat原始输出/消息详情 | ChatWorkbenchView声明式Child | 与命令式Viewer分别验；正文/候选身份保持 |
+| U08 旧版可达页与冷开 | 保留宿主、WorkbenchView/Quick导航 | 显式继承，不用默认主题碰巧一致；不回退焦点修补 |
+| U09 外链/Artifact放弃/旧结果固定/备份恢复/重跑 | 自有alert/NSAlert各路径 | 逐项迁移或写明例外，不能统称系统控件免验 |
+| U09 退出/关闭项目的无窗口门禁 | Bootstrap/WorkbenchModel正常终止链 | 无可用owner时原生确认保留，避免为材质制造退出死锁；不跳保存 |
+| U10 系统顶部菜单/红绿灯/文件保存/权限钥匙串/文本服务/tooltip | macOS原生绘制与事件 | 明确系统例外，不自绘替代，不改权限 |
+
+### 逐创建路径覆盖（源码等级）
+
+以下不是按文件去重。D=声明式workbenchSheet（含workbenchPopover别名）及完整环境桥；I=命令式ChildPanelHandle及所属canvas活偏好/语言；R=固定Root、延后隐藏的保留宿主；F=无可用canvas的原生NSAlert例外，保证启动/退出门禁可用。D/I共用child圆角20、六类角色及原关闭门禁；R不新增窗口。父窗口均为入口所属工作台，背景owner沿该窗口，表内列出另需捕获的业务所有者。每行已源码检查；仅后文点名图/动作及宿主测试有更高证据，其他路径均原生未验。系统顶部菜单、文件/权限/钥匙串面板、文本服务与tooltip保留原生，这不豁免D自有表单。
+
+| 创建点 | 实际入口/打开动作 | 宿主/传播 | 精确对象/角色边界 |
+|---|---|---|---|
+| DApp | 启动设置 | D | 无项目设置 |
+| DualWorkbench | 功能帮助 | D | 当前工作区 |
+| DualWorkbench | 设置 | D | 当前偏好Store |
+| DualWorkbench | 展开节点/资产库 | D | 原库状态 |
+| DualWorkbench | 项目选择 | D | 原项目集合 |
+| DualWorkbench | 项目文件 | D | store/instance |
+| DualWorkbench | 旧版工作区 | D | 明确旧版入口 |
+| DualWorkbench | 下载/模型管理器 | D | 应用模型服务 |
+| DualWorkbench | 语言 | D | 原语言Store |
+| DualWorkbench | 操作失败/位置确认 | D | 捕获失败对象 |
+| DualWorkbench | 固定旧资产确认 | D | 捕获旧资产 |
+| DualWorkbench | 资产预览/加入聊天附件 | D | store/ref/chat |
+| DualWorkbench | 条目信息 | D | 精确entry |
+| QuickGeneration | 运行详情 | D | 冻结run |
+| QuickGeneration | 资产预览 | D | 精确asset |
+| WorkbenchModelCard | 模型详情 | D | 精确变体 |
+| WorkbenchSettings | 帮助 | D | 当前设置页 |
+| ModelLibrary | 帮助 | D | 模型服务 |
+| ModelLibrary | 令牌编辑 | D | 原请求/凭据草稿 |
+| ModelLibrary | 通用取得确认 | D | request UUID/精确变体 |
+| ModelLibrary | 本地登记 | D | 精确资源/原位置 |
+| ModelLibrary | 删除记录与未完成清理 | D | task/generation |
+| ModelLibrary | 取消登记确认 | D | 捕获resource |
+| ModelLibrary | 删除副本确认 | D | 捕获resource |
+| ModelLibrary | 清除历史确认 | D | 捕获任务范围 |
+| ModelLibrary | 丢弃草稿确认 | D | 当前未提交草稿 |
+| ModelLibraryStorageSettings | 令牌编辑 | D | 同凭据所有者 |
+| ModelAcquisition | 令牌编辑 | D | 返回原request |
+| ModelAcquisition | 许可/来源详情 | D | 目录/不可变snapshot |
+| SharedLibraryBrowser | 帮助 | D | 库状态 |
+| SharedLibraryBrowser | 保存查询 | D | 查询及范围 |
+| SharedLibraryBrowser | 组织管理 | D | 原state |
+| SharedLibraryBrowser | 标签编辑 | D | 精确目标再验证 |
+| SharedLibraryBrowser | 详情 | D | 精确entry key |
+| SharedLibraryTagEditor | 标签管理 | D | 同编辑目标 |
+| SharedAssetMetadataPanel | 已保存名称/说明 | D | asset与版本 |
+| SharedAssetMetadataPanel | 运行内注解 | D | run/call/port/值版本CAS |
+| WorkflowResultQuery | 保存查询 | D | 原查询范围 |
+| WorkflowBatchPanel | 运行计划 | D | 批次/阶段身份 |
+| WorkflowCanvas | 重跑冻结调用确认 | D | 冻结call |
+| WorkflowCanvas | 工具管理 | D | 当前图 |
+| WorkflowCanvas | 发布公开接口 | D | 草稿/发布版本 |
+| WorkflowCanvas | 节点范围 | D | graph revision/node |
+| WorkflowCanvas | 固定工具检查/复制 | D | 固定版本 |
+| WorkflowCanvas | 检查器重跑确认 | D | 捕获call |
+| WorkflowCanvas | 端口资产元数据 | D | 精确port值 |
+| WorkflowCanvas | 放大图片 | D | 精确资源引用 |
+| WorkflowLibraries | 资产预览 | D | 精确asset |
+| ProjectFiles | 不完整备份确认 | D | 精确备份目标 |
+| ProjectFiles | 恢复不完整备份确认 | D | 精确备份目标 |
+| RecipeHandoff | 配方交接 | D | project/asset |
+| GenerationInspector | 旧版资产元数据 | D | 精确asset |
+| WorkbenchView | 旧版语言 | D | 原Store |
+| WorkbenchView | 旧版失败确认 | D | 捕获失败 |
+| WorkbenchView | 旧版管理器 | D | 模型服务 |
+| WorkbenchView | 文档名称 | D | 当前document |
+| ChatWorkbench | 对话重命名 | D | 捕获chat |
+| ChatWorkbench | 编辑消息 | D | message/version |
+| ChatWorkbench | 人工修改回答 | D | candidate/version |
+| ChatWorkbench | 对话标签 | D | 捕获chat |
+| ChatWorkbench | 默认提示 | D | 原设置草稿 |
+| ChatWorkbench | 消息/版本详情 | D | message/version |
+| ChatWorkbench | 原始输出 | D | 原始candidate |
+| ChatWorkbench | 请求尝试详情 | D | 捕获attempt |
+| ChatWorkbench | 项目附件 | D | 捕获project |
+| ChatWorkbench | 知识导入 | D | 导入草稿 |
+| ChatWorkbench | 作品编辑器 | D | 人工草稿/原件分离 |
+| ChatWorkbench | 保存回答字段/工作流 | D | 显示版本 |
+| ChatWorkbench | 保留引用 | D | 捕获引用 |
+| ChatWorkbench | 候选比较 | D | 候选集合 |
+| ChatWorkbench | 预设导入预览 | D | 导入草稿 |
+| ChatWorkbench | 对话导入损失确认 | D | 导入对象 |
+| ChatWorkbench | 聊天资产预览 | D | 精确asset |
+| ChatArtifactEditor | 放弃草稿确认 | D | 当前编辑草稿 |
+| ChatMarkdown | 打开外链确认 | D | 捕获URL |
+| SharedLibraryBrowser | 搜索标签弹层 | D | 查询，不改对象标签 |
+| SharedLibraryBrowser | 高级筛选弹层 | D | 原查询 |
+| WorkflowLibraries | 节点标签弹层 | D | 节点查询 |
+| WorkflowLibraries | 资产标签弹层 | D | 资产查询 |
+| WorkflowCanvas | 端口图例弹层 | D | 当前图 |
+| WorkflowResultQuery | 运行筛选弹层 | D | 原查询 |
+| WorkflowDock | 精确缩放弹层 | D | 当前相机 |
+| WorkbenchView | 旧版任务列表弹层 | D | 原任务服务 |
+| WorkbenchNavigation | 旧版窄左栏弹层 | D | 当前工作区 |
+| WorkbenchNavigation | 旧版窄检查器弹层 | D | 当前对象 |
+| DualWorkbench | 运行内值Viewer | I | run/call/值 |
+| DualWorkbench | 已保存资产Viewer | I | asset/ref |
+| WorkflowCanvas | 调用端口Viewer | I | call/port |
+| WorkflowCanvas | 资产预览转完整Viewer | I | 原资源身份 |
+| WorkflowHost | Controller预览Viewer | I | mediaPreviewReference |
+| WorkflowViewer | 另开查看器 | I | 同owner新只读session |
+| Bootstrap | 退出待处理编辑确认 | I/F | 原退出门禁 |
+| Bootstrap | 退出运行中Quick确认 | I/F | 等待/取消/继续 |
+| Bootstrap | 退出Quick保存失败 | I/F | 失败草稿保留 |
+| Bootstrap | 退出模型索引保存失败 | I/F | 原索引保存门禁 |
+| WorkbenchModel | 分叉兼容确认 | I/F | 原项目/副本 |
+| WorkbenchModel | 关闭项目运行等待确认 | I/F | 当前project |
+| ModelLibraryModel | 重新开始下载确认 | I/F | 精确task |
+| LegacyModelLibraryModel | 旧接口重新开始确认 | I/F | ModelID，仅源码兼容路径 |
+| LegacyModelLibraryModel | 旧接口删除确认 | I/F | ModelID，仅源码兼容路径 |
+| DualWorkbench | 节点工作流保留页 | R | 原controller |
+| WorkbenchSettings | 已访问设置页 | R | 原Store |
+| WorkbenchSidebar | 左右保留内容 | R | 各自owner |
+| QuickGeneration | 左栏页签 | R | 原草稿/控制器 |
+| QuickGeneration | 右栏页签 | R | 原结果 |
+| ChatWorkbench | 左栏页签 | R | 原chat |
+| ChatWorkbench | 右检查器 | R | chat/显示版本 |
+| ChatWorkbench | 语音面板 | R | 原语音状态 |
+| ChatToolsPanel | MCP任务页 | R | 原任务 |
+| WorkflowCanvas | 底部记录 | R | 原run |
+| WorkflowCanvas | 左侧准备 | R | 原节点 |
+| WorkflowCanvas | 共享库 | R | 原browser state |
+| WorkflowCanvas | 旧资产库 | R | 原asset state |
+| WorkflowCanvas | 节点结果 | R | node/call |
+| WorkflowCanvas | 运行概览 | R | 原run |
+| WorkflowCanvas | 运行详情 | R | run/call |
+
+菜单三条创建链分别检查：MenuAnchor（WorkbenchMenu/Picker/Context）→Popup；连线ConnectionReceiver→Popup；Popup.addPane各子级→同一resolved style且update遍历已开pane。动作仍捕获原对象。`ChatWorkbench.retainedPane`仅定义无调用，不虚列入口；公共ChildPanelHandle不重复算用户入口。
+
+当前确认的差异：命令式Viewer原先复制部分环境；AppKit菜单未应用SwiftUI的tint映射；Icon panel参数无效、普通按钮/输入层层玻璃；模型确认无许可分区、节点准备可绕过确认；库按operationPath逐页进入。三份ORT样例已与固定上游89746dc逐字节对应，本轮包装收窄为准确路径/大小/摘要。Chat父clip和SwiftF0真实拆分沿用上轮有效成果；新确认与本轮同版UI分级见后。
+
+**工程检查点（原生待验）**：共享解析/环境桥、静态按钮六角色、九处命令式确认与声明式确认已接入；嵌套确认一次性返回和编辑器身份由宿主测试覆盖。新确认使用现有ModelLibrary请求、库存、队列、精确目标与许可快照；18个固定条目分开commercial/fee/access及组件来源，未知不伪造许可，公开研究下载不因商用未知被禁止。已核实的ACE companion来源路径错误仅纠正11个remotePath，本地文件路径/摘要不变；有原索引备份、终态历史与断点迁移。没有下载ACE权重或宣称ACE真实执行通过。Audio/MRT2去掉本地“资格确认”伪门禁，原manifest/部署/文件/MLX/drain准入保留。
+
+独立只读复核发现并已修：Quick回调缺完整会话/导航检查；外部已验证副本遗漏导致重复下载；详情默认添加主功能；Quick类别与共享筛选冲突；模态滚动/旧家族锚点、全部模态标题；真实分词展开及容量1分组缓存。末次补scrollTargetLayout与String身份，不以字典非空冒充可见滚动。新增文案误置JSON顶层在资源反例中暴露，已归正式strings；失败记录保留。没有另一份文案真源。
+
+**普通App初验与修正**：0474a198正常Release/新独立bundle，1280×820pt、2×、中文。设置切浅色与玻璃底色0.2后，面板及实际两级菜单更新；深色主预览却仍浅色，原因为主预览误共享高级配色editingScheme。73444d47将主预览绑定实际解析主题，高级配色保留显式编辑scheme，仅局部偏好副本改theme，原Store/owner/编辑身份不动；两宽度×三主题6组合及非实施者复核通过。旧截图保留版本，不当修后证据。
+
+同0474普通App从空库存通过系统OpenPanel选择本轮NativeModels→下载器新建→SwiftF0精确变体→摘要/嵌套来源→明确开始1项。真实下载399114B，任务75D273F7-4254-4EAA-A02F-7F4B5E3E549D、资源C8156E6B-329F-43BE-BD01-ED50648A18A9；持久postAction=filesOnly，资源verified/unregistered，许可快照及源文摘要已保存。两个可见内容内部坐标点击保持面板，来源子窗关闭后原请求仍在；不是全边缘矩阵。无令牌/条款代签，无自动选用/推理。旧18548与本轮36842均正常D菜单Quit/PID消失，保存数据保留。初次截图-3811经准确路径重绑定恢复，未称锁屏或改权限。系统路径首次组合粘贴未进入目标，观察实际PathTextField后重新设置并核对准确目录，未误授权旧项目为模型根。
+
+定向亲跑：UI/资源/子窗/模型呈现77方法＋下载/恢复44方法通过；Audio/MRT2受控后端38方法通过，Python Pitch打包26方法通过。宿主事件、CPU provider与正常App分级；旧contextMenu测试曾无终结记录仍不算通过。签名临时.cstemp只移动到证据区重建，未删除源或改签名策略。
+
+### 普通 App 发现后的修正与真实执行
+
+生产后继 `73444d47` 修外观预览错误使用高级编辑页默认浅色：主预览采用实际工作区主题，高级预览用其明确编辑主题的局部偏好；不写回原Store。组件6组主题/宽度组合通过，普通App浅→深与0.2→0.8即时更新及重新打开已复验。
+
+随后 `d74bbd1c6f0127d7aface3c2b59f06f3c6dbe089` 修正常App发现的三类旁路：通用取得/变体卡用途改用已存在的标准定义本地化投影；补6条目录内存说明的中英资源；子窗内未保存确认显式使用共享按钮及36pt底栏角色；Quick两个拖入区域从不清晰的quaternary底色接入同页弱输入表面。没有改业务门禁、输入捕获、尺寸、下载策略或模型事实。独立只读复核无阻断，37项相关UI/资源/子窗方法通过；最后两处纯底板更改不计入前面的测试覆盖；dc910e正常包Quick深色拖入区已亲看，显示/输入区域可辨。
+
+0474普通Release新bundle空库存：通过通用确认仅下载SwiftF0，任务`75D273F7-4254-4EAA-A02F-7F4B5E3E549D`完成、未登记。7344冷开后仍为完整未登记；明确点击登记，再在Quick选择功能并点击“Use for”准确绑定，同一资源`C8156E6B-329F-43BE-BD01-ED50648A18A9`，未重下、未自动推理。该模型399114B、SHA `fa91bb45512b90339cf4b00a599ba8fe3a253c46419fcfe6b46df77a8a8336a5`。
+
+7344普通App真实生成：专属1秒16k/440Hz合成录音→实际SwiftF0 ONNX→run `FEFE0E46-9F3F-428C-9809-9317758806FE` completed，62帧、中位437.553833Hz、MIDI69；输出摘要 `52497451ba886e6afefe29514ee2f53fa363046869728ab6ccab942a1462ac90`，输入/模型/项目/run精确身份已读回。合成的是输入，不是模型结果。结果详情、滚动到资产预览、只读预览已操作；右侧结果单击只选择，不能误记作打开Viewer。普通菜单Quit后PID41059确实消失；此处尚不宣称最终后继冷恢复和取消通过。
+
+7344英文1080×680实际批量确认：Qwen3.5 Q4＋FLUX Dev，明确仅可下载1项，未开始这两项下载。令牌表单只输入非凭据测试字符串，未提交校验或保存钥匙串；关闭→Keep Editing、内部空白保持、B区→顶层确认、放弃后返回原批量选择均亲跑。它不证明真实账号批准或有效token恢复。系统屏幕共享紫色指示覆盖红绿灯像素时保留这一限制，不当作D绘制问题修。
+
+独立包装复核又发现旧固定声明把代码MIT误作权重MIT。`dc910e99e52973d28f0cf1b78e8a12b79f5d9ea6`将唯一声明源的weightLicense记为null，与目录未知一致，保留代码MIT、完整等值校验及篡改拒绝反例；26包装方法再过。首次默认/var临时目录被安全检查拒绝，改为本轮外盘TMPDIR后复验，原失败保留。构建d74已按自身正常取消链排空；本轮克隆旧固定资源，仅重封该声明/Pitch清单/总清单，未改历史输入，未声称重新从上游执行ORT排除。最终后继构建使用这一准确新资源。
+
+### 末次原生复验与有限诊断
+
+`dc910e`正常Release首次后台绑定时玻璃较平，不能据此认定初始化缺陷。有限诊断最早样本已经读到material=glass、strength=0.55、native=true、reduce/contrast=false；同一诊断PID通过Finder真正激活、不写偏好后玻璃出现。临时标记已逐字节撤回，未进入产品提交。正常dc910e从Finder启动、active=true的首次窗口直接呈现玻璃；没有为截图加启动刷新、切换设置或重建编辑器。初次NSLog隐私遮挡与绑定超时记录保留，不称锁屏/权限问题。新增首次Child/Retained渲染测试只检查偏好/owner/存储字节，明确不代表像素；5项宿主方法终结通过。
+
+dc910e普通App：1080×680冷开、1280×820浅色0.2→深色0.8→轻量回退→恢复；设置内实际一级与二级菜单、下载器已完成同一SwiftF0任务、英文窄窗Qwen确认、Qwen＋FLUX逐项可执行子集、许可来源、嵌套令牌未保存门禁均已操作。令牌仍只用未提交测试字符串；四个面板内部坐标保持打开，B区只产生最顶层确认，Keep Editing/Discard回到原选择。取消批量选择没有开始权重下载。发现Start 1 downloads等两处新英文数量句式后，dc643ead改为括号数量，保留同一{count}/动作；14项语言方法通过，非实施者复核无阻断。
+
+7344的真实SwiftF0旧run在dc910e冷开后规范JSON摘要仍为`ccb30e29bae2ffd97552c49c45fc1f9a05398c82ccbb915d0a9603795fda2ba9`，未重新运行。dc910e内节点库Text→搜索Qwen3.5直接显示BF16/Q4；ⓘ打开准确详情、返回原查询，显式BF16功能＋新增准确节点，未下载或推理。更后的同版动作与最终构建在交付段记录，不用此中间图覆盖后继。
+
+构建器再次拒绝复用旧build-final/输出路径；旧7344包未覆盖，改为全新build-dc643ead与CurrentD/Unified-Visual-dc643ead。旧配置根据保留报告恢复，失败日志保留。该中间构建随后正常取消；中间324d15aa普通包使用同一七引擎资源，资源清单摘要`34e94315858df3dec1137ed985041a4a787d3b84e72c767b141e8a1fd0224223`，没有诊断标记或默认日志。
+
+完整库原生检查继续发现A22的可达性缺口：默认840pt面板扣除190/270侧区后，结果区最大约354pt，源码已有两列却永不可达。324d15aa仅为模型节点库传现有子窗首选宽1160、高560，其他库仍840；父窗口既有边界继续限制。没有改卡片阈值/相机/状态或新增窗口。非实施者核对规格与实际链同意；中间324d15aa普通App已补1080pt单列、1280pt两列及同页BF16/Q4实图。dc643ead中间构建已正常SIGTERM排空、日志保留，不用于交付。
+
+### 324d中间候选与原生回执（2026-10-27）
+
+`324d15aa793a55a3246332b634ddd6a1a0a4551e`是本轮中间正常候选，以下图与动作保持原版本，不改记为后继通过。`first-test.D.preview.unifiedvisual20261026`，Release -O/WMO、DEBUG_DYLIB关闭、无诊断宏，正常Apple Development沙盒签名；其App在正常退出后已由ef69候选替换桌面入口并清理，项目与证据保留。
+
+当时构建`build-324d15aa/build-report.json`为packaged；签前/签后54,434文件及2,681嵌套归档成员零权重通过。非实施者独立核对实际Info、源码/可执行文件/产品/资源摘要、strict/deep签名与7引擎固定资源；SwiftF0代码MIT与未核实权重null一致，包内无model.onnx。临时诊断逐字节撤回；中间dc643ead、d74取消及错误复用构建路径均保留日志，不列交付成功。
+
+**当时普通App实际动作**（均324d15aa，Lead串行操作）：
+
+- 完整模型库：1080×680父窗口夹紧后单列；1280×820、1160pt完整库结果区能出现两列。Text/Qwen3.5搜索显示BF16/Q4，关闭重开查询保留；准确ⓘ详情返回原查询；BF16功能＋仅新增节点`361BD32A-8C57-4AF5-B313-5220C120F74C`，没有下载或推理。系统Edit→Node editing→Undo移除，Redo恢复同一节点ID，保存成功。未以此证明库功能拖放。
+- 设置：实际深色0.8、浅色0.2及轻量回退，已打开一级/二级菜单同步；恢复深色0.55、轻量关闭。真实聊天更多→Generation and versions两级菜单另拍，不以设置预览菜单替代全部生产路径。没有切系统降低透明度/高对比开关。
+- 下载器：同一SwiftF0任务仍仅1项Completed；英文1080通用Qwen确认固定底栏及括号数量可见。Qwen＋FLUX有明确仅可执行1项，许可/源站/令牌入口打开，未开始这两个大下载。测试字符串未验证、未存钥匙串；令牌正文空白点击保持，面板外B区只请求顶层关闭确认；×也进入同一门禁，放弃只移除测试草稿、回原下载确认，取消选择没有触发任务。一次截图后旧AX序号导致系统窗口菜单被打开，已通过实际Cancel退出，不把该调用记为Esc门禁通过。
+- 命令式Viewer：从本轮已保存Pitch资产Preview进入，同一owner玻璃/语言正确，Information展开并显示已保存资产/生产方。1080窄窗信息在正文下方；关闭返回资产库。没有编辑冻结结果、另造第二套元数据或自动导出。
+- Chat：打开本轮Visual-Review副本，历史长回答及阅读位置可见，实际滚动至末尾；普通输入→Undo→Redo有效。跨Quick/Workflow返回草稿仍在，但旧Undo栈丢失；追加新输入仍可撤销。非实施者核对4bf起点同样通过`if entry == .quick`拆除Chat，editor dismantle清Undo；这是确定的旧生命周期缺口，已归I010，不称本轮新回归，也不以相同AX ID声称同NSTextView。测试未发消息，测试草稿已清空。
+- 有限四动作：实际节点底板拖动、手形空白平移、滚轮100→400→5并恢复100、左右栏收展均完成对应终态；没有同步模型/构建。照片和AX只证明路径/终态，不给FPS或流畅度达标结论。性能继续“勉强可用但不够理想”。
+
+**当时真实SwiftF0与保存**：沿同一正常取得/登记资源，当时新增run `771A737B-8790-4321-88FF-FBE19BA3C735`（1秒输入，62帧，中位437.553833Hz）及`96AAD120-8982-41B9-BB97-EC938FF8A2B5`（120秒输入，7,500帧，中位437.427368Hz），均真实ONNX completed。120秒运行在工具下一次观察前完成，无法据此证明原生取消；1200秒受控输入被现有120秒上限正确拒绝，未放宽准入/伪造取消。保存→Cmd-Q后PID60045确实消失→Finder桌面入口重开PID60513（23:57:40），准确当时路径，旧结果直接恢复。三个run身份/规范内容和六个request/pitch文件摘要均保持；Visual-Review聊天文件字节保持；7344旧run按原ASCII规范摘要仍`ccb30e29bae2ffd97552c49c45fc1f9a05398c82ccbb915d0a9603795fda2ba9`。不宣称整个项目导航文件逐字节不变。证据`evidence/final-cold-before.json`、`final-cold-after.json`；新摘要明确JSON规范与旧证据一致后比较。
+
+**本会话当时图索引**：全部下列均正常324d15aa、无诊断。窗口尺寸为逻辑pt；示例/历史/真实运行已逐图说明。截图只能证明画面。
+
+| 图号 | 状态 | 证明范围 |
+|---|---|---|
+| UV-V01-r4 / V02-r7 | 1280×820，英文深色0.8，设置及两级预览菜单 | 主/子表面与层级、前景；预览条目是示例 |
+| UV-V02-r8、r9 | 同尺寸浅色0.2、轻量回退 | 同链实际颜色变化，不冒充系统无障碍开关 |
+| UV-V02-r10 / V08-r4 | 1080×680，英文深色0.55，真实Chat更多及生成/版本子菜单 | 生产菜单两级、历史长文、气泡工具 |
+| UV-V03-r3 | 1080×680，英文深色0.55，令牌测试草稿嵌套关闭确认 | 正文空白保持/B区请求确认；动作另记，不是截图证明点击 |
+| UV-V04-r4 | 同窄窗，Qwen Q4通用确认 | 固定底栏/规格/默认仅下载，未实际下载Qwen |
+| UV-V05-r4 | 同窄窗，Qwen＋FLUX受限批量确认底部 | 实际仅可执行1项/访问入口，不代表真实授权成功 |
+| UV-V06-r3 | 1280×820，英文深色0.55，下载器Completed1 | 本轮真实399KB SwiftF0任务 |
+| UV-V07-r2、r3、r4 | 1080单列、1280两列与Qwen3.5搜索 | 家族/精确变体/真实功能与双规格 |
+| UV-V08-r3 | 1080×680，英文界面，历史中文长回答 | Chat父边缘与独立气泡；不是本轮新Qwen推理 |
+| UV-V09-r4 | 1080×680，英文，当时120秒Pitch只读结果＋信息 | 本轮真实运行输出，生产方/元数据入口 |
+| UV-V10-r5 | 1080×680，英文深色0.55，Finder冷开 | 正确当时包、23:33结果恢复；共享紫色系统指示仍遮三色 |
+
+**亲跑测试/复核边界**：77UI＋44下载、38受控后端、26包装，后继37UI、14语言、5首次视觉桥宿主及预览6组合均有终结记录；重跑不相加成一个总数。DTests装配只编译不冒称执行。两位非实施者分别复核当时真实差分/文案/宽度/保留边界和实际签名产物；未操作桌面，不称其独立原生通过。原contextMenu无终结、key-window前置失败、真实IME/VoiceOver/纯hover、准确C区、普通App磁盘失败、外部桌面背景排除及连续性能仍未验。新旧包均正常退出后仅清理已停用的本轮/上轮候选二进制和本轮DerivedData；保存项目、模型、container、构建报告和旧失败证据保留（`evidence/cleanup-final.json`）。无必须本人即时处理的新权限/未知草稿，不鸣响。此后因确定父板及角色旁路继续有限修补，见下节。
+
+### 最终ef69组合候选与交付（2026-10-27）
+
+实际起点 **4bf4356ad3bd0ba7617e7a117cee1c11a38f1e3a**；最终生产 **ef69ff4c9423f9a20f9b3cddfebb465db6d08092**。正常完整App `D-Development/CurrentD/Unified-Visual-ef69ff4c/D.app`，桌面 **D 最新版** 已指向此包。工作分支仍`codex/ui-consolidated-20261020`。完整交付是其后的**测试与文档提交**，远端读回完整SHA写入CurrentD外部回执；不修改签后Info，也不把测试后继称生产源码。
+
+324d中文原生全景暴露搜索头的真实矩形玻璃父板，85cf只撤SharedLibraryBrowser布局父表面；独立复核继而找到Chat历史收藏/标签行、Filter footer同因父板，以及三个工作流文件中8处内层系统按钮/4处输入样式覆盖共享角色。ef69撤这两父板、接回共享普通/主动作/输入，Filter与Plan底部局部36pt；保留动作、校验、disabled、快捷键、目标、retained身份与关闭门禁。85cf构建先因输出父目录缺失拒绝，补目录后因复核发现上述缺口正常SIGTERM取消、排空，未覆盖运行包；两次失败日志保留。不是加大圆角掩盖或重构窗口。
+
+最终`build-ef69ff4c/build-report.json`为packaged；Release -O/WMO、DEBUG_DYLIB关闭，无诊断宏；Apple Development/Team3V4T79WLQS、沙盒/hardened runtime。独立复核实际包Info、可执行/产品摘要、strict/deep验签exit0与七资源；本次门禁54,434文件/2,681归档成员通过。资源摘要`34e94315858df3dec1137ed985041a4a787d3b84e72c767b141e8a1fd0224223`；SwiftF0代码MIT、权重许可未核实null，不将模型权重塞回App。构建器runtimeVerification仍not-run，以下另记普通App，不冒称Store分发验证。
+
+**最终普通App亲跑**：
+- 旧324d PID60513保存/正常Quit消失；Finder桌面入口启动ef69 PID67324，包/源码准确。1080×680与1280×820窗口实际拖边resize；搜索父板消失，原输入弱填色/查询保留。Filter通过真实更多入口打开，固定取消/应用完整，取消不改查询；运行设置/计划440pt/记录空态实际查看，未执行Qwen。
+- 完整库Qwen3.5两列BF16/Q4卡、正文滚动、双规格/用途/精确功能可见；Prepare Q4进入相同通用确认。英文1080窄窗固定底栏完整，Register默认0。最终ⓘ/＋的执行沿用324d同链未改证据，不将新拍卡片当作再次执行。
+- Qwen＋FLUX条件明确只允许下载可用1项；未开始大下载。令牌仅未提交测试字符串，内部(640,470)/(880,500)保持，B区(1100,460)触发顶层门禁；继续编辑保留，×再请求，放弃仅清测试草稿并返回原批量选择。取消选择走相同门禁，原SwiftF0完成任务仍仅1项，没有token校验、钥匙串写入或第三方批准。
+- 设置实际中文→英文→中文，浅色0.2/深色0.55及轻量开/关；已打开设置与一级/二级预览菜单更新，恢复中文/深色0.55/轻量关。Chat真实更多→生成与版本两级菜单展开/Esc逐层返回；系统文件菜单可到达并正常Cancel。没有操作OS降低透明度/高对比，轻量回退不冒充系统开关亲跑。
+- Chat专属Visual-Review长文/历史筛选同版实图；临时`final-visual-draft`输入→Cmd-Z空→Cmd-Shift-Z恢复→清空并保存，未发送。跨Quick/Workflow旧Undo丢失仍归I010，未因本次输入通过关闭。命令式Viewer固定打开120秒历史Pitch资产及信息，没有改冻结值。
+- 有限四动作使用专属Visual-Review两节点副本：可见节点底板(630,610)→(760,550)只移动目标130/-60pt；手形空白(850,640)→(900,600)可见视野平移50/-40pt；滚轮100→400→18，明确恢复100；左右栏各收放并保存。动作与像素终态不是连续帧率/跟随达标，性能仍“勉强可用但不够理想”。
+- **最终真实SwiftF0**：同一已取得/登记资源、专属120秒440Hz合成输入，run `61550BA1-CA8C-4921-90C0-9B9EE0A88110`真实ONNX completed，7,500帧、中位437.427368Hz；旧三run内容不变。新包已完成模型执行，不只是读取旧结果；取消仍未验。
+- 保存→正常Cmd-Q后PID67324消失→Finder桌面冷开PID67538（00:47:01），仅一个D实例、准确ef69路径，00:39完成结果直接恢复。四run规范摘要、八request/pitch文件、退出前后Visual-Review聊天字节相同，证据`evidence/ef69-cold-before.json`/`ef69-cold-after.json`。只比较此保存边界，不声称测试中导航/草稿revision从未变化。无强退或普通D操作。
+
+**最终会话图片**：均真实ef69普通App、无诊断；工具实际输出1080×680或1280×820，未裁掉窗口边界。324d照片保留旧图号/版本，不当ef69证据。
+
+| 图号 | 最终状态及证据边界 |
+|---|---|
+| UV-V01-r6/r7/r8/r9 | 中文1080、100%，双栏父板修后全景、运行设置/计划/记录空态；节点为测试草稿 |
+| UV-V02-r11/r12 | 中文1080设置两级／1280真实Chat两级菜单；示例与生产菜单明确区分 |
+| UV-V02-r13/r14 | 英文1080，浅色0.2两级菜单／轻量回退；深色0.55见r11；OS无障碍像素仍未验 |
+| UV-V03-r4/r5 | 中文1080筛选固定底栏／1280嵌套未保存确认；内部/B区动作另有原生记录 |
+| UV-V04-r5/r6 | 中文1280／英文1080公开Qwen确认、默认仅下载与固定主动作，未下载该模型 |
+| UV-V05-r5/r6 | 中文1280混合访问条件及令牌返回/未保存确认；测试字符串非真实凭据 |
+| UV-V06-r4 | 中文1280下载器SwiftF0原完成任务1；单项/批量服务反例为组件，未外推真实暂停大权重 |
+| UV-V07-r5/r6 | 中文1280同页Qwen3.5两变体卡与完整规格/功能滚动；单列/另一家族及ⓘ/＋沿用324d未改路径 |
+| UV-V08-r5/r6/r7 | 中文1280历史长聊天、修后收藏/标签父层及真实消息子菜单；不是本轮新Qwen推理 |
+| UV-V09-r5/r6 | 中文1280命令式历史结果Viewer／最终ef69新真实ONNX完成结果 |
+| UV-V10-r6 | 中文1080最终正常Quit→桌面冷开，00:39结果恢复；系统命令为实际AX可达，紫色系统共享指示遮住红绿灯处不算其像素全验 |
+
+**测试与独立复核**：新增搜索22方法通过。最后三suite共65方法执行有3 issue：1个key-window前置失败，1个媒体方法的audio/video未配置夹具（2issue）；补既有`synthetic.mp4/.wav`路径后媒体3case通过，key-window失败与nativeDrop skip保留、不删断言，不报全绿。SharedLibrary22、VisualBridge5及其余有终结的方法分别记录在`role-parent-final.log`；原未受影响77UI/44下载/38后端/26包装等按版本沿用，不累计成一个总数。新增`scripts/tests/test_ui_visual_boundaries.py`三项通过，固定3角色/3父板文件，旧旁路反例可检出；明确plain/原生/真实材质示例例外，不是全仓样式或原生验证。非实施者复核并推动上述补漏，随后复核真实diff/guard及最终签名产物；没有伪称其独立GUI通过。
+
+旧App及临时DerivedData在确认停止后清理（`cleanup-final.json`、`cleanup-ef69.json`），保存项目/模型/容器和失败证据保留。无新本人权限/未知保存决定，不鸣响。I010旧跨模式Undo待修，真实IME/VoiceOver/纯hover、C区、普通App磁盘失败、玻璃外部背景排除、系统菜单完整像素及连续性能仍未验；不把工程缺口都交给用户。停在用户看图与独立顾问审计，不扩下一轮、不合并、不上传、不发布。
+
+### A01–A28 分级回执
+
+等级：源码＝实际调用链；组件＝本轮定向宿主/服务/包装测试；原生＝对应正常签名App实际动作；沿用＝明确旧版未受影响证据。未验不写通过。最终原生补验见ef69同版图表，324d证据只按明确未受影响路径沿用，以下不由主界面一图外推全部入口。
+
+| ID | 实现/证据 | 保留边界 |
+|---|---|---|
+| A01 | 起点4bf、原树单Lead，祖先0；0474→7344→d74→dc910e→dc643ead→324d15aa→85cf→ef69产品链；签前/后绑定生产身份 | 不合并其他分支，不改个人scheme/普通D |
+| A02 | 上方逐创建路径覆盖U01–U10，D/I/R/F及OS例外 | 全路径为源码盘点，未点名的面板不称原生通过 |
+| A03 | ResolvedAppearance同时供SwiftUI/AppKit；纯政策与宿主测试 | 系统顶部菜单不仿制 |
+| A04 | 每级pane apply同style；最终设置两级浅/深/轻量及Chat实际两级菜单已拍 | 更深实际菜单、系统菜单像素未穷举 |
+| A05 | 全环境视觉桥、命令式owner活偏好、固定保留Root；组件与设置/Viewer路径验证 | 换外观不重建编辑器的边界已测；跨Quick/Workflow旧Undo栈丢失是已知工程缺陷（I010），不是原生未穷举；真实IME仍未验 |
+| A06 | 降低透明度/高对比/减动态解析与既有回退保留；原生轻量切换 | 轻量模式不是OS无障碍开关亲跑；不改用户系统设置 |
+| A07 | 六类按钮、footer36、工具16/28/4、关闭32、危险role；无效panel已实接；最终嵌套危险确认/普通/主动作实图 | tooltip/VoiceOver等旧缺证不关闭 |
+| A08 | contentShape/非命中装饰、无按压缩放；宿主命中反例 | 最终手感需用户集中判断 |
+| A09 | 沿用Chat父clip修正；85cf/ef69撤搜索/聊天筛选/Filter footer矩形父板，最终实图复验；无整页玻璃/栅格化 | 最终长文/菜单/子窗/Viewer/Quick代表图已补；未认定全部阴影已穷举 |
+| A10 | 内部宿主边界/保存门禁未改；最终令牌草稿内部与B区/嵌套返回亲跑 | 精确鼠标C区、跨界文本选择和原生三色像素旧余项 |
+| A11 | 下载器/管理器/节点/Quick同ModelAcquisitionRequest；SwiftF0走新确认 | 各入口源码接线＋代表原生，不外推全目录下载 |
+| A12 | 双栏规格事实/用途/组件/大小来源；18条目录测试 | 未知参数不猜，内存估计不当硬性最低要求 |
+| A13 | 18条disclosure按版本来源/摘要/日期，商业/费用/访问分开 | 不是法律保证；全分发义务仍I027 |
+| A14 | 公共未知可下载，受限来源明确批准/令牌；移除假资格门槛 | 实际第三方批准/token不由测试字符串证明 |
+| A15 | 源域最小token请求、原请求UUID与不可变snapshot；组件安全反例 | 7344只做未提交假字符串返回，没有真实账号授权 |
+| A16 | 原队列/单项策略保留；44下载方法覆盖暂停/重试/保存边界 | 普通AppSwiftF0单任务完成不外推整队列矩阵 |
+| A17 | 精确recipe/task/resource、旧任务snapshot、已有外部完整副本；冷恢复/迁移反例 | ACE实际大模型迁移/重试未下载亲跑 |
+| A18 | 默认filesOnly；实际下载后未登记→显式登记→准确Use→手动Generate | 后续目标失效拒绝由组件，不把登记称推理就绪 |
+| A19 | 批量逐项摘要与显式可执行子集；本地登记同摘要 | 7344两项选择只有1可执行，未实际批量大文件下载 |
+| A20 | 模态筛选→家族同页→精确变体/功能行 | 非模型旧分类不重写 |
+| A21 | 真实函数定义、单击选择、ⓘ详情、显式＋/drag、无多功能默认动作；组件/独立审查 | 原生细项另列，不凭可调用证明完整拖放 |
+| A22 | 原查询匹配/标签边界、容量1分组缓存、32项滚动；324d的1080单列/1280两列及ef69的1280两列实图 | 多页原生滚动恢复未穷举，不能仅按条目数缓存 |
+| A23 | 三ORT样例大小/全SHA/固定上游/调用核对；26包装反例 | 未知ONNX阻断，未删除源码目录样例 |
+| A24 | 随包固定core，注册权重路径；零模型新bundle正常打开 | 无下载目录code执行；现有模型不打进App |
+| A25 | 0474真实下载→7344登记/准确选用/真实62帧音高/落盘 | 324d的1秒/120秒、ef69的120秒真实运行及各自冷开已补；原生取消未验，合成输入不算假模型回复 |
+| A26 | 0474/7344真实入口签前签后零权重/身份/嵌套资源/正常签名；dc910e正常包构建及独立字节/签名复核已完成；最终ef69实际产物独立审查通过 | 本地Release，不等于Store分发/审查通过 |
+| A27 | 无新增轮询，容量1缓存/全内容失效；保留局部拖动/焦点/语言缓存；最终四动作/长文代表路径已跑 | 性能仍勉强可用但不够理想；没有本轮可靠FPS |
+| A28 | 0474/7344正常完整App与各自原生图/动作；dc910e普通图与动作已补；最终ef69同版图/动作/真实ONNX/正常Quit与冷开已补 | 最终交付字段由下方完成状态及远端回执绑定 |
+
+### 取得、样式与包装映射
+
+| 原入口/样式 | 本轮共享边界 | 例外/行为 |
+|---|---|---|
+| 普通胶囊/逐按钮玻璃、无效Icon panel、整行玻璃 | 32pt/r8普通或主动作、16/28工具、32关闭、弱填色选择行；footer36 | 独立40圆工具、原生红绿灯和模态镜片保留玻璃；系统控件不仿制 |
+| SwiftUI表面/AppKit菜单各算参数 | WorkbenchResolvedAppearance→两适配器；菜单每级同12/6/32 | 强调色/tint/实色回退共用政策；系统顶部菜单是例外 |
+| 声明式、命令式及保留宿主部分复制环境 | WorkbenchVisualContext/Bridge；owner活Store | 不重建原生编辑器；无canvas退出提示保留NSAlert |
+| 下载器新建/模型管理下载 | ModelAcquisitionRequest→同确认→release-model-catalog disclosure | 默认filesOnly；可选登记；原服务队列/任务/安装不复制 |
+| 节点模型准备 | 同确认＋精确node/graph/operation/model目标 | 再验证目标，完成后仅绑定授权目标，不自动运行 |
+| Quick模型准备 | 同确认＋完整草稿/会话/导航/变体捕获 | 目标变化拒绝绑定；无法捕获准确目标时仅全局取得 |
+| 批量/本地登记 | 同摘要/明确可执行子集；现有register | 不伪造下载，不借登记自动选用，不因商用未知误禁公开取得 |
+| 已完整副本/已有任务 | 精确资源/任务详情复用；verified external纳入 | 不重复下载；多副本要求明确选择；暂停队列不暗恢复 |
+
+18条目录均有checkedAt=2026-10-26、固定版本来源及组件范围；源文SHA保存在正式catalog，不复制成第二套事实库。Qwen3.5/3.8各两变体、Klein BF16、MiniMax、Wan、MRT2、ACE及Qwen2.5四变体按各固定条款记有条件商业/条款内免许可费/公开访问；Klein Q8、SwiftF0有未核实字段；FLUX Dev另商业许可、访问需源站批准；LTX商业及费用仍按组件条件/未知分开；Stable Audio允许范围和额外许可费用分开。不是D作法律担保，目录逐项引用才是可追溯事实。ACE只修固定源11个remotePath及有备份的精确旧recipe迁移；无新模型/转换器/插件平台。
+
+| 包装路径/文件 | 核实用途及固定身份 | 本轮措施与回归等级 |
+|---|---|---|
+| onnxruntime/datasets/logreg_iris.onnx | ORT1.22.1固定89746dc，670B，8224784c… | 仅包装副本按全SHA排除；D/Pitch运行无样例调用 |
+| onnxruntime/datasets/mul_1.onnx | 同上，130B，71f431c4… | 同上；未知或内容改变的ONNX阻断，不全后缀删除 |
+| onnxruntime/datasets/sigmoid.onnx | 同上，103B，5340aba6… | 同上；包装26反例通过 |
+| SwiftF0 core.py/model.onnx | 固定8e968fe5代码与399114B权重分开 | 沿用随包固定代码/外置精确权重；新通用确认实际下载见原生回执 |
+| 最终App/嵌套归档 | 签前签后同一入口核验 | 0474及中间324d为各自历史产物；最终ef69实际54434文件/2681嵌套成员零权重通过并独立复核，不拿源码检查替代产物 |
+
+**后续维护边界**：新增D自有命令使用WorkbenchMenu/Picker及同一PopupStyle.resolved；声明式workbenchSheet、命令式WorkbenchChildPanelHandle共用视觉上下文/所属canvas；确认沿既有保存门禁。系统顶部菜单、文本服务、文件/权限面板及无可用canvas的启动/退出提示为明确原生例外。检索实际Views/State/D入口：无残留D自有原生alert/confirmationDialog/sheet；Menu(configuration)仅兼容适配器，DApp中的Menu为系统菜单。修改这些边界必须复验各级菜单、嵌套关闭、活语言/外观及编辑器身份；不是全库样式正则替换。新增分组缓存归单一浏览器state、容量1、完整entries与语言对象/版本/有效语言失效，不按条目数猜变更，无轮询。
+
+
+
 ## App Store v2续办（2026-10-26）
 
 用户确认执行两份v2附件。起点/远端完整`2d8f29d63da9fc136b2c0cd55ecc1e885c787e4e`、生产`8a7fc428db142e2e2db4c891af48955bf4b07600`，原树/分支接续、生产祖先0、起点干净。Lead唯一写入/桌面，三个非实施者只读审查渲染、筛选兼容及权重/运行时。桌面旧候选仅作修前，普通D/保存内容/模型/个人scheme不动。

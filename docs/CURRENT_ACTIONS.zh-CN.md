@@ -1,5 +1,13 @@
 # 当前行动与接手点
 
+当前交审：D-UI-CONSOLIDATED-01 · 统一视觉、模型取得与节点库 W1–W6。实际起点 **4bf4356ad3bd0ba7617e7a117cee1c11a38f1e3a**；最终生产 **ef69ff4c9423f9a20f9b3cddfebb465db6d08092**，原工作树/`codex/ui-consolidated-20261020`接续。桌面 **D 最新版** → 正常完整Release `D-Development/CurrentD/Unified-Visual-ef69ff4c/D.app`，Finder启动/正常Quit/冷开已核对。完整交付为本次测试与文档后继，由CurrentD回执绑定远端完整SHA。
+
+共享菜单各级、声明式/命令式子窗和保留宿主、六按钮角色、通用下载确认、同页节点库、ORT三样例准确排除、SwiftF0固定代码/外部权重均已实施。最终同版正常图、两级生产菜单、库与嵌套关闭、真实SwiftF0取得/运行和最终120秒运行与保存冷开见[任务顶部](tasks/D-UI-CONSOLIDATED-01.md#统一视觉模型取得与节点库2026-10-26交审)的A01–A28/V01–V10分级回执。独立源码与产物复核已完成；不称全入口原生通过。
+
+[唯一31项清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#统一问题清单app-store-v22026-10-26)继续保留IME、C区、hover/VoiceOver、磁盘失败、玻璃外部排除、连续性能和Store/许可余项。新确认旧基线已有的跨Quick/Workflow输入Undo栈丢失归I010；草稿未丢，本轮未重构导航。性能仍“勉强可用但不够理想”，短动作不称FPS。没有需本人即时处理的新权限或未知保存决定。末次85cf/ef69已撤搜索/历史筛选/Filter footer矩形父板并收口运行面板样式旁路；最终新ONNX run、四动作终态及冷开摘要核对完成。旧候选/临时编译产物清理，保存项目/模型/证据保留。停在用户看图与独立顾问审计；不扩下一轮、不合并、不上传、不发布。
+
+以下为前轮交审事实：
+
 当前交审：D-UI-CONSOLIDATED-01 · App Store v2。实际起点完整`2d8f29d63da9fc136b2c0cd55ecc1e885c787e4e`；最终生产 **`2f559b341ed3f4c3068d301c306690d4db3ecac1`**，原树/`codex/ui-consolidated-20261020`接续。桌面 **D 最新版** → 正常完整Release `D-Development/CurrentD/AppStore-v2-20261026/D.app`；完整交付为本次文档后继，远端读回由CurrentD回执绑定。普通D、原项目/模型/个人scheme保持。
 
 已完成：Chat父clip、稳定查询兼容、Pitch/Wan外部资源和实际取得/使用、VMAF内嵌学习参数移除、签前后零权重及helper门禁、有限PrivacyInfo/缺失许可正文；末次修Quick无字段空板与模式遮挡。ceb8普通App实际SwiftF0下载到推理与Qwen回答/保存冷恢复、有限四动作/PAN记录及本地开发签名Archive按版本沿用；2f只补Quick同版复验。分级见[任务回执](tasks/D-UI-CONSOLIDATED-01.md#v2最终工程交审)。没有把短输入或源码判断当FPS、全模型或商店通过。
