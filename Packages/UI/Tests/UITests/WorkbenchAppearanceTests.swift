@@ -463,8 +463,8 @@ import Testing
 
     /// The real settings form must preview one palette across every sample card.
     /// This checks environment propagation, not native glass pixels.
-    @Test(arguments: [CGFloat(458), CGFloat(760)])
-    func appearancePreviewKeepsCardPaletteTogetherInOppositeHostScheme(width: CGFloat) throws {
+    @Test(arguments: [CGFloat(458), CGFloat(760)], [ChatDisplayPreferences.Theme.system, .light, .dark])
+    func appearancePreviewKeepsCardPaletteTogetherInOppositeHostScheme(width: CGFloat, theme: ChatDisplayPreferences.Theme) throws {
         let suite = "appearance-preview-\(UUID().uuidString)"
         let settings = try #require(UserDefaults(suiteName: suite))
         defer { settings.removePersistentDomain(forName: suite) }
@@ -473,7 +473,7 @@ import Testing
         var appearance = preferences.resolvedAppearance
         var local = appearance.local ?? WorkbenchLocalAppearance()
         local.material = .solid; appearance.local = local
-        preferences.appearance = appearance; preferences.theme = .system
+        preferences.appearance = appearance; preferences.theme = theme
         try #require(state.update(preferences))
         let before = settings.data(forKey: ChatDisplayPreferences.storageKey)
         let host = NSHostingView(rootView: AnyView(ChatDisplayPreferencesPanel(state: state)
@@ -502,11 +502,14 @@ import Testing
         let headingCards = plates.filter { $0.bounds.width > width * 0.75 && $0.bounds.height > 60 }
         try #require(!headingCards.isEmpty,
             "Missing heading plate; hosted plate sizes: \(plates.map { $0.bounds.size })")
-        #expect(headingCards.allSatisfy { $0.palette == preferences.resolvedAppearance.light },
-            "The full-width heading must use the preview palette, not the dark host palette")
+        #expect(headingCards.allSatisfy { $0.palette == preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? .dark) },
+            "Main preview must follow the resolved workbench theme")
         let nodeCards = plates.filter { $0.bounds.width >= 140 && $0.bounds.width <= 170 && $0.bounds.height >= 76 }
         try #require(nodeCards.count >= 2)
-        #expect(nodeCards.allSatisfy { $0.palette == preferences.resolvedAppearance.light })
+        #expect(nodeCards.allSatisfy { $0.palette == preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? .dark) })
+        let preview = ChatDisplayPreferencesPanel(state: state)
+        #expect(preview.previewPreferences(for: .light).preferredColorScheme == .light)
+        #expect(preview.previewPreferences(for: .dark).preferredColorScheme == .dark)
         for plate in plates {
             let frame = host.convert(plate.bounds, from: plate)
             #expect(frame.minX >= -1 && frame.maxX <= width + 1,

@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct ChatDisplayPreferencesPanel: View {
     let state: ChatDisplayPreferencesState
     @Environment(\.dLanguageStore) private var language
+    @Environment(\.colorScheme) private var hostScheme
     @State private var previewGroup = UUID().uuidString
     @State private var glassStrength: Double?
     @State private var enhancement: Double?
@@ -145,8 +146,8 @@ struct ChatDisplayPreferencesPanel: View {
         }
     }
 
-    private var appearancePreview: some View {
-        let palette = selectedPalette
+    private func appearancePreview(for scheme: ColorScheme) -> some View {
+        let palette = state.preferences.resolvedAppearance.palette(for: scheme)
         return VStack(alignment: .leading, spacing: 8) {
             Text(label("preview.title", "Preview", "预览")).font(.caption.weight(.semibold))
             VStack(alignment: .leading, spacing: 5) {
@@ -190,16 +191,18 @@ struct ChatDisplayPreferencesPanel: View {
                 }.environment(\.workbenchSurfaceGroup, previewGroup + ":scroll")
             }
         }
-        .environment(\.chatDisplayPreferences, previewPreferences)
-        .environment(\.colorScheme, editingScheme)
+        .environment(\.chatDisplayPreferences, previewPreferences(for: scheme))
+        .environment(\.colorScheme, scheme)
         .padding(12)
         .background(palette.canvasColor, in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("workbench-appearance-preview")
     }
 
-    private var previewPreferences: ChatDisplayPreferences {
+    func previewPreferences(for scheme: ColorScheme) -> ChatDisplayPreferences {
         var candidate = state.preferences
+        // The advanced palette is a local preview, never a persisted theme change.
+        candidate.theme = scheme == .dark ? .dark : .light
         var appearance = candidate.resolvedAppearance
         if let glassStrength { var local = appearance.local ?? .init(); local.strength = glassStrength; appearance.local = local }
         if let enhancement { var settings = appearance.resolvedReadability; settings.amount = enhancement; appearance.readability = settings }
@@ -286,7 +289,7 @@ struct ChatDisplayPreferencesPanel: View {
                     appearance.readability = settings; candidate.appearance = appearance
                 } }).workbenchHelp("SETTINGS-AMOUNT").frame(height: 24)
                 .disabled(!state.preferences.resolvedAppearance.resolvedReadability.enabled || state.preferences.resolvedAppearance.local?.material == .glass)
-            appearancePreview.environment(\.chatDisplayPreferences, previewPreferences)
+            appearancePreview(for: state.preferences.preferredColorScheme ?? hostScheme)
             Text(workflowText(language, "chat.displayPreferencesPanel.panelsSampleOnlyDSCanvasNeverYourDesktopImages"))
                 .font(.caption).foregroundStyle(.secondary)
         }.disabled(state.hasInvalidStoredRecord)
@@ -392,7 +395,7 @@ struct ChatDisplayPreferencesPanel: View {
                         .font(.caption).foregroundStyle(.red)
                         .accessibilityIdentifier("workbench-low-contrast")
                 }
-                appearancePreview
+                appearancePreview(for: editingScheme)
                 Button(label("resetPalette", "Reset selected palette", "重置当前配色")) {
                     let scheme = editingScheme
                     if change({ preferences in
