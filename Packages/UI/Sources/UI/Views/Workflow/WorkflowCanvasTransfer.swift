@@ -52,8 +52,7 @@ enum WorkflowCanvasTransfer: Codable, Transferable, Equatable, Sendable {
         } importing: { data in
             return try decode(data)
         }
-        // These are live D references, not an external file export. Keeping the
-        // representation local also avoids promising a file to another process.
+        // These are live references for this D process, not an external file export.
         .visibility(.ownProcess)
     }
 

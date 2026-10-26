@@ -1829,8 +1829,14 @@ public struct SharedLibraryBrowser: View {
             .font(.callout).lineLimit(2).padding(10).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
     private func dragProvider(for key: String) -> NSItemProvider {
+        dragProvider(for: key, using: insertionController)
+    }
+    // The actual view route is also checked with a captured controller in tests.
+    func dragProvider(for key: String, using controller: WorkflowController?) -> NSItemProvider {
         guard let current = entries.first(where: { $0.id == key }) else { return NSItemProvider() }
-        if let controller = insertionController, let owner = controller.assetLibraryOwner, current.item.kind == .asset {
+        // Only the project collection owns multi-source/runtime transfers.
+        // Quick/Chat keep their existing asset payload even while a canvas is open.
+        if onCollect != nil, let controller, let owner = controller.assetLibraryOwner, current.item.kind == .asset {
             let selected = dragEntries(for: key)
             guard !selectedKeys.contains(key) || selected.count == validSelection.count else {
                 errorMessage = workflowText(language, "container.hiddenSelection")
@@ -1857,7 +1863,7 @@ public struct SharedLibraryBrowser: View {
             }
             return provider
         }
-        return SharedLibraryBrowserLogic.dragProvider(for: current, controller: insertionController)
+        return SharedLibraryBrowserLogic.dragProvider(for: current, controller: controller)
     }
     private func folderDepth(_ id: UUID) -> Int {
         var depth = 0

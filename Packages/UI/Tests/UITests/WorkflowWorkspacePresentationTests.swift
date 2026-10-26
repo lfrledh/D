@@ -571,6 +571,53 @@ extension WorkflowWorkspacePresentationTests {
         try await f.close()
     }
 
+    @Test(arguments: [false, true])
+    func actualQuickLibraryDragKeepsLegacyAssetWhileCanvasHasOwner(explicitInstance: Bool) async throws {
+        let f = try await RenderingWorkspaceFixture.make()
+        #expect(f.controller.assetLibraryOwner != nil)
+        let project = UUID(), instance = UUID(), asset = UUID()
+        let selection: SharedLibraryBrowserSelection = explicitInstance
+            ? .assetInstance(projectID: project, instanceID: instance, assetID: asset)
+            : .asset(projectID: project, assetID: asset)
+        let entry = SharedLibraryBrowserEntry(item: .init(key: "other-project-asset", title: "Fixture", kind: .asset, readiness: .available), selection: selection)
+        let metadata = try SharedLibraryStore(fileURL: f.root.appendingPathComponent("library.json"))
+        // Quick/Chat share the live canvas controller for Add-to-Canvas, but do
+        // not own its asset collection. Exercise the real view provider branch.
+        let browser = SharedLibraryBrowser(entries: [entry], store: metadata,
+            onUse: { _ in }, onAdd: { _ in }, onPreview: { _ in }, onPrepare: { _ in },
+            onImport: {}, onClose: {})
+        let provider = browser.dragProvider(for: entry.id, using: f.controller)
+        #expect(provider.hasItemConformingToTypeIdentifier("org.d-workbench.canvas-item"))
+        let value: WorkflowCanvasTransfer = try await withCheckedThrowingContinuation { continuation in
+            _ = provider.loadTransferable(type: WorkflowCanvasTransfer.self) { continuation.resume(with: $0) }
+        }
+        #expect(value == (explicitInstance ? .assetInstance(projectID: project, instanceID: instance, assetID: asset) : .asset(projectID: project, assetID: asset)))
+        #expect(f.controller.runs.isEmpty)
+        try await f.close()
+    }
+
+    @Test func actualProjectLibraryDragKeepsExactRuntimeCollectionPayload() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        let graph = try f.runtimeValueGraph()
+        await c.run(target: graph.nodes[0].id, only: false)
+        let value = try #require(WorkflowLibraryValue.entries(c, language: nil).compactMap(\.runtimeValue).first)
+        let source = WorkflowLibrarySource.runtime(try WorkflowRuntimeAssetSource(call: value.call, port: value.port, value: value.value))
+        let owner = try #require(c.assetLibraryOwner)
+        try await c.setCollected([source], collected: true, owner: owner)
+        let entry = try #require(WorkflowLibraryValue.collectedEntries(c, language: nil, library: nil).first)
+        let metadata = try SharedLibraryStore(fileURL: f.root.appendingPathComponent("library.json"))
+        let browser = SharedLibraryBrowser(entries: [entry], store: metadata, onCollect: { _, _ in },
+            onUse: { _ in }, onAdd: { _ in }, onPreview: { _ in }, onPrepare: { _ in },
+            onImport: {}, onClose: {})
+        let provider = browser.dragProvider(for: entry.id, using: c)
+        let payload: WorkflowCanvasTransfer = try await withCheckedThrowingContinuation { continuation in
+            _ = provider.loadTransferable(type: WorkflowCanvasTransfer.self) { continuation.resume(with: $0) }
+        }
+        #expect(payload == .libraryItems(owner: owner, items: [.source(source)]))
+        #expect((await f.engine.submissions) == 0)
+        try await f.close()
+    }
+
     @Test(arguments: ["program", "registered-ready", "registered-unprepared", "unregistered", "wrong-kind", "removed", "changed-target", "read-only", "closed"])
     func libraryProviderThroughProductionCanvasCommandRespectsExactAdmission(scenario: String) async throws {
         let f = try await RenderingWorkspaceFixture.make(), c = f.controller
