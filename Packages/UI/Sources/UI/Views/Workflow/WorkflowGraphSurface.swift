@@ -1371,23 +1371,6 @@ private struct WorkflowNodeCard: View {
                 .anchorPreference(key: WorkflowPortAnchorPreferenceKey.self, value: .center) { [identity: $0] }
                 .frame(width: 22 * scale, height: WorkflowNodePortLayout.hitHeight(collapsed: collapsed) * scale).contentShape(Ellipse())
         }
-        .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
-            guard items.count == 1, let payload = items[0].libraryPayload else { return false }
-            guard input, payload.items.count == 1, !readOnly, controller.canEditCanvas,
-                  scope.isCurrent(in: controller), let target = controller.canvasInsertionTarget() else {
-                controller.errorMessage = workflowText(languageStore, "container.dropTarget")
-                return true
-            }
-            let origin = graph.layout.first { $0.nodeID == node.id }
-            Task {
-                do {
-                    let sources = try await controller.resolveLibraryDrop(payload.items, owner: payload.owner, target: target)
-                    try await controller.insertLibrarySources(sources, owner: payload.owner, target: target,
-                    x: (origin?.x ?? 100) - 420, y: origin?.y ?? 100, inputNode: node.id, inputPort: port.id) }
-                catch { controller.errorMessage = error.localizedDescription }
-            }
-            return true
-        }
         .buttonStyle(.plain)
         .disabled(readOnly || tool == .hand || !controller.canEditCanvas)
         .help(WorkflowCanvasPresentation.portTitle(operationID: node.operationID,
@@ -1404,8 +1387,27 @@ private struct WorkflowNodeCard: View {
                 enabled: !readOnly && tool == .pointer && controller.canEditCanvas,
                 visibleAt: { portVisible(identity, $0) },
                 onClick: { onSelectPort(identity) },
-                onChange: { onPortDrag(identity, $0) }, onEnd: onPortDragEnd)
+                onChange: { onPortDrag(identity, $0) }, onEnd: onPortDragEnd,
+                onLibraryDrop: { acceptLibraryAtPort($0, port: port, input: input) })
         }
+    }
+
+    private func acceptLibraryAtPort(_ item: WorkflowCanvasTransfer, port: WorkflowPortDefinition, input: Bool) -> Bool {
+        guard let payload = item.libraryPayload else { return false }
+        guard input, payload.items.count == 1, !readOnly, controller.canEditCanvas,
+              scope.isCurrent(in: controller), let target = controller.canvasInsertionTarget() else {
+            controller.errorMessage = workflowText(languageStore, "container.dropTarget")
+            return true
+        }
+        let origin = graph.layout.first { $0.nodeID == node.id }
+        Task {
+            do {
+                let sources = try await controller.resolveLibraryDrop(payload.items, owner: payload.owner, target: target)
+                try await controller.insertLibrarySources(sources, owner: payload.owner, target: target,
+                x: (origin?.x ?? 100) - 420, y: origin?.y ?? 100, inputNode: node.id, inputPort: port.id) }
+            catch { controller.errorMessage = error.localizedDescription }
+        }
+        return true
     }
 
     private func acceptAsset(_ items: [WorkflowCanvasTransfer]) -> Bool {

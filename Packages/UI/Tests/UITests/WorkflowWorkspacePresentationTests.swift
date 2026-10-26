@@ -1303,3 +1303,108 @@ extension WorkflowWorkspacePresentationTests {
         try await f.close()
     }
 }
+
+extension WorkflowWorkspacePresentationTests {
+    @Test(arguments: [CGFloat(1), 1.5])
+    func nativeLibraryPortDropUsesVisibleHostAndOneUndo(zoom: CGFloat) async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        c.addExample("template")
+        let model = try #require(c.graph?.nodes.first { $0.operationID == "d.text.template" })
+        for connection in try #require(c.graph).connections { c.disconnect(connection.id) }
+        let file = f.root.appendingPathComponent("port.txt")
+        try Data("port fixture".utf8).write(to: file)
+        let published = try await f.store.importWorkflowFile(at: file)
+        let owner = WorkflowAssetLibraryOwner(projectID: f.manifest.id, instanceID: f.manifest.effectiveInstanceID)
+        let transfer = WorkflowCanvasTransfer.library(owner: owner, sources: [.asset(published.record.reference)])
+        let original = try #require(c.graph)
+        let surface = WorkflowGraphSurface(controller: c, graph: original, zoom: .constant(zoom), tool: .constant(.pointer),
+            navigationRequest: .constant(nil), viewportInteractionLocked: .constant(false),
+            viewContext: .init(projectID: c.projectID, rootGraphID: original.id, bodyPath: []),
+            pendingConnection: .constant(nil), selectedConnectionID: .constant(nil), readOnly: false,
+            onPlan: { _, _ in }, onDropItem: { _, _ in false })
+        let host = NSHostingView(rootView: surface)
+        host.frame = .init(x: 0, y: 0, width: 1600, height: 900)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer { window.contentView = nil; window.close() }
+        host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(120)); host.layoutSubtreeIfNeeded()
+        func descendants(_ v: NSView) -> [NSView] { v.subviews.flatMap { [$0] + descendants($0) } }
+        let receiver = try #require(descendants(host).compactMap { $0 as? WorkflowPortDragView }
+            .first { $0.port?.nodeID == model.id && $0.port?.input == true && $0.port?.port == "input" })
+        let center = CGPoint(x: receiver.bounds.midX, y: receiver.bounds.midY)
+        let point = receiver.convert(center, to: nil)
+        #expect(receiver.hitTest(receiver.convert(center, to: receiver.superview)) === receiver)
+        #expect(receiver.registeredDraggedTypes.contains(.init("org.d-workbench.canvas-item")))
+        let drag = WorkspaceCanvasDropInfo(bytes: try transfer.encoded(), key: "asset", window: window, point: point)
+        defer { drag.draggingPasteboard.releaseGlobally() }
+        #expect(receiver.draggingEntered(drag).contains(.copy))
+        #expect(c.graph == original, "Hover must not pin assets or edit the graph")
+        try #require(receiver.prepareForDragOperation(drag))
+        try #require(receiver.performDragOperation(drag))
+        #expect(!receiver.performDragOperation(drag), "The same native delivery is consumed once")
+        for _ in 0..<50 where c.graph?.nodes.count == original.nodes.count { try await Task.sleep(for: .milliseconds(20)) }
+        let after = try #require(c.graph)
+        #expect(c.errorMessage == nil)
+        #expect(after.nodes.count == original.nodes.count + 1 && after.connections.count == original.connections.count + 1)
+        #expect(after.connections.contains { $0.targetNode == model.id && $0.targetPort == "input" })
+        c.undo(); #expect(c.graph == original)
+        #expect((await f.engine.submissions) == 0)
+        try await f.close()
+    }
+}
+
+extension WorkflowWorkspacePresentationTests {
+    @Test func nativeLibraryPortDropKeepsGeometryAndRejectsStalePayloads() throws {
+        let root = NSView(frame: .init(x: 0, y: 0, width: 400, height: 240))
+        let view = WorkflowPortDragView(frame: .init(x: 120, y: 90, width: 22, height: 22))
+        root.addSubview(view)
+        let window = NSWindow(contentRect: root.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = root
+        defer { window.contentView = nil; window.close() }
+        let project = UUID(), instance = UUID(), graph = UUID()
+        let scope = WorkflowCanvasScope(rootGraphID: graph, rootRevision: UUID(), graphID: graph,
+            bodyPath: [], projectID: project, instanceID: instance)
+        view.scope = scope; view.port = .init(nodeID: UUID(), port: "input", input: true); view.enabled = true
+        let owner = WorkflowAssetLibraryOwner(projectID: project, instanceID: instance)
+        let asset = WorkflowAssetReference(projectID: project, assetID: UUID(), kind: .image, sha256: String(repeating: "a", count: 64))
+        let transfer = WorkflowCanvasTransfer.library(owner: owner, sources: [.asset(asset)])
+        var received: [WorkflowCanvasTransfer] = []
+        view.onLibraryDrop = { received.append($0); return true }
+        let center = view.convert(.init(x: 11, y: 11), to: nil)
+        let drag = WorkspaceCanvasDropInfo(bytes: try transfer.encoded(), key: "fixture", window: window, point: center)
+        defer { drag.draggingPasteboard.releaseGlobally() }
+        // AppKit enters the bounding rectangle before the pointer reaches its ellipse.
+        drag.draggingLocation = view.convert(.init(x: 1, y: 1), to: nil)
+        #expect(view.draggingEntered(drag).isEmpty)
+        drag.draggingLocation = center
+        #expect(view.draggingUpdated(drag).contains(.copy))
+        view.visibleAt = { _ in false }; #expect(view.draggingUpdated(drag).isEmpty)
+        view.visibleAt = { _ in true }; #expect(view.draggingUpdated(drag).contains(.copy))
+        #expect(received.isEmpty)
+        // A graph revision changing after hover cannot redirect the pending drop.
+        view.scope = .init(rootGraphID: graph, rootRevision: UUID(), graphID: graph, bodyPath: [], projectID: project, instanceID: instance)
+        #expect(!view.performDragOperation(drag) && received.isEmpty)
+        view.scope = scope
+        #expect(view.draggingEntered(drag).contains(.copy))
+        drag.draggingPasteboard.clearContents(); drag.draggingPasteboard.setString("changed", forType: .string)
+        #expect(!view.performDragOperation(drag) && received.isEmpty)
+        for invalid in [WorkflowCanvasTransfer.operation(id: "d.text.input", modelID: nil),
+                        .library(owner: .init(projectID: project, instanceID: UUID()), sources: [.asset(asset)]),
+                        .library(owner: owner, sources: [.asset(asset), .asset(.init(projectID: project, assetID: UUID(), kind: .image, sha256: String(repeating: "b", count: 64)))])] {
+            let info = WorkspaceCanvasDropInfo(bytes: try invalid.encoded(), key: "invalid", window: window, point: center)
+            #expect(view.draggingEntered(info).isEmpty && !view.performDragOperation(info) && received.isEmpty)
+            info.draggingPasteboard.releaseGlobally()
+        }
+        let valid = WorkspaceCanvasDropInfo(bytes: try transfer.encoded(), key: "valid", window: window, point: center)
+        defer { valid.draggingPasteboard.releaseGlobally() }
+        #expect(view.draggingEntered(valid).contains(.copy))
+        view.removeFromSuperview()
+        #expect(!view.prepareForDragOperation(valid) && !view.performDragOperation(valid))
+        root.addSubview(view)
+        #expect(view.draggingEntered(valid).contains(.copy))
+        #expect(view.performDragOperation(valid))
+        #expect(!view.performDragOperation(valid) && view.draggingEntered(valid).isEmpty)
+        #expect(received == [transfer])
+    }
+}
