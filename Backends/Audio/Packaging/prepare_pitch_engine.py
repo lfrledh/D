@@ -239,7 +239,7 @@ def _model_declaration() -> dict[str, object]:
     return {
         "schemaVersion": 1, "profile": "swift-f0-0.1.2-cpu-v1", "version": "0.1.2",
         "actualSHA256": MODEL_SHA256, "sizeBytes": MODEL_SIZE_BYTES,
-        "provider": "CPUExecutionProvider", "sourceLicense": "MIT", "weightLicense": "MIT",
+        "provider": "CPUExecutionProvider", "sourceLicense": "MIT", "weightLicense": None,
         "distribution": "user-acquired-separate-model", "repository": "lars76/swift-f0",
         "revision": UPSTREAM_REVISION, "remotePath": "swift_f0/model.onnx",
     }
