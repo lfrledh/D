@@ -777,6 +777,11 @@ public final class ProjectSession {
     }
 
     private func activate(_ candidate: ProjectStore, lease: LocationAccess.Lease) async throws {
+        // Capture legacy membership before Quick/Chat or workflow can publish
+        // new outputs. This is one compatible organization record, not a graph migration.
+        if !isTemporaryChatWorkspace, try await candidate.workflowState().readOnlyReason == nil {
+            _ = try await candidate.initializeAssetCollection()
+        }
         let createdSession = try await factory(candidate.artifactDirectory)
         textContextID = UUID()
         audioCreationContextID = UUID()
@@ -1002,6 +1007,9 @@ public final class ProjectSession {
         }
         workflow = controller
         await controller.load()
+        // Establish the compatibility boundary before exposing a runnable canvas.
+        // This is organization metadata only; frozen graphs and outputs are untouched.
+        await controller.initializeAssetCollection()
         refreshWorkflowModels()
     }
 

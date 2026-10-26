@@ -160,7 +160,7 @@ struct WorkflowGraphSurface: View {
                                 },
                                 onPortDragEnd: { target in finishConnection(to: target, scope: scope) }
                             )
-                            .overlay { if let mark=planMarks[node.id] { WorkflowPlanBadge(mark:mark,scale:renderZoom).frame(width: WorkflowCanvasLayoutPolicy.nodeWidth * renderZoom) } }
+                            .overlay { if let mark=planMarks[node.id] { WorkflowPlanBadge(mark:mark,scale:renderZoom).frame(width: WorkflowCanvasLayoutPolicy.width(node.id, in: geometry.graph) * renderZoom) } }
                             .onGeometryChange(for: CGSize.self) { CGSize(width: $0.size.width / renderZoom - 22, height: $0.size.height / renderZoom) } action: { size in
                                 cardSizes[node.id] = size
                                 nodeSizeObserver?(node.id, size)
@@ -168,7 +168,7 @@ struct WorkflowGraphSurface: View {
                             .fixedSize(horizontal: false, vertical: true)
                             // Keep the full intrinsic event bounds. A short outer frame
                             // would paint ports below it but reject their native hits.
-                            .offset(x: (position.x - WorkflowCanvasLayoutPolicy.nodeWidth / 2 - 11) * effectiveZoom,
+                            .offset(x: (position.x - WorkflowCanvasLayoutPolicy.width(node.id, in: geometry.graph) / 2 - 11) * effectiveZoom,
                                     y: (position.y - WorkflowNodePortLayout.titleHeight / 2) * effectiveZoom)
                             .modifier(WorkflowNodeDragOffset(presentation: nodeDrag,
                                 moving: nodeDrag.movingNodeIDs.contains(node.id), scale: effectiveZoom))
@@ -521,7 +521,7 @@ struct WorkflowGraphSurface: View {
                 // covered cards. This matches the drawing stack and avoids invisible hits.
                 for node in geometry.graph.nodes.reversed() {
                     let center = geometry.displayPosition(node.id)
-                    let size = cardSizes[node.id] ?? CGSize(width: WorkflowCanvasLayoutPolicy.nodeWidth, height: 600)
+                    let size = cardSizes[node.id] ?? CGSize(width: WorkflowCanvasLayoutPolicy.width(node.id, in: geometry.graph), height: 600)
                     let frame = CGRect(x: center.x - size.width / 2, y: center.y - WorkflowNodePortLayout.titleHeight / 2,
                                        width: size.width, height: size.height)
                     if WorkflowConnectionGeometry.nodePlate(frame).cgPath.contains(display) {
@@ -621,7 +621,7 @@ struct WorkflowGraphSurface: View {
                 for node in geometry.graph.nodes {
                     let center = geometry.rawPosition(node.id)
                     let height = cardSizes[node.id]?.height ?? 600
-                    if abs(raw.x - center.x) <= WorkflowCanvasLayoutPolicy.nodeWidth / 2,
+                    if abs(raw.x - center.x) <= WorkflowCanvasLayoutPolicy.width(node.id, in: geometry.graph) / 2,
                        raw.y >= center.y - WorkflowNodePortLayout.titleHeight / 2,
                        raw.y <= center.y - WorkflowNodePortLayout.titleHeight / 2 + height { return false }
                 }
@@ -790,13 +790,22 @@ struct WorkflowGraphSurface: View {
               let item = try? items[0].validated() else { return false }
         if controller.graph == nil {
             switch item {
-            case .operation, .asset, .assetInstance, .tool: return onDropItem(item, rawPoint)
+            case .operation, .asset, .assetInstance, .tool, .library, .libraryItems: return onDropItem(item, rawPoint)
             case .output: return false
             }
         }
         guard scope.isCurrent(in: controller) else { return false }
+        if item.libraryPayload != nil, let graph = self.graph {
+            let geometry = WorkflowGraphGeometry(graph: graph, tools: controller.tools, registry: controller.registry)
+            let point = CGPoint(x: rawPoint.x + geometry.translation.width, y: rawPoint.y + geometry.translation.height)
+            let frames = WorkflowConnectionGeometry.nodeFrames(geometry: geometry, sizes: cardSizes)
+            if frames.values.contains(where: { WorkflowConnectionGeometry.nodePlate($0).cgPath.contains(point) }) {
+                controller.errorMessage = workflowText(languageStore, "container.dropTarget")
+                return true
+            }
+        }
         switch item {
-        case .operation, .asset, .assetInstance, .tool:
+        case .operation, .asset, .assetInstance, .tool, .library, .libraryItems:
             return onDropItem(item, rawPoint)
         case .output:
             return false
@@ -852,9 +861,9 @@ struct WorkflowCanvasMarquee {
                 ? WorkflowNodePortLayout.portBottom(inputs: definition?.inputs.count ?? 0, outputs: definition?.outputs.count ?? 0, collapsed: true) : CGFloat(WorkflowLayout.cardHeightBudget(
                     inputs: definition?.inputs.count ?? 1, outputs: definition?.outputs.count ?? 1))
             let height = cardSizes[node.id]?.height ?? fallbackHeight
-            let card = CGRect(x: center.x + edge.width - WorkflowCanvasLayoutPolicy.nodeWidth / 2,
+            let card = CGRect(x: center.x + edge.width - WorkflowCanvasLayoutPolicy.width(node.id, in: geometry.graph) / 2,
                               y: center.y + edge.height - WorkflowNodePortLayout.titleHeight / 2,
-                              width: WorkflowCanvasLayoutPolicy.nodeWidth, height: height)
+                              width: WorkflowCanvasLayoutPolicy.width(node.id, in: geometry.graph), height: height)
             if rect.intersects(card) { selected.insert(node.id) }
         }
         return selected
@@ -1015,6 +1024,12 @@ enum WorkflowNodePortLayout {
 }
 
 private struct WorkflowNodeCard: View {
+    @State private var containerPresentation = WorkflowContainerPresentation()
+    @State private var resizePreview: CGSize?
+    @State private var resizeTarget: WorkflowCanvasInsertionTarget?
+    private var isContainer: Bool { WorkflowAssetContainer.isContainer(node.operationID) }
+    private var cardWidth: CGFloat { WorkflowCanvasLayoutPolicy.width(node.id, in: graph) }
+    private var cardHeight: CGFloat { WorkflowCanvasLayoutPolicy.containerHeight(node.id, in: graph) }
     @Environment(\.workbenchModelReadiness) private var modelReadiness
     @Environment(\.workflowPrepareNode) private var prepareNode
     @Environment(\.workflowPreparingModels) private var preparingModels
@@ -1063,10 +1078,15 @@ private struct WorkflowNodeCard: View {
         // Share only this render's command tree. Each subsequent body still
         // captures the current owner, scope, language and admission state.
         let actions = nodeActions
+        let container = WorkflowAssetContainerView(controller: controller, node: node, scale: scale, height: cardHeight - 96, presentation: containerPresentation)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6 * scale) {
-                Image(systemName: collapsed ? "chevron.right" : "chevron.down")
-                    .font(.system(size: 9 * scale)).allowsHitTesting(false)
+                if isContainer {
+                    Button { if scope.isCurrent(in: controller) { controller.toggleCollapsed(node.id) } } label: {
+                        Image(systemName: collapsed ? "chevron.right" : "chevron.down").font(.system(size: 12 * scale)).frame(width: 28 * scale, height: 28 * scale)
+                    }.buttonStyle(.plain).workflowNodeControl(node.id)
+                        .accessibilityLabel(workflowText(languageStore, collapsed ? "container.expand" : "container.collapse"))
+                } else { Image(systemName: collapsed ? "chevron.right" : "chevron.down").font(.system(size: 9 * scale)).allowsHitTesting(false) }
                 Text(WorkflowHumanPresentation.name(node, in: graph.nodes, language: languageStore))
                     .font(.system(size: 13 * scale, weight: .semibold)).lineLimit(1)
                     .help(node.title).allowsHitTesting(false)
@@ -1076,11 +1096,14 @@ private struct WorkflowNodeCard: View {
                         .allowsHitTesting(false)
                 }
                 if !collapsed {
-                    WorkbenchMenu { actions } label: {
-                        Text(consistencyText(languageStore, "tabs.properties"))
-                            .font(.system(size: 11 * scale)).padding(4 * scale)
-                    }.buttonStyle(.plain).workflowNodeControl(node.id)
-                        .accessibilityIdentifier("workflow-node-menu-" + node.id.uuidString)
+                    if isContainer {
+                        WorkflowAssetContainerView(controller: controller, node: node, scale: scale, presentation: containerPresentation, headerActions: actions)
+                    } else {
+                        WorkbenchMenu { actions } label: {
+                            Text(consistencyText(languageStore, "tabs.properties")).font(.system(size: 11 * scale)).padding(4 * scale)
+                        }.buttonStyle(.plain).workflowNodeControl(node.id)
+                            .accessibilityIdentifier("workflow-node-menu-" + node.id.uuidString)
+                    }
                 }
             }.padding(.horizontal, 12 * scale).frame(height: WorkflowNodePortLayout.titleHeight * scale)
             if !collapsed {
@@ -1093,9 +1116,19 @@ private struct WorkflowNodeCard: View {
                         .lineLimit(1).help(identitySummary).allowsHitTesting(false)
                         .padding(.horizontal, 12 * scale)
                         .frame(height: 22 * scale, alignment: .leading)
+                        .modifier(WorkflowContainerControlRegion(nodeID: isContainer ? node.id : nil))
                 }
             }
-            if let definition { portGrid(definition) }
+            if let definition {
+                if isContainer { portGrid(definition).workflowNodeControl(node.id) } else { portGrid(definition) }
+            }
+            if isContainer && collapsed {
+                Text(containerCollapsedSummary).font(.system(size: 10 * scale)).foregroundStyle(.secondary)
+                    .lineLimit(2).padding(.horizontal, 12 * scale).frame(height: 28 * scale).workflowNodeControl(node.id)
+            }
+            if isContainer && !collapsed {
+                container
+            }
             if !collapsed {
                 VStack(alignment: .leading, spacing: 5 * scale) {
                     if runTarget {
@@ -1140,7 +1173,7 @@ private struct WorkflowNodeCard: View {
             }
         }
         .font(.system(size: 11 * scale))
-        .frame(width: WorkflowCanvasLayoutPolicy.nodeWidth * scale, alignment: .leading)
+        .frame(width: cardWidth * scale, alignment: .leading)
         // Reserve the entire edge-port hit region inside the hosting bounds.
         // Only the plate paints; this transparent margin is not another panel.
         .padding(.horizontal, 11 * scale)
@@ -1148,14 +1181,36 @@ private struct WorkflowNodeCard: View {
             WorkflowNodePlateReceiver(scale: scale)
                 .modifier(WorkflowHandPointerStyle(presentation: pointerPresentation, tool: tool))
                 .workbenchPanel(cornerRadius: 13 * scale)
-                .frame(width: WorkflowCanvasLayoutPolicy.nodeWidth * scale)
+                .frame(width: cardWidth * scale)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 13 * scale, style: .continuous)
                 .stroke(selected ? Color.accentColor : (modelNotReady ? Color.orange : Color.secondary.opacity(0.25)),
                         lineWidth: (selected ? 3 : 1) * scale)
-                .frame(width: WorkflowCanvasLayoutPolicy.nodeWidth * scale)
+                .frame(width: cardWidth * scale)
                 .allowsHitTesting(false)
+        }
+        .overlay(alignment: .topLeading) {
+            if let resizePreview {
+                RoundedRectangle(cornerRadius: 13 * scale).stroke(Color.accentColor, style: .init(lineWidth: 1, dash: [4, 3]))
+                    .frame(width: resizePreview.width * scale, height: resizePreview.height * scale)
+                    .padding(.leading, 11 * scale).allowsHitTesting(false)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if isContainer && !collapsed && !readOnly {
+                Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 10 * scale))
+                    .frame(width: 20 * scale, height: 20 * scale).contentShape(Rectangle()).padding(.trailing, 12 * scale)
+                    .workflowNodeControl(node.id).accessibilityLabel(workflowText(languageStore, "container.resize"))
+                    .gesture(DragGesture(minimumDistance: 2).onChanged { value in
+                        if resizeTarget == nil { resizeTarget = controller.canvasInsertionTarget() }
+                        resizePreview = CGSize(width: min(1200, max(300, WorkflowCanvasLayoutPolicy.width(node.id, in: graph) + value.translation.width / scale)),
+                            height: min(1000, max(280, WorkflowCanvasLayoutPolicy.containerHeight(node.id, in: graph) + value.translation.height / scale)))
+                    }.onEnded { _ in
+                        if let resizeTarget, let resizePreview { controller.resizeContainer(id: node.id, width: resizePreview.width, height: resizePreview.height, target: resizeTarget) }
+                        resizePreview = nil; resizeTarget = nil
+                    })
+            }
         }
         .contentShape(RoundedRectangle(cornerRadius: 13 * scale, style: .continuous))
         .dropDestination(for: WorkflowCanvasTransfer.self) { (items: [WorkflowCanvasTransfer], _: CGPoint) -> Bool in
@@ -1182,6 +1237,17 @@ private struct WorkflowNodeCard: View {
         WorkbenchMenuAction(consistencyText(languageStore, "menu.node.results"), id: "node.results") {
             if scope.isCurrent(in: controller) { onViewResults?(node.id) }
         }.featureHelp("MENU-NODE-RESULTS", language: languageStore).disabled(onViewResults == nil)
+        if let definition, !isContainer {
+            WorkbenchSubmenu(workflowText(languageStore, "container.addPreview"), id: "node.previewContainer") {
+                WorkbenchMenuForEach(definition.outputs, id: \.id) { port in
+                    WorkbenchMenuAction(WorkflowCanvasPresentation.portTitle(operationID: node.operationID, port: port, input: false, language: languageStore)) {
+                        guard scope.isCurrent(in: controller), let target = controller.canvasInsertionTarget() else { return }
+                        do { try controller.addPreviewContainer(after: node.id, port: port.id, target: target) }
+                        catch { controller.errorMessage = error.localizedDescription }
+                    }.disabled(readOnly || port.kinds.count != 1 || port.kinds == [.receipt])
+                }
+            }
+        }
         WorkbenchMenuDivider()
         WorkbenchSubmenu(consistencyText(languageStore, "menu.node.scope"), id: "node.scope") {
             WorkbenchMenuAction(consistencyText(languageStore, "menu.node.through"), id: "node.through") { if scope.isCurrent(in: controller) { onPlan(node.id, false) } }.featureHelp("MENU-NODE-THROUGH", language: languageStore).disabled(readOnly || definition == nil)
@@ -1212,6 +1278,20 @@ private struct WorkflowNodeCard: View {
         return choice.flatMap(SharedLibraryProjection.descriptor(for:))
     }
 
+    private var containerCollapsedSummary: String {
+        let step = controller.latestStep(for: node.id)
+        let value = step?.inputs["input"] ?? step?.outputs["output"]
+        let count: Int
+        switch value {
+        case .collection(let items): count = items.count
+        case .data(.list(_, let items)): count = items.count
+        case .some: count = 1
+        case .none: count = node.librarySources?.count ?? (node.assetReference == nil ? node.dataConfiguration?.items.count ?? 0 : 1)
+        }
+        let mode = workflowText(languageStore, node.operationID == WorkflowAssetContainer.filterID ? "container.manual" : "container.preview")
+        let selected = step?.decision?.selectedItemIDs?.count ?? step?.containerSelectionDraft?.count ?? 0
+        return mode + " · \(count) · " + workflowText(languageStore, "container.selected") + " \(selected)"
+    }
     private var identitySummary: String {
         return WorkflowNodeIdentity.resolve(node: node, definition: definition,
             modelChoices: controller.modelChoices, assets: controller.availableAssets,
@@ -1254,6 +1334,23 @@ private struct WorkflowNodeCard: View {
                 .anchorPreference(key: WorkflowPortAnchorPreferenceKey.self, value: .center) { [identity: $0] }
                 .frame(width: 22 * scale, height: WorkflowNodePortLayout.hitHeight(collapsed: collapsed) * scale).contentShape(Ellipse())
         }
+        .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
+            guard items.count == 1, let payload = items[0].libraryPayload else { return false }
+            guard input, payload.items.count == 1, !readOnly, controller.canEditCanvas,
+                  scope.isCurrent(in: controller), let target = controller.canvasInsertionTarget() else {
+                controller.errorMessage = workflowText(languageStore, "container.dropTarget")
+                return true
+            }
+            let origin = graph.layout.first { $0.nodeID == node.id }
+            Task {
+                do {
+                    let sources = try await controller.resolveLibraryDrop(payload.items, owner: payload.owner, target: target)
+                    try await controller.insertLibrarySources(sources, owner: payload.owner, target: target,
+                    x: (origin?.x ?? 100) - 420, y: origin?.y ?? 100, inputNode: node.id, inputPort: port.id) }
+                catch { controller.errorMessage = error.localizedDescription }
+            }
+            return true
+        }
         .buttonStyle(.plain)
         .disabled(readOnly || tool == .hand || !controller.canEditCanvas)
         .help(WorkflowCanvasPresentation.portTitle(operationID: node.operationID,
@@ -1275,6 +1372,10 @@ private struct WorkflowNodeCard: View {
     }
 
     private func acceptAsset(_ items: [WorkflowCanvasTransfer]) -> Bool {
+        if items.count == 1, items[0].libraryPayload != nil {
+            controller.errorMessage = workflowText(languageStore, "container.dropTarget")
+            return true
+        }
         guard items.count == 1, !readOnly, controller.canEditCanvas,
               controller.readOnlyReason == nil,
               definition?.interaction == .assetInput,
@@ -1306,20 +1407,22 @@ struct WorkflowGraphGeometry {
         let raw = graph.nodes.enumerated().map { index, node in
             previewPositions[node.id] ?? Self.rawPosition(node.id, index: index, graph: graph)
         }
-        let minimumX = raw.map(\.x).min() ?? 0
+        let minimumX = zip(raw, graph.nodes).map { $0.x - WorkflowCanvasLayoutPolicy.width($1.id, in: graph) / 2 }.min() ?? 0
         let heights = graph.nodes.map { node -> CGFloat in
             let definition = registry.definition(for: node, tools: tools)
             if graph.layout.first(where: { $0.nodeID == node.id })?.collapsed == true {
                 return WorkflowNodePortLayout.portBottom(inputs: definition?.inputs.count ?? 0, outputs: definition?.outputs.count ?? 0, collapsed: true)
+                    + (WorkflowAssetContainer.isContainer(node.operationID) ? 28 : 0)
             }
+            if WorkflowAssetContainer.isContainer(node.operationID) { return WorkflowCanvasLayoutPolicy.containerHeight(node.id, in: graph) }
             return CGFloat(WorkflowLayout.cardHeightBudget(inputs: definition?.inputs.count ?? 1,
                 outputs: definition?.outputs.count ?? 1))
         }
         estimatedHeights = Dictionary(uniqueKeysWithValues: zip(graph.nodes.map(\.id), heights))
         let minimumY = raw.map { $0.y - WorkflowNodePortLayout.titleHeight / 2 }.min() ?? 0
-        let naturalTranslation = CGSize(width: max(0, 150 - minimumX), height: max(0, 24 - minimumY))
+        let naturalTranslation = CGSize(width: max(0, 30 - minimumX), height: max(0, 24 - minimumY))
         translation = requestedTranslation ?? naturalTranslation
-        let maximumX = raw.map(\.x).max() ?? 0
+        let maximumX = zip(raw, graph.nodes).map { $0.x + WorkflowCanvasLayoutPolicy.width($1.id, in: graph) / 2 - 120 }.max() ?? 0
         let maximumY = zip(raw, heights).map { $0.0.y - WorkflowNodePortLayout.titleHeight / 2 + $0.1 }.max() ?? 0
         rawMaximum = CGPoint(x: maximumX, y: maximumY)
         size = CGSize(width: max(minimumSize.width, max(1_400, maximumX + translation.width + 320)),
@@ -1711,7 +1814,7 @@ private struct WorkflowNodeControlPreferenceKey: PreferenceKey {
     }
 }
 
-private extension View {
+extension View {
     func workflowNodeControl(_ nodeID: UUID? = nil) -> some View {
         anchorPreference(key: WorkflowNodeControlPreferenceKey.self, value: .bounds) { [.init(nodeID: nodeID, anchor: $0)] }
     }
@@ -1736,7 +1839,7 @@ enum WorkflowConnectionGeometry {
                            moving: Set<UUID> = [], offset: CGSize = .zero) -> [UUID: CGRect] {
         Dictionary(uniqueKeysWithValues: geometry.graph.nodes.map { node in
             let center = geometry.displayPosition(node.id)
-            let size = sizes[node.id] ?? CGSize(width: WorkflowCanvasLayoutPolicy.nodeWidth, height: geometry.estimatedHeights[node.id] ?? 180)
+            let size = sizes[node.id] ?? CGSize(width: WorkflowCanvasLayoutPolicy.width(node.id, in: geometry.graph), height: geometry.estimatedHeights[node.id] ?? 180)
             return (node.id, CGRect(x: center.x - size.width / 2 + (moving.contains(node.id) ? offset.width : 0),
                 y: center.y - WorkflowNodePortLayout.titleHeight / 2 + (moving.contains(node.id) ? offset.height : 0),
                 width: size.width, height: size.height))
@@ -1817,8 +1920,8 @@ enum WorkflowConnectionGeometry {
         let sourceCenter = geometry.displayPosition(connection.sourceNode)
         let targetCenter = geometry.displayPosition(connection.targetNode)
         return (
-            portCenters[source] ?? CGPoint(x: nodeFrames[connection.sourceNode]?.maxX ?? sourceCenter.x + WorkflowCanvasLayoutPolicy.nodeWidth / 2, y: sourceCenter.y),
-            portCenters[target] ?? CGPoint(x: nodeFrames[connection.targetNode]?.minX ?? targetCenter.x - WorkflowCanvasLayoutPolicy.nodeWidth / 2, y: targetCenter.y)
+            portCenters[source] ?? CGPoint(x: nodeFrames[connection.sourceNode]?.maxX ?? sourceCenter.x + WorkflowCanvasLayoutPolicy.width(connection.sourceNode, in: geometry.graph) / 2, y: sourceCenter.y),
+            portCenters[target] ?? CGPoint(x: nodeFrames[connection.targetNode]?.minX ?? targetCenter.x - WorkflowCanvasLayoutPolicy.width(connection.targetNode, in: geometry.graph) / 2, y: targetCenter.y)
         )
     }
 
@@ -1967,5 +2070,12 @@ enum WorkflowCanvasConnectionPolicy {
             #endif
         }
         return cached
+    }
+}
+
+private struct WorkflowContainerControlRegion: ViewModifier {
+    let nodeID: UUID?
+    func body(content: Content) -> some View {
+        if let nodeID { content.workflowNodeControl(nodeID) } else { content }
     }
 }

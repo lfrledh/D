@@ -98,7 +98,8 @@ enum WorkflowBatchValidation {
             if let decision = result.records[i].step.decision {
                 // The new immutable decision identity is deterministic within the child's dispatch.
                 result.records[i].step.decision = .init(id: replacement, waitingStepID: replacement,
-                    accepted: decision.accepted, selectedCandidateID: decision.selectedCandidateID, output: decision.output)
+                    accepted: decision.accepted, selectedCandidateID: decision.selectedCandidateID, output: decision.output,
+                    selectedItemIDs: decision.selectedItemIDs, typedOutput: decision.typedOutput)
             }
         }
         return result
@@ -174,7 +175,7 @@ enum WorkflowBatchValidation {
             for (index, attempt) in stage.attempts.enumerated() {
                 guard attempt.ordinal == index + 1, dispatched.insert(attempt.id).inserted,
                       owned.insert(attempt.runID).inserted, let run = byID[attempt.runID],
-                      run.planCheckpoint != nil, run.scope?.recomputeSelected == true,
+                      run.planCheckpoint != nil, (run.scope?.recomputeSelected == true || run.batchParent != nil),
                       attempt.activeSeconds.map({ $0.isFinite && $0 >= 0 }) ?? true,
                       (stage.parentRunIDs.isEmpty ? run.batchParent == nil : stage.parentRunIDs.contains(run.batchParent?.runID ?? UUID())) else {
                     throw WorkflowIssue("批次派发身份、运行来源或耗时无效。")

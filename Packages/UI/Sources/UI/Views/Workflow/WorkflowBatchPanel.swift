@@ -88,7 +88,7 @@ import SwiftUI
     // Only the candidate-review surface selects assets. Generic human forms and
     // text review keep their own label without changing the inspected call.
     static func reviewActionKey(for step: WorkflowStepRun, registry: WorkflowRegistry) -> String {
-        step.humanTask == nil && registry.operation(step.node.operationID)?.definition.interaction == .candidateReview
+        step.humanTask == nil && registry.operation(step.node.operationID)?.definition.interaction == .candidateReview || step.node.operationID == WorkflowAssetContainer.filterID
             ? "reviewGate" : "reviewHumanGate"
     }
 
@@ -123,6 +123,16 @@ import SwiftUI
             }
             ForEach(controller.callRecords(runID: run.id).filter { $0.step.status == .waiting }) { record in
                 Button(text(Self.reviewActionKey(for: record.step, registry: controller.registry))) { inspect(run, record) }
+            }
+            if let intent = controller.containerSubmission(forParent: run.id), intent.choices.first(where: { !$0.selectedIDs.isEmpty })?.call.address.runID == run.id {
+                Button(workflowText(language, controller.hasPendingSaves ? "metadata.panel.workspace.saveOnly" : "container.continueSaved")) {
+                    Task {
+                        do {
+                            if controller.hasPendingSaves { _ = try await controller.retryContainerSaving(intent.scope); return }
+                            if let next = try await controller.continueContainerSubmission(intent) { await controller.runBatchStage(next) }
+                        } catch { controller.errorMessage = error.localizedDescription }
+                    }
+                }.disabled(controller.isRunning)
             }
             if [.failed, .interrupted].contains(attempt.state) {
                 Button(text("newAttempt")) {

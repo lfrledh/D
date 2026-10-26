@@ -7,7 +7,7 @@ import SwiftUI
 }
 
 enum WorkflowResourceCategory: String, CaseIterable, Hashable {
-    case all, text, image, video, audio, data
+    case all, image, video, text, audio, data
     var mode: WorkflowCanvasLibraryMode {
         switch self { case .all: .assets; case .text: .text; case .image: .image; case .video: .video; case .audio: .audio; case .data: .data }
     }
@@ -41,10 +41,12 @@ struct WorkflowLibraryValue: Equatable {
     let port: String
     let value: WorkflowValue
     let createdAt: Date
+    var source: WorkflowRuntimeAssetSource? = nil
     var reference: WorkflowAssetReference? { value.asset }
     var annotationIdentity: WorkflowValueIdentity? {
         // Registered assets retain their existing ProjectStore annotation owner.
         guard reference == nil else { return nil }
+        if let source { return try? source.annotationIdentity(owner: .init(projectID: projectID, instanceID: instanceID), value: value) }
         return try? WorkflowValueIdentity(projectID: projectID, instanceID: instanceID, call: call, port: port, value: value)
     }
     @MainActor func saveAnnotation(in controller: WorkflowController, library: SharedLibraryStore,
@@ -65,10 +67,31 @@ struct WorkflowLibraryValue: Equatable {
               controller.projectInstanceID == instanceID,
               let run = controller.runs.first(where: { $0.id == call.address.runID }),
               let record = WorkflowWorkspacePanels.records(in: run).first(where: { $0.address == call.address && $0.id == call.stepID }) else { return false }
+        if let source { return (try? source.resolve(in: controller.runs)) == value }
         guard let current = record.step.outputs[port],
               let captured = try? WorkflowValueIdentity(projectID: projectID, instanceID: instanceID, call: call, port: port, value: value),
               let latest = try? WorkflowValueIdentity(projectID: projectID, instanceID: instanceID, call: call, port: port, value: current) else { return false }
         return captured == latest
+    }
+    @MainActor static func collectedEntries(_ controller: WorkflowController, language: UILanguageStore?, library: SharedLibraryStore?) -> [SharedLibraryBrowserEntry] {
+        guard let owner = controller.assetLibraryOwner else { return [] }
+        return (controller.assetCollection?.retained.values.map { $0 } ?? []).compactMap { source in
+            guard case .runtime(let reference) = source, let value = try? reference.resolve(in: controller.runs),
+                  let run = controller.runs.first(where: { $0.id == reference.call.address.runID }),
+                  let record = run.planCheckpoint?.records.first(where: { $0.id == reference.call.stepID && $0.address == reference.call.address }) else { return nil }
+            let snapshot = Self(projectID: owner.projectID, instanceID: owner.instanceID, call: reference.call, port: reference.port,
+                value: value, createdAt: run.createdAt, source: reference)
+            guard let key = snapshot.annotationIdentity?.storageKey else { return nil }
+            let annotation = library?.metadata.runtimeAnnotations[key]
+            let title = annotation?.name ?? WorkflowHumanPresentation.run(run, in: controller.runs, language: language)
+            var entry = SharedLibraryBrowserEntry(item: .init(key: key, title: title, detail: workspaceText(language, "runValue"),
+                kind: .asset, role: "run-value", contentKind: value.kind, readiness: .available,
+                assetFacts: .init(projectID: owner.projectID, instanceID: owner.instanceID, note: annotation?.note ?? "", favorite: annotation?.favorite ?? false, registeredAt: run.createdAt,
+                    occurrences: [.init(runID: run.id, nodeID: record.step.node.id, stepID: reference.call.stepID, address: reference.call.address)]),
+                facts: WorkflowValueCompatibility.facts(value, producer: nil)), selection: .unavailable(workspaceText(language, "runValue")))
+            entry.runtimeValue = snapshot; entry.collectionSource = source; entry.collected = controller.isCollected(source)
+            return entry
+        }
     }
     @MainActor static func entries(_ controller: WorkflowController, language: UILanguageStore?, excludingSaved: Set<WorkflowAssetReference> = [], library: SharedLibraryStore? = nil, indexedSaved: [ProjectAssetMetadataSnapshot] = []) -> [SharedLibraryBrowserEntry] {
         guard let project = controller.projectID, let instance = controller.projectInstanceID else { return [] }
@@ -180,6 +203,7 @@ struct WorkflowPlanMark: Equatable {
 struct WorkflowLibraryContext: Equatable {
     enum Source: Equatable {
         case node(UUID)
+        case sources([WorkflowLibrarySource])
         case run(UUID)
         case call(WorkflowCallReference)
         case attempt(stage: UUID, attempt: UUID, run: UUID)
@@ -205,6 +229,13 @@ struct WorkflowLibraryContext: Equatable {
         guard (owner == nil || owner == ObjectIdentifier(controller)), controller.canReadLibraryMetadata,
               controller.projectID == project, controller.projectInstanceID == instance else { return false }
         switch source {
+        case .sources(let sources):
+            return !sources.isEmpty && sources.allSatisfy { source in
+                switch source {
+                case .asset(let ref): return controller.availableAssets.contains { $0.id == ref.assetID }
+                case .runtime(let ref): return controller.runs.first { $0.id == ref.call.address.runID }?.planCheckpoint?.records.contains { $0.id == ref.call.stepID && $0.address == ref.call.address } == true
+                }
+            }
         case .node(let id): return controller.graph?.nodes.contains { $0.id == id } == true
         case .run(let id): return controller.runs.contains { $0.id == id }
         case .call(let call):
@@ -219,7 +250,7 @@ struct WorkflowLibraryContext: Equatable {
     @MainActor func displayName(in controller: WorkflowController, language: UILanguageStore?) -> String {
         let runID: UUID
         switch source {
-        case .node: return name
+        case .node, .sources: return name
         case .run(let id), .attempt(_, _, let id): runID = id
         case .call(let call): runID = call.address.runID
         }
@@ -232,12 +263,16 @@ struct WorkflowLibraryContext: Equatable {
     }
     func includes(_ entry: SharedLibraryBrowserEntry) -> Bool {
         guard let facts = entry.item.assetFacts, facts.projectID == project, facts.instanceID == instance else { return false }
+        if case .sources(let sources) = source {
+            return entry.collectionSource.map { sources.contains($0) } ?? false
+        }
         if case .node = source {} else if let snapshot = entry.metadataSnapshot, snapshot.record == nil {
             // A merged occurrence list across versions cannot identify the bytes of this result.
             return false
         }
         return facts.occurrences?.contains { occurrence in
             switch source {
+            case .sources: return false
             case .node(let id): return occurrence.nodeID == id
             case .run(let id), .attempt(_, _, let id): return occurrence.runID == id
             case .call(let call):
@@ -250,4 +285,18 @@ struct WorkflowLibraryContext: Equatable {
 private struct WorkflowLibraryContextKey:EnvironmentKey { static let defaultValue:WorkflowLibraryContext? = nil }
 extension EnvironmentValues {
     var workflowLibraryContext:WorkflowLibraryContext? { get { self[WorkflowLibraryContextKey.self] } set { self[WorkflowLibraryContextKey.self]=newValue } }
+}
+
+private struct WorkflowContainerNavigationKey: EnvironmentKey {
+    static let defaultValue: WorkflowContainerNavigation? = nil
+}
+struct WorkflowContainerNavigation: Sendable {
+    let reveal: @MainActor @Sendable (WorkflowLibraryContext) -> Void
+    let source: @MainActor @Sendable (WorkflowCallReference) -> Void
+}
+extension EnvironmentValues {
+    var workflowContainerNavigation: WorkflowContainerNavigation? {
+        get { self[WorkflowContainerNavigationKey.self] }
+        set { self[WorkflowContainerNavigationKey.self] = newValue }
+    }
 }

@@ -190,8 +190,33 @@ enum WorkflowArchiveInspection {
         guard archive.version >= 2 || !archive.requiresLanguageVersion else {
             throw WorkflowIssue("新语言数据必须使用流程格式 v2；不能写入旧格式。")
         }
-        guard archive.version == 3 || (archive.batchStages == nil && !archive.runs.contains(where: { $0.batchParent != nil })) else { throw WorkflowIssue("批次需要流程格式 v3。") }
+        guard archive.version >= 3 || (archive.batchStages == nil && !archive.runs.contains(where: { $0.batchParent != nil })) else { throw WorkflowIssue("批次需要流程格式 v3。") }
         try WorkflowBatchValidation.validate(archive.batchStages ?? [], runs: archive.runs)
+        if let submissions = archive.containerSubmissions {
+            guard archive.version >= 4, submissions.count <= 4096,
+                  Set(submissions.map(\.id)).count == submissions.count,
+                  Set(submissions.map { $0.scope.key }).count == submissions.count else { throw WorkflowIssue("Invalid container submission ledger.") }
+            for submission in submissions {
+                guard (submission.scope.stageID == nil) != (submission.scope.runID == nil), !submission.scope.path.isEmpty else { throw WorkflowIssue("Container scope must identify exactly one stage or run.") }
+                guard (1...64).contains(submission.repetitions), !submission.choices.isEmpty,
+                      Set(submission.choices.map { $0.call.stepID }).count == submission.choices.count else { throw WorkflowIssue("Invalid container submission choices.") }
+                for choice in submission.choices {
+                    guard let run = archive.runs.first(where: { $0.id == choice.call.address.runID }),
+                          let call = run.planCheckpoint?.records.first(where: { $0.address == choice.call.address && $0.id == choice.call.stepID }),
+                          call.address.path == submission.scope.path,
+                          call.step.decision?.selectedItemIDs == choice.selectedIDs else { throw WorkflowIssue("Container submission lost its exact decision.") }
+                    if let stageID = submission.scope.stageID {
+                        guard archive.batchStages?.contains(where: { $0.id == stageID && $0.attempts.contains(where: { $0.runID == run.id }) }) == true else { throw WorkflowIssue("Container submission crossed stages.") }
+                    } else if submission.scope.runID != run.id { throw WorkflowIssue("Container submission crossed runs.") }
+                }
+                if let nextID = submission.nextStageID {
+                    let parents = submission.choices.filter { !$0.selectedIDs.isEmpty }.map { $0.call.address.runID }
+                    guard let next = archive.batchStages?.first(where: { $0.id == nextID }),
+                          next.parentRunIDs == parents, next.repetitions == submission.repetitions,
+                          next.seedStrategy == submission.seedStrategy else { throw WorkflowIssue("Container continuation differs from its saved intent.") }
+                }
+            }
+        }
         let tools = archive.tools ?? []
         guard tools.count <= 256, Set(tools.map { "\($0.id):\($0.version)" }).count == tools.count else {
             throw WorkflowIssue("工具版本重复或数量超限。")

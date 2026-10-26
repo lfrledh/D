@@ -3290,7 +3290,7 @@ extension ProjectStore {
         struct Header: Decodable { let version: Int }
         let decoder = JSONDecoder()
         guard let header = try? decoder.decode(Header.self, from: data) else { throw WorkflowIssue("流程快照已损坏，原件已保留。") }
-        guard [1, 2, 3].contains(header.version) else {
+        guard [1, 2, 3, 4].contains(header.version) else {
             return .init(archive: nil, readOnlyReason: "流程格式 v\(header.version) 尚不支持；原始数据与连接已保留，只读。", originalBytes: data)
         }
         if let identity = try WorkflowArchiveInspection.unknownOperation(in: data) {
@@ -3358,27 +3358,116 @@ extension ProjectStore {
         return archive
     }
 
+    public func initializeAssetCollection() throws -> WorkflowAssetCollection {
+        var archive = try editableWorkflow()
+        if let value = archive.assetCollection { return value }
+        var keys = Set<String>()
+        for run in archive.runs {
+            for record in run.planCheckpoint?.records ?? [] {
+                for (port, output) in record.step.outputs {
+                    let source = try WorkflowRuntimeAssetSource.capture(record, port: port)
+                    keys.insert(WorkflowLibrarySource.runtime(source).key)
+                    for item in try WorkflowAssetContainer.items(in: output) where item.selectable {
+                        keys.insert(WorkflowLibrarySource.runtime(try .capture(record, port: port, itemID: item.id)).key)
+                    }
+                }
+            }
+        }
+        let value = WorkflowAssetCollection(legacyAssetIDs: Set(manifest.assets.map(\.id)), legacyRuntimeKeys: keys)
+        archive.assetCollection = value; archive.revision = UUID()
+        try commitWorkflow(archive, assets: manifest.assets)
+        return value
+    }
+    public func setAssetCollection(_ sources: [WorkflowLibrarySource], collected: Bool,
+                                   expected: WorkflowAssetCollection) throws -> WorkflowAssetCollection {
+        var archive = try editableWorkflow()
+        guard archive.assetCollection == expected else { throw WorkflowIssue("Asset library changed before saving.") }
+        for source in sources {
+            try validateCollectionSource(source, archive: archive)
+            if case .runtime(let runtime) = source { try runtime.validateForCollection(in: archive.runs) }
+        }
+        var next = expected; try next.set(sources, collected: collected)
+        if next == expected { return next }
+        archive.assetCollection = next; archive.revision = UUID()
+        try commitWorkflow(archive, assets: manifest.assets)
+        return next
+    }
+    public func replaceAssetCollection(_ value: WorkflowAssetCollection, expected: WorkflowAssetCollection) throws {
+        var archive = try editableWorkflow()
+        guard archive.assetCollection == expected, value.legacyAssetIDs == expected.legacyAssetIDs,
+              value.legacyRuntimeKeys == expected.legacyRuntimeKeys else { throw WorkflowIssue("Asset library changed before Undo.") }
+        archive.assetCollection = value; archive.revision = UUID()
+        try commitWorkflow(archive, assets: manifest.assets)
+    }
+    private func validateCollectionSource(_ source: WorkflowLibrarySource, archive: WorkflowArchive) throws {
+        switch source {
+        case .asset(let reference):
+            guard reference.projectID == manifest.id, archive.assets.contains(where: { $0.reference == reference }),
+                  manifest.assets.contains(where: { $0.id == reference.assetID }) else { throw WorkflowIssue("Collection asset version is unavailable.") }
+        case .runtime(let source): _ = try source.resolve(in: archive.runs)
+        }
+    }
+
     /// Draft configuration and execution history are saved together; Store retains all published asset records.
-    public func saveWorkflow(graphs: [WorkflowGraph], runs: [WorkflowRun], expectedRevision: UUID, tools: [WorkflowToolDefinition]? = nil, batchStages: [WorkflowBatchStage]? = nil) throws -> WorkflowArchive {
+    public func saveWorkflow(graphs: [WorkflowGraph], runs: [WorkflowRun], expectedRevision: UUID, tools: [WorkflowToolDefinition]? = nil, batchStages: [WorkflowBatchStage]? = nil, containerSubmissions: [WorkflowContainerSubmission]? = nil, collectionRequests: [WorkflowAssetCollectionRequest]? = nil) throws -> WorkflowArchive {
         var archive = try editableWorkflow()
         guard archive.revision == expectedRevision else { throw WorkflowIssue("流程已被另一操作修改，请重新读取后保存。") }
         archive.graphs = graphs; archive.runs = runs; archive.revision = UUID()
         if let tools { archive.tools = tools }
         if let batchStages { archive.batchStages = batchStages }
-        if archive.batchStages != nil || archive.runs.contains(where: { $0.batchParent != nil }) { archive.version = 3 }
+        if let containerSubmissions { archive.containerSubmissions = containerSubmissions }
+        if let collectionRequests { archive.collectionRequests = collectionRequests }
+        if archive.containerSubmissions != nil || archive.assetCollection != nil || archive.collectionRequests != nil { archive.version = 4 }
+        else if archive.batchStages != nil || archive.runs.contains(where: { $0.batchParent != nil }) { archive.version = 3 }
         else if archive.requiresLanguageVersion { archive.version = 2 }
         try commitWorkflow(archive, assets: manifest.assets)
         return archive
     }
 
     private func validateWorkflowArchive(_ archive: WorkflowArchive, assets: [ProjectAsset]) throws {
-        guard [1, 2, 3].contains(archive.version), archive.graphs.count <= 256, archive.runs.count <= 4_096,
+        guard [1, 2, 3, 4].contains(archive.version), archive.graphs.count <= 256, archive.runs.count <= 4_096,
               archive.assets.count <= 32_768, Set(archive.graphs.map(\.id)).count == archive.graphs.count,
               Set(archive.runs.map(\.id)).count == archive.runs.count,
               Set(archive.assets.map { $0.reference.assetID }).count == archive.assets.count else {
             throw WorkflowIssue("流程数量、版本或身份不合法；请另存项目或检查数据。")
         }
         try WorkflowArchiveInspection.validateStructure(archive)
+        if let collection = archive.assetCollection {
+            guard archive.version >= 4, collection.included.count + collection.excluded.count <= 32768,
+                  collection.retained.count <= 32768, collection.legacyAssetIDs.count <= 32768, collection.legacyRuntimeKeys.count <= 32768,
+                  collection.excluded.allSatisfy({ key in
+                      (key.hasPrefix("asset:") && UUID(uuidString: String(key.dropFirst(6))) != nil) ||
+                      (key.hasPrefix("value:") && PitchSourceIdentity.isDigest(String(key.dropFirst(6))))
+                  }),
+                  Set(collection.included.keys).isDisjoint(with: collection.excluded),
+                  collection.included.allSatisfy({ collection.retained[$0.key] == $0.value }) else { throw WorkflowIssue("Invalid asset collection metadata.") }
+            for (key, source) in collection.retained.merging(collection.included, uniquingKeysWith: { _, included in included }) {
+                guard key == source.key else { throw WorkflowIssue("Asset collection identity mismatch.") }
+                try validateCollectionSource(source, archive: archive)
+            }
+        }
+
+        if let requests = archive.collectionRequests {
+            guard archive.version >= 4, requests.filter({ $0.manualID != nil && !$0.completed }).count <= 256,
+                  requests.filter({ $0.manualID != nil && $0.completed }).count <= 128,
+                  requests.count <= archive.runs.reduce(0, { $0 + ($1.planCheckpoint?.records.count ?? 0) }) + 384,
+                  Set(requests.compactMap { $0.origin?.stepID }).count == requests.filter { $0.origin != nil }.count, Set(requests.map(\.id)).count == requests.count else { throw WorkflowIssue("Invalid collection requests.") }
+            for request in requests {
+                guard request.owner.projectID == manifest.id, PitchSourceIdentity.isDigest(request.id), !request.sources.isEmpty,
+                      request.sources.count <= 4096, Set(request.sources.map(\.key)).count == request.sources.count else { throw WorkflowIssue("Collection request identity mismatch.") }
+                if let origin = request.origin {
+                    guard request.manualID == nil,
+                          let record = archive.runs.first(where: { $0.id == origin.address.runID })?.planCheckpoint?.records.first(where: { $0.id == origin.stepID && $0.address == origin.address }),
+                          let expected = try WorkflowAssetCollectionRequest.event(record, previous: nil, owner: request.owner),
+                          request.id == expected.id, request.sources == expected.sources, request.folderID == expected.folderID else { throw WorkflowIssue("Collection request differs from its frozen origin.") }
+                } else {
+                    guard let manualID = request.manualID,
+                          request.id == (try WorkflowAssetCollectionRequest(trigger: "manual:" + manualID.uuidString, owner: request.owner, sources: request.sources, folderID: request.folderID, manualID: manualID)).id else { throw WorkflowIssue("Manual collection identity mismatch.") }
+                }
+                for source in request.sources { try validateCollectionSource(source, archive: archive) }
+            }
+        }
+
         let known = Dictionary(uniqueKeysWithValues: assets.map { ($0.id, $0) })
         for record in archive.assets {
             let ref = record.reference
@@ -3420,9 +3509,34 @@ extension ProjectStore {
             }
         }
         for record in archive.assets { for parent in record.parents { try validateRef(parent) } }
+        // Exact references are durable graph data, not a best-effort preview hint.
+        // Cache only for this validation call; changes never reuse prior digests.
+        var resolvedSources: [String: WorkflowValue] = [:]
+        func validateSources(_ node: WorkflowNode) throws {
+            if let sources = node.librarySources {
+                guard node.operationID == WorkflowAssetContainer.sourceID, !sources.isEmpty,
+                      sources.count <= 64, Set(sources.map(\.key)).count == sources.count else { throw WorkflowIssue("Invalid source container references.") }
+                let values = try sources.map { source -> WorkflowValue in
+                    if let cached = resolvedSources[source.key] { return cached }
+                    try validateCollectionSource(source, archive: archive)
+                    let value = try WorkflowAssetContainer.sourceValues([source], runs: archive.runs)[0]
+                    resolvedSources[source.key] = value; return value
+                }
+                let output = WorkflowAssetContainer.sourceOutput(sources, values: values)
+                guard node.parameters["kind"]?.string == (output?.kind.rawValue ?? "mixed"),
+                      node.dataConfiguration?.schema == output?.datum?.schema else { throw WorkflowIssue("Source container type differs from its exact saved values.") }
+            }
+            switch node.control {
+            case .branch(_, let yes, let no): for child in yes.nodes + no.nodes { try validateSources(child) }
+            case .map(let body, _), .loop(let body, _, _, _): for child in body.nodes { try validateSources(child) }
+            default: break
+            }
+        }
+
         for graph in archive.graphs + archive.runs.map(\.graph) + (archive.tools ?? []).map(\.graph) {
             // Missing values in editable drafts are allowed; topology and identity must remain valid.
             try WorkflowRegistry.standard.validate(graph, tools: archive.tools ?? [])
+            for node in graph.nodes { try validateSources(node) }
             for ref in try WorkflowCheckpointValidation.assetReferences(in: graph) { try validateRef(ref) }
         }
         try WorkflowArchiveInspection.validateScopeHistory(archive.runs, tools: archive.tools ?? [])
@@ -3432,6 +3546,7 @@ extension ProjectStore {
             // validateScopeHistory above validates each run and its source once
             // against this exact archive; assets and publication checks stay below.
             if let checkpoint = run.planCheckpoint {
+                for record in checkpoint.records { try validateSources(record.step.node) }
                 for ref in try WorkflowCheckpointValidation.assetReferences(in: checkpoint) { try validateRef(ref) }
             }
             for step in run.steps {
@@ -3442,6 +3557,7 @@ extension ProjectStore {
                 if let decision = step.decision {
                     guard decision.waitingStepID == step.id else { throw WorkflowIssue("人工决定不属于此等待点。") }
                     if let ref = decision.output { try validateRef(ref) }
+                    if let value = decision.typedOutput { try validateValue(value) }
                 }
             }
         }
@@ -3450,7 +3566,8 @@ extension ProjectStore {
     private func commitWorkflow(_ archive: WorkflowArchive, assets: [ProjectAsset],
                                 checkpoint: (@Sendable (WorkflowStoreCheckpoint) throws -> Void)? = nil) throws {
         var archive = archive
-        if archive.batchStages != nil || archive.runs.contains(where: { $0.batchParent != nil }) { archive.version = 3 }
+        if archive.containerSubmissions != nil || archive.assetCollection != nil || archive.collectionRequests != nil { archive.version = 4 }
+        else if archive.batchStages != nil || archive.runs.contains(where: { $0.batchParent != nil }) { archive.version = 3 }
         else if archive.requiresLanguageVersion { archive.version = 2 }
         try validateWorkflowArchive(archive, assets: assets)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -3730,7 +3847,13 @@ extension ProjectStore {
     }
 
     /// Pin an existing project asset, without copying it into a second asset system.
-    public func pinWorkflowAsset(_ id: UUID) throws -> WorkflowAssetReference {
+    public func pinWorkflowAsset(_ id: UUID, expected: ProjectReadOnlyAsset? = nil) throws -> WorkflowAssetReference {
+        if let expected {
+            guard expected.projectID == manifest.id, expected.instanceID == manifest.effectiveInstanceID,
+                  expected.assetID == id, let asset = manifest.assets.first(where: { $0.id == id }),
+                  asset.mediaType == expected.mediaType, asset.relativePath == expected.relativePath,
+                  WorkflowMediaFormat.descriptor(asset.mediaType)?.kind == expected.kind else { throw WorkflowIssue("Dragged original identity changed.") }
+        }
         var archive = try editableWorkflow()
         var active = Set<UUID>()
         func pin(_ assetID: UUID) throws -> WorkflowAssetReference {
@@ -3739,7 +3862,7 @@ extension ProjectStore {
                 if let asset = manifest.assets.first(where: { $0.id == assetID }) {
                     guard let format = WorkflowMediaFormat.descriptor(asset.mediaType) else { throw WorkflowIssue("素材格式不支持。") }
                     let bytes = try readAssetData(asset, limit: format.maximumBytes)
-                    guard Self.workflowHash(bytes) == record.reference.sha256 else { throw WorkflowIssue("已发布素材改变，拒绝重新绑定。") }
+                    guard (assetID != id || expected == nil || (expected?.sha256 == Self.workflowHash(bytes) && (expected?.registeredReference == nil || expected?.registeredReference == record.reference))), Self.workflowHash(bytes) == record.reference.sha256 else { throw WorkflowIssue("已发布素材改变，拒绝重新绑定。") }
                 } else { throw WorkflowIssue("素材不存在。") }
                 return record.reference
             }
@@ -3747,6 +3870,7 @@ extension ProjectStore {
                   let format = WorkflowMediaFormat.descriptor(asset.mediaType) else { throw WorkflowIssue("此素材不属于当前已适配的格式。") }
             let data = try readAssetData(asset, limit: format.maximumBytes)
             let digest = Self.workflowHash(data)
+            guard assetID != id || expected == nil || (expected?.sha256 == digest && expected?.registeredReference == nil) else { throw WorkflowIssue("Dragged original bytes changed before registration.") }
             if let expected = asset.metadata.imageContentSHA256 ?? asset.metadata.audio?.contentSHA256 ?? asset.metadata.video?.contentSHA256 ?? asset.metadata.pitch?.contentSHA256, expected != digest {
                 throw WorkflowIssue("已登记原件的摘要改变；未将新内容冒充原件。")
             }

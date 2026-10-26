@@ -101,7 +101,7 @@ import Foundation
                     facts: [descriptor.modelIdentity, descriptor.revision, descriptor.engine]))
             }
         }
-        for definition in registry.definitions where definition.modelKind == nil {
+        for definition in registry.definitions where definition.modelKind == nil && definition.id != WorkflowAssetContainer.sourceID {
             result.append(.init(item: .init(key: "operation:" + definition.id,
                 title: WorkflowCanvasPresentation.operationTitle(definition, language: language),
                 detail: WorkflowCanvasPresentation.operationDetail(definition, language: language), kind: .program, role: "program",

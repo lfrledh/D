@@ -65,6 +65,7 @@ struct WorkflowOperationTree: Identifiable {
             guard case .operation(let id,_) = entry.selection, let definition = WorkflowRegistry.standard.operation(id)?.definition else {
                 return [("other-program", workspaceText(language, "otherProgram"))]
             }
+            if WorkflowAssetContainer.isContainer(id) { return [("io", workspaceText(language, "ioPrograms"))] }
             if definition.interaction != .none || id == "d.control.human" { return [("human", workspaceText(language, "humanPrograms"))] }
             if id.hasPrefix("d.control.") { return [("control", workspaceText(language, "controlPrograms"))] }
             if definition.inputs.isEmpty || definition.outputs.isEmpty || id.hasPrefix("d.input.") || id.hasPrefix("d.export.") {

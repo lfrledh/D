@@ -3220,3 +3220,392 @@ extension WorkflowLifecycleTests {
         try await c.close(); try await store.close()
     }
 }
+
+extension WorkflowLifecycleTests {
+    @Test func containerSixAttemptsSelectTwoReachSecondGateWithoutReplaying() async throws {
+        let (_, store, engine, c) = try await fixture()
+        var input = try #require(c.registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("fixed full value"))
+        let a = try #require(c.registry.operation(WorkflowAssetContainer.filterID)).definition.makeNode()
+        let b = try #require(c.registry.operation(WorkflowAssetContainer.filterID)).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [input, a, b], connections: [.init(sourceNode: input.id, targetNode: a.id), .init(sourceNode: a.id, targetNode: b.id)])
+        let empty = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: empty.revision)
+        await c.load()
+        let stage = try await c.createBatchStage(selection: .through(b.id), pins: [], repetitions: 6, expectedGraphID: graph.id, expectedRevision: graph.revision)
+        await c.runBatchStage(stage)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        #expect(c.batchStages[0].attempts.map(\.state) == Array(repeating: .waiting, count: 6))
+        let scope = WorkflowContainerScope(stageID: stage, path: [.node(a.id)])
+        let snapshot = try c.containerSnapshot(scope)
+        #expect(snapshot.collectionComplete && snapshot.calls.count == 6)
+        let choices = snapshot.calls.enumerated().map { index, call in
+            WorkflowContainerChoice(call: .init(address: call.address, stepID: call.id), selectedIDs: [1, 4].contains(index) ? ["value"] : [])
+        }
+        let result = try await c.submitContainer(snapshot, choices: choices)
+        let next = try #require(result.nextStageID)
+        #expect(c.runs.count == 8)
+        #expect(try await c.submitContainer(snapshot, choices: choices) == result)
+        #expect(c.runs.count == 8 && c.containerSubmissions.count == 1)
+        let parents = Array(c.runs.prefix(6))
+        await c.runBatchStage(next)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        #expect(Array(c.runs.prefix(6)) == parents)
+        #expect(c.runs.suffix(2).allSatisfy { $0.planCheckpoint?.records.contains(where: { $0.step.node.id == b.id && $0.step.status == .waiting }) == true })
+        #expect(await engine.requests.isEmpty) // Service fixture only, not real model evidence.
+        let saved = try #require(try await store.workflowState().archive)
+        #expect(saved.containerSubmissions == [result] && saved.version == 4)
+        try await c.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        let cold = try #require(try await reopened.workflowState().archive)
+        #expect(cold.runs.count == 8 && cold.containerSubmissions == [result])
+        try await reopened.close()
+    }
+
+    @Test func containerSaveFailureRetainsOneIntentAndDoesNotDispatch() async throws {
+        let (_, store, engine, c) = try await fixture()
+        var input = try #require(c.registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("full value"))
+        let a = try #require(c.registry.operation(WorkflowAssetContainer.filterID)).definition.makeNode()
+        let b = try #require(c.registry.operation(WorkflowAssetContainer.filterID)).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [input, a, b], connections: [.init(sourceNode: input.id, targetNode: a.id), .init(sourceNode: a.id, targetNode: b.id)])
+        let empty = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: empty.revision)
+        await c.load()
+        let stage = try await c.createBatchStage(selection: .through(b.id), pins: [], repetitions: 2, expectedGraphID: graph.id, expectedRevision: graph.revision)
+        await c.runBatchStage(stage)
+        let scope = WorkflowContainerScope(stageID: stage, path: [.node(a.id)])
+        let snapshot = try c.containerSnapshot(scope)
+        let choices = snapshot.calls.map { WorkflowContainerChoice(call: .init(address: $0.address, stepID: $0.id), selectedIDs: ["value"]) }
+        c.beforeHistorySave = { throw WorkflowIssue("controlled container save failure") }
+        await #expect(throws: (any Error).self) { try await c.submitContainer(snapshot, choices: choices) }
+        let pending = try #require(c.containerSubmissions.first)
+        let frozen = c.runs
+        #expect(c.hasPendingSaves && c.runs.count == 4)
+        #expect(try await store.workflowState().archive?.runs.count == 2)
+        #expect(await engine.requests.isEmpty)
+        c.beforeHistorySave = {}
+        #expect(try await c.retryContainerSaving(scope) == pending)
+        #expect(c.runs == frozen && !c.hasPendingSaves)
+        #expect(try await store.workflowState().archive?.containerSubmissions == [pending])
+        try await c.close(); try await store.close()
+    }
+}
+
+extension WorkflowLifecycleTests {
+    private func containerFixture(autoCollect: Bool = false) async throws -> (ProjectStore, WorkflowFixtureEngine, WorkflowController, WorkflowNode, WorkflowNode, UUID) {
+        let (_, store, engine, controller) = try await fixture()
+        var input = try #require(controller.registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("full frozen value"))
+        var a = try #require(controller.registry.operation(WorkflowAssetContainer.filterID)).definition.makeNode()
+        if autoCollect { a.collectionRule = .init(folderID: UUID()) }
+        let b = try #require(controller.registry.operation(WorkflowAssetContainer.filterID)).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [input, a, b], connections: [.init(sourceNode: input.id, targetNode: a.id), .init(sourceNode: a.id, targetNode: b.id)])
+        let archive = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: archive.revision)
+        await controller.load(); await controller.initializeAssetCollection()
+        let stage = try await controller.createBatchStage(selection: .through(b.id), pins: [], repetitions: 2, expectedGraphID: graph.id, expectedRevision: graph.revision)
+        await controller.runBatchStage(stage)
+        try #require(controller.errorMessage == nil, Comment(rawValue: controller.errorMessage ?? ""))
+        return (store, engine, controller, a, b, stage)
+    }
+
+    @Test(arguments: [false, true]) func containerCommitRejectsConcurrentDraftAndCancellation(cancel: Bool) async throws {
+        let (store, engine, c, a, _, _) = try await containerFixture()
+        let first = try #require(c.runs.first)
+        let second = try #require(c.runs.last?.planCheckpoint?.records.first { $0.step.node.id == a.id })
+        // Single-call scope deliberately leaves another run available for draft editing.
+        let snapshot = try c.containerSnapshot(.init(runID: first.id, path: [.node(a.id)]))
+        let record = try #require(snapshot.calls.first)
+        let choices = [WorkflowContainerChoice(call: .init(address: record.address, stepID: record.id), selectedIDs: ["value"])]
+        let gate = WorkflowSubmitGate()
+        c.beforeContainerDecisionCommit = { await gate.wait() }
+        let work = Task { try await c.submitContainer(snapshot, choices: choices) }
+        for _ in 0..<2000 { if await gate.entered { break }; try await Task.sleep(for: .milliseconds(1)) }
+        try #require(await gate.entered)
+        if cancel { await c.cancel() }
+        else { try c.editContainerSelection(call: .init(address: second.address, stepID: second.id), input: try #require(second.step.inputs["input"]), selectedIDs: ["value"]) }
+        await gate.open()
+        await #expect(throws: (any Error).self) { try await work.value }
+        #expect(c.containerSubmissions.isEmpty && c.runs.count == 2)
+        #expect(c.runs[0].planCheckpoint?.records.first { $0.id == record.id }?.step.decision == nil)
+        if !cancel { #expect(c.runs[1].planCheckpoint?.records.first { $0.id == second.id }?.step.containerSelectionDraft == ["value"]) }
+        #expect(await engine.requests.isEmpty)
+        c.beforeContainerDecisionCommit = {}; try await c.close(); try await store.close()
+    }
+
+    @Test func collectionFrozenInputSurvivesDecisionUndoAndColdReopen() async throws {
+        let (store, engine, c, a, _, stage) = try await containerFixture()
+        let baseline = try #require(c.assetCollection)
+        #expect(baseline.legacyRuntimeKeys.isEmpty)
+        let snapshot = try c.containerSnapshot(.init(stageID: stage, path: [.node(a.id)]))
+        let call = try #require(snapshot.calls.first), full = try #require(call.step.inputs["input"])
+        let source = WorkflowLibrarySource.runtime(try .init(call: .init(address: call.address, stepID: call.id), port: "input", value: full, itemID: "value", input: true))
+        #expect(!baseline.contains(source))
+        try await c.setCollected([source], collected: true, owner: try #require(c.assetLibraryOwner))
+        let collected = c.assetCollection
+        try await c.setCollected([source], collected: true, owner: try #require(c.assetLibraryOwner))
+        #expect(c.assetCollection == collected && c.assetCollection?.included.count == 1)
+        try await c.undoCollection(); #expect(c.assetCollection == baseline)
+        try await c.redoCollection(); #expect(c.assetCollection == collected)
+        let choices = snapshot.calls.enumerated().map { index, call in WorkflowContainerChoice(call: .init(address: call.address, stepID: call.id), selectedIDs: index == 0 ? ["value"] : []) }
+        let decision = try await c.submitContainer(snapshot, choices: choices)
+        #expect(decision.nextStageID != nil)
+        if case .runtime(let ref) = source { #expect(try ref.resolve(in: c.runs) == full) }
+        #expect(c.assetCollection == collected)
+        // An old CAS cannot overwrite a later collection change.
+        await #expect(throws: (any Error).self) { try await store.setAssetCollection([source], collected: false, expected: baseline) }
+        let frozen = c.runs
+        try await c.close(); try await store.close()
+        let cold = try await ProjectStore.open(at: store.rootURL)
+        let saved = try #require(try await cold.workflowState().archive)
+        #expect(saved.assetCollection == collected && saved.runs == frozen)
+        #expect(try await cold.initializeAssetCollection() == collected)
+        #expect(await engine.requests.isEmpty)
+        try await cold.close()
+    }
+}
+
+extension WorkflowLifecycleTests {
+    @Test func containerCollectionFailureRetriesOrganizationOnly() async throws {
+        let (store, engine, c, a, _, stage) = try await containerFixture(autoCollect: true)
+        #expect(c.collectionRequests.isEmpty)
+        let snapshot = try c.containerSnapshot(.init(stageID: stage, path: [.node(a.id)]))
+        let choices = snapshot.calls.enumerated().map { index, call in WorkflowContainerChoice(call: .init(address: call.address, stepID: call.id), selectedIDs: index == 0 ? ["value"] : []) }
+        let submission = try await c.submitContainer(snapshot, choices: choices)
+        #expect(c.collectionRequests.count == 1)
+        let request = try #require(c.collectionRequests.first)
+        let frozen = c.runs
+        await c.processCollectionRequests { _ in throw WorkflowIssue("controlled folder save failure") }
+        #expect(c.collectionRequests[0].error != nil && !c.collectionRequests[0].completed)
+        #expect(c.assetCollection?.included.count == 1 && c.runs == frozen)
+        let pending = try #require(try await store.workflowState().archive)
+        #expect(pending.collectionRequests == c.collectionRequests)
+        await c.load()
+        var writes = 0
+        await c.processCollectionRequests(retryFailed: true) { value in
+            #expect(value.id == request.id && value.sources == request.sources); writes += 1
+        }
+        #expect(writes == 1 && c.collectionRequests[0].completed && c.runs == frozen)
+        await c.processCollectionRequests(retryFailed: true) { _ in writes += 1 }
+        #expect(writes == 1)
+        let continued = try await c.continueContainerSubmission(submission)
+        #expect(continued == submission.nextStageID && c.runs.count == 3)
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await reopened.workflowState().archive?.collectionRequests?.first?.completed == true)
+        try await reopened.close()
+    }
+
+    @Test func singleContainerContinuationFreezesParentAgainstOldResume() async throws {
+        let (store, engine, c, a, b, _) = try await containerFixture()
+        await c.run(target: b.id, only: false)
+        let run = try #require(c.runs.last)
+        let snapshot = try c.containerSnapshot(.init(runID: run.id, path: [.node(a.id)]))
+        let record = try #require(snapshot.calls.first)
+        let result = try await c.submitContainer(snapshot, choices: [.init(call: .init(address: record.address, stepID: record.id), selectedIDs: ["value"])])
+        #expect(result.nextStageID != nil)
+        let frozen = c.runs
+        await c.resume(runID: run.id); await c.stopPausedRun(runID: run.id)
+        #expect(c.runs == frozen && !c.hasPendingSaves)
+        let id = try #require(result.nextStageID)
+        await c.runBatchStage(id)
+        #expect(c.runs.first { $0.id == run.id } == frozen.first { $0.id == run.id })
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+}
+
+extension WorkflowLifecycleTests {
+    @Test func manualCollectionSameIDCommitsOnce() async throws {
+        let (store, engine, c, a, _, stage) = try await containerFixture()
+        let record = try #require(c.containerSnapshot(.init(stageID: stage, path: [.node(a.id)])).calls.first)
+        let source = WorkflowLibrarySource.runtime(try .capture(record, port: "preview"))
+        let owner = try #require(c.assetLibraryOwner), requestID = UUID()
+        let firstGate = WorkflowSubmitGate(), secondGate = WorkflowSubmitGate()
+        var entered = 0
+        c.beforeCollectionRequestCommit = {
+            entered += 1
+            if entered == 1 { await firstGate.wait() } else { await secondGate.wait() }
+        }
+        let first = Task { try await c.requestCollection([source], owner: owner, folderID: nil, requestID: requestID) }
+        try await waitForRepairGate(firstGate)
+        let second = Task { try await c.requestCollection([source], owner: owner, folderID: nil, requestID: requestID) }
+        try await waitForRepairGate(secondGate)
+        await firstGate.open(); await secondGate.open()
+        let firstID = try await first.value, secondID = try await second.value
+        #expect(firstID == secondID && c.collectionRequests.count == 1 && !c.hasPendingSaves)
+        #expect(try await store.workflowState().archive?.collectionRequests == c.collectionRequests)
+        await #expect(throws: (any Error).self) { try await c.requestCollection([source], owner: owner, folderID: UUID(), requestID: requestID) }
+        let frozen = c.runs
+        var classifications = 0
+        await c.processCollectionRequests { _ in classifications += 1 }
+        await c.processCollectionRequests { _ in classifications += 1 }
+        #expect(classifications == 1 && c.runs == frozen)
+        #expect(await engine.requests.isEmpty)
+        c.beforeCollectionRequestCommit = {}; try await c.close(); try await store.close()
+    }
+
+    @Test(arguments: ["call", "digest", "kind", "schema", "scalarAlias"])
+    func containerSourcesRejectForgedSavedIdentity(change: String) async throws {
+        let (store, engine, c, a, _, stage) = try await containerFixture()
+        let record = try #require(c.containerSnapshot(.init(stageID: stage, path: [.node(a.id)])).calls.first)
+        let exact = try WorkflowRuntimeAssetSource.capture(record, port: "preview")
+        var source = exact
+        if change == "call" { source = try .init(call: .init(address: .init(runID: UUID()), stepID: record.id), port: "input", value: record.step.inputs["input"]!, input: true) }
+        if change == "digest" { source = try .init(call: exact.call, port: exact.port, value: .data(.text("changed")), input: true) }
+        if change == "scalarAlias" {
+            var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(exact)) as? [String: Any])
+            object["itemID"] = "value"
+            source = try JSONDecoder().decode(WorkflowRuntimeAssetSource.self, from: JSONSerialization.data(withJSONObject: object))
+            #expect(throws: (any Error).self) { try source.resolve(in: c.runs) }
+        }
+        var node = try #require(c.registry.operation(WorkflowAssetContainer.sourceID)).definition.makeNode()
+        node.librarySources = [.runtime(source)]; node.parameters["kind"] = .text(change == "kind" ? "image" : "text")
+        node.dataConfiguration = .init(schema: change == "schema" ? .boolean : .text)
+        let before = try #require(try await store.workflowState().archive)
+        let graph = WorkflowGraph(nodes: [node])
+        await #expect(throws: (any Error).self) { try await store.saveWorkflow(graphs: before.graphs + [graph], runs: before.runs, expectedRevision: before.revision) }
+        #expect(try await store.workflowState().archive == before)
+        node.librarySources = [.runtime(exact)]; node.parameters["kind"] = .text("text"); node.dataConfiguration = .init(schema: .text)
+        let valid = WorkflowGraph(nodes: [node])
+        _ = try await store.saveWorkflow(graphs: before.graphs + [valid], runs: before.runs, expectedRevision: before.revision)
+        await c.load(); c.selectedGraphID = valid.id
+        await c.run(target: node.id, only: false)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        #expect(c.runs.last?.steps.last?.outputs["output"] == record.step.inputs["input"])
+        #expect(Array(c.runs.prefix(before.runs.count)) == before.runs)
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+
+    @Test func containerOriginalDropCapturesWithoutWritingThenInsertsOneUndoGroup() async throws {
+        let (root, store, engine, c) = try await fixture()
+        let file = root.appendingPathComponent("drop.png"); try workflowFixturePNG(width: 512, height: 512).write(to: file)
+        let document = try #require(await store.snapshot().documents.first?.id)
+        let manifest = try await store.importImageReference(at: file, name: "drop", documentID: document)
+        let asset = try #require(manifest.assets.first)
+        await c.load()
+        let before = try await store.workflowState().archive
+        let token = try await store.readOnlyAsset(id: asset.id).token
+        let afterRead = try await store.workflowState().archive
+        #expect(token.registeredReference == nil && afterRead == before)
+        let owner = try #require(c.assetLibraryOwner), target = try #require(c.canvasInsertionTarget())
+        let sources = try await c.resolveLibraryDrop([.original(token)], owner: owner, target: target)
+        try await c.insertLibrarySources(sources, owner: owner, target: target, x: 200, y: 100)
+        #expect(c.graphs.count == 1 && c.graph?.nodes.count == 1 && c.graph?.nodes.first?.assetReference != nil)
+        c.undo(); #expect(c.graphs.isEmpty)
+        #expect(try Data(contentsOf: file) == workflowFixturePNG(width: 512, height: 512))
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+}
+
+extension WorkflowLifecycleTests {
+    @Test func containerImageSubsetUsesVisibleMapAndRetainsOriginalCandidates() async throws {
+        let (_, store, engine, c) = try await fixture()
+        c.addExample("containerImages")
+        let graph = try #require(c.graph)
+        let gate = try #require(graph.nodes.first { $0.operationID == WorkflowAssetContainer.filterID })
+        let target = try #require(graph.nodes.last)
+        let stage = try await c.createBatchStage(selection: .through(target.id), pins: [], repetitions: 1, expectedGraphID: graph.id, expectedRevision: graph.revision)
+        await c.runBatchStage(stage)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        let snapshot = try c.containerSnapshot(.init(stageID: stage, path: [.node(gate.id)]))
+        let record = try #require(snapshot.calls.first)
+        let candidates = try #require(record.step.inputs["input"]?.candidates)
+        #expect(candidates.count == 6)
+        let selected = [candidates[1].id.uuidString, candidates[4].id.uuidString]
+        let submission = try await c.submitContainer(snapshot, choices: [.init(call: .init(address: record.address, stepID: record.id), selectedIDs: selected)])
+        let original = c.runs[0], requests = await engine.requests.count
+        await c.runBatchStage(try #require(submission.nextStageID))
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        let child = try #require(c.runs.last)
+        #expect(child.status == .completed && c.runs[0] == original)
+        #expect(child.planCheckpoint?.records.filter { $0.step.node.operationID == "d.image.resize" }.count == 2)
+        #expect(child.planCheckpoint?.records.first { $0.step.node.id == gate.id }?.step.decision?.typedOutput == .collection([candidates[1], candidates[4]]))
+        #expect(await engine.requests.count == requests)
+        try await c.close(); try await store.close()
+    }
+}
+
+
+extension WorkflowLifecycleTests {
+    @Test func containerDropRejectsChangedOriginalBeforeRegistration() async throws {
+        let (root, store, engine, c) = try await fixture()
+        let file = root.appendingPathComponent("source.png")
+        try workflowFixturePNG(width: 512, height: 512).write(to: file)
+        let document = try #require(await store.snapshot().documents.first?.id)
+        let imported = try await store.importImageReference(at: file, name: "original", documentID: document)
+        let asset = try #require(imported.assets.first)
+        await c.load()
+        let token = try await store.readOnlyAsset(id: asset.id).token
+        let before = try await store.workflowState().archive
+        let storedFile = store.rootURL.appendingPathComponent(token.relativePath)
+        let original = try Data(contentsOf: storedFile)
+        try workflowFixturePNG(width: 768, height: 512).write(to: storedFile)
+        await #expect(throws: (any Error).self) { try await store.pinWorkflowAsset(asset.id, expected: token) }
+        #expect(try await store.workflowState().archive == before)
+        try original.write(to: storedFile)
+        #expect(try await store.readOnlyAsset(id: asset.id).token == token)
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+
+    @Test func containerDropConnectsOneEditAndRejectsOccupiedOrStaleTargets() async throws {
+        let (store, engine, c, a, _, stage) = try await containerFixture()
+        let record = try #require(c.containerSnapshot(.init(stageID: stage, path: [.node(a.id)])).calls.first)
+        let source = WorkflowLibrarySource.runtime(try .capture(record, port: "preview"))
+        let node = try #require(c.registry.operation("d.text.confirm")).definition.makeNode()
+        let archive = try #require(try await store.workflowState().archive)
+        let graph = WorkflowGraph(nodes: [node])
+        _ = try await store.saveWorkflow(graphs: archive.graphs + [graph], runs: archive.runs, expectedRevision: archive.revision)
+        await c.load(); c.selectedGraphID = graph.id
+        let owner = try #require(c.assetLibraryOwner), target = try #require(c.canvasInsertionTarget())
+        try await c.insertLibrarySources([source], owner: owner, target: target, x: 100, y: 100, inputNode: node.id, inputPort: "input")
+        #expect(c.graph?.nodes.count == 2 && c.graph?.connections.count == 1)
+        let after = c.graphs, occupied = try #require(c.canvasInsertionTarget())
+        await #expect(throws: (any Error).self) { try await c.insertLibrarySources([source], owner: owner, target: occupied, x: 100, y: 100, inputNode: node.id, inputPort: "input") }
+        await #expect(throws: (any Error).self) { try await c.insertLibrarySources([source], owner: owner, target: target, x: 100, y: 100) }
+        #expect(c.graphs == after)
+        c.undo(); #expect(c.graph?.nodes == [node] && c.graph?.connections.isEmpty == true)
+        c.redo(); #expect(c.graphs == after)
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+}
+
+
+extension WorkflowLifecycleTests {
+    @Test func containerSecondGateCommitAndContinuationRemainUniqueAfterColdOpen() async throws {
+        let (store, engine, c, a, b, firstStage) = try await containerFixture()
+        let first = try c.containerSnapshot(.init(stageID: firstStage, path: [.node(a.id)]))
+        let firstChoices = first.calls.map { WorkflowContainerChoice(call: .init(address: $0.address, stepID: $0.id), selectedIDs: ["value"]) }
+        let accepted = try await c.submitContainer(first, choices: firstChoices)
+        let secondStage = try #require(accepted.nextStageID)
+        await c.runBatchStage(secondStage)
+        let second = try c.containerSnapshot(.init(stageID: secondStage, path: [.node(b.id)]))
+        #expect(second.calls.count == 2 && second.collectionComplete)
+        let before = Array(c.runs.prefix(2))
+        let choices = second.calls.map { WorkflowContainerChoice(call: .init(address: $0.address, stepID: $0.id), selectedIDs: ["value"]) }
+        let decided = try await c.submitContainer(second, choices: choices)
+        let finalStage = try #require(decided.nextStageID)
+        #expect(c.runs.count == 6)
+        #expect(try await c.submitContainer(second, choices: choices) == decided)
+        #expect(try await c.continueContainerSubmission(decided) == finalStage)
+        await c.runBatchStage(finalStage)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        #expect(c.runs.suffix(2).allSatisfy { $0.status == .completed })
+        #expect(Array(c.runs.prefix(2)) == before && c.containerSubmissions.count == 2)
+        #expect(await engine.requests.isEmpty)
+        let frozenRuns = c.runs, submissions = c.containerSubmissions
+        try await c.close()
+        let saved = try await store.workflowState().archive
+        #expect(saved?.runs == frozenRuns && saved?.containerSubmissions == submissions)
+        try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await reopened.workflowState().archive == saved)
+        try await reopened.close()
+    }
+}

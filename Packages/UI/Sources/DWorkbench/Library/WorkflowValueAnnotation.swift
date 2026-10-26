@@ -7,7 +7,7 @@ import Foundation
 public struct WorkflowValueIdentity: Sendable, Equatable {
     public let storageKey: String
     public init(projectID: UUID, instanceID: UUID, call: WorkflowCallReference, port: String,
-                value: WorkflowValue, candidateID: UUID? = nil) throws {
+                value: WorkflowValue, candidateID: UUID? = nil, itemID: String? = nil, sourceVersion: String? = nil) throws {
         struct Payload: Encodable {
             let version: Int
             let project: UUID
@@ -15,11 +15,13 @@ public struct WorkflowValueIdentity: Sendable, Equatable {
             let call: WorkflowCallReference
             let port: String
             let candidate: UUID?
+            let itemID: String?
+            let sourceVersion: String?
             let value: WorkflowValue
         }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(Payload(version: 1, project: projectID, instance: instanceID,
-            call: call, port: port, candidate: candidateID, value: value))
+            call: call, port: port, candidate: candidateID, itemID: itemID, sourceVersion: sourceVersion, value: value))
         storageKey = "runtime-value-v1:" + SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
     }
     public static func isStorageKey(_ key: String) -> Bool {

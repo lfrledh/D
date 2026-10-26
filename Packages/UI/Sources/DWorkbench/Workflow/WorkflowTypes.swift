@@ -63,6 +63,8 @@ public struct WorkflowNode: Codable, Sendable, Equatable, Identifiable {
     public var control: WorkflowControlBlock?
     public var dataConfiguration: WorkflowDataConfiguration?
     public var assetReference: WorkflowAssetReference?
+    public var collectionRule: WorkflowAssetCollectionRule?
+    public var librarySources: [WorkflowLibrarySource]?
     public init(id: UUID = UUID(), operationID: String, definitionVersion: Int = 1, title: String,
                 parameters: [String: WorkflowScalar] = [:], assetReference: WorkflowAssetReference? = nil) {
         self.id = id; self.operationID = operationID; self.definitionVersion = definitionVersion
@@ -84,7 +86,10 @@ public struct WorkflowLayout: Codable, Sendable, Equatable {
     public var x: Double
     public var y: Double
     public var collapsed: Bool
-    public init(nodeID: UUID, x: Double, y: Double, collapsed: Bool = false) {
+    public var width: Double?
+    public var height: Double?
+    public init(nodeID: UUID, x: Double, y: Double, collapsed: Bool = false, width: Double? = nil, height: Double? = nil) {
+        self.width = width; self.height = height
         self.nodeID = nodeID; self.x = x; self.y = y; self.collapsed = collapsed
     }
 
@@ -124,15 +129,20 @@ public struct WorkflowDecision: Codable, Sendable, Equatable {
     public let accepted: Bool
     public let selectedCandidateID: UUID?
     public let output: WorkflowAssetReference?
-    public init(id: UUID = UUID(), waitingStepID: UUID, accepted: Bool, selectedCandidateID: UUID? = nil, output: WorkflowAssetReference? = nil) {
+    public let selectedItemIDs: [String]?
+    public let typedOutput: WorkflowValue?
+    public init(id: UUID = UUID(), waitingStepID: UUID, accepted: Bool, selectedCandidateID: UUID? = nil, output: WorkflowAssetReference? = nil,
+                selectedItemIDs: [String]? = nil, typedOutput: WorkflowValue? = nil) {
         self.id = id; self.waitingStepID = waitingStepID; self.accepted = accepted
         self.selectedCandidateID = selectedCandidateID; self.output = output
+        self.selectedItemIDs = selectedItemIDs; self.typedOutput = typedOutput
     }
 }
 public struct WorkflowStepRun: Codable, Sendable, Equatable, Identifiable {
     /// Human edits at a waiting gate are durable drafts, never an implicit decision.
     public var humanTask: WorkflowHumanTask?
     public var reviewTextDraft: String?
+    public var containerSelectionDraft: [String]?
     public var repeatRequested: Bool?
     public var inputsBound: Bool?
     public var id: UUID
@@ -177,6 +187,9 @@ public struct WorkflowAssetRecord: Codable, Sendable, Equatable {
     }
 }
 public struct WorkflowArchive: Codable, Sendable, Equatable {
+    public var containerSubmissions: [WorkflowContainerSubmission]?
+    public var assetCollection: WorkflowAssetCollection?
+    public var collectionRequests: [WorkflowAssetCollectionRequest]?
     public var batchStages: [WorkflowBatchStage]?
     public var tools: [WorkflowToolDefinition]?
     public var version = 1
@@ -243,7 +256,7 @@ public struct WorkflowFieldDefinition: Sendable, Equatable, Identifiable {
         self.id = id; self.title = title; self.kind = kind; self.defaultValue = defaultValue
     }
 }
-public enum WorkflowInteraction: Sendable, Equatable { case none, assetInput, textReview, candidateReview }
+public enum WorkflowInteraction: Sendable, Equatable { case none, assetInput, textReview, candidateReview, containerReview }
 public struct WorkflowOperationDefinition: Sendable, Equatable, Identifiable {
     public var id: String
     public var version: Int

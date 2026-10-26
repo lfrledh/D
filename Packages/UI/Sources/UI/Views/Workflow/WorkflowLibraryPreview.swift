@@ -9,7 +9,8 @@ actor WorkflowLibraryPreviewCache {
         var image: CGImage?
         var excerpt: String?
         var duration: Double?
-        var cost: Int { image.map { $0.bytesPerRow * $0.height } ?? 0 }
+        var waveform: [AudioPeak]?
+        var cost: Int { (image.map { $0.bytesPerRow * $0.height } ?? 0) + (waveform?.count ?? 0) * 8 + (excerpt?.utf8.count ?? 0) }
     }
     private struct Entry { var preview: Preview; var used: UInt64 }
     private var entries: [String: Entry] = [:]
@@ -76,6 +77,16 @@ actor WorkflowLibraryPreviewCache {
             } onCancel: { Task { await self.cancelPoster(posterID) } }
             let seconds = try await asset.load(.duration).seconds
             if seconds.isFinite, seconds >= 0 { result.duration = seconds }
+        } else if token.kind == .audio {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("D-Waveform-" + UUID().uuidString)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let url = directory.appendingPathComponent(token.mediaType == "audio/x-caf" ? "preview.caf" : "preview.wav")
+            try content.data.write(to: url, options: .withoutOverwriting)
+            let inspection = try AudioMediaInspector.inspect(at: url, policy: .workflowOriginal)
+            guard inspection.contentSHA256 == token.sha256 else { throw WorkflowIssue("Audio preview identity changed.") }
+            result.waveform = inspection.waveform
+            result.duration = Double(inspection.format.frameCount) / inspection.format.sampleRate
         } else if let text = content.text { result.excerpt = String(text.prefix(300)).replacingOccurrences(of: "\n", with: " ") }
         try Task.checkCancellation()
         if let key { entries[key] = .init(preview: result, used: tick) }
@@ -92,12 +103,14 @@ struct WorkflowLibraryPreview: View {
     let cache: WorkflowLibraryPreviewCache
     let pixels: Int
     let load: @MainActor @Sendable () async throws -> ProjectReadOnlyContent
+    var exactVersion: String? = nil
     @Environment(\.workbenchContentVisible) private var visible
     @Environment(\.dLanguageStore) private var language
     @State private var preview: WorkflowLibraryPreviewCache.Preview?
     @State private var failure: String?
     @State private var retry = 0
     private var version: String? {
+        if let exactVersion { return entry.id + "/" + exactVersion }
         if let runtime = entry.runtimeValue, let reference = runtime.reference {
             return "\(runtime.projectID)/\(runtime.instanceID)/\(reference.assetID)/\(reference.sha256)"
         }
@@ -116,6 +129,20 @@ struct WorkflowLibraryPreview: View {
                     Text(String(format: "%.1f s", seconds)).font(.caption.monospacedDigit()).padding(4)
                         .background(.black.opacity(0.65), in: Capsule()).foregroundStyle(.white)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                }
+            } else if let peaks = preview?.waveform {
+                VStack(spacing: 2) {
+                    Canvas { context, size in
+                        let width = size.width / CGFloat(max(1, peaks.count))
+                        for (index, peak) in peaks.enumerated() {
+                            let x = (CGFloat(index) + 0.5) * width
+                            context.stroke(Path { path in
+                                path.move(to: CGPoint(x: x, y: size.height * (0.5 - CGFloat(peak.maximum) * 0.45)))
+                                path.addLine(to: CGPoint(x: x, y: size.height * (0.5 - CGFloat(peak.minimum) * 0.45)))
+                            }, with: .color(.accentColor), lineWidth: max(1, width * 0.5))
+                        }
+                    }
+                    if let duration = preview?.duration { Text(String(format: "%.1f s", duration)).font(.caption.monospacedDigit()) }
                 }
             } else if let excerpt = preview?.excerpt { Text(excerpt).font(.caption).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading) }
             else if failure != nil {

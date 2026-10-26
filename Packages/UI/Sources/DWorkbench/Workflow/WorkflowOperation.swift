@@ -5,6 +5,7 @@ public enum WorkflowOperationResult: Sendable, Equatable {
     case outputs([String: WorkflowValue])
     case reviewText(WorkflowAssetReference)
     case choose([WorkflowCandidate])
+    case reviewValue(WorkflowValue)
     case humanTask(WorkflowHumanTask)
 }
 public struct WorkflowExecutionContext: Sendable {
@@ -33,6 +34,7 @@ public struct WorkflowExecutionContext: Sendable {
     func publishMedia(_ data: Data, mediaType: String, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func readText(_ reference: WorkflowAssetReference) async throws -> String
     func verifyAsset(_ reference: WorkflowAssetReference) async throws
+    func resolveLibrarySources(_ sources: [WorkflowLibrarySource]) async throws -> [WorkflowValue]
     func publishText(_ text: String, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func rewriteText(_ text: String, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func generateImages(prompt: String, reference: WorkflowAssetReference?, context: WorkflowExecutionContext) async throws -> [WorkflowCandidate]
@@ -53,6 +55,9 @@ public struct WorkflowOperation: Sendable {
 
 /// Older test/host implementations remain explicit about unsupported new services.
 extension WorkflowOperationServices {
+    public func resolveLibrarySources(_ sources: [WorkflowLibrarySource]) async throws -> [WorkflowValue] {
+        throw WorkflowIssue("This host cannot resolve saved workflow values.")
+    }
     public func readLanguageResponse(_ reference: WorkflowAssetReference) async throws -> TextResponse? { nil }
     public func transformAudio(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { throw WorkflowIssue("此入口尚未提供音频转换。") }
     public func readData(_ reference: WorkflowAssetReference) async throws -> Data { throw WorkflowIssue("此入口尚未提供媒体读取。") }

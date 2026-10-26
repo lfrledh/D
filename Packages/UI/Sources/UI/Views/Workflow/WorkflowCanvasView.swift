@@ -128,7 +128,7 @@ public struct WorkflowCanvasView: View {
     private let onDestination: () -> Void
     private let onPublishText: () -> Void
     private let publishDocumentDescription: String?
-    private var onExpandLibrary: ((WorkflowCanvasLibraryMode, WorkflowLibraryContext?, @escaping () -> Void) -> Void)? = nil
+    private var onExpandLibrary: ((WorkflowCanvasLibraryMode, WorkflowLibraryContext?, @escaping () -> Void, WorkflowContainerNavigation) -> Void)? = nil
     private let destinationEnabled: Bool
     private let onReturnText: (WorkflowAssetReference) -> Void
     private let captureControls: AnyView
@@ -258,8 +258,16 @@ public struct WorkflowCanvasView: View {
             bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init)), owner: ObjectIdentifier(controller)))
     }
 
-    func expandingLibrary(_ action: ((WorkflowCanvasLibraryMode, WorkflowLibraryContext?, @escaping () -> Void) -> Void)?) -> Self {
+    func expandingLibrary(_ action: ((WorkflowCanvasLibraryMode, WorkflowLibraryContext?, @escaping () -> Void, WorkflowContainerNavigation) -> Void)?) -> Self {
         var copy = self; copy.onExpandLibrary = action; return copy
+    }
+    private var containerNavigation: WorkflowContainerNavigation {
+        WorkflowContainerNavigation(reveal: revealLibrary, source: { call in
+            guard let run = controller.runs.first(where: { $0.id == call.address.runID }),
+                  let record = WorkflowWorkspacePanels.records(in: run).first(where: { $0.id == call.stepID && $0.address == call.address }) else { return }
+            panelsState.selectRun(run.id); panelsState.selectResult(node: record.step.node.id, call: call)
+            activityVisible = true; recordsDetail = true; workspaceDraft = nil; runSettingsVisible = false
+        })
     }
     public var body: some View {
         #if DEBUG
@@ -267,6 +275,7 @@ public struct WorkflowCanvasView: View {
         let _ = WorkflowCanvasUpdateProbe.workspace?(.init(draftTarget:workspaceDraft?.target,open:{id,mode in setRunTarget(id);runRange=mode;presentWorkspacePlan(id,mode:mode)},target:setRunTarget,range:setRunRange))
         #endif
         canvasContent
+        .environment(\.workflowContainerNavigation, containerNavigation)
         .environment(\.workbenchMenuContext, canvasMenuContext)
         .workbenchConfirmation(text("workflow.scope.rerunCall","重新运行具体调用"),isPresented:Binding(get:{pendingHistoryRetry != nil},set:{if !$0 { pendingHistoryRetry=nil }})) {
             Button(workspaceText(languageStore, "retryFrozen")) {
@@ -660,7 +669,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     .help(layoutText(languageStore, "manageNodes")).accessibilityLabel(layoutText(languageStore, "manageNodes"))
                     .accessibilityIdentifier("workflow-program-actions")
             }
-            Button { onExpandLibrary?(panelsState.preparation == .programs ? .programs : .nodes, nil, {}) } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
+            Button { onExpandLibrary?(panelsState.preparation == .programs ? .programs : .nodes, nil, {}, containerNavigation) } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
                 .disabled(onExpandLibrary == nil).help(layoutText(languageStore, "expandNodes")).accessibilityLabel(layoutText(languageStore, "expandNodes"))
                 .accessibilityIdentifier("workflow-expand-nodes")
         }
@@ -673,7 +682,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 .accessibilityIdentifier("workflow-import-asset")
             Button {
                 let captured = resourceContext
-                onExpandLibrary?(resourceCategory.mode, captured, { if resourceContext == captured { clearLibraryLocation() } })
+                onExpandLibrary?(resourceCategory.mode, captured, { if resourceContext == captured { clearLibraryLocation() } }, containerNavigation)
             } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
                 .disabled(onExpandLibrary == nil).help(layoutText(languageStore, "expandAssets")).accessibilityLabel(layoutText(languageStore, "expandAssets"))
                 .accessibilityIdentifier("workflow-expand-assets")
@@ -892,6 +901,15 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             guard let tool = controller.tools.first(where: { $0.id == reference.id && $0.version == reference.version && (try? WorkflowPlanCompiler.digest($0)) == reference.digest }) else { return false }
             controller.addTool(tool, x: point.x, y: point.y)
             return controller.errorMessage == nil
+        case .library, .libraryItems:
+            guard let payload = value.libraryPayload, let target = controller.canvasInsertionTarget(), controller.assetLibraryOwner == payload.owner else { return false }
+            Task {
+                do {
+                    let sources = try await controller.resolveLibraryDrop(payload.items, owner: payload.owner, target: target)
+                    try await controller.insertLibrarySources(sources, owner: payload.owner, target: target, x: point.x, y: point.y) }
+                catch { controller.errorMessage = error.localizedDescription }
+            }
+            return true
         case .output: return false
         }
     }
@@ -2713,6 +2731,11 @@ struct WorkflowWaitingDecision: View {
     }
 
     var body: some View {
+        if interaction == .containerReview {
+            WorkflowAssetContainerView(controller: controller, node: step.node, forcedStepID: step.id, height: 340)
+        } else { legacyBody }
+    }
+    private var legacyBody: some View {
         VStack(alignment: .leading, spacing: 9) {
             Text(workflowText(languageStore, "workflow.decision.title"))
                 .font(.headline)
@@ -2937,10 +2960,12 @@ struct WorkflowStatusBadge: View {
 }
 
 private enum WorkflowExampleChoice: String, CaseIterable, Identifiable {
-    case text, image, file, template
+    case container, containerImages, text, image, file, template
     var id: String { rawValue }
     @MainActor func title(_ language: UILanguageStore?) -> String {
         switch self {
+        case .container: workflowText(language, "container.example")
+        case .containerImages: workflowText(language, "container.imageExample")
         case .text: workflowText(language, "workflow.example.text")
         case .image: workflowText(language, "workflow.example.image")
         case .file: workflowText(language, "workflow.example.file")
@@ -3021,6 +3046,13 @@ enum WorkflowCanvasLayoutPolicy {
     static let inspectorWidth: CGFloat = WorkbenchSidebarLayout.leadingWidth
     static let canvasMinimumWidth: CGFloat = 360
     static let nodeWidth: CGFloat = 240
+    static func width(_ id: UUID, in graph: WorkflowGraph) -> CGFloat {
+        guard let node = graph.nodes.first(where: { $0.id == id }), WorkflowAssetContainer.isContainer(node.operationID) else { return nodeWidth }
+        return CGFloat(min(1200, max(300, graph.layout.first(where: { $0.nodeID == id })?.width ?? 360)))
+    }
+    static func containerHeight(_ id: UUID, in graph: WorkflowGraph) -> CGFloat {
+        CGFloat(min(1000, max(280, graph.layout.first(where: { $0.nodeID == id })?.height ?? 360)))
+    }
     static let zoomRange: ClosedRange<CGFloat> = 0.05...4.0
 
     static func usesHorizontalPanelScroll(width: CGFloat) -> Bool { false }

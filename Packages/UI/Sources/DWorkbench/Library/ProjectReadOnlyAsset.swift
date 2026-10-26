@@ -1,7 +1,7 @@
 import Foundation
 
 /// A verified read token, not a registration or permission to bind a workflow input.
-public struct ProjectReadOnlyAsset: Sendable, Equatable {
+public struct ProjectReadOnlyAsset: Codable, Sendable, Equatable {
     public let projectID: UUID
     public let instanceID: UUID
     public let assetID: UUID

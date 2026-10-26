@@ -38,6 +38,8 @@ public struct SharedLibraryBrowserEntry: Identifiable, Equatable {
     public var legacyFailure: String?
     public var metadataSnapshot: ProjectAssetMetadataSnapshot?
     var runtimeValue: WorkflowLibraryValue? = nil
+    var collected = true
+    var collectionSource: WorkflowLibrarySource? = nil
 
     public init(item: SharedLibraryItem, selection: SharedLibraryBrowserSelection, facts: [String] = [], activityID: String? = nil, legacyTags: [String] = [], legacyFailure: String? = nil, metadataSnapshot: ProjectAssetMetadataSnapshot? = nil) {
         self.item = item
@@ -57,6 +59,7 @@ public enum SharedLibraryBrowserScope: Hashable {
 public final class SharedLibraryBrowserState {
     public var query: SharedLibraryQuery
     public var draftText: String
+    public var collectedOnly = true
     public var operationPath: [String] = []
     var modelModality: CreatorMode?
     var collapsedModelFamilies: Set<String> = []
@@ -253,7 +256,7 @@ struct SharedLibraryBrowserRenameDrafts {
     }
 
     static func allows(_ action: SharedLibraryBrowserAction, entry: SharedLibraryBrowserEntry) -> Bool {
-        if entry.runtimeValue != nil { return action == .preview }
+        if entry.runtimeValue != nil { return action == .preview || (action == .add && entry.collectionSource != nil) }
         if action == .location {
             switch entry.selection { case .asset, .assetInstance: return true; default: return false }
         }
@@ -298,6 +301,9 @@ struct SharedLibraryBrowserRenameDrafts {
     }
 
     static func canvasTransfer(for entry: SharedLibraryBrowserEntry) -> WorkflowCanvasTransfer? {
+        if let source = entry.collectionSource, let facts = entry.item.assetFacts {
+            return .library(owner: .init(projectID: facts.projectID, instanceID: facts.instanceID), sources: [source])
+        }
         guard allows(.add, entry: entry) else { return nil }
         switch entry.selection {
         case .operation(let id, let modelID): return .operation(id: id, modelID: modelID)
@@ -353,6 +359,7 @@ public struct SharedLibraryBrowser: View {
     private let entries: [SharedLibraryBrowserEntry]
     private let store: SharedLibraryStore
     private let compact: Bool
+    private let onCollect: (([SharedLibraryBrowserEntry], Bool) -> Void)?
     private let onUse: (SharedLibraryBrowserEntry) -> Void
     private let onAdd: (SharedLibraryBrowserEntry) -> Void
     private let onPreview: (SharedLibraryBrowserEntry) -> Void
@@ -382,6 +389,9 @@ public struct SharedLibraryBrowser: View {
     @State private var saveQueryRequest: SharedLibrarySaveQueryRequest?
     @State private var showOrganizer = false
     @State private var compactDetailKey: String?
+    @Environment(\.workflowContainerNavigation) private var containerNavigation
+    @State private var collectionNotice: String?
+    @State private var collectedLocation: WorkflowLibraryContext?
     @State private var errorMessage: String?
     private struct TagRequest: Identifiable {
         let id = UUID()
@@ -408,6 +418,7 @@ public struct SharedLibraryBrowser: View {
     public init(
         entries: [SharedLibraryBrowserEntry], store: SharedLibraryStore, compact: Bool = false, allowsImport: Bool = true, canvasMode: WorkflowCanvasLibraryMode? = nil, scopeDescription: String = "", importTargetDescription: String = "",
         state: SharedLibraryBrowserState? = nil,
+        onCollect: (([SharedLibraryBrowserEntry], Bool) -> Void)? = nil,
         onUse: @escaping (SharedLibraryBrowserEntry) -> Void,
         onAdd: @escaping (SharedLibraryBrowserEntry) -> Void,
         onPreview: @escaping (SharedLibraryBrowserEntry) -> Void,
@@ -422,7 +433,7 @@ public struct SharedLibraryBrowser: View {
     ) {
         self._state = State(initialValue: state ?? SharedLibraryBrowserState())
         self.importTargetDescription = importTargetDescription; self.scopeDescription = scopeDescription; self.canvasMode = canvasMode; self.entries = entries; self.store = store; self.compact = compact; self.allowsImport = allowsImport
-        self.onUse = onUse; self.onAdd = onAdd; self.onPreview = onPreview; self.onLocation = onLocation
+        self.onCollect = onCollect; self.onUse = onUse; self.onAdd = onAdd; self.onPreview = onPreview; self.onLocation = onLocation
         self.onExport = onExport
         self.onExternalCopy = onExternalCopy; self.readPreview = readPreview
         self.onPrepare = onPrepare; self.onImport = onImport; self.onClose = onClose
@@ -474,6 +485,7 @@ public struct SharedLibraryBrowser: View {
     private var visibleResult: Result<[SharedLibraryBrowserEntry], Error> {
         Result {
             let eligible = entries.filter { entry in
+                if onCollect != nil && state.collectedOnly && workflowContext == nil && !entry.collected { return false }
                 guard let workflowContext else { return true }
                 return insertionController.map { workflowContext.isCurrent(in: $0) } == true && workflowContext.includes(entry)
             }
@@ -510,6 +522,17 @@ public struct SharedLibraryBrowser: View {
                 }.font(.caption).foregroundStyle(.red).padding(8)
                     .accessibilityIdentifier("shared-library-error")
             }
+            if let collectionNotice {
+                HStack {
+                    Text(collectionNotice).font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    if let collectedLocation, let containerNavigation {
+                        Button(workflowText(language, "container.showInLibrary")) { containerNavigation.reveal(collectedLocation) }
+                    }
+                    Button { self.collectionNotice = nil } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel(word("dismissError", "关闭错误"))
+                }.padding(8)
+            }
             if case .failure(let error) = visibleResult {
                 Text(sharedLibraryErrorText(error, language: language)).foregroundStyle(.red).padding(8)
             }
@@ -531,6 +554,9 @@ public struct SharedLibraryBrowser: View {
                     }
                 }
             }
+        }
+        .dropDestination(for: WorkflowCanvasTransfer.self) { values, _ in
+            acceptCollectionDrop(values, into: scope)
         }
         .background(WorkbenchCommandWindow(scope: commandScope))
         .focusable().focusEffectDisabled().focused($selectionFocused)
@@ -653,6 +679,13 @@ public struct SharedLibraryBrowser: View {
             LazyVGrid(columns: [.init(.adaptive(minimum: state.thumbnailSize), spacing: 10)], spacing: 10) {
                 ForEach(visible) { entry in
                     VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Button {
+                                if !selectedKeys.insert(entry.id).inserted { selectedKeys.remove(entry.id) }
+                            } label: { Image(systemName: selectedKeys.contains(entry.id) ? "checkmark.circle.fill" : "circle").frame(width: 28, height: 28) }
+                                .buttonStyle(.plain).accessibilityLabel(workflowText(language, "container.select"))
+                            Spacer()
+                        }
                         if let readPreview {
                             WorkflowLibraryPreview(entry: entry, cache: state.previewCache, pixels: Int(state.thumbnailSize * 2), load: { try await readPreview(entry) })
                                 .frame(height: state.thumbnailSize * 0.68).frame(maxWidth: .infinity)
@@ -786,13 +819,22 @@ public struct SharedLibraryBrowser: View {
                 ForEach(folderTree) { folder in
                     scopeButton(folder.name, icon: "folder", value: .folder(folder.id))
                         .padding(.leading, CGFloat(folderDepth(folder.id)) * 10)
+                        .dropDestination(for: WorkflowCanvasTransfer.self) { values, _ in acceptCollectionDrop(values, into: .folder(folder.id)) }
                         .dropDestination(for: String.self) { (keys: [String], _: CGPoint) -> Bool in
+                            if onCollect != nil, let owner = insertionController?.assetLibraryOwner {
+                                guard let ids = SharedLibraryBrowserLogic.validatedDropKeys(keys, entries: entries) else { return false }
+                                let selected = entries.filter { ids.contains($0.id) }
+                                let sources = selected.compactMap(\.collectionSource)
+                                guard sources.count == selected.count, !sources.isEmpty else { return false }
+                                return acceptCollectionDrop([.library(owner: owner, sources: sources)], into: .folder(folder.id))
+                            }
                             return acceptDrop(keys) { try store.addMembers($0, to: folder.id) }
                         }
                 }
                 Text(word("savedQueries", "智能筛选")).workbenchHelp("MENU-LIBRARY-SAVED").font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 8)
                 ForEach(saved) { item in
-                    scopeButton(item.name, icon: "line.3.horizontal.decrease.circle", value: .saved(item.id)).workbenchHelp("MENU-LIBRARY-SAVED-DYNAMIC", target: item.id.uuidString)
+                    scopeButton(item.name, icon: "line.3.horizontal.decrease.circle", value: .saved(item.id))
+                        .dropDestination(for: WorkflowCanvasTransfer.self) { values, _ in acceptCollectionDrop(values, into: .saved(item.id)) }.workbenchHelp("MENU-LIBRARY-SAVED-DYNAMIC", target: item.id.uuidString)
                 }
             }.padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 16).frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -821,7 +863,7 @@ public struct SharedLibraryBrowser: View {
             } else if visible.isEmpty {
                 ContentUnavailableView(word("empty", "没有符合条件的条目"), systemImage: "square.stack")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if canvasMode == .image || canvasMode == .video || (query.contentKinds.count == 1 && (query.contentKinds.contains(.image) || query.contentKinds.contains(.video))) {
+            } else if canvasMode == .image || canvasMode == .video || (canvasMode == nil && query.contentKinds.count == 1 && (query.contentKinds.contains(.image) || query.contentKinds.contains(.video))) {
                 WorkbenchScrollView { resourceGrid.padding(.bottom, 16) }
                     .scrollPosition(navigationScroll).accessibilityIdentifier("shared-library-results")
             } else {
@@ -884,8 +926,11 @@ public struct SharedLibraryBrowser: View {
             }
 
             HStack {
-                WorkbenchMenu(scopeTitle) {
-                    WorkbenchMenuAction(word("all", "全部")) { selectScope(.all) }
+                WorkbenchMenu(onCollect != nil && scope == .all ? workflowText(language, state.collectedOnly ? "container.library.collected" : "container.library.all") : scopeTitle) {
+                    if onCollect != nil {
+                        WorkbenchMenuAction(workflowText(language, "container.library.collected")) { state.collectedOnly = true; selectScope(.all) }
+                        WorkbenchMenuAction(workflowText(language, "container.library.all")) { state.collectedOnly = false; selectScope(.all) }
+                    } else { WorkbenchMenuAction(word("all", "全部")) { selectScope(.all) } }
                     WorkbenchMenuForEach(SharedLibraryItemKind.allCases, id: \.self) { kind in WorkbenchMenuAction(kindName(kind)) { selectScope(.kind(kind)) } }
                     WorkbenchMenuForEach(folders) { folder in WorkbenchMenuAction(folder.name) { selectScope(.folder(folder.id)) } }
                     WorkbenchMenuForEach(saved) { saved in WorkbenchMenuAction(saved.name) { selectScope(.saved(saved.id)) } }
@@ -1065,6 +1110,9 @@ public struct SharedLibraryBrowser: View {
     }
 
     @WorkbenchMenuBuilder private func resourceActions(_ entry: SharedLibraryBrowserEntry) -> WorkbenchMenuRows {
+        if let onCollect, entry.item.kind == .asset {
+            WorkbenchMenuAction(workflowText(language, entry.collected ? "container.library.remove" : "container.library.add"), id: "asset.collection") { onCollect([entry], !entry.collected) }
+        }
         if canPreview(entry) { WorkbenchMenuAction(word("viewReadOnly", "在 D 内只读查看")) { dispatch(.preview, key: entry.id) } }
         WorkbenchMenuAction(word("detailsAndTags", "详情、名称与标签…")) { focusedKey = entry.id; compactDetailKey = compact ? entry.id : nil }
         if entry.item.kind == .asset, entry.runtimeValue == nil || entry.runtimeValue?.reference != nil, let onExternalCopy {
@@ -1123,6 +1171,10 @@ public struct SharedLibraryBrowser: View {
             if canPreview(entry) {
                 Button(word("preview", "预览")) { dispatch(.preview, key: entry.id) }
                     .accessibilityIdentifier("shared-library-preview").workbenchHelp("LIB-ENTRY-INFO", target: "entry:\(entry.id):\(entry.selection):\(entry.metadataSnapshot?.instanceID)")
+            }
+            if case .runtime(let source) = entry.collectionSource, let navigation = containerNavigation {
+                Button(workflowText(language, "container.locateSource")) { navigation.source(source.call) }
+                    .accessibilityIdentifier("shared-library-locate-source")
             }
             if SharedLibraryBrowserLogic.allows(.location, entry: entry) {
                 Button(word("location", "查看文件位置…")) { dispatch(.location, key: entry.id) }
@@ -1588,8 +1640,60 @@ public struct SharedLibraryBrowser: View {
         case .prepare: onPrepare(current)
         }
     }
+    private func acceptCollectionDrop(_ values: [WorkflowCanvasTransfer], into target: SharedLibraryBrowserScope) -> Bool {
+        guard onCollect != nil, values.count == 1, let payload = values[0].libraryPayload,
+              let controller = insertionController, controller.assetLibraryOwner == payload.owner else { return false }
+        if case .saved = target { errorMessage = workflowText(language, "container.savedDrop"); return true }
+        if case .tag = target { errorMessage = workflowText(language, "container.tagDrop"); return true }
+        let folder: UUID? = { if case .folder(let id) = target { return id }; return nil }()
+        let requestID = UUID()
+        Task {
+            do {
+                let sources = try await controller.resolveLibraryDrop(payload.items, owner: payload.owner)
+                let id = try await controller.requestCollection(sources, owner: payload.owner, folderID: folder, requestID: requestID)
+                await controller.processCollectionRequests { request in
+                    if let folderID = request.folderID {
+                        try store.addMembers(Set(try request.sources.map { try $0.metadataKey(owner: request.owner, runs: controller.runs) }), to: folderID)
+                    }
+                }
+                if let saved = controller.collectionRequests.first(where: { $0.id == id }), saved.completed {
+                    collectionNotice = workflowText(language, "container.collectedFiltered")
+                    collectedLocation = .init(controller: controller, source: .sources(sources), name: workflowText(language, "container.selected") + " \(sources.count)")
+                } else if let reason = controller.collectionRequests.first(where: { $0.id == id })?.error { errorMessage = reason }
+                else { collectionNotice = workflowText(language, "container.collectionPending") }
+            } catch { errorMessage = error.localizedDescription }
+        }
+        return true
+    }
     private func dragProvider(for key: String) -> NSItemProvider {
         guard let current = entries.first(where: { $0.id == key }) else { return NSItemProvider() }
+        if let controller = insertionController, let owner = controller.assetLibraryOwner, current.item.kind == .asset {
+            let selected = selectedKeys.contains(key) ? visible.filter { selectedKeys.contains($0.id) } : [current]
+            guard !selectedKeys.contains(key) || selected.count == validSelection.count else {
+                errorMessage = workflowText(language, "container.hiddenSelection")
+                return NSItemProvider()
+            }
+            guard !selected.isEmpty, selected.count <= 64, selected.allSatisfy({ $0.item.assetFacts?.projectID == owner.projectID && $0.item.assetFacts?.instanceID == owner.instanceID }) else { return NSItemProvider() }
+            // Capture when dragging starts, not when hover enters a destination.
+            let capture = Task { @MainActor () throws -> Data in
+                var items: [WorkflowLibraryDropItem] = []
+                for entry in selected {
+                    if let source = entry.collectionSource { items.append(.source(source)) }
+                    else if let readPreview { items.append(.original(try await readPreview(entry).token)) }
+                    else { throw WorkflowIssue(workflowText(language, "container.stale")) }
+                }
+                guard controller.assetLibraryOwner == owner else { throw WorkflowIssue(workflowText(language, "container.stale")) }
+                return try WorkflowCanvasTransfer.libraryItems(owner: owner, items: items).encoded()
+            }
+            let provider = NSItemProvider(); provider.suggestedName = selected.count == 1 ? current.item.title : workflowText(language, "container.selected") + " \(selected.count)"
+            provider.registerDataRepresentation(forTypeIdentifier: UTType.workflowCanvasItem.identifier, visibility: .all) { completion in
+                let progress = Progress(totalUnitCount: 1)
+                progress.cancellationHandler = { capture.cancel() }
+                Task { do { completion(try await capture.value, nil); progress.completedUnitCount = 1 } catch { completion(nil, error) } }
+                return progress
+            }
+            return provider
+        }
         return SharedLibraryBrowserLogic.dragProvider(for: current, controller: insertionController)
     }
     private func folderDepth(_ id: UUID) -> Int {

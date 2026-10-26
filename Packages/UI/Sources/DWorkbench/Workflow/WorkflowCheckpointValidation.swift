@@ -900,6 +900,12 @@ private struct CheckpointValidator {
                 switch (interaction, value) {
                 case (.textReview, .asset(let reference)) where reference.kind == .text:
                     try validateAsset(reference)
+                case (.containerReview, _):
+                    guard runtimeNode.operationID == WorkflowAssetContainer.filterID,
+                          value == record.step.inputs["input"] else {
+                        throw WorkflowIssue("Container preview changed its input.")
+                    }
+                    try validateValue(value, port: .init(kinds: [value.kind], required: false), nodeID: step.node.id, name: name)
                 case (.candidateReview, .collection(let candidates))
                     where candidates.allSatisfy({ $0.asset == nil || $0.asset?.kind == .image }):
                     try validateValue(value, port: .init(kinds: [.images], required: false),
@@ -926,7 +932,7 @@ private struct CheckpointValidator {
             }
         }
         if let interaction = registry.definition(for: runtimeNode)?.interaction,
-           [.textReview, .candidateReview].contains(interaction),
+           [.textReview, .candidateReview, .containerReview].contains(interaction),
            [.waiting, .rejected].contains(record.step.status),
            record.step.outputs["preview"] == nil {
             throw WorkflowIssue("A waiting or rejected review record is missing its preview.", nodeID: step.node.id)
@@ -957,7 +963,24 @@ private struct CheckpointValidator {
                 }
             }
         }
+        if let draft = step.containerSelectionDraft {
+            guard step.node.operationID == WorkflowAssetContainer.filterID, let input = step.inputs["input"],
+                  Set(draft).count == draft.count,
+                  Set(draft).isSubset(of: Set(try WorkflowAssetContainer.items(in: input).filter(\.selectable).map(\.id))) else {
+                throw WorkflowIssue("Container draft refers to another value.")
+            }
+        }
+        if let decision = step.decision, step.node.operationID == WorkflowAssetContainer.filterID {
+            try WorkflowAssetContainer.validateDecision(decision, step: step)
+            if [.completed, .partial].contains(step.status) {
+                guard decision.accepted, let output = decision.typedOutput, step.outputs == ["output": output] else {
+                    throw WorkflowIssue("Container output does not equal its saved decision.")
+                }
+            }
+            return
+        }
         if let decision = step.decision {
+            guard decision.selectedItemIDs == nil, decision.typedOutput == nil else { throw WorkflowIssue("Legacy decision has container-only fields.") }
             guard decision.waitingStepID == step.id else {
                 throw WorkflowIssue("A review decision refers to a different waiting stepID.", nodeID: step.node.id)
             }
@@ -1413,6 +1436,7 @@ private struct CheckpointAssetCollector {
             if let decision = task.decision { try collect(datum: decision, depth: 0) }
         }
         if let output = step.decision?.output { try append(output) }
+        if let output = step.decision?.typedOutput { try collect(value: output, depth: 0) }
     }
 
     private mutating func collect(plan: WorkflowPlan, depth: Int) throws {
@@ -1445,6 +1469,7 @@ private struct CheckpointAssetCollector {
     mutating func collect(node: WorkflowNode, depth: Int, includingNestedGraphs: Bool = true) throws {
         try count(depth)
         if let reference = node.assetReference { try append(reference) }
+        for source in node.librarySources ?? [] { if case .asset(let reference) = source { try append(reference) } }
         if let configuration = node.dataConfiguration {
             if let value = configuration.value { try collect(datum: value, depth: depth + 1) }
             for item in configuration.items { try collect(datum: item.value, depth: depth + 1) }

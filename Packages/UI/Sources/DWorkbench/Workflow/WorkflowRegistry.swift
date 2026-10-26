@@ -41,6 +41,21 @@ public struct WorkflowRegistry: Sendable {
                 .init($0.name, $0.name, kinds: $0.type.portKinds, required: $0.required)
             }
         }
+        if [WorkflowAssetContainer.previewID, WorkflowAssetContainer.filterID].contains(node.operationID),
+           let kind = node.parameters["kind"]?.string.flatMap(WorkflowDataKind.init(rawValue:)) {
+            result.inputs = [.init("input", "资产", kinds: [kind])]
+            result.outputs = [.init("output", "资产", kinds: [kind])]
+        }
+        if node.operationID == WorkflowAssetContainer.sourceID {
+            if node.librarySources != nil {
+                result.outputs = node.parameters["kind"]?.string.flatMap(WorkflowDataKind.init(rawValue:)).map { [.init("output", "资产", kinds: [$0])] } ?? []
+            } else if let value = node.dataConfiguration?.value {
+                result.outputs = [.init("output", "资产", kinds: [value.kind])]
+            } else if let items = node.dataConfiguration?.items, let schema = items.first?.value.schema,
+                      items.allSatisfy({ $0.value.schema == schema }) {
+                result.outputs = [.init("output", "资产列表", kinds: [.list])]
+            } else { result.outputs = [] } // A mixed preview never invents an Any port.
+        }
         if node.operationID == "d.value.input", let value = node.dataConfiguration?.value {
             result.outputs = [.init("output", "值", kinds: [value.kind])]
         }
@@ -105,6 +120,10 @@ public struct WorkflowRegistry: Sendable {
         guard connectionIDs.count == graph.connections.count else { throw WorkflowIssue("连接身份重复。") }
         let layoutIDs = Set(graph.layout.map(\.nodeID))
         guard layoutIDs.count == graph.layout.count else { throw WorkflowIssue("节点布局重复。") }
+        guard graph.layout.allSatisfy({ item in
+            item.x.isFinite && item.y.isFinite && (item.width.map { $0.isFinite && (300...1200).contains($0) } ?? true)
+                && (item.height.map { $0.isFinite && (280...1000).contains($0) } ?? true)
+        }) else { throw WorkflowIssue("Invalid node presentation size.") }
         guard layoutIDs.isSubset(of: nodeIDs) else { throw WorkflowIssue("布局引用了不存在的节点。") }
 
         for node in graph.nodes { try validate(node) }
@@ -232,6 +251,10 @@ public struct WorkflowRegistry: Sendable {
             canonical.append(node.operationID)
             canonical.append(String(node.definitionVersion))
             let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+            if let sources = node.librarySources {
+                canonical.append("librarySources-v1")
+                canonical.append(String(decoding: try encoder.encode(sources), as: UTF8.self))
+            }
             if let configuration = node.dataConfiguration {
                 canonical.append("dataConfiguration-v1")
                 canonical.append(String(decoding: try encoder.encode(configuration), as: UTF8.self))

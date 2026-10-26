@@ -53,6 +53,28 @@ public struct DualWorkbenchView: View {
     @State private var fullLibraryState = SharedLibraryBrowserState()
     @State private var canvasLibraryStates: [WorkflowCanvasLibraryMode:SharedLibraryBrowserState] =
         Dictionary(uniqueKeysWithValues: [WorkflowCanvasLibraryMode.nodes,.programs,.assets,.text,.image,.video,.audio,.data].map { ($0,SharedLibraryBrowserState()) })
+    private struct LibraryNavigationState {
+        let modes: [WorkflowCanvasLibraryMode: SharedLibraryBrowserState]
+        let full: SharedLibraryBrowserState
+    }
+    @State private var libraryNavigationOwner: UUID?
+    @State private var libraryNavigationHistory: [UUID: LibraryNavigationState] = [:]
+    @State private var libraryNavigationOrder: [UUID] = []
+    private func changeLibraryNavigationOwner(_ next: UUID?) {
+        guard next != libraryNavigationOwner else { return }
+        if let old = libraryNavigationOwner {
+            libraryNavigationHistory[old] = .init(modes: canvasLibraryStates, full: fullLibraryState)
+            libraryNavigationOrder.removeAll { $0 == old }; libraryNavigationOrder.append(old)
+        }
+        if let next, let saved = libraryNavigationHistory[next] {
+            canvasLibraryStates = saved.modes; fullLibraryState = saved.full
+        } else {
+            canvasLibraryStates = Dictionary(uniqueKeysWithValues: [WorkflowCanvasLibraryMode.nodes,.programs,.assets,.text,.image,.video,.audio,.data].map { ($0,SharedLibraryBrowserState()) })
+            fullLibraryState = SharedLibraryBrowserState()
+        }
+        libraryNavigationOwner = next
+        while libraryNavigationOrder.count > 4 { libraryNavigationHistory.removeValue(forKey: libraryNavigationOrder.removeFirst()) }
+    }
     @State private var pendingLegacyPreview:SharedLibraryBrowserEntry?
     @State private var compactLibraryState = SharedLibraryBrowserState()
     @State private var previewAsset: LibraryAssetPreview?
@@ -102,6 +124,7 @@ public struct DualWorkbenchView: View {
     @State private var expandedLibraryForCanvas = false
     @State private var legacyInstance: UUID?
     @State private var legacyName = ""
+    @State private var expandedContainerNavigation: WorkflowContainerNavigation?
     @State private var expandedLibraryContext: WorkflowLibraryContext?
     @State private var clearExpandedContext: () -> Void = {}
     private var quickImportTitle: String { quickModel === automaticQuickModel ? layoutText(language, "independent") : (quickModel.manifest?.name ?? "—") }
@@ -110,6 +133,12 @@ public struct DualWorkbenchView: View {
         if usesTemporaryChat { return layoutText(language, "temporary") }
         if displayedOwner === automaticQuickModel { return layoutText(language, "independent") }
         return displayedOwner.manifest?.name ?? layoutText(language, "independent")
+    }
+    private var expandedLibraryNavigation: WorkflowContainerNavigation? {
+        guard expandedLibraryForCanvas, let navigation = expandedContainerNavigation else { return nil }
+        return .init(reveal: { context in expandedLibraryContext = context }, source: { call in
+            libraryVisible = false; navigation.source(call)
+        })
     }
     private func openLibrary(_ mode: WorkflowCanvasLibraryMode, forCanvas: Bool, context: WorkflowLibraryContext? = nil, clearContext: @escaping () -> Void = {}) {
         expandedLibraryContext = context; clearExpandedContext = clearContext
@@ -511,7 +540,10 @@ public struct DualWorkbenchView: View {
                 }
                 RetainedContentHost(content: WorkflowHostView(model: canvasModel, nodeTags: nodeTags, metadata: metadata, library: library, onQuickUse: useNode,
                     libraryContent: canvasLibraryContent,
-                    onExpandLibrary: { mode, context, clear in openLibrary(mode, forCanvas: true, context: context, clearContext: clear) },
+                    onExpandLibrary: { mode, context, clear, navigation in
+                        expandedContainerNavigation = navigation
+                        openLibrary(mode, forCanvas: true, context: context, clearContext: clear)
+                    },
                     onImportLibraryAsset: { beginLibraryImport(forCanvas: true) },
                     onSharedAssetDrop: acceptSharedAssetDrop,
                     acceptsLegacyAsset: { projectID, assetID in
@@ -564,6 +596,7 @@ public struct DualWorkbenchView: View {
         .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences)
         .preferredColorScheme(automaticQuickModel.chatDisplaySettings.preferences.preferredColorScheme)
         .onAppear { consumeSettingsRequest() }
+        .onChange(of: canvasModel.manifest?.effectiveInstanceID, initial: true) { _, owner in changeLibraryNavigationOwner(owner) }
         .onChange(of: settingsRequest) { _, _ in consumeSettingsRequest() }
         .onChange(of: canPresentSettings) { _, ready in if ready { consumeSettingsRequest() } }
         .workbenchSheet(isPresented: $settingsVisible, title: workflowText(language, "childPanel.name.settings"), onDismiss: finishSettingsDismissal) {
@@ -598,6 +631,7 @@ public struct DualWorkbenchView: View {
                 }
                 libraryBrowser(compact: false, at: { CGPoint(x: 160, y: 140) }, canvasMode: expandedLibraryMode, forCanvas: expandedLibraryForCanvas)
                     .environment(\.workflowLibraryContext, expandedLibraryContext)
+                    .environment(\.workflowContainerNavigation, expandedLibraryNavigation)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .task { await refreshLibrary(checkModels: true) }
@@ -832,10 +866,12 @@ public struct DualWorkbenchView: View {
                 _ = entries // Refresh the complete semantic inputs before selecting.
                 return libraryProjection.selection(canvasMode: canvasMode, family: canvasMode == .nodes || compact ? nil : modelPickerCategory)
             }()
+            let collectAction: (([SharedLibraryBrowserEntry], Bool) -> Void)? = canvasMode?.resourceCategory == nil ? nil : { values, collect in collectLibraryEntries(values, collect) }
             SharedLibraryBrowser(entries: sourceEntries, store: metadata, compact: compact, allowsImport: canvasMode?.resourceCategory != nil, canvasMode:canvasMode,
                 scopeDescription: ([model.manifest?.name, automaticQuickModel.manifest == nil ? nil : layoutText(language, "independent")].compactMap { $0 }).joined(separator: " · "),
                 importTargetDescription: forCanvas ? canvasModel.manifest?.name ?? "—" : quickImportTitle,
                 state: canvasMode.flatMap { canvasLibraryStates[$0] } ?? (compact ? compactLibraryState : fullLibraryState),
+                onCollect: collectAction,
                 onUse: useLibraryEntry, onAdd: { value in
                     guard let insertionPoint = point() else { return }
                     beginAddingLibraryEntry(value, at: insertionPoint)
@@ -860,11 +896,43 @@ public struct DualWorkbenchView: View {
         }
     }
     private var workspaceAssetEntries:[SharedLibraryBrowserEntry] {
-        let saved=entries.filter { $0.item.kind == .asset }
-        guard let controller=canvasModel.projectSession.workflow else { return saved }
+        guard let controller = canvasModel.projectSession.workflow else { return [] }
+        let saved = entries.filter { $0.item.kind == .asset && $0.metadataSnapshot?.projectID == controller.projectID && $0.metadataSnapshot?.instanceID == controller.projectInstanceID }
         let references=Set(saved.compactMap { $0.metadataSnapshot?.record?.reference })
         let projected=WorkflowLibraryValue.entries(controller,language:language,excludingSaved:references,library:metadata,indexedSaved:saved.compactMap(\.metadataSnapshot))
-        return saved+projected
+        let regular = (saved + projected).map { entry in
+            var result = entry
+            if let snapshot = entry.metadataSnapshot {
+                result.collected = controller.assetCollection?.contains(asset: snapshot.asset) ?? true
+                result.collectionSource = snapshot.record.map { .asset($0.reference) }
+            } else if let runtime = entry.runtimeValue, let record = controller.runs.first(where: { $0.id == runtime.call.address.runID })?.planCheckpoint?.records.first(where: { $0.id == runtime.call.stepID }),
+                      let source = try? WorkflowRuntimeAssetSource.capture(record, port: runtime.port) {
+                result.collectionSource = runtime.reference.map(WorkflowLibrarySource.asset) ?? .runtime(source)
+                result.collected = result.collectionSource.map(controller.isCollected) ?? false
+            }
+            return result
+        }
+        let visibleSources = Set(regular.compactMap { $0.collectionSource?.key })
+        return regular + WorkflowLibraryValue.collectedEntries(controller, language: language, library: metadata).filter { !visibleSources.contains($0.collectionSource?.key ?? "") }
+    }
+    private func collectLibraryEntries(_ values: [SharedLibraryBrowserEntry], _ collect: Bool) {
+        guard let controller = canvasModel.projectSession.workflow, let owner = controller.assetLibraryOwner else { return }
+        let validations = values.map(libraryTagValidation)
+        Task {
+            do {
+                var sources: [WorkflowLibrarySource] = []
+                for (value, validate) in zip(values, validations) {
+                    try validate()
+                    if let source = value.collectionSource { sources.append(source) }
+                    else if let asset = value.metadataSnapshot {
+                        sources.append(.asset(try await controller.services.store.pinWorkflowAsset(asset.asset.id)))
+                    } else { throw WorkflowIssue(workflowText(language, "container.stale")) }
+                }
+                for validate in validations { try validate() }
+                try await controller.setCollected(sources, collected: collect, owner: owner)
+                await refreshLibrary(checkModels: false)
+            } catch { controller.errorMessage = error.localizedDescription }
+        }
     }
     private func libraryTagValidation(_ value: SharedLibraryBrowserEntry) -> () throws -> Void {
         let intent = navigationIntent
@@ -1077,7 +1145,7 @@ public struct DualWorkbenchView: View {
         guard let previewWindow = commandScope.window, previewWindow.isKeyWindow else { return }
         if let runtime=value.runtimeValue {
             guard let controller=canvasModel.projectSession.workflow,runtime.isCurrent(in:controller) else { issue=t("runtimeUnavailable");return }
-            do { canvasModel.viewers.library=metadata;try canvasModel.viewers.open(.init(title:value.item.title,subtitle:value.item.detail,value:runtime.value,call:runtime.call,port:runtime.port,usesCallTitle: true),model:canvasModel,language:language,ownerWindow:previewWindow) }
+            do { canvasModel.viewers.library=metadata;try canvasModel.viewers.open(.init(title:value.item.title,subtitle:value.item.detail,value:runtime.value,call:runtime.call,port:runtime.port,usesCallTitle: true,runtimeSource:runtime.source),model:canvasModel,language:language,ownerWindow:previewWindow) }
             catch { issue=error.localizedDescription }
             return
         }
@@ -1292,6 +1360,12 @@ public struct DualWorkbenchView: View {
                                  owner: ProjectSession, controller: WorkflowController, scope: WorkflowCanvasInsertionTarget, navigationIntent intent: UUID, wasLibraryVisible: Bool) async {
         guard canvasModel.projectSession === owner, owner.workflow === controller, controller.isCurrent(scope) else { return }
         do {
+            if let source = value.collectionSource, let libraryOwner = controller.assetLibraryOwner {
+                try libraryTagValidation(value)()
+                try await controller.insertLibrarySources([source], owner: libraryOwner, target: scope, x: point.x, y: point.y)
+                if canvasModel.projectSession === owner, owner.workflow === controller, navigationIntent == intent, libraryVisible == wasLibraryVisible { libraryVisible = false; navigate(to: .workflow) }
+                return
+            }
             switch value.selection {
             case .operation(let id, let modelID): controller.addNode(operationID: id, modelID: modelID, x: point.x, y: point.y)
             case .tool(let reference):

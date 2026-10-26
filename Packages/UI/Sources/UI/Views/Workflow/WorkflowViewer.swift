@@ -16,6 +16,7 @@ struct WorkflowViewerTarget {
     var port: String? = nil
     var side: WorkflowViewerValueSide = .output
     var usesCallTitle = false
+    var runtimeSource: WorkflowRuntimeAssetSource? = nil
 }
 
 struct WorkflowViewerCallIdentity:Hashable {
@@ -104,6 +105,10 @@ struct WorkflowViewerCallIdentity:Hashable {
     }
     var runtimeAnnotationTarget: WorkflowLibraryValue? {
         if editingAnnotations { return editingRuntimeTarget }
+        if let source = target.runtimeSource, let value = target.value, value.asset == nil, exactRecord != nil {
+            return .init(projectID: projectID, instanceID: instanceID, call: source.call, port: source.port, value: value,
+                createdAt: controller?.runs.first { $0.id == source.call.address.runID }?.createdAt ?? Date(timeIntervalSince1970: 0), source: source)
+        }
         guard target.side == .output, let call = target.call, let port = target.port,
               let value = target.value, value.asset == nil, exactRecord != nil else { return nil }
         return .init(projectID: projectID, instanceID: instanceID, call: call, port: port, value: value, createdAt: controller?.runs.first { $0.id == call.address.runID }?.createdAt ?? Date(timeIntervalSince1970: 0))
@@ -259,6 +264,7 @@ struct WorkflowViewerCallIdentity:Hashable {
         guard canRead, !suspended, let controller, let call=target.call,
               let run=controller.runs.first(where: { $0.id == call.address.runID }) else { return nil }
         guard let record = WorkflowWorkspacePanels.records(in:run).first(where: { $0.address == call.address && $0.id == call.stepID }) else { return nil }
+        if let source = target.runtimeSource { return (try? source.resolve(in: controller.runs)) == target.value ? record : nil }
         if let port = target.port {
             let expected = target.side == .input ? record.step.inputs[port] : record.step.outputs[port]
             guard expected == target.value else { return nil }

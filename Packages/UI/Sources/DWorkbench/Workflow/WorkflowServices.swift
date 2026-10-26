@@ -152,6 +152,13 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         }
     }
 
+    public func resolveLibrarySources(_ sources: [WorkflowLibrarySource]) async throws -> [WorkflowValue] {
+        let state = try await store.workflowState()
+        let values = try WorkflowAssetContainer.sourceValues(sources, runs: state.archive?.runs ?? [])
+        for value in values { for reference in WorkflowAssetContainer.references(in: value) { try await verifyAsset(reference) } }
+        return values
+    }
+
     public func prepare(_ graph: WorkflowGraph, nodes: [UUID]) async throws -> WorkflowGraph {
         guard bindings.isEmpty else { throw WorkflowIssue("上一运行的模型使用权尚未释放。") }
         cancelled = false
@@ -254,7 +261,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
             await finish()
             switch result {
             case .outputs: activity.end(phase: "completed")
-            case .reviewText, .choose, .humanTask: activity.end(phase: "waiting")
+            case .reviewText, .choose, .reviewValue, .humanTask: activity.end(phase: "waiting")
             }
             // A published result survives cancellation during lease release. The interpreter
             // persists it before honoring stop, so a later resume cannot generate it twice.

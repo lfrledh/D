@@ -418,6 +418,15 @@ import Foundation
                 record.step.status = .waiting
             }
             try await wait()
+        case .reviewValue(let value):
+            guard node.operationID == WorkflowAssetContainer.filterID, inputs["input"] == value else {
+                throw WorkflowIssue("Container preview is not its frozen input.")
+            }
+            try updateRecord(at: address) { record in
+                record.step.outputs = ["preview": value]
+                record.step.status = .waiting
+            }
+            try await wait()
         case .humanTask(let task):
             guard task.id == current.step.id else {
                 throw WorkflowIssue("人工任务身份必须等于本次实际 stepID。", nodeID: node.id)
@@ -463,6 +472,20 @@ import Foundation
         }
 
         guard let decision = current.step.decision else { try await wait() }
+        if current.step.node.operationID == WorkflowAssetContainer.filterID {
+            try WorkflowAssetContainer.validateDecision(decision, step: current.step)
+            guard decision.accepted, let value = decision.typedOutput else {
+                try updateRecord(at: address) { record in record.step.status = .rejected }
+                try await cancelPlan(reason: "Container branch rejected")
+            }
+            let outputs = ["output": value]
+            try validateOutputs(outputs, for: planned)
+            try updateRecord(at: address) { record in
+                record.step.outputs = outputs; record.step.status = .completed; record.step.error = nil
+            }
+            try await persist(); try await honorRequests()
+            return outputs
+        }
         guard decision.accepted, let output = decision.output else {
             try updateRecord(at: address) { record in
                 record.step.status = .rejected
@@ -796,6 +819,8 @@ import Foundation
             var newStep = new.step
             oldStep.decision = nil
             newStep.decision = nil
+            oldStep.containerSelectionDraft = nil
+            newStep.containerSelectionDraft = nil
             oldStep.reviewTextDraft = nil
             newStep.reviewTextDraft = nil
             if var oldTask = oldStep.humanTask, var newTask = newStep.humanTask {

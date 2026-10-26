@@ -260,7 +260,7 @@ public enum WorkflowLanguageExamples {
         return .init(name: "生成单主题三图并处理成功项", graph: graph)
     }
 
-    private static func imageProcessingBody() throws -> WorkflowGraph {
+    static func imageProcessingBody() throws -> WorkflowGraph {
         let input = try requiredPublicInput("item", schema: .asset(.image), title: "成功图片")
         var resize = try node("d.image.resize", title: "明确调整尺寸")
         resize.parameters["width"] = .integer(768)

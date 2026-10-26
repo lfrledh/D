@@ -1,6 +1,42 @@
 import Foundation
 
 public enum WorkflowExamples {
+    /// New editable example only. Historical graphs and legacy examples keep
+    /// their original IDs, ports and editable text/single-choice semantics.
+    public static func assetReview() -> WorkflowGraph {
+        var generate = node(WorkflowModelRoutes.qwen35, title: "Qwen3.5-9B")
+        generate.parameters["task"] = .text("Write one short exhibition title, under eight words. Return only the title.")
+        generate.parameters["maximumPromptTokens"] = .integer(512)
+        generate.parameters["maximumOutputTokens"] = .integer(64)
+        generate.parameters["thinking"] = .text("off")
+        var first = node(WorkflowAssetContainer.filterID, title: "资产容器 A")
+        first.dataConfiguration = .init(schema: .text)
+        var template = node("d.text.template", title: "标题模板")
+        template.parameters["template"] = .text("Selected title: {{input}}")
+        let second = node(WorkflowAssetContainer.filterID, title: "资产容器 B")
+        return WorkflowGraph(name: "生成、筛选与继续", nodes: [generate, first, template, second],
+            connections: [connect(generate, first), connect(first, template), connect(template, second)],
+            layout: [place(generate, 120, 120), place(first, 480, 120), place(template, 900, 120), place(second, 1260, 120)])
+    }
+
+    public static func imageContainerReview() throws -> WorkflowGraph {
+        var prompt = node("d.text.input", title: "图像提示")
+        prompt.parameters["text"] = .text("A quiet studio filled with morning light")
+        var generate = node("d.image.generate", title: "生成图像组")
+        generate.parameters["count"] = .integer(6)
+        var filter = node(WorkflowAssetContainer.filterID, title: "筛选图像组")
+        filter.parameters["kind"] = .text("images")
+        let candidates = node("d.value.candidates", title: "候选转列表")
+        var map = node("d.control.map", title: "逐项处理图片")
+        map.control = .map(body: try WorkflowLanguageExamples.imageProcessingBody(), continueOnFailure: true)
+        var preview = node(WorkflowAssetContainer.previewID, title: "查看处理结果")
+        preview.parameters["kind"] = .text("list")
+        return WorkflowGraph(name: "图像组筛选与逐项处理", nodes: [prompt, generate, filter, candidates, map, preview],
+            connections: [connect(prompt, generate, targetPort: "prompt"), connect(generate, filter), connect(filter, candidates),
+                .init(sourceNode: candidates.id, sourcePort: "successful", targetNode: map.id), connect(map, preview)],
+            layout: [place(prompt, 120, 120), place(generate, 420, 120), place(filter, 780, 120), place(candidates, 1200, 120), place(map, 1500, 120), place(preview, 1860, 120)])
+    }
+
     public static func text() -> WorkflowGraph {
         var input = node("d.text.input", title: "原文")
         input.parameters["text"] = .text("Write a short introduction for a local exhibition.")

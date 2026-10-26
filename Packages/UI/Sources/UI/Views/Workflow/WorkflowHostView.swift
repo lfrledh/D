@@ -11,7 +11,7 @@ struct WorkflowHostView: View {
     var library: ModelLibraryModel? = nil
     var onQuickUse: ((WorkflowNode) -> Void)? = nil
     var libraryContent: ((WorkflowCanvasLibraryMode, @escaping () -> CGPoint?, @escaping () -> Void) -> AnyView)? = nil
-    var onExpandLibrary: ((WorkflowCanvasLibraryMode, WorkflowLibraryContext?, @escaping () -> Void) -> Void)? = nil
+    var onExpandLibrary: ((WorkflowCanvasLibraryMode, WorkflowLibraryContext?, @escaping () -> Void, WorkflowContainerNavigation) -> Void)? = nil
     var onImportLibraryAsset: (() -> Void)? = nil
     var onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
     var acceptsLegacyAsset: ((UUID, UUID) -> Bool)? = nil
@@ -49,6 +49,15 @@ struct WorkflowHostView: View {
                     destinationEnabled: !model.isBusy && !model.isChangingProject && controller.readOnlyReason == nil)
                     .expandingLibrary(onExpandLibrary)
                     .environment(\.workflowViewerModel,model)
+                    .environment(\.workflowContainerLibrary,metadata)
+                    .task(id: "collection:\(controller.collectionRequests.last?.id ?? "none"):\(controller.isRunning):\(controller.hasPendingSaves)") {
+                        await controller.processCollectionRequests { request in
+                            guard let folder = request.folderID else { return }
+                            guard let metadata, model.projectSession.workflow === controller, controller.assetLibraryOwner == request.owner else { throw SharedLibraryError.staleAnnotation }
+                            let keys = try Set(request.sources.map { try $0.metadataKey(owner: request.owner, runs: controller.runs) })
+                            try metadata.addMembers(keys, to: folder)
+                        }
+                    }
                     .environment(\.workflowPrepareNode, preparationAction(controller: controller))
                     .environment(\.workflowPreparingModels, library?.preparingNodeIdentities ?? [])
                     .environment(\.workflowModelPreparation, library?.nodePreparationPresentation)
