@@ -54,12 +54,15 @@ public enum SharedLibraryBrowserScope: Hashable {
     case all, kind(SharedLibraryItemKind), tag(UUID), folder(UUID), saved(UUID)
 }
 
+enum SharedLibraryAssetSort: String, CaseIterable { case source, nameAscending, nameDescending }
+
 /// The caller owns one instance per browser surface so closing a view does not erase its place.
 @MainActor @Observable
 public final class SharedLibraryBrowserState {
     public var query: SharedLibraryQuery
     public var draftText: String
     public var collectedOnly = true
+    var assetSort: SharedLibraryAssetSort = .source
     public var operationPath: [String] = []
     var modelModality: CreatorMode?
     var collapsedModelFamilies: Set<String> = []
@@ -219,7 +222,8 @@ struct SharedLibraryBrowserRenameDrafts {
 
     static func visibleEntries(
         _ entries: [SharedLibraryBrowserEntry], store: SharedLibraryStore,
-        query: SharedLibraryQuery, scope: SharedLibraryBrowserScope, context: SharedLibraryQueryContext = .init()
+        query: SharedLibraryQuery, scope: SharedLibraryBrowserScope, context: SharedLibraryQueryContext = .init(),
+        collectedOnly: Bool = false, sort: SharedLibraryAssetSort = .source
     ) throws -> [SharedLibraryBrowserEntry] {
         let scopeKeys: Set<String>
         switch scope {
@@ -235,11 +239,18 @@ struct SharedLibraryBrowserRenameDrafts {
             guard let folder = store.metadata.folders[id] else { throw SharedLibraryError.missingFolder }
             scopeKeys = Set(entries.filter { folder.memberKeys.contains($0.item.key) }.map(\.id))
         }
-        return entries.filter { entry in
+        let result = entries.filter { entry in
+            if scope == .all && collectedOnly && !entry.collected { return false }
             guard scopeKeys.contains(entry.id), store.matches(entry.item, query: query, context: context) else { return false }
             if case .kind(let kind) = scope { return entry.item.kind == kind }
             return true
         }
+        guard sort != .source else { return result }
+        return result.enumerated().sorted { a, b in
+            let order = a.element.item.title.localizedStandardCompare(b.element.item.title)
+            if order == .orderedSame { return a.offset < b.offset }
+            return sort == .nameAscending ? order == .orderedAscending : order == .orderedDescending
+        }.map(\.element)
     }
 
     static func tagEditEntries(_ ids: Set<String>, in entries: [SharedLibraryBrowserEntry]) -> [SharedLibraryBrowserEntry] {
@@ -377,6 +388,8 @@ public struct SharedLibraryBrowser: View {
     private let queryContext: SharedLibraryQueryContext
     private let annotationSave: (SharedLibraryBrowserEntry) -> SharedLibraryAnnotationSave?
     private let tagValidation: (SharedLibraryBrowserEntry) -> (() throws -> Void)
+    private var captureFileImport: (() -> WorkbenchAssetImportCommand?)?
+    private var headerOnly = false
 
     @Environment(\.dLanguageStore) private var language
     @Environment(\.workflowLibraryContext) private var workflowContext
@@ -440,6 +453,11 @@ public struct SharedLibraryBrowser: View {
         self.tagValidation = tagValidation; self.queryContext = queryContext; self.annotationSave = annotationSave
     }
 
+    func importingFiles(_ capture: @escaping () -> WorkbenchAssetImportCommand?) -> Self {
+        var copy = self; copy.captureFileImport = capture; return copy
+    }
+    func headerActionsOnly(_ value: Bool) -> Self { var copy = self; copy.headerOnly = value; return copy }
+
     private var query: SharedLibraryQuery {
         get { state.effectiveQuery(using: store) }
         nonmutating set {
@@ -485,13 +503,15 @@ public struct SharedLibraryBrowser: View {
     private var visibleResult: Result<[SharedLibraryBrowserEntry], Error> {
         Result {
             let eligible = entries.filter { entry in
-                if onCollect != nil && state.collectedOnly && workflowContext == nil && !entry.collected { return false }
                 guard let workflowContext else { return true }
                 return insertionController.map { workflowContext.isCurrent(in: $0) } == true && workflowContext.includes(entry)
             }
             let search = canvasMode == .nodes ? eligible.map { SharedModelLibraryCard.searchEntry($0, language: language) } : eligible
-            let ids = Set(try SharedLibraryBrowserLogic.visibleEntries(search, store: store, query: query, scope: scope, context: queryContext).map(\.id))
-            return eligible.filter { ids.contains($0.id) }
+            let matches = try SharedLibraryBrowserLogic.visibleEntries(search, store: store, query: query, scope: scope, context: queryContext,
+                collectedOnly: onCollect != nil && state.collectedOnly && workflowContext == nil,
+                sort: onCollect != nil ? state.assetSort : .source)
+            let originals = Dictionary(eligible.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            return matches.compactMap { originals[$0.id] }
         }
     }
     private var visible: [SharedLibraryBrowserEntry] { (try? visibleResult.get()) ?? [] }
@@ -511,6 +531,9 @@ public struct SharedLibraryBrowser: View {
     }
 
     public var body: some View {
+        Group {
+        if headerOnly { searchMore }
+        else {
         VStack(spacing: 0) {
             if !compact { header }
             if let errorMessage {
@@ -555,12 +578,42 @@ public struct SharedLibraryBrowser: View {
                 }
             }
         }
-        .dropDestination(for: WorkflowCanvasTransfer.self) { values, _ in
-            acceptCollectionDrop(values, into: scope)
+        }
+        }
+        .onDrop(of: [.workflowCanvasItem, .fileURL], isTargeted: nil) { providers, _ in
+            guard !headerOnly, contentVisible, providers.count == 1, let provider = providers.first else { return false }
+            let custom = provider.hasItemConformingToTypeIdentifier(UTType.workflowCanvasItem.identifier)
+            guard !custom || onCollect != nil else { return false }
+            let capturedScope = scope, capturedOwner = insertionController?.assetLibraryOwner
+            let command = custom ? nil : captureFileImport?()
+            guard custom || command != nil else { return false }
+            Task { @MainActor in
+                do {
+                    let load: () async throws -> Data = {
+                        try await withCheckedThrowingContinuation { continuation in
+                            provider.loadDataRepresentation(forTypeIdentifier: custom ? UTType.workflowCanvasItem.identifier : UTType.fileURL.identifier) { data, error in
+                                if let data { continuation.resume(returning: data) }
+                                else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)) }
+                            }
+                        }
+                    }
+                    if custom {
+                        let bytes = try await load()
+                        guard contentVisible, scope == capturedScope, insertionController?.assetLibraryOwner == capturedOwner else { throw SharedLibraryError.staleAnnotation }
+                        guard acceptCollectionDrop([try WorkflowCanvasTransfer.decode(bytes)], into: capturedScope) else { throw SharedLibraryError.staleAnnotation }
+                    } else if let command {
+                        _ = try await command.perform {
+                            guard let url = URL(dataRepresentation: try await load(), relativeTo: nil), url.isFileURL else { throw CocoaError(.fileReadUnsupportedScheme) }
+                            return (url, .copy)
+                        }
+                    }
+                } catch { errorMessage = sharedLibraryErrorText(error, language: language) }
+            }
+            return true
         }
         .background(WorkbenchCommandWindow(scope: commandScope))
-        .focusable().focusEffectDisabled().focused($selectionFocused)
-        .focusedValue(\.workbenchAssetExport, exportMenuCommand)
+        .focusable(!headerOnly).focusEffectDisabled().focused($selectionFocused)
+        .focusedValue(\.workbenchAssetExport, headerOnly ? nil : exportMenuCommand)
         .onChange(of: entryKeyboardFocus) { _, value in
             if let value, visible.contains(where: { $0.id == value }) { focusedKey = value }
         }
@@ -570,6 +623,7 @@ public struct SharedLibraryBrowser: View {
             dispatch(.preview, key: entry.id); return .handled
         }
         .workflowKeyboardCommands { command in
+            guard !headerOnly else { return false }
             switch command {
             case .search: searchFocused = true; return true
             case .tags: showTags = true; return true
@@ -583,6 +637,10 @@ public struct SharedLibraryBrowser: View {
         .workbenchSheet(item: $featureHelp.presentation, title: workflowText(language, "childPanel.name.help")) { WorkbenchFeatureGuide(presentation: $0, store: featureHelp).environment(\.dLanguageStore, language) }
         .environment(\.workbenchMenuContext, "library:\(ObjectIdentifier(store)):\(ObjectIdentifier(state)):\(queryContext.projectID?.uuidString ?? "none"):\(queryContext.instanceID?.uuidString ?? "none")")
         .modifier(LibraryPanelSurface(enabled: !compact))
+        .workbenchPopover(isPresented: $showFilters, title: workflowText(language, "childPanel.name.filters"), arrowEdge: .bottom) { filterPopover }
+        .workbenchSheet(isPresented: Binding(get: { headerOnly && errorMessage != nil }, set: { if !$0 { errorMessage = nil } }), title: word("unavailable", "当前不可用")) {
+            Text(errorMessage ?? "").textSelection(.enabled).padding(24).frame(width: 420)
+        }
         .workbenchSheet(item: $saveQueryRequest, title: workflowText(language, "childPanel.name.query")) { request in SharedLibrarySaveQuerySheet(request: request, store: store) { saveQueryRequest = nil } }
         .workbenchSheet(isPresented: $showOrganizer, title: workflowText(language, "childPanel.name.organizer")) { organizer }
         .workbenchSheet(item: $tagRequest, title: workflowText(language, "childPanel.name.tags")) { request in
@@ -636,6 +694,7 @@ public struct SharedLibraryBrowser: View {
                 Button(action: onImport) { Image(systemName: "square.and.arrow.down") }
                     .help(layoutText(language, "importAsset") + " · " + importTargetDescription).accessibilityLabel(layoutText(language, "importAsset"))
             }
+            if onCollect != nil { searchMore }
             Button { showOrganizer = true } label: { Image(systemName: "square.stack.3d.up") }
                 .help(word("organize", "整理资料库")).accessibilityLabel(word("organize", "整理资料库")).workbenchHelp("MENU-LIBRARY-MANAGE")
             Button { perform { try store.undo() } } label: { Image(systemName: "arrow.uturn.backward") }
@@ -914,12 +973,10 @@ public struct SharedLibraryBrowser: View {
                 TextField(word("search", "搜索名称、说明或我的标签"), text: searchTextBinding)
                     .textFieldStyle(.plain).focused($searchFocused).onSubmit { submitSearch() }
                     .accessibilityIdentifier("shared-library-search").workbenchHelp("LIB-SEARCH")
-                Button { showTags.toggle() } label: { Image(systemName: "tag").padding(6).contentShape(Rectangle()) }
-                    .buttonStyle(.plain).accessibilityLabel(word("conditions", "条件"))
-                    .workbenchPopover(isPresented: $showTags, title: workflowText(language, "childPanel.name.tags"), arrowEdge: .bottom) { queryTagPopover }
+                if onCollect == nil { tagSearchControl }
                 Button { submitSearch() } label: { Image(systemName: "magnifyingglass").padding(6).contentShape(Rectangle()) }
                     .buttonStyle(.plain).accessibilityLabel(word("searchNow", "搜索"))
-                searchMore
+                if onCollect == nil { searchMore }
             }.padding(7).workbenchInputSurface()
             if state.hasUnsubmittedText {
                 Text(word("searchPending", "待搜索 · 当前仍显示上次搜索结果")).font(.caption2).foregroundStyle(.secondary)
@@ -931,13 +988,20 @@ public struct SharedLibraryBrowser: View {
                         WorkbenchMenuAction(workflowText(language, "container.library.collected")) { state.collectedOnly = true; selectScope(.all) }
                         WorkbenchMenuAction(workflowText(language, "container.library.all")) { state.collectedOnly = false; selectScope(.all) }
                     } else { WorkbenchMenuAction(word("all", "全部")) { selectScope(.all) } }
-                    WorkbenchMenuForEach(SharedLibraryItemKind.allCases, id: \.self) { kind in WorkbenchMenuAction(kindName(kind)) { selectScope(.kind(kind)) } }
+                    if onCollect == nil { WorkbenchMenuForEach(SharedLibraryItemKind.allCases, id: \.self) { kind in WorkbenchMenuAction(kindName(kind)) { selectScope(.kind(kind)) } } }
                     WorkbenchMenuForEach(folders) { folder in WorkbenchMenuAction(folder.name) { selectScope(.folder(folder.id)) } }
                     WorkbenchMenuForEach(saved) { saved in WorkbenchMenuAction(saved.name) { selectScope(.saved(saved.id)) } }
                 }.font(.caption)
-                Group {
-                    Spacer(minLength: 0)
-
+                if onCollect != nil { tagSearchControl }
+                Spacer(minLength: 0)
+                if onCollect != nil {
+                    WorkbenchMenu {
+                        WorkbenchMenuForEach(SharedLibraryAssetSort.allCases, id: \.self) { order in
+                            WorkbenchMenuAction(workflowText(language, "container.sort." + order.rawValue)) { state.assetSort = order }
+                        }
+                    } label: { Image(systemName: "arrow.up.arrow.down").frame(width: 28, height: 28) }
+                        .accessibilityLabel(workflowText(language, "container.sort.title"))
+                        .help(workflowText(language, "container.sort." + state.assetSort.rawValue))
                 }
             }
             if query.scope != nil || query.properties?.isEmpty == false {
@@ -963,7 +1027,14 @@ public struct SharedLibraryBrowser: View {
             if !query.allTagIDs.union(query.anyTagIDs).filter({ store.metadata.tags[$0] == nil }).isEmpty {
                 WorkflowTechnicalDetails(value: query.allTagIDs.union(query.anyTagIDs).filter { store.metadata.tags[$0] == nil }.sorted { $0.uuidString < $1.uuidString }.map { state.tagPresentation.title($0, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition")) + ": " + $0.uuidString }.joined(separator: "\n"))
             }
-        }.workbenchPopover(isPresented: $showFilters, title: workflowText(language, "childPanel.name.filters"), arrowEdge: .bottom) { filterPopover }
+        }
+    }
+    private var tagSearchControl: some View {
+        Button { showTags.toggle() } label: {
+            HStack(spacing: 3) { Image(systemName: "tag"); if onCollect != nil { Text(workflowText(language, "container.library.tags")); Image(systemName: "chevron.down").font(.caption2) } }
+                .padding(6).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityLabel(word("conditions", "条件"))
+            .workbenchPopover(isPresented: $showTags, title: workflowText(language, "childPanel.name.tags"), arrowEdge: .bottom) { queryTagPopover }
     }
     private var searchFooter: some View {
             HStack {

@@ -540,6 +540,7 @@ public struct DualWorkbenchView: View {
                 }
                 RetainedContentHost(content: WorkflowHostView(model: canvasModel, nodeTags: nodeTags, metadata: metadata, library: library, onQuickUse: useNode,
                     libraryContent: canvasLibraryContent,
+                    libraryHeaderContent: { mode in AnyView(libraryBrowser(compact: true, at: { nil }, canvasMode: mode, forCanvas: true, headerOnly: true)) },
                     onExpandLibrary: { mode, context, clear, navigation in
                         expandedContainerNavigation = navigation
                         openLibrary(mode, forCanvas: true, context: context, clearContext: clear)
@@ -857,7 +858,7 @@ public struct DualWorkbenchView: View {
         AnyView(libraryBrowser(compact: true, at: point, onBack: close, canvasMode: mode, forCanvas: true))
     }
 
-    @ViewBuilder private func libraryBrowser(compact: Bool, at point: @escaping () -> CGPoint?, onBack: (() -> Void)? = nil, canvasMode: WorkflowCanvasLibraryMode? = nil, forCanvas: Bool = false) -> some View {
+    @ViewBuilder private func libraryBrowser(compact: Bool, at point: @escaping () -> CGPoint?, onBack: (() -> Void)? = nil, canvasMode: WorkflowCanvasLibraryMode? = nil, forCanvas: Bool = false, headerOnly: Bool = false) -> some View {
         if let metadata {
             let sourceEntries: [SharedLibraryBrowserEntry] = {
                 if let category = canvasMode?.resourceCategory {
@@ -884,6 +885,8 @@ public struct DualWorkbenchView: View {
                 onImport: { beginLibraryImport(forCanvas: forCanvas) }, onClose: { if let onBack { onBack() } else { libraryVisible = false } }, tagValidation: libraryTagValidation,
                 queryContext: libraryQueryContext(forCanvas: forCanvas),
                 annotationSave: libraryAnnotationSave)
+                .importingFiles { canvasMode?.resourceCategory != nil ? captureLibraryImport(forCanvas: forCanvas) : nil }
+                .headerActionsOnly(headerOnly)
                 .environment(\.workflowLibraryInsertionController, canvasModel.projectSession.workflow)
         } else {
             VStack(alignment: .leading) {
@@ -1319,28 +1322,29 @@ public struct DualWorkbenchView: View {
     }
     /// Capture at the command boundary, before any file-panel suspension.
     private func beginLibraryImport(forCanvas: Bool) {
+        guard let command = captureLibraryImport(forCanvas: forCanvas) else { return }
+        Task { @MainActor in
+            do { _ = try await command.perform(choose: { await NativeAssetImportPanel.choose(language: language) }) }
+            catch { issue = error.localizedDescription }
+        }
+    }
+    private func captureLibraryImport(forCanvas: Bool) -> WorkbenchAssetImportCommand? {
         let owner = forCanvas ? canvasModel : quickModel
         let session = owner.projectSession, epoch = owner.projectSession.navigationEpoch
         let store = session.currentStore, instance = owner.manifest?.effectiveInstanceID
         let controller = forCanvas ? session.workflow : nil
         let originalQuick = quick
         guard let store, instance != nil, !owner.isChangingProject,
-              !forCanvas || controller?.canEditCanvas == true else { return }
+              !forCanvas || controller?.canEditCanvas == true else { return nil }
         let current: @MainActor () -> Bool = {
             let displayed = forCanvas ? canvasModel : quickModel
             return (entry == .workflow) == forCanvas && displayed === owner && session.currentStore === store
                 && owner.manifest?.effectiveInstanceID == instance && session.navigationEpoch == epoch && !owner.isChangingProject
                 && (forCanvas ? session.workflow === controller && controller?.canEditCanvas == true : quick === originalQuick)
         }
-        let command = WorkbenchAssetImportCommand(store: store, controller: controller,
-            staleMessage: layoutText(language, "staleImport"), isCurrent: current)
-        Task { @MainActor in
-            do {
-                if try await command.perform(choose: { await NativeAssetImportPanel.choose(language: language) }) {
-                    await refreshLibrary(checkModels: false)
-                }
-            } catch { issue = error.localizedDescription }
-        }
+        return WorkbenchAssetImportCommand(store: store, controller: controller,
+            staleMessage: layoutText(language, "staleImport"), isCurrent: current,
+            didImport: { await refreshLibrary(checkModels: false) })
     }
 
     private func beginAddingLibraryEntry(_ value: SharedLibraryBrowserEntry, at point: CGPoint) {

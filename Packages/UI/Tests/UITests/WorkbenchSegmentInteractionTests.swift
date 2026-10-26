@@ -2,6 +2,7 @@ import AppKit
 import DWorkbench
 import SwiftUI
 import Testing
+import UniformTypeIdentifiers
 @testable import UI
 
 /// Deterministic AppKit component state tests. This window models key ownership;
@@ -100,7 +101,8 @@ import Testing
         let source = root.appendingPathComponent("Source.txt"); try Data("Original".utf8).write(to: source)
         let before = await store.snapshot(), otherBefore = await other.snapshot()
         var active: ProjectStore = store
-        let command = WorkbenchAssetImportCommand(store: store, controller: nil, staleMessage: "target changed", isCurrent: { active === store })
+        var refreshes = 0
+        let command = WorkbenchAssetImportCommand(store: store, controller: nil, staleMessage: "target changed", isCurrent: { active === store }, didImport: { refreshes += 1 })
         do {
             _ = try await command.perform { active = other; return (source, .copy) }
             Issue.record("A replaced destination must be rejected")
@@ -110,7 +112,20 @@ import Testing
         active = store
         #expect(try await command.perform { nil } == false)
         #expect(await store.snapshot() == before)
-        #expect(try await command.perform { (source, .copy) })
+        let provider = NSItemProvider(object: source as NSURL)
+        let imported = try await command.perform {
+            let bytes: Data = try await withCheckedThrowingContinuation { continuation in
+                provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, error in
+                    if let data { continuation.resume(returning: data) }
+                    else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)) }
+                }
+            }
+            let url = try #require(URL(dataRepresentation: bytes, relativeTo: nil))
+            #expect(url.isFileURL && url == source)
+            return (url, .copy)
+        }
+        #expect(imported)
+        #expect(refreshes == 1)
         #expect(await store.snapshot().assets.count == before.assets.count + 1)
         #expect(await other.snapshot() == otherBefore)
         #expect(try Data(contentsOf: source) == Data("Original".utf8))

@@ -45,14 +45,16 @@ enum ProjectFilesPresentation {
     let controller: WorkflowController?
     let staleMessage: String
     let isCurrent: () -> Bool
-    func perform(choose: () async -> (URL, AssetImportMode)?) async throws -> Bool {
+    var didImport: @MainActor () async -> Void = {}
+    func perform(choose: () async throws -> (URL, AssetImportMode)?) async throws -> Bool {
         guard isCurrent() else { throw WorkflowIssue(staleMessage) }
-        guard let (url, mode) = await choose() else { return false }
+        guard let (url, mode) = try await choose() else { return false }
         guard isCurrent() else { throw WorkflowIssue(staleMessage) }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         if let controller { await controller.importLibraryFile(url, mode: mode) }
         else { _ = try await store.importWorkflowMediaFile(at: url, mode: mode) }
+        if isCurrent() { await didImport() }
         return true
     }
 }

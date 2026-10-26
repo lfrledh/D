@@ -11,6 +11,7 @@ struct WorkflowHostView: View {
     var library: ModelLibraryModel? = nil
     var onQuickUse: ((WorkflowNode) -> Void)? = nil
     var libraryContent: ((WorkflowCanvasLibraryMode, @escaping () -> CGPoint?, @escaping () -> Void) -> AnyView)? = nil
+    var libraryHeaderContent: ((WorkflowCanvasLibraryMode) -> AnyView)? = nil
     var onExpandLibrary: ((WorkflowCanvasLibraryMode, WorkflowLibraryContext?, @escaping () -> Void, WorkflowContainerNavigation) -> Void)? = nil
     var onImportLibraryAsset: (() -> Void)? = nil
     var onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
@@ -55,7 +56,7 @@ struct WorkflowHostView: View {
                             } catch { controller.errorMessage = error.localizedDescription }
                         }
                         return true
-                    }, onQuickUse: onQuickUse, libraryContent: libraryContent,
+                    }, onQuickUse: onQuickUse, libraryContent: libraryContent, libraryHeaderContent: libraryHeaderContent, libraryProjectName: model.manifest?.name ?? "",
                     onSharedAssetDrop: onSharedAssetDrop, acceptsLegacyAsset: acceptsLegacyAsset, captureControls:AnyView(captureControls),
                     publishDocumentDescription: model.projectSession.text != nil && !model.isChangingProject ? layoutText(languageStore, "documentHelp", arguments: ["source": model.manifest?.documents.first(where: { $0.id == model.projectSession.text?.editor.document.id })?.name ?? "—", "target": controller.graph?.name ?? model.manifest?.name ?? "—"]) : nil,
                     destinationEnabled: !model.isBusy && !model.isChangingProject && controller.readOnlyReason == nil)

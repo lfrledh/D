@@ -124,6 +124,8 @@ public struct WorkflowCanvasView: View {
     private let onDropCanvasFile: (URL, CGPoint) -> Bool
     private let onQuickUse: ((WorkflowNode) -> Void)?
     private let libraryContent: ((WorkflowCanvasLibraryMode, @escaping () -> CGPoint?, @escaping () -> Void) -> AnyView)?
+    private let libraryHeaderContent: ((WorkflowCanvasLibraryMode) -> AnyView)?
+    private let libraryProjectName: String
     private let onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)?
     private let acceptsLegacyAsset: ((UUID, UUID) -> Bool)?
     private let onDestination: () -> Void
@@ -231,6 +233,8 @@ public struct WorkflowCanvasView: View {
         onDropCanvasFile: @escaping (URL, CGPoint) -> Bool = { _, _ in false },
         onQuickUse: ((WorkflowNode) -> Void)? = nil,
         libraryContent: ((WorkflowCanvasLibraryMode, @escaping () -> CGPoint?, @escaping () -> Void) -> AnyView)? = nil,
+        libraryHeaderContent: ((WorkflowCanvasLibraryMode) -> AnyView)? = nil,
+        libraryProjectName: String = "",
         onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil,
         acceptsLegacyAsset: ((UUID, UUID) -> Bool)? = nil,
         captureControls: AnyView = AnyView(EmptyView()),
@@ -252,6 +256,8 @@ public struct WorkflowCanvasView: View {
         self.onSharedAssetDrop = onSharedAssetDrop
         self.acceptsLegacyAsset = acceptsLegacyAsset
         self.onQuickUse = onQuickUse; self.libraryContent = libraryContent
+        self.libraryHeaderContent = libraryHeaderContent
+        self.libraryProjectName = libraryProjectName
         self.onDestination = onDestination
         self.onPublishText = onPublishText
         self.publishDocumentDescription = publishDocumentDescription; self.destinationEnabled = destinationEnabled
@@ -503,7 +509,7 @@ public struct WorkflowCanvasView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(.bottom, 72)
                 WorkbenchSidebar(leading: false, expanded: shown.library,
-                    title: workspaceText(languageStore, "resources"), identifier: "canvas-library-toggle",
+                    title: layoutText(languageStore, "assetLibrary"), identifier: "canvas-library-toggle",
                     hostIdentifier: "canvas-library-host", toggle: {
                         showLibrary = !shown.library; narrowLibrary = true
                     }, actions: { AnyView(resourceActions) }) { resourcePanel }
@@ -690,6 +696,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
                 .disabled(onExpandLibrary == nil).help(layoutText(languageStore, "expandAssets")).accessibilityLabel(layoutText(languageStore, "expandAssets"))
                 .accessibilityIdentifier("workflow-expand-assets")
+            if let libraryHeaderContent { libraryHeaderContent(resourceCategory.mode).environment(\.workflowLibraryContext, resourceContext) }
         }
     }
     private func revealLibrary(_ context: WorkflowLibraryContext) {
@@ -703,6 +710,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
     private var resourcePanel:some View {
         VStack(spacing:6) {
+            if !libraryProjectName.isEmpty { Text(libraryProjectName).font(.caption2).foregroundStyle(.secondary).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 12) }
             WorkbenchSidebarTabs(title:workspaceText(languageStore, "resources"),selection:$resourceCategory,
                 choices:WorkflowResourceCategory.allCases.map { ($0,$0.title(languageStore)) },helpPrefix:"WORKSPACE-RESOURCE-")
             if let context=resourceContext {

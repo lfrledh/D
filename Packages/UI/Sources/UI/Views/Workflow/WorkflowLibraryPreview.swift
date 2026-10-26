@@ -3,7 +3,8 @@ import DWorkbench
 import ImageIO
 import SwiftUI
 
-/// Owned by one browser state. At most two reads/decodes and 64 / 32 MiB retained images.
+/// Owned by one browser state. Two bounded reads; video posters decode serially.
+/// At most 64 / 32 MiB retained images. No playback is started by this cache.
 actor WorkflowLibraryPreviewCache {
     struct Preview: Sendable {
         var image: CGImage?
@@ -18,6 +19,28 @@ actor WorkflowLibraryPreviewCache {
     private var active = 0
     private var posterGenerators: [UUID: AVAssetImageGenerator] = [:]
     private var waiters: [(UUID, CheckedContinuation<Void, Error>)] = []
+    private var posterBusy = false
+    private var posterWaiters: [(UUID, CheckedContinuation<Void, Error>)] = []
+
+    private func acquirePoster(_ id: UUID) async throws {
+        try Task.checkCancellation()
+        if !posterBusy { posterBusy = true; return }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                if Task.isCancelled { continuation.resume(throwing: CancellationError()) }
+                else { posterWaiters.append((id, continuation)) }
+            }
+        } onCancel: { Task { await self.cancelPosterWaiter(id) } }
+        if Task.isCancelled { releasePoster(); throw CancellationError() }
+    }
+    private func cancelPosterWaiter(_ id: UUID) {
+        guard let i = posterWaiters.firstIndex(where: { $0.0 == id }) else { return }
+        posterWaiters.remove(at: i).1.resume(throwing: CancellationError())
+    }
+    private func releasePoster() {
+        if posterWaiters.isEmpty { posterBusy = false }
+        else { posterWaiters.removeFirst().1.resume() }
+    }
 
     private func acquire(_ id: UUID) async throws {
         try Task.checkCancellation()
@@ -56,6 +79,7 @@ actor WorkflowLibraryPreviewCache {
             ] as CFDictionary)
             guard result.image != nil else { throw WorkflowIssue("图像预览无法解码。") }
         } else if token.kind == .video {
+            try await acquirePoster(UUID()); defer { releasePoster() }
             let directory = FileManager.default.temporaryDirectory.appendingPathComponent("D-Poster-" + UUID().uuidString)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
             defer { try? FileManager.default.removeItem(at: directory) }

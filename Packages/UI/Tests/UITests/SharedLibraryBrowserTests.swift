@@ -386,6 +386,24 @@ struct SharedLibraryBrowserTests {
         }
     }
 
+    @Test func assetScopesDoNotInheritHiddenCollectedFilterAndSortOnlyPresentation() throws {
+        let store = try SharedLibraryStore()
+        var z = entry("asset:z", title: "Zebra", kind: .asset), a = entry("asset:a", title: "Alpha", kind: .asset)
+        z.collected = true; a.collected = false
+        let values = [z, a]
+        let folder = try store.createFolder(name: "Both")
+        try store.addMembers(Set(values.map(\.id)), to: folder)
+        let saved = try store.createSavedQuery(name: "Assets", query: .init(kinds: [.asset]))
+        #expect(try SharedLibraryBrowserLogic.visibleEntries(values, store: store, query: .init(), scope: .all, collectedOnly: true).map(\.id) == [z.id])
+        for scope: SharedLibraryBrowserScope in [.folder(folder), .saved(saved)] {
+            #expect(try SharedLibraryBrowserLogic.visibleEntries(values, store: store, query: .init(), scope: scope, collectedOnly: true).map(\.id) == [z.id, a.id])
+            #expect(try SharedLibraryBrowserLogic.visibleEntries(values, store: store, query: .init(text: "Alpha"), scope: scope, collectedOnly: true).map(\.id) == [a.id])
+        }
+        #expect(try SharedLibraryBrowserLogic.visibleEntries(values, store: store, query: .init(), scope: .all, sort: .nameAscending).map(\.id) == [a.id, z.id])
+        #expect(try SharedLibraryBrowserLogic.visibleEntries(values, store: store, query: .init(), scope: .all, sort: .nameDescending).map(\.id) == [z.id, a.id])
+        #expect(values == [z, a] && store.metadata.folders[folder]?.memberKeys == Set(values.map(\.id)))
+    }
+
     @Test
     func savingScopePreservesIntersectionAndRejectsUnrepresentableCases() throws {
         let store = try SharedLibraryStore()
