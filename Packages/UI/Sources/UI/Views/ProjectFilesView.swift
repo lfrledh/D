@@ -52,7 +52,7 @@ enum ProjectFilesPresentation {
         guard isCurrent() else { throw WorkflowIssue(staleMessage) }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        if let controller { await controller.importLibraryFile(url, mode: mode) }
+        if let controller { try await controller.importLibraryFileReportingFailure(url, mode: mode) }
         else { _ = try await store.importWorkflowMediaFile(at: url, mode: mode) }
         if isCurrent() { await didImport() }
         return true

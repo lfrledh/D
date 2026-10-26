@@ -1,5 +1,6 @@
 import AppKit
 import DWorkbench
+import DInference
 import SwiftUI
 import Testing
 import UniformTypeIdentifiers
@@ -132,6 +133,41 @@ import UniformTypeIdentifiers
         try await store.close(); try await other.close()
     }
 
+    @Test func workflowImportFailureReachesVisibleCommandWithoutSuccessCallback() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Import.dproject"), name: "Import")
+        let engine = ImportNoInferenceEngine()
+        let runtime = WorkbenchSession(engine: engine, backendID: "never",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let controller = WorkflowController(services: .init(store: store, session: runtime,
+            resolveText: { throw WorkflowIssue("No model") }, resolveImage: { throw WorkflowIssue("No model") }))
+        await controller.load()
+        let before = await store.snapshot()
+        let invalid = root.appendingPathComponent("Invalid.mp4")
+        let bytes = Data("This is not a video".utf8); try bytes.write(to: invalid)
+        var refreshed = 0
+        let command = WorkbenchAssetImportCommand(store: store, controller: controller,
+            staleMessage: "target changed", isCurrent: { true }, didImport: { refreshed += 1 })
+        do {
+            _ = try await command.perform { (invalid, .copy) }
+            Issue.record("Invalid media must reach the command caller, not report success")
+        } catch { #expect(!error.localizedDescription.isEmpty) }
+        #expect(refreshed == 0)
+        #expect(await store.snapshot() == before)
+        #expect(controller.availableAssets.isEmpty && controller.runs.isEmpty)
+        #expect(try Data(contentsOf: invalid) == bytes)
+        let valid = root.appendingPathComponent("Valid.txt")
+        try Data("Full original content".utf8).write(to: valid)
+        let result = try await command.perform { (valid, .copy) }
+        #expect(result && refreshed == 1 && controller.availableAssets.count == 1)
+        #expect(controller.runs.isEmpty)
+        #expect(await engine.calls == 0)
+        try await store.close()
+    }
+
     @Test func removedSelectionKeepsLabelsWithoutInventingAnotherSelection() throws {
         var preferences = ChatDisplayPreferences(); preferences.appearance = WorkbenchAppearance(lightweight: true)
         let renderer = ImageRenderer(content: WorkbenchCategoryLensTrack(selection: 0, titles: ["A", "C"],
@@ -166,5 +202,13 @@ import UniformTypeIdentifiers
         let expected = cache.selection(canvasMode: nil, family: category).filter { $0.item.kind == .model || $0.item.kind == .component }
         let actual = cache.selection(canvasMode: .nodes, family: category)
         #expect(actual == expected && !actual.isEmpty)
+    }
+}
+
+private actor ImportNoInferenceEngine: InferenceEngine {
+    private(set) var calls = 0
+    func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        calls += 1
+        throw WorkflowIssue("Import must not run inference")
     }
 }

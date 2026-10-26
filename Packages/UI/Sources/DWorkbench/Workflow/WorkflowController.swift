@@ -869,11 +869,15 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     }
     /// An explicit import publishes the chosen reference or copy in this project's existing Store.
     public func importLibraryFile(_ url: URL, mode: AssetImportMode = .copy) async {
-        guard canEditCanvas else { return }
-        do {
-            _ = try await services.store.importWorkflowMediaFile(at: url, mode: mode)
-            await refreshAssets(); await onChange()
-        } catch { errorMessage = error.localizedDescription }
+        do { try await importLibraryFileReportingFailure(url, mode: mode) }
+        catch { errorMessage = error.localizedDescription }
+    }
+    /// Shared commands must receive the failure, rather than reporting a successful
+    /// import after this controller has only stored an error for its records panel.
+    public func importLibraryFileReportingFailure(_ url: URL, mode: AssetImportMode = .copy) async throws {
+        guard canEditCanvas else { throw WorkflowIssue("目标流程已改变。") }
+        _ = try await services.store.importWorkflowMediaFile(at: url, mode: mode)
+        await refreshAssets(); await onChange()
     }
     /// Import and graph insertion have separate durability boundaries. A changed
     /// destination keeps the successfully imported asset, but never inserts into a new graph.

@@ -3,6 +3,29 @@ import Testing
 @testable import DWorkbench
 
 struct WorkflowAssetContainerTests {
+    @Test @MainActor func previewPassesCompleteValuesWithoutReviewOrPublication() async throws {
+        let operation = try #require(WorkflowRegistry.standard.operation(WorkflowAssetContainer.previewID))
+        let reference = WorkflowAssetReference(projectID: UUID(), assetID: UUID(), kind: .image, sha256: String(repeating: "b", count: 64))
+        let candidate = WorkflowCandidate(asset: reference, seed: "18446744073709551615")
+        let failed = WorkflowCandidate(error: "controlled failure", seed: "7")
+        let values: [WorkflowValue] = [
+            .data(.text(String(repeating: "完整内容 👩🏽‍🎨\n", count: 4_096))),
+            .data(.list(element: .text, items: [.init(id: "z", value: .text("second")), .init(id: "a", value: .text("first"))])),
+            .collection([candidate, failed])
+        ]
+        #expect(operation.definition.interaction == .none)
+        for value in values {
+            var node = operation.definition.makeNode()
+            node.parameters["kind"] = .text(value.kind.rawValue)
+            let services = PreviewOnlyServices()
+            let result = try await operation.execute(.init(node: node, stepID: UUID(), inputs: ["input": value]), services)
+            // No renderer, Viewer or selection exists in this execution path.
+            // Full equality includes member order, failed candidates and seeds.
+            #expect(result == .outputs(["output": value]))
+            #expect(services.verified == (value.kind == .images ? [reference] : []))
+            #expect(services.unexpectedCalls == 0)
+        }
+    }
     @Test func listSubsetKeepsTypeOrderAndMemberIDs() throws {
         let input = WorkflowValue.data(.list(element: .text, items: [.init(id: "b", value: .text("second")), .init(id: "a", value: .text("first"))]))
         let selected = try WorkflowAssetContainer.selecting(["a"], from: input)
@@ -49,6 +72,22 @@ struct WorkflowAssetContainerTests {
         #expect(registry.definition(for: filter)?.inputs.first?.kinds == [.images])
         #expect(registry.definition(for: filter)?.outputs.first?.kinds == [.images])
     }
+}
+
+@MainActor private final class PreviewOnlyServices: WorkflowOperationServices {
+    var verified: [WorkflowAssetReference] = []
+    var unexpectedCalls = 0
+    private func unexpected<T>() throws -> T {
+        unexpectedCalls += 1
+        throw WorkflowIssue("Preview must not publish, infer or export.")
+    }
+    func verifyAsset(_ reference: WorkflowAssetReference) async throws { verified.append(reference) }
+    func readText(_ reference: WorkflowAssetReference) async throws -> String { try unexpected() }
+    func publishText(_ text: String, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { try unexpected() }
+    func rewriteText(_ text: String, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { try unexpected() }
+    func generateImages(prompt: String, reference: WorkflowAssetReference?, context: WorkflowExecutionContext) async throws -> [WorkflowCandidate] { try unexpected() }
+    func transformImage(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { try unexpected() }
+    func export(_ value: WorkflowValue, context: WorkflowExecutionContext) async throws -> WorkflowExportReceipt { try unexpected() }
 }
 
 extension WorkflowAssetContainerTests {
