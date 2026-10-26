@@ -1178,9 +1178,10 @@ extension WorkflowWorkspacePresentationTests {
         await c.load()
         let owner = try #require(c.assetLibraryOwner), sources: [WorkflowLibrarySource] = [.asset(published.record.reference)]
         let id = try await c.requestCollection(sources, owner: owner, folderID: nil, requestID: UUID())
-        let feedback = SharedLibraryCollectionFeedback(requestID: id,
+        var feedback = SharedLibraryCollectionFeedback(requestID: id,
             context: .init(controller: c, source: .sources(sources), name: "Captured"))
-        #expect(feedback.status(in: c) == .pending)
+        feedback.acknowledgeCompletion(in: c)
+        #expect(feedback.status(in: c) == .pending && !feedback.durablyCompleted)
         var release: CheckedContinuation<Void, Never>?
         let drain = Task { @MainActor in
             await c.processCollectionRequests { _ in await withCheckedContinuation { release = $0 } }
@@ -1195,7 +1196,8 @@ extension WorkflowWorkspacePresentationTests {
             withObservationTracking { _ = feedback.status(in: c) } onChange: { changed() }
             gate.resume(); await drain.value
         }
-        #expect(feedback.status(in: c) == .completed)
+        feedback.acknowledgeCompletion(in: c)
+        #expect(feedback.status(in: c) == .completed && feedback.durablyCompleted)
         let other = try await RenderingWorkspaceFixture.make()
         #expect(feedback.status(in: other.controller) == .obsolete)
         let missing = SharedLibraryCollectionFeedback(requestID: "different", context: feedback.context)

@@ -11,13 +11,17 @@ struct SharedLibraryCollectionFeedback {
     enum Status: Equatable { case pending, completed, failed(String), obsolete }
     let requestID: String
     let context: WorkflowLibraryContext
+    private(set) var durablyCompleted = false
+    @MainActor mutating func acknowledgeCompletion(in controller: WorkflowController?) {
+        if status(in: controller) == .completed { durablyCompleted = true }
+    }
     @MainActor func status(in controller: WorkflowController?) -> Status {
         guard let controller, context.isCurrent(in: controller),
               case .sources(let sources) = context.source,
               let request = controller.collectionRequests.first(where: { $0.id == requestID }),
               request.owner == controller.assetLibraryOwner, request.sources == sources else { return .obsolete }
         if let error = request.error { return .failed(error) }
-        if request.completed { return controller.isSaving || controller.hasPendingSaves ? .pending : .completed }
+        if request.completed { return durablyCompleted || !(controller.isSaving || controller.hasPendingSaves) ? .completed : .pending }
         return .pending
     }
 }
@@ -1804,6 +1808,9 @@ public struct SharedLibraryBrowser: View {
         case .pending:
             collectionNotice = workflowText(language, "container.collectionPending"); collectedLocation = nil
         case .completed:
+            if !feedback.durablyCompleted {
+                var confirmed = feedback; confirmed.acknowledgeCompletion(in: insertionController); collectionFeedback = confirmed
+            }
             collectionNotice = workflowText(language, "container.collectedFiltered"); collectedLocation = feedback.context
         case .failed(let reason):
             collectionNotice = reason; collectedLocation = nil
