@@ -430,7 +430,7 @@ import UniformTypeIdentifiers
         let sources = transferSources(items)
         guard let data = try? WorkflowCanvasTransfer.library(owner: owner, sources: sources).encoded() else { return NSItemProvider() }
         let result = NSItemProvider(); result.suggestedName = t("selected") + " \(sources.count)"
-        result.registerDataRepresentation(forTypeIdentifier: UTType.workflowCanvasItem.identifier, visibility: .all) { completion in completion(data, nil); return nil }
+        result.registerDataRepresentation(forTypeIdentifier: UTType.workflowCanvasItem.identifier, visibility: .ownProcess) { completion in completion(data, nil); return nil }
         return result
     }
     private func name(_ item: ContainerItem) -> String {

@@ -368,7 +368,7 @@ struct SharedLibraryBrowserRenameDrafts {
         if allowsCanvas, let transfer = canvasTransfer(for: current),
            let payload = try? transfer.encoded() {
             provider.registerDataRepresentation(
-                forTypeIdentifier: UTType.workflowCanvasItem.identifier, visibility: .all
+                forTypeIdentifier: UTType.workflowCanvasItem.identifier, visibility: .ownProcess
             ) { completion in
                 completion(payload, nil)
                 return nil
@@ -1849,7 +1849,7 @@ public struct SharedLibraryBrowser: View {
                 return try WorkflowCanvasTransfer.libraryItems(owner: owner, items: items).encoded()
             }
             let provider = NSItemProvider(); provider.suggestedName = selected.count == 1 ? current.item.title : workflowText(language, "container.selected") + " \(selected.count)"
-            provider.registerDataRepresentation(forTypeIdentifier: UTType.workflowCanvasItem.identifier, visibility: .all) { completion in
+            provider.registerDataRepresentation(forTypeIdentifier: UTType.workflowCanvasItem.identifier, visibility: .ownProcess) { completion in
                 let progress = Progress(totalUnitCount: 1)
                 progress.cancellationHandler = { capture.cancel() }
                 Task { do { completion(try await capture.value, nil); progress.completedUnitCount = 1 } catch { completion(nil, error) } }
