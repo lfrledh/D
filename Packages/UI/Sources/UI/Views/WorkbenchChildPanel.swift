@@ -256,7 +256,16 @@ public struct WorkbenchChildPanelSize: Equatable {
                            width: resolved.width, height: resolved.height)
     }
     override func mouseDown(with event: NSEvent) {
-        guard window?.attachedSheet == nil, NSApp.modalWindow == nil, !(NSApp.keyWindow is NSSavePanel), WorkbenchChildPanels.top(on: window) === self else { return }
+        guard let window, event.window === window,
+              window.attachedSheet == nil, NSApp.modalWindow == nil, !(NSApp.keyWindow is NSSavePanel),
+              WorkbenchChildPanels.top(on: window) === self,
+              !WorkbenchPopupOverlay.isPresented(on: window) else { return }
+        // SwiftUI's noninteractive title/padding can hit this barrier directly,
+        // or an inner NSView can forward an unhandled mouseDown here. Neither is
+        // an outside click. Use the current hosting surface, not the child hit,
+        // and include its corner/padding bounds (but not its external shadow).
+        guard bounds.contains(convert(event.locationInWindow, from: nil)),
+              !host.bounds.contains(host.convert(event.locationInWindow, from: nil)) else { return }
         gate.requestClose()
     }
     override func rightMouseDown(with event: NSEvent) { mouseDown(with: event) }
