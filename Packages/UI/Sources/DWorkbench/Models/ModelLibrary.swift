@@ -53,23 +53,23 @@ public actor ModelLibrary {
     private let availableBytesOverride: UInt64?
     private var inlineDownloadCredential: ModelDownloadCredential?
     private var credentialIntent = UUID()
-    private var disk: DiskState
+    private var disk: DiskState { didSet { stateDidChange() } }
     private var rootScope: ModelScopedLocation?
     private var libraryRoot: ModelDirectory?
     private var libraryLock: ModelFileHandle?
     private var externalScopes: [ModelID: ModelScopedLocation] = [:]
     private var workers: [ModelID: Task<Void, Never>] = [:]
-    private var leases: [UUID: ModelUsageLease] = [:]
+    private var leases: [UUID: ModelUsageLease] = [:] { didSet { stateDidChange() } }
     private var preparationJobs: [ModelID: (job: Task<URL, any Error>, lease: ModelUsageLease, scope: ModelScopedLocation)] = [:]
     private var accepting = true
-    private var queueError: String?
+    private var queueError: String? { didSet { stateDidChange(urgent: true) } }
     private var retryWake: Task<Void, Never>?
     private var activeDownload: (task: UUID, attempt: UUID, generation: UUID, resource: ModelID)?
     private var queuePausing = false
     private var cleanupReservations: Set<ModelID> = []
     private var cancelledOperations: Set<ModelID> = []
     private var copyJob: Task<[String: ModelFileIdentity], any Error>?
-    private var currentCopy: ModelCopyProgress?
+    private var currentCopy: ModelCopyProgress? { didSet { stateDidChange() } }
     private var copyKnownFiles: [String: ModelFileIdentity] = [:]
     private static let chunkBytes: UInt64 = 16 * 1024 * 1024
 
@@ -186,9 +186,89 @@ public actor ModelLibrary {
         try persist()
     }
 
-    public func snapshot() -> ModelLibrarySnapshot {
+    // One owner, no lifecycle timer. Subscription and initial memory snapshot are
+    // installed in the same actor turn. A bounded newest buffer preserves current
+    // terminal state even when a consumer is busy reconciling a previous update.
+    private var observers: [UUID: AsyncStream<ModelLibrarySnapshot>.Continuation] = [:]
+    private var publication: Task<Void, Never>?
+    private var publicationIsUrgent = false
+    private var progressMutation = false
+    private var lastPublished: ModelLibrarySnapshot?
+    private var availabilityCheck: Task<ModelLibrarySnapshot, Never>?
+    private var requestedChecks: Set<ModelID> = []
+    private var checkAll = false
+    // Internal, constant-size counters for targeted regression tests (no logging).
+    private(set) var statePublicationCount = 0
+    private(set) var availabilityCheckCount = 0
+    var observationCount: Int { observers.count }
+
+    public func changes() -> AsyncStream<ModelLibrarySnapshot> {
+        let id = UUID()
+        let pair = AsyncStream<ModelLibrarySnapshot>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        observers[id] = pair.continuation
+        pair.continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeObserver(id) }
+        }
+        pair.continuation.yield(snapshot())
+        return pair.stream
+    }
+    private func removeObserver(_ id: UUID) {
+        observers[id] = nil
+        if observers.isEmpty {
+            publication?.cancel(); publication = nil; publicationIsUrgent = false; lastPublished = nil
+        }
+    }
+    private func stateDidChange(urgent: Bool = false) {
+        guard !observers.isEmpty else { return }
+        let immediate = urgent || !progressMutation
+        if publication != nil {
+            guard immediate && !publicationIsUrgent else { return }
+            publication?.cancel()
+        }
+        publicationIsUrgent = immediate
+        publication = Task { [weak self] in
+            if !immediate {
+                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            }
+            guard !Task.isCancelled else { return }
+            await self?.publishState()
+        }
+    }
+    private func publishState() {
+        publication = nil; publicationIsUrgent = false
+        let current = snapshot()
+        guard current != lastPublished else { return }
+        lastPublished = current; statePublicationCount += 1
+        for observer in observers.values { observer.yield(current) }
+    }
+
+    /// Explicit display availability check. Concurrent requests merge their exact
+    /// resource scope before one actor-isolated pass. The pass has no suspension:
+    /// root/record replacement cannot interleave or accept a stale result. Admission
+    /// (resolve/acquire/register/delete) retains its stronger, independent checks.
+    public func checkAvailability(ids: Set<ModelID>? = nil) async -> ModelLibrarySnapshot {
+        if let ids { requestedChecks.formUnion(ids) } else { checkAll = true }
+        if let availabilityCheck { return await availabilityCheck.value }
+        let task = Task { [weak self] in
+            await Task.yield()
+            guard let self else { preconditionFailure("Model library released during an owned check") }
+            return await self.performAvailabilityCheck()
+        }
+        availabilityCheck = task
+        return await task.value
+    }
+    private func performAvailabilityCheck() -> ModelLibrarySnapshot {
+        let ids: Set<ModelID>? = checkAll ? nil : requestedChecks
+        requestedChecks.removeAll(); checkAll = false
+        checkAvailabilityNow(ids: ids)
+        availabilityCheck = nil
+        return snapshot()
+    }
+    private func checkAvailabilityNow(ids: Set<ModelID>?) {
+        availabilityCheckCount += 1
         for index in disk.records.indices {
             let stored = disk.records[index]
+            guard ids == nil || ids!.contains(stored.record.id) else { continue }
             var availability = stored.record.availability
             var location = stored.record.directory
             // Viewing never hashes files, adopts legacy identities, or mutates registration.
@@ -229,9 +309,14 @@ public actor ModelLibrary {
                 disk.revision &+= 1
             }
         }
+    }
+
+    /// Memory only; never walks directories or checks file identities.
+    public func snapshot() -> ModelLibrarySnapshot {
+        let leaseCounts = Dictionary(grouping: leases.values, by: \.modelID).mapValues(\.count)
         let records = disk.records.map { stored -> ModelRecord in
             var record = stored.record
-            record.activeLeaseCount = leases.values.filter { $0.modelID == record.id }.count
+            record.activeLeaseCount = leaseCounts[record.id, default: 0]
             return record
         }
         return .init(revision: disk.revision, rootURL: rootScope?.url ?? disk.rootURL, catalog: catalog,
@@ -337,7 +422,11 @@ public actor ModelLibrary {
             throw ModelLibraryError.busy("已有受管理模型。当前仅支持原模型库在同一磁盘卷内移动；请选择包含原模型库的位置，不会接管跨卷复制的内容。")
         }
         let previousDisk = disk, previousRoot = libraryRoot, previousScope = rootScope, previousLock = libraryLock
-        do { try attachRoot(scope, create: !hasManaged); try persist() }
+        do {
+            try attachRoot(scope, create: !hasManaged)
+            checkAvailabilityNow(ids: Set(disk.records.filter { $0.record.storage == .managed }.map { $0.record.id }))
+            try persist()
+        }
         catch {
             disk = previousDisk; libraryRoot = previousRoot; rootScope = previousScope; libraryLock = previousLock
             throw error
@@ -610,6 +699,8 @@ public actor ModelLibrary {
 
     private func noteCopy(path: String, bytes: UInt64, identity: ModelFileIdentity,
                           sourceID: ModelID, total: UInt64) {
+        progressMutation = true
+        defer { progressMutation = false }
         copyKnownFiles[path] = identity
         currentCopy = .init(sourceID: sourceID, copiedBytes: bytes, totalBytes: total)
         disk.revision &+= 1
@@ -1052,6 +1143,8 @@ public actor ModelLibrary {
             offset = end + 1
             let current = try ModelDirectory.identity(fd, regular: true)
             guard current.sameNode(expected.identity), current.size == offset else { throw ModelLibraryError.integrity("下载文件发生变化。") }
+            progressMutation = true
+            defer { progressMutation = false }
             mutate(id) {
                 $0.files[file.path] = .init(completed: offset, identity: current)
                 $0.record.downloadedBytes = $0.files.values.reduce(0) { $0 + $1.completed }

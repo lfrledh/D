@@ -42,6 +42,8 @@ public final class ModelLibraryModel {
     public private(set) var preparationNotice: String?
     public private(set) var snapshot: ModelLibrarySnapshot?
     public private(set) var isChoosingLocation = false
+    private var fileCheckRequests = 0
+    public var isCheckingFiles: Bool { fileCheckRequests > 0 }
     public private(set) var globalOperation: GlobalOperation?
     public private(set) var pendingActions: [ModelID: PendingAction] = [:]
     public private(set) var queueCommandPending = false
@@ -65,8 +67,15 @@ public final class ModelLibraryModel {
     @ObservationIgnored public let library: ModelLibrary
     @ObservationIgnored private var preparation: Task<Void, Never>?
     @ObservationIgnored private var importTask: Task<Void, Never>?
-    @ObservationIgnored private var poller: Task<Void, Never>?
+    @ObservationIgnored private var observation: Task<Void, Never>?
+    @ObservationIgnored private var volumeObservers: [NSObjectProtocol] = []
     @ObservationIgnored private var refreshGeneration: UInt64 = 0
+    @ObservationIgnored private var observationGeneration = UUID()
+    @ObservationIgnored private var pendingReconciliation: ModelLibrarySnapshot?
+    @ObservationIgnored private var preparationSnapshot: ModelLibrarySnapshot?
+    @ObservationIgnored private var preparationTokens: [String: UUID] = [:]
+    private(set) var installationStates: [String] = []
+    private(set) var preparationProjectionCount = 0
 
     public enum GlobalOperation: Sendable {
         case choosingRoot, choosingCredential, registering, copying, preparing
@@ -96,6 +105,11 @@ public final class ModelLibraryModel {
             case .removing: "正在移除…"
             }
         }
+    }
+
+    isolated deinit {
+        observation?.cancel()
+        for observer in volumeObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
     }
 
     public init(library: ModelLibrary, language: UILanguageStore? = nil) { self.library = library; self.language = language }
@@ -207,36 +221,92 @@ public final class ModelLibraryModel {
 
     /// Called by the app composition root, independently of a manager sheet's lifetime.
     public func start() {
-        guard poller == nil else { return }
-        poller = Task { [weak self] in
-            while !Task.isCancelled {
-                await self?.refresh()
-                guard self != nil, !Task.isCancelled else { return }
-                do { try await Task.sleep(for: .milliseconds(400)) } catch { return }
+        guard observation == nil else { return }
+        let generation = UUID(); observationGeneration = generation
+        let library = self.library
+        for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification] {
+            volumeObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                guard let volume = notification.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL else { return }
+                Task { @MainActor [weak self] in
+                    guard let self, self.observationGeneration == generation else { return }
+                    await self.volumeChanged(volume)
+                }
+            })
+        }
+        observation = Task { [weak self] in
+            for await updated in await library.changes() {
+                guard !Task.isCancelled, let self, self.observationGeneration == generation else { return }
+                await self.apply(updated)
             }
         }
     }
 
-    public func stop() { poller?.cancel(); poller = nil }
+    public func stop() {
+        observationGeneration = UUID(); observation?.cancel(); observation = nil
+        for observer in volumeObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+        volumeObservers.removeAll()
+    }
 
-    public func refresh() async {
+    /// Commands refresh memory; only opening the manager or explicit refresh asks
+    /// for filesystem availability. Closing the manager never stops observation.
+    func volumeChanged(_ volume: URL) async {
+        guard let snapshot else { return }
+        let prefix = volume.standardizedFileURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        func includes(_ url: URL?) -> Bool {
+            guard let path = url?.standardizedFileURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) else { return false }
+            return path == prefix || path.hasPrefix(prefix + "/")
+        }
+        let ids = Set(snapshot.records.filter {
+            includes($0.directory) || ($0.storage == .managed && includes(snapshot.rootURL))
+        }.map(\.id))
+        guard !ids.isEmpty else { return }
+        await apply(await library.checkAvailability(ids: ids))
+    }
+
+    public func refresh(checkFiles: Bool = false) async {
         refreshGeneration &+= 1
         let generation = refreshGeneration
-        let updated = await library.snapshot()
-        guard generation == refreshGeneration, updated.revision >= (snapshot?.revision ?? 0) else { return }
-        // Keep native menu tracking intact while idle. Compare all visible values,
-        // including transient copy progress, so real readiness changes still publish.
+        await apply(await library.snapshot())
+        if checkFiles {
+            fileCheckRequests += 1
+            defer { fileCheckRequests -= 1 }
+            let updated = await library.checkAvailability()
+            guard generation == refreshGeneration else { return }
+            await apply(updated)
+        }
+    }
+    private func apply(_ updated: ModelLibrarySnapshot) async {
+        guard updated.revision >= (snapshot?.revision ?? 0) else { return }
         if snapshot != updated { snapshot = updated }
+        let states = updated.records.map { "\($0.id):\($0.state.rawValue):\($0.availability.rawValue):\($0.registrationState.rawValue)" }.sorted()
+        if installationStates != states { installationStates = states }
         updateNodePreparationPresentation(updated)
         await reconcileNodePreparations(updated)
     }
 
     private func updateNodePreparationPresentation(_ snapshot: ModelLibrarySnapshot) {
-        let resources = Dictionary(grouping: snapshot.resources, by: { $0.record.catalogID + "@" + $0.record.revision })
+        let tokens = nodePreparations.mapValues(\.token)
+        let previous = preparationSnapshot
+        guard previous?.resources != snapshot.resources || previous?.downloads != snapshot.downloads ||
+            previous?.catalog != snapshot.catalog || tokens != preparationTokens else { return }
+        let previousResources = Dictionary(uniqueKeysWithValues: (previous?.resources ?? []).map { ($0.id, $0) })
+        let previousTasks = Dictionary(grouping: previous?.downloads ?? [], by: \.resourceID)
         let tasks = Dictionary(grouping: snapshot.downloads, by: \.resourceID)
-        var values: [String: WorkflowModelPreparation] = [:]
-        var byResource: [ModelID: WorkflowModelPreparation] = [:]
-        for entry in snapshot.catalog {
+        var affected = Set(snapshot.resources.filter { previousResources[$0.id] != $0 || previousTasks[$0.id] != tasks[$0.id] }
+            .map { $0.record.catalogID })
+        let currentIDs = Set(snapshot.resources.map(\.id))
+        affected.formUnion((previous?.resources ?? []).filter { !currentIDs.contains($0.id) }.map { $0.record.catalogID })
+        let changedTokens = Set(tokens.keys).union(preparationTokens.keys).filter { tokens[$0] != preparationTokens[$0] }
+        affected.formUnion(snapshot.catalog.filter { $0.workflowIdentity.map(changedTokens.contains) == true }.map(\.id))
+        if previous?.catalog != snapshot.catalog { affected.formUnion(snapshot.catalog.map(\.id)) }
+        preparationSnapshot = snapshot; preparationTokens = tokens
+        guard !affected.isEmpty else { return }
+        preparationProjectionCount += 1
+        let resources = Dictionary(grouping: snapshot.resources.filter { affected.contains($0.record.catalogID) },
+                                   by: { $0.record.catalogID + "@" + $0.record.revision })
+        var values = nodePreparationPresentation.values
+        var byResource = nodePreparationPresentation.resources.filter { currentIDs.contains(.init(rawValue: $0.key.rawValue)) }
+        for entry in snapshot.catalog where affected.contains(entry.id) {
             guard let identity = entry.workflowIdentity else { continue }
             let candidates = resources[entry.id + "@" + entry.revision] ?? []
             for resource in candidates {
@@ -248,6 +318,7 @@ public final class ModelLibraryModel {
                     phase: "copyUnavailable", completed: nil, total: nil, issue: nil)
             } else if candidates.count == 1, let resource = candidates.first { values[identity] = byResource[resource.record.id] }
             else if candidates.count > 1 { values[identity] = .init(resource: nil, taskID: nil, attemptID: nil, phase: "ambiguousCopies", completed: nil, total: nil, issue: nil) }
+            else { values[identity] = nil }
         }
         nodePreparationPresentation.replace(values, resources: byResource)
     }
@@ -287,7 +358,7 @@ public final class ModelLibraryModel {
                                  storage: ModelStorageKind = .external) async {
         guard !isChoosingLocation, globalOperation == nil, !hasActiveWork else { return }
         guard let entry = catalog.first(where: { $0.id == catalogID }) else {
-            errorMessage = "所选模型不在固定目录中。"; return
+            errorMessage = managementText("catalogMissing", "所选模型不在内置模型目录中。"); return
         }
         isChoosingLocation = true
         let panel = NSOpenPanel()
@@ -343,7 +414,7 @@ public final class ModelLibraryModel {
         isChoosingLocation = true
         do {
             guard try await library.canPrepareVideo(id) else {
-                throw ModelLibraryError.unavailable("当前应用没有该模型的完整准备引擎，或原始文件尚未校验；请使用本阶段的完整开发资源重新构建。原文件未修改。")
+                throw ModelLibraryError.unavailable(managementText("prepareEngineUnavailable", "当前应用没有该模型的完整准备引擎，或原始文件尚未校验；请使用本阶段的完整开发资源重新构建。原文件未修改。"))
             }
         } catch {
             isChoosingLocation = false
@@ -453,20 +524,20 @@ public final class ModelLibraryModel {
     }
 
     public func status(for record: ModelRecord) -> String {
-        if let action = pendingActions[record.id] { return action.title }
-        if record.availability == .needsAuthorization { return "需要重新授权" }
-        if record.availability == .unavailable { return "存放位置不可用" }
+        if let action = pendingActions[record.id] { return managementText("pending." + String(describing: action), action.title) }
+        if record.availability == .needsAuthorization { return managementText("recordStatus.authorization", "需要重新授权") }
+        if record.availability == .unavailable { return managementText("recordStatus.unavailable", "存放位置不可用") }
         switch record.state {
-        case .registered: return "已登记，等待校验"
-        case .queued: return "等待下载"
-        case .downloading: return "正在下载"
-        case .pausing: return "正在暂停，等待写入结束"
-        case .paused: return "已暂停"
-        case .verifying: return "正在校验完整性"
-        case .publishing: return "正在完成安装"
-        case .installed: return "文件已校验；执行引擎需单独验证"
-        case .preparationRequired: return "原始文件已校验；仍需准备"
-        case .failed: return "操作未完成"
+        case .registered: return managementText("recordStatus.registered", "已登记，等待校验")
+        case .queued: return managementText("recordStatus.queued", "等待下载")
+        case .downloading: return managementText("recordStatus.downloading", "正在下载")
+        case .pausing: return managementText("recordStatus.pausing", "正在暂停，等待写入结束")
+        case .paused: return managementText("recordStatus.paused", "已暂停")
+        case .verifying: return managementText("recordStatus.verifying", "正在校验完整性")
+        case .publishing: return managementText("recordStatus.publishing", "正在完成安装")
+        case .installed: return managementText("recordStatus.installed", "文件已校验；执行引擎需单独验证")
+        case .preparationRequired: return managementText("recordStatus.preparationRequired", "原始文件已校验；仍需准备")
+        case .failed: return managementText("recordStatus.failed", "操作未完成")
         }
     }
 
@@ -610,14 +681,22 @@ extension ModelLibraryModel {
         workflowText(language, "workflow.node.prepare." + key, fallback: fallback)
     }
     private func reconcileNodePreparations(_ current: ModelLibrarySnapshot) async {
+        pendingReconciliation = current
         guard !reconcilingNodePreparations else { return }
         reconcilingNodePreparations = true
         defer { reconcilingNodePreparations = false }
+        while let current = pendingReconciliation {
+            pendingReconciliation = nil
+            await reconcileNodePreparationPass(current)
+        }
+    }
+    private func reconcileNodePreparationPass(_ current: ModelLibrarySnapshot) async {
         for (identity, request) in nodePreparations {
             var finished = false
             defer {
                 if finished, nodePreparations[identity]?.token == request.token {
                     nodePreparations[identity] = nil; preparingNodeIdentities.remove(identity)
+                    if let snapshot { updateNodePreparationPresentation(snapshot) }
                 }
             }
             do {
@@ -672,6 +751,7 @@ extension ModelLibraryModel {
         for (identity, request) in nodePreparations where request.resource == resource {
             nodePreparations[identity] = nil; preparingNodeIdentities.remove(identity)
         }
+        if let snapshot { updateNodePreparationPresentation(snapshot) }
     }
     public func unregisterResource(_ resource: ModelResource) async {
         revokeNodePreparation(resource.id)

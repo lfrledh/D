@@ -11,6 +11,8 @@ import ast
 import email.parser
 import hashlib
 import json
+import importlib.util
+import plistlib
 import os
 from pathlib import Path
 import re
@@ -20,6 +22,7 @@ import stat
 import subprocess
 import sys
 import time
+import tempfile
 from typing import Any
 
 
@@ -1292,8 +1295,178 @@ def _execute(preflight: dict[str, Any], config_path: Path, run_root: Path, timeo
         raise error
 
 
+def _prepared_product_path(path: str) -> bool:
+    """Docs and personal Xcode schemes cannot alter this explicit scheme build."""
+    return not (path.startswith("docs/") or ("/" not in path and path.endswith(".md"))
+                or "/xcuserdata/" in path)
+
+
+def _prepared_source(root: Path, production: str, delivery: str) -> dict[str, str]:
+    def git(*args: str) -> bytes:
+        return subprocess.check_output(["git", "-C", str(root), *args])
+    if Path(git("rev-parse", "--show-toplevel").decode().strip()).resolve() != root.resolve():
+        raise BuildError("build source must be the actual Git root")
+    for label, value in [("production", production), ("delivery", delivery)]:
+        if re.fullmatch(r"[0-9a-f]{40}", value) is None or git("rev-parse", value + "^{commit}").decode().strip() != value:
+            raise BuildError(label + " must identify a full commit")
+    if git("rev-parse", "HEAD").decode().strip() != delivery:
+        raise BuildError("delivery must be the actual build checkout HEAD")
+    ancestor = subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor", production, delivery])
+    if ancestor.returncode != 0:
+        raise BuildError("production is not a verified ancestor (status " + str(ancestor.returncode) + ")")
+    differences = git("diff", "--name-only", "-z", production, "--")
+    untracked = git("ls-files", "--others", "--exclude-standard", "-z")
+    staged = git("diff", "--cached", "--name-only", "-z", production, "--")
+    blocked = sorted({os.fsdecode(p) for p in (differences + untracked + staged).split(b"\0")
+                      if p and _prepared_product_path(os.fsdecode(p))})
+    if blocked:
+        raise BuildError("product input differs from production: " + ", ".join(blocked[:20]))
+    # Track all actual product bytes too, so an edit during compilation cannot be
+    # labelled with a clean commit, even if it is subsequently staged differently.
+    paths = [p for p in git("ls-files", "-z").split(b"\0")
+             if p and _prepared_product_path(os.fsdecode(p))]
+    contents = _content_snapshot(root, paths, "product")
+    return {"production": production, "delivery": delivery, "productSHA256": contents["sha256"]}
+
+
+def _prepared_info(source: Path, production: str, delivery: str) -> dict[str, Any]:
+    value = plistlib.loads(source.read_bytes())
+    for key, expected in [("DSourceCommit", production), ("DDeliveryCommit", delivery)]:
+        if key in value and value[key] != expected:
+            raise BuildError("stale source Info marker: " + key)
+        value[key] = expected
+    value["DDeliveryChannel"] = "local-preview"
+    value["CFBundleDisplayName"] = "D 最新版"
+    for declaration in value.get("CFBundleDocumentTypes", []):
+        declaration["LSHandlerRank"] = "None"
+    return value
+
+
+def _execute_prepared(config_path: Path, run_root: Path, timeout: float) -> tuple[dict[str, Any], Path]:
+    """Current seven-engine path. Signed by Xcode, never mutate signed inputs."""
+    cfg = _read_json(config_path, "prepared build configuration")
+    keys = {"sourceRoot", "productionCommit", "deliveryCommit", "preparedResources", "signingConfig",
+            "sourcePackages", "packageCache", "configuration", "bundleID", "outputApp", "signingTeam"}
+    if not isinstance(cfg, dict) or set(cfg) != keys:
+        raise BuildError("prepared configuration fields differ from the fixed schema")
+    if any(not isinstance(value, str) or not value for value in cfg.values()):
+        raise BuildError("prepared configuration values must be non-empty strings")
+    if cfg["configuration"] not in {"Debug", "Release"}:
+        raise BuildError("configuration must be Debug or Release")
+    if re.fullmatch(r"[A-Za-z0-9.-]+", cfg["bundleID"]) is None:
+        raise BuildError("invalid bundle ID")
+    root = _absolute(cfg["sourceRoot"], "sourceRoot")
+    if root.resolve() != Path(__file__).resolve().parents[1]:
+        raise BuildError("sourceRoot must own this build entry point")
+    identity = _prepared_source(root, cfg["productionCommit"], cfg["deliveryCommit"])
+    resources = _absolute(cfg["preparedResources"], "preparedResources")
+    signing = _absolute(cfg["signingConfig"], "signingConfig")
+    output = _absolute(cfg["outputApp"], "outputApp")
+    if output.suffix != ".app" or os.path.lexists(output) or os.path.lexists(run_root):
+        raise BuildError("run root and output App must be new, unoccupied paths")
+    protected_paths = [root, resources, signing, config_path,
+                       _absolute(cfg["sourcePackages"], "sourcePackages"), _absolute(cfg["packageCache"], "packageCache")]
+    for path in protected_paths + [run_root, output]:
+        _reject_symlink_ancestors(path, "prepared build path")
+    for path in protected_paths:
+        if not path.exists(): raise BuildError("protected input missing: " + str(path))
+    for path in [run_root, output]:
+        if not path.parent.is_dir(): raise BuildError("output parent must already exist: " + str(path.parent))
+        for protected in protected_paths:
+            if _overlap(path, protected): raise BuildError("build/output path overlaps protected input")
+    if _overlap(run_root, output): raise BuildError("build root and published App overlap")
+    if re.fullmatch(r"[A-Z0-9]{10}", cfg["signingTeam"]) is None: raise BuildError("invalid expected signing team")
+    spec = importlib.util.spec_from_file_location("d_prepared_resources", root / "scripts/prepare-development-resources.py")
+    if spec is None or spec.loader is None: raise BuildError("resource validator missing")
+    core = importlib.util.module_from_spec(spec); spec.loader.exec_module(core)
+    manifest = core.validate_prepared(resources)
+    resource_digest = hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()
+    signing_digest = _sha256(signing)
+    info = _prepared_info(root / "D/Info.plist", identity["production"], identity["delivery"])
+    info["DProductInputSHA256"] = identity["productSHA256"]
+    info["DResourceManifestSHA256"] = resource_digest
+    info["DBuildConfiguration"] = cfg["configuration"]
+    run_root.mkdir()
+    info_path = run_root / "Candidate-Info.plist"
+    info_path.write_bytes(plistlib.dumps(info))
+    xcconfig = run_root / "Candidate.xcconfig"
+    # Reject control characters/config expansion instead of interpolating arbitrary
+    # input as xcconfig source. Paths may contain spaces.
+    for value in [str(signing), str(resources), str(info_path)]:
+        if any(c in value for c in ['\n', '\r', '"', '$']): raise BuildError("unsafe xcconfig path")
+    xcconfig.write_text(f'#include "{signing}"\nD_DEVELOPMENT_RESOURCES = {resources}\n'
+                        f'PRODUCT_BUNDLE_IDENTIFIER = {cfg["bundleID"]}\nINFOPLIST_FILE = {info_path}\n')
+    derived = run_root / "DerivedData"
+    command = ["xcodebuild", "-workspace", str(root / "D.xcworkspace"), "-scheme", "D",
+               "-configuration", cfg["configuration"], "-destination", "platform=macOS,arch=arm64",
+               "-derivedDataPath", str(derived), "-clonedSourcePackagesDirPath", cfg["sourcePackages"],
+               "-packageCachePath", cfg["packageCache"], "-disableAutomaticPackageResolution", "-skipPackageUpdates",
+               "-onlyUsePackageVersionsFromResolvedFile", "-xcconfig", str(xcconfig), "build"]
+    report = {"mode": "prepared-resources", **identity, "resourceManifestSHA256": resource_digest,
+              "configuration": cfg["configuration"], "bundleID": cfg["bundleID"], "runtimeVerification": "not-run", "stages": []}
+    report_path = run_root / "build-report.json"
+    try:
+        _run_stage("prepared-xcodebuild", command, dict(os.environ), run_root / "xcodebuild.log", timeout, report["stages"])
+        if _prepared_source(root, identity["production"], identity["delivery"]) != identity or _sha256(signing) != signing_digest:
+            raise BuildError("source or signing input changed during build")
+        if core.validate_prepared(resources) != manifest: raise BuildError("prepared resources changed during build")
+        built = derived / "Build/Products" / cfg["configuration"] / "D.app"
+        actual_info = plistlib.loads((built / "Contents/Info.plist").read_bytes())
+        for key in ["DSourceCommit", "DDeliveryCommit", "DProductInputSHA256", "DResourceManifestSHA256", "DBuildConfiguration"]:
+            if actual_info.get(key) != info[key]: raise BuildError("built identity mismatch: " + key)
+        if actual_info.get("CFBundleIdentifier") != cfg["bundleID"]: raise BuildError("built bundle identity mismatch")
+        engines = built / "Contents/Resources/Engines"
+        if {p.name for p in engines.iterdir()} != set(manifest["engines"]): raise BuildError("packaged engine set mismatch")
+        for name, expected in manifest["engines"].items():
+            if core.inspect_engine(engines / name, name) != expected: raise BuildError("packaged engine inventory mismatch: " + name)
+        subprocess.run(["codesign", "--verify", "--deep", "--strict", str(built)], check=True)
+        signature = subprocess.check_output(["codesign", "-dvv", str(built)], stderr=subprocess.STDOUT).decode()
+        if ("Authority=Apple Development:" not in signature or "Signature=adhoc" in signature or
+                "TeamIdentifier=" + cfg["signingTeam"] + "\n" not in signature):
+            raise BuildError("candidate is not signed by the expected Apple Development team")
+        entitlements = subprocess.check_output(["codesign", "-d", "--entitlements", ":-", str(built)], stderr=subprocess.DEVNULL)
+        if plistlib.loads(entitlements).get("com.apple.security.app-sandbox") is not True:
+            raise BuildError("candidate sandbox entitlement missing")
+        report["signingTeam"] = cfg["signingTeam"]
+        # Never replace a running or existing bundle. The desktop alias is updated
+        # separately after normal quit and native acceptance by the Lead.
+        if os.path.lexists(output): raise BuildError("output appeared during build")
+        stage_parent = Path(tempfile.mkdtemp(prefix=".d-candidate-", dir=output.parent))
+        staged_app = stage_parent / "D.app"
+        try:
+            _run_stage("copy-signed-app", ["/usr/bin/ditto", str(built), str(staged_app)], dict(os.environ),
+                       run_root / "copy.log", timeout, report["stages"])
+            subprocess.run(["codesign", "--verify", "--deep", "--strict", str(staged_app)], check=True)
+            if (staged_app / "Contents/Info.plist").read_bytes() != (built / "Contents/Info.plist").read_bytes():
+                raise BuildError("copied candidate identity differs")
+            core._publish_exclusive(staged_app, output)
+            report["finalApp"] = str(output)
+        finally:
+            # Only this invocation's exclusively-created, unpublished staging.
+            if staged_app.exists(): shutil.rmtree(staged_app)
+            stage_parent.rmdir()
+        report.update(status="packaged", finalApp=str(output), executableSHA256=_sha256(output / "Contents/MacOS/D"))
+    except (Exception, KeyboardInterrupt) as error:
+        report.update(status="cancelled" if isinstance(error, (Cancelled, KeyboardInterrupt)) else "failed", error=str(error))
+        if report.get("finalApp") and output.is_dir(): report["retainedPublishedApp"] = str(output)
+        message = str(error)
+        try:
+            report_path.write_text(json.dumps(report, indent=2) + "\n")
+        except OSError as receipt_error:
+            message += "; receipt write failed: " + str(receipt_error)
+        if report.get("retainedPublishedApp"): message += "; signed App retained at " + str(output)
+        if isinstance(error, (Cancelled, KeyboardInterrupt)): raise Cancelled(message) from error
+        raise BuildError(message) from error
+    try:
+        report_path.write_text(json.dumps(report, indent=2) + "\n")
+    except OSError as error:
+        raise BuildError(f"signed App retained at {output}; receipt write failed: {error}") from error
+    return report, report_path
+
+
 def parse_arguments(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--prepared-resources", action="store_true", help="use the current guarded Xcode/prepared engine path")
     parser.add_argument("--config", required=True, help="absolute path to a schemaVersion 1 local JSON config")
     parser.add_argument("--run-root", required=True, help="absolute path that must not already exist")
     parser.add_argument("--timeout-per-stage", type=float, default=3600.0)
@@ -1312,8 +1485,11 @@ def main(argv: list[str] | None = None) -> int:
         args = parse_arguments(sys.argv[1:] if argv is None else argv)
         config_path = _absolute(args.config, "--config")
         run_root = _absolute(args.run_root, "--run-root")
-        preflight = _preflight(config_path, run_root)
-        report, report_path = _execute(preflight, config_path, run_root, args.timeout_per_stage)
+        if args.prepared_resources:
+            report, report_path = _execute_prepared(config_path, run_root, args.timeout_per_stage)
+        else:
+            preflight = _preflight(config_path, run_root)
+            report, report_path = _execute(preflight, config_path, run_root, args.timeout_per_stage)
     except Cancelled as error:
         # Cleanup has completed. Keep repeated cancellation from replacing the
         # promised 130 status during Python's short interpreter-shutdown window.

@@ -25,11 +25,21 @@ public struct WorkflowInputContract: Sendable {
             else { schema = step.node.dataConfiguration?.fields.first(where: { $0.name == portID })?.type }
         }
     }
-    public var specializedConcept: String? {
+    private var specializedKind: WorkflowDataKind? {
         switch (node.operationID, port.id) {
-        case ("d.music.align", "input"), ("d.music.keys", "input"), ("d.music.render", "input"), ("d.music.generate", "notes"): "音符序列"
-        case ("d.music.chords", "input"), ("d.music.generate", "chords"): "和弦轨"
-        case ("d.music.align", "tempo"): "速度映射"
+        case ("d.music.align", "input"), ("d.music.keys", "input"), ("d.music.render", "input"), ("d.music.generate", "notes"): .notes
+        case ("d.music.chords", "input"), ("d.music.generate", "chords"): .chords
+        case ("d.music.align", "tempo"): .tempo
+        default: nil
+        }
+    }
+    // Legacy fact values remain stable for saved searches; never select a
+    // validator by translated display text.
+    public var specializedConcept: String? {
+        switch specializedKind {
+        case .notes: "音符序列"
+        case .chords: "和弦轨"
+        case .tempo: "速度映射"
         default: nil
         }
     }
@@ -43,10 +53,10 @@ public struct WorkflowInputContract: Sendable {
         switch value {
         case .data(let datum):
             try datum.validate()
-            switch value.asset == nil ? specializedConcept : nil {
-            case "音符序列": _ = try WorkflowNoteSequence(datum: datum)
-            case "和弦轨": _ = try WorkflowChordTrack(datum: datum)
-            case "速度映射": _ = try WorkflowTempoMap(datum: datum)
+            switch value.asset == nil ? specializedKind : nil {
+            case .notes: _ = try WorkflowNoteSequence(datum: datum)
+            case .chords: _ = try WorkflowChordTrack(datum: datum)
+            case .tempo: _ = try WorkflowTempoMap(datum: datum)
             default: break
             }
         case .asset(let reference):
@@ -60,16 +70,16 @@ public struct WorkflowInputContract: Sendable {
     public func compatibility(with value: WorkflowValue, decodedAsset: WorkflowDatum? = nil) -> WorkflowInputCompatibilityResult {
         do {
             try validate(value)
-            if specializedConcept != nil && value.asset != nil {
+            if specializedKind != nil && value.asset != nil {
                 guard let decodedAsset else { return .init(status: .unverified, reason: "需读取并验证专用数据；文件类型不能证明结构兼容。", converter: nil, reasonCode: "specialized") }
-                switch specializedConcept {
-                case "音符序列": _ = try WorkflowNoteSequence(datum: decodedAsset)
-                case "和弦轨": _ = try WorkflowChordTrack(datum: decodedAsset)
-                case "速度映射": _ = try WorkflowTempoMap(datum: decodedAsset)
+                switch specializedKind {
+                case .notes: _ = try WorkflowNoteSequence(datum: decodedAsset)
+                case .chords: _ = try WorkflowChordTrack(datum: decodedAsset)
+                case .tempo: _ = try WorkflowTempoMap(datum: decodedAsset)
                 default: break
                 }
             }
-            if schema == nil && specializedConcept == nil && [.record, .list, .optional, .result, .notes, .chords, .tempo, .pitch].contains(value.kind) && port.assetListKind == nil {
+            if schema == nil && specializedKind == nil && [.record, .list, .optional, .result, .notes, .chords, .tempo, .pitch].contains(value.kind) && port.assetListKind == nil {
                 return .init(status: .unverified, reason: "接收端未声明足够精确的结构契约。", converter: nil, reasonCode: "contract")
             }
             return .init(status: .direct, reason: "符合此输入的已声明结构；其他输入与运行条件另行校验。", converter: nil, reasonCode: "direct")

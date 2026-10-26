@@ -113,7 +113,7 @@ public struct ModelLibraryView: View {
         .environment(\.workbenchHelpStore, featureHelp)
         .workbenchSheet(item: $featureHelp.presentation, title: workflowText(language, "childPanel.name.help")) { WorkbenchFeatureGuide(presentation: $0, store: featureHelp).environment(\.dLanguageStore, language) }
         .environment(\.workbenchMenuContext, "models:\(ObjectIdentifier(model)):\(ObjectIdentifier(model.library)):\(model.rootURL?.standardizedFileURL.path ?? "none"):\(model.workspace)")
-        .task { model.loadInventory(); await model.refresh() }
+        .task { model.loadInventory(); await model.refresh(checkFiles: true) }
         .onDisappear { model.clearSelectionContext(); rate = .init() }
         .onChange(of: model.snapshot?.revision, initial: true) { _, _ in sampleTransfer() }
         .onChange(of: model.workspace) { _, _ in rate = .init(); sampleTransfer() }
@@ -144,6 +144,7 @@ public struct ModelLibraryView: View {
                     Spacer(minLength: 8)
                     TextField(text("searchDownloads", "搜索下载任务"), text: $model.taskSearch)
                         .textFieldStyle(.roundedBorder).frame(maxWidth: 240).accessibilityIdentifier("model-manager-task-search")
+                    refreshButton
                     WorkbenchFeatureGuideButton(store: featureHelp)
                 }.buttonStyle(.bordered).padding(.horizontal, 16).frame(height: 44)
                 Divider()
@@ -241,8 +242,18 @@ public struct ModelLibraryView: View {
         rate.sample(identity: .init(task: task.id, attempt: task.attemptID, generation: task.generation), bytes: resource.record.downloadedBytes)
     }
 
+    private var refreshButton: some View {
+        Button { Task { await model.refresh(checkFiles: true) } } label: {
+            Image(systemName: "arrow.clockwise").frame(width: 28, height: 28).contentShape(Rectangle())
+        }
+        .disabled(model.isCheckingFiles)
+        .accessibilityLabel(text("refreshAvailability"))
+        .help(text("refreshAvailability"))
+        .accessibilityIdentifier("model-manager-refresh")
+    }
     private var controls: some View {
         HStack(spacing: 8) {
+            refreshButton
             if model.workspace == "resources" {
                 Button(text("import", "登记模型…")) { importVisible = true }.accessibilityIdentifier("model-manager-import")
             }

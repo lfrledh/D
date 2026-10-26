@@ -10,7 +10,7 @@ import Testing
 
 @Suite @MainActor
 struct ModelLibraryPresentationTests {
-    @Test func idlePollingPreservesPresentationWhileRealChangesStillPublish() async throws {
+    @Test func memoryRefreshPreservesPresentationWhileRealChangesStillPublish() async throws {
         let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
         let root = URL(fileURLWithPath: base).appendingPathComponent("LibraryPresentation-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -23,7 +23,7 @@ struct ModelLibraryPresentationTests {
         withObservationTracking { _ = model.snapshot } onChange: { idleChange.withLock { $0 = true } }
         await model.refresh()
         await model.refresh()
-        #expect(!idleChange.withLock { $0 }, "Unchanged polling must not rebuild an open native menu")
+        #expect(!idleChange.withLock { $0 }, "Unchanged memory refresh must not rebuild an open native menu")
 
         let location = root.appendingPathComponent("models")
         try FileManager.default.createDirectory(at: location, withIntermediateDirectories: true)
@@ -307,6 +307,7 @@ extension ModelLibraryPresentationTests {
         try FileManager.default.createDirectory(at: root.appendingPathComponent("files"), withIntermediateDirectories: true)
         try await library.configureRoot(at: root.appendingPathComponent("files"))
         let model = ModelLibraryModel(library: library)
+        model.start(); defer { model.stop() }
         var current = true, bound: [ModelID] = []
         let operation = try #require(entry.workflowProfileID), identity = try #require(entry.workflowIdentity)
         let bind: @MainActor (ModelID, @escaping @MainActor () -> Bool) async throws -> Void = { id, authorized in
@@ -351,17 +352,16 @@ extension ModelLibraryPresentationTests {
             model.isPresented = false; model.clearSelectionContext() // Closing the manager cannot cancel the request.
             if scenario == "target-changed" { current = false }
             if scenario == "paused" {
-                for _ in 0..<5 { await model.refresh() }
+                for _ in 0..<5 { await Task.yield() }
                 #expect(model.snapshot?.queueState == .paused)
                 #expect(await transport.count == 0 && bound.isEmpty)
             } else {
                 await transport.open()
                 for _ in 0..<500 {
-                    await model.refresh()
                     if !model.preparingNodeIdentities.contains(identity), model.snapshot?.downloads.first?.state == .completed || scenario == "existing-files" { break }
                     try await Task.sleep(for: .milliseconds(10))
                 }
-                for _ in 0..<5 { await model.refresh() }
+                for _ in 0..<5 { await Task.yield() }
                 let resource = try #require(model.snapshot?.resources.first)
                 #expect(await transport.count == 1)
                 #expect(resource.record.revision == entry.revision && resource.control.fileState == .verified)
@@ -581,6 +581,137 @@ extension ModelLibraryPresentationTests {
         #expect(await transfer.count == before)
         #expect(model.snapshot?.resources.first?.control.fileState == .verified)
         #expect(model.snapshot?.downloads.count == 1)
+        try await library.shutdown()
+    }
+}
+
+// QUALITY-CLOSEOUT-20261026: event-driven ownership, no manager lifetime timer.
+extension ModelLibraryPresentationTests {
+    @Test func idleObservationAndRepeatedOpenDoNotScanOrProjectPeriodically() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("QualityIdle-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = try await ModelLibrary(stateDirectory: root)
+        let model = ModelLibraryModel(library: library)
+        model.start(); model.start(); defer { model.stop() }
+        for _ in 0..<500 { if model.snapshot != nil { break }; await Task.yield() }
+        #expect(model.snapshot != nil)
+        #expect(await library.observationCount == 1)
+        model.isPresented = true
+        await model.refresh(checkFiles: true)
+        let checks = await library.availabilityCheckCount
+        let publications = await library.statePublicationCount
+        let projections = model.preparationProjectionCount
+        try await Task.sleep(for: .milliseconds(900))
+        model.isPresented = false
+        try await Task.sleep(for: .milliseconds(900))
+        #expect(await library.availabilityCheckCount == checks)
+        #expect(await library.statePublicationCount == publications)
+        #expect(model.preparationProjectionCount == projections)
+        model.stop()
+        for _ in 0..<500 { if await library.observationCount == 0 { break }; await Task.yield() }
+        #expect(await library.observationCount == 0)
+        model.start()
+        for _ in 0..<500 { if await library.observationCount == 1 { break }; await Task.yield() }
+        #expect(await library.observationCount == 1)
+        try await library.shutdown()
+    }
+
+    @Test(arguments: ["zh-Hans", "en"])
+    func unknownCatalogUsesLanguageResourceWithoutOpeningPanel(locale: String) async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("QualityLanguage-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bytes = Data(repeating: 0x41, count: 4096)
+        let entry = ModelCatalogEntry(id: "quality-language", title: "Official fixture name", repository: "fixture/language", revision: String(repeating: "a", count: 40),
+            files: [.init(path: "payload.bin", size: UInt64(bytes.count), sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())])
+        let library = try await ModelLibrary(stateDirectory: root.appendingPathComponent("state"), catalog: [entry])
+        let language = UILanguageStore(preferredLanguages: [locale]); try language.select(locale)
+        let model = ModelLibraryModel(library: library, language: language)
+        await model.refresh()
+        let before = await library.snapshot()
+        await model.registerExisting(catalogID: "unknown-fixture")
+        #expect(model.errorMessage == (locale == "en" ? "The selected model is not in the built-in model catalog." : "所选模型不在内置模型目录中。"))
+        #expect(!model.isChoosingLocation && model.globalOperation == nil)
+        #expect(await library.snapshot() == before)
+        let source = root.appendingPathComponent("source")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try bytes.write(to: source.appendingPathComponent("payload.bin"))
+        let id = try await library.registerExisting(at: source, catalogID: entry.id)
+        await model.refresh()
+        let record = try #require(model.snapshot?.records.first)
+        #expect(model.status(for: record) == (locale == "en" ? "Files verified; the execution engine needs separate validation" : "文件已校验；执行引擎需单独验证"))
+        var prepared = false
+        await model.prepareVideo(id) { _, _ in prepared = true }
+        #expect(!prepared && !model.isChoosingLocation)
+        #expect(model.errorMessage?.contains(locale == "en" ? "complete preparation engine" : "完整准备引擎") == true)
+        #expect(try Data(contentsOf: source.appendingPathComponent("payload.bin")) == bytes)
+        try await library.shutdown()
+    }
+}
+
+extension ModelLibraryPresentationTests {
+    @Test func lastCompletionWhileAnotherBindingSuspendsIsDrainedWithoutPolling() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("QualityBinding-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fixed = Array(try ModelCatalog.entries().filter { $0.preparation == .none && $0.workflowIdentity != nil && $0.workflowProfileID != nil }.prefix(2))
+        #expect(fixed.count == 2)
+        let bytes = Data(repeating: 0x41, count: 4096)
+        let entries = fixed.map { item in
+            ModelCatalogEntry(id: item.id, title: item.title, repository: "fixture/events", revision: item.revision,
+                files: [.init(path: "payload.bin", size: UInt64(bytes.count), sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())],
+                workflowProfileID: item.workflowProfileID, workflowIdentity: item.workflowIdentity)
+        }
+        let transfer = PresentationTransfer(), gate = NodeBindingGate()
+        await transfer.open()
+        let library = try await ModelLibrary(stateDirectory: root.appendingPathComponent("state"), catalog: entries, transport: transfer)
+        try await library.configureRoot(at: root)
+        try await library.pauseQueue()
+        let model = ModelLibraryModel(library: library)
+        model.start(); defer { model.stop() }
+        var entered = false, bound: [ModelID] = []
+        await model.prepareNode(operationID: try #require(entries[0].workflowProfileID), identity: try #require(entries[0].workflowIdentity), isCurrent: { true }) { id, authorized in
+            entered = true; await gate.wait()
+            guard authorized() else { return }; bound.append(id)
+        }
+        try await library.resumeQueue()
+        for _ in 0..<500 { if entered { break }; try await Task.sleep(for: .milliseconds(5)) }
+        #expect(entered)
+        await model.prepareNode(operationID: try #require(entries[1].workflowProfileID), identity: try #require(entries[1].workflowIdentity), isCurrent: { true }) { id, authorized in
+            guard authorized() else { return }; bound.append(id)
+        }
+        for _ in 0..<500 {
+            if await library.snapshot().downloads.filter({ $0.state == .completed }).count == 2 { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        await gate.open()
+        for _ in 0..<500 { if bound.count == 2 { break }; try await Task.sleep(for: .milliseconds(5)) }
+        #expect(bound.count == 2 && Set(bound).count == 2)
+        #expect(model.preparingNodeIdentities.isEmpty)
+        #expect(await library.availabilityCheckCount == 1, "Configure root only; byte events cannot scan files")
+        #expect(await transfer.count == 2)
+        await model.volumeChanged(URL(fileURLWithPath: "/Volumes/Unrelated-Quality-Fixture"))
+        #expect(await library.availabilityCheckCount == 1, "Unrelated volume notification must not scan this library")
+        try await library.shutdown()
+    }
+}
+
+extension ModelLibraryPresentationTests {
+    @Test func destroyingIdlePresentationReleasesSubscriptionWithoutAnotherEvent() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("QualityLifetime-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = try await ModelLibrary(stateDirectory: root)
+        var model: ModelLibraryModel? = ModelLibraryModel(library: library)
+        weak var weakModel = model
+        model?.start()
+        for _ in 0..<500 { if model?.snapshot != nil { break }; await Task.yield() }
+        #expect(await library.observationCount == 1)
+        model = nil
+        for _ in 0..<500 { if await library.observationCount == 0 { break }; await Task.yield() }
+        #expect(weakModel == nil)
+        #expect(await library.observationCount == 0)
         try await library.shutdown()
     }
 }

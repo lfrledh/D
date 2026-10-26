@@ -45,6 +45,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				ReviewOnly.xcconfig,
 			);
 			target = ED43658D2F52D7D300430841 /* D */;
 		};
@@ -293,7 +294,7 @@
 			outputPaths = ();
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nif [ \"$CONFIGURATION\" != Debug ]; then exit 0; fi\nexport PYTHONDONTWRITEBYTECODE=1\n/usr/bin/python3 \"$SRCROOT/scripts/verify-development-resources.py\" --prepared \"$D_DEVELOPMENT_RESOURCES\"\n";
+			shellScript = "set -eu\nexport PYTHONDONTWRITEBYTECODE=1\n/usr/bin/python3 \"$SRCROOT/scripts/verify-development-resources.py\" --prepared \"$D_DEVELOPMENT_RESOURCES\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -514,7 +515,6 @@
 		ED4365B32F52D7D400430841 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				EXCLUDED_SOURCE_FILE_NAMES = "Engines";
 				CODE_SIGN_ENTITLEMENTS = D/D.entitlements;
 				INFOPLIST_FILE = D/Info.plist;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;

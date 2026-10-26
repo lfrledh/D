@@ -19,6 +19,7 @@ public enum ProjectCloseDecision: Sendable {
 /// Only the composition root constructs an inference implementation.
 @MainActor @Observable
 public final class ProjectSession {
+    isolated deinit { modelObservation?.cancel() }
     public private(set) var manifest: ProjectManifest?
     public private(set) var projectURL: URL?
     /// Quick records restored with a named project keep that project instance as owner.
@@ -411,7 +412,7 @@ public final class ProjectSession {
     @ObservationIgnored private var cancellationRequests: Set<UUID> = []
     @ObservationIgnored private var pendingSaves: [UUID: RunOutcome] = [:]
     @ObservationIgnored private var poller: Task<Void, Never>?
-    @ObservationIgnored private var modelPoller: Task<Void, Never>?
+    @ObservationIgnored private var modelObservation: Task<Void, Never>?
     @ObservationIgnored private var draftWriter: Task<Void, Never>?
     @ObservationIgnored private var draftSaveFailed = false
     @ObservationIgnored private var draftWriteTail: Task<Void, Never>?
@@ -1181,7 +1182,7 @@ public final class ProjectSession {
         let identity = kind.rawValue + ":" + (execution?.executionRevision ?? entry.revision)
         let binding = try await resolveInstalledWorkflowModel(id, kind: kind, identity: identity, session: session, library: library)
         await binding.release()
-        let installationSnapshot = await library.snapshot()
+        let installationSnapshot = await library.checkAvailability(ids: [id])
         try Task.checkCancellation()
         guard workflowInstallationSelection == selection else { throw CancellationError() }
         // A newer removal/unavailability observation can arrive while snapshot()
@@ -1473,7 +1474,7 @@ public final class ProjectSession {
                     }?.bookmark
                 }
                 if let installation, let library = modelLibrary {
-                    let snapshot = await library.snapshot()
+                    let snapshot = await library.checkAvailability(ids: [installation])
                     guard snapshot.revision >= modelAvailabilityRevision,
                           let record = snapshot.records.first(where: { $0.id == installation }) else {
                         throw WorkflowIssue("模型安装记录已改变或移除。")
@@ -1497,7 +1498,7 @@ public final class ProjectSession {
                         let binding = try await self.resolveWorkflowModel(choice.kind, identity: choice.id, session: session)
                         await binding.release()
                     }
-                    let current = await library.snapshot()
+                    let current = await library.checkAvailability(ids: [installation])
                     guard modelReadinessRequests[choice.id] == request,
                           workflowBindingMatches(choice, installation: installation, bookmark: nil) else { return }
                     guard current.revision >= modelAvailabilityRevision,
@@ -1726,18 +1727,17 @@ public final class ProjectSession {
         } ?? reference.directory.lastPathComponent
         modelStatus = "模型库已校验此模型；生成前会检查全部权重。"
         settings.set(id.rawValue.uuidString, forKey: Self.selectedModelKey)
-        startModelReadinessPolling(id: id, library: library)
+        startModelReadinessObservation(id: id, library: library)
     }
 
     private static func modelTitle(for record: ModelRecord, in snapshot: ModelLibrarySnapshot) -> String {
         snapshot.catalog.first(where: { $0.id == record.catalogID })?.title ?? record.catalogID
     }
 
-    private func startModelReadinessPolling(id: ModelID, library: ModelLibrary) {
-        modelPoller?.cancel()
-        modelPoller = Task { [weak self] in
-            while !Task.isCancelled {
-                let snapshot = await library.snapshot()
+    private func startModelReadinessObservation(id: ModelID, library: ModelLibrary) {
+        modelObservation?.cancel()
+        modelObservation = Task { [weak self] in
+            for await snapshot in await library.changes() {
                 guard let self, !Task.isCancelled, self.selectedModelID == id else { return }
                 if let record = snapshot.records.first(where: { $0.id == id }) {
                     self.selectedModelReady = record.state == .installed && record.availability == .available
@@ -1755,7 +1755,6 @@ public final class ProjectSession {
                     self.selectedModelReady = false
                     self.modelStatus = "所选模型已从模型库移除，请重新选择可用模型。"
                 }
-                do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
             }
         }
     }
@@ -2741,8 +2740,8 @@ public final class ProjectSession {
             return false
         }
         guard let store else {
-            modelPoller?.cancel()
-            modelPoller = nil
+            modelObservation?.cancel()
+            modelObservation = nil
             return true
         }
         do {
@@ -2816,8 +2815,8 @@ public final class ProjectSession {
             selectedModelID = nil
             selectedModelRevision = nil
             selectedModelReady = false
-            modelPoller?.cancel()
-            modelPoller = nil
+            modelObservation?.cancel()
+            modelObservation = nil
             imageProfile = .flux2Klein
             modelStatus = modelLibrary == nil ? "请选择已安装的 FLUX.2 Klein 4B q8 模型文件夹。" : "请在模型库中安装或选择可用模型。"
             manifest = nil

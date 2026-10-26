@@ -3,6 +3,7 @@
   "locale": "en",
   "displayName": "English",
   "strings": {
+    "modelManagement.refreshAvailability": "Refresh file availability",
     "workflow.node.prepare.identityMismatch": "This model identity does not match the operation or a supported catalog draft.",
     "workflow.node.prepare.notReady": "Model not ready",
     "workflow.node.prepare.download": "Download and Register Model",
@@ -4744,6 +4745,21 @@
     "chat.clarity.reasonModel": "Choose a model first.",
     "chat.clarity.reasonParameters": "Complete or correct invalid parameters first.",
     "chat.clarity.reasonNoQuestion": "This answer has no original question to regenerate from.",
-    "chat.clarity.reasonSpeech": "Stop the current read-aloud first."
+    "chat.clarity.reasonSpeech": "Stop the current read-aloud first.",
+    "modelManagement.catalogMissing": "The selected model is not in the built-in model catalog.",
+    "modelManagement.prepareEngineUnavailable": "This app lacks the complete preparation engine for this model, or the original files have not been verified. Rebuild with the complete development resources for this stage. The original files are unchanged.",
+    "modelManagement.pending.relinking": "Verifying the new location…",
+    "modelManagement.recordStatus.authorization": "Access needs to be granted again",
+    "modelManagement.recordStatus.unavailable": "Storage location unavailable",
+    "modelManagement.recordStatus.registered": "Registered; awaiting verification",
+    "modelManagement.recordStatus.queued": "Waiting to download",
+    "modelManagement.recordStatus.downloading": "Downloading",
+    "modelManagement.recordStatus.pausing": "Pausing; waiting for writes to finish",
+    "modelManagement.recordStatus.paused": "Paused",
+    "modelManagement.recordStatus.verifying": "Verifying integrity",
+    "modelManagement.recordStatus.publishing": "Finishing installation",
+    "modelManagement.recordStatus.installed": "Files verified; the execution engine needs separate validation",
+    "modelManagement.recordStatus.preparationRequired": "Original files verified; preparation is still needed",
+    "modelManagement.recordStatus.failed": "Operation incomplete"
   }
 }

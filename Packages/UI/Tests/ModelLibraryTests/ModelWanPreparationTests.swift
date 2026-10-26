@@ -262,7 +262,7 @@ struct ModelWanPreparationTests {
         let output = try await reopened.prepareVideo(id, in: fixture.destination)
         #expect(FileManager.default.fileExists(atPath: output.path))
         try Self.replaceRequiredParent(fixture, source: ModelDirectory(fixture.source))
-        #expect(await reopened.snapshot().records.first?.availability == .unavailable)
+        #expect(await reopened.checkAvailability().records.first?.availability == .unavailable)
         await #expect(throws: (any Error).self) { _ = try await reopened.prepareVideo(id, in: fixture.destination) }
         try await reopened.shutdown()
     }

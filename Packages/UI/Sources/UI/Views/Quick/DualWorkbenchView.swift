@@ -146,7 +146,7 @@ public struct DualWorkbenchView: View {
     @Environment(\.dLanguageStore) private var language
     private var canvasModel: WorkbenchModel { model.manifest == nil ? automaticQuickModel : model }
     private var installationStates: [String] {
-        library.records.map { "\($0.id):\($0.state.rawValue):\($0.availability.rawValue):\($0.registrationState.rawValue)" }.sorted()
+        library.installationStates
     }
     private var quickModelIdentity: String? {
         if quick.category == .text, quick.textPresentation == .chat, let modelID = chat?.selectedSession?.configuration?.parameters["modelID"]?.string {

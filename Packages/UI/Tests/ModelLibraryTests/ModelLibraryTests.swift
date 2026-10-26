@@ -221,7 +221,7 @@ struct ModelLibraryTests {
         index["rootBookmark"] = try copied.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil).base64EncodedString()
         try JSONSerialization.data(withJSONObject: index).write(to: indexURL)
         let reopened = try await fixture.library(server: server)
-        #expect(await reopened.snapshot().records.first?.availability == .unavailable)
+        #expect(await reopened.checkAvailability().records.first?.availability == .unavailable)
         await #expect(throws: ModelLibraryError.self) { _ = try await reopened.resolve(id) }
         try await reopened.configureRoot(at: fixture.destination)
         #expect(try await reopened.resolve(id).directory.path.hasPrefix(fixture.destination.path + "/"))
@@ -238,7 +238,7 @@ struct ModelLibraryTests {
         _ = try await waitRecord(library, id: id) { $0.state == .failed }
         let moved = fixture.root.appendingPathComponent("moved-original")
         try FileManager.default.moveItem(at: fixture.destination, to: moved)
-        #expect(await library.snapshot().records.first?.availability == .unavailable)
+        #expect(await library.checkAvailability().records.first?.availability == .unavailable)
         try await library.configureRoot(at: moved)
         #expect(await library.snapshot().records.first?.availability == .available)
         try server.setMode("valid")
@@ -254,7 +254,7 @@ struct ModelLibraryTests {
         let old = fixture.root.appendingPathComponent("old")
         try FileManager.default.moveItem(at: fixture.source, to: old)
         try fixture.writeModel(at: fixture.source)
-        #expect(await library.snapshot().records.first?.availability == .unavailable)
+        #expect(await library.checkAvailability().records.first?.availability == .unavailable)
         await #expect(throws: ModelLibraryError.self) { _ = try await library.acquire(id) }
         let unknownRoot = fixture.destination.appendingPathComponent(".d-model-library/unknown-empty")
         try FileManager.default.createDirectory(at: unknownRoot, withIntermediateDirectories: true)
@@ -703,5 +703,34 @@ struct ModelLibraryTests {
         let entry = ModelCatalogEntry(id: "bad", title: "bad", repository: "fixture/model", revision: fixture.entry.revision,
             files: [.init(path: path, size: 1, sha256: String(repeating: "0", count: 64))], imageProfile: .flux2Klein)
         await #expect(throws: ModelLibraryError.self) { _ = try await ModelLibrary(stateDirectory: fixture.state, catalog: [entry]) }
+    }
+}
+
+extension ModelLibraryTests {
+    @Test func memorySnapshotDoesNotInspectFilesButExplicitCheckAndAdmissionDo() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let library = try await fixture.library()
+        let id = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        let before = await library.availabilityCheckCount
+        let source = fixture.source.appendingPathComponent("weights/payload.bin")
+        try Data(repeating: 0xFF, count: 17).write(to: source)
+        for _ in 0..<20 { _ = await library.snapshot() }
+        #expect(await library.availabilityCheckCount == before)
+        #expect(await library.snapshot().records.first?.availability == .available)
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.acquire(id) }
+        #expect(await library.checkAvailability(ids: [id]).records.first?.availability == .unavailable)
+        try await library.shutdown()
+    }
+    @Test func concurrentAvailabilityRequestsShareOnePassAndKeepTheirUnion() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let library = try await fixture.library()
+        let id = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        let before = await library.availabilityCheckCount
+        async let first = library.checkAvailability(ids: [])
+        async let second = library.checkAvailability(ids: [id])
+        let (a,b) = await (first, second)
+        #expect(a == b)
+        #expect(await library.availabilityCheckCount == before + 1)
+        try await library.shutdown()
     }
 }

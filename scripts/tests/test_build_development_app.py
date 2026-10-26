@@ -1100,5 +1100,61 @@ class BuildLocalCompatibilityTests(unittest.TestCase):
         self.assertTrue(log.is_file())
 
 
+class PreparedIdentityTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(dir=os.environ.get("D_MB_TEST_TMP_ROOT"))
+        self.root = Path(self.temporary.name)
+        self.core = _load_coordinator(TARGET, "d_prepared_identity")
+        self.git("init", "-q")
+        self.git("config", "user.name", "Fixture")
+        self.git("config", "user.email", "fixture@example.invalid")
+        (self.root / "D").mkdir(); (self.root / "docs").mkdir()
+        (self.root / "D/Main.swift").write_text("let value = 1\n")
+        self.git("add", "D/Main.swift"); self.git("commit", "-qm", "fixture product")
+        self.production = self.git("rev-parse", "HEAD").strip()
+        (self.root / "docs/receipt.md").write_text("fixture receipt\n")
+        self.git("add", "docs/receipt.md"); self.git("commit", "-qm", "fixture docs")
+        self.delivery = self.git("rev-parse", "HEAD").strip()
+
+    def tearDown(self): self.temporary.cleanup()
+    def git(self, *args):
+        return subprocess.check_output(["git", "-C", str(self.root), *args], stderr=subprocess.DEVNULL).decode()
+
+    def test_clean_and_document_successor_identify_actual_product_bytes(self):
+        value = self.core._prepared_source(self.root, self.production, self.delivery)
+        self.assertEqual(value["production"], self.production)
+        self.assertEqual(len(value["productSHA256"]), 64)
+        (self.root / "docs/receipt.md").write_text("receipt draft\n")
+        self.assertEqual(self.core._prepared_source(self.root, self.production, self.delivery), value)
+
+    def test_dirty_staged_and_untracked_product_inputs_are_rejected(self):
+        source = self.root / "D/Main.swift"
+        source.write_text("let value = 2\n")
+        with self.assertRaises(self.core.BuildError): self.core._prepared_source(self.root, self.production, self.delivery)
+        self.git("add", "D/Main.swift")
+        source.write_text("let value = 1\n")  # index still differs even if worktree returns to production
+        with self.assertRaises(self.core.BuildError): self.core._prepared_source(self.root, self.production, self.delivery)
+        self.git("add", "D/Main.swift")
+        (self.root / "D/new.swift").write_text("let fresh = 1\n")
+        with self.assertRaises(self.core.BuildError): self.core._prepared_source(self.root, self.production, self.delivery)
+
+    def test_product_successor_and_nonancestor_cannot_be_labelled_document_delivery(self):
+        (self.root / "D/Main.swift").write_text("let value = 3\n")
+        self.git("add", "D/Main.swift"); self.git("commit", "-qm", "fixture product change")
+        head = self.git("rev-parse", "HEAD").strip()
+        with self.assertRaises(self.core.BuildError): self.core._prepared_source(self.root, self.production, head)
+        with self.assertRaises(self.core.BuildError): self.core._prepared_source(self.root, head, self.delivery)
+
+    def test_stale_info_marker_is_rejected_before_signing(self):
+        import plistlib
+        info = self.root / "D/Info.plist"
+        info.write_bytes(plistlib.dumps({"DSourceCommit": "f" * 40}))
+        with self.assertRaises(self.core.BuildError): self.core._prepared_info(info, self.production, self.delivery)
+        info.write_bytes(plistlib.dumps({"NSMicrophoneUsageDescription": "fixture"}))
+        result = self.core._prepared_info(info, self.production, self.delivery)
+        self.assertEqual(result["DSourceCommit"], self.production)
+        self.assertEqual(result["DDeliveryCommit"], self.delivery)
+
+
 if __name__ == "__main__":
     unittest.main()

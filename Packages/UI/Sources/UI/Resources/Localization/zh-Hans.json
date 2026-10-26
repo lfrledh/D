@@ -3,6 +3,7 @@
   "locale": "zh-Hans",
   "displayName": "简体中文",
   "strings": {
+    "modelManagement.refreshAvailability": "刷新文件可用性",
     "workflow.node.prepare.identityMismatch": "此模型身份与操作不匹配，且不是受支持的目录草稿。",
     "workflow.node.prepare.notReady": "模型未就绪",
     "workflow.node.prepare.download": "下载模型并登记",
@@ -4744,6 +4745,21 @@
     "chat.clarity.reasonModel": "请先选择模型。",
     "chat.clarity.reasonParameters": "请先修正未完成或无效的参数。",
     "chat.clarity.reasonNoQuestion": "这条回答没有可用于重新生成的原问题。",
-    "chat.clarity.reasonSpeech": "请先停止当前朗读。"
+    "chat.clarity.reasonSpeech": "请先停止当前朗读。",
+    "modelManagement.catalogMissing": "所选模型不在内置模型目录中。",
+    "modelManagement.prepareEngineUnavailable": "当前应用没有该模型的完整准备引擎，或原始文件尚未校验；请使用本阶段的完整开发资源重新构建。原文件未修改。",
+    "modelManagement.pending.relinking": "正在校验新位置…",
+    "modelManagement.recordStatus.authorization": "需要重新授权",
+    "modelManagement.recordStatus.unavailable": "存放位置不可用",
+    "modelManagement.recordStatus.registered": "已登记，等待校验",
+    "modelManagement.recordStatus.queued": "等待下载",
+    "modelManagement.recordStatus.downloading": "正在下载",
+    "modelManagement.recordStatus.pausing": "正在暂停，等待写入结束",
+    "modelManagement.recordStatus.paused": "已暂停",
+    "modelManagement.recordStatus.verifying": "正在校验完整性",
+    "modelManagement.recordStatus.publishing": "正在完成安装",
+    "modelManagement.recordStatus.installed": "文件已校验；执行引擎需单独验证",
+    "modelManagement.recordStatus.preparationRequired": "原始文件已校验；仍需准备",
+    "modelManagement.recordStatus.failed": "操作未完成"
   }
 }

@@ -64,6 +64,24 @@ import Testing
         #expect(typed.compatibility(with: .data(.text("{\"count\":2}"))).status == .conversion)
         #expect(typed.compatibility(with: .data(.text("{\"other\":2}"))).status == .incompatible)
     }
+    @Test func specializedValidatorsFollowOperationAndPortIDsNotDisplayNames() throws {
+        let tempo = WorkflowTempoMap(beatsPerMinute: 120, firstBeatSeconds: 0, numerator: 4, denominator: 4)
+        let chords = WorkflowChordTrack(chords: [], duration: 1, tempo: tempo, sources: [])
+        let notes = WorkflowNoteSequence(clock: .seconds, notes: [], duration: 1, sources: [])
+        let cases: [(String, String, WorkflowDatum)] = [
+            ("d.music.render", "input", try notes.datum()),
+            ("d.music.chords", "input", try chords.datum()),
+            ("d.music.align", "tempo", try tempo.datum())]
+        for (operation, port, valid) in cases {
+            var node = try #require(WorkflowRegistry.standard.operation(operation)).definition.makeNode()
+            node.title = "Custom name / 用户自定义同名文字"
+            let contract = try WorkflowInputContract(step: .init(node: node, inputs: []), portID: port)
+            #expect(contract.compatibility(with: .data(valid)).status == .direct)
+            #expect(contract.compatibility(with: .data(.record(schema: [], fields: [:]))).status == .incompatible)
+            node.operationID = "custom.unknown"; node.title = "音符序列"
+            #expect(throws: WorkflowIssue.self) { try WorkflowInputContract(step: .init(node: node, inputs: []), portID: port) }
+        }
+    }
     @Test @MainActor func contentFiltersDoNotConfuseAssetsWithOperationOutputs() throws {
         let store = try SharedLibraryStore()
         let asset = SharedLibraryItem(key: "asset:test", title: "图像素材", kind: .asset, contentKind: .image,
