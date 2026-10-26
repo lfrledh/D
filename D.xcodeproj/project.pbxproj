@@ -289,7 +289,16 @@
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = ();
-			inputPaths = ("$(SRCROOT)/scripts/verify-development-resources.py", "$(SRCROOT)/scripts/prepare-development-resources.py", "$(D_DEVELOPMENT_RESOURCES)/");
+			inputPaths = (
+				"$(SRCROOT)/scripts/verify-development-resources.py",
+				"$(SRCROOT)/scripts/prepare-development-resources.py",
+				"$(SRCROOT)/scripts/check-zero-model-weights.py",
+				"$(SRCROOT)/scripts/non-model-resource-data.json",
+				"$(SRCROOT)/Backends/Audio/Packaging/package_audio_app.py",
+				"$(SRCROOT)/Backends/Audio/Packaging/prepare_engine.py",
+				"$(SRCROOT)/Backends/Audio/Packaging/prepare_mrt2_engine.py",
+				"$(D_DEVELOPMENT_RESOURCES)/",
+			);
 			name = "Verify development engines";
 			outputPaths = ();
 			runOnlyForDeploymentPostprocessing = 0;
