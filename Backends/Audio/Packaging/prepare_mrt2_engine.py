@@ -72,6 +72,7 @@ def copy_runtime(python_root: Path, site: Path, target: Path) -> None:
                 record = destination / path.name / name
                 if record.is_file():
                     record.unlink()  # Only files copied into our new unpublished staging tree.
+    common._install_dependency_licenses(destination)
 
 
 def prepare(args: argparse.Namespace) -> None:

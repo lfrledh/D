@@ -122,6 +122,7 @@ def prepare(args):
             copy_file(python / 'lib' / name, staging / 'python/lib' / name)
         target_site = staging / 'python/lib/python3.12/site-packages'
         core._copy_tree(site, target_site)
+        core._install_dependency_licenses(target_site)
         # Only copied installation records are removed; source environment remains unchanged.
         for directory in target_site.glob('*.dist-info'):
             for name in ('direct_url.json', 'RECORD', 'INSTALLER', 'REQUESTED'):

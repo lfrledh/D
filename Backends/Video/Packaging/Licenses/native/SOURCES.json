@@ -1,0 +1,227 @@
+[
+  {
+    "component": "openssl@3/3.6.3",
+    "upstreamRecipe": [
+      "https://github.com/openssl/openssl/releases/download/openssl-3.6.3/openssl-3.6.3.tar.gz",
+      "243a86649cf6f23eeb6a2ff2456e09e5d77dd9018a54d3d96b0c6bdd6ba6c7f1"
+    ],
+    "binaries": [
+      {
+        "name": "libssl.3.dylib",
+        "sourceSHA256": "ffd8ac6981000def0928367924b6cb1e7a98712efbc06e2a2f3f750138bd89ca"
+      },
+      {
+        "name": "libcrypto.3.dylib",
+        "sourceSHA256": "a12805a18cd5e4f733fa8727b91afa08b587f9da5a760517cd79cb508a3a3f71"
+      }
+    ],
+    "notices": [
+      {
+        "path": "openssl-3-3.6.3/LICENSE.txt",
+        "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
+      }
+    ]
+  },
+  {
+    "component": "svt-av1/4.2.0",
+    "upstreamRecipe": [
+      "https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/v4.2.0/SVT-AV1-v4.2.0.tar.bz2",
+      "512f2ea5649e3e76c2dddcc25c2556fb67a9582baaab207c9c96161c94659dad"
+    ],
+    "binaries": [
+      {
+        "name": "libSvtAv1Enc.4.2.0.dylib",
+        "sourceSHA256": "bac7066bcd47c31971f61e57cdd0eccabb2ec2ef3ca5aa1e08bd5ca51cd54608"
+      }
+    ],
+    "notices": [
+      {
+        "path": "svt-av1-4.2.0/LICENSE.md",
+        "sha256": "0acc2fcb27472bdc9aaf8b71f37055bbdac4f54671b7d922f241bd7fcd0dd3e6"
+      },
+      {
+        "path": "svt-av1-4.2.0/LICENSE-BSD2.md",
+        "sha256": "c582fcbeb9cf972a60d298bfaf41dc5adff2dd14208946edcb9bb56a281e8438"
+      }
+    ]
+  },
+  {
+    "component": "dav1d/1.5.4",
+    "upstreamRecipe": [
+      "https://code.videolan.org/videolan/dav1d/-/archive/1.5.4/dav1d-1.5.4.tar.bz2",
+      "2abfb0c89212e6e4733a54e0ae509ec00a5b845a6360946f918806e14aedb011"
+    ],
+    "binaries": [
+      {
+        "name": "libdav1d.7.dylib",
+        "sourceSHA256": "60c3a42a79582241ac77bbbba4c0137c2209204aecbc59e5d6392c2dc0a5b439"
+      }
+    ],
+    "notices": [
+      {
+        "path": "dav1d-1.5.4/COPYING",
+        "sha256": "dd92c3c2247c5651606fc23a5e2d6a1ebc5ace9a3e49cbde0e12f05ad1cb1ee5"
+      }
+    ]
+  },
+  {
+    "component": "xz/5.8.3",
+    "upstreamRecipe": [
+      "https://github.com/tukaani-project/xz/releases/download/v5.8.3/xz-5.8.3.tar.gz",
+      "3d3a1b973af218114f4f889bbaa2f4c037deaae0c8e815eec381c3d546b974a0"
+    ],
+    "binaries": [
+      {
+        "name": "liblzma.5.dylib",
+        "sourceSHA256": "606a5184911c876c7446f932685183d8b348f5c9a95f764b01607be0e40b64ea"
+      }
+    ],
+    "notices": [
+      {
+        "path": "xz-5.8.3/COPYING",
+        "sha256": "616a3ad264ce29b8f1cb97e53037b139d406899ca8d1f799651e17bfa09830b8"
+      },
+      {
+        "path": "xz-5.8.3/COPYING.0BSD",
+        "sha256": "0b01625d853911cd0e2e088dcfb743261034a091bb379246cb25a14cc4c74bf1"
+      }
+    ]
+  },
+  {
+    "component": "lame/4.0",
+    "upstreamRecipe": [
+      "https://downloads.sourceforge.net/project/lame/lame/4.0/lame-4.0.tar.gz",
+      "3df5124d5ad3a98312ffd7ba6a9b36230e4f8a3e66d3ce0f425e336c32d216eb"
+    ],
+    "binaries": [
+      {
+        "name": "libmp3lame.0.dylib",
+        "sourceSHA256": "5150d16a2b09a8f6f3475dcc837fdf5435d4f97e817ca12306fec8da5614647c"
+      }
+    ],
+    "notices": [
+      {
+        "path": "lame-4.0/LICENSE",
+        "sha256": "5c1f8d44f1eacbea3e1c31ff6ee11a4e1690ccbed4ee4af16de3b6eb61dc69a8"
+      },
+      {
+        "path": "lame-4.0/COPYING",
+        "sha256": "e64f9c5a18f56828c10a575df13ade641aa3af4512a7afe6c411256943b57aaf"
+      }
+    ]
+  },
+  {
+    "component": "mpg123/1.33.7",
+    "upstreamRecipe": [
+      "https://www.mpg123.de/download/mpg123-1.33.7.tar.bz2",
+      "31d0e35a4ca567ec9b5ebda6c3062bb4435d6d3eacd6ef0d95cadd7854dc03ee"
+    ],
+    "binaries": [
+      {
+        "name": "libmpg123.0.dylib",
+        "sourceSHA256": "435f7bc76659569772b1a90b049a28fe17bc0d605525f1061f830c119807718a"
+      }
+    ],
+    "notices": [
+      {
+        "path": "mpg123-1.33.7/COPYING",
+        "sha256": "c22482728a634a8dfdb4ff72a96d4c1ed64cd8f3e79335c401751ac591609366"
+      }
+    ]
+  },
+  {
+    "component": "opus/1.6.1",
+    "upstreamRecipe": [
+      "https://ftp.osuosl.org/pub/xiph/releases/opus/opus-1.6.1.tar.gz",
+      "6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1"
+    ],
+    "binaries": [
+      {
+        "name": "libopus.0.dylib",
+        "sourceSHA256": "435581a316f3dd41982f3101caa6be6ec974572e31765cd0e29c7cbe30198609"
+      }
+    ],
+    "notices": [
+      {
+        "path": "opus-1.6.1/COPYING",
+        "sha256": "01e1167d54a096d123cf6dfbbeb19587278845c6481d2d66d545669846079551"
+      }
+    ]
+  },
+  {
+    "component": "libvmaf/3.2.0",
+    "upstreamRecipe": [
+      "https://github.com/Netflix/vmaf/archive/refs/tags/v3.2.0.tar.gz",
+      "a28f93f3b4fa65601be324587072e32a6a704a304ba7b1aec9b70b3f709bc1dc"
+    ],
+    "binaries": [
+      {
+        "name": "libvmaf.3.dylib",
+        "sourceSHA256": "c2d788b0cce9486c0002ea66d802ab50d797afc48f69597df0954de24d069eaa"
+      }
+    ],
+    "notices": [
+      {
+        "path": "libvmaf-3.2.0/LICENSE",
+        "sha256": "a6fdb51d02b9dfe198e55534bb8047fe6d756eda117f4ff83de98f92c1952710"
+      }
+    ]
+  },
+  {
+    "component": "libvpx/1.16.0",
+    "upstreamRecipe": [
+      "https://github.com/webmproject/libvpx/archive/refs/tags/v1.16.0.tar.gz",
+      "7a479a3c66b9f5d5542a4c6a1b7d3768a983b1e5c14c60a9396edc9b649e015c"
+    ],
+    "binaries": [
+      {
+        "name": "libvpx.12.dylib",
+        "sourceSHA256": "e7376dca3d10474e7f603c7a8cf86d5c3c7030265c5f7be3d0137755cbf997f1"
+      }
+    ],
+    "notices": [
+      {
+        "path": "libvpx-1.16.0/LICENSE",
+        "sha256": "8267348d5af1262c11d1a08de2f5afc77457755f1ac658627dd9acf71011d615"
+      }
+    ]
+  },
+  {
+    "component": "x264/r3222",
+    "upstreamRecipe": [
+      "https://code.videolan.org/videolan/x264.git",
+      "https://artifacts.videolan.org/x264/release-macos-arm64/"
+    ],
+    "binaries": [
+      {
+        "name": "libx264.165.dylib",
+        "sourceSHA256": "e0d737b88c67ac30e8561d9267d10495529cfede1af45838914c0b522c37a26d"
+      }
+    ],
+    "notices": [
+      {
+        "path": "x264-r3222/COPYING",
+        "sha256": "32b1062f7da84967e7019d01ab805935caa7ab7321a7ced0e30ebe75e5df1670"
+      }
+    ]
+  },
+  {
+    "component": "x265/4.2",
+    "upstreamRecipe": [
+      "https://bitbucket.org/multicoreware/x265_git/downloads/x265_4.2.tar.gz",
+      "40b1ea0453e0309f0eba934e0ddf533f8f6295966679e8894e8f1c1c8d5e1210"
+    ],
+    "binaries": [
+      {
+        "name": "libx265.216.dylib",
+        "sourceSHA256": "2c195f99496aca5475f5dd8d66fbd7465e50dc9e792f6e80572bf2cc03b3e789"
+      }
+    ],
+    "notices": [
+      {
+        "path": "x265-4.2/COPYING",
+        "sha256": "d8afb1bcc7a2cfc603683b168d6987ef0a48e59e0da3693bf55c5d33b67e2b49"
+      }
+    ]
+  }
+]

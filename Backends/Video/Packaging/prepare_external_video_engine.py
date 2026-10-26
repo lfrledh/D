@@ -149,6 +149,59 @@ def verify_relocated_dependencies(staging):
         raise core.PackagingError("Unresolved prepared dependencies: " + "; ".join(unresolved[:50]))
 
 
+def install_weight_free_vmaf(staging, supplied):
+    """Replace only this unpublished copy of the fixed scoring dependency."""
+    target = staging / "native/libs/libvmaf.3.dylib"
+    if not target.exists(): return
+    if supplied is None: raise core.PackagingError("FFmpeg libvmaf requires --vmaf-no-models built with built_in_models=false")
+    folder = core._absolute_directory(str(supplied), "fixed no-model VMAF build")
+    core._reject_overlap(staging, [folder])
+    record = json.loads((folder / "PROVENANCE.json").read_text())
+    source = folder / "libvmaf.3.dylib"
+    if (record.get("version") != "3.2.0" or record.get("builtInModels") is not False or
+        record.get("sourceSHA256") != "a28f93f3b4fa65601be324587072e32a6a704a304ba7b1aec9b70b3f709bc1dc" or
+        source.is_symlink() or core._sha256(source) != record.get("librarySHA256") or
+        core._sha256(folder / "LICENSE") != "a6fdb51d02b9dfe198e55534bb8047fe6d756eda117f4ff83de98f92c1952710" or
+        b'svm_type nu_svr' in source.read_bytes()):
+        raise core.PackagingError("no-model VMAF provenance differs")
+    old = set(command(['/usr/bin/nm', '-gjU', target]).splitlines())
+    new = set(command(['/usr/bin/nm', '-gjU', source]).splitlines())
+    if not {s for s in old if s.startswith('_vmaf_')} <= new:
+        raise core.PackagingError("VMAF public symbols would be removed")
+    if command(['/usr/bin/lipo', '-archs', source]).strip() != 'arm64':
+        raise core.PackagingError("VMAF architecture differs")
+    load = command(['/usr/bin/otool', '-l', source])
+    if ('name @loader_path/libvmaf.3.dylib ' not in load or 'compatibility version 3.0.0' not in load or
+        'minos 26.0' not in load):
+        raise core.PackagingError("VMAF ABI or deployment identity differs")
+    with tempfile.TemporaryDirectory(prefix='.vmaf-', dir=target.parent) as scratch:
+        checked = Path(scratch) / target.name
+        copy_file(source, checked)
+        if core._sha256(checked) != record['librarySHA256']:
+            raise core.PackagingError("VMAF source changed after verification")
+        os.replace(checked, target)
+    copy_file(folder / 'LICENSE', staging / 'Licenses/libvmaf-BSD-2-Clause-Patent.txt')
+    copy_file(folder / 'PROVENANCE.json', staging / 'Licenses/libvmaf-no-models.json')
+    return record
+
+
+def install_native_notices(staging, libraries):
+    source = Path(__file__).resolve().parent / 'Licenses/native'
+    records = json.loads((source / 'SOURCES.json').read_text())
+    observed = {row['name']: row['sourceSHA256'] for row in libraries}
+    for record in records:
+        relevant = [row for row in record['binaries'] if row['name'] in observed]
+        if not relevant: continue
+        if any(observed[row['name']] != row['sourceSHA256'] for row in relevant):
+            raise core.PackagingError('native notice source identity differs: ' + record['component'])
+        for notice in record['notices']:
+            path = source / notice['path']
+            if path.is_symlink() or '..' in Path(notice['path']).parts or core._sha256(path) != notice['sha256']:
+                raise core.PackagingError('native notice differs')
+            copy_file(path, staging / 'Licenses/native' / notice['path'])
+    copy_file(source / 'SOURCES.json', staging / 'Licenses/native/SOURCES.json')
+
+
 def verify_ltx_source(archive, site, video):
     if core._sha256(archive) != "99a789280172bfc51c4e4b455e29f55c8b467ac2305131bcf9fe5750a3b03d0e":
         raise core.PackagingError("Pinned LTX source archive differs")
@@ -229,6 +282,7 @@ def prepare(args):
             copy_file(python / "lib" / name, staging / "python/lib" / name)
         target_site = staging / "python/lib/python3.12/site-packages"
         core._copy_tree(site, target_site)
+        core._install_dependency_licenses(target_site)
         # Bind provenance to the actual shipped copy, not a prior input snapshot.
         ltx_checked = verify_ltx_source(Path(args.ltx_source_archive), target_site, video)
         for record in target_site.rglob("direct_url.json"):
@@ -243,6 +297,14 @@ def prepare(args):
         for name in ["LICENSE.md", "COPYING.GPLv2", "COPYING.GPLv3", "COPYING.LGPLv2.1", "COPYING.LGPLv3"]:
             copy_file(ffmpeg.parent.parent / name, staging / "Licenses" / ("ffmpeg-" + name))
         libraries = relocate_tools(staging)
+        install_native_notices(staging, libraries)
+        vmaf = install_weight_free_vmaf(staging, getattr(args, 'vmaf_no_models', None))
+        if vmaf is not None:
+            for library in libraries:
+                if library['name'] == 'libvmaf.3.dylib':
+                    library['replacedSourceSHA256'] = library['sourceSHA256']
+                    library['sourceSHA256'] = vmaf['librarySHA256']
+                    library['sourceBuild'] = 'Licenses/libvmaf-no-models.json'
         verify_relocated_dependencies(staging)
         (staging / "runtime-origin.json").write_text(json.dumps({
             "schemaVersion": 1, "h3Commit": "8974cc055ea9c02fcd14cc27dfda3e1027c05153",
@@ -271,6 +333,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for option in ["python-root", "site-packages", "h3-source", "h3-source-archive", "ltx-source-archive", "ffmpeg", "ffprobe", "output", "identity", "team"]:
         parser.add_argument("--" + option, required=True)
+    parser.add_argument('--vmaf-no-models', type=Path, help='fixed build_vmaf_without_models.py output, required if FFmpeg links libvmaf')
     try:
         prepare(parser.parse_args())
     except (OSError, ValueError, subprocess.SubprocessError, core.PackagingError) as error:

@@ -168,6 +168,31 @@ def _copy_site_packages(source: Path, destination: Path) -> None:
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(entry, target)
+    _install_dependency_licenses(destination)
+
+
+def _install_dependency_licenses(site: Path) -> None:
+    """Complete notices omitted by the fixed upstream wheels, in staging only."""
+    own = Path(__file__).resolve().parent
+    notices = [
+        (("sentencepiece-0.2.1.dist-info", "sentencepiece-0.2.2.dist-info"),
+         own / "Licenses/sentencepiece-LICENSE.txt", "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"),
+        (("ai_edge_litert-2.2.0.dist-info",), own / "Licenses/litert-2.2.0-LICENSE.txt",
+         "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"),
+        (("tokenizers-0.22.2.dist-info",), own.parents[1] / "Video/Packaging/Licenses/tokenizers-0.22.2-LICENSE.txt",
+         "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"),
+    ]
+    for distributions, source, digest in notices:
+        for distribution in distributions:
+            folder = site / distribution
+            if not folder.is_dir(): continue
+            if source.is_symlink() or _sha256(source) != digest:
+                raise PackagingError("fixed dependency license differs: " + source.name)
+            target = folder / "licenses" / ("D-" + source.name)
+            target.parent.mkdir(exist_ok=True)
+            if target.exists() and target.read_bytes() != source.read_bytes():
+                raise PackagingError("dependency license target differs: " + str(target))
+            shutil.copy2(source, target)
 
 
 def _sha256(path: Path) -> str:

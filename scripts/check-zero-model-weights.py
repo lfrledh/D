@@ -12,6 +12,7 @@ import lzma
 import hashlib
 import io
 import json
+import re
 from pathlib import Path
 import stat
 import struct
@@ -67,6 +68,15 @@ def scan(root: Path, known: dict[str, str] | None = None) -> dict:
     def inspect(name: str, size: int, head: bytes, load, depth: int = 0, inherited: str | None = None):
         if depth > MAX_DEPTH: raise WeightError(f'archive nesting limit: {name}')
         suffix = Path(name).suffix.lower()
+        # VMAF stores complete trained LIBSVM records in ordinary JSON and,
+        # optionally, compiled libraries. Test bytes, not the filename/container.
+        if size <= MAX_MEMBER:
+            for match in re.finditer(rb'svm_type(?:[ \t]|\\+t)+(?:nu_svr|epsilon_svr|c_svc|nu_svc|one_class)', load()):
+                block = load()[match.start():match.start() + 16 * 1024 * 1024].split(b'\0')[0]
+                block = re.sub(rb'\\+r\\+n|\\+n|\r\n', b'\n', block)
+                block = re.sub(rb'\\+t', b'\t', block)
+                if re.search(rb'\ntotal_sv[ \t]+[1-9][0-9]*[ \t]*\n', block) and re.search(rb'\nSV[ \t]*\n[-+0-9.]', block):
+                    raise WeightError(f'embedded trained SVM parameters forbidden: {name}')
         if any(p.lower().endswith(('.mlmodelc', '.mlpackage')) for p in name.replace('!', '/').split('/')):
             raise WeightError(f'compiled model container forbidden: {name}')
         if name.lower().endswith(tuple(WEIGHTS)) or head[:4] in (b'GGUF', b'ggml', b'ggmf', b'ggjt', b'TFL3') or head[4:8] == b'TFL3':

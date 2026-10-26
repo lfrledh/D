@@ -54,5 +54,13 @@ class ZeroModelWeightsTests(unittest.TestCase):
         with patch.object(zero, 'MAX_MEMBERS',3), self.assertRaises(zero.WeightError): self.scan('a.zip',data.getvalue())
     def test_code_and_documentation_remain(self):
         self.assertEqual(self.scan('provider.py', b'print("model.onnx")')['files'],1)
+    def test_embedded_svm_in_native_code_and_archives_is_not_exempt(self):
+        raw = b'\xcf\xfa\xed\xfe' + b'\0' * 600 + b'svm_type nu_svr\\nkernel_type rbf\\ntotal_sv 1\\nrho 0.2\\nSV\\n0.5 1:0.3\\n'
+        with self.assertRaises(zero.WeightError): self.scan('libquality.dylib', raw)
+        for ending in [b'\n', b'\r\n', b'\\r\\n']:
+            record = raw[604:].replace(b'\\n', ending).replace(b'total_sv 1', b'total_sv\t1').replace(b'svm_type ', b'svm_type\t')
+            with self.assertRaises(zero.WeightError): self.scan('model.json', json.dumps({'model_dict': {'model': record.decode()}}).encode())
+        with self.assertRaises(zero.WeightError): self.scan('runtime.zip', self.zipped('renamed.data', raw))
+        self.scan('libquality.dylib', b'\xcf\xfa\xed\xfe' + b'vmaf_model_load svm_type total_sv SV')
 
 if __name__ == '__main__': unittest.main()
