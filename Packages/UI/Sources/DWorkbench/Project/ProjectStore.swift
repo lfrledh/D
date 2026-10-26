@@ -471,12 +471,33 @@ public actor ProjectStore {
     /// The complete UUID asset version remains in workflow input and parent records.
     public func prepareWorkflowPitchInput(_ reference: WorkflowAssetReference, graphID: UUID,
                                           runID: UUID, range: AudioFrameRange? = nil) throws -> PitchAnalysisRequest {
+        try preparePublishedPitchInput(reference, ownerID: graphID, runID: runID, range: range)
+    }
+
+    /// Quick creation has no hidden graph. Its persisted, frozen attempt owns the
+    /// input snapshot; a visible draft or a different attempt cannot authorize it.
+    func prepareQuickPitchInput(_ reference: WorkflowAssetReference, runID: UUID,
+                                expectedNode: WorkflowNode, expectedInputs: [String: WorkflowValue]) throws -> PitchAnalysisRequest {
+        let state = try readQuickCreationState().state
+        guard let run = state.runs.first(where: { $0.id == runID }), run.status == .running,
+              run.draft.node == expectedNode, run.draft.inputs == expectedInputs,
+              expectedNode.operationID == "d.music.pitch",
+              expectedInputs["input"]?.asset == reference else {
+            throw ProjectStoreError.externalModification
+        }
+        // The attempt UUID is the Quick source scope, not a fabricated workflow.
+        // Original asset version, full bytes and post-conversion identity remain checked.
+        return try preparePublishedPitchInput(reference, ownerID: runID, runID: runID, range: nil)
+    }
+
+    private func preparePublishedPitchInput(_ reference: WorkflowAssetReference, ownerID: UUID,
+                                            runID: UUID, range: AudioFrameRange?) throws -> PitchAnalysisRequest {
         let (url, asset) = try workflowMedia(reference)
         guard reference.kind == .audio, let audio = asset.metadata.audio else { throw WorkflowIssue("需要已发布的原声音频。") }
         let inspection = try AudioMediaInspector.inspect(at: url)
         try ProjectFiles.requireRegisteredAudio(inspection, matches: audio)
         let selected = range ?? .init(startFrame: 0, endFrame: audio.format.frameCount)
-        let source = PitchSourceIdentity(assetID: reference.assetID, documentID: graphID, documentRevision: 0,
+        let source = PitchSourceIdentity(assetID: reference.assetID, documentID: ownerID, documentRevision: 0,
             contentSHA256: reference.sha256, sampleRate: audio.format.sampleRate, frameCount: audio.format.frameCount,
             startFrame: selected.startFrame, endFrame: selected.endFrame)
         try source.validate()

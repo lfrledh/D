@@ -553,8 +553,13 @@ struct WorkflowImageHistoryFailure: LocalizedError {
     public func analyzePitch(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }
         let binding = try model(for: context)
-        guard let graphID = context.graphID else { throw WorkflowIssue("音高任务缺少冻结的流程身份。") }
-        let input = try await store.prepareWorkflowPitchInput(reference, graphID: graphID, runID: context.stepID)
+        let input: PitchAnalysisRequest
+        if let graphID = context.graphID {
+            input = try await store.prepareWorkflowPitchInput(reference, graphID: graphID, runID: context.stepID)
+        } else {
+            input = try await store.prepareQuickPitchInput(reference, runID: context.stepID,
+                expectedNode: context.node, expectedInputs: context.inputs)
+        }
         return try await generateMedia(.pitch(input), mediaType: PitchAnalysisResult.mediaType, parents: [reference], binding: binding, context: context)
     }
     private func generateMedia(_ input: InferenceInput, mediaType: String, parents: [WorkflowAssetReference],
