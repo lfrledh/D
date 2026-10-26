@@ -1,5 +1,28 @@
 # D-UI-CONSOLIDATED-01
 
+## App Store v2续办（2026-10-26）
+
+用户确认执行两份v2附件。起点/远端完整`2d8f29d63da9fc136b2c0cd55ecc1e885c787e4e`、生产`8a7fc428db142e2e2db4c891af48955bf4b07600`，原树/分支接续、生产祖先0、起点干净。Lead唯一写入/桌面，三个非实施者只读审查渲染、筛选兼容及权重/运行时。桌面旧候选仅作修前，普通D/保存内容/模型/个人scheme不动。
+
+31项当前状态只在[统一清单](../FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#统一问题清单app-store-v22026-10-26)。本节仅追加本轮证据与实现回执；原始截图/采样/构建与产物清单留外盘`AgentTrials/D-UI-CONSOLIDATED-01/run-20261026-appstore-v2`。渲染、零权重/打包、兼容修改分别提交；固定检查点后串行测量，不污染比较。
+
+
+### v2工程检查点（正常候选构建前）
+
+生产 `59c758f26e96abd6d41c4782f6ec222af4d75981`，提交顺序：`60548a65`冻结旧查询结果并分离稳定概念身份；`07aed40c`移除中央聊天父容器矩形裁切；`1e45924b`分离模型资源、接通取得与使用、签前/签后门禁和helper继承；`59c758f2`有限PrivacyInfo API用途声明。尚未把新生产计为普通App原生通过。
+
+- I004：45组旧结果先冻结，46个内置用途编码兼容，未知/OR/跨语言/冷保存反例保留；3个定向测试通过。业务验证原先的稳定ID修正沿用，未更换用户标签或schema。
+- I009：8a7正常Release长文原生画面已复现底部矩形裁断，中央父层无新增底板；仅移除ChatWorkbenchView中央`.clipped()`。输入宿主和侧栏隐藏回归通过；修后普通App待验。
+- I021：实际七引擎原资源中4个ONNX（Pitch 399114字节和3个依赖测试模型）及Wan四件分词资源被排除；Unigram包含学习分数，无小尺寸/评估例外。模型代码仍随包固定，SwiftF0仅接受显式外部model.onnx；Pitch固定来源commit与内容SHA分别校验。Wan四件以原来源/摘要下载，准备包纳入同一模型租约，不从App读取。旧三文件recipe只允许固定七文件升级；不复活删除记录、不重写完成历史、不丢原权重，不自动恢复队列。旧执行包保留且明确要求重新准备。
+- I026：新资源集16个MH_EXECUTE helper均读回exact app-sandbox+inherit，无额外权限；动态库不添加继承。CPU代码、FFmpeg/ONNXRuntime/Python/WASI仍固定随包；不运行下载代码、不新增pip行为。ChatPython/WASI用户代码及远程工具的商店适用性仍开放，未删核心能力。
+- 亲跑：模型服务104项（含旧Wan准备夹具）、下载40项（含准入与保存失败）及后续3项迁移/位置回归；UI17项（含实际continueResource命令、终态绑定和无轮询）；Pitch Python12、包装24；Video Python60（受控依赖组合，非最终运行时）、后端Video8与Pitch11（CPU/假provider）；资源21、零权重9、helper2。数字按方法/套件分别记录，重跑不叠成总数。首次Pitch过滤名错误只跑到Video，随后使用真实suite名补跑Pitch11；前置Python依赖、TMP软链、旧夹具及一个测试字段拼写失败保留在同一日志目录，不删断言。
+- 非实施者查真实diff发现并修正：最终engine准入的Pitch 40/64位身份桥接；旧Wan删除/执行包/继续入口；partial尾块恢复与新建空叶子保存失败；真实View按钮遗漏；已发布与Staging位置投影。已验证槽位/取消/登记保护，真实模型运行仍待正常包。
+- I028：仅声明UserDefaults CA92.1、FileTimestamp C617.1/3B52.1、SystemBootTime 35F9.1、DiskSpace E174.1/85F4.1；没有填“不收集/不跟踪”或捏造正式隐私URL。Apple现行required-reason平台段落未列原生macOS，不称缺理由必拒。[官方用途](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype)、[manifest范围](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files)。
+- I027/029已核事实：固定FFmpeg9.0.1启用GPL/version3/x264/x265/OpenSSL，不能称仅LGPL或仅系统加密；分发源码/链接义务及商店兼容需完整闭环。HF下载凭据限源，模型/资产书签、可选MCP/搜索的网络与数据去向需如实声明。正式支持/隐私URL、联系主体、首发承诺、年龄与出口问卷未提供，不编造、不上传。原始实际引擎清单、许可证/网络审计和官方链接在外盘同一`evidence/store-facts-audit.md`，不上传私有原始trace。
+
+I017修前有限证据：8a7正常Release -O/WMO、1280×820、中文100%、1节点/24条既有测试历史、双栏、手形。21个短拖拽（不是一次持续拖拽）覆盖4.783秒，真实相机净移动70×30；20秒sample涵盖整个输入区间及5.572秒尾部。1396个AX样本显示桥内部观察仍会污染输入；1193个CA提交/1153个SwiftUI render样本与等待重叠，不换算帧率。历史/摘要仅19/10样本，不能据此归为主因。此前未活动/工具错选、自动深色切换和尾段缺失记录排除。高倍缩放后切回看不到节点经“显示全部节点”恢复，为视口状态，未冒称渲染缺陷。不新添无因果依据的性能产品补丁；正常新包四动作与长文仍待对照。
+
+
 ## 工程质量收口（2026-10-26）
 
 批次 QUALITY-CLOSEOUT-20261026。实际起点/当时远端均 **`2a27f966a1eead1e68bc5bb735dd57d68ae197ac`**，累计祖先检查退出0；原树 `D-Worktrees/D-UI-CONSOLIDATED-20261020`、`codex/ui-consolidated-20261020` 接续，起点无未提交内容/其他写入者，不用主目录的另一工作线。Lead单写/桌面，三个非实施者分别只读复核事件链、本地化/稳定身份、实际包装链。
