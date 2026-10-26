@@ -122,7 +122,7 @@ struct WorkflowHostView: View {
     private func chooseModel(controller: WorkflowController, kind: WorkflowModelKind) {
         // Capture synchronously, before either the task or the native panel suspends.
         guard let target = controller.modelSelectionTarget(), target.kind == kind else { return }
-        if kind != .pitch, let library {
+        if let library {
             let owner = model.projectSession
             library.presentSelection { id in
                 do {

@@ -347,9 +347,18 @@ public struct ModelLibraryView: View {
             Divider()
             Text(text("knownScope", "当前已知资源与引用；未扫描所有历史项目。")).font(.caption).foregroundStyle(.secondary)
             if record.activeLeaseCount > 0 { Text(text("inUse", "正在运行、排队、准备或备份中，文件受到保护。")) }
+            if resource.control.requiresTokenizerUpgrade == true {
+                Text(text(resource.control.role == .execution ? "tokenizerExecutionUpgrade" : "tokenizerUpgrade", ""))
+                    .font(.callout).foregroundStyle(.secondary)
+            }
             if let error = record.error { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
             VStack(alignment: .leading, spacing: 10) {
-                if resource.control.fileState == .verified || resource.control.fileState == .invalid {
+                if resource.control.requiresTokenizerUpgrade == true, resource.control.role != .execution, record.storage == .managed {
+                    Button(text("completeTokenizer", "")) { Task { await model.continueResource(resource) } }
+                        .disabled(record.activeLeaseCount > 0 || model.hasActiveWork || model.globalOperation != nil)
+                }
+                if resource.control.fileState == .verified || resource.control.fileState == .invalid ||
+                    (resource.control.requiresTokenizerUpgrade == true && resource.control.role != .execution && record.storage == .external) {
                     Button(text("reverify", "重新校验文件")) { Task { await model.reverify(resource) } }.disabled(record.activeLeaseCount > 0 || model.hasActiveWork || model.globalOperation != nil)
                 }
                 if resource.control.fileState == .deleted {
@@ -553,6 +562,7 @@ public struct ModelLibraryView: View {
     }
     private func downloadState(_ state: ModelDownloadState) -> String { text("task." + state.rawValue, state.rawValue) }
     private func resourceLocation(_ resource: ModelResource) -> String {
+        if let directory = resource.record.directory { return directory.path }
         if resource.control.fileState == .partial, resource.record.storage == .managed, let root = model.rootURL {
             return root.appendingPathComponent(".d-model-library/Staging/" + resource.record.id.description + "/Content").path
         }

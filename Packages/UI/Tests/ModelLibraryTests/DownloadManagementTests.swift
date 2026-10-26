@@ -1088,3 +1088,153 @@ extension DownloadManagementTests {
         try await library.shutdown()
     }
 }
+
+
+extension DownloadManagementTests {
+    @Test(arguments: ["queued", "deleted", "noHistory", "completed", "execution"])
+    func wanTokenizerUpgradePreservesExistingIdentityWithoutDownloading(state: String) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let current = try #require(ModelCatalog.entries().first { $0.id == "wan21-t2v-1.3b-bf16" })
+        let old = ModelCatalogEntry(id: current.id, title: current.title, repository: current.repository,
+            revision: current.revision, files: Array(current.files.prefix(3)), workflowProfileID: current.workflowProfileID,
+            workflowIdentity: current.workflowIdentity, preparation: current.preparation)
+        let transfer = FixtureTransfer([:])
+        var owner: ModelLibrary? = try await ModelLibrary(stateDirectory: f.state, catalog: [old], transport: transfer, availableBytesOverride: UInt64.max)
+        try await owner!.configureRoot(at: f.destination)
+        let task = try await owner!.enqueueDownloads([old.id], postAction: .register, startIfIdle: false)[0]
+        if state == "deleted" || state == "noHistory" {
+            try await owner!.cancelDownload(task.id, keepPartial: true)
+            if state == "deleted" { try await owner!.deleteOwnedCopy(task.resourceID) }
+            else { try await owner!.clearDownloadHistory([task.id]) }
+        }
+        try await owner!.shutdown(); owner = nil
+        let index = f.state.appendingPathComponent("index.json")
+        if state == "completed" || state == "execution" {
+            // Historical-state fixture only; it does not claim any model bytes were verified.
+            var json = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: index)) as? [String: Any])
+            var tasks = try #require(json["downloads"] as? [[String: Any]])
+            tasks[0]["state"] = "completed"; json["downloads"] = tasks
+            if state == "execution" {
+                var records = try #require(json["records"] as? [[String: Any]])
+                var control = try #require(records[0]["control"] as? [String: Any])
+                control["role"] = "execution"; control["requiredPaths"] = ["D-VIDEO-PREPARED.json"]
+                records[0]["control"] = control
+                var record = try #require(records[0]["record"] as? [String: Any]); record["totalBytes"] = 42
+                records[0]["record"] = record; json["records"] = records
+            }
+            try JSONSerialization.data(withJSONObject: json, options: [.sortedKeys]).write(to: index)
+        }
+        let before = try Data(contentsOf: index)
+        owner = try await ModelLibrary(stateDirectory: f.state, catalog: [current], transport: transfer, availableBytesOverride: UInt64.max)
+        let snapshot = await owner!.snapshot(), resource = try #require(snapshot.resources.first)
+        #expect(resource.id == task.resourceID)
+        #expect(await transfer.requests == 0)
+        #expect(try Data(contentsOf: f.state.appendingPathComponent("index.wan-tokenizer-v1.backup.json")) == before)
+        if state == "deleted" {
+            #expect(resource.control.fileState == .deleted)
+            await #expect(throws: (any Error).self) { _ = try await owner!.continueWanTokenizerUpgrade(resource.id) }
+        } else if state == "execution" {
+            #expect(resource.record.totalBytes == 42 && resource.control.role == .execution)
+            #expect(resource.control.requiredPaths == ["D-VIDEO-PREPARED.json"])
+            await #expect(throws: (any Error).self) { _ = try await owner!.continueWanTokenizerUpgrade(resource.id) }
+            await #expect(throws: (any Error).self) { _ = try await owner!.acquire(resource.record.id) }
+        } else {
+            #expect(resource.control.requiresTokenizerUpgrade == true && resource.control.fileState == .partial)
+            #expect(resource.record.directory?.path.contains("/Staging/" + resource.record.id.description + "/Content") == true)
+            let resumed = try await owner!.continueWanTokenizerUpgrade(resource.id)
+            #expect(resumed.resourceID == task.resourceID && resumed.state == .queued)
+            #expect(resumed.postAction == (state == "noHistory" ? .filesOnly : .register))
+            #expect(await owner!.snapshot().queueState != .running)
+            if state == "completed" {
+                #expect(resumed.id != task.id)
+                #expect(await owner!.snapshot().downloads.first { $0.id == task.id }?.state == .completed)
+            }
+        }
+        try await owner!.shutdown(); owner = nil
+        let cold = try await ModelLibrary(stateDirectory: f.state, catalog: [current], transport: transfer, availableBytesOverride: UInt64.max)
+        #expect(await cold.snapshot().records.first?.id == resource.record.id)
+        #expect(await transfer.requests == 0)
+        try await cold.shutdown()
+    }
+}
+
+
+extension DownloadManagementTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_PITCH_MODEL_DIRECTORY"] != nil))
+    func fixedPitchContentRevisionPassesActualEngineAdmissionAndPinsLease() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let source = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_PITCH_MODEL_DIRECTORY"]))
+        let entry = try #require(ModelCatalog.entries().first { $0.id == ModelCatalog.pitchID })
+        let library = try await ModelLibrary(stateDirectory: f.state, catalog: [entry])
+        let id = try await library.registerExisting(at: source, catalogID: entry.id)
+        let reference = ModelReference(directory: source, revision: PitchAnalysisRequest.modelSHA256)
+        try await library.checkKnownResourceRegistration(reference)
+        for revision in ["wrong", String(repeating: "0", count: 64)] {
+            await #expect(throws: ModelLibraryError.self) {
+                _ = try await library.acquireKnownResource(.init(directory: source, revision: revision))
+            }
+        }
+        let base = FixtureInferenceEngine(), engine = ModelLibraryInferenceEngine(base: base, library: library)
+        // Controlled executor tests wrapper admission only, not a Pitch inference result.
+        let run = try await engine.submit(.init(model: reference, input: .text(.init(prompt: "fixture"))), backendID: "fixture")
+        #expect(await base.submissions == 1)
+        await #expect(throws: ModelLibraryError.self) { try await library.unregister(id) }
+        await run.cancel()
+        #expect(await library.snapshot().records[0].activeLeaseCount == 1)
+        await base.finish(.cancelled); #expect(await run.outcome() == .cancelled)
+        #expect(await library.snapshot().records[0].activeLeaseCount == 0)
+        try await library.unregister(id)
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.acquireKnownResource(reference) }
+        try await library.shutdown()
+    }
+}
+
+
+extension DownloadManagementTests {
+    @Test func newLeafSaveFailureRollsBackOnlyItsEmptyFileAndColdRetryWorks() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let transfer = FixtureTransfer(f.contents), fault = FixtureFault()
+        var owner: ModelLibrary? = try await library(f, transport: transfer, fault: fault)
+        try await owner!.configureRoot(at: f.destination)
+        fault.arm("download.createdLeaf")
+        let task = try await owner!.enqueueDownloads([f.entry.id], postAction: .register)[0]
+        _ = try await wait(owner!) { $0.downloads.first?.state == .failed }
+        #expect(await transfer.requests == 0)
+        let index = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: f.state.appendingPathComponent("index.json"))) as? [String: Any])
+        let rows = try #require(index["records"] as? [[String: Any]])
+        #expect((rows[0]["files"] as? [String: Any])?.isEmpty == true)
+        try await owner!.shutdown(); owner = nil; fault.clear()
+        let cold = try await library(f, transport: transfer, fault: fault)
+        let old = try #require(await cold.snapshot().downloads.first { $0.id == task.id })
+        _ = try await cold.continueDownload(old.id, expectedGeneration: old.generation)
+        try await cold.resumeQueue()
+        let done = try await wait(cold) { $0.downloads.last?.state == .completed }
+        #expect(done.records.first?.id == task.resourceID.modelID)
+        #expect(done.resources.first?.control.fileState == .verified)
+        try await cold.shutdown()
+    }
+}
+
+
+extension DownloadManagementTests {
+    @Test func publishedResourceNeedingSupplementKeepsItsKnownLocationAfterColdOpen() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let transfer = FixtureTransfer(f.contents)
+        var owner: ModelLibrary? = try await library(f, transport: transfer)
+        try await owner!.configureRoot(at: f.destination)
+        _ = try await owner!.enqueueDownloads([f.entry.id])
+        let complete = try await wait(owner!) { $0.downloads.first?.state == .completed }
+        let location = try #require(complete.resources.first?.record.directory)
+        try await owner!.shutdown(); owner = nil
+        let path = f.state.appendingPathComponent("index.json")
+        var json = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: path)) as? [String: Any])
+        var records = try #require(json["records"] as? [[String: Any]])
+        var control = try #require(records[0]["control"] as? [String: Any]); control["fileState"] = "partial"
+        records[0]["control"] = control; json["records"] = records
+        try JSONSerialization.data(withJSONObject: json).write(to: path)
+        let cold = try await library(f, transport: transfer)
+        #expect(await cold.snapshot().resources.first?.record.directory == location)
+        #expect(location.path.contains("/Installations/"))
+        try await cold.shutdown()
+    }
+}

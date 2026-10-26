@@ -195,8 +195,11 @@ private final class ModelAccessProbeDelegate: NSObject, URLSessionTaskDelegate, 
 }
 enum ModelSourceAccessProbe {
     static func check(_ url: URL, credential: ModelDownloadCredential?) async throws {
-        guard ModelDownloadRequestPolicy.isHuggingFaceResolve(url, path: url.path) else { throw ModelCredentialIssue.invalidSource }
-        let token = try credential?.token()
+        let isHuggingFace = ModelDownloadRequestPolicy.isHuggingFaceResolve(url, path: url.path)
+        let isPublicFixedGitHub = url.scheme == "https" && url.host?.lowercased() == "raw.githubusercontent.com"
+            && url.port == nil && url.user == nil && url.password == nil
+        guard isHuggingFace || isPublicFixedGitHub else { throw ModelCredentialIssue.invalidSource }
+        let token = isHuggingFace ? try credential?.token() : nil
         var range = ModelByteRange(url: url, start: 0, end: 0, total: 1); range.authorizedPath = url.path
         let config = URLSessionConfiguration.ephemeral
         config.httpCookieStorage = nil; config.urlCredentialStorage = nil; config.urlCache = nil; config.timeoutIntervalForRequest = 20

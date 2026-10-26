@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add a prepared pitch engine to a copied D app for internal evaluation."""
+"""Add a prepared code-only pitch engine to a copied D app."""
 
 from __future__ import annotations
 
@@ -33,7 +33,6 @@ REQUIRED_ENGINE_FILES = (
     "provider/d_audio_access.py",
     "model-manifests/swift-f0.json",
     "python/lib/python3.12/site-packages/swift_f0/core.py",
-    "python/lib/python3.12/site-packages/swift_f0/model.onnx",
 )
 
 
@@ -129,7 +128,7 @@ def _validate_model_declaration(path: Path) -> None:
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise PackagingError("pitch model declaration is unreadable or malformed") from error
     if not isinstance(value, dict) or type(value.get("schemaVersion")) is not int or value != prepare_pitch_engine._model_declaration():
-        raise PackagingError("pitch model declaration differs from the fixed internal-evaluation profile")
+        raise PackagingError("pitch model declaration differs from the fixed separate-model profile")
 
 
 def _validate_pitch_engine(engine: Path) -> dict[str, Any]:
@@ -168,11 +167,11 @@ def _validate_pitch_engine(engine: Path) -> dict[str, Any]:
     for relative in REQUIRED_ENGINE_FILES:
         if relative not in declarations:
             raise PackagingError(f"pitch engine manifest lacks required file: {relative}")
-    model_path = engine / "python/lib/python3.12/site-packages/swift_f0/model.onnx"
-    prepare_pitch_engine._validate_model(model_path)
-    if declarations[REQUIRED_ENGINE_FILES[-1]]["sha256"] != prepare_pitch_engine.MODEL_SHA256:
-        raise PackagingError("pitch engine manifest model digest differs from the approved artifact")
+    if any(p.suffix.lower() == ".onnx" for p in engine.rglob("*")):
+        raise PackagingError("pitch engine contains forbidden model weights")
     _validate_model_declaration(engine / "model-manifests/swift-f0.json")
+    if package_audio_app._sha256(engine / "python/lib/python3.12/site-packages/swift_f0/core.py") != prepare_pitch_engine.PATCHED_CORE_SHA256:
+        raise PackagingError("pitch bundled core differs from fixed external-model implementation")
     prepare_pitch_engine._verify_no_installation_records(engine)
     return manifest
 
@@ -209,11 +208,11 @@ def _failure_report(stage: str, error: BaseException, produced: list[str]) -> di
     return {
         "schemaVersion": 1,
         "status": "failed",
-        "packageKind": "d-pitch-app-internal-evaluation",
+        "packageKind": "d-pitch-app-code-only",
         "failedStage": stage,
         "error": str(error),
         "producedFiles": produced,
-        "internalEvaluationOnly": True,
+        "internalEvaluationOnly": False,
         "modelExecution": "not-run",
         "runtimeVerification": "not-run",
         "guiVerification": "not-run",
@@ -223,9 +222,6 @@ def _failure_report(stage: str, error: BaseException, produced: list[str]) -> di
 
 
 def _package_impl(args: argparse.Namespace, state: dict[str, Any]) -> dict[str, Any]:
-    state["stage"] = "validate-internal-evaluation-ack"
-    if getattr(args, "internal_evaluation_ack", False) is not True:
-        raise PackagingError("--internal-evaluation-ack is required")
     state["stage"] = "validate-inputs"
     app = package_audio_app._checked_directory(args.app, "app")
     if app.suffix != ".app":
@@ -305,7 +301,7 @@ def _package_impl(args: argparse.Namespace, state: dict[str, Any]) -> dict[str, 
         return {
             "schemaVersion": 1,
             "status": "packaged",
-            "packageKind": "d-pitch-app-internal-evaluation",
+            "packageKind": "d-pitch-app-code-only",
             "output": str(output),
             "bundleIdentifier": bundle_identifier,
             "teamIdentifier": team,
@@ -313,7 +309,7 @@ def _package_impl(args: argparse.Namespace, state: dict[str, Any]) -> dict[str, 
             "signedNativeFiles": native_count,
             "signatureVerification": "completed",
             "producedFiles": list(state["produced"]),
-            "internalEvaluationOnly": True,
+            "internalEvaluationOnly": False,
             "modelExecution": "not-run",
             "runtimeVerification": "not-run",
             "guiVerification": "not-run",
@@ -362,7 +358,7 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--identity", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--report", required=True)
-    parser.add_argument("--internal-evaluation-ack", action="store_true", required=True)
+    parser.add_argument("--internal-evaluation-ack", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
 

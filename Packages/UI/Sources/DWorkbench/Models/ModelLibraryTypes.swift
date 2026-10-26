@@ -23,6 +23,9 @@ public struct ImageModelProfile: Codable, Hashable, Sendable {
     }
 }
 
+/// Fixed supported origins; catalog files cannot supply arbitrary credential destinations.
+public enum ModelFileSource: String, Codable, Hashable, Sendable { case huggingFace, githubRaw }
+
 public struct ModelFile: Codable, Hashable, Sendable {
     public let path: String
     public let size: UInt64
@@ -33,14 +36,15 @@ public struct ModelFile: Codable, Hashable, Sendable {
     public let sourceRepository: String?
     public let sourceRevision: String?
     public let remotePath: String?
+    public let source: ModelFileSource?
     public init(path: String, size: UInt64, sha256: String,
                 digestAlgorithm: ModelDigestAlgorithm = .sha256, sourceRepository: String? = nil,
-                sourceRevision: String? = nil, remotePath: String? = nil) {
+                sourceRevision: String? = nil, remotePath: String? = nil, source: ModelFileSource? = nil) {
         self.path = path; self.size = size; self.sha256 = sha256
         self.digestAlgorithm = digestAlgorithm; self.sourceRepository = sourceRepository
-        self.sourceRevision = sourceRevision; self.remotePath = remotePath
+        self.sourceRevision = sourceRevision; self.remotePath = remotePath; self.source = source
     }
-    private enum CodingKeys: String, CodingKey { case path, size, sha256, digestAlgorithm, sourceRepository, sourceRevision, remotePath }
+    private enum CodingKeys: String, CodingKey { case path, size, sha256, digestAlgorithm, sourceRepository, sourceRevision, remotePath, source }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         self.init(path: try values.decode(String.self, forKey: .path),
@@ -49,7 +53,8 @@ public struct ModelFile: Codable, Hashable, Sendable {
                   digestAlgorithm: try values.decodeIfPresent(ModelDigestAlgorithm.self, forKey: .digestAlgorithm) ?? .sha256,
                   sourceRepository: try values.decodeIfPresent(String.self, forKey: .sourceRepository),
                   sourceRevision: try values.decodeIfPresent(String.self, forKey: .sourceRevision),
-                  remotePath: try values.decodeIfPresent(String.self, forKey: .remotePath))
+                  remotePath: try values.decodeIfPresent(String.self, forKey: .remotePath),
+                  source: try values.decodeIfPresent(ModelFileSource.self, forKey: .source))
     }
     public func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
@@ -59,6 +64,7 @@ public struct ModelFile: Codable, Hashable, Sendable {
         try values.encodeIfPresent(sourceRepository, forKey: .sourceRepository)
         try values.encodeIfPresent(sourceRevision, forKey: .sourceRevision)
         try values.encodeIfPresent(remotePath, forKey: .remotePath)
+        try values.encodeIfPresent(source, forKey: .source)
     }
 }
 
@@ -122,6 +128,8 @@ public enum ModelLibrarySelection {
         guard let operationID = entry.workflowProfileID,
               let identity = entry.workflowIdentity else { return false }
         switch operationID {
+        case "d.music.pitch":
+            return ModelCatalog.isPitch(entry)
         case "d.model.language":
             return identity == "text:" + entry.revision && WorkflowModelRoutes.legacyTextOperations(identity: identity).contains(operationID)
         case WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38:
@@ -137,6 +145,20 @@ public enum ModelLibrarySelection {
 }
 
 public enum ModelCatalog {
+    public static let pitchID = "swift-f0-0.1.2-cpu-v1"
+    public static let pitchSourceRevision = "8e968fe53b818da318d46e14b84b3d0b41192ad1"
+    public static let pitchIdentity = "pitch:" + PitchAnalysisRequest.modelSHA256
+    /// Source commit and frozen execution digest are different identities. Only this
+    /// exact, checksum-verified catalog mapping joins them; no generic revision bypass.
+    public static func isPitch(_ entry: ModelCatalogEntry) -> Bool {
+        entry.id == pitchID && entry.repository == "lars76/swift-f0"
+            && entry.revision == pitchSourceRevision && entry.workflowProfileID == "d.music.pitch"
+            && entry.workflowIdentity == pitchIdentity && entry.preparation == .none
+            && entry.files.contains { $0.path == "model.onnx" && $0.size == 399_114
+                && $0.sha256 == PitchAnalysisRequest.modelSHA256 && $0.digestAlgorithm == .sha256
+                && $0.source == .githubRaw && $0.remotePath == "swift_f0/model.onnx"
+                && $0.sourceRepository == nil && $0.sourceRevision == nil }
+    }
     public static let flux2ID = "flux2-klein-4b-q8"
     public static func entries() throws -> [ModelCatalogEntry] { try FrozenModelCatalog.entries() }
     public static func flux2() throws -> ModelCatalogEntry {
@@ -171,11 +193,12 @@ public struct ModelRecord: Identifiable, Codable, Sendable, Equatable {
     public var state: ModelInstallationState
     public var availability: ModelAvailability
     public var downloadedBytes: UInt64
-    public let totalBytes: UInt64
+    public private(set) var totalBytes: UInt64
     public var error: String?
     public var directory: URL?
     public var activeLeaseCount: Int
     public var registrationState: ModelRegistrationState = .registered
+    func replacingTotalBytes(_ value: UInt64) -> Self { var copy = self; copy.totalBytes = value; return copy }
     public init(id: ModelID, catalogID: String, revision: String, storage: ModelStorageKind,
                 state: ModelInstallationState, availability: ModelAvailability, downloadedBytes: UInt64,
                 totalBytes: UInt64, error: String?, directory: URL?, activeLeaseCount: Int,
@@ -289,6 +312,7 @@ public struct ModelResourceControl: Codable, Sendable, Equatable {
     public var retryNotBefore: Date?
     public var preparationRecipe: String?
     public var requiredPaths: [String]?
+    public var requiresTokenizerUpgrade: Bool?
     public var lastVerified: Date?
     public var lastAccessCheck: Date?
     public var events: [ModelResourceEvent] = []
@@ -305,7 +329,7 @@ public struct ModelDownloadTask: Identifiable, Codable, Sendable, Equatable {
     public let id: UUID
     public let resourceID: ModelResourceID
     public let catalogID: String
-    public let recipeIdentity: String
+    public private(set) var recipeIdentity: String
     public var state: ModelDownloadState
     public var postAction: ModelDownloadPostAction
     public var attemptID: UUID
@@ -318,6 +342,13 @@ public struct ModelDownloadTask: Identifiable, Codable, Sendable, Equatable {
     public var postActionError: String?
     public let createdAt: Date?
     public var completedAt: Date?
+    func upgradingRecipe(_ value: String) -> Self {
+        var copy = self; copy.recipeIdentity = value
+        // Reject UI commands captured against the former recipe; attempt identity
+        // changes only when the existing scheduler actually dispatches work.
+        copy.generation = UUID()
+        return copy
+    }
     public init(resourceID: ModelResourceID, catalogID: String, recipeIdentity: String,
                 postAction: ModelDownloadPostAction, createdAt: Date? = Date()) {
         id = UUID(); self.resourceID = resourceID; self.catalogID = catalogID; self.recipeIdentity = recipeIdentity

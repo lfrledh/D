@@ -56,9 +56,7 @@ ENGINE_CONTRACTS: dict[str, dict[str, Any]] = {
         "required": (
             "python/bin/python3", "provider/d_video_run.py", "provider/d_video_model.py",
             "provider/d_video_prepare.py", "provider/d_audio_access.py",
-            "model-manifests/wan21.json", "tokenizer/special_tokens_map.json",
-            "tokenizer/spiece.model", "tokenizer/tokenizer.json",
-            "tokenizer/tokenizer_config.json", "Vendor/wan21/__init__.py",
+            "model-manifests/wan21.json", "Vendor/wan21/__init__.py",
             "Vendor/wan21/PROVENANCE.json", "Vendor/wan21/LICENSE-MIT.txt",
             "Vendor/wan21/LICENSE-WAN-APACHE-2.0.txt",
         ),
@@ -71,7 +69,6 @@ ENGINE_CONTRACTS: dict[str, dict[str, Any]] = {
             "python/bin/python3", "provider/d_pitch_analysis_backend.py",
             "provider/d_audio_access.py", "model-manifests/swift-f0.json",
             "python/lib/python3.12/site-packages/swift_f0/core.py",
-            "python/lib/python3.12/site-packages/swift_f0/model.onnx",
         ),
     },
 }
@@ -533,6 +530,36 @@ def _publish_exclusive(staging: Path, output: Path) -> None:
         raise ResourceError(f"cannot publish output: {output}: {error}") from error
 
 
+def check_zero_weights(root: Path) -> dict[str, Any]:
+    """One read-only gate shared by resource preparation, Xcode and final App checks."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("d_zero_model_weights", Path(__file__).with_name("check-zero-model-weights.py"))
+    if spec is None or spec.loader is None: raise ResourceError("zero-weight validator missing")
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    try: return module.scan(root)
+    except (OSError, ValueError) as error: raise ResourceError(str(error)) from error
+
+
+def check_helper_sandboxes(root: Path) -> list[str]:
+    # The same finite Mach-O reader used by engine signing, with actual entitlement
+    # readback. A valid signature alone does not prove sandbox inheritance.
+    packaging = Path(__file__).resolve().parents[1] / "Backends/Audio/Packaging"
+    sys.path.insert(0, str(packaging))
+    try:
+        import package_audio_app
+        helpers = []
+        for path in sorted(root.rglob("*")):
+            if path.is_symlink() or not path.is_file(): continue
+            if package_audio_app._is_executable_mach_o(path):
+                values, _ = package_audio_app._entitlements(path, "verify prepared helper sandbox")
+                if values != {"com.apple.security.app-sandbox": True, "com.apple.security.inherit": True}:
+                    raise ResourceError(f"helper does not inherit exactly the App sandbox: {path.relative_to(root)}")
+                helpers.append(str(path.relative_to(root)))
+        return helpers
+    except package_audio_app.PackagingError as error: raise ResourceError(str(error)) from error
+    finally: sys.path.remove(str(packaging))
+
+
 def validate_prepared(root: Path, expected_config_digest: str | None = None) -> dict[str, Any]:
     root = _absolute_directory(str(root), "prepared resource set")
     try:
@@ -580,6 +607,8 @@ def validate_prepared(root: Path, expected_config_digest: str | None = None) -> 
         actual = inspect_engine(engine_root / name, name)
         if actual != recorded:
             raise ResourceError(f"prepared engine inventory differs from its resource manifest: {name}")
+    check_zero_weights(root)
+    check_helper_sandboxes(engine_root)
     return manifest
 
 

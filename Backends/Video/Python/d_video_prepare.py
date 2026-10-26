@@ -19,6 +19,7 @@ import uuid
 import pickle
 import re
 import signal
+import shutil
 import sys
 from contextlib import contextmanager
 
@@ -28,6 +29,7 @@ FILES = {
     "diffusion": ("diffusion_pytorch_model.safetensors", "96b6b242ca1c2f24e9d02cd6596066fab6d310e2d7538f33ae267cb18d957e8f", 5676070424, "BF16"),
     "vae": ("Wan2.1_VAE.pth", "38071ab59bd94681c686fa51d75a1968f64e470262043be31f7a094e442fd981", 507609880, "F32"),
 }
+TOKENIZER_FILES = {'special_tokens_map.json': ('7b8a9f5040adb67b5805abdfd42c1f8d0f3d0e711f10726580eb3789cd0ad61d', 6623), 'spiece.model': ('e3909a67b780650b35cf529ac782ad2b6b26e6d1f849d3fbb6a872905f452458', 4548313), 'tokenizer.json': ('6e197b4d3dbd71da14b4eb255f4fa91c9c1f2068b20a2de2472967ca3d22602b', 16837417), 'tokenizer_config.json': ('ed9a3a8b0faa71a70a32847e0435fe036e6e112d4df4edb7bb48a921e344dc05', 61728)}
 PRODUCTION_FILES = FILES.copy()
 PRODUCTION_COUNTS = {"text": 242, "diffusion": 825, "vae": 194}
 _cancelled = False
@@ -124,6 +126,14 @@ def prepare(source: Path, destination: Path) -> dict:
             raise ValueError("Original model size, SHA-256 or identity mismatch: " + name)
         identities[role] = before
 
+    tokenizer_identities = {}
+    for name, (expected, size) in TOKENIZER_FILES.items():
+        path = checked_local(source / "google/umt5-xxl" / name)
+        before = identity(path)
+        if before[2] != size or digest(path) != expected or identity(path) != before:
+            raise ValueError("Original tokenizer changed or differs from the fixed model: " + name)
+        tokenizer_identities[name] = before
+
     # An incomplete directory is retained as evidence on failure. Only the final
     # manifest marks a completed preparation, never directory presence alone.
     destination.mkdir(mode=0o700)
@@ -198,6 +208,19 @@ def prepare(source: Path, destination: Path) -> dict:
         print(json.dumps({"stage": "prepared", "component": role, "tensorCount": len(keys),
                           "peakRSSBytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}), flush=True)
 
+    (destination / "tokenizer").mkdir(mode=0o700)
+    for name, (expected, size) in TOKENIZER_FILES.items():
+        check_cancelled()
+        original = source / "google/umt5-xxl" / name
+        target = destination / "tokenizer" / name
+        if identity(original) != tokenizer_identities[name]: raise ValueError("Original tokenizer changed")
+        with original.open("rb") as incoming, target.open("xb") as outgoing:
+            shutil.copyfileobj(incoming, outgoing, 1024 * 1024)
+            outgoing.flush(); os.fsync(outgoing.fileno())
+        if digest(target) != expected or identity(original) != tokenizer_identities[name]:
+            raise ValueError("Tokenizer changed while preparing")
+        manifest["originals"].append({"path": "google/umt5-xxl/" + name, "size": size, "sha256": expected})
+
     # Validation binds verified bytes to file identities. Recheck those identities
     # and the complete inventory after the last output has been validated.
     output_identities, directory_identities = validate_output(
@@ -217,12 +240,14 @@ def prepare(source: Path, destination: Path) -> dict:
     for role, (name, _, _, _) in FILES.items():
         if identity(source / name) != identities[role]:
             raise ValueError("Original changed before publication: " + name)
+    for name, before in tokenizer_identities.items():
+        if identity(source / "google/umt5-xxl" / name) != before: raise ValueError("Original tokenizer changed before publication")
     exclusive_json(destination / "D-VIDEO-PREPARED.json", manifest)
     return manifest
 
 
 def verify_inventory(destination: Path, outputs: dict, directories: dict) -> None:
-    for role in FILES:
+    for role in (*FILES, "tokenizer"):
         directory = destination / role
         if directory_identity(directory) != directories[role]:
             raise ValueError("Prepared directory changed before publication: " + role)
@@ -231,7 +256,7 @@ def verify_inventory(destination: Path, outputs: dict, directories: dict) -> Non
             raise ValueError("Prepared resource inventory contains missing or extra files")
     if directory_identity(destination) != directories["root"]:
         raise ValueError("Prepared destination changed before publication")
-    if {entry.name for entry in destination.iterdir()} != set(FILES):
+    if {entry.name for entry in destination.iterdir()} != set(FILES) | {"tokenizer"}:
         raise ValueError("Prepared destination contains unexpected resources")
 
 
@@ -283,7 +308,14 @@ def validate_output(destination: Path, manifest: dict, *, production: bool) -> t
         raise ValueError("Prepared component has no tensors")
     if production and counts != PRODUCTION_COUNTS:
         raise ValueError("Production checkpoint tensor counts differ")
-    directories = {"root": directory_identity(destination)}
+    for name, (expected, size) in TOKENIZER_FILES.items():
+        relative = "tokenizer/" + name
+        path = checked_local(destination / relative)
+        before = identity(path)
+        if before[2] != size or digest(path) != expected or identity(path) != before:
+            raise ValueError("Prepared tokenizer differs from fixed model")
+        verified_outputs[relative] = before
+    directories = {"root": directory_identity(destination), "tokenizer": directory_identity(destination / "tokenizer")}
     directories.update({role: directory_identity(destination / role) for role in counts})
     verify_inventory(destination, verified_outputs, directories)
     return verified_outputs, directories

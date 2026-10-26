@@ -71,8 +71,7 @@ struct BundledAudioEngine: Sendable {
                  "provider/Patches/ltx25-gemma4-streaming.json", "provider/Patches/ltx25-gemma4-streaming.patch"]
             case .pitch:
                 ["python/bin/python3", script, "provider/d_audio_access.py", model,
-                 "python/lib/python3.12/site-packages/swift_f0/core.py",
-                 "python/lib/python3.12/site-packages/swift_f0/model.onnx"]
+                 "python/lib/python3.12/site-packages/swift_f0/core.py"]
             case .stableAudio:
                 ["python/bin/python3", script, "provider/d_audio_access.py", "provider/d_audio_contract.py", model,
                  "provider/d_audio_sa3.py"]
@@ -81,8 +80,7 @@ struct BundledAudioEngine: Sendable {
                  "provider/d_audio_mrt2_contract.py", "provider/d_mrt2_export.py"]
             case .video:
                 ["python/bin/python3", script, "provider/d_video_model.py", "provider/d_video_prepare.py",
-                 "provider/d_audio_access.py", model, "tokenizer/special_tokens_map.json", "tokenizer/spiece.model",
-                 "tokenizer/tokenizer.json", "tokenizer/tokenizer_config.json", "Vendor/wan21/__init__.py",
+                 "provider/d_audio_access.py", model, "Vendor/wan21/__init__.py",
                  "Vendor/wan21/PROVENANCE.json", "Vendor/wan21/LICENSE-MIT.txt",
                  "Vendor/wan21/LICENSE-WAN-APACHE-2.0.txt"]
             }
@@ -105,13 +103,6 @@ struct BundledAudioEngine: Sendable {
         guard family == .video, entries["python/lib/python3.12/site-packages/torch/__init__.py"] != nil,
               entries["python/lib/python3.12/site-packages/safetensors/__init__.py"] != nil else { return nil }
         return root.appendingPathComponent("provider/d_video_prepare.py")
-    }
-
-    var videoTokenizerDirectory: URL? {
-        switch family {
-        case .stableAudio, .mrt2Music, .pitch, .externalVideo, .aceMusic: nil
-        case .video: root.appendingPathComponent("tokenizer", isDirectory: true)
-        }
     }
 
     func externalVideoTool(_ name: String) -> URL? {

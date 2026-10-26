@@ -324,6 +324,31 @@ public struct WorkbenchView: View {
                                 .disabled(model.projectSession.pitchIsBusy).padding(.horizontal, 20)
                                 .accessibilityIdentifier("pitch-reject-unreadable")
                         }
+                        if let library, model.projectSession.hasPitchEngine {
+                            Button(workflowText(legacyLanguage, "workflow.action.chooseModel")) {
+                                let owner = model.projectSession
+                                let documentID = owner.activeDocumentID, contextID = audio.contextID
+                                library.presentSelection { id in
+                                    do {
+                                        _ = try await owner.selectWorkflowInstallation(id: id) { choice in
+                                            guard model.projectSession === owner, owner.activeDocumentID == documentID,
+                                                  owner.audio?.contextID == contextID, choice.kind == .pitch,
+                                                  !owner.pitchIsBusy else {
+                                                throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。"))
+                                            }
+                                        }
+                                        library.isPresented = false
+                                    } catch { library.errorMessage = error.localizedDescription }
+                                }
+                                library.captureSelectionPresentation("SwiftF0") {
+                                    model.projectSession === owner && owner.activeDocumentID == documentID
+                                        && owner.audio?.contextID == contextID && !owner.pitchIsBusy
+                                }
+                            }
+                            .disabled(model.projectSession.pitchIsBusy)
+                            .accessibilityIdentifier("pitch-choose-model")
+                            .padding(.horizontal, 20)
+                        }
                         PitchAnalysisView(result: model.projectSession.pitchResult,
                             isBusy: model.projectSession.pitchIsBusy,
                             isStale: model.projectSession.pitchIsStale,

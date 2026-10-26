@@ -1,3 +1,4 @@
+import DInference
 import Foundation
 
 /// Reviewed, descriptive projections of adapters already present in the source tree.
@@ -356,7 +357,7 @@ public enum ModelNodeCatalog {
         title: "SwiftF0 0.1.2 · 音高分析",
         summary: "对已验证原始音频选区做单声音高分析；这是分析节点，不生成声音，也不等同于 MIDI 转写。",
         modelIdentity: "swift-f0 0.1.2-d1 · sha256 fa91bb45512b90339cf4b00a599ba8fe3a253c46419fcfe6b46df77a8a8336a5",
-        revision: "0.1.2-d1",
+        revision: PitchAnalysisRequest.modelSHA256,
         engine: "cpu.pitch.swift-f0 · ONNX Runtime CPUExecutionProvider",
         device: "CPU",
         precision: "FP32 输入；宿主派生 16 kHz mono Float32",

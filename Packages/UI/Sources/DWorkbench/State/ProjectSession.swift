@@ -115,7 +115,14 @@ public final class ProjectSession {
     public private(set) var pitchResultAssetID: UUID?
     public private(set) var pitchStatus: String?
     @ObservationIgnored private var pitchAdmissions: [UUID: Task<Void, Never>] = [:]
-    public var hasPitchEngine: Bool { session?.pitchBackendID != nil && session?.pitchModel != nil }
+    public var hasPitchEngine: Bool { session?.pitchBackendID != nil }
+    public var pitchModelIdentity: String {
+        if explicitModelChoices.contains(where: { $0.kind == .pitch && $0.id == ModelCatalog.pitchIdentity }) {
+            return ModelCatalog.pitchIdentity
+        }
+        return session?.pitchModel.map { "pitch:" + ($0.revision ?? $0.directory.lastPathComponent) } ?? ""
+    }
+    @ObservationIgnored private var pitchRunBindings: [UUID: WorkflowModelBinding] = [:]
     public var pitchIsBusy: Bool {
         !pitchAdmissions.isEmpty || documentJobs.contains { job in
             if case .pitch = job.request.input { return activeJobIDs.contains(job.id) || pendingSaves[job.id] != nil }
@@ -134,16 +141,17 @@ public final class ProjectSession {
         return activeDocument?.pitchAnalysis?.acceptedAssetIDs.contains(id) == true
     }
     public var canAnalyzePitch: Bool {
-        hasPitchEngine && activeDocument?.audioDraft != nil && audio?.canEdit == true
+        hasPitchEngine && !pitchModelIdentity.isEmpty && activeDocument?.audioDraft != nil && audio?.canEdit == true
             && audio?.hasUnsubmittedInput == false && !isChangingProject && !closePending
             && !isBusy && (activeDocument?.pitchAnalysis?.selectedAssetID == nil || pitchHasSaved)
     }
 
     public func analyzePitch() async {
         guard canAnalyzePitch, let documentID = activeDocumentID, let store, let session,
-              let backendID = session.pitchBackendID, let reference = session.pitchModel,
+              let backendID = session.pitchBackendID,
               let audio else { return }
         let contextID = audio.contextID
+        let identity = pitchModelIdentity
         let id = UUID(); let preceding = admissionTail
         activeJobIDs.insert(id); liveStates[id] = .preparing; phases[id] = "正在准备原声音高分析"; phaseCodes[id] = "preparingPitch"
         pitchStatus = nil
@@ -155,6 +163,11 @@ public final class ProjectSession {
                 guard await audio.flushPendingWrites() else { throw AudioMediaError.unavailable("请先保存原声输入") }
                 try Task.checkCancellation()
                 guard self.audio?.contextID == contextID, activeDocumentID == documentID else { throw CancellationError() }
+                let binding = try await resolveWorkflowModel(.pitch, identity: identity, session: session)
+                pitchRunBindings[id] = binding
+                try Task.checkCancellation()
+                guard self.audio?.contextID == contextID, activeDocumentID == documentID else { throw CancellationError() }
+                let reference = binding.reference
                 let input = try await store.preparePitchInput(documentID: documentID, runID: id)
                 try Task.checkCancellation()
                 guard self.audio?.contextID == contextID, activeDocumentID == documentID else { throw CancellationError() }
@@ -1007,7 +1020,7 @@ public final class ProjectSession {
         case .text: textReference.map { "text:" + ($0.revision ?? $0.directory.lastPathComponent) } ?? ""
         case .music: musicReference.map { "music:" + ($0.revision ?? $0.directory.lastPathComponent) } ?? ""
         case .video: videoReference.map { "video:" + ($0.revision ?? $0.directory.lastPathComponent) } ?? ""
-        case .pitch: session?.pitchModel.map { "pitch:" + ($0.revision ?? $0.directory.lastPathComponent) } ?? ""
+        case .pitch: pitchModelIdentity
         case .image: selectedModelRevision.map { "image:" + $0 } ?? modelLease.map { "image:" + $0.url.lastPathComponent } ?? ""
         }
     }
@@ -1041,13 +1054,6 @@ public final class ProjectSession {
     }
     private func resolveWorkflowModel(_ kind: WorkflowModelKind, identity: String, session: WorkbenchSession) async throws -> WorkflowModelBinding {
         guard !identity.isEmpty else { throw WorkflowIssue("请为此节点选择已安装模型。") }
-        if kind == .pitch {
-            guard let ref = session.pitchModel, let backend = session.pitchBackendID,
-                  identity == "pitch:" + (ref.revision ?? ref.directory.lastPathComponent) else {
-                throw WorkflowIssue("指定音高识别资源未准备，不能改用其他模型。")
-            }
-            return .init(identity: identity, reference: ref, backendID: backend)
-        }
         if let installation = try WorkflowModelBookmarks(settings: settings).installation(for: identity) {
             guard let library = modelLibrary else { throw WorkflowIssue("模型库当前不可用；未改用其他目录。") }
             return try await resolveInstalledWorkflowModel(installation, kind: kind, identity: identity, session: session, library: library)
@@ -1066,6 +1072,13 @@ public final class ProjectSession {
                     operationID: adapter.operationID, textCapability: adapter.textCapability, imageRecipe: adapter.imageRecipe,
                     release: { await access.release(lease) })
             } catch { await access.release(lease); throw error }
+        }
+        if kind == .pitch, session.pitchModel != nil {
+            guard let ref = session.pitchModel, let backend = session.pitchBackendID,
+                  identity == "pitch:" + (ref.revision ?? ref.directory.lastPathComponent) else {
+                throw WorkflowIssue("指定音高识别资源未准备，不能改用其他模型。")
+            }
+            return .init(identity: identity, reference: ref, backendID: backend)
         }
         if kind == .image, let library = modelLibrary {
             let records = await library.snapshot().records.filter { "image:" + $0.revision == identity }
@@ -1121,7 +1134,9 @@ public final class ProjectSession {
         let entry = try await library.catalogEntry(for: id)
         let lease = try await library.acquire(id)
         do {
-            guard identity == kind.rawValue + ":" + (lease.reference.revision ?? "") else { throw WorkflowIssue("安装记录与节点的固定模型身份不符。") }
+            let isFixedPitch = kind == .pitch && ModelCatalog.isPitch(entry)
+                && lease.reference.revision == ModelCatalog.pitchSourceRevision && identity == ModelCatalog.pitchIdentity
+            guard isFixedPitch || identity == kind.rawValue + ":" + (lease.reference.revision ?? "") else { throw WorkflowIssue("安装记录与节点的固定模型身份不符。") }
             let reference: ModelReference
             let backendID: String
             var operationID: String?, textCapability: TextExecutionCapability?, imageRecipe: WorkflowImageRecipe?, videoRecipe: WorkflowVideoRecipe?
@@ -1151,7 +1166,8 @@ public final class ProjectSession {
                       let validate = session.validateVideoModel, let backend = session.videoBackendID {
                 reference = try await validate(lease.reference.directory); backendID = backend; operationID = "d.video.generate"
             } else { throw WorkflowIssue("已取得模型文件，但此应用尚未准备对应的执行引擎。") }
-            guard reference.revision == lease.reference.revision else { throw WorkflowIssue("执行引擎验证的版本与安装目录不符。") }
+            guard isFixedPitch ? reference.revision == PitchAnalysisRequest.modelSHA256
+                : reference.revision == lease.reference.revision else { throw WorkflowIssue("执行引擎验证的版本与安装目录不符。") }
             return .init(identity: identity, reference: reference, backendID: backendID, operationID: operationID,
                 textCapability: textCapability, imageRecipe: imageRecipe, videoRecipe: videoRecipe,
                 release: { await library.release(lease) })
@@ -1179,7 +1195,8 @@ public final class ProjectSession {
         else if let operation = entry.workflowProfileID,
                 let known = WorkflowRegistry.standard.operation(operation)?.definition.modelKind { kind = known }
         else { throw WorkflowIssue("模型文件仍需准备，尚不能绑定执行操作。") }
-        let identity = kind.rawValue + ":" + (execution?.executionRevision ?? entry.revision)
+        let identity = kind == .pitch && ModelCatalog.isPitch(entry) ? ModelCatalog.pitchIdentity
+            : kind.rawValue + ":" + (execution?.executionRevision ?? entry.revision)
         let binding = try await resolveInstalledWorkflowModel(id, kind: kind, identity: identity, session: session, library: library)
         await binding.release()
         let installationSnapshot = await library.checkAvailability(ids: [id])
@@ -1307,7 +1324,7 @@ public final class ProjectSession {
                         guard let validate = session.validateVideoModel else { throw WorkflowIssue("T2V 实现未安装。") }
                         revision = try await validate(lease.url).revision
                     }
-                case .pitch: throw WorkflowIssue("SwiftF0 使用已准备的固定资源，不能替换为其他模型。")
+                case .pitch: throw WorkflowIssue("所选目录未通过 SwiftF0 固定版本校验，未改变模型选择。")
                 case .image: try await session.validateModel(lease.url); revision = nil
                 }
                 try Task.checkCancellation()
@@ -1964,6 +1981,7 @@ public final class ProjectSession {
         if let lease = usageLeases.removeValue(forKey: id), let modelLibrary {
             await modelLibrary.release(lease)
         }
+        if let binding = pitchRunBindings.removeValue(forKey: id) { await binding.release() }
         activeJobIDs.remove(id)
         handles.removeValue(forKey: id)
         workers.removeValue(forKey: id)

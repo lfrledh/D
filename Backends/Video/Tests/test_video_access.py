@@ -19,7 +19,7 @@ import d_video_run as runner
 class VideoAccessTests(unittest.TestCase):
     def arguments(self, root):
         return argparse.Namespace(request=root/'run'/'request.json', model=root/'model',
-            tokenizer=root/'tokenizer', output=root/'run'/'frames',
+            tokenizer=root/'model'/'tokenizer', output=root/'run'/'frames',
             access_manifest=root/'bootstrap'/'access.json',
             access_run_id='cfe9876a-3e85-4de9-95fa-fa7b8f0e0bc6')
 

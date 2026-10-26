@@ -1,4 +1,5 @@
 import Darwin
+import CryptoKit
 import DInference
 import Foundation
 
@@ -36,11 +37,11 @@ public actor MLXVideoBackend: InferenceBackend {
         }
         try VideoBackendConfiguration.validate(video)
         for (url, label) in [(request.model.directory, "prepared video model"),
-                             (configuration.tokenizerDirectory, "video tokenizer"),
+                             (request.model.directory.appendingPathComponent("tokenizer", isDirectory: true), "video tokenizer"),
                              (configuration.artifactDirectory, "video artifacts")] {
             try AudioFileSystem.validateDirectory(url, label: label)
         }
-        for protected in [request.model.directory, configuration.tokenizerDirectory,
+        for protected in [request.model.directory, request.model.directory.appendingPathComponent("tokenizer", isDirectory: true),
                           configuration.providerScript.deletingLastPathComponent(),
                           configuration.pythonExecutable.deletingLastPathComponent()] {
             guard !AudioFileSystem.overlaps(configuration.artifactDirectory, protected) else {
@@ -59,6 +60,13 @@ public actor MLXVideoBackend: InferenceBackend {
         guard object["complete"] == .bool(true),
               object["revision"] == .string(VideoBackendConfiguration.revision) else {
             throw InferenceFailure.invalidRequest("Video model preparation is incomplete or belongs to another revision.")
+        }
+        for resource in WanTokenizerResource.files {
+            let (bytes, _) = try AudioFileSystem.readRegularFile(request.model.directory.appendingPathComponent(resource.preparedPath),
+                label: "Wan tokenizer", maximumBytes: resource.size)
+            guard bytes.count == resource.size, SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == resource.sha256 else {
+                throw InferenceFailure.invalidRequest("Wan tokenizer is missing or differs from the selected prepared model. Prepare this installation again.")
+            }
         }
         return (video, data)
     }
@@ -86,7 +94,7 @@ public actor MLXVideoBackend: InferenceBackend {
         try AudioFileSystem.writeExclusive(data, to: requestURL)
         let cache = run.appendingPathComponent("cache"), tmp = run.appendingPathComponent("tmp")
         var arguments = ["-B", configuration.providerScript.path, "--request", requestURL.path,
-                        "--model", request.model.directory.path, "--tokenizer", configuration.tokenizerDirectory.path,
+                        "--model", request.model.directory.path, "--tokenizer", request.model.directory.appendingPathComponent("tokenizer", isDirectory: true).path,
                         "--output", output.path]
         let access: AudioProviderAccess?
         if let root = configuration.accessBootstrapRoot {

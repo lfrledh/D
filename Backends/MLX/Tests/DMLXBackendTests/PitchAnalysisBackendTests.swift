@@ -11,6 +11,7 @@ struct PitchProviderContractTests {
         let configuration = PitchBackendConfiguration(
             pythonExecutable: URL(fileURLWithPath: "/usr/bin/python3"),
             providerScript: URL(fileURLWithPath: "/tmp/d_pitch_analysis_backend.py"),
+            bundledCore: URL(fileURLWithPath: "/app/core.py"),
             artifactDirectory: URL(fileURLWithPath: "/tmp"))
         #expect(configuration.timeoutSeconds == 30)
         #expect(configuration.cancellationGraceSeconds == 2)
@@ -314,8 +315,10 @@ private final class PitchBackendFixture {
             model: ModelReference(directory: model, revision: PitchAnalysisRequest.modelSHA256),
             input: .pitch(pitch))
         let python = ProcessInfo.processInfo.environment["D_PITCH_PYTHON_EXECUTABLE"] ?? "/usr/bin/python3"
+        let core = root.appendingPathComponent("bundled-core.py")
+        try "# Fixed fixture module; never loaded from the model directory.".write(to: core, atomically: false, encoding: .utf8)
         configuration = PitchBackendConfiguration(
-            pythonExecutable: URL(fileURLWithPath: python), providerScript: provider,
+            pythonExecutable: URL(fileURLWithPath: python), providerScript: provider, bundledCore: core,
             artifactDirectory: artifacts, timeoutSeconds: mode == "timeout" ? 0.1 : 5,
             cancellationGraceSeconds: 0.1)
     }

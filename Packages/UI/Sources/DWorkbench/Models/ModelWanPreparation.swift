@@ -63,7 +63,8 @@ enum ModelWanPreparation {
         }
         guard counts == ["text": 242, "diffusion": 825, "vae": 194] else { throw ModelLibraryError.integrity("Wan 模型张量不完整。") }
         let markerFile = ModelFile(path: marker, size: UInt64(data.count), sha256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())
-        return try stage.verify(files + [markerFile])
+        let tokenizerFiles = WanTokenizerResource.files.map { ModelFile(path: $0.preparedPath, size: $0.size, sha256: $0.sha256) }
+        return try stage.verify(files + tokenizerFiles + [markerFile])
     }
 
     static func prepare(source: ModelDirectory, entry: ModelCatalogEntry, parent: ModelDirectory,

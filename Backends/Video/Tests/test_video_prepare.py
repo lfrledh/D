@@ -50,14 +50,24 @@ class PreparationTests(unittest.TestCase):
                 torch.save(values, path)
             files[role] = name, prepare.digest(path), path.stat().st_size, dtype
         prepare.FILES = files  # Explicit test fixture: production registry is unchanged on disk.
-        self.originals = {p.name: prepare.digest(p) for p in self.source.iterdir()}
+        self.old_tokenizers = prepare.TOKENIZER_FILES
+        tokenizer = self.source / "google/umt5-xxl"
+        tokenizer.mkdir(parents=True)
+        tokenizers = {}
+        for name in self.old_tokenizers:
+            path = tokenizer / name
+            path.write_bytes(("controlled tokenizer fixture: " + name).encode())
+            tokenizers[name] = prepare.digest(path), path.stat().st_size
+        prepare.TOKENIZER_FILES = tokenizers
+        self.originals = {str(p.relative_to(self.source)): prepare.digest(p) for p in self.source.rglob("*") if p.is_file()}
 
     def tearDown(self):
         prepare.FILES = self.old_files
+        prepare.TOKENIZER_FILES = self.old_tokenizers
         self.temporary.cleanup()
 
     def assertOriginalsUnchanged(self):
-        self.assertEqual({p.name: prepare.digest(p) for p in self.source.iterdir()}, self.originals)
+        self.assertEqual({str(p.relative_to(self.source)): prepare.digest(p) for p in self.source.rglob("*") if p.is_file()}, self.originals)
 
     def testExactShardsAndMixedPrecisionWithoutOriginalModification(self):
         destination = self.root / "转换结果 🎬"

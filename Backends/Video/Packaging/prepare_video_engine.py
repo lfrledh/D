@@ -305,7 +305,6 @@ def _copy_inputs(
     site_packages: Path,
     video_root: Path,
     audio_provider: Path,
-    tokenizer: Path,
 ) -> None:
     interpreter = python_root / "bin/python3.12"
     stdlib = python_root / "lib/python3.12"
@@ -327,12 +326,6 @@ def _copy_inputs(
     prepare_engine._validate_tree(source_vendor, "Wan vendor")
     access = audio_provider / "d_audio_access.py"
 
-    for name, expected in TOKENIZER_DIGESTS.items():
-        path = tokenizer / name
-        _regular(path, f"tokenizer file {name}")
-        if _sha256(path) != expected:
-            raise PackagingError(f"tokenizer file differs from the pinned revision: {name}")
-
     declaration = Path(__file__).resolve().parents[1] / "Models" / MODEL_DECLARATION
     _validate_model_declaration(declaration)
 
@@ -353,10 +346,6 @@ def _copy_inputs(
         _copy_verified_source(source_python / name, provider / name, f"video provider {name}")
     _copy_verified_source(access, provider / "d_audio_access.py", "audio access provider")
     prepare_engine._copy_tree(source_vendor, staging / "Vendor/wan21")
-    target_tokenizer = staging / "tokenizer"
-    target_tokenizer.mkdir()
-    for name in TOKENIZER_DIGESTS:
-        shutil.copy2(tokenizer / name, target_tokenizer / name)
     target_models = staging / "model-manifests"
     target_models.mkdir()
     shutil.copy2(declaration, target_models / MODEL_DECLARATION)
@@ -406,15 +395,14 @@ def prepare(args: argparse.Namespace) -> None:
     site_packages = prepare_engine._absolute_directory(args.site_packages, "site-packages")
     video_root = prepare_engine._absolute_directory(args.video_root, "video-root")
     audio_provider = prepare_engine._absolute_directory(args.audio_provider_directory, "audio-provider-directory")
-    tokenizer = prepare_engine._absolute_directory(args.tokenizer, "tokenizer")
     output = prepare_engine._absolute_output(args.output)
-    sources = [python_root, site_packages, video_root, audio_provider, tokenizer]
+    sources = [python_root, site_packages, video_root, audio_provider]
     prepare_engine._reject_overlap(output, sources)
 
     staging: Path | None = None
     try:
         staging = Path(tempfile.mkdtemp(prefix=".d-video-engine-", dir=output.parent))
-        _copy_inputs(staging, python_root, site_packages, video_root, audio_provider, tokenizer)
+        _copy_inputs(staging, python_root, site_packages, video_root, audio_provider)
         from prepare_external_video_engine import relocate_tools, verify_relocated_dependencies
         (staging / "native").mkdir()
         relocate_tools(staging)
@@ -442,7 +430,7 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--site-packages", required=True)
     parser.add_argument("--video-root", required=True)
     parser.add_argument("--audio-provider-directory", required=True)
-    parser.add_argument("--tokenizer", required=True)
+    parser.add_argument("--tokenizer", help=argparse.SUPPRESS) # accepted only for old build command compatibility; never copied
     parser.add_argument("--output", required=True)
     return parser.parse_args(argv)
 

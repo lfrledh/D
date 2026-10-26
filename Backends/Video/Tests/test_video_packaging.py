@@ -200,12 +200,16 @@ class PrepareVideoEngineTests(VideoFixture):
             self.assertEqual(path.stat().st_size, entry["sizeBytes"])
             self.assertEqual(digest(path), entry["sha256"])
 
+    def test_tokenizer_is_not_an_application_resource(self) -> None:
+        (self.tokenizer / "spiece.model").write_bytes(b"changed")
+        self.prepare()
+        self.assertFalse((self.output / "tokenizer").exists())
+
     def test_missing_wrong_version_license_tokenizer_and_legitimate_runner_are_handled(self) -> None:
         cases: list[tuple[str, callable]] = [
             ("package", lambda: shutil.rmtree(self.site / "ftfy")),
             ("version", lambda: (self.site / "numpy-2.4.3.dist-info/METADATA").write_text("Name: numpy\nVersion: 9\n", encoding="utf-8")),
             ("license", lambda: (self.site / "wcwidth-0.8.3.dist-info/LICENSE").unlink()),
-            ("tokenizer", lambda: (self.tokenizer / "spiece.model").write_bytes(b"changed")),
         ]
         for index, (expected, mutate) in enumerate(cases):
             with self.subTest(expected=expected):
@@ -266,7 +270,7 @@ class PrepareVideoEngineTests(VideoFixture):
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
         shutil.rmtree(self.output)
         with self.assertRaisesRegex(prepare_video_engine.PackagingError, "overlaps"):
-            self.prepare(output=str(self.tokenizer / "nested"))
+            self.prepare(output=str(self.site / "nested"))
         link = self.site / "numpy/link"
         link.symlink_to(self.site / "numpy/__init__.py")
         with self.assertRaisesRegex(prepare_video_engine.PackagingError, "symlink"):

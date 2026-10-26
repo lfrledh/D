@@ -37,16 +37,14 @@ CONTRACTS = {
         "d-video-engine", "provider/d_video_run.py", "Vendor",
         ("python/bin/python3", "provider/d_video_run.py", "provider/d_video_model.py",
          "provider/d_video_prepare.py", "provider/d_audio_access.py", "model-manifests/wan21.json",
-         "tokenizer/special_tokens_map.json", "tokenizer/spiece.model", "tokenizer/tokenizer.json",
-         "tokenizer/tokenizer_config.json", "Vendor/wan21/__init__.py", "Vendor/wan21/PROVENANCE.json",
+         "Vendor/wan21/__init__.py", "Vendor/wan21/PROVENANCE.json",
          "Vendor/wan21/LICENSE-MIT.txt", "Vendor/wan21/LICENSE-WAN-APACHE-2.0.txt"),
     ),
     "PitchEngine.dengine": (
         "d-pitch-engine", "provider/d_pitch_analysis_backend.py",
         "python/lib/python3.12/site-packages/swift_f0",
         ("python/bin/python3", "provider/d_pitch_analysis_backend.py", "provider/d_audio_access.py",
-         "model-manifests/swift-f0.json", "python/lib/python3.12/site-packages/swift_f0/core.py",
-         "python/lib/python3.12/site-packages/swift_f0/model.onnx"),
+         "model-manifests/swift-f0.json", "python/lib/python3.12/site-packages/swift_f0/core.py"),
     ),
 }
 

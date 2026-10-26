@@ -220,9 +220,8 @@ def _regular_bytes(path: Path, expected_size: int | None, maximum: int, label: s
     return _bounded_regular_bytes(path, maximum, label, expected_size)
 
 
-def _load_core(model_directory: Path) -> type[Any]:
-    core_path = model_directory / "core.py"
-    if core_path.parent != model_directory or core_path.is_symlink():
+def _load_core(core_path: Path) -> type[Any]:
+    if not core_path.is_absolute() or core_path.is_symlink():
         raise ProtocolError("SwiftF0 core path is invalid")
     spec = importlib.util.spec_from_file_location("_d_pinned_swift_f0_core", core_path)
     if spec is None or spec.loader is None:
@@ -235,8 +234,8 @@ def _load_core(model_directory: Path) -> type[Any]:
         sys.modules.pop(spec.name, None)
         raise
     actual = Path(module.__file__).resolve(strict=True)
-    if actual != core_path.resolve(strict=True) or actual.parent != model_directory.resolve(strict=True):
-        raise ProtocolError("loaded SwiftF0 core does not match modelDirectory")
+    if actual != core_path.resolve(strict=True):
+        raise ProtocolError("loaded SwiftF0 core does not match the bundled module")
     swift_f0 = getattr(module, "SwiftF0", None)
     if not isinstance(swift_f0, type):
         raise ProtocolError("SwiftF0 core does not expose SwiftF0")
@@ -270,7 +269,7 @@ def _validated_frames(raw_pitch: Sequence[Any], raw_confidence: Sequence[Any],
     return frames
 
 
-def _analyze(request: dict[str, Any], detector_factory: Callable[[Path], Any] | None = None) -> dict[str, Any]:
+def _analyze(request: dict[str, Any], detector_factory: Callable[[Path], Any] | None = None, *, bundled_core: Path | None = None) -> dict[str, Any]:
     input_bytes = _regular_bytes(request["inputPath"], request["sampleCount"] * 4,
                                  MAX_INPUT_BYTES, "prepared input")
     if hashlib.sha256(input_bytes).hexdigest() != request["inputSHA256"]:
@@ -285,8 +284,11 @@ def _analyze(request: dict[str, Any], detector_factory: Callable[[Path], Any] | 
     started = time.monotonic()
     if detector_factory is None:
         import numpy as np
-        swift_f0 = _load_core(request["modelDirectory"])
-        detector = swift_f0(confidence_threshold=THRESHOLD, fmin=FMIN, fmax=FMAX)
+        if bundled_core is None:
+            raise ProtocolError("fixed bundled SwiftF0 code was not supplied")
+        swift_f0 = _load_core(bundled_core)
+        detector = swift_f0(confidence_threshold=THRESHOLD, fmin=FMIN, fmax=FMAX,
+                           model_path=str(request["modelDirectory"] / "model.onnx"))
         audio = np.frombuffer(input_bytes, dtype="<f4").copy()
     else:
         detector = detector_factory(request["modelDirectory"])
@@ -401,6 +403,7 @@ def _execute(args: argparse.Namespace,
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--request", required=True)
+    parser.add_argument("--core-module", required=True)
     parser.add_argument("--access-manifest")
     parser.add_argument("--access-run-id")
     parser.add_argument("--model-directory")
@@ -408,7 +411,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--run-directory")
     args = parser.parse_args(argv)
     try:
-        response = _execute(args)
+        response = _execute(args, analyzer=lambda request: _analyze(request, bundled_core=_path(args.core_module, "bundled core module")))
         encoded = json.dumps(response, ensure_ascii=False, allow_nan=False,
                              sort_keys=True, separators=(",", ":"))
         sys.stdout.write(encoded + "\n")

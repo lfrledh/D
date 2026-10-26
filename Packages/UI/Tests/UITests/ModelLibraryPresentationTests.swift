@@ -715,3 +715,39 @@ extension ModelLibraryPresentationTests {
         try await library.shutdown()
     }
 }
+
+extension ModelLibraryPresentationTests {
+    @Test(arguments: [false, true])
+    func missingTokenizerResourceButtonQueuesExactResourceWithoutResumingAll(clearHistory: Bool) async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("TokenizerCommand-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let entry = try #require(ModelCatalog.entries().first { $0.id == "wan21-t2v-1.3b-bf16" })
+        let old = ModelCatalogEntry(id: entry.id, title: entry.title, repository: entry.repository, revision: entry.revision,
+            files: Array(entry.files.prefix(3)), workflowProfileID: entry.workflowProfileID,
+            workflowIdentity: entry.workflowIdentity, preparation: entry.preparation)
+        let transfer = PresentationTransfer()
+        var previous: ModelLibrary? = try await ModelLibrary(stateDirectory: root.appendingPathComponent("state"),
+            catalog: [old], transport: transfer, availableBytesOverride: UInt64.max)
+        try await previous!.configureRoot(at: root)
+        let task = try await previous!.enqueueDownloads([old.id], postAction: .register, startIfIdle: false)[0]
+        try await previous!.cancelDownload(task.id)
+        if clearHistory { try await previous!.clearDownloadHistory([task.id]) }
+        try await previous!.shutdown(); previous = nil
+        let library = try await ModelLibrary(stateDirectory: root.appendingPathComponent("state"),
+            catalog: [entry], transport: transfer, availableBytesOverride: UInt64.max)
+        let model = ModelLibraryModel(library: library)
+        await model.refresh()
+        let resource = try #require(model.snapshot?.resources.first)
+        #expect(resource.control.requiresTokenizerUpgrade == true)
+        await model.continueResource(resource)
+        #expect(model.errorMessage == nil)
+        let queued = try #require(model.snapshot?.downloads.last)
+        #expect(queued.resourceID == task.resourceID && queued.state == .queued)
+        #expect(queued.postAction == (clearHistory ? .filesOnly : .register))
+        let requests = await transfer.count
+        #expect(!model.queueIsRunning && requests == 0)
+        try await library.shutdown()
+    }
+}

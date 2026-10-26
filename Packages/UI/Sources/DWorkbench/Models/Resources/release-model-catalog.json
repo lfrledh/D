@@ -1335,6 +1335,26 @@
           "path": "Wan2.1_VAE.pth",
           "sha256": "38071ab59bd94681c686fa51d75a1968f64e470262043be31f7a094e442fd981",
           "size": 507609880
+        },
+        {
+          "path": "google/umt5-xxl/special_tokens_map.json",
+          "size": 6623,
+          "sha256": "7b8a9f5040adb67b5805abdfd42c1f8d0f3d0e711f10726580eb3789cd0ad61d"
+        },
+        {
+          "path": "google/umt5-xxl/spiece.model",
+          "size": 4548313,
+          "sha256": "e3909a67b780650b35cf529ac782ad2b6b26e6d1f849d3fbb6a872905f452458"
+        },
+        {
+          "path": "google/umt5-xxl/tokenizer.json",
+          "size": 16837417,
+          "sha256": "6e197b4d3dbd71da14b4eb255f4fa91c9c1f2068b20a2de2472967ca3d22602b"
+        },
+        {
+          "path": "google/umt5-xxl/tokenizer_config.json",
+          "size": 61728,
+          "sha256": "ed9a3a8b0faa71a70a32847e0435fe036e6e112d4df4edb7bb48a921e344dc05"
         }
       ],
       "id": "wan21-t2v-1.3b-bf16",
@@ -1955,6 +1975,27 @@
       "repository": "stabilityai/stable-audio-3-optimized",
       "revision": "da6edc54ddba10bfd79a077102ded687f80e882b",
       "title": "Stable Audio Small Music"
+    },
+    {
+      "id": "swift-f0-0.1.2-cpu-v1",
+      "title": "SwiftF0 0.1.2 · CPU",
+      "repository": "lars76/swift-f0",
+      "revision": "8e968fe53b818da318d46e14b84b3d0b41192ad1",
+      "files": [
+        {
+          "path": "model.onnx",
+          "remotePath": "swift_f0/model.onnx",
+          "size": 399114,
+          "sha256": "fa91bb45512b90339cf4b00a599ba8fe3a253c46419fcfe6b46df77a8a8336a5",
+          "source": "githubRaw"
+        }
+      ],
+      "workflowProfileID": "d.music.pitch",
+      "workflowIdentity": "pitch:fa91bb45512b90339cf4b00a599ba8fe3a253c46419fcfe6b46df77a8a8336a5",
+      "preparation": "none",
+      "modelSpec": "SwiftF0 0.1.2 · ONNX · CPU",
+      "memoryGuidance": "CPU 音高分析；256 MiB 估计工作预算。",
+      "provenance": "https://github.com/lars76/swift-f0/tree/8e968fe53b818da318d46e14b84b3d0b41192ad1 · MIT (code and models)"
     }
   ],
   "schemaVersion": 1

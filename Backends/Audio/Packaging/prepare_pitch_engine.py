@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the fixed SwiftF0 engine for approved internal evaluation only."""
+"""Prepare fixed SwiftF0 code without model or dependency test weights."""
 
 from __future__ import annotations
 
@@ -46,6 +46,9 @@ PACKAGE_DIRECTORIES = (
     "mpmath",
 )
 OPTIONAL_NATIVE_DIRECTORIES = ("numpy.libs", "onnxruntime.libs")
+CORE_SHA256 = "d55fb17f9532c4fc7db927a9b53c6d8f4e0c9b3b19d9521c556ce8811eaec259"
+PATCHED_CORE_SHA256 = "f55056f7e569f29b632fd9ed0cb6bc6bd35ad11df70b8b260d66d2ddbc576af9"
+UPSTREAM_REVISION = "8e968fe53b818da318d46e14b84b3d0b41192ad1"
 MAXIMUM_LICENSE_BYTES = 4 * 1024 * 1024
 DISTRIBUTION_PACKAGE_PATHS = {
     "swift-f0": ("swift_f0",),
@@ -181,6 +184,12 @@ def _copy_selected_site(site: Path, destination: Path) -> None:
         if prepare_engine._lexists(target):
             raise PackagingError(f"duplicate selected site-packages entry: {relative.as_posix()}")
         prepare_engine._copy_tree(source, target)
+        # Distribution policy has no small/test-model exemption. This is an
+        # owned staging copy; installed/user models and source trees are untouched.
+        for weight in target.rglob("*"):
+            if weight.suffix.lower() != ".onnx": continue
+            _regular(weight, "copied ONNX payload")
+            weight.unlink()
         if relative.name.endswith(".dist-info"):
             for name in INSTALLATION_RECORDS:
                 record = target / name
@@ -216,22 +225,26 @@ def _copy_providers(provider: Path, destination: Path) -> None:
 
 def _model_declaration() -> dict[str, object]:
     return {
-        "schemaVersion": 1,
-        "profile": "swift-f0-0.1.2-cpu-internal-evaluation",
-        "version": "0.1.2",
-        "actualSHA256": MODEL_SHA256,
-        "sizeBytes": MODEL_SIZE_BYTES,
-        "provider": "CPUExecutionProvider",
-        "sourceLicense": "MIT",
-        "weightLicense": "unknown",
-        "distribution": "internal-evaluation-only",
+        "schemaVersion": 1, "profile": "swift-f0-0.1.2-cpu-v1", "version": "0.1.2",
+        "actualSHA256": MODEL_SHA256, "sizeBytes": MODEL_SIZE_BYTES,
+        "provider": "CPUExecutionProvider", "sourceLicense": "MIT", "weightLicense": "MIT",
+        "distribution": "user-acquired-separate-model", "repository": "lars76/swift-f0",
+        "revision": UPSTREAM_REVISION, "remotePath": "swift_f0/model.onnx",
     }
 
 
-def _validate_model(path: Path) -> None:
-    info = _regular(path, "swift_f0 model.onnx")
-    if info.st_size != MODEL_SIZE_BYTES or _sha256(path) != MODEL_SHA256:
-        raise PackagingError("swift_f0 model.onnx differs from the approved internal-evaluation artifact")
+def _separate_model_path(core: Path) -> None:
+    if _sha256(core) != CORE_SHA256:
+        raise PackagingError("fixed SwiftF0 code differs from the reviewed source")
+    source = core.read_text(encoding="utf-8")
+    old = '        model_path = os.path.join(os.path.dirname(__file__), "model.onnx")'
+    parameter = '        fmax: Optional[float] = None,'
+    if source.count(old) != 1 or source.count(parameter) != 1:
+        raise PackagingError("fixed SwiftF0 model-path patch does not apply")
+    source = source.replace(parameter, parameter + '\n        model_path: Optional[str] = None,')
+    source = source.replace(old, '        if model_path is None:\n            raise ValueError("D requires an explicitly selected model path")')
+    source = source.replace('Initialize SwiftF0 with the bundled ONNX model.', 'Initialize SwiftF0 with explicitly supplied ONNX weights.')
+    core.write_text('# D modification: load explicitly verified external weights; fixed code remains bundled.\n' + source, encoding="utf-8")
 
 
 def _manifest(root: Path) -> dict[str, object]:
@@ -253,8 +266,6 @@ def _verify_no_installation_records(root: Path) -> None:
 
 
 def prepare(args: argparse.Namespace) -> None:
-    if getattr(args, "internal_evaluation_ack", False) is not True:
-        raise PackagingError("--internal-evaluation-ack is required")
     python_root = prepare_engine._absolute_directory(args.python_root, "python-root")
     site = prepare_engine._absolute_directory(args.site_packages, "site-packages")
     provider = prepare_engine._absolute_directory(args.provider_directory, "provider-directory")
@@ -266,8 +277,9 @@ def prepare(args: argparse.Namespace) -> None:
     try:
         _copy_runtime(python_root, site, staging / "python")
         _copy_providers(provider, staging / "provider")
-        copied_model = staging / "python/lib/python3.12/site-packages/swift_f0/model.onnx"
-        _validate_model(copied_model)
+        _separate_model_path(staging / "python/lib/python3.12/site-packages/swift_f0/core.py")
+        if any(p.suffix.lower() == ".onnx" for p in staging.rglob("*")):
+            raise PackagingError("pitch engine still contains model weights")
         (staging / "model-manifests").mkdir()
         declaration = _model_declaration()
         (staging / "model-manifests/swift-f0.json").write_text(
@@ -296,7 +308,7 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--site-packages", required=True)
     parser.add_argument("--provider-directory", required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--internal-evaluation-ack", action="store_true", required=True)
+    parser.add_argument("--internal-evaluation-ack", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
 
@@ -306,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
     except (PackagingError, OSError, shutil.Error, UnicodeError) as error:
         prepare_engine._safe_message(sys.stderr, f"prepare_pitch_engine: {error}")
         return 2
-    message = "Prepared fixed SwiftF0 pitch engine for internal evaluation; runtime/model execution/signature verification: not run."
+    message = "Prepared fixed SwiftF0 code without model weights; runtime/model execution/signature verification: not run."
     return 0 if prepare_engine._safe_message(sys.stdout, message) else 2
 
 

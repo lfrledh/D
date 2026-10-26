@@ -95,11 +95,12 @@ struct VideoBackendTests {
     @Test("Backend result is validated, can repeat after release, and published files survive consumer/report failure")
     func runtimePublication() async throws {
         let root = try root()
-        let model = root.appendingPathComponent("model"), tokenizer = root.appendingPathComponent("tokenizer")
+        let model = root.appendingPathComponent("model"), tokenizer = root.appendingPathComponent("model/tokenizer")
         let code = root.appendingPathComponent("code"), outputs = root.appendingPathComponent("outputs")
         for directory in [model, tokenizer, code, outputs] {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
+        try copyTokenizer(to: tokenizer)
         let manifest = model.appendingPathComponent("D-VIDEO-PREPARED.json")
         try JSONSerialization.data(withJSONObject: ["complete": true, "revision": VideoBackendConfiguration.revision])
             .write(to: manifest)
@@ -110,7 +111,7 @@ struct VideoBackendTests {
                 .write(to: script, atomically: false, encoding: .utf8)
             let backend = try MLXVideoBackend(configuration: .init(
                 pythonExecutable: URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_VIDEO_TEST_PYTHON"]!),
-                providerScript: script, tokenizerDirectory: tokenizer, artifactDirectory: outputs,
+                providerScript: script, artifactDirectory: outputs,
                 memoryLimitBytes: 14 * 1024 * 1024 * 1024, timeoutSeconds: 10, cancellationGraceSeconds: 0.2))
             let request = InferenceRequest(model: .init(directory: model, revision: VideoBackendConfiguration.revision), input: .video(video()))
             do {
@@ -142,11 +143,12 @@ struct VideoBackendTests {
 
     @Test("Application access stays narrow, drains on errors, and per-task budgets reach wire and result")
     func applicationAccessAndBudget() async throws {
-        let root = try root(), model = root.appendingPathComponent("model"), tokenizer = root.appendingPathComponent("tokenizer")
+        let root = try root(), model = root.appendingPathComponent("model"), tokenizer = root.appendingPathComponent("model/tokenizer")
         let code = root.appendingPathComponent("code"), output = root.appendingPathComponent("outputs"), access = root.appendingPathComponent("access")
         for directory in [model, tokenizer, code, output, access] {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
+        try copyTokenizer(to: tokenizer)
         try JSONSerialization.data(withJSONObject: ["complete": true, "revision": VideoBackendConfiguration.revision])
             .write(to: model.appendingPathComponent("D-VIDEO-PREPARED.json"))
         let script = code.appendingPathComponent("fixture.py")
@@ -165,7 +167,7 @@ struct VideoBackendTests {
                 try source.write(to: script, atomically: false, encoding: .utf8)
                 let backend = try MLXVideoBackend(configuration: .init(
                     pythonExecutable: URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_VIDEO_TEST_PYTHON"]!),
-                    providerScript: script, tokenizerDirectory: tokenizer, artifactDirectory: output,
+                    providerScript: script, artifactDirectory: output,
                     memoryLimitBytes: 14 * 1024 * 1024 * 1024, timeoutSeconds: 10,
                     cancellationGraceSeconds: 0.2, accessBootstrapRoot: access))
                 let request = InferenceRequest(model: .init(directory: model, revision: VideoBackendConfiguration.revision),
@@ -188,11 +190,12 @@ struct VideoBackendTests {
 
     @Test("Deployment replacement after bootstrap creation revokes private grants without launching")
     func deploymentConfirmationFailureCleansBootstrap() async throws {
-        let root = try root(), model = root.appendingPathComponent("model"), tokenizer = root.appendingPathComponent("tokenizer")
+        let root = try root(), model = root.appendingPathComponent("model"), tokenizer = root.appendingPathComponent("model/tokenizer")
         let code = root.appendingPathComponent("code"), output = root.appendingPathComponent("outputs"), access = root.appendingPathComponent("access")
         for directory in [model, tokenizer, code, output, access] {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
+        try copyTokenizer(to: tokenizer)
         try JSONSerialization.data(withJSONObject: ["complete": true, "revision": VideoBackendConfiguration.revision])
             .write(to: model.appendingPathComponent("D-VIDEO-PREPARED.json"))
         let script = code.appendingPathComponent("never.py"), marker = code.appendingPathComponent("launched")
@@ -200,7 +203,7 @@ struct VideoBackendTests {
         let confirm = VideoDeploymentConfirmationFixture()
         let backend = try MLXVideoBackend(configuration: .init(
             pythonExecutable: URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_VIDEO_TEST_PYTHON"]!),
-            providerScript: script, tokenizerDirectory: tokenizer, artifactDirectory: output,
+            providerScript: script, artifactDirectory: output,
             memoryLimitBytes: 14 * 1024 * 1024 * 1024, timeoutSeconds: 10,
             accessBootstrapRoot: access, confirmDeployment: { try confirm.check() }))
         let request = InferenceRequest(model: .init(directory: model, revision: VideoBackendConfiguration.revision), input: .video(video()))
@@ -213,9 +216,10 @@ struct VideoBackendTests {
     @Test("Runtime cancels promptly and queued video starts after the cancelled provider exits")
     func runtimeCancelHandoff() async throws {
         let root = try root()
-        let model = root.appendingPathComponent("model"), tokenizer = root.appendingPathComponent("tokenizer")
+        let model = root.appendingPathComponent("model"), tokenizer = root.appendingPathComponent("model/tokenizer")
         let code = root.appendingPathComponent("code"), outputs = root.appendingPathComponent("outputs")
         for d in [model, tokenizer, code, outputs] { try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true) }
+        try copyTokenizer(to: tokenizer)
         try JSONSerialization.data(withJSONObject: ["complete": true, "revision": VideoBackendConfiguration.revision])
             .write(to: model.appendingPathComponent("D-VIDEO-PREPARED.json"))
         let access = root.appendingPathComponent("access")
@@ -226,7 +230,7 @@ struct VideoBackendTests {
             .write(to: script, atomically: false, encoding: .utf8)
         let backend = try MLXVideoBackend(configuration: .init(
             pythonExecutable: URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_VIDEO_TEST_PYTHON"]!),
-            providerScript: script, tokenizerDirectory: tokenizer, artifactDirectory: outputs,
+            providerScript: script, artifactDirectory: outputs,
             memoryLimitBytes: 14 * 1024 * 1024 * 1024, timeoutSeconds: 10, cancellationGraceSeconds: 0.2, accessBootstrapRoot: access))
         let runtime = try InferenceRuntime(backends: [backend], configuration: .init(memoryBudgetBytes: 14 * 1024 * 1024 * 1024))
         let waiting = VideoRequest(prompt: "WAIT", negativePrompt: "", width: 64, height: 48, frameCount: 5,
@@ -295,6 +299,12 @@ struct VideoBackendTests {
     (o/"result.json").write_text(json.dumps(result));print(json.dumps(result),flush=True)
     """#
 
+    private func copyTokenizer(to destination: URL) throws {
+        let source = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_WAN_TOKENIZER"]))
+        for file in WanTokenizerResource.files {
+            try FileManager.default.copyItem(at: source.appendingPathComponent(file.name), to: destination.appendingPathComponent(file.name))
+        }
+    }
     private func root() throws -> URL {
         guard let path = ProcessInfo.processInfo.environment["D_VIDEO_TEST_OUTPUT"] else {
             throw InferenceFailure.invalidRequest("D_VIDEO_TEST_OUTPUT is required for owned CPU outputs.")

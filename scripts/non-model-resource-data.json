@@ -1,0 +1,137 @@
+[
+  {
+    "sha256": "97c8ed74d091fcfd23498029bb819c29d096c3dcb1326edee5dfb0591ade2e4b",
+    "purpose": "CPython parser grammar table; not model inference weight",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/lib2to3/Grammar3.12.14.final.0.pickle"
+  },
+  {
+    "sha256": "36ee934395b9209737b13893ddaff05fad8e239c2fdfac29d401d3fceeb30768",
+    "purpose": "CPython parser grammar table; not model inference weight",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/lib2to3/PatternGrammar3.12.14.final.0.pickle"
+  },
+  {
+    "sha256": "2638ce9e2500e572a5e0de7faed6661eb569d1b696fcba07b0dd223da5f5d224",
+    "purpose": "Python import path configuration text, not PyTorch weight",
+    "sourceExample": "ACEMusicEngine.dengine/python/lib/python3.12/site-packages/distutils-precedence.pth"
+  },
+  {
+    "sha256": "9564b309cbf3441ff0a6e4468fddaca46230fab34f15c77d87025a455bdf59d9",
+    "purpose": "NumPy object serialization/scalar/RNG compatibility fixture; no identified trained-model role; may exclude test fixtures from copying",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/numpy/_core/tests/data/astype_copy.pkl"
+  },
+  {
+    "sha256": "64ba08ecade24295c392ea03175626c9ce896f0e099e06d0282f60adab9546c9",
+    "purpose": "NumPy object serialization/scalar/RNG compatibility fixture; no identified trained-model role; may exclude test fixtures from copying",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/numpy/lib/tests/data/py2-np0-objarr.npy"
+  },
+  {
+    "sha256": "178732502fbf4c1f504852c0a3673b738e2b0ba35460882b7c6c7d3ea58f48a9",
+    "purpose": "NumPy object serialization/scalar/RNG compatibility fixture; no identified trained-model role; may exclude test fixtures from copying",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/numpy/lib/tests/data/py2-objarr.npy"
+  },
+  {
+    "sha256": "c68d771c14f415b159daabd9cf42d61836f74ae40049269787baca7d57098f1e",
+    "purpose": "NumPy object serialization/scalar/RNG compatibility fixture; no identified trained-model role; may exclude test fixtures from copying",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/numpy/lib/tests/data/py2-objarr.npz"
+  },
+  {
+    "sha256": "ee6b6290a9475e9e2e9d984cf1e068b7c0a49e5c750687c975def7369d8f5bca",
+    "purpose": "NumPy object serialization/scalar/RNG compatibility fixture; no identified trained-model role; may exclude test fixtures from copying",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/numpy/lib/tests/data/py3-objarr.npy"
+  },
+  {
+    "sha256": "bd5465f7f359effabe86376e52bf185a7cd1cbc1123659af30f95a4920baf5f9",
+    "purpose": "NumPy object serialization/scalar/RNG compatibility fixture; no identified trained-model role; may exclude test fixtures from copying",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/numpy/lib/tests/data/py3-objarr.npz"
+  },
+  {
+    "sha256": "5f469dde101a2c65e283d2ed487028f8180ebcb9457cf60c9d9b952314668fed",
+    "purpose": "NumPy object serialization/scalar/RNG compatibility fixture; no identified trained-model role; may exclude test fixtures from copying",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/numpy/lib/tests/data/python3.npy"
+  },
+  {
+    "sha256": "6a039c807558149ad5fa7ad12436c69d49c5e194cf617b92785f8cb60ec63297",
+    "purpose": "NumPy object serialization/scalar/RNG compatibility fixture; no identified trained-model role; may exclude test fixtures from copying",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/numpy/lib/tests/data/win64python2.npy"
+  },
+  {
+    "sha256": "7e46d9e08af4b6a37991b04fb8388644c1595a0abcd0f26d6a5d575e2a3663ea",
+    "purpose": "SentencePiece Unicode normalization rule table; not neural inference weight; preserve only with explicit provenance/hash classification",
+    "sourceExample": "MRT2MusicEngine.dengine/python/lib/python3.12/site-packages/sentencepiece/package_data/nfkc.bin"
+  },
+  {
+    "sha256": "d8dfef3d6db0eef0742f8b55a73aee7fce6c1e21d26a09b8d3d4b52c42a791cb",
+    "purpose": "SentencePiece Unicode normalization rule table; not neural inference weight; preserve only with explicit provenance/hash classification",
+    "sourceExample": "MRT2MusicEngine.dengine/python/lib/python3.12/site-packages/sentencepiece/package_data/nfkc_cf.bin"
+  },
+  {
+    "sha256": "5febaab28312e9dbddb42be695c9e4380367f7ebe65121cdf894fb5d59d37eed",
+    "purpose": "SentencePiece Unicode normalization rule table; not neural inference weight; preserve only with explicit provenance/hash classification",
+    "sourceExample": "MRT2MusicEngine.dengine/python/lib/python3.12/site-packages/sentencepiece/package_data/nmt_nfkc.bin"
+  },
+  {
+    "sha256": "2df05162904a1bca9784913964d2a863d656676479f7c8bb11be49c980ea5f77",
+    "purpose": "SentencePiece Unicode normalization rule table; not neural inference weight; preserve only with explicit provenance/hash classification",
+    "sourceExample": "MRT2MusicEngine.dengine/python/lib/python3.12/site-packages/sentencepiece/package_data/nmt_nfkc_cf.bin"
+  },
+  {
+    "sha256": "52f11028ff8a7df3e009d94a8b6a54d4a8a17132efb4ccc1c9a0a41e432bd91e",
+    "purpose": "SentencePiece Unicode normalization rule table; not neural inference weight; preserve only with explicit provenance/hash classification",
+    "sourceExample": "ExternalVideoEngine.dengine/python/lib/python3.12/site-packages/sentencepiece/package_data/nfkc.bin"
+  },
+  {
+    "sha256": "60833ec11201446659c3549c183b18f024c4007628cc6b3a4e91ae007697b826",
+    "purpose": "SentencePiece Unicode normalization rule table; not neural inference weight; preserve only with explicit provenance/hash classification",
+    "sourceExample": "ExternalVideoEngine.dengine/python/lib/python3.12/site-packages/sentencepiece/package_data/nfkc_cf.bin"
+  },
+  {
+    "sha256": "79372c41389c2b9b29bc171017ab5400e352debd686b02670a42bec709015074",
+    "purpose": "SentencePiece Unicode normalization rule table; not neural inference weight; preserve only with explicit provenance/hash classification",
+    "sourceExample": "ExternalVideoEngine.dengine/python/lib/python3.12/site-packages/sentencepiece/package_data/nmt_nfkc.bin"
+  },
+  {
+    "sha256": "22c292c76f503795f30c85d79d30a7f572fff4f49e00392d2d60f4f93e941a1e",
+    "purpose": "SentencePiece Unicode normalization rule table; not neural inference weight; preserve only with explicit provenance/hash classification",
+    "sourceExample": "ExternalVideoEngine.dengine/python/lib/python3.12/site-packages/sentencepiece/package_data/nmt_nfkc_cf.bin"
+  },
+  {
+    "sha256": "cf8f81ceb5eaaee1621aa60b892d83e596a6173f6f6517359b679ff3daa1b0f8",
+    "purpose": "Graph dataset/test pickle or graph atlas text, not identified model weights",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/networkx/algorithms/flow/tests/gl1.gpickle.bz2"
+  },
+  {
+    "sha256": "6f79f0e90fa4c51ec79165f15963e1ed89477576e06bcaa67ae622c260411931",
+    "purpose": "Graph dataset/test pickle or graph atlas text, not identified model weights",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/networkx/algorithms/flow/tests/gw1.gpickle.bz2"
+  },
+  {
+    "sha256": "3b17e66cdeda8edb8d1dec72626c77f1f65dd4675e3f76dc2fc4fd84aa038e30",
+    "purpose": "Graph dataset/test pickle or graph atlas text, not identified model weights",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/networkx/algorithms/flow/tests/netgen-2.gpickle.bz2"
+  },
+  {
+    "sha256": "ccacba1e0fbfb30bec361f0e48ec88c999d3474fcda5ddf93bd444ace17cfa0e",
+    "purpose": "Graph dataset/test pickle or graph atlas text, not identified model weights",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/networkx/algorithms/flow/tests/wlm3.gpickle.bz2"
+  },
+  {
+    "sha256": "73fc416df0164923607751cb759f4ae81deb5f6550bf25be59c86de3b747e41d",
+    "purpose": "Graph dataset/test pickle or graph atlas text, not identified model weights",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/networkx/generators/atlas.dat.gz"
+  },
+  {
+    "sha256": "11f43e5fbd0a9078010055f6a483dc09497830d3f564d44e697394ef9bdd8aa3",
+    "purpose": "NumPy data serialization/RNG compatibility fixtures, not identified trained weights",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/numpy/random/tests/data/generator_pcg64_np121.pkl.gz"
+  },
+  {
+    "sha256": "7cdf1d78d5715fe1c42c0d5e219df691db58bdce21c0ac9aeb0bf4d0625e1f46",
+    "purpose": "NumPy data serialization/RNG compatibility fixtures, not identified trained weights",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/numpy/random/tests/data/generator_pcg64_np126.pkl.gz"
+  },
+  {
+    "sha256": "3156b5ca5172ec350f81404afa821e292755978518122377019ec6dec773cdac",
+    "purpose": "NumPy data serialization/RNG compatibility fixtures, not identified trained weights",
+    "sourceExample": "VideoEngine.dengine/python/lib/python3.12/site-packages/numpy/random/tests/data/sfc64_np126.pkl.gz"
+  }
+]

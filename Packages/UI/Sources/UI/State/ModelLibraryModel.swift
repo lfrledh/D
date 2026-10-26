@@ -762,6 +762,12 @@ extension ModelLibraryModel {
         await command { try await self.library.deleteOwnedCopy(resource.id); self.preparationNotice = self.managementText("deletedReceipt", "已删除此副本。登记保留但不可用；其他副本及作品保留。") }
     }
     public func continueResource(_ resource: ModelResource) async {
+        if resource.control.requiresTokenizerUpgrade == true, resource.control.role != .execution {
+            await perform(.resuming, id: resource.record.id) {
+                self.selectedTask = try await self.library.continueWanTokenizerUpgrade(resource.id).id
+            }
+            return
+        }
         if let task = snapshot?.downloads.last(where: { $0.resourceID == resource.id }) { await continueTask(task) }
     }
     public func continueTask(_ task: ModelDownloadTask) async {

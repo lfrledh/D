@@ -77,11 +77,11 @@ enum AppSessionFactory {
         let memoryBudgetBytes = ResourceBudgetPolicy().inferenceBudgetBytes(
             physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory)
         let videoBackend: MLXVideoBackend?
-        if let engine = bundledVideoEngine, let tokenizer = engine.videoTokenizerDirectory,
+        if let engine = bundledVideoEngine,
            let accessRoot = videoAccessRoot {
             videoBackend = try MLXVideoBackend(configuration: .init(
                 pythonExecutable: engine.pythonExecutable, providerScript: engine.providerScript,
-                tokenizerDirectory: tokenizer, artifactDirectory: artifactDirectory,
+                artifactDirectory: artifactDirectory,
                 memoryLimitBytes: memoryBudgetBytes, accessBootstrapRoot: accessRoot,
                 confirmDeployment: { try engine.confirmUnchanged() }))
         } else { videoBackend = nil }
@@ -106,9 +106,15 @@ enum AppSessionFactory {
         if let engine = bundledPitchEngine {
             try engine.confirmUnchanged()
             pitchBackend = try PitchAnalysisBackend(configuration: .init(pythonExecutable: engine.pythonExecutable,
-                providerScript: engine.providerScript, artifactDirectory: artifactDirectory,
-                accessBootstrapRoot: audioAccessRoot))
-            pitchReference = ModelReference(directory: engine.vendorDirectory, revision: PitchAnalysisRequest.modelSHA256)
+                providerScript: engine.providerScript, bundledCore: engine.vendorDirectory.appendingPathComponent("core.py"),
+                artifactDirectory: artifactDirectory, accessBootstrapRoot: audioAccessRoot))
+            pitchReference = nil
+            modelAdapters.append(.init(kind: .pitch, modelRevision: PitchAnalysisRequest.modelSHA256,
+                operationID: "d.music.pitch", title: "SwiftF0 0.1.2 · CPU", backendID: "cpu.pitch.swift-f0",
+                validateModel: { directory in
+                    try engine.confirmUnchanged()
+                    return try PitchAnalysisBackend.validateModel(at: directory)
+                }))
         } else { pitchBackend = nil; pitchReference = nil }
         var backends: [any InferenceBackend] = [backend, textBackend, vlmBackend, devBackend]
         if let pitchBackend { backends.append(pitchBackend) }

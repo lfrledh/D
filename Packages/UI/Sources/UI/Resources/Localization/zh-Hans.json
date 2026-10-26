@@ -3,6 +3,9 @@
   "locale": "zh-Hans",
   "displayName": "简体中文",
   "strings": {
+    "modelManagement.completeTokenizer": "补齐分词资源",
+    "modelManagement.tokenizerUpgrade": "此安装需要固定分词资源，已有权重保留。请将缺少的下载加入队列，或重新校验完整外部目录，再准备执行包。",
+    "modelManagement.tokenizerExecutionUpgrade": "旧执行包不包含分词资源。请补齐原始模型资源后重新准备执行包。此旧包保留。",
     "modelManagement.refreshAvailability": "刷新文件可用性",
     "workflow.node.prepare.identityMismatch": "此模型身份与操作不匹配，且不是受支持的目录草稿。",
     "workflow.node.prepare.notReady": "模型未就绪",

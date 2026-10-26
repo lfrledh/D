@@ -1419,6 +1419,7 @@ def _execute_prepared(config_path: Path, run_root: Path, timeout: float) -> tupl
         if {p.name for p in engines.iterdir()} != set(manifest["engines"]): raise BuildError("packaged engine set mismatch")
         for name, expected in manifest["engines"].items():
             if core.inspect_engine(engines / name, name) != expected: raise BuildError("packaged engine inventory mismatch: " + name)
+        report["zeroModelWeights"] = core.check_zero_weights(built)
         subprocess.run(["codesign", "--verify", "--deep", "--strict", str(built)], check=True)
         signature = subprocess.check_output(["codesign", "-dvv", str(built)], stderr=subprocess.STDOUT).decode()
         if ("Authority=Apple Development:" not in signature or "Signature=adhoc" in signature or

@@ -355,6 +355,14 @@ final class ModelDirectory: Sendable {
         }
     }
 
+    func removeCreatedEmptyFile(_ path: String, expected: ModelFileIdentity) throws {
+        guard expected.size == 0, try fileIdentity(path) == expected else {
+            throw ModelLibraryError.unsafePath("新建断点文件已改变，未删除。")
+        }
+        let (parent, name) = try parent(path); defer { Darwin.close(parent) }
+        guard unlinkat(parent, name, 0) == 0, fsync(parent) == 0 else { throw Self.failure("回退未保存的空断点文件") }
+    }
+
     func removeKnownFiles(_ known: [String: ModelFileIdentity]) throws {
         let actual = try entries(expectedPaths: Set(known.keys))
         guard actual == known else { throw ModelLibraryError.unsafePath("目录含有未知或已改变的文件，未删除任何内容。") }

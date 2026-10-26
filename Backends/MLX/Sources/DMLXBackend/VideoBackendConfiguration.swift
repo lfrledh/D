@@ -6,7 +6,6 @@ public struct VideoBackendConfiguration: Sendable {
     public static let profile = VideoExecutionCapability.wan21.profile
     public let pythonExecutable: URL
     public let providerScript: URL
-    public let tokenizerDirectory: URL
     public let artifactDirectory: URL
     /// MLX graph-evaluation guideline; not an RSS/physical-memory hard cap.
     public let memoryLimitBytes: UInt64
@@ -15,12 +14,12 @@ public struct VideoBackendConfiguration: Sendable {
     public let accessBootstrapRoot: URL?
     public let confirmDeployment: (@Sendable () throws -> Void)?
 
-    public init(pythonExecutable: URL, providerScript: URL, tokenizerDirectory: URL,
+    public init(pythonExecutable: URL, providerScript: URL,
                 artifactDirectory: URL, memoryLimitBytes: UInt64, timeoutSeconds: Double = 3600,
                 cancellationGraceSeconds: Double = 30, accessBootstrapRoot: URL? = nil,
                 confirmDeployment: (@Sendable () throws -> Void)? = nil) {
         self.pythonExecutable = pythonExecutable; self.providerScript = providerScript
-        self.tokenizerDirectory = tokenizerDirectory; self.artifactDirectory = artifactDirectory
+        self.artifactDirectory = artifactDirectory
         self.memoryLimitBytes = memoryLimitBytes; self.timeoutSeconds = timeoutSeconds
         self.cancellationGraceSeconds = cancellationGraceSeconds
         self.accessBootstrapRoot = accessBootstrapRoot

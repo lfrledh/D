@@ -3,6 +3,9 @@
   "locale": "en",
   "displayName": "English",
   "strings": {
+    "modelManagement.completeTokenizer": "Get missing tokenizer resources",
+    "modelManagement.tokenizerUpgrade": "This installation needs the fixed tokenizer resources. Existing weights are kept. Queue the missing download, or verify the complete external folder, then prepare a new execution package.",
+    "modelManagement.tokenizerExecutionUpgrade": "This older execution package does not include the tokenizer resources. Complete the original model resources and prepare a new execution package. This package is preserved.",
     "modelManagement.refreshAvailability": "Refresh file availability",
     "workflow.node.prepare.identityMismatch": "This model identity does not match the operation or a supported catalog draft.",
     "workflow.node.prepare.notReady": "Model not ready",

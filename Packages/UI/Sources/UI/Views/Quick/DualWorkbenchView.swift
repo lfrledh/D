@@ -1198,9 +1198,8 @@ public struct DualWorkbenchView: View {
     }
     private func prepareModel(_ value: SharedLibraryBrowserEntry) async {
         guard case .operation(let id, _) = value.selection, let kind = WorkflowRegistry.standard.operation(id)?.definition.modelKind else { presentLibraryDestination(.info(value)); return }
-        if kind == .pitch { await refreshLibrary(checkModels: true); presentLibraryDestination(.info(value)); return }
         if [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38, WorkflowModelRoutes.fluxDev,
-            WorkflowModelRoutes.ace, "d.image.generate", "d.music.generate"].contains(id) {
+            WorkflowModelRoutes.ace, "d.image.generate", "d.music.generate", "d.music.pitch"].contains(id) {
             presentLibraryDestination(.models); return
         }
         guard !usesTemporaryChat else {

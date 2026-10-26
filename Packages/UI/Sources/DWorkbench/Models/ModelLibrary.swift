@@ -12,6 +12,8 @@ public actor ModelLibrary {
         var record: ModelRecord
         var bookmark: Data?
         var recipeIdentity: String?
+        var precedingRecipeIdentity: String?
+        var needsWanTokenizerUpgrade: Bool?
         var files: [String: FileProgress] = [:]
         var verifiedFiles: [String: ModelFileIdentity] = [:]
         var verifiedDirectories: [String: ModelFileIdentity]?
@@ -109,6 +111,7 @@ public actor ModelLibrary {
                 throw ModelLibraryError.integrity("模型库索引版本无效或记录重复，原文件已保留。")
             }
         } else { disk = DiskState() }
+        var migratedWanIDs = Set<ModelID>()
         for index in disk.records.indices {
             let value = disk.records[index]
             guard let entry = catalog.first(where: { $0.id == value.record.catalogID }), entry.revision == value.record.revision,
@@ -117,7 +120,25 @@ public actor ModelLibrary {
             }
             let identity = try Self.recipeIdentity(entry)
             if let recorded = value.recipeIdentity {
-                guard recorded == identity else { throw ModelLibraryError.integrity("固定下载配方已改变；保留已有文件，拒绝混合断点。") }
+                if recorded != identity {
+                    guard try Self.isWanTokenizerUpgrade(from: recorded, to: entry) else {
+                        throw ModelLibraryError.integrity("固定下载配方已改变；保留已有文件，拒绝混合断点。")
+                    }
+                    migratedWanIDs.insert(value.record.id)
+                    disk.records[index].precedingRecipeIdentity = recorded
+                    disk.records[index].recipeIdentity = identity
+                    disk.records[index].needsWanTokenizerUpgrade = true
+                    disk.records[index].control = value.control ?? .init(fileState: .partial, origin: .legacy)
+                    if value.deletion == nil, ![.deleted, .deleting].contains(value.control?.fileState) {
+                        if value.control?.role != .execution {
+                            disk.records[index].record = value.record.replacingTotalBytes(entry.totalBytes)
+                        }
+                        disk.records[index].record.state = .paused
+                        disk.records[index].record.error = value.record.error
+                        disk.records[index].control?.fileState = .partial
+                        disk.records[index].control?.requiresTokenizerUpgrade = true
+                    }
+                }
             } else {
                 // v1 persisted only Klein's fixed single-repository SHA-256 recipe.
                 guard let legacy = try? ModelCatalog.flux2(), entry.id == ModelCatalog.flux2ID,
@@ -135,7 +156,7 @@ public actor ModelLibrary {
                     origin: value.record.storage == .external ? .local : .legacy)
             }
             disk.records[index].record.activeLeaseCount = 0
-            if [.queued, .downloading, .pausing, .verifying, .publishing].contains(value.record.state) {
+            if !migratedWanIDs.contains(value.record.id), [.queued, .downloading, .pausing, .verifying, .publishing].contains(value.record.state) {
                 disk.records[index].record.state = .paused
                 disk.records[index].record.error = "上次操作中断；请点击继续，不会自动恢复下载。"
             }
@@ -152,6 +173,15 @@ public actor ModelLibrary {
                 catch { }
             }
         }
+        if !migratedWanIDs.isEmpty, let originalIndex {
+            try checkpoint("wanTokenizerMigration.backup")
+            let backup = "index.wan-tokenizer-v1.backup.json"
+            if try Self.exists(backup, in: directory) {
+                guard try directory.read(backup, maximum: 32 * 1024 * 1024) == originalIndex else {
+                    throw ModelLibraryError.integrity("Wan 升级备份已存在且内容不同，未修改索引。")
+                }
+            } else { try directory.atomicWrite(originalIndex, to: backup) }
+        }
         if disk.schemaVersion == 1, let originalIndex {
             try checkpoint("migration.backup")
             let backup = "index.v1.backup.json"
@@ -167,9 +197,16 @@ public actor ModelLibrary {
             throw ModelLibraryError.integrity("下载任务身份重复。")
         }
         for index in disk.downloads!.indices {
-            let task = disk.downloads![index]
+            var task = disk.downloads![index]
             let resource = try stored(task.resourceID.modelID)
-            guard task.catalogID == resource.record.catalogID, task.recipeIdentity == resource.recipeIdentity,
+            if migratedWanIDs.contains(task.resourceID.modelID), task.recipeIdentity == resource.precedingRecipeIdentity,
+               !task.state.isTerminal, let recipe = resource.recipeIdentity {
+                task = task.upgradingRecipe(recipe); task.state = .paused
+                disk.downloads![index] = task
+                mutate(task.resourceID.modelID) { $0.control?.downloadOwner = .init(task) }
+            }
+            guard task.catalogID == resource.record.catalogID,
+                  task.recipeIdentity == resource.recipeIdentity || (task.state.isTerminal && task.recipeIdentity == resource.precedingRecipeIdentity),
                   task.attempts >= 0, (0...3).contains(task.automaticRetries) else {
                 throw ModelLibraryError.integrity("下载任务与资源配方不符。")
             }
@@ -317,6 +354,12 @@ public actor ModelLibrary {
         let records = disk.records.map { stored -> ModelRecord in
             var record = stored.record
             record.activeLeaseCount = leaseCounts[record.id, default: 0]
+            if record.storage == .managed, stored.control?.fileState == .partial,
+               stored.verifiedRoot == nil, let selectedRoot = disk.rootURL {
+                // A root attachment's future Installations path is not a published
+                // resource. Projection uses the existing ownership ledger, no I/O.
+                record.directory = selectedRoot.appendingPathComponent(".d-model-library/Staging/" + record.id.description + "/Content")
+            }
             return record
         }
         return .init(revision: disk.revision, rootURL: rootScope?.url ?? disk.rootURL, catalog: catalog,
@@ -334,10 +377,10 @@ public actor ModelLibrary {
         }
         let intent = credentialIntent
         let credential = downloadCredential
-        let groups = Dictionary(grouping: entry.files) { ($0.sourceRepository ?? entry.repository) + "@" + ($0.sourceRevision ?? entry.revision) }
+        let groups = Dictionary(grouping: entry.files) { ($0.source?.rawValue ?? "huggingFace") + ":" + ($0.sourceRepository ?? entry.repository) + "@" + ($0.sourceRevision ?? entry.revision) }
         for key in groups.keys.sorted() {
             guard let file = groups[key]?.max(by: { $0.size < $1.size }) else { continue }
-            try await ModelSourceAccessProbe.check(sourceURL(entry: entry, file: file, start: 0), credential: credential)
+            try await ModelSourceAccessProbe.check(sourceURL(entry: entry, file: file, start: 0), credential: file.source == .githubRaw ? nil : credential)
             try Task.checkCancellation()
             guard intent == credentialIntent else { throw CancellationError() }
             guard disk.downloads?.contains(where: { $0.id == task.id && $0.generation == task.generation && $0.attemptID == task.attemptID }) == true else {
@@ -729,6 +772,9 @@ public actor ModelLibrary {
         defer { scheduleDownloads() }
         guard !leases.values.contains(where: { $0.modelID == id }) else { throw ModelLibraryError.busy("模型仍用于运行或排队任务，不能重新定位。") }
         let previous = try stored(id)
+        guard !(previous.needsWanTokenizerUpgrade == true && previous.control?.role == .execution) else {
+            throw ModelLibraryError.unavailable("旧 Wan 执行包缺少独立分词资源。请补齐原始资源并重新准备执行包；旧文件未修改。")
+        }
         guard previous.record.storage == .external else {
             throw ModelLibraryError.busy("受管理模型请通过更换模型库位置来重新定位整个模型库。")
         }
@@ -1025,6 +1071,8 @@ public actor ModelLibrary {
                           directories: [String: ModelFileIdentity]? = nil) {
         let needsPreparation = (try? entry(for: id).preparation) == .required
         mutate(id) {
+            $0.needsWanTokenizerUpgrade = nil
+            $0.control?.requiresTokenizerUpgrade = nil
             $0.verifiedRoot = directory.identity; $0.verifiedFiles = files; $0.verifiedDirectories = directories
             $0.record.directory = directory.url; $0.record.downloadedBytes = $0.record.totalBytes
             $0.record.state = needsPreparation && $0.control?.role != .execution ? .preparationRequired : .installed
@@ -1059,6 +1107,51 @@ public actor ModelLibrary {
             guard let expected = try stored(id).publicationRoot, expected.sameNode(candidate.identity) else {
                 throw ModelLibraryError.unsafePath("安装位置已有未知内容，未覆盖或删除。")
             }
+            if try stored(id).needsWanTokenizerUpgrade == true {
+                let stored = try stored(id)
+                guard ModelWanPreparation.supports(entry), stored.record.storage == .managed,
+                      stored.control?.role != .execution, !leases.values.contains(where: { $0.modelID == id }),
+                      let previous = stored.precedingRecipeIdentity,
+                      try Self.isWanTokenizerUpgrade(from: previous, to: entry) else {
+                    throw ModelLibraryError.integrity("此旧执行包或外部资源需重新校验并准备；未写入原始目录。")
+                }
+                let existing = try candidate.entries(expectedPaths: Set(entry.files.map(\.path)))
+                for (path, identity) in existing {
+                    if let progress = stored.files[path], let file = entry.files.first(where: { $0.path == path }), progress.completed < file.size {
+                        guard progress.identity.sameNode(identity), identity.size >= 0,
+                              UInt64(identity.size) >= progress.completed,
+                              UInt64(identity.size) <= min(file.size, progress.completed + Self.chunkBytes) else {
+                            throw ModelLibraryError.integrity("Wan 分词资源断点已改变，未写入。")
+                        }
+                    } else {
+                        guard let expected = stored.files[path]?.identity ?? stored.verifiedFiles[path], expected == identity else {
+                            throw ModelLibraryError.integrity("Wan 升级前资源身份已改变，未写入。")
+                        }
+                    }
+                }
+                try requireSpace(entry.totalBytes - min(entry.totalBytes, stored.record.downloadedBytes))
+                for file in entry.files {
+                    if self.disk.records.first(where: { $0.record.id == id })?.files[file.path] == nil {
+                        if let old = stored.verifiedFiles[file.path], old == existing[file.path] {
+                            mutate(id) { $0.files[file.path] = .init(completed: file.size, identity: old) }
+                        } else {
+                            guard file.path.hasPrefix("google/umt5-xxl/"), existing[file.path] == nil else {
+                                throw ModelLibraryError.integrity("Wan 升级只允许补充固定分词资源，未重写权重。")
+                            }
+                            try createDownloadLeaf(file.path, model: id, content: candidate)
+                        }
+                        try persist()
+                    }
+                }
+                setState(id, .downloading); try persist()
+                for file in entry.files { try await download(file, model: id, content: candidate, entry: entry) }
+                try checkpoint("wanTokenizerUpgrade.directorySync")
+                for path in ["google/umt5-xxl", "google"] {
+                    let directory = try candidate.child(path)
+                    guard fsync(directory.descriptor) == 0 else { throw ModelDirectory.failure("保存分词资源目录") }
+                }
+                guard fsync(candidate.descriptor) == 0 else { throw ModelDirectory.failure("保存模型目录") }
+            }
             setState(id, .verifying)
             let job = Task.detached { try candidate.verify(entry.files) }
             let files = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
@@ -1076,11 +1169,7 @@ public actor ModelLibrary {
         let remaining = entry.totalBytes - min(entry.totalBytes, try stored(id).record.downloadedBytes)
         try requireSpace(remaining)
         for file in entry.files where try stored(id).files[file.path] == nil {
-            let descriptor = try content.openFile(file.path, writing: true, create: true)
-            defer { Darwin.close(descriptor) }
-            let identity = try ModelDirectory.identity(descriptor, regular: true)
-            mutate(id) { $0.files[file.path] = .init(completed: 0, identity: identity) }
-            try persist()
+            try createDownloadLeaf(file.path, model: id, content: content)
         }
         setState(id, .downloading); try persist()
         try await withThrowingTaskGroup(of: Void.self) { group in
@@ -1116,8 +1205,34 @@ public actor ModelLibrary {
         verified(id, directory: installed, files: verifiedFiles)
     }
 
+    private func createDownloadLeaf(_ path: String, model id: ModelID, content: ModelDirectory) throws {
+        let descriptor = try content.openFile(path, writing: true, create: true)
+        let identity = try ModelDirectory.identity(descriptor, regular: true)
+        Darwin.close(descriptor)
+        mutate(id) { $0.files[path] = .init(completed: 0, identity: identity) }
+        do {
+            try checkpoint("download.createdLeaf")
+            try persist()
+        } catch {
+            if case ModelAtomicWriteError.publishedButUnsynced = error { throw error }
+            // This ledger was not published. Remove it even when unlink succeeded
+            // but directory synchronization fails; never persist a ghost offset.
+            mutate(id) { $0.files[path] = nil }
+            do { try content.removeCreatedEmptyFile(path, expected: identity) }
+            catch let cleanup { throw ModelLibraryError.storage(error.localizedDescription + "\n" + cleanup.localizedDescription) }
+            throw error
+        }
+    }
+
     private func download(_ file: ModelFile, model id: ModelID, content: ModelDirectory, entry: ModelCatalogEntry) async throws {
         var offset = try stored(id).files[file.path]!.completed
+        if offset == file.size {
+            let fd = try content.openFile(file.path, writing: false); defer { Darwin.close(fd) }
+            guard try ModelDirectory.identity(fd, regular: true) == stored(id).files[file.path]?.identity else {
+                throw ModelLibraryError.integrity("完整模型文件身份已改变，未重新写入：\(file.path)")
+            }
+            return
+        }
         let fd = try content.openFile(file.path, writing: true)
         defer { Darwin.close(fd) }
         let actual = try ModelDirectory.identity(fd, regular: true)
@@ -1133,7 +1248,7 @@ public actor ModelLibrary {
             let end = min(offset + Self.chunkBytes, file.size) - 1
             let url = sourceURL(entry: entry, file: file, start: offset)
             var range = ModelByteRange(url: url, start: offset, end: end, total: file.size)
-            if sourceBaseURL == nil, let credential = downloadCredential {
+            if sourceBaseURL == nil, file.source != .githubRaw, let credential = downloadCredential {
                 range.credential = credential
                 range.authorizedPath = url.path
             }
@@ -1267,6 +1382,12 @@ public actor ModelLibrary {
         return directory
     }
     private func sourceURL(entry: ModelCatalogEntry, file: ModelFile, start: UInt64) -> URL {
+        if sourceBaseURL == nil, file.source == .githubRaw {
+            return URL(string: "https://raw.githubusercontent.com")!
+                .appendingPathComponent(file.sourceRepository ?? entry.repository)
+                .appendingPathComponent(file.sourceRevision ?? entry.revision)
+                .appendingPathComponent(file.remotePath ?? file.path)
+        }
         let base = sourceBaseURL ?? URL(string: "https://huggingface.co")!
         var url = base.appendingPathComponent(file.sourceRepository ?? entry.repository).appendingPathComponent("resolve")
             .appendingPathComponent(file.sourceRevision ?? entry.revision).appendingPathComponent(file.remotePath ?? file.path)
@@ -1314,6 +1435,15 @@ public actor ModelLibrary {
         guard let value = catalog.first(where: { $0.id == id }) else { throw ModelLibraryError.invalidCatalog("不支持的模型目录条目。") }; return value
     }
     private func entry(for id: ModelID) throws -> ModelCatalogEntry { try catalogEntry(stored(id).record.catalogID) }
+    private static func isWanTokenizerUpgrade(from recorded: String, to entry: ModelCatalogEntry) throws -> Bool {
+        guard let frozen = try ModelCatalog.entries().first(where: { $0.id == "wan21-t2v-1.3b-bf16" }),
+              entry == frozen, entry.files.count == 7 else { return false }
+        let old = ModelCatalogEntry(id: entry.id, title: entry.title, repository: entry.repository, revision: entry.revision,
+            files: Array(entry.files.prefix(3)), workflowProfileID: entry.workflowProfileID,
+            workflowIdentity: entry.workflowIdentity, preparation: entry.preparation)
+        return try recipeIdentity(old) == recorded
+    }
+
     private static func recipeIdentity(_ entry: ModelCatalogEntry) throws -> String {
         struct Recipe: Encodable {
             let id: String
@@ -1536,7 +1666,10 @@ extension ModelLibrary {
             }) { throw ModelLibraryError.unavailable("This resource location was retired. Select the registered copy explicitly.") }
             return nil
         }
-        guard reference.revision == (value.control?.executionRevision ?? value.record.revision) else {
+        let entry = try entry(for: value.record.id)
+        let exactPitchContent = ModelCatalog.isPitch(entry) && value.record.revision == ModelCatalog.pitchSourceRevision
+            && value.control?.role != .execution && reference.revision == PitchAnalysisRequest.modelSHA256
+        guard exactPitchContent || reference.revision == (value.control?.executionRevision ?? value.record.revision) else {
             throw ModelLibraryError.unavailable("已知模型资源的版本引用不符。")
         }
         return try acquire(value.record.id)
@@ -1555,6 +1688,15 @@ extension ModelLibrary {
             if case ModelAtomicWriteError.publishedButUnsynced = error { throw error }
             disk.downloads = previous; throw error
         }
+    }
+    @discardableResult public func continueWanTokenizerUpgrade(_ resource: ModelResourceID) throws -> ModelDownloadTask {
+        let value = try stored(resource.modelID)
+        guard value.needsWanTokenizerUpgrade == true, value.control?.requiresTokenizerUpgrade == true,
+              value.control?.role != .execution, let old = value.precedingRecipeIdentity,
+              try Self.isWanTokenizerUpgrade(from: old, to: entry(for: resource.modelID)) else {
+            throw ModelLibraryError.unavailable("该资源没有待补齐的分词资源。")
+        }
+        return try continuePartial(resource, resumeQueue: false)
     }
     @discardableResult public func continuePartial(_ resource: ModelResourceID, postAction: ModelDownloadPostAction? = nil, resumeQueue: Bool = true) throws -> ModelDownloadTask {
         try requireAdmission()
@@ -1978,7 +2120,8 @@ extension ModelLibrary {
         try requireAdmission(); try requireIdleWorker()
         let id = resource.modelID, original = try stored(id)
         guard !leases.values.contains(where: { $0.modelID == id }), original.deletion == nil,
-              original.control?.fileState != .partial, original.control?.fileState != .deleted else {
+              (original.control?.fileState != .partial || (original.needsWanTokenizerUpgrade == true && original.record.storage == .external && original.control?.role != .execution)),
+              original.control?.fileState != .deleted else {
             throw ModelLibraryError.busy("资源正在使用、未完成或已删除，不能完整校验。")
         }
         // External rebind already verifies and preserves the original registration.

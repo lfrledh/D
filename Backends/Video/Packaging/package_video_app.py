@@ -36,10 +36,6 @@ REQUIRED_VIDEO_FILES = (
     "provider/d_video_model.py",
     "provider/d_video_prepare.py",
     "provider/d_audio_access.py",
-    "tokenizer/special_tokens_map.json",
-    "tokenizer/spiece.model",
-    "tokenizer/tokenizer.json",
-    "tokenizer/tokenizer_config.json",
     "model-manifests/wan21.json",
     "Vendor/wan21/__init__.py",
     "Vendor/wan21/PROVENANCE.json",
@@ -134,9 +130,7 @@ def _validate_video_engine(engine: Path) -> dict[str, Any]:
     for relative in REQUIRED_VIDEO_FILES:
         if relative not in declarations:
             raise PackagingError(f"video engine manifest lacks required file: {relative}")
-    for name, digest in prepare_video_engine.TOKENIZER_DIGESTS.items():
-        if declarations[f"tokenizer/{name}"].get("sha256") != digest:
-            raise PackagingError(f"video engine tokenizer differs from the pinned revision: {name}")
+    if (engine / "tokenizer").exists(): raise PackagingError("Tokenizer parameters belong to the user model installation")
     prepare_video_engine._validate_model_declaration(engine / "model-manifests/wan21.json")
     return manifest
 

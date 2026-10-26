@@ -30,6 +30,8 @@ APP_IDENTIFIER = "dev.d-workstation.pitch-packaging-fixture"
 TEAM_IDENTIFIER = "FIXTURETEAM"
 IDENTITY = "A" * 40
 SIMULATED_MODEL = b"controlled SwiftF0 model fixture; never executed"
+SIMULATED_CORE = 'class SwiftF0:\n    def __init__(\n        self,\n        fmax: Optional[float] = None,\n    ):\n        model_path = os.path.join(os.path.dirname(__file__), "model.onnx")\n'
+SIMULATED_PATCHED_CORE = '# D modification: load explicitly verified external weights; fixed code remains bundled.\n' + SIMULATED_CORE.replace('        fmax: Optional[float] = None,', '        fmax: Optional[float] = None,\n        model_path: Optional[str] = None,').replace('        model_path = os.path.join(os.path.dirname(__file__), "model.onnx")', '        if model_path is None:\n            raise ValueError("D requires an explicitly selected model path")')
 SIMULATED_LICENSE = (
     "Copyright (c) Controlled Fixture Authors\n\n"
     "Permission is hereby granted to use, copy, modify, and distribute this "
@@ -51,6 +53,8 @@ class PitchPackagingTests(unittest.TestCase):
             prepare_pitch_engine,
             MODEL_SHA256=self.model_digest,
             MODEL_SIZE_BYTES=len(SIMULATED_MODEL),
+            CORE_SHA256=hashlib.sha256(SIMULATED_CORE.encode()).hexdigest(),
+            PATCHED_CORE_SHA256=hashlib.sha256(SIMULATED_PATCHED_CORE.encode()).hexdigest(),
         )
         self.constants.start()
         self.addCleanup(self.constants.stop)
@@ -76,7 +80,8 @@ class PitchPackagingTests(unittest.TestCase):
             package.mkdir()
             (package / "__init__.py").write_text("", encoding="utf-8")
         (site / "swift_f0/model.onnx").write_bytes(SIMULATED_MODEL)
-        (site / "swift_f0/core.py").write_text("# controlled resolver-required fixture\n", encoding="utf-8")
+        (site / "swift_f0/core.py").write_text(SIMULATED_CORE, encoding="utf-8")
+        (site / "onnxruntime/tiny.ONNX").write_bytes(b"dependency test model")
         (site / "numpy.libs").mkdir()
         (site / "numpy.libs/libfixture.dylib").write_bytes(b"not a Mach-O")
         (site / "google/protobuf").mkdir(parents=True)
@@ -125,8 +130,7 @@ class PitchPackagingTests(unittest.TestCase):
             (engine / "provider" / provider).write_text("# fixture\n", encoding="utf-8")
         model = engine / "python/lib/python3.12/site-packages/swift_f0/model.onnx"
         model.parent.mkdir(parents=True)
-        model.write_bytes(SIMULATED_MODEL)
-        (model.parent / "core.py").write_text("# controlled resolver-required fixture\n", encoding="utf-8")
+        (model.parent / "core.py").write_text(SIMULATED_PATCHED_CORE, encoding="utf-8")
         (engine / "model-manifests").mkdir()
         (engine / "model-manifests/swift-f0.json").write_text(
             json.dumps(prepare_pitch_engine._model_declaration(), sort_keys=True) + "\n",
@@ -206,8 +210,8 @@ class PitchPackagingTests(unittest.TestCase):
         manifest = json.loads((output / "engine.json").read_text(encoding="utf-8"))
         declaration = json.loads((output / "model-manifests/swift-f0.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["kind"], "d-pitch-engine")
-        self.assertEqual(declaration["distribution"], "internal-evaluation-only")
-        self.assertEqual(declaration["weightLicense"], "unknown")
+        self.assertEqual(declaration["distribution"], "user-acquired-separate-model")
+        self.assertEqual(declaration["weightLicense"], "MIT")
         self.assertEqual(declaration["provider"], "CPUExecutionProvider")
         self.assertFalse((output / "provider/must_not_be_copied.py").exists())
         self.assertFalse((output / "python/lib/python3.12/site-packages/unapproved_package").exists())
@@ -219,11 +223,11 @@ class PitchPackagingTests(unittest.TestCase):
         for current, _directories, names in os.walk(output):
             self.assertTrue(prepare_pitch_engine.INSTALLATION_RECORDS.isdisjoint(names), current)
 
-    def test_prepare_refuses_missing_ack_without_output(self) -> None:
+    def test_prepare_needs_no_evaluation_exception_and_contains_no_weights(self) -> None:
         output = self.root / "PitchEngine.dengine"
-        with self.assertRaisesRegex(prepare_engine.PackagingError, "internal-evaluation-ack"):
-            prepare_pitch_engine.prepare(self._prepare_args(output, ack=False))
-        self.assertFalse(output.exists())
+        prepare_pitch_engine.prepare(self._prepare_args(output, ack=False))
+        self.assertFalse(any(p.suffix.lower() == ".onnx" for p in output.rglob("*")))
+        self.assertIn("model_path: Optional[str]", (output / "python/lib/python3.12/site-packages/swift_f0/core.py").read_text())
 
     def test_prepare_refuses_wrong_fixed_distribution_version(self) -> None:
         output = self.root / "PitchEngine.dengine"
@@ -251,14 +255,15 @@ class PitchPackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(prepare_engine.PackagingError, "flatbuffers"):
             prepare_pitch_engine._selected_site_entries(site)
 
-    def test_prepare_refuses_model_digest_mismatch(self) -> None:
+    def test_prepare_refuses_changed_runtime_code_and_leaves_source_weight(self) -> None:
         output = self.root / "PitchEngine.dengine"
         args = self._prepare_args(output)
-        model = Path(args.site_packages) / "swift_f0/model.onnx"
-        model.write_bytes(b"same-size-invalid-model".ljust(len(SIMULATED_MODEL), b"x"))
-        with self.assertRaisesRegex(prepare_engine.PackagingError, "approved internal-evaluation artifact"):
+        core = Path(args.site_packages) / "swift_f0/core.py"
+        core.write_text(SIMULATED_CORE + "# changed")
+        with self.assertRaisesRegex(prepare_engine.PackagingError, "fixed SwiftF0 code"):
             prepare_pitch_engine.prepare(args)
         self.assertFalse(output.exists())
+        self.assertEqual((core.parent / "model.onnx").read_bytes(), SIMULATED_MODEL)
 
     def test_approved_model_reference_has_frozen_digest_without_execution(self) -> None:
         if not APPROVED_MODEL.is_file():
@@ -284,23 +289,21 @@ class PitchPackagingTests(unittest.TestCase):
 
         recorded = json.loads(report.read_text(encoding="utf-8"))
         self.assertEqual(result["status"], "packaged")
-        self.assertEqual(recorded["packageKind"], "d-pitch-app-internal-evaluation")
+        self.assertEqual(recorded["packageKind"], "d-pitch-app-code-only")
         self.assertEqual(recorded["modelExecution"], "not-run")
         self.assertEqual(recorded["runtimeVerification"], "not-run")
         self.assertTrue((output / "Contents/Resources/PitchEngine.dengine").is_dir())
         self.assertEqual((app / "Contents/Info.plist").read_bytes(), original_info)
         self.assertFalse((app / "Contents/Resources/PitchEngine.dengine").exists())
 
-    def test_package_refuses_missing_ack_and_writes_bounded_failure_report(self) -> None:
-        app = self._make_app()
-        engine = self._make_engine()
-        output = self.root / "D-Pitch.app"
-        report = self.root / "failure.json"
-        with self.assertRaisesRegex(prepare_engine.PackagingError, "internal-evaluation-ack"):
+    def test_package_rejects_even_tiny_test_weight_and_writes_failure(self) -> None:
+        app = self._make_app(); engine = self._make_engine()
+        (engine / "test.ONNX").write_bytes(b"x"); self._refresh_engine_manifest(engine)
+        output = self.root / "D-Pitch.app"; report = self.root / "failure.json"
+        with self.assertRaisesRegex(prepare_engine.PackagingError, "forbidden model weights"):
             package_pitch_app.package(self._package_args(app, engine, output, report, ack=False))
-        recorded = json.loads(report.read_text(encoding="utf-8"))
+        recorded = json.loads(report.read_text())
         self.assertEqual(recorded["status"], "failed")
-        self.assertEqual(recorded["failedStage"], "validate-internal-evaluation-ack")
         self.assertEqual(recorded["producedFiles"], [])
         self.assertFalse(output.exists())
 
@@ -314,7 +317,7 @@ class PitchPackagingTests(unittest.TestCase):
         self._refresh_engine_manifest(engine)
         output = self.root / "D-Pitch.app"
         report = self.root / "failure.json"
-        with self.assertRaisesRegex(prepare_engine.PackagingError, "fixed internal-evaluation profile"):
+        with self.assertRaisesRegex(prepare_engine.PackagingError, "fixed separate-model profile"):
             package_pitch_app.package(self._package_args(app, engine, output, report))
         self.assertFalse(output.exists())
 
@@ -346,7 +349,7 @@ class PitchPackagingTests(unittest.TestCase):
                     expected = "invalid type, value, digest, or path"
                 else:
                     for entry in manifest["files"]:
-                        entry["sizeBytes"] = 200 * 1024 * 1024
+                        entry["sizeBytes"] = 300 * 1024 * 1024
                     expected = "aggregate limit"
                 manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
                 output = self.root / f"D-Limit-{index}-Output.app"

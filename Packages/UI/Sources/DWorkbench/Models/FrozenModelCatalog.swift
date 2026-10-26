@@ -17,7 +17,7 @@ enum FrozenModelCatalog {
         } catch {
             throw ModelLibraryError.invalidCatalog("固定模型目录资源无法读取或格式无效：\(error.localizedDescription)")
         }
-        guard document.schemaVersion == 1, document.entries.count == 17,
+        guard document.schemaVersion == 1, document.entries.count == 18,
               Set(document.entries.map(\.id)).count == document.entries.count else {
             throw ModelLibraryError.invalidCatalog("固定目录版本、条目数或身份无效。")
         }

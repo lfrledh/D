@@ -6,16 +6,19 @@ import Foundation
 public struct PitchBackendConfiguration: Sendable {
     public let pythonExecutable: URL
     public let providerScript: URL
+    /// Fixed application code, never read from the user model directory.
+    public let bundledCore: URL
     public let artifactDirectory: URL
     public let timeoutSeconds: Double
     public let cancellationGraceSeconds: Double
     public let accessBootstrapRoot: URL?
 
-    public init(pythonExecutable: URL, providerScript: URL, artifactDirectory: URL,
+    public init(pythonExecutable: URL, providerScript: URL, bundledCore: URL, artifactDirectory: URL,
                 timeoutSeconds: Double = 30, cancellationGraceSeconds: Double = 2,
                 accessBootstrapRoot: URL? = nil) {
         self.pythonExecutable = pythonExecutable
         self.providerScript = providerScript
+        self.bundledCore = bundledCore
         self.artifactDirectory = artifactDirectory
         self.timeoutSeconds = timeoutSeconds
         self.cancellationGraceSeconds = cancellationGraceSeconds
@@ -39,6 +42,14 @@ public actor PitchAnalysisBackend: InferenceBackend {
                 "Pitch timeout and cancellation grace must be finite and positive.")
         }
         self.configuration = configuration
+    }
+
+    /// The same fixed weight validation is used by registration and execution.
+    public nonisolated static func validateModel(at directory: URL) throws -> ModelReference {
+        let directory = try AudioFileSystem.absoluteLocal(directory, label: "Pitch model directory")
+        try AudioFileSystem.validateDirectory(directory, label: "Pitch model directory")
+        _ = try PitchAdmission.validateModel(in: directory)
+        return ModelReference(directory: directory, revision: PitchAnalysisRequest.modelSHA256)
     }
 
     public func estimate(_ request: InferenceRequest) async throws -> ResourceEstimate {
@@ -75,7 +86,8 @@ public actor PitchAnalysisBackend: InferenceBackend {
             "PYTHONPYCACHEPREFIX": cache.appendingPathComponent("pycache").path,
             "TMPDIR": temporary.path, "XDG_CACHE_HOME": cache.path,
         ]
-        var arguments = ["-B", admission.providerScript.path, "--request", requestURL.path]
+        var arguments = ["-B", admission.providerScript.path, "--request", requestURL.path,
+                         "--core-module", admission.bundledCore.path]
         let access: AudioProviderAccess?
         if let root = configuration.accessBootstrapRoot {
             access = try AudioProviderAccess.prepare(
@@ -348,6 +360,7 @@ struct PitchAdmission: Sendable {
     let providerIdentity: AudioFileSystem.Identity
     let helperIdentity: AudioFileSystem.Identity?
     let modelIdentity: AudioFileSystem.Identity
+    let bundledCore: URL
     let coreIdentity: AudioFileSystem.Identity
     let inputIdentity: AudioFileSystem.Identity
 
@@ -408,17 +421,14 @@ struct PitchAdmission: Sendable {
         guard finite else {
             throw InferenceFailure.invalidRequest("Prepared pitch input contains non-finite samples.")
         }
-        let modelURL = model.appendingPathComponent("model.onnx")
-        let (modelData, modelIdentity) = try AudioFileSystem.readRegularFile(
-            modelURL, label: "SwiftF0 model.onnx", maximumBytes: 399_114)
-        guard modelData.count == 399_114,
-              sha256(modelData) == PitchAnalysisRequest.modelSHA256 else {
-            throw InferenceFailure.invalidRequest("SwiftF0 model.onnx digest is incorrect.")
-        }
+        let modelIdentity = try validateModel(in: model)
+        let bundledCore = try AudioFileSystem.absoluteLocal(configuration.bundledCore, label: "Bundled SwiftF0 core")
         let coreIdentity = try AudioFileSystem.regularFile(
-            model.appendingPathComponent("core.py"), label: "SwiftF0 core.py",
-            maximumBytes: 1024 * 1024)
-        guard !AudioFileSystem.overlaps(artifacts, model),
+            bundledCore, label: "Bundled SwiftF0 core.py", maximumBytes: 1024 * 1024)
+        guard !AudioFileSystem.overlaps(model, bundledCore),
+              !AudioFileSystem.overlaps(artifacts, bundledCore),
+              !AudioFileSystem.overlaps(input, bundledCore),
+              !AudioFileSystem.overlaps(artifacts, model),
               !AudioFileSystem.overlaps(artifacts, input),
               !AudioFileSystem.overlaps(model, input),
               !AudioFileSystem.overlaps(artifacts, provider),
@@ -431,7 +441,7 @@ struct PitchAdmission: Sendable {
                     pythonResolvedURL: resolvedPython,
                     pythonIdentity: pythonIdentity, providerIdentity: providerIdentity,
                     helperIdentity: helperIdentity,
-                    modelIdentity: modelIdentity, coreIdentity: coreIdentity,
+                    modelIdentity: modelIdentity, bundledCore: bundledCore, coreIdentity: coreIdentity,
                     inputIdentity: inputIdentity)
     }
 
@@ -454,7 +464,7 @@ struct PitchAdmission: Sendable {
             modelDirectory.appendingPathComponent("model.onnx"), label: "SwiftF0 model.onnx",
             maximumBytes: 399_114)
         let currentCore = try AudioFileSystem.regularFile(
-            modelDirectory.appendingPathComponent("core.py"), label: "SwiftF0 core.py",
+            bundledCore, label: "Bundled SwiftF0 core.py",
             maximumBytes: 1024 * 1024)
         let currentInput = try AudioFileSystem.regularFile(
             inputURL, label: "Prepared pitch input", maximumBytes: 7_680_000)
@@ -466,6 +476,15 @@ struct PitchAdmission: Sendable {
             throw InferenceFailure.invalidRequest(
                 "Pitch deployment or prepared input changed after admission.")
         }
+    }
+
+    static func validateModel(in directory: URL) throws -> AudioFileSystem.Identity {
+        let (data, identity) = try AudioFileSystem.readRegularFile(
+            directory.appendingPathComponent("model.onnx"), label: "SwiftF0 model.onnx", maximumBytes: 399_114)
+        guard data.count == 399_114, sha256(data) == PitchAnalysisRequest.modelSHA256 else {
+            throw InferenceFailure.invalidRequest("SwiftF0 model.onnx digest is incorrect.")
+        }
+        return identity
     }
 
     private static func sha256(_ data: Data) -> String {

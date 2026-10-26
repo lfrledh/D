@@ -124,6 +124,8 @@ def run(request_path: Path, model_path: Path, tokenizer_path: Path, output: Path
     if access_run_id is not None and request["runID"] != access_run_id:
         raise ValueError("Video request differs from the access run identity")
     model = PreparedModel(model_path)
+    if checked_local(tokenizer_path) != checked_local(model_path) / "tokenizer":
+        raise ValueError("Tokenizer must belong to the selected prepared model")
     conditions = tokenize_conditions(tokenizer_path, request)
     output = checked_local(output)
     if not output.parent.is_dir():
@@ -271,6 +273,8 @@ def validate_chunk_shape(shape, request, delivered):
 @contextmanager
 def application_access(args):
     """Acquire only the two parent-issued directories, before opening their files."""
+    if args.tokenizer != args.model / "tokenizer":
+        raise ValueError("Tokenizer must belong to the selected prepared model")
     if bool(args.access_manifest) != bool(args.access_run_id):
         raise ValueError("access-manifest and access-run-id must be supplied together")
     if args.access_manifest is None:

@@ -1,4 +1,5 @@
 import Darwin
+import CryptoKit
 import DInference
 import Foundation
 import CoreFoundation
@@ -155,7 +156,7 @@ private extension WanModelPreparation {
         ("text", "models_t5_umt5-xxl-enc-bf16.pth", 11_361_920_418, "7cace0da2b446bbbbc57d031ab6cf163a3d59b366da94e5afe36745b746fd81d"),
         ("diffusion", "diffusion_pytorch_model.safetensors", 5_676_070_424, "96b6b242ca1c2f24e9d02cd6596066fab6d310e2d7538f33ae267cb18d957e8f"),
         ("vae", "Wan2.1_VAE.pth", 507_609_880, "38071ab59bd94681c686fa51d75a1968f64e470262043be31f7a094e442fd981")
-    ]
+    ] + WanTokenizerResource.files.map { ("tokenizer", $0.sourcePath, Int64($0.size), $0.sha256) }
 
     static func invalidMarker() -> InferenceFailure {
         .backendFailed("Wan preparation did not publish a valid prepared contract.")
@@ -247,7 +248,7 @@ private extension WanModelPreparation {
         }
         guard counts == ["text": 242, "diffusion": 825, "vae": 194],
               Set(try FileManager.default.contentsOfDirectory(atPath: destination.path)) ==
-                Set(["text", "diffusion", "vae", "D-VIDEO-PREPARED.json"]) else { throw invalidMarker() }
+                Set(["text", "diffusion", "vae", "tokenizer", "D-VIDEO-PREPARED.json"]) else { throw invalidMarker() }
         for (role, count) in counts {
             let directory = destination.appendingPathComponent(role)
             let identity = try directoryIdentity(directory)
@@ -256,6 +257,16 @@ private extension WanModelPreparation {
                 throw invalidMarker()
             }
             directoryIdentities.append((directory, identity))
+        }
+        let tokenizer = destination.appendingPathComponent("tokenizer")
+        directoryIdentities.append((tokenizer, try directoryIdentity(tokenizer)))
+        guard Set(try FileManager.default.contentsOfDirectory(atPath: tokenizer.path)) == Set(WanTokenizerResource.files.map(\.name)) else { throw invalidMarker() }
+        for resource in WanTokenizerResource.files {
+            let url = destination.appendingPathComponent(resource.preparedPath)
+            let (data, identity) = try AudioFileSystem.readRegularFile(url, label: "Wan tokenizer", maximumBytes: resource.size)
+            guard data.count == resource.size,
+                  SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == resource.sha256 else { throw invalidMarker() }
+            files.append((url, identity))
         }
         guard try regularIdentity(marker, label: "Wan completion marker") == markerIdentity,
               try directoryIdentity(destination) == rootIdentity else { throw invalidMarker() }

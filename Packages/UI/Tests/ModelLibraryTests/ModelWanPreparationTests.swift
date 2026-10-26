@@ -43,7 +43,7 @@ struct ModelWanPreparationTests {
         let directory = try ModelDirectory(URL(fileURLWithPath: path))
         let model = try #require(ModelCatalog.entries().first { $0.id == "wan21-t2v-1.3b-bf16" })
         let files = try ModelWanPreparation.verifiedFiles(in: directory, entry: model)
-        #expect(files.count == 1_262)
+        #expect(files.count == 1_266)
         #expect(try directory.entries(expectedPaths: Set(files.keys)) == files)
     }
 
@@ -175,7 +175,7 @@ struct ModelWanPreparationTests {
         #expect(actual.standardizedFileURL.path == candidate.standardizedFileURL.path)
         #expect(try ModelDirectory(actual).identity.sameNode(ModelDirectory(candidate).identity))
         let output = try await library.prepareVideo(id, in: fixture.destination)
-        #expect(try ModelWanPreparation.verifiedFiles(in: ModelDirectory(output), entry: expected).count == 1262)
+        #expect(try ModelWanPreparation.verifiedFiles(in: ModelDirectory(output), entry: expected).count == 1266)
         try FileManager.default.createDirectory(at: output.appendingPathComponent("google"), withIntermediateDirectories: false)
         #expect(throws: (any Error).self) { _ = try ModelWanPreparation.verifiedFiles(in: ModelDirectory(output), entry: expected) }
         #expect(try String(contentsOf: outside.appendingPathComponent("marker"), encoding: .utf8) == "untouched")
@@ -326,6 +326,11 @@ struct ModelWanPreparationTests {
                              "dtype":role == "vae" ? "F32" : "BF16", "size":bytes.count, "sha256":hash])
             }
         }
+        let tokenizerSource = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_WAN_TOKENIZER"]))
+        try FileManager.default.createDirectory(at: destination.appendingPathComponent("tokenizer"), withIntermediateDirectories: false)
+        for file in WanTokenizerResource.files {
+            try FileManager.default.copyItem(at: tokenizerSource.appendingPathComponent(file.name), to: destination.appendingPathComponent(file.preparedPath))
+        }
         let value: [String: Any] = ["schemaVersion":1, "complete":true,
             "repository": "Wan-AI/Wan2.1-T2V-1.3B", "revision": ModelWanPreparation.revision,
             "preparation":"original-names-tensor-shards-v1", "precision":["text":"BF16", "diffusion":"BF16 with original FP32 time/head/modulation/norm tensors", "vae":"F32"],
@@ -345,7 +350,7 @@ struct ModelWanPreparationTests {
         let source = try ModelDirectory(fixture.source), before = try source.entries()
         let output = try await library.prepareVideo(id, in: fixture.destination)
         #expect(!output.lastPathComponent.hasPrefix("."))
-        #expect(try ModelWanPreparation.verifiedFiles(in: ModelDirectory(output), entry: expected).count == 1262)
+        #expect(try ModelWanPreparation.verifiedFiles(in: ModelDirectory(output), entry: expected).count == 1266)
         #expect(try source.entries() == before)
         #expect(await library.snapshot().records.first?.state == .preparationRequired)
         #expect(await library.snapshot().records.first?.activeLeaseCount == 0)

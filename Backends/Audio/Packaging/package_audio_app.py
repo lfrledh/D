@@ -13,6 +13,7 @@ import re
 import shutil
 import signal
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -357,6 +358,36 @@ def _is_mach_o(path: Path) -> bool:
         return handle.read(4) in MACH_O_MAGICS
 
 
+def _is_executable_mach_o(path: Path) -> bool:
+    """Inspect every universal slice; executables, not dylibs, inherit sandbox."""
+    with path.open("rb") as source:
+        header = source.read(32)
+        def kind(h):
+            if len(h) < 16: raise PackagingError("truncated Mach-O header")
+            if h[:4] in (b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe"): order = "little"
+            elif h[:4] in (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf"): order = "big"
+            else: raise PackagingError("invalid Mach-O slice")
+            return int.from_bytes(h[12:16], order) == 2
+        magic = header[:4]
+        if magic in (b"\xca\xfe\xba\xbe", b"\xca\xfe\xba\xbf", b"\xbe\xba\xfe\xca", b"\xbf\xba\xfe\xca"):
+            order = "big" if magic[0] == 0xca else "little"
+            wide = magic in (b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca")
+            count = int.from_bytes(header[4:8], order)
+            if not 1 <= count <= 32: raise PackagingError("invalid universal architecture count")
+            source.seek(8); table = source.read(count * (32 if wide else 20))
+            if len(table) != count * (32 if wide else 20): raise PackagingError("truncated universal table")
+            kinds = set()
+            for i in range(count):
+                row = table[i*(32 if wide else 20):]
+                offset = int.from_bytes(row[8:16] if wide else row[8:12], order)
+                source.seek(offset); kinds.add(kind(source.read(16)))
+            if len(kinds) != 1: raise PackagingError("inconsistent executable universal slices")
+            return kinds.pop()
+        if magic in (b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf"):
+            return kind(header)
+        return False
+
+
 def _manifest_files(engine: Path) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     manifest_path = engine / "engine.json"
     try:
@@ -388,14 +419,24 @@ def _sign_engine(engine: Path, identity: str, team: str) -> int:
         except OSError as error:
             raise PackagingError(f"cannot inspect engine file magic: {relative}") from error
     for relative, path in native:
-        _command([
-            CODESIGN, "--force", "--sign", identity,
-            "--options", "runtime", "--timestamp=none", str(path),
-        ], f"sign engine native file {relative}")
+        command = [CODESIGN, "--force", "--sign", identity, "--options", "runtime", "--timestamp=none"]
+        # Executable helpers inherit exactly the invoking App sandbox. No new
+        # file/network permissions, per-helper exceptions, or entitlement copying.
+        with tempfile.NamedTemporaryFile(suffix=".plist") as entitlement_file:
+            if _is_executable_mach_o(path):
+                entitlement_file.write(plistlib.dumps({"com.apple.security.app-sandbox": True,
+                                                      "com.apple.security.inherit": True}))
+                entitlement_file.flush()
+                command += ["--entitlements", entitlement_file.name]
+            _command(command + [str(path)], f"sign engine native file {relative}")
         _command([CODESIGN, "--verify", "--strict", str(path)], f"verify engine native file {relative}")
         _identifier, signed_team = _signature_metadata(path, f"read engine native signature {relative}", require_identifier=False)
         if signed_team != team:
             raise PackagingError(f"engine native TeamIdentifier changed: {relative}")
+        if _is_executable_mach_o(path):
+            entitlements, _ = _entitlements(path, f"read helper sandbox {relative}")
+            if entitlements != {"com.apple.security.app-sandbox": True, "com.apple.security.inherit": True}:
+                raise PackagingError(f"helper must inherit exactly the App sandbox: {relative}")
         info = path.stat()
         declarations[relative].update(
             sizeBytes=info.st_size,

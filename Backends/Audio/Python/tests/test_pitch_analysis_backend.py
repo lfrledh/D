@@ -11,6 +11,7 @@ import tempfile
 import types
 import unittest
 import uuid
+from unittest.mock import patch
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 
 
@@ -121,6 +122,25 @@ class PitchProviderValidationTests(unittest.TestCase):
                 with self.assertRaises(provider.ProtocolError):
                     provider._validated_frames([pitch], [confidence], [voicing], 1)
 
+    def test_external_weights_never_supply_executable_core(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            weight = b"controlled fake weight".ljust(399_114, b"\0")
+            with patch.object(provider, "MODEL_SHA256", hashlib.sha256(weight).hexdigest()):
+                request = provider._validate_request(valid_request(root))
+                (request["modelDirectory"] / "model.onnx").write_bytes(weight)
+                (request["modelDirectory"] / "core.py").write_text("raise AssertionError('model directory code executed')")
+                fixed = root / "fixed-core.py"
+                expected = str(request["modelDirectory"] / "model.onnx")
+                fixed.write_text("from types import SimpleNamespace\nclass SwiftF0:\n"
+                    " def __init__(self, **kwargs):\n  assert kwargs['model_path'] == " + repr(expected) + "\n"
+                    " def detect_from_array(self, audio, rate):\n  assert rate == 16000\n"
+                    "  return SimpleNamespace(pitch_hz=[220.0],confidence=[0.95],voicing=[True],timestamps=[127.5/16000])\n")
+                result = provider._analyze(request, bundled_core=fixed)
+                self.assertEqual(result["frames"][0]["rawPitchHz"], 220.0)
+                with self.assertRaises(provider.ProtocolError): provider._analyze(request)
+                with self.assertRaises(FileNotFoundError): provider._analyze(request, bundled_core=root/"missing.py")
+
     def test_access_arguments_are_all_or_nothing(self) -> None:
         args = types.SimpleNamespace(access_manifest="/tmp/access.json", access_run_id=None,
                                      model_directory=None, input_directory=None, run_directory=None)
@@ -196,7 +216,7 @@ class PitchProviderValidationTests(unittest.TestCase):
             request.write_text('{"schemaVersion":true}', encoding="utf-8")
             stdout, stderr = io.StringIO(), io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(stderr):
-                status = provider.main(["--request", str(request)])
+                status = provider.main(["--request", str(request), "--core-module", str(Path(temporary) / "core.py")])
             self.assertEqual(status, 2)
             self.assertEqual(stdout.getvalue(), "")
             self.assertTrue(stderr.getvalue().startswith("pitch provider failed:"))
