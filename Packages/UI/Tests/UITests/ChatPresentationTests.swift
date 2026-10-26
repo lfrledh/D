@@ -377,12 +377,12 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host
         defer { window.close() }
-        func settle() {
+        func settle() async throws {
             host.layoutSubtreeIfNeeded()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.08))
+            try await Task.sleep(for: .milliseconds(80))
             host.layoutSubtreeIfNeeded()
         }
-        settle()
+        try await settle()
         let left = try #require(descendants(host).first { $0.accessibilityIdentifier() == "chat-sessions-host" })
         let right = try #require(descendants(host).first { $0.accessibilityIdentifier() == "chat-inspector-host" })
         let editor = try #require(descendants(left).compactMap { $0 as? NSTextView }.first {
@@ -399,16 +399,16 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         editor.setMarkedText("pinyin", selectedRange: .init(location: 6, length: 0),
                              replacementRange: .init(location: NSNotFound, length: 0))
         // The other pane can close and reopen without touching this editor or IME.
-        sidebars.trailing = false; settle()
+        sidebars.trailing = false; try await settle()
         #expect(right.isHiddenOrHasHiddenAncestor && !left.isHiddenOrHasHiddenAncestor)
         sidebars.trailing = true
-        try await Task.sleep(for: .milliseconds(800)); settle()
+        try await Task.sleep(for: .milliseconds(800)); try await settle()
         #expect(editor.hasMarkedText() && window.firstResponder === editor)
-        sidebars.leading = false; settle()
+        sidebars.leading = false; try await settle()
         #expect(left.isHiddenOrHasHiddenAncestor && !right.isHiddenOrHasHiddenAncestor)
         #expect(window.firstResponder !== editor)
         sidebars.leading = true
-        try await Task.sleep(for: .milliseconds(800)); settle()
+        try await Task.sleep(for: .milliseconds(800)); try await settle()
         #expect(descendants(host).contains { $0 === editor })
         #expect(descendants(host).contains { $0 === composer })
         #expect(!left.isHiddenOrHasHiddenAncestor && !right.isHiddenOrHasHiddenAncestor)

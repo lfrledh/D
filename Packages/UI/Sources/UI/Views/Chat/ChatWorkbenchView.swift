@@ -687,7 +687,10 @@ struct ChatWorkbenchView: View {
                     - WorkbenchSidebarLayout.occupiedWidth(inspectorShown, leading: false, available: geometry.size.width + 32)))
                 .workbenchMeasureLayout("chat-center")
                 .transaction { $0.animation = nil }
-                .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
+                // This is a transparent layout region, not a drawing surface.
+                // The transcript and editor own their viewport clips; clipping
+                // their shared parent cuts the floating components' shadows.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.leading, WorkbenchSidebarLayout.occupiedWidth(sidebarShown, leading: true, available: geometry.size.width + 32))
                 .padding(.trailing, WorkbenchSidebarLayout.occupiedWidth(inspectorShown, leading: false, available: geometry.size.width + 32))
                 .chatMeasured("conversation", probe: layoutProbe)
