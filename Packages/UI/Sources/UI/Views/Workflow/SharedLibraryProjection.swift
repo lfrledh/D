@@ -78,7 +78,7 @@ import Foundation
             let descriptor = descriptor(for: choice)
             result.append(.init(item: .init(key: modelKey(choice), title: descriptor?.title ?? choice.displayName,
                 detail: WorkflowCanvasPresentation.operationTitle(definition, language: language), kind: .model, role: "primary-model",
-                inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: readiness[choice.id] ?? .unknown, facts: .init(concepts: [definition.title], producers: descriptor.map { [$0.modelIdentity] } ?? [])),
+                inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: readiness[choice.id] ?? .unknown, facts: .init(concepts: SharedLibraryConcept.operation(definition.id).wireValues, producers: descriptor.map { [$0.modelIdentity] } ?? [])),
                 selection: .operation(id: definition.id, modelID: choice.id),
                 facts: [choice.id, descriptor?.precision ?? "", descriptor?.engine ?? "", consistencyText(language, "copy.verifyBeforeRun")].filter { !$0.isEmpty }))
         }
@@ -88,7 +88,7 @@ import Foundation
                 let identity = identity(descriptor, kind: kind)
                 result.append(.init(item: .init(key: descriptor.id, title: descriptor.title,
                     detail: WorkflowCanvasPresentation.operationTitle(definition, language: language), kind: .model, role: "primary-model",
-                    inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: .unprepared, facts: .init(concepts: [definition.title], producers: [descriptor.modelIdentity])),
+                    inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: .unprepared, facts: .init(concepts: SharedLibraryConcept.operation(definition.id).wireValues, producers: [descriptor.modelIdentity])),
                     selection: .operation(id: definition.id, modelID: identity), facts: [descriptor.modelIdentity, descriptor.revision, descriptor.precision, descriptor.deploymentNote]))
             } else {
                 // Reviewed legacy adapters remain discoverable without claiming a new executable node route.
@@ -106,7 +106,7 @@ import Foundation
                 title: WorkflowCanvasPresentation.operationTitle(definition, language: language),
                 detail: WorkflowCanvasPresentation.operationDetail(definition, language: language), kind: .program, role: "program",
                 inputs: Set(definition.inputs.flatMap { $0.kinds.count == WorkflowDataKind.allCases.count ? [] : $0.kinds }),
-                outputs: outputs(definition), readiness: .available, facts: .init(concepts: [definition.title], producers: [definition.id])), selection: .operation(id: definition.id, modelID: nil),
+                outputs: outputs(definition), readiness: .available, facts: .init(concepts: SharedLibraryConcept.operation(definition.id).wireValues, producers: [definition.id])), selection: .operation(id: definition.id, modelID: nil),
                 facts: [definition.id, "v\(definition.version)"]))
         }
         for tool in tools {
@@ -208,5 +208,18 @@ import Foundation
         }
         selections[key] = current
         return current
+    }
+}
+
+@MainActor enum SharedLibraryConceptPresentation {
+    static func label(_ wire: String, language: UILanguageStore?) -> String {
+        guard let concept = SharedLibraryConcept(wireValue: wire) else { return wire }
+        switch concept {
+        case .operation(let id):
+            guard let definition = WorkflowRegistry.standard.operation(id)?.definition else { return wire }
+            return WorkflowCanvasPresentation.operationTitle(definition, language: language)
+        case .content(let kind): return WorkflowCanvasPresentation.kind(kind, language: language)
+        case .structured(let kind): return workflowText(language, "workflow.concept." + kind.rawValue)
+        }
     }
 }

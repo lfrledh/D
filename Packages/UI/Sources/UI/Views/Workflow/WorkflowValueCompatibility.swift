@@ -23,10 +23,8 @@ struct WorkflowConsumerMatch: Identifiable {
 }
 @MainActor enum WorkflowValueCompatibility {
     static func conceptTitle(_ legacyIdentity: String, language: UILanguageStore?) -> String {
-        // Existing persisted fact IDs retain their bytes. Only their labels change.
-        let key: String
-        switch legacyIdentity { case "音符序列": key = "notes"; case "和弦轨": key = "chords"; case "速度映射": key = "tempo"; default: return legacyIdentity }
-        return workflowText(language, "workflow.concept." + key)
+        guard case .structured = SharedLibraryConcept(wireValue: legacyIdentity) else { return legacyIdentity }
+        return SharedLibraryConceptPresentation.label(legacyIdentity, language: language)
     }
     // Immutable registered contracts. Mutable instance schemas are evaluated separately.
     private static let contracts: [(WorkflowOperationDefinition, WorkflowInputContract)] = WorkflowRegistry.standard.definitions.flatMap { definition in
@@ -86,11 +84,11 @@ struct WorkflowConsumerMatch: Identifiable {
             (kind, Set(WorkflowRegistry.standard.definitions.filter { $0.inputs.contains { $0.kinds.contains(kind) } }.map(\.id)))
         })
     static func facts(_ value: WorkflowValue, producer: String?, format: String? = nil) -> SharedLibraryFactConditions {
-        let concept = value.datum.flatMap(WorkflowInputContract.concept)
+        let concept = value.datum.flatMap(WorkflowInputContract.conceptIdentity)
         // A candidate receiver remains explicitly conditional; the detail always
         // evaluates its actual contract and never treats a user tag as capability.
         let receivers = candidateReceivers[value.kind] ?? []
-        return .init(concepts: concept.map { [$0] } ?? [], producers: producer.map { [$0] } ?? [],
+        return .init(concepts: concept?.wireValues ?? [], producers: producer.map { [$0] } ?? [],
             consumers: receivers, formats: format.map { [$0] } ?? [])
     }
 }

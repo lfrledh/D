@@ -90,10 +90,12 @@ public struct WorkflowInputContract: Sendable {
             return .init(status: .incompatible, reason: error.localizedDescription, converter: nil)
         }
     }
-    public static func concept(of datum: WorkflowDatum) -> String? {
-        if (try? WorkflowNoteSequence(datum: datum)) != nil { return "音符序列" }
-        if (try? WorkflowChordTrack(datum: datum)) != nil { return "和弦轨" }
-        if (try? WorkflowTempoMap(datum: datum)) != nil { return "速度映射" }
+    public static func conceptIdentity(of datum: WorkflowDatum) -> SharedLibraryConcept? {
+        if (try? WorkflowNoteSequence(datum: datum)) != nil { return .structured(.notes) }
+        if (try? WorkflowChordTrack(datum: datum)) != nil { return .structured(.chords) }
+        if (try? WorkflowTempoMap(datum: datum)) != nil { return .structured(.tempo) }
         return nil
     }
+    /// Compatibility for existing callers; never used to select a validator.
+    public static func concept(of datum: WorkflowDatum) -> String? { conceptIdentity(of: datum)?.wireValue }
 }

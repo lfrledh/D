@@ -1175,8 +1175,8 @@ public struct SharedLibraryBrowser: View {
         let selected = (query.facts ?? .init())[keyPath: path]
         return DisclosureGroup(title) {
             ForEach(known.union(selected).sorted(), id: \.self) { value in
-                if tagSearch.isEmpty || value.localizedStandardContains(tagSearch) || factLabel(value).localizedStandardContains(tagSearch) {
-                    Toggle(factLabel(value) + (known.contains(value) ? "" : " · " + word("unknownCondition", "当前范围未记录")), isOn: Binding(get: { selected.contains(value) }, set: { included in
+                if tagSearch.isEmpty || value.localizedStandardContains(tagSearch) || factLabel(value, concept: path == \.concepts).localizedStandardContains(tagSearch) {
+                    Toggle(factLabel(value, concept: path == \.concepts) + (known.contains(value) ? "" : " · " + word("unknownCondition", "当前范围未记录")), isOn: Binding(get: { selected.contains(value) }, set: { included in
                         var facts = query.facts ?? .init()
                         if included { facts[keyPath: path].insert(value) } else { facts[keyPath: path].remove(value) }
                         query.facts = facts.isEmpty ? nil : facts
@@ -1186,7 +1186,8 @@ public struct SharedLibraryBrowser: View {
             if known.isEmpty && selected.isEmpty { Text(word("factUnrecorded", "当前范围尚未记录此项事实")).font(.caption).foregroundStyle(.secondary) }
         }
     }
-    private func factLabel(_ value: String) -> String {
+    private func factLabel(_ value: String, concept: Bool = false) -> String {
+        if concept { return SharedLibraryConceptPresentation.label(value, language: language) }
         if value.hasPrefix("content."), let kind = WorkflowDataKind(rawValue: String(value.dropFirst(8))) { return WorkflowCanvasPresentation.kind(kind, language: language) }
         if let definition = WorkflowRegistry.standard.operation(value)?.definition { return WorkflowCanvasPresentation.operationTitle(definition, language: language) }
         if let descriptor = ModelNodeCatalog.entries.first(where: { $0.modelIdentity == value }) { return descriptor.title }
@@ -1194,7 +1195,7 @@ public struct SharedLibraryBrowser: View {
     }
     private func factTokens(_ path: WritableKeyPath<SharedLibraryFactConditions, Set<String>>) -> some View {
         ForEach((query.facts ?? .init())[keyPath: path].sorted(), id: \.self) { value in
-            token(factLabel(value)) { var facts = query.facts ?? .init(); facts[keyPath: path].remove(value); query.facts = facts.isEmpty ? nil : facts }
+            token(factLabel(value, concept: path == \.concepts)) { var facts = query.facts ?? .init(); facts[keyPath: path].remove(value); query.facts = facts.isEmpty ? nil : facts }
         }
     }
 
