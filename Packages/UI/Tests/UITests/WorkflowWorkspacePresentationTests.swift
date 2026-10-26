@@ -2,6 +2,7 @@ import AppKit
 import DInference
 import DWorkbench
 import Foundation
+import Observation
 import SwiftUI
 import Testing
 import UniformTypeIdentifiers
@@ -1169,6 +1170,44 @@ extension WorkflowWorkspacePresentationTests {
         #expect(after.data == content.data && after.token == content.token)
         #expect(after.metadata.record == content.metadata.record)
         viewer.stop(); try await f.close()
+    }
+
+    @Test func collectionReceiptObservesLateCompletionAndRejectsChangedOwner() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        let published = try await f.store.publishWorkflowAsset(data: Data("original".utf8), mediaType: "text/plain", name: "Receipt", operationID: "d.text.input")
+        await c.load()
+        let owner = try #require(c.assetLibraryOwner), sources: [WorkflowLibrarySource] = [.asset(published.record.reference)]
+        let id = try await c.requestCollection(sources, owner: owner, folderID: nil, requestID: UUID())
+        let feedback = SharedLibraryCollectionFeedback(requestID: id,
+            context: .init(controller: c, source: .sources(sources), name: "Captured"))
+        #expect(feedback.status(in: c) == .pending)
+        var release: CheckedContinuation<Void, Never>?
+        let drain = Task { @MainActor in
+            await c.processCollectionRequests { _ in await withCheckedContinuation { release = $0 } }
+        }
+        for _ in 0..<1000 where release == nil { try await Task.sleep(for: .milliseconds(1)) }
+        let gate = try #require(release)
+        // A second drain returns immediately while the existing owner is busy.
+        // The receipt must keep observing that owner's later durable completion.
+        await c.processCollectionRequests { _ in Issue.record("Second drain must not classify") }
+        #expect(feedback.status(in: c) == .pending)
+        await confirmation("existing request wakes its presentation") { changed in
+            withObservationTracking { _ = feedback.status(in: c) } onChange: { changed() }
+            gate.resume(); await drain.value
+        }
+        #expect(feedback.status(in: c) == .completed)
+        let other = try await RenderingWorkspaceFixture.make()
+        #expect(feedback.status(in: other.controller) == .obsolete)
+        let missing = SharedLibraryCollectionFeedback(requestID: "different", context: feedback.context)
+        #expect(missing.status(in: c) == .obsolete)
+        let failedID = try await c.requestCollection(sources, owner: owner, folderID: UUID(), requestID: UUID())
+        let failed = SharedLibraryCollectionFeedback(requestID: failedID, context: feedback.context)
+        await c.processCollectionRequests { _ in throw WorkflowIssue("controlled classification failure") }
+        #expect(failed.status(in: c) == .failed("controlled classification failure"))
+        #expect(feedback.status(in: c) == .completed)
+        #expect(await f.engine.submissions == 0)
+        try await other.close(); try await f.close()
+        #expect(feedback.status(in: c) == .obsolete)
     }
 
     @Test func legacyCallAndAmbiguousSavedVersionNeverNavigateToOtherBytes() async throws {
