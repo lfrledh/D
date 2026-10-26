@@ -919,7 +919,6 @@ public struct SharedLibraryBrowser: View {
                 WorkflowTechnicalDetails(value: query.allTagIDs.union(query.anyTagIDs).filter { store.metadata.tags[$0] == nil }.sorted { $0.uuidString < $1.uuidString }.map { state.tagPresentation.title($0, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition")) + ": " + $0.uuidString }.joined(separator: "\n"))
             }
         }.workbenchPopover(isPresented: $showFilters, title: workflowText(language, "childPanel.name.filters"), arrowEdge: .bottom) { filterPopover }
-            .workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge)
     }
     private var searchFooter: some View {
             HStack {
