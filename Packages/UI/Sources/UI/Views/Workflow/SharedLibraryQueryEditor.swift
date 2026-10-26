@@ -66,8 +66,8 @@ struct SharedLibraryFilterEditor: View {
         HStack {
             Button(t("cancel"), action: close).workbenchHelp("QUERY-CANCEL").keyboardShortcut(.cancelAction)
             Spacer()
-            Button(t("applyAllFilters")) { applyRequest += 1 }.workbenchHelp("QUERY-APPLY").keyboardShortcut(.defaultAction)
-        }.padding(16).workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge)
+            Button(t("applyAllFilters")) { applyRequest += 1 }.buttonStyle(WorkbenchPrimaryButtonStyle()).workbenchHelp("QUERY-APPLY").keyboardShortcut(.defaultAction)
+        }.environment(\.workbenchActionHeight, 36).padding(16)
         }.frame(width: 400, height: 580)
         .environment(\.workbenchMenuContext, "filter:\(ObjectIdentifier(store)):\(draft.context)")
     }

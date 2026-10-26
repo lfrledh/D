@@ -113,8 +113,8 @@ struct WorkflowCanvasCornerZoom: View {
 /// Secondary run surfaces already own a glass shell.
 struct WorkflowDecisionPrimaryStyle: ViewModifier {
     let flat: Bool
-    @ViewBuilder func body(content: Content) -> some View {
-        if flat { content.buttonStyle(.borderedProminent) }
-        else { content.buttonStyle(WorkbenchPrimaryButtonStyle()) }
+    func body(content: Content) -> some View {
+        // The shared primary role is now flat in both presentation contexts.
+        content.buttonStyle(WorkbenchPrimaryButtonStyle())
     }
 }

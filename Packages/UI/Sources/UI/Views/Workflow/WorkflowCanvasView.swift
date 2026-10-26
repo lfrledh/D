@@ -737,9 +737,9 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             }.padding(.horizontal, 10).accessibilityIdentifier("workflow-result-run").workbenchHelp("RESULT-RUN")
             ZStack {
                 if visitedOutput.contains(.node) || panelsState.output == .node {
-                    retained(resultsPanel.buttonStyle(.bordered).textFieldStyle(.roundedBorder), visible: panelsState.output == .node, id: "workflow-results-host")
+                    retained(resultsPanel.buttonStyle(WorkbenchGlassButtonStyle()).textFieldStyle(WorkbenchGlassTextFieldStyle()), visible: panelsState.output == .node, id: "workflow-results-host")
                 }
-                retained(runOverview.buttonStyle(.bordered).textFieldStyle(.roundedBorder), visible: panelsState.output == .overview, id: "workflow-overview-host")
+                retained(runOverview.buttonStyle(WorkbenchGlassButtonStyle()).textFieldStyle(WorkbenchGlassTextFieldStyle()), visible: panelsState.output == .overview, id: "workflow-overview-host")
                 if panelsState.output == .batches {
                     WorkflowBatchPanel(controller: controller, revealLibrary: revealLibrary) { run, record in
                         panelsState.selectRun(run.id)
@@ -1221,7 +1221,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 Button(dockText("viewPlan")) { if let target = validRunTarget { presentWorkspacePlan(target.id, mode: runRange) } }
                     .disabled(validRunTarget == nil || !controller.canEditCanvas || !controller.bodyPath.isEmpty)
             }
-        }.buttonStyle(.bordered).padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 16)
+        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 16)
     }
     private var seedSupported: Bool {
         guard let target = validRunTarget, let draft = try? WorkflowWorkspaceRunDraft(controller: controller, target: target.id, mode: runRange) else { return false }
@@ -1237,7 +1237,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 Button(dockText("close")) { activityVisible = false }
             }
             ZStack {
-            if visitedRecordsDetail || recordsDetail { retained(outputPanel.buttonStyle(.bordered).textFieldStyle(.roundedBorder), visible: recordsDetail, id: "workflow-record-details-retained") }
+            if visitedRecordsDetail || recordsDetail { retained(outputPanel.buttonStyle(WorkbenchGlassButtonStyle()).textFieldStyle(WorkbenchGlassTextFieldStyle()), visible: recordsDetail, id: "workflow-record-details-retained") }
             if !recordsDetail {
                 WorkbenchScrollView {
                     VStack(alignment: .leading, spacing: 10) {
@@ -1277,7 +1277,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 }
             }
             }
-        }.padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 16).buttonStyle(.bordered).textFieldStyle(.roundedBorder)
+        }.padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 16).buttonStyle(WorkbenchGlassButtonStyle()).textFieldStyle(WorkbenchGlassTextFieldStyle())
             .onChange(of: recordsDetail, initial: true) { _, visible in if visible { visitedRecordsDetail = true } }
     }
 

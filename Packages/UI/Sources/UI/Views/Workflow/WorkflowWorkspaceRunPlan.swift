@@ -81,11 +81,11 @@ import SwiftUI
                         } else if draft.mode == 0 { await controller.run(target:draft.target,only:false) }
                         else { await controller.runScoped(draft.selection,pins:inputs,expectedGraphID:draft.graph.id,expectedRevision:draft.graph.revision) }
                     }
-                }.buttonStyle(.borderedProminent)
+                }.buttonStyle(WorkbenchPrimaryButtonStyle())
                     .disabled(!current || !controller.canEditCanvas || controller.isRunning || ((draft.mode >= 1 || options.batch) && pins.count != draft.slice.boundaries.count))
                     .accessibilityIdentifier("workflow-run-preview-submit")
-            }
-        }.padding(14).buttonStyle(.bordered)
+            }.environment(\.workbenchActionHeight, 36)
+        }.padding(14).buttonStyle(WorkbenchGlassButtonStyle())
             .onChange(of:options.choices, initial: true) { _,_ in
                 var labels:[UUID:String]=[:]
                 for boundary in draft.slice.boundaries {

@@ -1004,7 +1004,7 @@ ScrollViewReader { proxy in
                     WorkbenchChoice(newLabel("allTags", english: "All tags", chinese: "全部标签"), value:"")
                     WorkbenchChoiceForEach(allTags(sessions), id: \.self) { tag in WorkbenchChoice(tag, value:tag) }
                 }.labelsHidden().accessibilityLabel(newLabel("tagFilter", english: "Filter by tag", chinese: "按标签筛选"))
-            }.controlSize(.small).workbenchPanel(cornerRadius: 0).workbenchSurface(.scrollEdge)
+            }.controlSize(.small)
             WorkbenchScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     if !search.isEmpty && !showDeleted {
