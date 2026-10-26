@@ -400,6 +400,7 @@ public struct WorkflowCanvasView: View {
     }
 
     @Environment(\.workbenchModeSize) private var modeSize
+    @Environment(\.workbenchWindowControlSize) private var windowControlSize
     private func panels(height: CGFloat, width: CGFloat) -> some View {
         let shown = WorkflowCanvasLayoutPolicy.visiblePanels(width: width, library: showLibrary,
             inspector: showInspector, preferLibrary: narrowLibrary)
@@ -955,7 +956,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 Label(consistencyText(languageStore, "copy.runningWorkflow"), systemImage: "lock").help(consistencyText(languageStore, "copy.copyOnEdit")).font(.caption).foregroundStyle(.secondary)
             } else if controller.presentationCopySourceID != nil { Text(text("workspace.editingCopy", "编辑副本")).font(.caption).foregroundStyle(.secondary) }
             Spacer(minLength: 8)
-        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.leading, 128).padding(.trailing, 18).padding(.vertical, 10).padding(.top, 6)
+        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.leading, max(128, 16 + windowControlSize.width + 12)).padding(.trailing, 18).padding(.vertical, 10).padding(.top, 6)
     }
 
     private var bodyBreadcrumb: String {

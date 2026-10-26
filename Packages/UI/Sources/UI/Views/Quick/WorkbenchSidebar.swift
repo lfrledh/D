@@ -160,6 +160,7 @@ struct WorkbenchSidebar<Content: View>: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.workbenchModeSize) private var modeSize
+    @Environment(\.workbenchWindowControlSize) private var windowControlSize
     @Environment(\.workbenchPanelWidths) private var widths
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -238,6 +239,7 @@ struct WorkbenchSidebar<Content: View>: View {
             .frame(width: width, height: geometry.size.height, alignment: alignment)
         }
         .frame(width: leading ? widths.leading : widths.trailing)
+        .padding(.top, max(0, windowControlSize.height - 32))
         .padding(.bottom, leading ? 0 : modeSize.height + 28)
         .onChange(of: expanded) { _, open in if !open { revealed = false } }
         .environment(\.workbenchSurfaceGroup, "sidebar:" + surfaceGroup)

@@ -129,16 +129,17 @@ private actor LocalGlassNoInference: InferenceEngine {
         let owner = WorkbenchBackgroundOwner()
         let canvas = WorkbenchBackgroundNSView(frame: host.bounds); canvas.owner = owner; owner.root = canvas
         canvas.isCanvas = true; canvas.stylesWindowTitlebar = true; host.addSubview(canvas)
-        let controls = WorkbenchWindowControlHost(frame: .init(x: 16, y: host.bounds.height - 52, width: union.width + 24, height: 40))
+        let controls = WorkbenchWindowControlHost(frame: .init(x: 16, y: host.bounds.height - 40, width: union.width + 16, height: 32))
         controls.owner = owner; host.addSubview(controls); controls.bind()
         let chrome = try #require(canvas.titlebar)
         #expect(window.contentView === host && window.styleMask.contains(.titled) && window.isOpaque)
         #expect(buttons.allSatisfy { $0.superview === controls })
         #expect(zip(types, buttons).allSatisfy { window.standardWindowButton($0) === $1 })
-        #expect(controls.measuredWidth == union.width + 24)
+        #expect(controls.measuredSize == CGSize(width: union.width + 16, height: max(32, union.height + 16)))
         #expect(buttons.map { $0.frame.size } == frames.map(\.size))
-        #expect(abs(buttons.first!.frame.minX - 12) < 0.1)
-        #expect(abs(buttons.last!.frame.maxX - (controls.measuredWidth - 12)) < 0.1)
+        #expect(abs(buttons.first!.frame.minX - 8) < 0.1)
+        #expect(abs(buttons.last!.frame.maxX - (controls.measuredSize.width - 8)) < 0.1)
+        #expect(buttons.allSatisfy { controls.bounds.contains($0.frame) })
         // Model the public effect of AppKit restoring controls during a scene update.
         for (button, parent) in zip(buttons, parents) { parent?.addSubview(button) }
         NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
@@ -154,7 +155,7 @@ private actor LocalGlassNoInference: InferenceEngine {
         WorkbenchWindowChrome.fullScreenTransitionFailed(window)
         #expect(buttons.allSatisfy { $0.superview === controls })
         var callbacks = 0; controls.changed = { _, _ in callbacks += 1 }
-        controls.report(width: controls.measuredWidth + 1, fullScreen: true)
+        controls.report(size: CGSize(width: controls.measuredSize.width + 1, height: controls.measuredSize.height), fullScreen: true)
         chrome.detach(controls)
         await Task.yield(); try await Task.sleep(for: .milliseconds(10))
         #expect(callbacks == 0, "Detached host must not deliver stale full-screen state")
@@ -196,6 +197,75 @@ private actor LocalGlassNoInference: InferenceEngine {
         canvas.releaseTitlebar()
         #expect(zip(replacements, parents).allSatisfy { $0.superview === $1 })
         #expect(replacements.map(\.frame) == frames)
+    }
+
+    @Test func floatingChromeFitsLargerNativeBoundsWithoutScalingOrClosingGaps() throws {
+        let window = DeferredChromeWindow(contentRect: .init(x:0,y:0,width:1080,height:680),
+            styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
+        window.isReleasedWhenClosed = false
+        let root = NSView(frame:window.contentView!.bounds); window.contentView = root
+        defer { window.contentView = nil; window.close() }
+        let types: [NSWindow.ButtonType] = [.closeButton,.miniaturizeButton,.zoomButton]
+        let buttons = try types.enumerated().map { index,type in
+            let old = try #require(window.standardWindowButton(type))
+            let button = try #require(NSWindow.standardWindowButton(type,for:window.styleMask))
+            button.frame = CGRect(x:6 + index*38,y:2,width:26,height:30)
+            old.superview?.addSubview(button); window.replacements[type] = button
+            return button
+        }
+        let frames = buttons.map(\.frame)
+        let union = buttons.reduce(CGRect.null) { $0.union($1.convert($1.bounds,to:nil)) }
+        let owner = WorkbenchBackgroundOwner()
+        let canvas = WorkbenchBackgroundNSView(frame:root.bounds); canvas.owner=owner; owner.root=canvas
+        canvas.isCanvas=true; canvas.stylesWindowTitlebar=true; root.addSubview(canvas)
+        let controls = WorkbenchWindowControlHost(frame:.init(x:16,y:600,width:80,height:32))
+        controls.owner=owner; root.addSubview(controls); controls.bind()
+        #expect(controls.measuredSize == CGSize(width:union.width+16,height:46))
+        controls.setFrameSize(controls.measuredSize); controls.chrome?.refreshGeometry()
+        #expect(buttons.map { $0.frame.size } == frames.map(\.size))
+        #expect(buttons.allSatisfy { controls.bounds.contains($0.frame) })
+        #expect(buttons.first?.frame.minX == 8 && buttons.last?.frame.maxX == controls.bounds.maxX-8)
+        #expect(buttons[1].frame.minX-buttons[0].frame.maxX == frames[1].minX-frames[0].maxX)
+        canvas.releaseTitlebar()
+        #expect(buttons.map(\.frame) == frames)
+    }
+
+    @Test func floatingChromeClearanceSurvivesRetainedSidebarAndSmallWindow() async throws {
+        var preferences = ChatDisplayPreferences(), appearance = WorkbenchAppearance()
+        var local = WorkbenchLocalAppearance(); local.material = .solid
+        appearance.local = local; preferences.appearance = appearance
+        // Same sidebar geometry; solid exposes our public native shape surface.
+        // This is not a native Liquid Glass pixel/appearance assertion.
+        func content(height: CGFloat, open: Bool) -> some View {
+            VStack(spacing:0) {
+                Color.clear.frame(height:52)
+                RetainedContentHost(content: WorkbenchSidebar(leading:true,expanded:open,title:"Settings",
+                    identifier:"clearance-toggle",hostIdentifier:"clearance-content",toggle:{}) { Text("Retained content") },
+                    visible:true,identifier:"clearance-workspace")
+            }.environment(\.chatDisplayPreferences,preferences)
+                .environment(\.workbenchWindowControlSize,CGSize(width:80,height:height))
+        }
+        let host = NSHostingView(rootView:content(height:32,open:true))
+        let window = NSWindow(contentRect:.init(x:0,y:0,width:1080,height:680),styleMask:[.titled,.resizable],backing:.buffered,defer:false)
+        window.isReleasedWhenClosed=false; window.contentView=host
+        defer { window.contentView=nil; window.close() }
+        func children(_ view:NSView)->[NSView] { view.subviews.flatMap { [$0]+children($0) } }
+        for size in [CGSize(width:1080,height:680),CGSize(width:1440,height:900)] {
+            window.setContentSize(size)
+            for height:CGFloat in [32,46] {
+                for open in [true,false] {
+                    host.rootView=content(height:height,open:open)
+                    for _ in 0..<35 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for:.milliseconds(10)) }
+                    let surfaces=children(host).compactMap { $0 as? WorkbenchBackgroundNSView }
+                        .filter { $0.surfaceGroup?.hasPrefix("sidebar:")==true && !$0.isHiddenOrHasHiddenAncestor }
+                    let surface=try #require(surfaces.max { $0.bounds.width*$0.bounds.height < $1.bounds.width*$1.bounds.height })
+                    let rect=host.convert(surface.bounds,from:surface)
+                    let top=host.isFlipped ? rect.minY : host.bounds.height-rect.maxY
+                    #expect(top-(8+height) >= 11.9)
+                    #expect(abs(top-(52+max(0,height-32)+(open ? 0 : WorkbenchSidebarLayout.buttonInset))) < 1)
+                }
+            }
+        }
     }
 
     @Test func actualWorkbenchTopRowDoesNotRouteDragIntoCanvas() async throws {

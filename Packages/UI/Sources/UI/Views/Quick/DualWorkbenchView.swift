@@ -414,6 +414,7 @@ public struct DualWorkbenchView: View {
             retrySave: entry == .quick && (originalQuick.pendingSaveRunID != nil || originalQuick.saveIssue != nil) ? action(systemMenuText(language, "retrySave"), enabled: !originalQuick.isRunning) { Task { await originalQuick.retrySave() } } : nil)
     }
     @State private var modeSize = CGSize(width: 232, height: 52)
+    @State private var windowControlSize = CGSize(width: 80, height: 32)
     private var modeSwitcher: some View {
         WorkbenchGlassSegments(title: t("workspaceMode"), selection: Binding(get: { entry }, set: { navigate(to: $0) }),
             choices: [(Entry.quick, layoutText(language, "quick")), (.workflow, layoutText(language, "workflow"))],
@@ -528,8 +529,9 @@ public struct DualWorkbenchView: View {
         }
         .frame(minWidth: WorkbenchSidebarLayout.minimumWindowWidth, minHeight: 580)
         .environment(\.workbenchModeSize, modeSize)
+        .environment(\.workbenchWindowControlSize, windowFullScreen ? CGSize(width: 80, height: 32) : windowControlSize)
         .overlay(alignment: .topLeading) {
-            WorkbenchNativeWindowControls(fullScreen: $windowFullScreen).padding(.leading, 16).padding(.top, 12)
+            WorkbenchNativeWindowControls(fullScreen: $windowFullScreen, size: $windowControlSize).padding(.leading, 16).padding(.top, 8)
         }
         .overlay(alignment: .topTrailing) {
             WorkbenchWindowDragRegion().frame(width: 120, height: 28).padding(.trailing, 16).padding(.top, 8)

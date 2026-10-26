@@ -117,7 +117,7 @@ import SwiftUI
         if !transitioning { isFullScreen = window.styleMask.contains(.fullScreen) }
         guard let host = controls, host.window === window else { return }
         if isFullScreen || transitioning {
-            restoreButtons(); host.report(width: host.measuredWidth, fullScreen: true); return
+            restoreButtons(); host.report(size: host.measuredSize, fullScreen: true); return
         }
         if !placements.isEmpty && placements.contains(where: { window.standardWindowButton($0.type) !== $0.button }) { restoreButtons() }
         if placements.isEmpty {
@@ -134,7 +134,7 @@ import SwiftUI
         }
         let union = placements.reduce(CGRect.null) { $0.union($1.inWindow) }
         guard !union.isNull, union.width.isFinite, union.width > 0 else { return }
-        host.report(width: union.width + 24, fullScreen: false)
+        host.report(size: CGSize(width: union.width + 16, height: max(32, union.height + 16)), fullScreen: false)
         for item in placements {
             if item.button.superview !== host { host.addSubview(item.button); item.button.autoresizingMask = [] }
             let frame = buttonFrame(item, in: host)
@@ -143,7 +143,7 @@ import SwiftUI
     }
     private func buttonFrame(_ item: Placement, in host: NSView) -> CGRect {
         let union = placements.reduce(CGRect.null) { $0.union($1.inWindow) }
-        return CGRect(x: 12 + item.inWindow.minX - union.minX,
+        return CGRect(x: 8 + item.inWindow.minX - union.minX,
             y: (host.bounds.height - union.height) / 2 + item.inWindow.minY - union.minY,
             width: item.frame.width, height: item.frame.height)
     }
@@ -194,9 +194,9 @@ import SwiftUI
 @MainActor final class WorkbenchWindowControlHost: NSView {
     weak var chrome: WorkbenchWindowTitlebar?
     weak var owner: WorkbenchBackgroundOwner?
-    var changed: ((CGFloat, Bool) -> Void)?
-    private(set) var measuredWidth: CGFloat = 80
-    private var reported: (CGFloat, Bool)?
+    var changed: ((CGSize, Bool) -> Void)?
+    private(set) var measuredSize = CGSize(width: 80, height: 32)
+    private var reported: (CGSize, Bool)?
     private var reportID = UUID()
     override var mouseDownCanMoveWindow: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -207,15 +207,15 @@ import SwiftUI
     }
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); bind() }
     func bind() { guard window != nil else { return }; owner?.windowControls = self; owner?.root?.synchronizeTitlebar() }
-    func report(width: CGFloat, fullScreen: Bool) {
-        guard reported?.0 != width || reported?.1 != fullScreen else { return }
-        measuredWidth = width; reported = (width, fullScreen)
+    func report(size: CGSize, fullScreen: Bool) {
+        guard reported?.0 != size || reported?.1 != fullScreen else { return }
+        measuredSize = size; reported = (size, fullScreen)
         let ticket = UUID(); reportID = ticket
         let sourceChrome = chrome, sourceWindow = window
         DispatchQueue.main.async { [weak self, weak sourceChrome, weak sourceWindow] in
             guard let self, self.reportID == ticket, self.chrome === sourceChrome, self.window === sourceWindow,
                   sourceChrome != nil, sourceWindow != nil else { return }
-            self.changed?(width, fullScreen)
+            self.changed?(size, fullScreen)
         }
     }
     func cancelReport() { reportID = UUID(); reported = nil }
@@ -224,23 +224,35 @@ import SwiftUI
 
 struct WorkbenchNativeWindowControls: View {
     @Binding var fullScreen: Bool
-    @State private var width: CGFloat = 80
+    @Binding var size: CGSize
     @Environment(\.workbenchBackground) private var owner
     var body: some View {
         Host(owner: owner) { measured, full in
-            if width != measured { width = measured }
+            if size != measured { size = measured }
             if fullScreen != full { fullScreen = full }
-        }.frame(width: fullScreen ? 0 : width, height: 40)
+        }.frame(width: fullScreen ? 0 : size.width, height: size.height)
             .workbenchPanel(in: Capsule())
             .opacity(fullScreen ? 0 : 1).allowsHitTesting(!fullScreen)
             .accessibilityIdentifier("workbench-window-controls")
     }
     private struct Host: NSViewRepresentable {
         let owner: WorkbenchBackgroundOwner?
-        let changed: (CGFloat, Bool) -> Void
+        let changed: (CGSize, Bool) -> Void
         func makeNSView(context: Context) -> WorkbenchWindowControlHost { let view = WorkbenchWindowControlHost(); view.owner = owner; view.changed = changed; return view }
         func updateNSView(_ view: WorkbenchWindowControlHost, context: Context) { view.owner = owner; view.changed = changed; view.bind() }
         static func dismantleNSView(_ view: WorkbenchWindowControlHost, coordinator: ()) { view.chrome?.detach(view); if view.owner?.windowControls === view { view.owner?.windowControls = nil } }
+    }
+}
+
+// Only unusually large native controls add local sidebar clearance. The normal
+// 32pt shell ends at y=40; Quick's existing y=52 sidebar leaves a 12pt gap.
+private struct WorkbenchWindowControlSizeKey: EnvironmentKey {
+    static let defaultValue = CGSize(width: 80, height: 32)
+}
+extension EnvironmentValues {
+    var workbenchWindowControlSize: CGSize {
+        get { self[WorkbenchWindowControlSizeKey.self] }
+        set { self[WorkbenchWindowControlSizeKey.self] = newValue }
     }
 }
 
