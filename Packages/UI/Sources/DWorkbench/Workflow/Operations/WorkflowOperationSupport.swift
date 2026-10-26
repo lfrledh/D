@@ -90,6 +90,13 @@ enum WorkflowTemplate {
         services: any WorkflowOperationServices
     ) async throws -> (text: String, parent: WorkflowAssetReference?) {
         if let input = context.inputs[port] {
+            // Model and typed-data nodes can supply text without a saved file.
+            // The exact value remains in the frozen call inputs; do not invent
+            // an asset parent or coerce collections/structured values to text.
+            if case .data(.text(let text)) = input {
+                try WorkflowExecution.ensureTextLimit(text, node: context.node, port: port)
+                return (text, nil)
+            }
             let reference = try WorkflowExecution.asset(input, kind: .text, port: port, node: context.node)
             let text = try await services.readText(reference)
             try WorkflowExecution.ensureTextLimit(text, node: context.node, port: port)

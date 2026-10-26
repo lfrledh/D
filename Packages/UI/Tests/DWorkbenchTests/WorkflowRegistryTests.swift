@@ -123,6 +123,36 @@ struct WorkflowRegistryTests {
         #expect(services.publishedTexts == ["keep {{other}} / X"])
     }
 
+    @Test func templateAcceptsFrozenRuntimeTextAndKeepsAssetParentsExact() async throws {
+        let registry = WorkflowRegistry.standard
+        let operation = try #require(registry.operation("d.text.template"))
+        var node = operation.definition.makeNode()
+        node.parameters["template"] = .text("{{input}} / {{other}}")
+        let saved = asset(kind: .text)
+        let inputs: [String: WorkflowValue] = ["input": .data(.text("keep {{other}}")), "other": .asset(saved)]
+        try registry.validateInputs(inputs, node: node, connectedPorts: ["input", "other"])
+        let context = WorkflowExecutionContext(node: node, stepID: UUID(), inputs: inputs)
+        let services = RegistryServices()
+        _ = try await operation.execute(context, services)
+        #expect(services.publishedTexts == ["keep {{other}} / fixture text"])
+        #expect(services.publishedParents == [[saved]])
+        #expect(context.inputs == inputs)
+
+        for invalid: WorkflowValue in [.data(.boolean(true)), .data(.record(schema: [], fields: [:])), .data(.list(element: .text, items: [.init(id: "one", value: .text("not scalar"))])), .collection([]), .asset(asset(kind: .image))] {
+            await #expect(throws: WorkflowIssue.self) {
+                try await operation.execute(.init(node: node, stepID: UUID(), inputs: ["input": invalid, "other": .asset(saved)]), services)
+            }
+        }
+        await #expect(throws: WorkflowIssue.self) {
+            try await operation.execute(.init(node: node, stepID: UUID(), inputs: ["input": .data(.text(String(repeating: "x", count: 1_048_577))), "other": .asset(saved)]), services)
+        }
+        #expect(services.publishCount == 1)
+        node.parameters["template"] = .text("{{input}}")
+        _ = try await operation.execute(.init(node: node, stepID: UUID(), inputs: ["input": .data(.text("runtime only"))]), services)
+        #expect(services.publishedTexts.last == "runtime only")
+        #expect(services.publishedParents.last == [])
+    }
+
     @Test func topPRejectsZeroButAcceptsPositiveUnitValues() throws {
         let registry = WorkflowRegistry.standard
         var rewrite = try node("d.text.rewrite", in: registry)
@@ -286,6 +316,7 @@ struct WorkflowRegistryTests {
 @MainActor private final class RegistryServices: WorkflowOperationServices {
     private(set) var publishCount = 0
     private(set) var publishedTexts: [String] = []
+    private(set) var publishedParents: [[WorkflowAssetReference]] = []
     private(set) var generatedNode: WorkflowNode?
 
     func readText(_ reference: WorkflowAssetReference) async throws -> String { "fixture text" }
@@ -298,6 +329,7 @@ struct WorkflowRegistryTests {
     ) async throws -> WorkflowAssetReference {
         publishCount += 1
         publishedTexts.append(text)
+        publishedParents.append(parents)
         return reference(kind: .text)
     }
 

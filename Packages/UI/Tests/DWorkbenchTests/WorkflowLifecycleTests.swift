@@ -3228,7 +3228,9 @@ extension WorkflowLifecycleTests {
         input.dataConfiguration = .init(value: .text("fixed full value"))
         let a = try #require(c.registry.operation(WorkflowAssetContainer.filterID)).definition.makeNode()
         let b = try #require(c.registry.operation(WorkflowAssetContainer.filterID)).definition.makeNode()
-        let graph = WorkflowGraph(nodes: [input, a, b], connections: [.init(sourceNode: input.id, targetNode: a.id), .init(sourceNode: a.id, targetNode: b.id)])
+        var template = try #require(c.registry.operation("d.text.template")).definition.makeNode()
+        template.parameters["template"] = .text("Selected title: {{input}}")
+        let graph = WorkflowGraph(nodes: [input, a, template, b], connections: [.init(sourceNode: input.id, targetNode: a.id), .init(sourceNode: a.id, targetNode: template.id), .init(sourceNode: template.id, targetNode: b.id)])
         let empty = try #require(try await store.workflowState().archive)
         _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: empty.revision)
         await c.load()
@@ -3252,6 +3254,13 @@ extension WorkflowLifecycleTests {
         try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
         #expect(Array(c.runs.prefix(6)) == parents)
         #expect(c.runs.suffix(2).allSatisfy { $0.planCheckpoint?.records.contains(where: { $0.step.node.id == b.id && $0.step.status == .waiting }) == true })
+        #expect(parents.allSatisfy { $0.planCheckpoint?.records.contains(where: { $0.step.node.id == template.id }) == false })
+        for child in c.runs.suffix(2) {
+            let processed = try #require(child.planCheckpoint?.records.first { $0.step.node.id == template.id })
+            #expect(processed.step.inputs["input"] == .data(.text("fixed full value")))
+            let output = try #require(processed.step.outputs["output"]?.asset)
+            #expect(try await c.services.readText(output) == "Selected title: fixed full value")
+        }
         #expect(await engine.requests.isEmpty) // Service fixture only, not real model evidence.
         let saved = try #require(try await store.workflowState().archive)
         #expect(saved.containerSubmissions == [result] && saved.version == 4)
