@@ -1,8 +1,10 @@
 # 当前行动与接手点
 
-当前执行：D-UI-CONSOLIDATED-01 · App Store v2（2026-10-26）。从完整`2d8f29d63da9fc136b2c0cd55ecc1e885c787e4e`、生产`8a7fc428db142e2e2db4c891af48955bf4b07600`原树接续；本地/远端一致且包含生产。当前桌面“D 最新版”仍指向正常修前Quality-Closeout-20261026；不覆盖运行包，用户数据/模型/历史证据保护。
+当前交审：D-UI-CONSOLIDATED-01 · App Store v2。实际起点完整`2d8f29d63da9fc136b2c0cd55ecc1e885c787e4e`；最终生产 **`2f559b341ed3f4c3068d301c306690d4db3ecac1`**，原树/`codex/ui-consolidated-20261020`接续。桌面 **D 最新版** → 正常完整Release `D-Development/CurrentD/AppStore-v2-20261026/D.app`；完整交付为本次文档后继，远端读回由CurrentD回执绑定。普通D、原项目/模型/个人scheme保持。
 
-唯一活动状态为[统一31项清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#统一问题清单app-store-v22026-10-26)，[原任务回执](tasks/D-UI-CONSOLIDATED-01.md#app-store-v2续办2026-10-26)保存实现与分级证据。当前授权：I009真实归因修共享背景/裁切，I021零权重取得及打包，I026运行时边界，I004稳定筛选兼容，I017有限Release性能续办及本地商店准备。首版渠道已定Mac App Store；容器/定价/开源许可等仍待决，不新增状态表、不上传/合并/发布。交付停在用户看图与顾问审计。
+已完成：Chat父clip、稳定查询兼容、Pitch/Wan外部资源和实际取得/使用、VMAF内嵌学习参数移除、签前后零权重及helper门禁、有限PrivacyInfo/缺失许可正文；末次修Quick无字段空板与模式遮挡。ceb8普通App实际SwiftF0下载到推理与Qwen回答/保存冷恢复、有限四动作/PAN记录及本地开发签名Archive按版本沿用；2f只补Quick同版复验。分级见[任务回执](tasks/D-UI-CONSOLIDATED-01.md#v2最终工程交审)。没有把短输入或源码判断当FPS、全模型或商店通过。
+
+唯一活动状态为[统一31项清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#统一问题清单app-store-v22026-10-26)。当前停点：用户截图/体验评审与顾问差分审计；性能沿用此前勉强可用但不够理想的评价，本轮短动作不足以更新连续体验。I027分发权利、I026商店适用性、正式隐私/公开材料与发行签名仍未闭环；容器、首发承诺、定价、自有开源许可待决。没有需要本人即时处理的新权限或未知保存请求，不鸣响。不新增功能、不合并、不上传、不发布。
 
 以下均为各轮历史当时回执；其“当前”不覆盖上方入口。
 
