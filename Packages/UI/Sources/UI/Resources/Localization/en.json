@@ -1956,6 +1956,8 @@
     "metadata.panel.fixedToolCall": "Fixed tool call",
     "metadata.panel.rootCall": "Node execution",
     "metadata.panel.callAlias": "Call alias",
+    "metadata.panel.attemptNumber": "Attempt {number}",
+    "metadata.panel.runNumber": "Run {number}",
     "metadata.panel.technicalDetails": "Technical details & full identity",
     "metadata.panel.copyDetails": "Copy full details",
     "metadata.panel.sourceAsset": "Recorded source asset",

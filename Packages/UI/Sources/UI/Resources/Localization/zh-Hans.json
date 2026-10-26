@@ -1956,6 +1956,8 @@
     "metadata.panel.fixedToolCall": "固定工具调用",
     "metadata.panel.rootCall": "本次节点执行",
     "metadata.panel.callAlias": "调用别名",
+    "metadata.panel.attemptNumber": "尝试 {number}",
+    "metadata.panel.runNumber": "运行 {number}",
     "metadata.panel.technicalDetails": "技术详情与完整身份",
     "metadata.panel.copyDetails": "复制完整详情",
     "metadata.panel.sourceAsset": "已登记来源素材",

@@ -38,6 +38,37 @@ import Testing
         #expect(first.graph.nodes[0].title == "Frozen" && current.nodes[0].id == node.id)
     }
 
+    @Test(arguments: ["zh-Hans", "en"])
+    func batchRunTitlesUsePersistedAttemptOrderInsteadOfUUIDOrder(languageID: String) throws {
+        let language = UILanguageStore(preferredLanguages: [languageID]); try language.select(languageID)
+        let node = WorkflowNode(operationID: "d.text.input", title: "Frozen")
+        var first = WorkflowRun(graph: WorkflowGraph(name: "Review", nodes: [node]), targetNodeID: node.id)
+        first.id = UUID(uuidString: "FFFFFFFF-0000-0000-0000-000000000001")!
+        first.createdAt = Date(timeIntervalSince1970: 100_000)
+        var second = first; second.id = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+        let stage = WorkflowBatchStage(name: "Batch", repetitions: 2, attempts: [
+            .init(ordinal: 1, runID: first.id), .init(ordinal: 2, runID: second.id)])
+        let unrelated = WorkflowBatchStage(name: "Other", repetitions: 1, attempts: [.init(ordinal: 99, runID: UUID())])
+        let title = WorkflowHumanPresentation.run(first, in: [first, second], stages: [stage, unrelated], language: language)
+        #expect(title.contains(languageID == "en" ? "Attempt 1" : "尝试 1"))
+        #expect(WorkflowHumanPresentation.run(second, in: [first, second], stages: [stage], language: language)
+            .contains(languageID == "en" ? "Attempt 2" : "尝试 2"))
+        #expect(title == WorkflowHumanPresentation.run(first, in: [second, first], stages: [unrelated, stage], language: language))
+        #expect(first.graph.nodes[0].title == "Frozen" && stage.attempts[0].runID == first.id)
+    }
+
+    @Test func inheritedCompletedContainerIsNotANewPendingDecision() {
+        let node = WorkflowNode(operationID: WorkflowAssetContainer.filterID, title: "Gate")
+        var call = WorkflowPlanCallRecord(address: .init(runID: UUID(), path: [.node(node.id)]),
+            step: .init(node: node, signature: "frozen", status: .waiting))
+        #expect(WorkflowContainerPresentation.hasUndecidedFilter([call]))
+        call.step.decision = .init(waitingStepID: call.id, accepted: true, selectedItemIDs: ["value"], typedOutput: .data(.text("kept")))
+        #expect(!WorkflowContainerPresentation.hasUndecidedFilter([call]))
+        call.step.status = .completed
+        #expect(!WorkflowContainerPresentation.hasUndecidedFilter([call]))
+        #expect(!WorkflowContainerPresentation.hasUndecidedFilter([]))
+    }
+
     @Test(arguments: [true, false])
     func batchOrderComesOnlyFromFrozenParentInput(recorded: Bool) {
         let runID = UUID(), parent = WorkflowNode(operationID: "d.control.map", title: "Batch")

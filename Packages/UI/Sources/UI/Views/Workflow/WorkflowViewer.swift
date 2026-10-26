@@ -98,7 +98,7 @@ struct WorkflowViewerCallIdentity:Hashable {
     }
     func displaySubtitle(_ language: UILanguageStore?) -> String {
         if let call = target.call, let controller, let run = controller.runs.first(where: { $0.id == call.address.runID }) {
-            return WorkflowHumanPresentation.run(run, in: controller.runs, language: language)
+            return WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: language)
         }
         if let metadata { return metadata.asset.mediaType + " · " + metadata.asset.createdAt.formatted(date: .abbreviated, time: .shortened) }
         return target.subtitle

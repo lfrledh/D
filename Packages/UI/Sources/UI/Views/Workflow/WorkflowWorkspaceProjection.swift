@@ -83,7 +83,7 @@ struct WorkflowLibraryValue: Equatable {
                 value: value, createdAt: run.createdAt, source: reference)
             guard let key = snapshot.annotationIdentity?.storageKey else { return nil }
             let annotation = library?.metadata.runtimeAnnotations[key]
-            let title = annotation?.name ?? WorkflowHumanPresentation.run(run, in: controller.runs, language: language)
+            let title = annotation?.name ?? WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: language)
             var entry = SharedLibraryBrowserEntry(item: .init(key: key, title: title, detail: workspaceText(language, "runValue"),
                 kind: .asset, role: "run-value", contentKind: value.kind, readiness: .available,
                 assetFacts: .init(projectID: owner.projectID, instanceID: owner.instanceID, note: annotation?.note ?? "", favorite: annotation?.favorite ?? false, registeredAt: run.createdAt,
@@ -117,7 +117,7 @@ struct WorkflowLibraryValue: Equatable {
                     assetFacts:.init(projectID:project,instanceID:instance,note:annotation?.note ?? "",favorite:annotation?.favorite ?? false,registeredAt:run.createdAt,
                         occurrences:[.init(runID:run.id,nodeID:output.call.step.node.id,stepID:output.call.id,address:output.call.address)]),
                     facts: WorkflowValueCompatibility.facts(output.value, producer: output.call.step.node.operationID)),
-                    selection:.unavailable(state),facts:[WorkflowHumanPresentation.run(run,in:controller.runs,language:language),WorkflowHumanPresentation.call(output.call,in:WorkflowWorkspacePanels.records(in:run),language:language)],activityID:id)
+                    selection:.unavailable(state),facts:[WorkflowHumanPresentation.run(run,in:controller.runs,stages:controller.batchStages,language:language),WorkflowHumanPresentation.call(output.call,in:WorkflowWorkspacePanels.records(in:run),language:language)],activityID:id)
                 entry.runtimeValue = snapshot
                 return entry
             }
@@ -255,7 +255,7 @@ struct WorkflowLibraryContext: Equatable {
         case .call(let call): runID = call.address.runID
         }
         guard let run = controller.runs.first(where: { $0.id == runID }) else { return name }
-        let title = WorkflowHumanPresentation.run(run, in: controller.runs, language: language)
+        let title = WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: language)
         if case .call(let call) = source, let record = WorkflowWorkspacePanels.records(in: run).first(where: { $0.address == call.address && $0.id == call.stepID }) {
             return title + " · " + WorkflowHumanPresentation.name(record.step.node, in: WorkflowHumanPresentation.nodes(in: run), language: language) + " · " + WorkflowHumanPresentation.call(record, in: WorkflowWorkspacePanels.records(in: run), language: language)
         }

@@ -78,7 +78,7 @@ struct WorkflowScopePresentation: Identifiable {
                                     get: { choices[key(boundary)] }, set: { choices[key(boundary)] = $0 })) {
                                     WorkbenchChoice(text("choose", "请选择一个结果"), value:Optional<UUID>.none)
                                     WorkbenchChoiceForEach(records) { call in
-                                        WorkbenchChoice(call.step.node.title + " · " + (controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0, in: controller.runs, language: language) } ?? text("unavailableRun", "历史运行不可访问")) + " · " + WorkflowHumanPresentation.call(call, in: records, language: language), value:Optional(call.id))
+                                        WorkbenchChoice(call.step.node.title + " · " + (controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0, in: controller.runs, stages: controller.batchStages, language: language) } ?? text("unavailableRun", "历史运行不可访问")) + " · " + WorkflowHumanPresentation.call(call, in: records, language: language), value:Optional(call.id))
                                     }
                                 }
                                 if let call = records.first(where: { $0.id == choices[key(boundary)] }) {

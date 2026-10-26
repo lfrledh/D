@@ -753,7 +753,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             WorkbenchPicker(text("workspace.selectedRun", "所选运行"), selection: Binding(get: { panelsState.runID }, set: { panelsState.selectRun($0) })) {
                 WorkbenchChoice(text("workspace.chooseRun", "选择运行记录"), value:UUID?.none)
                 WorkbenchChoiceForEach(controller.runs.reversed()) { run in
-                    WorkbenchChoice(WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore), value:Optional(run.id))
+                    WorkbenchChoice(WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: languageStore), value:Optional(run.id))
                 }
             }.padding(.horizontal, 10).accessibilityIdentifier("workflow-result-run").workbenchHelp("RESULT-RUN")
             ZStack {
@@ -859,7 +859,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             VStack(alignment: .leading, spacing: 12) {
                 if let run = selectedResultRun {
                     Button(workspaceText(languageStore, "locateResults", "", ""), systemImage: "tray.full") {
-                        revealLibrary(.init(controller: controller, source: .run(run.id), name: WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore)))
+                        revealLibrary(.init(controller: controller, source: .run(run.id), name: WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: languageStore)))
                     }.accessibilityIdentifier("run-locate-results")
                     Text(run.graph.name).font(.headline)
                     Text(WorkflowCanvasPresentation.statusTitle(run.status, language: languageStore)).font(.title3)
@@ -1283,7 +1283,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                             VStack(alignment: .leading, spacing: 5) {
                                 Button { inspectRun(run) } label: {
                                     VStack(alignment: .leading, spacing: 3) {
-                                        Text(WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore)).font(.subheadline)
+                                        Text(WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: languageStore)).font(.subheadline)
                                         Text(WorkflowCanvasPresentation.statusTitle(run.status, language: languageStore) + " · " + run.createdAt.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
                                         if let seconds = controller.batchStages.lazy.flatMap(\.attempts).first(where: { $0.runID == run.id })?.activeSeconds {
                                             Text(workspaceText(languageStore, "activeTime") + String(format: " %.2f s", seconds)).font(.caption)
@@ -1292,7 +1292,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                                 }.buttonStyle(.plain)
                                 HStack {
                                     Button(workspaceText(languageStore, "locateResults"), systemImage: "tray.full") {
-                                        revealLibrary(.init(controller: controller, source: .run(run.id), name: WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore)))
+                                        revealLibrary(.init(controller: controller, source: .run(run.id), name: WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: languageStore)))
                                     }
                                     if isBatchRun(run.id) {
                                         Button(workspaceText(languageStore, "batches")) { panelsState.selectRun(run.id); panelsState.output = .batches; recordsDetail = true }
@@ -1492,7 +1492,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
     private func openValue(_ value:WorkflowValue,_ call:WorkflowCallReference,_ title:String, port: String? = nil, side: WorkflowViewerValueSide = .output) {
         guard let viewerModel,viewerModel.projectSession.workflow === controller else { return }
-        do { try viewerModel.viewers.open(.init(title:title,subtitle:controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0,in:controller.runs,language:languageStore) } ?? "",value:value,call:call,port:port,side:side,usesCallTitle: true),model:viewerModel,language:languageStore) }
+        do { try viewerModel.viewers.open(.init(title:title,subtitle:controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0,in:controller.runs,stages:controller.batchStages,language:languageStore) } ?? "",value:value,call:call,port:port,side:side,usesCallTitle: true),model:viewerModel,language:languageStore) }
         catch { controller.errorMessage=error.localizedDescription }
     }
     private func openCall(_ run:WorkflowRun,record:WorkflowPlanCallRecord) {
@@ -1958,7 +1958,7 @@ private struct WorkflowNodeInspector: View {
                                    resultScope: resultRunID.flatMap { run in controller.projectID.map { project in
                                        .init(mode: .run, projectID: project, instanceID: controller.projectInstanceID, runID: run, nodeID: step.node.id, stepID: step.id)
                                    } }, scopeDescription: controller.runs.first(where: { $0.id == resultRunID }).map { run in
-                                       WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore) + " · " + step.node.title + " · " + (resultRecord.map { WorkflowHumanPresentation.call($0, in: WorkflowWorkspacePanels.records(in: run), language: languageStore) } ?? "")
+                                       WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: languageStore) + " · " + step.node.title + " · " + (resultRecord.map { WorkflowHumanPresentation.call($0, in: WorkflowWorkspacePanels.records(in: run), language: languageStore) } ?? "")
                                    })
                 }
                 WorkflowTechnicalDetails(value: "Run: " + (resultRunID?.uuidString ?? "—") + "\nCall: " + step.id.uuidString + "\nNode: " + step.node.id.uuidString + "\n" + String(describing: resultRecord?.address))
@@ -2005,7 +2005,7 @@ private struct WorkflowNodeInspector: View {
                         DisclosureGroup(call.step.node.title + " · " + WorkflowCanvasPresentation.statusTitle(call.step.status, language: languageStore)) {
                             if let revealLibrary {
                                 Button(workspaceText(languageStore, "locateResults", "", "")) {
-                                    revealLibrary(.init(controller: controller, source: .call(.init(address: call.address, stepID: call.id)), name: WorkflowHumanPresentation.run(run, in: controller.runs, language: languageStore) + " · " + WorkflowHumanPresentation.call(call, in: WorkflowWorkspacePanels.records(in: run), language: languageStore)))
+                                    revealLibrary(.init(controller: controller, source: .call(.init(address: call.address, stepID: call.id)), name: WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: languageStore) + " · " + WorkflowHumanPresentation.call(call, in: WorkflowWorkspacePanels.records(in: run), language: languageStore)))
                                 }
                             }
                             WorkflowTechnicalDetails(value: String(describing: call.address) + "\n" + call.id.uuidString)
@@ -2347,7 +2347,7 @@ private struct WorkflowConnectionInspection: View {
                     .font(.caption)
             }
             ForEach(snapshots.reversed()) { snapshot in
-                DisclosureGroup(WorkflowHumanPresentation.run(snapshot.run, in: controller.runs, language: language) + " · " + WorkflowHumanPresentation.call(snapshot.call, in: WorkflowWorkspacePanels.records(in: snapshot.run), language: language)) {
+                DisclosureGroup(WorkflowHumanPresentation.run(snapshot.run, in: controller.runs, stages: controller.batchStages, language: language) + " · " + WorkflowHumanPresentation.call(snapshot.call, in: WorkflowWorkspacePanels.records(in: snapshot.run), language: language)) {
                     WorkflowTechnicalDetails(value: snapshot.runID.uuidString + "\n" + snapshot.stepID.uuidString + "\n" + snapshot.revision.uuidString + "\n" + String(describing: snapshot.address))
                     WorkflowStepValues(title: snapshot.call.step.node.title, values: [connection.targetPort: snapshot.value],
                         operationID: snapshot.operationID, portsAreInputs: true, controller: controller,

@@ -69,8 +69,11 @@ import UniformTypeIdentifiers
     var cache = WorkflowLibraryPreviewCache()
     var rows: [ContainerItem] = []
     var playback = WorkflowContainerPlayback()
-    var collectionNotice = false
+    var collectionLocation: WorkflowLibraryContext?
     var expanded = false
+    static func hasUndecidedFilter(_ calls: [WorkflowPlanCallRecord]) -> Bool {
+        calls.contains { $0.step.node.operationID == WorkflowAssetContainer.filterID && $0.step.status == .waiting && $0.step.decision == nil }
+    }
 }
 
 /// The card and historical waiting entries share the same captured call decisions.
@@ -169,7 +172,7 @@ import UniformTypeIdentifiers
     }
     private var chosen: [ContainerItem] { rows.filter(selected) }
     private var grid: Bool { !rows.isEmpty && rows.allSatisfy { [WorkflowDataKind.image, .video].contains($0.value?.kind ?? .receipt) } }
-    private var mutable: Bool { review && submission == nil && snapshot != nil }
+    private var mutable: Bool { review && submission == nil && snapshot.map { WorkflowContainerPresentation.hasUndecidedFilter($0.calls) } == true }
     var body: some View {
         if let headerActions {
             HStack(spacing: 4 * scale) {
@@ -224,8 +227,11 @@ import UniformTypeIdentifiers
             if controller.collectionRequests.contains(where: { !$0.completed && $0.error != nil }) {
                 Button(t("retryCollection")) { Task { await retryCollection() } }.help(controller.collectionRequests.first { !$0.completed && $0.error != nil }?.error ?? "")
             }
-            if presentation.collectionNotice {
-                HStack { Text(t("collectedFiltered")).font(.caption).foregroundStyle(.secondary); Button(t("showInLibrary")) { showInLibrary(chosen.isEmpty ? rows : chosen) } }
+            if let location = presentation.collectionLocation {
+                HStack { Text(t("collectedFiltered")).font(.caption).foregroundStyle(.secondary); Button(t("showInLibrary")) {
+                    guard location.isCurrent(in: controller) else { error = t("stale"); return }
+                    navigation?.reveal(location)
+                } }
             }
             if let error { Text(error).foregroundStyle(.red).lineLimit(3).textSelection(.enabled) }
             WorkbenchScrollView {
@@ -376,11 +382,12 @@ import UniformTypeIdentifiers
     }
     @ViewBuilder private func audioControls(_ reference: WorkflowAssetReference) -> some View {
         let playback = presentation.playback
+        let isPlaying = playback.reference == reference && playback.transport.state == .playing
         HStack(spacing: 4 * scale) {
             Button {
                 Task { do { try await playback.toggle(reference, controller: controller) } catch { self.error = error.localizedDescription } }
-            } label: { Image(systemName: playback.reference == reference && playback.transport.state == .playing ? "pause.fill" : "play.fill").frame(width: 28 * scale, height: 28 * scale) }
-                .buttonStyle(.plain).accessibilityLabel(workspaceText(language, playback.transport.state == .playing ? "pause" : "play"))
+            } label: { Image(systemName: isPlaying ? "pause.fill" : "play.fill").frame(width: 28 * scale, height: 28 * scale) }
+                .buttonStyle(.plain).accessibilityLabel(workspaceText(language, isPlaying ? "pause" : "play"))
             if playback.reference == reference, let format = playback.format {
                 Slider(value: Binding(get: { Double(playback.transport.positionFrame) }, set: { value in
                     do { try playback.transport.seek(toFrame: Int64(value)) } catch { self.error = error.localizedDescription }
@@ -525,7 +532,8 @@ import UniformTypeIdentifiers
         guard let owner = controller.assetLibraryOwner else { return }
         var seen = Set<String>()
         let sources = items.compactMap(\.source).filter { seen.insert($0.key).inserted }
-        Task { do { try await controller.setCollected(sources, collected: true, owner: owner); presentation.collectionNotice = true } catch { self.error = error.localizedDescription } }
+        let location = WorkflowLibraryContext(controller: controller, source: .sources(sources), name: node.title)
+        Task { do { try await controller.setCollected(sources, collected: true, owner: owner); presentation.collectionLocation = location } catch { self.error = error.localizedDescription } }
     }
     private func open(_ item: ContainerItem) {
         guard let model, let value = item.value, model.projectSession.workflow === controller else { return }

@@ -1088,6 +1088,29 @@ extension WorkflowWorkspacePresentationTests {
 }
 
 extension WorkflowWorkspacePresentationTests {
+    @Test func collectedNoticeKeepsCapturedSourceAfterSelectionAndScopeChange() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        let graph = try f.runtimeValueGraph()
+        await c.run(target: graph.nodes[0].id, only: false)
+        let value = try #require(WorkflowLibraryValue.entries(c, language: nil).compactMap(\.runtimeValue).first)
+        let source = try WorkflowRuntimeAssetSource(call: value.call, port: value.port, value: value.value)
+        let before = c.runs
+        try await c.setCollected([.runtime(source)], collected: true, owner: try #require(c.assetLibraryOwner))
+        let entry = try #require(WorkflowLibraryValue.collectedEntries(c, language: nil, library: nil).first)
+        let presentation = WorkflowContainerPresentation()
+        presentation.selectedScope = .init(runID: value.call.address.runID, path: value.call.address.path)
+        presentation.collectionLocation = .init(controller: c, source: .sources([.runtime(source)]), name: "Collected A")
+        presentation.previewSelection = ["a different row"]
+        presentation.selectedScope = .init(runID: UUID(), path: [.node(UUID())])
+        let location = try #require(presentation.collectionLocation)
+        #expect(location.source == .sources([.runtime(source)]))
+        #expect(location.isCurrent(in: c) && location.includes(entry))
+        #expect(c.runs == before)
+        await f.owner.closeProject()
+        #expect(!location.isCurrent(in: c))
+        try await f.close()
+    }
+
     @Test func exactResultNavigationAndRuntimeAnnotationsKeepFrozenStateAndSearch() async throws {
         let f = try await RenderingWorkspaceFixture.make(), c = f.controller
         let graph = try f.runtimeValueGraph()

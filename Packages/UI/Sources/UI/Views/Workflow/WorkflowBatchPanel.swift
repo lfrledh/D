@@ -101,7 +101,7 @@ import SwiftUI
             VStack(alignment: .leading) {
                 Text(WorkflowCanvasPresentation.statusTitle(run.status, language: language))
                 if let parent = run.batchParent, let parentRun = controller.runs.first(where: { $0.id == parent.runID }) {
-                    Text(text("fixedParent") + " " + WorkflowHumanPresentation.run(parentRun, in: controller.runs, language: language)).font(.caption)
+                    Text(text("fixedParent") + " " + WorkflowHumanPresentation.run(parentRun, in: controller.runs, stages: controller.batchStages, language: language)).font(.caption)
                 }
                 if let schedule = run.planCheckpoint?.batchSeeds {
                     DisclosureGroup(text("actualSeeds")) {
@@ -118,7 +118,7 @@ import SwiftUI
             Spacer()
             if let revealLibrary {
                 Button(workspaceText(language, "locateResults", "", ""), systemImage: "tray.full") {
-                    revealLibrary(.init(controller: controller, source: .attempt(stage: stageID, attempt: attempt.id, run: run.id), name: WorkflowHumanPresentation.run(run, in: controller.runs, language: language)))
+                    revealLibrary(.init(controller: controller, source: .attempt(stage: stageID, attempt: attempt.id, run: run.id), name: WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: language)))
                 }.accessibilityIdentifier("attempt-locate-results")
             }
             ForEach(controller.callRecords(runID: run.id).filter { $0.step.status == .waiting }) { record in

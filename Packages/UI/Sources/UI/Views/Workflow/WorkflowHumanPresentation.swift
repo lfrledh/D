@@ -20,11 +20,16 @@ enum WorkflowHumanPresentation {
         var seen = Set<UUID>()
         return (run.graph.nodes + WorkflowWorkspacePanels.records(in: run).map(\.step.node)).filter { seen.insert($0.id).inserted }
     }
-    @MainActor static func run(_ run: WorkflowRun, in runs: [WorkflowRun], language: UILanguageStore?) -> String {
+    @MainActor static func run(_ run: WorkflowRun, in runs: [WorkflowRun], stages: [WorkflowBatchStage] = [], language: UILanguageStore?) -> String {
         let title = run.graph.name + " · " + run.createdAt.formatted(date: .abbreviated, time: .standard)
+        if let attempt = stages.lazy.flatMap({ $0.attempts }).first(where: { $0.runID == run.id }) {
+            return title + " · " + metadataText(language, "attemptNumber")
+                .replacingOccurrences(of: "{number}", with: String(attempt.ordinal))
+                + " · " + WorkflowCanvasPresentation.statusTitle(run.status, language: language)
+        }
         let peers = runs.filter { $0.graph.name == run.graph.name && $0.createdAt.formatted(date: .abbreviated, time: .standard) == run.createdAt.formatted(date: .abbreviated, time: .standard) }
             .sorted { $0.id.uuidString < $1.id.uuidString }
-        let alias = peers.count > 1 ? " · \((peers.firstIndex { $0.id == run.id } ?? 0) + 1)" : ""
+        let alias = peers.count > 1 ? " · " + metadataText(language, "runNumber").replacingOccurrences(of: "{number}", with: String((peers.firstIndex { $0.id == run.id } ?? 0) + 1)) : ""
         return title + alias + " · " + WorkflowCanvasPresentation.statusTitle(run.status, language: language)
     }
     @MainActor static func call(_ call: WorkflowPlanCallRecord, in records: [WorkflowPlanCallRecord], language: UILanguageStore?) -> String {

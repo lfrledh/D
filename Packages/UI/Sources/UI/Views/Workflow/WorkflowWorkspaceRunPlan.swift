@@ -106,7 +106,7 @@ import SwiftUI
             })) {
                 WorkbenchChoice(text("none"),value:UUID?.none)
                 WorkbenchChoiceForEach(records) { call in
-                    WorkbenchChoice((controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0,in:controller.runs,language:language) } ?? text("missing"))+" · "+WorkflowHumanPresentation.call(call,in:records,language:language),value:Optional(call.id))
+                    WorkbenchChoice((controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0,in:controller.runs,stages:controller.batchStages,language:language) } ?? text("missing"))+" · "+WorkflowHumanPresentation.call(call,in:records,language:language),value:Optional(call.id))
                 }
             }.disabled(!current)
             if let choice=options.choices[key(boundary)],let call=records.first(where:{$0.address == choice.address && $0.id == choice.stepID}),let value=call.step.outputs[boundary.sourcePort] {
