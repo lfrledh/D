@@ -296,6 +296,39 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         #expect(window.firstResponder !== editor)
     }
 
+    @Test func quickPitchHasNoEmptyPromptPlateAndAvoidsFloatingModeControl() async throws {
+        let (_, model, store, root) = try await fixture(ChatState())
+        let quick = QuickGenerationController(store: store) { throw WorkflowIssue("Layout must not infer") }
+        await quick.load()
+        quick.select(operationID: "d.music.pitch", modelID: "fixture:exact-pitch")
+        let draftID = quick.draft?.id
+        let sidebars = WorkbenchSidebarState()
+        let mode = CGSize(width: 264, height: 52)
+        var sizes: [String: CGSize] = [:]
+        let host = NSHostingView(rootView: QuickGenerationView(quick: quick, model: model,
+            selectedResults: .constant([:]), onChooseModel: {}, onSettingsToCanvas: { _ in },
+            onResultToCanvas: { _ in }, onValueToCanvas: { _ in })
+            .environment(\.workbenchSidebars, sidebars).environment(\.workbenchModeSize, mode)
+            .environment(\.workbenchLayoutObservation, { sizes[$0] = $1 }))
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 1280, height: 820),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.close() }
+        for width: CGFloat in [1280, 1080] {
+            for right in [false, true] {
+                sidebars.trailing = right; host.frame.size = .init(width: width, height: 820)
+                for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30)) }
+                let input = try #require(sizes["quick-input"]), center = try #require(sizes["quick-center"])
+                #expect(input.height < 130, "Pitch has no prompt editor; its plate must not reserve an empty 180pt field")
+                let occupied = WorkbenchSidebarLayout.occupiedWidth(right, leading: false, available: width)
+                #expect(abs(input.width - (center.width - WorkbenchFloatingLayout.composerTrailingInset(
+                    visibleRightPanel: occupied, mode: mode))) < 1, "Real Quick plate must clear the actual floating mode control")
+            }
+        }
+        #expect(quick.draft?.id == draftID && quick.state.runs.isEmpty)
+        try await quick.flush(); try await close(store, root: root)
+    }
+
     @Test func quickSidebarsStayOpenAcrossCategoriesAtMinimumWindow() async throws {
         var state = ChatState(); let session = ChatSession(title: "Shared sidebar fixture")
         state.sessions = [session]; state.selectedSessionID = session.id

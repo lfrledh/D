@@ -28,6 +28,7 @@ struct QuickGenerationView: View {
     var onResolveSharedAsset: QuickInputImport.SharedAssetResolver? = nil
     var textWorkspaceActions: AnyView = AnyView(EmptyView())
     @Environment(\.workbenchSidebars) private var sharedSidebars
+    @Environment(\.workbenchModeSize) private var modeSize
     @State private var localSidebars = WorkbenchSidebarState()
     private var sidebars: WorkbenchSidebarState { sharedSidebars ?? localSidebars }
     private enum LeftTab: String, CaseIterable { case settings, assets }
@@ -87,7 +88,8 @@ struct QuickGenerationView: View {
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                    if let definition, let draft = quick.draft {
+                    if let definition, let draft = quick.draft,
+                       !definition.fields.filter({ ["task", "promptText"].contains($0.id) }).isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             ForEach(definition.fields.filter { ["task", "promptText"].contains($0.id) }) { field in
                                 QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, modelIdentity: draft.node.parameters["modelID"]?.string, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
@@ -100,6 +102,10 @@ struct QuickGenerationView: View {
                     }
                     generationBar
                     }.padding(12).workbenchPanel(cornerRadius: 16)
+                        .workbenchMeasureLayout("quick-input")
+                        .padding(.trailing, WorkbenchFloatingLayout.composerTrailingInset(
+                            visibleRightPanel: WorkbenchSidebarLayout.occupiedWidth(rightShown, leading: false, available: geometry.size.width),
+                            mode: modeSize))
                 }.frame(width: max(0, geometry.size.width - 32
                     - WorkbenchSidebarLayout.occupiedWidth(leftShown, leading: true, available: geometry.size.width)
                     - WorkbenchSidebarLayout.occupiedWidth(rightShown, leading: false, available: geometry.size.width)))
