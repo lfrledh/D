@@ -55,7 +55,8 @@ CONTRACTS["ExternalVideoEngine.dengine"] = (
     ("python/bin/python3", "provider/app_video_driver.py", "provider/d_audio_access.py",
      "model-manifests/h3-fl2va-bf16.json", "native/h3", "native/h3_shaders.metal",
      "native/ffmpeg", "native/ffprobe", "provider/Resources/h3-fl2va-bf16.json",
-     "provider/Resources/ltx23-bf16.json", "provider/Resources/ltx23-q8-test.json", "provider/Resources/ltx25-bf16.json"),
+     "provider/Resources/ltx23-bf16.json", "provider/Resources/ltx23-q8-test.json", "provider/Resources/ltx25-bf16.json", "model-manifests/ltx25-bf16.json",
+     "provider/Patches/ltx25-gemma4-streaming.json", "provider/Patches/ltx25-gemma4-streaming.patch"),
 )
 
 CONTRACTS["ACEMusicEngine.dengine"] = (
