@@ -698,7 +698,7 @@ public struct SharedLibraryBrowser: View {
                         .onTapGesture(count: 2) { dispatch(.preview, key: entry.id) }
                         .onTapGesture { selectedKeys = [entry.id]; focusedKey = entry.id; entryKeyboardFocus = entry.id }
                         .focusable().focused($entryKeyboardFocus, equals: entry.id).focusEffectDisabled().onKeyPress(.space) { dispatch(.preview, key: entry.id); return .handled }
-                        .workbenchContextMenu { resourceActions(entry) }.onDrag { dragProvider(for: entry.id) }
+                        .workbenchContextMenu { resourceActions(entry) }.onDrag { dragProvider(for: entry.id) } preview: { dragPreview(for: entry.id) }
                         .accessibilityElement(children: .combine).accessibilityIdentifier("shared-library-entry-" + entry.id)
                 }
             }
@@ -1094,7 +1094,7 @@ public struct SharedLibraryBrowser: View {
         }
         .accessibilityIdentifier("shared-library-entry-" + entry.id)
         VStack(alignment: .leading, spacing: 4) {
-            row.workbenchContextMenu { resourceActions(entry) }.onDrag { dragProvider(for: entry.id) }
+            row.workbenchContextMenu { resourceActions(entry) }.onDrag { dragProvider(for: entry.id) } preview: { dragPreview(for: entry.id) }
                 .onTapGesture(count:2) { if entry.item.kind == .asset,canPreview(entry) { dispatch(.preview,key:entry.id) } }
                 .focusable().focused($entryKeyboardFocus, equals: entry.id).focusEffectDisabled()
                 .onKeyPress(.space) { guard entry.item.kind == .asset,canPreview(entry) else { return .ignored }; dispatch(.preview,key:entry.id);return .handled }
@@ -1665,10 +1665,20 @@ public struct SharedLibraryBrowser: View {
         }
         return true
     }
+    private func dragEntries(for key: String) -> [SharedLibraryBrowserEntry] {
+        guard let current = entries.first(where: { $0.id == key }) else { return [] }
+        return selectedKeys.contains(key) ? visible.filter { selectedKeys.contains($0.id) } : [current]
+    }
+    private func dragPreview(for key: String) -> some View {
+        let selected = dragEntries(for: key)
+        let valid = !selectedKeys.contains(key) || selected.count == validSelection.count
+        return Label(valid ? (selected.count == 1 ? selected[0].item.title : workflowText(language, "container.selected") + " \(selected.count)") : workflowText(language, "container.hiddenSelection"), systemImage: "doc.on.doc")
+            .font(.callout).lineLimit(2).padding(10).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
     private func dragProvider(for key: String) -> NSItemProvider {
         guard let current = entries.first(where: { $0.id == key }) else { return NSItemProvider() }
         if let controller = insertionController, let owner = controller.assetLibraryOwner, current.item.kind == .asset {
-            let selected = selectedKeys.contains(key) ? visible.filter { selectedKeys.contains($0.id) } : [current]
+            let selected = dragEntries(for: key)
             guard !selectedKeys.contains(key) || selected.count == validSelection.count else {
                 errorMessage = workflowText(language, "container.hiddenSelection")
                 return NSItemProvider()

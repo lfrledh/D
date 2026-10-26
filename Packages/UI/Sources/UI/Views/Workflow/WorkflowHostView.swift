@@ -43,6 +43,18 @@ struct WorkflowHostView: View {
                     onDropFile: { url in
                         guard model.projectSession.workflow === controller, controller.canEditCanvas else { return false }
                         Task { await importAssetURL(url, controller: controller) }; return true
+                    }, onDropCanvasFile: { url, point in
+                        guard model.projectSession.workflow === controller, !model.isChangingProject,
+                              let owner = controller.assetLibraryOwner, let target = controller.canvasInsertionTarget() else { return false }
+                        Task {
+                            let scoped = url.startAccessingSecurityScopedResource()
+                            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                            do {
+                                let inserted = try await controller.importCanvasFile(url, owner: owner, target: target, x: point.x, y: point.y)
+                                if !inserted { controller.errorMessage = workflowText(languageStore, "container.importedTargetChanged") }
+                            } catch { controller.errorMessage = error.localizedDescription }
+                        }
+                        return true
                     }, onQuickUse: onQuickUse, libraryContent: libraryContent,
                     onSharedAssetDrop: onSharedAssetDrop, acceptsLegacyAsset: acceptsLegacyAsset, captureControls:AnyView(captureControls),
                     publishDocumentDescription: model.projectSession.text != nil && !model.isChangingProject ? layoutText(languageStore, "documentHelp", arguments: ["source": model.manifest?.documents.first(where: { $0.id == model.projectSession.text?.editor.document.id })?.name ?? "—", "target": controller.graph?.name ?? model.manifest?.name ?? "—"]) : nil,

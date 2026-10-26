@@ -866,6 +866,22 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             await refreshAssets(); await onChange()
         } catch { errorMessage = error.localizedDescription }
     }
+    /// Import and graph insertion have separate durability boundaries. A changed
+    /// destination keeps the successfully imported asset, but never inserts into a new graph.
+    @discardableResult
+    public func importCanvasFile(_ url: URL, owner: WorkflowAssetLibraryOwner,
+        target: WorkflowCanvasInsertionTarget, x: Double, y: Double,
+        mode: AssetImportMode = .copy) async throws -> Bool {
+        guard assetLibraryOwner == owner, isCurrent(target), url.isFileURL, x.isFinite, y.isFinite else {
+            throw WorkflowIssue("Asset drop target changed.")
+        }
+        let published = try await services.store.importWorkflowMediaFile(at: url, mode: mode)
+        await refreshAssets(); await onChange()
+        guard assetLibraryOwner == owner, isCurrent(target) else { return false }
+        try await insertLibrarySources([.asset(published.record.reference)], owner: owner,
+            target: target, x: x, y: y)
+        return true
+    }
     public func setAssetTags(id: UUID, tags: [String]) async throws {
         guard canEditCanvas, availableAssets.contains(where: { $0.id == id }) else {
             throw WorkflowIssue("当前不能编辑此资产标签。")

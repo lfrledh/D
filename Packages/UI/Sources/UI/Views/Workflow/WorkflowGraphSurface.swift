@@ -1,8 +1,10 @@
 import AppKit
+import CoreTransferable
 import DWorkbench
 import Foundation
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 private struct WorkflowPrepareNodeKey: EnvironmentKey {
     static let defaultValue: (@MainActor (UUID) -> Void)? = nil
@@ -47,6 +49,7 @@ struct WorkflowGraphSurface: View {
     var portCenterObserver: (([WorkflowPortIdentity: CGPoint]) -> Void)?
     var onScrollObservation: (WorkflowCanvasViewContext, WorkflowCanvasScrollObservation) -> Void = { _, _ in }
     var onDropItem: (WorkflowCanvasTransfer, CGPoint) -> Bool = { _, _ in false }
+    var onDropCanvasFile: (URL, CGPoint) -> Bool = { _, _ in false }
     var onBindAsset: (UUID, UUID?, UUID, UUID) -> Bool = { _, _, _, _ in false }
     var onInspect: (UUID) -> Void = { _ in }
     var onClearSelection: () -> Void = {}
@@ -259,10 +262,29 @@ struct WorkflowGraphSurface: View {
                            height: (contentSize.height + edge.height * 2) * effectiveZoom)
                     .coordinateSpace(name: WorkflowCanvasCoordinateSpace.name)
                     .contentShape(Rectangle())
-                    .dropDestination(for: WorkflowCanvasTransfer.self, action: { items, location in
-                        return acceptSurfaceDrop(items, at: geometry.rawPoint(forDisplayPoint: CGPoint(
-                            x: location.x / effectiveZoom - edge.width, y: location.y / effectiveZoom - edge.height)), scope: scope)
-                    })
+                    .onDrop(of: [.workflowCanvasItem, .fileURL], isTargeted: nil) { providers, location in
+                        guard providers.count == 1, let provider = providers.first,
+                              !readOnly, let target = controller.canvasInsertionTarget() else { return false }
+                        let raw = geometry.rawPoint(forDisplayPoint: CGPoint(
+                            x: location.x / effectiveZoom - edge.width, y: location.y / effectiveZoom - edge.height))
+                        let custom = provider.hasItemConformingToTypeIdentifier(UTType.workflowCanvasItem.identifier)
+                        Task { @MainActor in
+                            do {
+                                let bytes: Data = try await withCheckedThrowingContinuation { continuation in
+                                    provider.loadDataRepresentation(forTypeIdentifier: custom ? UTType.workflowCanvasItem.identifier : UTType.fileURL.identifier) { data, error in
+                                        if let data { continuation.resume(returning: data) }
+                                        else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)) }
+                                    }
+                                }
+                                guard controller.isCurrent(target) else { throw WorkflowIssue(workflowText(languageStore, "container.stale")) }
+                                if custom { _ = acceptSurfaceDrop([try WorkflowCanvasTransfer.decode(bytes)], at: raw, scope: scope) }
+                                else if let url = URL(dataRepresentation: bytes, relativeTo: nil), url.isFileURL {
+                                    _ = acceptFileDrop([url], at: raw, scope: scope)
+                                } else { throw CocoaError(.fileReadUnsupportedScheme) }
+                            } catch { controller.errorMessage = error.localizedDescription }
+                        }
+                        return true
+                    }
                     .frame(width: layout.contentSize.width,
                            height: layout.contentSize.height,
                            alignment: .topLeading)
@@ -780,6 +802,24 @@ struct WorkflowGraphSurface: View {
         controller.moveNodes(layouts, target: target)
     }
 
+    func acceptFileDrop(_ urls: [URL], at rawPoint: CGPoint, scope: WorkflowCanvasScope) -> Bool {
+        guard urls.count == 1, let url = urls.first, url.isFileURL,
+              !readOnly, controller.canEditCanvas, controller.readOnlyReason == nil,
+              controller.graph == nil || scope.isCurrent(in: controller) else { return false }
+        if intersectsNode(rawPoint) {
+            controller.errorMessage = workflowText(languageStore, "container.dropTarget")
+            return true
+        }
+        return onDropCanvasFile(url, rawPoint)
+    }
+    private func intersectsNode(_ rawPoint: CGPoint) -> Bool {
+        guard let graph = self.graph else { return false }
+        let geometry = WorkflowGraphGeometry(graph: graph, tools: controller.tools, registry: controller.registry)
+        let point = CGPoint(x: rawPoint.x + geometry.translation.width, y: rawPoint.y + geometry.translation.height)
+        return WorkflowConnectionGeometry.nodeFrames(geometry: geometry, sizes: cardSizes).values.contains {
+            WorkflowConnectionGeometry.nodePlate($0).cgPath.contains(point)
+        }
+    }
     func acceptSurfaceDrop(
         _ items: [WorkflowCanvasTransfer],
         at rawPoint: CGPoint,
@@ -795,11 +835,8 @@ struct WorkflowGraphSurface: View {
             }
         }
         guard scope.isCurrent(in: controller) else { return false }
-        if item.libraryPayload != nil, let graph = self.graph {
-            let geometry = WorkflowGraphGeometry(graph: graph, tools: controller.tools, registry: controller.registry)
-            let point = CGPoint(x: rawPoint.x + geometry.translation.width, y: rawPoint.y + geometry.translation.height)
-            let frames = WorkflowConnectionGeometry.nodeFrames(geometry: geometry, sizes: cardSizes)
-            if frames.values.contains(where: { WorkflowConnectionGeometry.nodePlate($0).cgPath.contains(point) }) {
+        if item.libraryPayload != nil {
+            if intersectsNode(rawPoint) {
                 controller.errorMessage = workflowText(languageStore, "container.dropTarget")
                 return true
             }

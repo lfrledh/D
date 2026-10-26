@@ -795,3 +795,35 @@ private struct OperationDisclosureProbe: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { let view = NSView(); view.identifier = .init(id); return view }
     func updateNSView(_ view: NSView, context: Context) {}
 }
+
+extension SharedLibraryBrowserTests {
+    @Test func containerNamesUseExactAnnotationAndProducerUsesFrozenBinding() throws {
+        let registry = WorkflowRegistry.standard
+        var producer = try #require(registry.operation("d.value.input")).definition.makeNode()
+        producer.title = "Actual producer"; producer.dataConfiguration = .init(value: .text("unchanged"))
+        let gate = try #require(registry.operation(WorkflowAssetContainer.filterID)).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [producer, gate], connections: [.init(sourceNode: producer.id, targetNode: gate.id)])
+        let plan = try WorkflowPlanCompiler().compile(graph, target: gate.id)
+        let owner = WorkflowAssetLibraryOwner(projectID: UUID(), instanceID: UUID()), runID = UUID()
+        let value = WorkflowValue.data(.text("unchanged"))
+        var produced = WorkflowStepRun(node: producer, signature: "producer", inputs: [:], status: .completed); produced.outputs = ["output": value]
+        let step = WorkflowStepRun(node: gate, signature: "gate", inputs: ["input": value], status: .waiting)
+        let record = WorkflowPlanCallRecord(address: .init(runID: runID, path: [.node(gate.id)]), step: step)
+        var run = WorkflowRun(id: runID, graph: graph, targetNodeID: gate.id, steps: [produced, step], status: .waiting)
+        run.planCheckpoint = .init(runID: runID, plan: plan, records: [.init(address: .init(runID: runID, path: [.node(producer.id)]), step: produced), record], state: .waiting)
+        let source = try WorkflowRuntimeAssetSource.capture(record, port: "preview")
+        var item = ContainerItem(id: "one", itemID: "value", value: value, record: record, source: .runtime(source), failure: nil, ordinal: 1)
+        item.captureAnnotationKey(owner: owner)
+        let key = try #require(item.runtimeAnnotationKey)
+        var metadata = SharedLibraryMetadata(); metadata.runtimeAnnotations[key] = .init(name: "My exact name")
+        #expect(item.displayName(assets: [], metadata: metadata, fallback: "fallback") == "My exact name")
+        #expect(item.exactProducer(in: [run]) == producer)
+        metadata.runtimeAnnotations[key] = .init(name: "Changed name")
+        #expect(item.displayName(assets: [], metadata: metadata, fallback: "fallback") == "Changed name")
+        var other = item; other.captureAnnotationKey(owner: .init(projectID: owner.projectID, instanceID: UUID()))
+        #expect(other.displayName(assets: [], metadata: metadata, fallback: "fallback") == "fallback")
+        run.planCheckpoint?.records[0].step.outputs["output"] = .data(.text("different"))
+        #expect(item.exactProducer(in: [run]) == nil)
+        #expect(item.value == value && record.step == step)
+    }
+}

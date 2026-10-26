@@ -3609,3 +3609,69 @@ extension WorkflowLifecycleTests {
         try await reopened.close()
     }
 }
+
+extension WorkflowLifecycleTests {
+    @Test(arguments: [false, true]) func containerExternalFileDropKeepsImportWhenTargetChanges(changed: Bool) async throws {
+        let (root, store, engine, c) = try await fixture()
+        let file = root.appendingPathComponent("canvas-drop.png")
+        let bytes = try workflowFixturePNG(width: 512, height: 512); try bytes.write(to: file)
+        let owner = try #require(c.assetLibraryOwner), target = try #require(c.canvasInsertionTarget())
+        if changed { c.onChange = { c.onChange = {}; c.addBlankGraph(name: "new destination") } }
+        let inserted = try await c.importCanvasFile(file, owner: owner, target: target, x: 200, y: 120)
+        #expect(inserted == !changed)
+        #expect(c.availableAssets.count == 1)
+        #expect(try Data(contentsOf: file) == bytes)
+        if changed { #expect(c.graph?.name == "new destination" && c.graph?.nodes.isEmpty == true) }
+        else {
+            #expect(c.graph?.nodes.count == 1 && c.graph?.nodes.first?.assetReference?.assetID == c.availableAssets.first?.id)
+            c.undo(); #expect(c.graphs.isEmpty)
+            #expect(await store.snapshot().assets.count == 1)
+        }
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+    @Test func containerExternalInvalidFileLeavesNoPlaceholder() async throws {
+        let (root, store, engine, c) = try await fixture()
+        let file = root.appendingPathComponent("invalid.png"); try Data("not an image".utf8).write(to: file)
+        let owner = try #require(c.assetLibraryOwner), target = try #require(c.canvasInsertionTarget())
+        await #expect(throws: (any Error).self) { try await c.importCanvasFile(file, owner: owner, target: target, x: 0, y: 0) }
+        #expect(c.graphs.isEmpty && c.availableAssets.isEmpty)
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+    @Test func containerAndLegacyHumanRequireSeparateExplicitContinuation() async throws {
+        let (_, store, engine, c) = try await fixture()
+        var input = try #require(c.registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("original"))
+        let a = try #require(c.registry.operation(WorkflowAssetContainer.filterID)).definition.makeNode()
+        let human = try #require(c.registry.operation("d.control.human")).definition.makeNode()
+        let b = try #require(c.registry.operation(WorkflowAssetContainer.filterID)).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [input, a, human, b], connections: [
+            .init(sourceNode: input.id, targetNode: a.id), .init(sourceNode: a.id, targetNode: human.id), .init(sourceNode: human.id, targetNode: b.id)])
+        let archive = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: archive.revision)
+        await c.load()
+        let first = try await c.createBatchStage(selection: .through(b.id), pins: [], repetitions: 1, expectedGraphID: graph.id, expectedRevision: graph.revision)
+        await c.runBatchStage(first)
+        let snapshot = try c.containerSnapshot(.init(stageID: first, path: [.node(a.id)]))
+        let record = try #require(snapshot.calls.first)
+        let decided = try await c.submitContainer(snapshot, choices: [.init(call: .init(address: record.address, stepID: record.id), selectedIDs: ["value"])])
+        #expect(c.runs.allSatisfy { $0.planCheckpoint?.records.contains { $0.step.node.id == human.id } == false })
+        let parent = c.runs[0]
+        await c.runBatchStage(try #require(decided.nextStageID))
+        let child = try #require(c.runs.last)
+        let waiting = try #require(child.planCheckpoint?.records.first { $0.step.node.id == human.id })
+        #expect(waiting.step.status == .waiting && waiting.step.inputs["input"] == .data(.text("original")))
+        await c.decideHuman(stepID: waiting.id, value: .text("approved"), expectedTask: try #require(waiting.step.humanTask))
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        #expect(c.runs.allSatisfy { $0.planCheckpoint?.records.contains { $0.step.node.id == b.id } == false })
+        let humanParent = try #require(c.runs.last)
+        let next = try await c.createNextBatchStage(parentRunIDs: [humanParent.id], repetitions: 1)
+        await c.runBatchStage(next)
+        #expect(c.runs[0] == parent && c.runs[1] == humanParent)
+        let last = try #require(c.runs.last?.planCheckpoint?.records.first { $0.step.node.id == b.id })
+        #expect(last.step.status == .waiting && last.step.inputs["input"] == .data(.text("approved")))
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+}

@@ -121,6 +121,7 @@ public struct WorkflowCanvasView: View {
     private let onRecord: (UUID) -> Void
     private let onImportAsset: () -> Void
     private let onDropFile: (URL) -> Bool
+    private let onDropCanvasFile: (URL, CGPoint) -> Bool
     private let onQuickUse: ((WorkflowNode) -> Void)?
     private let libraryContent: ((WorkflowCanvasLibraryMode, @escaping () -> CGPoint?, @escaping () -> Void) -> AnyView)?
     private let onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)?
@@ -227,6 +228,7 @@ public struct WorkflowCanvasView: View {
         metadata: SharedLibraryStore? = nil,
         onImportAsset: @escaping () -> Void = {},
         onDropFile: @escaping (URL) -> Bool = { _ in false },
+        onDropCanvasFile: @escaping (URL, CGPoint) -> Bool = { _, _ in false },
         onQuickUse: ((WorkflowNode) -> Void)? = nil,
         libraryContent: ((WorkflowCanvasLibraryMode, @escaping () -> CGPoint?, @escaping () -> Void) -> AnyView)? = nil,
         onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil,
@@ -246,6 +248,7 @@ public struct WorkflowCanvasView: View {
         self.onRecord = onRecord
         self.onImportAsset = onImportAsset
         self.onDropFile = onDropFile
+        self.onDropCanvasFile = onDropCanvasFile
         self.onSharedAssetDrop = onSharedAssetDrop
         self.acceptsLegacyAsset = acceptsLegacyAsset
         self.onQuickUse = onQuickUse; self.libraryContent = libraryContent
@@ -464,6 +467,7 @@ public struct WorkflowCanvasView: View {
                         scrollObserver?(context, observation)
                     },
                     onDropItem: dropItem,
+                    onDropCanvasFile: onDropCanvasFile,
                     onBindAsset: { project, instance, asset, node in
                         guard controller.canEditCanvas,
                               WorkflowCanvasAssetIdentity.acceptsOwnProject(

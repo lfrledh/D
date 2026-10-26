@@ -1254,3 +1254,29 @@ extension WorkflowWorkspacePresentationTests {
         viewer.endAnnotationEditing(); viewer.stop(); try await f.close()
     }
 }
+
+extension WorkflowWorkspacePresentationTests {
+    @Test func externalCanvasFileDropUsesNodeBoundaryAndCapturedScope() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        c.addExample("template")
+        let graph = try #require(c.graph), node = try #require(graph.nodes.first)
+        let scope = WorkflowCanvasScope(rootGraphID: graph.id, rootRevision: graph.revision, graphID: graph.id, bodyPath: [], projectID: c.projectID, instanceID: c.projectInstanceID)
+        var received: [CGPoint] = []
+        let surface = WorkflowGraphSurface(controller: c, graph: graph, zoom: .constant(1), tool: .constant(.hand),
+            navigationRequest: .constant(nil), viewportInteractionLocked: .constant(false),
+            viewContext: .init(projectID: c.projectID, rootGraphID: graph.id, bodyPath: []),
+            pendingConnection: .constant(nil), selectedConnectionID: .constant(nil), readOnly: false,
+            onPlan: { _, _ in }, onDropCanvasFile: { _, point in received.append(point); return true })
+        let geometry = WorkflowGraphGeometry(graph: graph, tools: c.tools, registry: c.registry)
+        let frame = try #require(WorkflowConnectionGeometry.nodeFrames(geometry: geometry, sizes: [:])[node.id])
+        let onNode = geometry.rawPoint(forDisplayPoint: CGPoint(x: frame.midX, y: frame.midY))
+        let file = f.root.appendingPathComponent("input.png"), blank = CGPoint(x: -2000, y: -2000)
+        #expect(surface.acceptFileDrop([file], at: onNode, scope: scope) && received.isEmpty)
+        #expect(surface.acceptFileDrop([file], at: blank, scope: scope) && received == [blank])
+        #expect(!surface.acceptFileDrop([file, file], at: blank, scope: scope))
+        c.addBlankGraph(name: "changed")
+        #expect(!surface.acceptFileDrop([file], at: blank, scope: scope) && received == [blank])
+        #expect(await f.engine.submissions == 0)
+        try await f.close()
+    }
+}

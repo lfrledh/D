@@ -12,6 +12,43 @@ import UniformTypeIdentifiers
     let source: WorkflowLibrarySource?
     let failure: String?
     let ordinal: Int
+    var runtimeAnnotationKey: String? = nil
+    var concept: String? = nil
+    var producer: WorkflowNode? = nil
+    var consumers: [WorkflowConsumerMatch] = []
+
+    mutating func captureAnnotationKey(owner: WorkflowAssetLibraryOwner?) {
+        guard let owner, let value, value.asset == nil, case .runtime(let runtime) = source else { return }
+        runtimeAnnotationKey = try? runtime.annotationIdentity(owner: owner, value: value).storageKey
+    }
+    func displayName(assets: [ProjectAsset], metadata: SharedLibraryMetadata?, fallback: String) -> String {
+        if let reference = value?.asset, let asset = assets.first(where: { $0.id == reference.assetID }) { return asset.name }
+        if let runtimeAnnotationKey, let name = metadata?.runtimeAnnotations[runtimeAnnotationKey]?.name, !name.isEmpty { return name }
+        return fallback
+    }
+    func exactProducer(in runs: [WorkflowRun]) -> WorkflowNode? {
+        guard case .runtime(let source) = source,
+              let run = runs.first(where: { $0.id == source.call.address.runID }), let checkpoint = run.planCheckpoint,
+              let current = checkpoint.records.first(where: { $0.id == source.call.stepID && $0.address == source.call.address }) else { return nil }
+        if source.input != true { return current.step.node }
+        var bindings: [WorkflowPlanInput] = []
+        func visit(_ plan: WorkflowPlan) {
+            for step in plan.steps {
+                if step.id == current.step.node.id { bindings += step.inputs.filter { $0.port == source.port } }
+                switch step.kind {
+                case .call: break
+                case .branch(_, let yes, let no): visit(yes); visit(no)
+                case .map(let body, _), .loop(let body, _, _, _), .invoke(_, let body): visit(body)
+                }
+            }
+        }
+        visit(checkpoint.plan)
+        guard bindings.count == 1, let binding = bindings.first else { return nil }
+        let address = WorkflowExecutionAddress(runID: run.id, path: Array(current.address.path.dropLast()) + [.node(binding.sourceNode)])
+        guard let producer = checkpoint.records.first(where: { $0.address == address }),
+              let output = producer.step.outputs[binding.sourcePort], output == current.step.inputs[source.port] else { return nil }
+        return producer.step.node
+    }
 }
 
 @MainActor @Observable final class WorkflowContainerPresentation {
@@ -203,7 +240,7 @@ import UniformTypeIdentifiers
                 Button(t("selectAll")) { selectAll() }.disabled(review && !mutable)
                 Button(t("clear")) { selectAll(clear: true) }.disabled(review && !mutable)
                 Spacer(minLength: 0)
-                Text(t("selected") + " \(chosen.count)").monospacedDigit().onDrag { provider(chosen) }
+                Text(t("selected") + " \(chosen.count)").monospacedDigit().onDrag { provider(chosen) } preview: { dragPreview(chosen) }
             }.buttonStyle(.plain)
             if review, submission == nil {
                 HStack {
@@ -294,25 +331,40 @@ import UniformTypeIdentifiers
                 Text(name(item)).fontWeight(.medium).lineLimit(2).textSelection(.enabled)
                 if let value = item.value {
                     if let reference = value.asset {
+                        if ![WorkflowDataKind.image, .video, .audio, .text, .document].contains(reference.kind) {
+                            WorkflowContainerStructuredAssetInfo(reference: reference, controller: controller)
+                        } else {
                         let entry = SharedLibraryBrowserEntry(item: .init(key: reference.assetID.uuidString, title: name(item), detail: "", kind: .asset, role: "container", contentKind: reference.kind, readiness: .available), selection: .unavailable(""))
                         WorkflowLibraryPreview(entry: entry, cache: cache, pixels: Int(300 * scale), load: {
                             try await controller.services.store.readOnlyAsset(id: reference.assetID, reference: reference)
                         }, exactVersion: reference.sha256).frame(minWidth: grid ? 140 * scale : nil, minHeight: grid ? 105 * scale : 38 * scale, maxHeight: grid ? 105 * scale : 38 * scale)
-                            .onDrag { provider([item]) }
+                            .onDrag { provider([item]) } preview: { dragPreview([item]) }
                         if reference.kind == .audio { audioControls(reference) }
                         else if reference.kind == .video {
                             Button { open(item) } label: { Label(workspaceText(language, "play"), systemImage: "play.fill") }
                                 .buttonStyle(.plain)
                         }
+                        }
                     } else if case .data(.text(let text)) = value {
                         Text(String(text.prefix(300))).lineLimit(3).foregroundStyle(.secondary).textSelection(.enabled)
-                    } else { Text(WorkflowCanvasPresentation.kind(value.kind, language: language)).foregroundStyle(.secondary) }
+                    } else {
+                        Text(item.concept.map { WorkflowValueCompatibility.conceptTitle($0, language: language) }
+                             ?? WorkflowCanvasPresentation.kind(value.kind, language: language)).foregroundStyle(.secondary)
+                        Text(workflowText(language, "workflow.compatibility.producer") + " · " +
+                             (item.producer?.title ?? workflowText(language, "metadata.panel.unknown"))).font(.caption)
+                        ForEach(item.consumers) { match in
+                            Text(match.displayTitle(language) + " · " + match.displayPort(language) + " · " +
+                                 workflowText(language, "workflow.compatibility.status." + match.result.status.rawValue)).font(.caption).lineLimit(2)
+                        }
+                        if item.consumers.isEmpty { Text(workflowText(language, "workflow.compatibility.noReceivers")).font(.caption) }
+                    }
                 }
                 if let failure = item.failure { Text(failure).foregroundStyle(.red).lineLimit(2) }
             }.frame(maxWidth: .infinity, alignment: .leading)
             VStack(spacing: 4 * scale) {
                 Image(systemName: "hand.draw").font(.system(size: 16 * scale)).frame(width: 28 * scale, height: 28 * scale)
-                    .contentShape(Rectangle()).onDrag { provider([item]) }.help(t("dragAsset")).accessibilityLabel(t("dragAsset"))
+                    .contentShape(Rectangle()).onDrag { provider([item]) } preview: { dragPreview([item]) }
+                    .help(t("dragAsset")).accessibilityLabel(t("dragAsset"))
             Button { open(item) } label: { Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 16 * scale)).frame(width: 28 * scale, height: 28 * scale) }
                 .buttonStyle(.plain).accessibilityLabel(t("enlarge")).disabled(item.value == nil)
             }
@@ -358,18 +410,24 @@ import UniformTypeIdentifiers
         let failures = snapshot.stage?.attempts.filter { [.failed, .cancelled].contains($0.state) }.count ?? snapshot.runs.filter { [.failed, .cancelled].contains($0.status) }.count
         return t("arrived") + " \(rows.count)" + (failures == 0 ? "" : " · " + t("failed") + " \(failures)")
     }
+    private func transferSources(_ items: [ContainerItem]) -> [WorkflowLibrarySource] {
+        var seen = Set<String>()
+        return items.compactMap(\.source).filter { seen.insert($0.key).inserted }
+    }
+    private func dragPreview(_ items: [ContainerItem]) -> some View {
+        Label(items.count == 1 ? name(items[0]) : t("selected") + " \(transferSources(items).count)", systemImage: "doc.on.doc")
+            .font(.callout).padding(10).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
     private func provider(_ items: [ContainerItem]) -> NSItemProvider {
         guard let owner = controller.assetLibraryOwner else { return NSItemProvider() }
-        var seen = Set<String>()
-        let sources = items.compactMap(\.source).filter { seen.insert($0.key).inserted }
+        let sources = transferSources(items)
         guard let data = try? WorkflowCanvasTransfer.library(owner: owner, sources: sources).encoded() else { return NSItemProvider() }
         let result = NSItemProvider(); result.suggestedName = t("selected") + " \(sources.count)"
         result.registerDataRepresentation(forTypeIdentifier: UTType.workflowCanvasItem.identifier, visibility: .all) { completion in completion(data, nil); return nil }
         return result
     }
     private func name(_ item: ContainerItem) -> String {
-        if let reference = item.value?.asset, let asset = controller.availableAssets.first(where: { $0.id == reference.assetID }) { return asset.name }
-        return t("item") + " \(item.ordinal)"
+        item.displayName(assets: controller.availableAssets, metadata: library?.metadata, fallback: t("item") + " \(item.ordinal)")
     }
     private func refresh() {
         if let sources = node.librarySources {
@@ -396,7 +454,22 @@ import UniformTypeIdentifiers
         if let selectedScope, scopes.contains(where: { $0 == selectedScope }) { snapshot = try? controller.containerSnapshot(selectedScope) }
         else if selectedScope != nil { snapshot = nil; error = t("stale") }
         else { snapshot = nil }
-        rows = projectedRows()
+        let plans = controller.runs.compactMap { $0.planCheckpoint?.plan }
+        rows = projectedRows().map { source in
+            var item = source
+            item.captureAnnotationKey(owner: controller.assetLibraryOwner)
+            if let value = item.value, value.asset == nil, value.kind != .text {
+                item.concept = value.datum.flatMap(WorkflowInputContract.concept)
+                item.producer = item.exactProducer(in: controller.runs)
+                let matches = WorkflowValueCompatibility.concreteConsumers(value, plans: plans, tools: controller.tools, language: language)
+                    + WorkflowValueCompatibility.consumers(value, language: language)
+                var seen = Set<String>()
+                item.consumers = Array(matches.filter {
+                    [.direct, .conversion].contains($0.result.status) && seen.insert($0.id).inserted
+                }.prefix(2))
+            }
+            return item
+        }
         previewSelection.formIntersection(Set(rows.map(\.id)))
     }
     private func toggle(_ item: ContainerItem) {
@@ -460,6 +533,58 @@ import UniformTypeIdentifiers
             if case .runtime(let source) = item.source { guard try source.resolve(in: controller.runs) == value else { throw WorkflowIssue(t("stale")) } }
             try model.viewers.open(.init(title: name(item), subtitle: snapshot?.runs.first?.createdAt.formatted() ?? "", value: value, call: { if case .runtime(let source) = item.source { return source.call }; return item.record.map { .init(address: $0.address, stepID: $0.id) } }(), runtimeSource: { if case .runtime(let source) = item.source { return source }; return nil }()), model: model, language: language)
         } catch { self.error = error.localizedDescription }
+    }
+}
+
+/// One visible row's summary. Read through the existing exact Store reader once;
+/// release full decoded bytes after validation and retain only bounded display facts.
+private struct WorkflowContainerStructuredAssetInfo: View {
+    private struct Identity: Hashable {
+        let reference: WorkflowAssetReference
+        let instanceID: UUID?
+        let visible: Bool
+    }
+    let reference: WorkflowAssetReference
+    let controller: WorkflowController
+    @Environment(\.dLanguageStore) private var language
+    @Environment(\.workbenchContentVisible) private var visible
+    @State private var concept: String?
+    @State private var producerID: String?
+    @State private var receivers: [WorkflowConsumerMatch] = []
+    @State private var failure: String?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(concept.map { WorkflowValueCompatibility.conceptTitle($0, language: language) }
+                 ?? WorkflowCanvasPresentation.kind(reference.kind, language: language))
+            Text(workflowText(language, "workflow.compatibility.producer") + " · " +
+                 (producerID.flatMap { WorkflowRegistry.standard.operation($0) }.map { WorkflowCanvasPresentation.operationTitle($0.definition, language: language) }
+                  ?? workflowText(language, "metadata.panel.unknown")))
+            ForEach(receivers) { match in
+                Text(match.displayTitle(language) + " · " + match.displayPort(language) + " · " + workflowText(language, "workflow.compatibility.status." + match.result.status.rawValue)).lineLimit(2)
+            }
+            if receivers.isEmpty { Text(workflowText(language, "workflow.compatibility.noReceivers")) }
+            if let failure { Text(failure).foregroundStyle(.red).lineLimit(2) }
+        }.font(.caption).foregroundStyle(.secondary)
+        .task(id: Identity(reference: reference, instanceID: controller.projectInstanceID, visible: visible)) {
+            concept = nil; producerID = nil; receivers = []; failure = nil
+            guard visible else { return }
+            let owner = controller.assetLibraryOwner
+            do {
+                let content = try await controller.services.store.readOnlyAsset(id: reference.assetID, reference: reference)
+                try Task.checkCancellation()
+                guard controller.assetLibraryOwner == owner else { return }
+                producerID = content.metadata.record?.operationID
+                let decoded = try? JSONDecoder().decode(WorkflowDatum.self, from: content.data)
+                if let decoded { try decoded.validate(); concept = WorkflowInputContract.concept(of: decoded) }
+                let matches = WorkflowValueCompatibility.concreteConsumers(.asset(reference), decodedAsset: decoded,
+                    plans: controller.runs.compactMap { $0.planCheckpoint?.plan }, tools: controller.tools, language: nil)
+                    + WorkflowValueCompatibility.consumers(.asset(reference), decodedAsset: decoded, language: nil)
+                var seen = Set<String>()
+                receivers = Array(matches.filter { [.direct, .conversion].contains($0.result.status) && seen.insert($0.id).inserted }.prefix(2))
+            } catch is CancellationError { }
+            catch { failure = error.localizedDescription }
+        }
+        .onDisappear { concept = nil; producerID = nil; receivers = []; failure = nil }
     }
 }
 
