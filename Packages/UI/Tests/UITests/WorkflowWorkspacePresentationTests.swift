@@ -1481,6 +1481,18 @@ extension WorkflowWorkspacePresentationTests {
         #expect(presentation.issue == nil)
         presentation.report("second", scope: capturedIssueScope, token: second)
         #expect(presentation.issue?.message == "second")
+        // An insertion changes revision before its asynchronous persistence completes.
+        // Its save failure still belongs to the same displayed canvas, not a stale graph.
+        let afterEdit = WorkflowCanvasScope(rootGraphID: capturedIssueScope.rootGraphID, rootRevision: UUID(),
+            graphID: capturedIssueScope.graphID, bodyPath: capturedIssueScope.bodyPath,
+            projectID: capturedIssueScope.projectID, instanceID: capturedIssueScope.instanceID)
+        presentation.report("save failed after insertion", scope: afterEdit, token: second)
+        #expect(presentation.issue?.message == "save failed after insertion")
+        #expect(presentation.issue?.isVisible(in: afterEdit) == true)
+        #expect(presentation.token(for: afterEdit) == second)
+        #expect(presentation.issue?.isVisible(in: other) == false)
+        presentation.report("captured save failure", scope: capturedIssueScope, token: second)
+        #expect(presentation.issue?.isVisible(in: afterEdit) == true, "The real async callback retains the pre-edit scope")
         presentation.clear()
         presentation.report("after dismissal", scope: capturedIssueScope, token: second)
         #expect(presentation.issue == nil && presentation.token(for: capturedIssueScope) == nil)

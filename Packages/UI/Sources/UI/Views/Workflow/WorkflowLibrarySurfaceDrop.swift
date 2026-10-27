@@ -191,20 +191,20 @@ struct WorkflowLibraryDropFeedback: View {
 struct WorkflowLibraryDropIssue: Equatable {
     let scope: WorkflowCanvasScope
     let message: String
-    func isVisible(in current: WorkflowCanvasScope) -> Bool { scope == current }
+    func isVisible(in current: WorkflowCanvasScope) -> Bool { scope.identity == current.identity }
 }
 
 /// Capacity one, scoped to a graph surface and one drag attempt, including async completion.
 @Observable @MainActor final class WorkflowLibraryDropIssues {
     private(set) var issue: WorkflowLibraryDropIssue?
     private var token: UUID?
-    private var scope: WorkflowCanvasScope?
+    private var scope: WorkflowCanvasScopeIdentity?
     @discardableResult func begin(scope: WorkflowCanvasScope) -> UUID {
-        let next = UUID(); token = next; self.scope = scope; issue = nil; return next
+        let next = UUID(); token = next; self.scope = scope.identity; issue = nil; return next
     }
-    func token(for scope: WorkflowCanvasScope) -> UUID? { self.scope == scope ? token : nil }
+    func token(for scope: WorkflowCanvasScope) -> UUID? { self.scope == scope.identity ? token : nil }
     func report(_ message: String, scope: WorkflowCanvasScope, token: UUID) {
-        guard self.token == token, self.scope == scope else { return }
+        guard self.token == token, self.scope == scope.identity else { return }
         issue = .init(scope: scope, message: message)
     }
     func clear() { token = nil; scope = nil; issue = nil }

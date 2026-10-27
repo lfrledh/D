@@ -313,7 +313,8 @@ struct WorkflowGraphSurface: View {
                         return true
                     })
                     .overlay(alignment: .topLeading) { WorkflowLibraryDropFeedback(preview: libraryDropPreview) }
-                    .onChange(of: scope) { _, _ in libraryDropPreview.clear(); libraryDropIssues.clear() }
+                    .onChange(of: scope) { _, _ in libraryDropPreview.clear() }
+                    .onChange(of: scope.identity) { _, _ in libraryDropIssues.clear() }
                     .onChange(of: renderZoom) { _, _ in libraryDropPreview.clear() }
                     .onChange(of: edge) { _, _ in libraryDropPreview.clear() }
                     .onDisappear { libraryDropPreview.clear(); libraryDropIssues.clear() }
