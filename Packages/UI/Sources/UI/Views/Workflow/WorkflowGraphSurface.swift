@@ -53,6 +53,7 @@ struct WorkflowGraphSurface: View {
     var onBindAsset: (UUID, UUID?, UUID, UUID) -> Bool = { _, _, _, _ in false }
     var onInspect: (UUID) -> Void = { _ in }
     var onClearSelection: () -> Void = {}
+    var onRequestKeyboardFocus: () -> Void = {}
     @Environment(\.dLanguageStore) private var languageStore
     @GestureState private var gestureScale: CGFloat = 1
     @State private var nodeDrag = WorkflowCanvasNodeDragPresentation()
@@ -565,6 +566,7 @@ struct WorkflowGraphSurface: View {
         WorkflowCanvasViewportInput(
             tool: tool,
             onHandPressedChanged: { handPointer.pressed = $0 },
+            onRequestKeyboardFocus: onRequestKeyboardFocus,
             interactionScope: scope,
             wheelZoom: scrollTracking.wheelZoom,
             navigationID: navigationRequest?.id,

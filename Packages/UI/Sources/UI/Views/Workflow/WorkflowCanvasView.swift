@@ -204,6 +204,7 @@ public struct WorkflowCanvasView: View {
     @State private var measuredCardSizes: [UUID: CGSize] = [:]
     @State private var navigationRequest: WorkflowCanvasNavigationRequest?
     @State private var viewportInteractionLocked = false
+    @FocusState private var workspaceKeyboardFocused: Bool
     @State private var viewStates = WorkflowCanvasViewStateStore()
     @State private var pendingConnection: WorkflowPendingConnection?
     @State private var selectedConnectionID: UUID?
@@ -373,6 +374,10 @@ public struct WorkflowCanvasView: View {
         // interaction; an explicit focus-only shape leaves child focus and hits intact.
         .contentShape(.focusEffect, Rectangle())
         .focusable()
+        .focused($workspaceKeyboardFocused)
+        .onChange(of: contentVisible) { _, visible in
+            if !visible { workspaceKeyboardFocused = false }
+        }
         .workflowKeyboardCommands(performKeyboardCommand)
         .background(WorkbenchCommandWindow(scope: commandScope))
         .focusedSceneValue(\.workbenchCanvas, contentVisible ? canvasCommands : nil)
@@ -489,7 +494,10 @@ public struct WorkflowCanvasView: View {
                         guard controller.graph?.nodes.contains(where: { $0.id == id }) == true else { return }
                         controller.selectedNodeIDs = []; controller.selectedNodeID = id; selectedConnectionID = nil
                         panelsState.inspect(id); showInspector = true; narrowLibrary = false
-                    }, onClearSelection: { panelsState.clearSelection() })
+                    }, onClearSelection: { panelsState.clearSelection() },
+                    onRequestKeyboardFocus: {
+                        if contentVisible { workspaceKeyboardFocused = true }
+                    })
 
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }

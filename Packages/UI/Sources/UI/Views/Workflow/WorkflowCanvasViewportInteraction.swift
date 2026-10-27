@@ -215,6 +215,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     typealias Coordinator = Void
     var tool: WorkflowCanvasTool = .pointer
     var onHandPressedChanged: (Bool) -> Void = { _ in }
+    var onRequestKeyboardFocus: () -> Void = {}
     var interactionScope: WorkflowCanvasScope? = nil
     var wheelZoom: WorkflowCanvasWheelZoom? = nil
     var navigationID: UUID? = nil
@@ -241,6 +242,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         view.wheelZoom = wheelZoom
         view.wheelLayout = wheelLayout
         view.onHandPressedChanged = onHandPressedChanged
+        view.onRequestKeyboardFocus = onRequestKeyboardFocus
         view.setTool(tool)
         view.pointerTarget = pointerTarget
         view.onPointer = onPointer
@@ -260,6 +262,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         var wheelLayout: (CGSize) -> WorkflowCanvasViewportGeometry? = { _ in nil }
         var pointerTarget: (CGPoint, CGPoint, CGSize) -> WorkflowCanvasPointerTarget = { _, _, _ in .control }
         var onPointer: (WorkflowCanvasPointerUpdate) -> Void = { _ in }
+        var onRequestKeyboardFocus: () -> Void = {}
         var onPan: (Bool, CGPoint, CGSize) -> Void = { _, _, _ in }
         private struct PointerSession {
             let id = UUID()
@@ -361,6 +364,10 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                     y: clip.isFlipped ? location.y - clip.bounds.minY : clip.bounds.maxY - location.y)
                 let target = pointerTarget(point, clip.bounds.origin, clip.bounds.size)
                 guard target != .control else { return false }
+                // This monitor consumes owned mouseDown before SwiftUI sees it.
+                // Focus the existing workspace boundary once, never the probe or
+                // a control/text/port surface, and never on each drag/scroll tick.
+                onRequestKeyboardFocus()
                 pointerSession = PointerSession(target: target, tool: tool,
                     windowStart: event.locationInWindow, point: point, offset: clip.bounds.origin,
                     viewport: clip.bounds.size, shift: event.modifierFlags.contains(.shift),

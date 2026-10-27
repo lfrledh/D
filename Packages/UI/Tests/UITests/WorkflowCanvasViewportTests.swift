@@ -126,7 +126,8 @@ struct WorkflowCanvasViewportTests {
         let point = scroll.contentView.convert(.init(x: 120, y: 100), to: nil)
         let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: 1, wheel2: 0, wheel3: 0))
         let event = FixtureWheel(base: try #require(NSEvent(cgEvent: cg)), owner: window, point: point)
-        var deliveries = 0, changes: [Bool] = []
+        var deliveries = 0, focusRequests = 0, changes: [Bool] = []
+        probe.onRequestKeyboardFocus = { focusRequests += 1 }
         probe.onWheel = { _, _, _, _ in deliveries += 1 }
         probe.onHandPressedChanged = { changes.append($0) }
         for step in 0..<8 {
@@ -134,16 +135,21 @@ struct WorkflowCanvasViewportTests {
             document.setFrameSize(.init(width: 3300 + step * 50, height: 2640 + step * 40))
             probe.setFrameSize(document.bounds.size); scroll.layoutSubtreeIfNeeded(); probe.reportViewportSize()
         }
-        #expect(deliveries == 8 && changes.isEmpty)
+        #expect(deliveries == 8 && changes.isEmpty && focusRequests == 0)
         probe.pointerTarget = { _, _, _ in node ? .node(UUID()) : .blank }
         #expect(probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: point)))
-        #expect(probe.handPressed && changes == [true])
+        #expect(probe.handPressed && changes == [true] && focusRequests == 1)
+        for step in 1...8 {
+            let moved = CGPoint(x: point.x + CGFloat(step), y: point.y - CGFloat(step))
+            #expect(probe.routePointer(CursorFixtureEvent(type: .leftMouseDragged, owner: window, point: moved)))
+        }
+        #expect(focusRequests == 1)
         #expect(probe.routePointer(CursorFixtureEvent(type: .leftMouseUp, owner: window, point: point)))
         #expect(!probe.handPressed && changes == [true, false])
         #expect(probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: point)))
         probe.setTool(.pointer)
         #expect(!probe.handPressed && changes == [true, false, true, false])
-        probe.stopMonitoring(); #expect(changes.count == 4)
+        probe.stopMonitoring(); #expect(changes.count == 4 && focusRequests == 2)
         // This verifies presentation-state delivery, not native cursor appearance.
     }
 
@@ -174,8 +180,9 @@ struct WorkflowCanvasViewportTests {
         default: break
         }
         var changes: [Bool] = []; probe.onHandPressedChanged = { changes.append($0) }
+        var focusRequests = 0; probe.onRequestKeyboardFocus = { focusRequests += 1 }
         #expect(!probe.routePointer(CursorFixtureEvent(type: .leftMouseDown, owner: window, point: point)))
-        #expect(changes.isEmpty && !probe.handPressed)
+        #expect(changes.isEmpty && !probe.handPressed && focusRequests == 0)
     }
 
     @Test(arguments: [false, true])
