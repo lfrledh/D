@@ -134,7 +134,7 @@ enum WorkflowArchiveInspection {
     static func containsUnknownFields(original: Data, decoded: WorkflowArchive) throws -> Bool {
         let source = try JSONSerialization.jsonObject(with: original)
         let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(decoded))
-        func unknown(_ source: Any, _ known: Any, depth: Int) throws -> Bool {
+        func unknown(_ source: Any, _ known: Any, path: [String], depth: Int) throws -> Bool {
             guard depth <= 192 else { throw WorkflowIssue("流程数据层级过深。") }
             if let object = source as? [String: Any], let recognized = known as? [String: Any] {
                 for (key, value) in object {
@@ -143,13 +143,29 @@ enum WorkflowArchiveInspection {
                         // Conservatively preserve it read-only rather than guessing the schema.
                         return true
                     }
-                    if try unknown(value, counterpart, depth: depth + 1) { return true }
+                    if try unknown(value, counterpart, path: path + [key], depth: depth + 1) { return true }
                 }
             } else if let items = source as? [Any], let counterparts = known as? [Any] {
                 guard items.count == counterparts.count else { return true }
+                // These schema fields are Sets, not UUID-keyed dictionary pairs.
+                // Decode/encode may reorder them, including a two-UUID set.
+                if path.count == 2, path[0] == "assetCollection",
+                   ["legacyAssetIDs", "legacyRuntimeKeys", "excluded"].contains(path[1]) {
+                    guard let values = items as? [String], let expected = counterparts as? [String],
+                          Set(values).count == values.count, Set(expected).count == expected.count else { return true }
+                    if path[1] == "legacyAssetIDs" {
+                        let ids = values.compactMap(UUID.init(uuidString:)), knownIDs = expected.compactMap(UUID.init(uuidString:))
+                        guard ids.count == values.count, knownIDs.count == expected.count,
+                              Set(ids).count == ids.count else { return true }
+                        return Set(ids) != Set(knownIDs)
+                    }
+                    return Set(values) != Set(expected)
+                }
                 // Codable represents non-string-key dictionaries as alternating key/value arrays.
                 // Dictionary iteration order is not a semantic change (checkpoint inputs use UUID keys).
-                let pairs = items.count.isMultiple(of: 2) && !items.isEmpty &&
+                let dictionaryField = path == ["runs", "*", "planCheckpoint", "externalInputs"] ||
+                    path == ["runs", "*", "batchParent", "stepIDs"]
+                let pairs = dictionaryField && items.count.isMultiple(of: 2) && !items.isEmpty &&
                     stride(from: 0, to: items.count, by: 2).allSatisfy { index in
                         (items[index] as? String).flatMap(UUID.init(uuidString:)) != nil &&
                         (counterparts[index] as? String).flatMap(UUID.init(uuidString:)) != nil
@@ -159,15 +175,15 @@ enum WorkflowArchiveInspection {
                         guard let target = stride(from: 0, to: counterparts.count, by: 2).first(where: {
                             counterparts[$0] as? String == items[index] as? String
                         }) else { return true }
-                        if try unknown(items[index + 1], counterparts[target + 1], depth: depth + 1) { return true }
+                        if try unknown(items[index + 1], counterparts[target + 1], path: path + ["*"], depth: depth + 1) { return true }
                     }
                     return false
                 }
-                for (a, b) in zip(items, counterparts) where try unknown(a, b, depth: depth + 1) { return true }
+                for (a, b) in zip(items, counterparts) where try unknown(a, b, path: path + ["*"], depth: depth + 1) { return true }
             }
             return false
         }
-        return try unknown(source, encoded, depth: 0)
+        return try unknown(source, encoded, path: [], depth: 0)
     }
 
     static func unknownOperation(in data: Data, registry: WorkflowRegistry = .standard) throws -> String? {

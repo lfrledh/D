@@ -178,6 +178,89 @@ struct WorkflowArchiveInspectionTests {
         #expect(try WorkflowArchiveInspection.containsUnknownFields(original: future, decoded: archive))
     }
 
+    @Test(arguments: [2, 6]) func assetCollectionSetOrderCannotMakeSavedOutputsReadOnly(count: Int) throws {
+        var archive = WorkflowArchive(graphs: [.init(name: "原图")])
+        archive.assetCollection = .init(legacyAssetIDs: Set((0..<count).map { _ in UUID() }), legacyRuntimeKeys: ["one", "two"])
+        archive.assetCollection?.excluded = ["asset:one", "asset:two"]
+        let encoded = try JSONEncoder().encode(archive)
+        var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var collection = try #require(object["assetCollection"] as? [String: Any])
+        for field in ["legacyAssetIDs", "legacyRuntimeKeys", "excluded"] {
+            collection[field] = Array(try #require(collection[field] as? [String]).reversed())
+        }
+        object["assetCollection"] = collection
+        let reordered = try JSONSerialization.data(withJSONObject: object)
+        #expect(try !WorkflowArchiveInspection.containsUnknownFields(original: reordered, decoded: archive))
+        #expect(try JSONDecoder().decode(WorkflowArchive.self, from: reordered) == archive)
+        collection["futureOwnership"] = ["retain": true]
+        object["assetCollection"] = collection
+        #expect(try WorkflowArchiveInspection.containsUnknownFields(original: JSONSerialization.data(withJSONObject: object), decoded: archive))
+        collection.removeValue(forKey: "futureOwnership")
+        collection["legacyAssetIDs"] = [String](repeating: UUID().uuidString, count: count)
+        object["assetCollection"] = collection
+        #expect(try WorkflowArchiveInspection.containsUnknownFields(original: JSONSerialization.data(withJSONObject: object), decoded: archive))
+    }
+
+    @Test func realUUIDDictionariesCanReorderButUnknownValueFieldsRemainProtected() throws {
+        let node = try #require(WorkflowRegistry.standard.operation("d.value.input")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [node])
+        var checkpoint = WorkflowPlanCheckpoint(plan: try WorkflowPlanCompiler().compile(graph, target: node.id))
+        let a = UUID(), b = UUID()
+        checkpoint.externalInputs = [a: ["input": .data(.text("one"))], b: ["input": .data(.text("two"))]]
+        var run = WorkflowRun(id: checkpoint.runID, graph: graph, targetNodeID: node.id, steps: [], status: .completed)
+        run.planCheckpoint = checkpoint
+        run.batchParent = .init(runID: UUID(), checkpointDigest: String(repeating: "a", count: 64), stepIDs: [a: UUID(), b: UUID()])
+        let archive = WorkflowArchive(runs: [run])
+        var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(archive)) as? [String: Any])
+        var runs = try #require(object["runs"] as? [[String: Any]])
+        for (owner, field) in [("planCheckpoint", "externalInputs"), ("batchParent", "stepIDs")] {
+            var parent = try #require(runs[0][owner] as? [String: Any])
+            let pairs = try #require(parent[field] as? [Any])
+            parent[field] = Array(pairs[2..<4]) + Array(pairs[0..<2])
+            runs[0][owner] = parent
+        }
+        object["runs"] = runs
+        #expect(try !WorkflowArchiveInspection.containsUnknownFields(original: JSONSerialization.data(withJSONObject: object), decoded: archive))
+        var parent = try #require(runs[0]["planCheckpoint"] as? [String: Any])
+        var pairs = try #require(parent["externalInputs"] as? [Any])
+        var value = try #require(pairs[1] as? [String: Any]); value["futurePort"] = ["retain": true]
+        pairs[1] = value; parent["externalInputs"] = pairs; runs[0]["planCheckpoint"] = parent; object["runs"] = runs
+        #expect(try WorkflowArchiveInspection.containsUnknownFields(original: JSONSerialization.data(withJSONObject: object), decoded: archive))
+        value.removeValue(forKey: "futurePort")
+        var input = try #require(value["input"] as? [String: Any])
+        var payload = try #require(input["data"] as? [String: Any])
+        payload["futurePayload"] = ["retain": true]
+        input["data"] = payload; value["input"] = input; pairs[1] = value
+        parent["externalInputs"] = pairs; runs[0]["planCheckpoint"] = parent; object["runs"] = runs
+        let future = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(WorkflowArchive.self, from: future)
+        #expect(decoded == archive)
+        #expect(try WorkflowArchiveInspection.containsUnknownFields(original: future, decoded: decoded))
+    }
+
+    @Test func legacyAssetSetColdReopenStillAllowsNextPublication() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("collection-cold-" + UUID().uuidString + ".dproject")
+        let store = try await ProjectStore.create(at: root, name: "受控集合冷开")
+        for index in 0..<6 {
+            _ = try await store.publishWorkflowAsset(data: Data("original-\(index)".utf8), mediaType: "text/plain", name: "原件", operationID: "d.text.input")
+        }
+        let collection = try await store.initializeAssetCollection()
+        #expect(collection.legacyAssetIDs.count == 6)
+        let frozen = try #require(try await store.workflowState().archive)
+        try await store.close()
+        let cold = try await ProjectStore.open(at: root)
+        #expect(try await cold.workflowState().archive == frozen)
+        _ = try await cold.publishWorkflowAsset(data: Data("next response".utf8), mediaType: "text/plain", name: "下一次回答", operationID: "d.text.input")
+        let next = try #require(try await cold.workflowState().archive)
+        #expect(next.assetCollection == collection && next.assets.count == frozen.assets.count + 1)
+        #expect(Array(next.assets.prefix(frozen.assets.count)) == frozen.assets)
+        try await cold.close()
+        let reopened = try await ProjectStore.open(at: root)
+        #expect(try await reopened.workflowState().archive == next)
+        try await reopened.close()
+    }
+
     @Test func emptyContainersDoNotBypassTypeValidation() throws {
         let bad = WorkflowDataSchema.record([.init("same", .text), .init("same", .boolean)])
         #expect(throws: WorkflowIssue.self) { try WorkflowDatum.list(element: bad, items: []).validate() }
