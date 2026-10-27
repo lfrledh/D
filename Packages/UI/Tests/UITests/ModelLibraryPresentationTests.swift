@@ -816,7 +816,10 @@ extension ModelLibraryPresentationTests {
             #expect(authorized()); bound = selected
         }
         let request = try #require(model.acquisitionRequest)
+        let beforeEvents = resources[0].control.events
         await model.confirmExistingRegistration(requestID: request.id, resource: resources[0], useTarget: true)
+        let afterUse = await library.snapshot()
+        #expect(afterUse.resources.first?.control.events == beforeEvents, "Selecting a registered model must not register it again")
         #expect(bound == id && model.acquisitionRequest == nil && model.errorMessage == nil)
         #expect(model.snapshot?.downloads.isEmpty == true && model.snapshot?.resources.count == 1)
         #expect(await transfer.count == 0)

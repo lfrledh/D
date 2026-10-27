@@ -1590,6 +1590,26 @@ extension WorkflowWorkspacePresentationTests {
         try await f.close()
     }
 
+    @Test func unchangedCollectionRuleFailureStillOffersSaveRetry() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        c.addBlankGraph(); c.addNode(operationID: WorkflowAssetContainer.previewID)
+        let node = try #require(c.graph?.nodes.last), target = try #require(c.canvasInsertionTarget())
+        var calls = 0
+        let draft = WorkflowCollectionRuleDraft(controller: c, node: node, target: target, flush: {
+            calls += 1
+            if calls == 1 { throw CocoaError(.fileWriteNoPermission) }
+            try await c.saveExplicitEdits()
+        })
+        #expect(!draft.retriesSaving && !draft.dirty)
+        await #expect(throws: WorkflowIssue.self) { try await draft.save() }
+        #expect(draft.retriesSaving && !draft.applied && draft.failure != nil)
+        try await draft.save()
+        #expect(calls == 2 && draft.saved && draft.failure == nil && c.graph?.nodes.last?.collectionRule == nil)
+        #expect(c.runs.isEmpty && c.collectionRequests.isEmpty)
+        #expect(await f.engine.submissions == 0)
+        try await f.close()
+    }
+
     @Test func collectionRuleDraftRejectsChangedOwnerAndDuplicateInFlightSave() async throws {
         let f = try await RenderingWorkspaceFixture.make(), c = f.controller
         c.addBlankGraph(); c.addNode(operationID: WorkflowAssetContainer.previewID)

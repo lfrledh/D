@@ -1812,7 +1812,9 @@ public struct SharedLibraryBrowser: View {
             if !feedback.durablyCompleted {
                 var confirmed = feedback; confirmed.acknowledgeCompletion(in: insertionController); collectionFeedback = confirmed
             }
-            collectionNoticeCode = "container.collectedFiltered"; collectionNotice = "Collection saved."; collectedLocation = feedback.context
+            // Completion proves persistence, not whether this query hides every
+            // source. Keep the precise reveal action without inventing filtering.
+            collectionNoticeCode = "container.collected"; collectionNotice = "Collection saved."; collectedLocation = feedback.context
         case .failed(let reason):
             collectionNotice = reason.reason; collectionNoticeCode = reason.code; collectedLocation = nil
         case .obsolete:

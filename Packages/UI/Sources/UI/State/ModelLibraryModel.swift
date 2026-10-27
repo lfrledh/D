@@ -85,7 +85,13 @@ public final class ModelLibraryModel {
         acquisitionSubmissionID = requestID
         defer { if acquisitionSubmissionID == requestID { acquisitionSubmissionID = nil } }
         errorMessage = nil
-        await registerResource(resource)
+        // A current registered resource is already admitted by the exact
+        // snapshot above. Choosing it must not append another registration.
+        if resource.record.registrationState != .registered { await registerResource(resource) }
+        else {
+            do { _ = try await library.resolve(resource.record.id) }
+            catch { errorMessage = error.localizedDescription; return }
+        }
         guard acquisitionRequest?.id == requestID, errorMessage == nil else { return }
         if useTarget, let target = request.target {
             do {
@@ -907,8 +913,9 @@ extension ModelLibraryModel {
         guard let resource else { return entry.totalBytes }
         if resource.control.fileState == .verified { return 0 }
         let saved = resource.record.downloadedBytes
-        guard saved < entry.totalBytes, resource.record.state != .failed || saved == 0 else { return nil }
-        return entry.totalBytes - saved
+        // The progress counter is not a verified reusable-file manifest. Do not
+        // subtract it or show zero while an existing partial needs verification.
+        return saved == 0 ? entry.totalBytes : nil
     }
     public func moveNext(_ id: UUID) async {
         let next = snapshot?.downloads.first { $0.id != id && $0.state == .queued && $0.attempts == 0 }?.id

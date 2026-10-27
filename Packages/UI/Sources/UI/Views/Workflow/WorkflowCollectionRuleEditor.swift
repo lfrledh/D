@@ -31,6 +31,7 @@ import SwiftUI
         return .init(id: editedRuleID, folderID: folderID)
     }
     var dirty: Bool { !saved && (applied || value != baseline) }
+    var retriesSaving: Bool { applied || failure != nil }
     // Selection is not ownership. The applied rule ID/value is its exact version;
     // an unrelated layout revision must not prevent saving it. A retry can save the same captured graph after
     // navigation, but can neither apply the edit again nor write to a replacement.
@@ -87,7 +88,7 @@ struct WorkflowCollectionRuleEditor: View {
                 .disabled(draft.applied || draft.saving)
             Text(t("ruleFutureOnly")).font(.caption).foregroundStyle(.secondary)
             WorkbenchPicker(t("destination"), selection: $draft.folderID) {
-                WorkbenchChoice(t("library.collected"), value: Optional<UUID>.none)
+                WorkbenchChoice(t("collectionDefaultDestination"), value: Optional<UUID>.none)
                 if let library {
                     WorkbenchChoiceForEach(library.metadata.folders.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { folder in
                         WorkbenchChoice(folder.name, value: Optional(folder.id))
@@ -101,9 +102,10 @@ struct WorkflowCollectionRuleEditor: View {
                 Button(workspaceText(language, "cancel")) { dismiss() }
                     .buttonStyle(WorkbenchGlassButtonStyle())
                 Spacer()
-                Button(draft.applied ? workspaceText(language, "saveOnly") : workflowText(language, "chat.save")) {
+                Button(draft.retriesSaving ? workspaceText(language, "saveOnly") : t("saveSettings")) {
                     Task { do { try await draft.save(); $dismiss() } catch { /* Draft owns visible, recoverable failure. */ } }
                 }.buttonStyle(WorkbenchPrimaryButtonStyle()).accessibilityIdentifier("container-rule-save")
+                    .help(draft.retriesSaving ? workspaceText(language, "saveOnly.help") : t("saveSettings"))
             }.disabled(draft.saving)
         }.padding(24).frame(width: 460)
             .workbenchCloseProtection(isDirty: draft.dirty, isSaving: draft.saving,

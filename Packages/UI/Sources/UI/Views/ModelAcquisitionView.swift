@@ -1,6 +1,25 @@
 import DWorkbench
 import SwiftUI
 
+/// Wording follows the ledger phase, not the existence of a nonterminal task.
+enum ModelAcquisitionPresentation {
+    static func taskMessageKey(_ state: ModelDownloadState) -> String {
+        switch state {
+        case .downloading: "existingTask.downloading"
+        case .queued: "existingTask.queued"
+        case .paused: "existingTask.paused"
+        default: "existingTask"
+        }
+    }
+    static func taskActionKey(_ state: ModelDownloadState) -> String {
+        state == .downloading ? "viewProgress" : "viewTask"
+    }
+    static func existingUseKey(registered: Bool) -> String { registered ? "useRegistered" : "useExisting" }
+    static func queueHeld(_ state: ModelDownloadQueueState?, hasUnfinishedTasks: Bool) -> Bool {
+        state == .paused || (state == .waitingForResume && hasUnfinishedTasks)
+    }
+}
+
 /// One bounded request, using the existing model-library owner and task ledger.
 struct ModelAcquisitionView: View {
     @Bindable var model: ModelLibraryModel
@@ -41,6 +60,8 @@ struct ModelAcquisitionView: View {
         return true
     }
     private var available: [ModelCatalogEntry] { selected.filter(downloadable) }
+    private var held: Bool { ModelAcquisitionPresentation.queueHeld(model.snapshot?.queueState,
+        hasUnfinishedTasks: model.snapshot?.downloads.contains { !$0.state.isTerminal } == true) }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if !confirming {
@@ -74,8 +95,10 @@ struct ModelAcquisitionView: View {
                                 .disabled(!register || !target.isCurrent())
                             if !target.isCurrent() { Text(t("targetChanged")).foregroundStyle(.orange) }
                         }
-                        if model.snapshot?.queueState != .running && !(model.snapshot?.downloads.allSatisfy({ $0.state.isTerminal }) ?? true) || model.snapshot?.queueState == .paused {
-                            Text(t("queuePaused")).font(.caption)
+                        Text(t("queueNotice")).font(.caption)
+                        if held { Text(t("queuePaused")).font(.caption) }
+                        if available.count != selected.count {
+                            Text(t("available", ["selected": String(selected.count), "available": String(available.count)])).font(.caption)
                         }
                         if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
                     }.padding(20)
@@ -105,6 +128,7 @@ struct ModelAcquisitionView: View {
             Text(t("total", ["size": ModelLibraryModel.formatBytes(selected.reduce(0) { $0 + $1.totalBytes })]))
             let bytes = available.map { ModelLibraryModel.additionalDownloadBytes($0, resource: resource($0)) }
             Text(t("additional", ["size": bytes.allSatisfy { $0 != nil } ? ModelLibraryModel.formatBytes(bytes.compactMap { $0 }.reduce(0, +)) : t("unknownBytes")]))
+                .help(t("additional.help"))
             HStack {
                 Text(model.rootURL?.path ?? t("noRoot")).textSelection(.enabled)
                 Spacer()
@@ -121,10 +145,13 @@ struct ModelAcquisitionView: View {
         } else if selected.count == 1, let entry = selected.first, matchingResources(entry).count > 1 {
             Button(t("viewExisting")) { model.resourceSearch = entry.title; model.workspace = "resources"; model.acquisitionRequest = nil }.buttonStyle(WorkbenchPrimaryButtonStyle())
         } else if selected.count == 1, let entry = selected.first, let current = task(entry) {
-            Button(t("viewTask")) { model.selectedTask = current.id; model.workspace = "downloads"; model.acquisitionRequest = nil }.buttonStyle(WorkbenchPrimaryButtonStyle())
+            Button(t(ModelAcquisitionPresentation.taskActionKey(current.state))) { model.selectedTask = current.id; model.workspace = "downloads"; model.acquisitionRequest = nil }.buttonStyle(WorkbenchPrimaryButtonStyle())
         } else if selected.count == 1, let entry = selected.first, let current = resource(entry), current.control.fileState == .verified {
             if register, useTarget, request.target != nil, current.record.state == .installed {
-                Button(t("useExisting")) { Task { await model.confirmExistingRegistration(requestID: request.id, resource: current, useTarget: true) } }.buttonStyle(WorkbenchPrimaryButtonStyle()).disabled(pending)
+                Button(t(ModelAcquisitionPresentation.existingUseKey(registered: current.record.registrationState == .registered))) {
+                    Task { await model.confirmExistingRegistration(requestID: request.id, resource: current, useTarget: true) }
+                }.buttonStyle(WorkbenchPrimaryButtonStyle()).disabled(pending)
+                    .help(current.record.registrationState == .registered ? t("useTarget", ["target": request.target?.title ?? ""]) : t("useExisting.help", ["target": request.target?.title ?? ""]))
             } else if current.record.registrationState != .registered && current.record.state == .installed {
                 Button(t("register")) { Task { await model.confirmExistingRegistration(requestID: request.id, resource: current) } }.buttonStyle(WorkbenchPrimaryButtonStyle()).disabled(pending)
             } else { Button(t("viewExisting")) { viewResource(current) }.buttonStyle(WorkbenchPrimaryButtonStyle()) }
@@ -137,7 +164,6 @@ struct ModelAcquisitionView: View {
             } else { Button(t("recheck")) { check(entry) }.buttonStyle(WorkbenchPrimaryButtonStyle()).disabled(pending) }
         } else {
             let partial = available.count != selected.count
-            let held = model.snapshot?.queueState == .paused || (model.snapshot?.queueState == .waitingForResume && model.snapshot?.downloads.contains { !$0.state.isTerminal } == true)
             Button(t(partial ? (held ? "enqueueAvailable" : "startAvailable") : (held ? "enqueue" : "start"), ["count": String(available.count)])) { submit(available) }
                 .buttonStyle(WorkbenchPrimaryButtonStyle()).disabled(available.isEmpty || pending || (useTarget && request.target?.isCurrent() != true))
                 .keyboardShortcut(.defaultAction)
@@ -147,8 +173,8 @@ struct ModelAcquisitionView: View {
         if matchingResources(entry).count > 1 {
             Button(t("viewExisting")) { model.resourceSearch = entry.title; model.workspace = "resources"; model.acquisitionRequest = nil }
         } else if let current = task(entry) {
-            Text(t("existingTask")).font(.caption)
-            Button(t("viewTask")) { model.selectedTask = current.id; model.workspace = "downloads"; model.acquisitionRequest = nil }
+            Text(t(ModelAcquisitionPresentation.taskMessageKey(current.state))).font(.caption)
+            Button(t(ModelAcquisitionPresentation.taskActionKey(current.state))) { model.selectedTask = current.id; model.workspace = "downloads"; model.acquisitionRequest = nil }
         } else if let current = resource(entry), current.control.fileState == .verified {
             Text(t("existingFiles")).font(.caption)
             Button(t("viewExisting")) { viewResource(current) }

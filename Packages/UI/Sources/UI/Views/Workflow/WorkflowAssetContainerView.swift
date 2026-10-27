@@ -124,6 +124,10 @@ struct ContainerProjectionIdentity: Equatable {
     static func hasUndecidedFilter(_ calls: [WorkflowPlanCallRecord]) -> Bool {
         calls.contains { $0.step.node.operationID == WorkflowAssetContainer.filterID && $0.step.status == .waiting && $0.step.decision == nil }
     }
+    static func continuationEnded(_ submission: WorkflowContainerSubmission?, stages: [WorkflowBatchStage]) -> Bool {
+        guard let id = submission?.nextStageID, let stage = stages.first(where: { $0.id == id }) else { return false }
+        return [.finished, .cancelled].contains(stage.state)
+    }
 }
 
 /// The card and historical waiting entries share the same captured call decisions.
@@ -162,7 +166,7 @@ struct ContainerProjectionIdentity: Equatable {
     var enlargeControl: some View {
         Button { presentation.expanded = true } label: {
             Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 16 * scale)).frame(width: 28 * scale, height: 28 * scale)
-        }.buttonStyle(.plain).accessibilityLabel(t("enlarge")).workflowNodeControl(node.id)
+        }.buttonStyle(.plain).accessibilityLabel(t("enlarge")).help(t("enlarge.help")).workflowNodeControl(node.id)
             .workbenchSheet(isPresented: $presentation.expanded, title: node.title) {
                 WorkflowAssetContainerView(controller: controller, node: node, forcedStepID: forcedStepID, height: 560, presentation: presentation, expandedPresentation: true).frame(width: 720)
             }
@@ -184,7 +188,7 @@ struct ContainerProjectionIdentity: Equatable {
         }
         if review { WorkbenchMenuAction(t("rejectAll"), role: .destructive) { rejectAll = true }.disabled(!canDecide) }
     }
-    private func t(_ key: String) -> String { workflowText(language, "container." + key) }
+    private func t(_ key: String, _ arguments: [String: String] = [:]) -> String { workflowText(language, "container." + key, arguments: arguments) }
     private var review: Bool { node.operationID == WorkflowAssetContainer.filterID }
     private var submission: WorkflowContainerSubmission? {
         controller.containerSubmissions.first { $0.scope == selectedScope }
@@ -270,6 +274,7 @@ struct ContainerProjectionIdentity: Equatable {
 
             }
             if let otherWaitingCall {
+                Text(t(submission != nil && !controller.hasPendingSaves ? "otherGates.saved" : "otherGates.pending")).font(.caption).foregroundStyle(.secondary)
                 Button(t("otherGates")) { navigation?.source(otherWaitingCall) }.font(.caption).buttonStyle(.plain)
             }
             if let snapshot, !snapshot.collectionComplete { Text(t("collecting")).foregroundStyle(.secondary) }
@@ -279,8 +284,8 @@ struct ContainerProjectionIdentity: Equatable {
                 }
                 Button(t("retryCollection")) { Task { await retryCollection() } }
             }
-            if let location = presentation.collectionLocation {
-                HStack { Text(t("collectedFiltered")).font(.caption).foregroundStyle(.secondary); Button(t("showInLibrary")) {
+            if let location = presentation.collectionLocation, location.isCurrent(in: controller) {
+                HStack { Text(t("collected")).font(.caption).foregroundStyle(.secondary); Button(t("showInLibrary")) {
                     guard location.isCurrent(in: controller) else { error = .init("Container target changed.", code: "container.stale"); return }
                     navigation?.reveal(location)
                 } }
@@ -301,9 +306,11 @@ struct ContainerProjectionIdentity: Equatable {
                 Text(t("selected") + " \(chosen.count)").monospacedDigit().onDrag { provider(chosen) } preview: { dragPreview(chosen) }
             }.buttonStyle(.plain)
             if review, submission == nil {
-                HStack {
-                    Stepper(t("perInput") + " \(repetitions)", value: $presentation.repetitions, in: 1...64)
-                    Text("× \(Set(chosen.compactMap { $0.record?.address.runID }).count)").monospacedDigit()
+                VStack(alignment: .leading, spacing: 4 * scale) {
+                    Stepper(t("perInput", ["count": String(repetitions)]), value: $presentation.repetitions, in: 1...64)
+                        .help(t("perInput.help"))
+                    let inputs = Set(chosen.compactMap { $0.record?.address.runID }).count
+                    Text(t("runCount", ["inputs": String(inputs), "repetitions": String(repetitions), "total": String(inputs * repetitions)])).monospacedDigit().fixedSize(horizontal: false, vertical: true)
                 }.disabled(!canDecide)
                 WorkbenchPicker(workspaceText(language, "seedStrategy"), selection: $presentation.seedStrategy) {
                     WorkbenchChoice(workspaceText(language, "seedFixed"), value: WorkflowBatchSeedStrategy.fixed)
@@ -313,10 +320,12 @@ struct ContainerProjectionIdentity: Equatable {
             HStack(spacing: 8 * scale) {
                 Button(t("library.add")) { collect(chosen) }.disabled(chosen.isEmpty)
                     .buttonStyle(WorkbenchGlassButtonStyle())
+                    .help(t("library.add.help"))
                 Spacer(minLength: 0)
                 if review {
                     Button(primaryTitle) { submit() }.buttonStyle(WorkbenchPrimaryButtonStyle())
-                        .disabled(controller.isRunning || (submission == nil && (!canDecide || chosen.isEmpty)))
+                        .disabled(controller.isRunning || (!controller.hasPendingSaves && WorkflowContainerPresentation.continuationEnded(submission, stages: controller.batchStages)) || (submission == nil && (!canDecide || chosen.isEmpty)))
+                        .help(controller.hasPendingSaves && submission != nil ? workspaceText(language, "saveOnly.help") : submission != nil ? t("continueSaved.help") : primaryTitle)
                 }
             }
         }.font(.system(size: 11 * scale))
@@ -361,7 +370,7 @@ struct ContainerProjectionIdentity: Equatable {
     private var primaryTitle: String {
         if controller.hasPendingSaves && submission != nil { return workspaceText(language, "saveOnly") }
         if submission != nil { return t("continueSaved") }
-        return t(otherWaitingCall == nil ? "useContinue" : "confirm") + " (\(chosen.count))"
+        return t(otherWaitingCall == nil ? "useContinue" : "confirm", ["count": String(chosen.count)])
     }
     private func row(_ item: ContainerItem) -> some View {
         HStack(alignment: .top, spacing: 6 * scale) {
@@ -409,7 +418,7 @@ struct ContainerProjectionIdentity: Equatable {
                     .contentShape(Rectangle()).onDrag { provider([item]) } preview: { dragPreview([item]) }
                     .help(t("dragAsset")).accessibilityLabel(t("dragAsset"))
             Button { open(item) } label: { Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 16 * scale)).frame(width: 28 * scale, height: 28 * scale) }
-                .buttonStyle(.plain).accessibilityLabel(t("enlarge")).disabled(item.value == nil)
+                .buttonStyle(.plain).accessibilityLabel(t("viewFullContent")).help(t("viewFullContent.help")).disabled(item.value == nil)
             }
         }.padding(4 * scale).contentShape(Rectangle())
             .background(currentItem == item.id ? Color.accentColor.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 6 * scale))
@@ -447,12 +456,12 @@ struct ContainerProjectionIdentity: Equatable {
         let index = (scopes.firstIndex(of: scope) ?? 0) + 1
         let date = controller.batchStages.first { $0.id == scope.stageID }?.createdAt
             ?? controller.runs.first { $0.id == scope.runID }?.createdAt
-        return t("batch") + " \(index)" + (date.map { " · " + $0.formatted(date: .abbreviated, time: .shortened) } ?? "")
+        return t("batch", ["index": String(index)]) + (date.map { " · " + $0.formatted(date: .abbreviated, time: .shortened) } ?? "")
     }
     private var arrivalSummary: String {
-        guard let snapshot else { return "\(rows.count)" }
+        guard let snapshot else { return t("arrived", ["count": String(rows.count)]) }
         let failures = snapshot.stage?.attempts.filter { [.failed, .cancelled].contains($0.state) }.count ?? snapshot.runs.filter { [.failed, .cancelled].contains($0.status) }.count
-        return t("arrived") + " \(rows.count)" + (failures == 0 ? "" : " · " + t("failed") + " \(failures)")
+        return t("arrived", ["count": String(rows.count)]) + (failures == 0 ? "" : " · " + t("failed") + " \(failures)")
     }
     private func transferSources(_ items: [ContainerItem]) -> [WorkflowLibrarySource] {
         var seen = Set<String>()
@@ -573,7 +582,7 @@ struct ContainerProjectionIdentity: Equatable {
                     intent = try await controller.submitContainer(fresh, choices: choices, repetitions: count, seedStrategy: strategy, endAll: endAll)
                 }
                 if let next = try await controller.continueContainerSubmission(intent) { await controller.runBatchStage(next) }
-                else if !endAll && otherWaitingCall == nil { error = .init("Other human gates remain.", code: "container.otherGates") }
+                else if !endAll && otherWaitingCall == nil { error = .init("Other human gates remain.", code: "container.otherGates.saved") }
                 refresh()
             } catch { self.error = .init(presenting: error, fallbackCode: "container.issue.actionFailed") }
         }
@@ -590,6 +599,7 @@ struct ContainerProjectionIdentity: Equatable {
         var seen = Set<String>()
         let sources = items.compactMap(\.source).filter { seen.insert($0.key).inserted }
         let location = WorkflowLibraryContext(controller: controller, source: .sources(sources), name: node.title)
+        presentation.collectionLocation = nil; error = nil
         Task { do { try await controller.setCollected(sources, collected: true, owner: owner); presentation.collectionLocation = location } catch { self.error = .init(presenting: error, fallbackCode: "container.issue.actionFailed") } }
     }
     private func open(_ item: ContainerItem) {

@@ -1,5 +1,6 @@
 import AppKit
 import Darwin
+import Observation
 import DWorkbench
 import SwiftUI
 import UniformTypeIdentifiers
@@ -83,24 +84,48 @@ enum NativeAssetImportPanel {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.title = language?.text("files.import.title", fallback: "导入素材") ?? "导入素材"
-        let picker = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 330, height: 28))
-        picker.addItems(withTitles: [
-            language?.text("files.import.copy", fallback: "复制到项目（默认）") ?? "复制到项目（默认）",
-            language?.text("files.import.reference", fallback: "引用原位置") ?? "引用原位置"
-        ])
-        let note = NSTextField(labelWithString: language?.text("files.import.warning",
-            fallback: "引用需要保留原文件和磁盘连接；不会移动或删除原件。") ?? "引用需要保留原文件和磁盘连接；不会移动或删除原件。")
+        let accessory = NativeAssetImportAccessory(panel: panel, language: language)
+        let response = await panel.begin()
+        defer { withExtendedLifetime(accessory) {} }
+        guard response == .OK, let url = panel.url else { return nil }
+        return (url, accessory.picker.indexOfSelectedItem == 1 ? .reference : .copy)
+    }
+}
+
+/// The reference warning belongs only to reference mode. Retain the same native
+/// picker across a language refresh, including its selected import semantics.
+@MainActor final class NativeAssetImportAccessory: NSObject {
+    let picker = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 400, height: 28))
+    let note = NSTextField(labelWithString: "")
+    private weak var panel: NSOpenPanel?
+    private let language: UILanguageStore?
+    init(panel: NSOpenPanel, language: UILanguageStore?) {
+        self.panel = panel; self.language = language
+        super.init()
+        picker.target = self; picker.action = #selector(selectionChanged)
         note.lineBreakMode = .byWordWrapping
         let accessory = NSStackView(views: [picker, note])
-        accessory.orientation = .vertical
-        accessory.alignment = .leading
-        accessory.spacing = 6
-        accessory.frame = NSRect(x: 0, y: 0, width: 350, height: 64)
+        accessory.orientation = .vertical; accessory.alignment = .leading; accessory.spacing = 6
+        accessory.frame = NSRect(x: 0, y: 0, width: 420, height: 110)
         panel.accessoryView = accessory
-        guard await panel.begin() == .OK, let url = panel.url else { return nil }
-        return (url, picker.indexOfSelectedItem == 1 ? .reference : .copy)
+        refreshLanguage()
     }
+    func refreshLanguage() {
+        withObservationTracking {
+            let selected = max(0, picker.indexOfSelectedItem)
+            panel?.title = workflowText(language, "files.import.title")
+            panel?.prompt = workflowText(language, "files.chooseFile")
+            picker.removeAllItems()
+            picker.addItems(withTitles: [workflowText(language, "files.import.copy"), workflowText(language, "files.import.reference")])
+            picker.selectItem(at: selected)
+            picker.setAccessibilityLabel(workflowText(language, "files.import.title"))
+            note.stringValue = workflowText(language, "files.import.warning")
+            selectionChanged()
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in self?.refreshLanguage() }
+        }
+    }
+    @objc func selectionChanged() { note.isHidden = picker.indexOfSelectedItem != 1 }
 }
 
 /// The sheet owns only presentation state. Every operation captures its original Store and
@@ -153,7 +178,7 @@ struct ProjectFilesView: View {
         case .verified: word("status.verified", "已核对")
         case .pendingVerification: word("status.pending", "待核对")
         case .offline: word("status.offline", "磁盘离线")
-        case .needsAuthorization: word("status.authorization", "需要授权")
+        case .needsAuthorization: word("status.authorization", "需要文件访问权限")
         case .missing: word("status.missing", "文件缺失")
         case .changed: word("status.changed", "内容已变")
         case .corrupt: word("status.corrupt", "位置无效")
@@ -298,6 +323,7 @@ struct ProjectFilesView: View {
                     Text(location.resolvedURL?.path ?? location.location.url?.path ?? word("unknown", "未知"))
                         .font(.caption).textSelection(.enabled)
                     if let reason = location.reason { Text(reason).font(.caption).foregroundStyle(.orange) }
+                    if location.status == .needsAuthorization { Text(word("authorization.help", "请重新选择文件位置，允许 D 访问这些文件。")).font(.caption) }
                     Text("\(word("registered", "登记")): \(item.asset.fileLocations == nil ? word("unknown", "未知") : date(location.location.registeredAt)) · \(word("verified", "上次核对")): \(date(location.location.lastVerifiedAt)) · \(location.location.role == .externalOriginal ? consistencyText(consistencyLanguage, "remaining.19fb176689ad") : consistencyText(consistencyLanguage, "remaining.16bddd9faed3")): \(date(location.location.contentCreatedAt))")
                         .font(.caption).foregroundStyle(.secondary)
                     Button(consistencyText(consistencyLanguage, "remaining.ded07da9efc6")) { reveal(location) }
@@ -321,14 +347,14 @@ struct ProjectFilesView: View {
             }
             Text(word("changedNote", "若字节不同，请作为新素材导入；旧记录不会自动替换。"))
                 .font(.caption).foregroundStyle(.secondary)
-            Button(word("importNew", "作为新素材导入…")) {
+            Button(word("importNew", "导入资产")) {
                 Task {
                     guard let (url, mode) = await NativeAssetImportPanel.choose(language: language) else { return }
                     start { store in
                         let access = url.startAccessingSecurityScopedResource()
                         defer { if access { url.stopAccessingSecurityScopedResource() } }
                         _ = try await store.importWorkflowMediaFile(at: url, mode: mode)
-                        return word("importedNew", "已登记新素材；原记录保留。")
+                        return word("importedNew", "已导入资产，原文件保留。")
                     }
                 }
             }.disabled(busy)
@@ -369,6 +395,7 @@ struct ProjectFilesView: View {
     }
     private func chooseFolder(_ title: String) async -> URL? {
         let panel = NSOpenPanel(); panel.title = title
+        panel.prompt = word("chooseFolder", "选择文件夹…")
         panel.canChooseDirectories = true; panel.canChooseFiles = false
         return await panel.begin() == .OK ? panel.url : nil
     }
@@ -406,6 +433,7 @@ struct ProjectFilesView: View {
     private func relocateFile(_ id: UUID) {
         Task {
             let panel = NSOpenPanel(); panel.title = word("findFile", "定位同内容文件…")
+            panel.prompt = word("chooseFile", "选择文件…")
             panel.canChooseDirectories = false
             guard await panel.begin() == .OK, let url = panel.url else { return }
             start { store in

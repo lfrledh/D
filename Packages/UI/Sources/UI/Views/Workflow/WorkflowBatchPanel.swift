@@ -36,7 +36,7 @@ import SwiftUI
                                 Text("\(complete)/\(stage.attempts.count) " + text("batchCompleted") +
                                      " · \(waiting) " + text("batchWaiting")).font(.caption)
                                 if stage.state == .savingBlocked || stage.attempts.contains(where: { $0.state == .savingBlocked }) || (stage.state == .cancelled && controller.hasPendingSaves) {
-                                    Button(text("saveOnly")) { Task { await controller.retryBatchSaving(stage.id) } }.disabled(controller.isRunning)
+                                    Button(text("saveOnly")) { Task { await controller.retryBatchSaving(stage.id) } }.disabled(controller.isRunning).help(text("saveOnly.help"))
                                 } else if stage.attempts.contains(where: { $0.state == .queued }), stage.state != .cancelled {
                                     Button(text("resumeQueue")) { Task { await controller.runBatchStage(stage.id) } }
                                         .disabled(controller.isRunning || controller.hasPendingSaves)
@@ -58,8 +58,9 @@ import SwiftUI
             .workbenchSheet(isPresented: $showPlan, title: workflowText(language, "childPanel.name.plan")) {
                 VStack(alignment: .leading, spacing: 14) {
                     Text(text("nextStage")).font(.headline)
-                    Stepper(text("perSelected") + " \(repetitions)", value: $repetitions, in: 1...64)
-                    Text("\(selected.count) × \(repetitions) = \(selected.count * repetitions)")
+                    Stepper(workflowText(language, "container.perInput", arguments: ["count": String(repetitions)]), value: $repetitions, in: 1...64)
+                        .help(workflowText(language, "container.perInput.help"))
+                    Text(workflowText(language, "container.runCount", arguments: ["inputs": String(selected.count), "repetitions": String(repetitions), "total": String(selected.count * repetitions)]))
                     Text(text("fixedPrefix")).font(.callout)
                     WorkbenchPicker(text("seedStrategy"), selection: $seedStrategy) {
                         WorkbenchChoice(text("seedFixed"), value: WorkflowBatchSeedStrategy.fixed)
@@ -132,7 +133,8 @@ import SwiftUI
                             if let next = try await controller.continueContainerSubmission(intent) { await controller.runBatchStage(next) }
                         } catch { controller.errorMessage = error.localizedDescription }
                     }
-                }.disabled(controller.isRunning)
+                }.disabled(controller.isRunning || (!controller.hasPendingSaves && WorkflowContainerPresentation.continuationEnded(intent, stages: controller.batchStages)))
+                    .help(workflowText(language, controller.hasPendingSaves ? "metadata.panel.workspace.saveOnly.help" : "container.continueSaved.help"))
             }
             if [.failed, .interrupted].contains(attempt.state) {
                 Button(text("newAttempt")) {

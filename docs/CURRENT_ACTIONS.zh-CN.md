@@ -1,5 +1,11 @@
 # 当前行动与接手点
 
+当前施工：**D-UI-CONSOLIDATED-01 / UI-COPY-BATCH01-20261027 v2**。实际本地与fetch后远端起点均为`16dbb05d243bd86877d2a6133de7cdc146ba336e`，包含累计交付（祖先检查0）；原UI专属树及分支继续，无未提交/暂存文件、无其他活动写入者。主仓个人scheme保持。上一轮生产`6129799d30e35652db6b3eb3f2e00aad9d66e170`及正常验收沿用，历史PID40956已不在运行，不视为当前实例。
+
+本轮实施01已批准双语文案及真实状态接线。**02按用户最新消息仅改标题“自动保存到项目资产库…”；其余说明和分类→标签行为待确认**，附件02中的相反批准措辞不作为授权。继续原保存/队列/精确身份机制，不扩性能调查。Lead唯一写入与桌面，两位只读复核者；交付与未验仍归[现有任务](tasks/D-UI-CONSOLIDATED-01.md)和[唯一集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。当前桌面入口仍是下述612，最终正常候选完成后安全更新。
+
+以下为上一轮已完成接续点：
+
 当前交审：**D-UI-CONSOLIDATED-01 / NATIVE-QUALITY-CLOSEOUT-20261027**。实际起点完整`63a782dda440ff6e74eaf949ecc52368e15f0ef3`，从生产825c累计线接续；最终生产 **`6129799d30e35652db6b3eb3f2e00aad9d66e170`**。原专属树`D-Worktrees/D-UI-CONSOLIDATED-20261020`、分支`codex/ui-consolidated-20261020`不变，祖先检查0、起点无个人/索引差异；Lead唯一写入/桌面，非实施者源码、证据和实包复核完成。
 
 唯一用户入口：桌面 **D 最新版** → `D-Development/CurrentD/Quality-Native-6129799d/D.app`。正常完整Release -O/WMO、无诊断宏、Apple Development签名、七引擎/零权重；同源本地Archive也完成。源码/资源/签名身份一致，完整文档交付及远端读回SHA绑定现有`CurrentD/receipt.json`，不签后改包。
