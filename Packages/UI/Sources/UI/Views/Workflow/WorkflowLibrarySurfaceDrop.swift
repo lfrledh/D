@@ -78,11 +78,13 @@ enum WorkflowLibraryDropAdmission: Equatable {
     }
 
     static func submit(_ value: WorkflowCanvasTransfer, port: WorkflowPortIdentity,
-                       scope: WorkflowCanvasScope, controller: WorkflowController, language: UILanguageStore?) -> Bool {
+                       scope: WorkflowCanvasScope, controller: WorkflowController, language: UILanguageStore?,
+                       onIssue: @escaping @MainActor (String) -> Void = { _ in }) -> Bool {
         guard let payload = value.libraryPayload else { return false }
         let admission = admission(value, port: port, scope: scope, controller: controller)
         guard admission.permitsDrop, let target = controller.canvasInsertionTarget() else {
-            controller.errorMessage = workflowText(language, admission.key); return true
+            let message = workflowText(language, admission.key)
+            controller.errorMessage = message; onIssue(message); return true
         }
         let origin = controller.graph?.layout.first { $0.nodeID == port.nodeID }
         Task {
@@ -90,7 +92,7 @@ enum WorkflowLibraryDropAdmission: Equatable {
                 let sources = try await controller.resolveLibraryDrop(payload.items, owner: payload.owner, target: target)
                 try await controller.insertLibrarySources(sources, owner: payload.owner, target: target,
                     x: (origin?.x ?? 100) - 420, y: origin?.y ?? 100, inputNode: port.nodeID, inputPort: port.port)
-            } catch { controller.errorMessage = error.localizedDescription }
+            } catch { controller.errorMessage = error.localizedDescription; onIssue(error.localizedDescription) }
         }
         return true
     }
@@ -181,5 +183,45 @@ struct WorkflowLibraryDropFeedback: View {
                 .fixedSize().offset(x: point.x + 16, y: point.y - 32)
                 .allowsHitTesting(false).accessibilityIdentifier("workflow-asset-drop-feedback")
         }
+    }
+}
+
+/// Presentation only; the controller retains the original error/diagnostic. A late
+/// failure from another graph must not become a banner in the newly selected one.
+struct WorkflowLibraryDropIssue: Equatable {
+    let scope: WorkflowCanvasScope
+    let message: String
+    func isVisible(in current: WorkflowCanvasScope) -> Bool { scope == current }
+}
+
+/// Capacity one, scoped to a graph surface and one drag attempt, including async completion.
+@Observable @MainActor final class WorkflowLibraryDropIssues {
+    private(set) var issue: WorkflowLibraryDropIssue?
+    private var token: UUID?
+    private var scope: WorkflowCanvasScope?
+    @discardableResult func begin(scope: WorkflowCanvasScope) -> UUID {
+        let next = UUID(); token = next; self.scope = scope; issue = nil; return next
+    }
+    func token(for scope: WorkflowCanvasScope) -> UUID? { self.scope == scope ? token : nil }
+    func report(_ message: String, scope: WorkflowCanvasScope, token: UUID) {
+        guard self.token == token, self.scope == scope else { return }
+        issue = .init(scope: scope, message: message)
+    }
+    func clear() { token = nil; scope = nil; issue = nil }
+}
+
+struct WorkflowLibraryDropIssueView: View {
+    let message: String
+    let dismiss: () -> Void
+    @Environment(\.dLanguageStore) private var language
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            Button(workflowText(language, "workflow.action.close"), systemImage: "xmark", action: dismiss)
+                .labelStyle(.iconOnly).buttonStyle(WorkbenchGlassButtonStyle(compact: true))
+        }.font(.caption).padding(10).frame(maxWidth: 420)
+            .workbenchPanel(cornerRadius: 10).padding(.horizontal, 20).padding(.bottom, 72)
+            .accessibilityIdentifier("workflow-asset-drop-issue")
     }
 }

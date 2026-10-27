@@ -71,6 +71,7 @@ struct WorkflowGraphSurface: View {
     @State private var cardSizes: [UUID: CGSize] = [:]
     @State private var marquee: WorkflowCanvasMarquee?
     @State private var libraryDropPreview = WorkflowLibraryDropPreview()
+    @State private var libraryDropIssues = WorkflowLibraryDropIssues()
 
     var body: some View {
         #if DEBUG
@@ -265,13 +266,15 @@ struct WorkflowGraphSurface: View {
                     .contentShape(Rectangle())
                     .onDrop(of: [.workflowCanvasItem, .fileURL], delegate: WorkflowLibrarySurfaceDrop(preview: libraryDropPreview, scope: scope,
                         makeHit: {
+                            libraryDropIssues.begin(scope: scope)
                             let map = WorkflowLibraryDropHitMap(graph: graph, geometry: geometry, centers: measuredPortCenters, sizes: cardSizes)
                             return { point in map.hit(CGPoint(x: point.x / renderZoom - edge.width, y: point.y / renderZoom - edge.height)) }
                         },
                         assess: { value, port in WorkflowLibraryPortDrop.admission(value, port: port,
                             scope: scope, controller: controller) }) { providers, location in
                         guard providers.count == 1, let provider = providers.first,
-                              !readOnly, let target = controller.canvasInsertionTarget() else { return false }
+                              !readOnly, let target = controller.canvasInsertionTarget(),
+                              let issueToken = libraryDropIssues.token(for: scope) else { return false }
                         let raw = geometry.rawPoint(forDisplayPoint: CGPoint(
                             x: location.x / effectiveZoom - edge.width, y: location.y / effectiveZoom - edge.height))
                         let destination = WorkflowLibraryDropTarget.hit(CGPoint(x: location.x / effectiveZoom - edge.width,
@@ -290,25 +293,38 @@ struct WorkflowGraphSurface: View {
                                 if custom {
                                     let value = try WorkflowCanvasTransfer.decode(bytes)
                                     if value.libraryPayload != nil, case .port(let port) = destination {
-                                        _ = WorkflowLibraryPortDrop.submit(value, port: port, scope: scope, controller: controller, language: languageStore)
-                                    } else { _ = acceptSurfaceDrop([value], at: raw, scope: scope) }
+                                        _ = WorkflowLibraryPortDrop.submit(value, port: port, scope: scope, controller: controller, language: languageStore) { message in
+                                            libraryDropIssues.report(message, scope: scope, token: issueToken)
+                                        }
+                                    } else {
+                                        if value.libraryPayload != nil, destination == .blocked { throw WorkflowIssue(workflowText(languageStore, "container.dropTarget")) }
+                                        _ = acceptSurfaceDrop([value], at: raw, scope: scope)
+                                    }
                                 }
                                 else if let url = URL(dataRepresentation: bytes, relativeTo: nil), url.isFileURL {
                                     guard destination == .canvas else { throw WorkflowIssue(workflowText(languageStore, "container.dropTarget")) }
                                     _ = acceptFileDrop([url], at: raw, scope: scope)
                                 } else { throw CocoaError(.fileReadUnsupportedScheme) }
-                            } catch { controller.errorMessage = error.localizedDescription }
+                            } catch {
+                                controller.errorMessage = error.localizedDescription
+                                libraryDropIssues.report(error.localizedDescription, scope: scope, token: issueToken)
+                            }
                         }
                         return true
                     })
                     .overlay(alignment: .topLeading) { WorkflowLibraryDropFeedback(preview: libraryDropPreview) }
-                    .onChange(of: scope) { _, _ in libraryDropPreview.clear() }
+                    .onChange(of: scope) { _, _ in libraryDropPreview.clear(); libraryDropIssues.clear() }
                     .onChange(of: renderZoom) { _, _ in libraryDropPreview.clear() }
                     .onChange(of: edge) { _, _ in libraryDropPreview.clear() }
-                    .onDisappear { libraryDropPreview.clear() }
+                    .onDisappear { libraryDropPreview.clear(); libraryDropIssues.clear() }
                     .frame(width: layout.contentSize.width,
                            height: layout.contentSize.height,
                            alignment: .topLeading)
+                }
+                .overlay(alignment: .bottom) {
+                    if let issue = libraryDropIssues.issue, issue.isVisible(in: scope) {
+                        WorkflowLibraryDropIssueView(message: issue.message) { libraryDropIssues.clear() }
+                    }
                 }
                 .scrollIndicators(.never)
                 .scrollPosition($scrollPosition)

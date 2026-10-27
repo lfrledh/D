@@ -1465,6 +1465,26 @@ extension WorkflowWorkspacePresentationTests {
         let ref = WorkflowAssetReference(projectID: owner.projectID, assetID: UUID(), kind: .text, sha256: String(repeating: "a", count: 64))
         let transfer = WorkflowCanvasTransfer.library(owner: owner, sources: [.asset(ref)])
         #expect(WorkflowLibraryPortDrop.admission(transfer, port: port, scope: try scope(), controller: c) == .blocked("container.dropOccupied"))
+        var reported: [String] = []
+        #expect(WorkflowLibraryPortDrop.submit(transfer, port: port, scope: try scope(), controller: c, language: nil, onIssue: { reported.append($0) }))
+        #expect(reported.count == 1 && reported.first == c.errorMessage)
+        let issue = WorkflowLibraryDropIssue(scope: try scope(), message: try #require(reported.first))
+        #expect(issue.isVisible(in: try scope()))
+        let capturedIssueScope = try scope()
+        let other = WorkflowCanvasScope(rootGraphID: capturedIssueScope.rootGraphID, rootRevision: capturedIssueScope.rootRevision,
+            graphID: UUID(), bodyPath: [], projectID: capturedIssueScope.projectID, instanceID: capturedIssueScope.instanceID)
+        #expect(!issue.isVisible(in: other), "A late failure cannot appear on another selected graph")
+        let presentation = WorkflowLibraryDropIssues()
+        let first = presentation.begin(scope: capturedIssueScope)
+        let second = presentation.begin(scope: capturedIssueScope)
+        presentation.report("late first", scope: capturedIssueScope, token: first)
+        #expect(presentation.issue == nil)
+        presentation.report("second", scope: capturedIssueScope, token: second)
+        #expect(presentation.issue?.message == "second")
+        presentation.clear()
+        presentation.report("after dismissal", scope: capturedIssueScope, token: second)
+        #expect(presentation.issue == nil && presentation.token(for: capturedIssueScope) == nil)
+        c.errorMessage = nil
         #expect(c.graph == occupied)
         for connection in occupied.connections { c.disconnect(connection.id) }
         let original = try #require(c.graph), captured = try scope()
