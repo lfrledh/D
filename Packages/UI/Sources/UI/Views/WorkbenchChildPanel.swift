@@ -116,17 +116,23 @@ public struct WorkbenchChildPanelSize: Equatable {
 
 /// Only mounted panels are registered. No global click monitor or background poll.
 @MainActor public enum WorkbenchChildPanels {
-    private static var mounted: [WeakPanel] = []
+    // Menu availability observes the same mounted surfaces used for admission.
+    // A closed panel must invalidate that projection even when native focus
+    // returns to the same hosting view and causes no other SwiftUI update.
+    @MainActor @Observable fileprivate final class Registry {
+        var mounted: [WeakPanel] = []
+    }
+    private static let registry = Registry()
     private static let owners = NSHashTable<NSWindow>.weakObjects()
     private static var escapeMonitor: Any?
     public static func registerOwner(_ window: NSWindow) { owners.add(window) }
     static func isOwner(_ window: NSWindow) -> Bool { owners.contains(window) }
-    private final class WeakPanel {
+    fileprivate final class WeakPanel {
         weak var view: WorkbenchChildOverlay?
         init(_ view: WorkbenchChildOverlay) { self.view = view }
     }
     fileprivate static func add(_ view: WorkbenchChildOverlay) {
-        mounted.removeAll { $0.view == nil }; mounted.append(WeakPanel(view))
+        registry.mounted.removeAll { $0.view == nil }; registry.mounted.append(WeakPanel(view))
         if escapeMonitor == nil {
             escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 guard event.window === NSApp.keyWindow, RunLoop.current.currentMode != .eventTracking,
@@ -136,8 +142,8 @@ public struct WorkbenchChildPanelSize: Equatable {
         }
     }
     fileprivate static func remove(_ view: WorkbenchChildOverlay) {
-        mounted.removeAll { $0.view == nil || $0.view === view }
-        if mounted.isEmpty, let escapeMonitor { NSEvent.removeMonitor(escapeMonitor); self.escapeMonitor = nil }
+        registry.mounted.removeAll { $0.view == nil || $0.view === view }
+        if registry.mounted.isEmpty, let escapeMonitor { NSEvent.removeMonitor(escapeMonitor); self.escapeMonitor = nil }
     }
     /// A removed/folded editor can leave the window/root as responder. Only that
     /// orphaned path needs a fallback; live child controls, menus and composition
@@ -156,7 +162,7 @@ public struct WorkbenchChildPanelSize: Equatable {
     }
     fileprivate static func top(on window: NSWindow?) -> WorkbenchChildOverlay? {
         guard let window else { return nil }
-        return mounted.reversed().compactMap(\.view).first { $0.window === window && !$0.isHidden }
+        return registry.mounted.reversed().compactMap(\.view).first { $0.window === window && !$0.isHidden }
     }
     public static func isPresented(on window: NSWindow?) -> Bool { top(on: window) != nil }
     /// System navigation is explicit. Close all layers in order, and execute only

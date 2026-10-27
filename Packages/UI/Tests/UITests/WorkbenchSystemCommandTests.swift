@@ -1,6 +1,8 @@
 import AppKit
 import DWorkbench
 import SwiftUI
+import Observation
+import Synchronization
 import Testing
 @testable import UI
 
@@ -21,16 +23,25 @@ import Testing
         let scope = WorkbenchCommandScope(); scope.window = window; scope.sourceView = host
         defer { window.close() }
         #expect(scope.permitsVisibleCommands)
+        let opened = Mutex(false)
+        withObservationTracking { _ = scope.permitsVisibleCommands } onChange: { opened.withLock { $0 = true } }
         let preferences = ChatDisplayPreferencesState()
         let parent = try #require(WorkbenchChildPanelHandle(owner: window, title: "Parent",
             content: AnyView(Text("Controlled panel")), preferences: preferences, language: nil))
         defer { parent.close() }
+        #expect(opened.withLock { $0 })
         #expect(!scope.permitsVisibleCommands)
         let child = try #require(WorkbenchChildPanelHandle(owner: window, title: "Nested",
             content: AnyView(Text("Controlled nested panel")), preferences: preferences, language: nil))
+        let nestedClosed = Mutex(false)
+        withObservationTracking { _ = scope.permitsVisibleCommands } onChange: { nestedClosed.withLock { $0 = true } }
         child.close()
+        #expect(nestedClosed.withLock { $0 })
         #expect(!scope.permitsVisibleCommands)
+        let parentClosed = Mutex(false)
+        withObservationTracking { _ = scope.permitsVisibleCommands } onChange: { parentClosed.withLock { $0 = true } }
         parent.close()
+        #expect(parentClosed.withLock { $0 })
         // No canvas click or canvas command publication is needed to save the
         // current owner. A retained but hidden owner must remain ineligible.
         #expect(scope.permitsVisibleCommands)
