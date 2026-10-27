@@ -1405,11 +1405,14 @@ extension WorkflowWorkspacePresentationTests {
         let owner = WorkflowAssetLibraryOwner(projectID: f.manifest.id, instanceID: f.manifest.effectiveInstanceID)
         let transfer = WorkflowCanvasTransfer.library(owner: owner, sources: [.asset(published.record.reference)])
         let original = try #require(c.graph)
+        var measuredCenters: [WorkflowPortIdentity: CGPoint] = [:]
+        var measuredSizes: [UUID: CGSize] = [:]
         let surface = WorkflowGraphSurface(controller: c, graph: original, zoom: .constant(zoom), tool: .constant(.pointer),
             navigationRequest: .constant(nil), viewportInteractionLocked: .constant(false),
             viewContext: .init(projectID: c.projectID, rootGraphID: original.id, bodyPath: []),
             pendingConnection: .constant(nil), selectedConnectionID: .constant(nil), readOnly: false,
-            onPlan: { _, _ in }, onDropItem: { _, _ in false })
+            onPlan: { _, _ in }, nodeSizeObserver: { measuredSizes[$0] = $1 },
+            portCenterObserver: { measuredCenters = $0 }, onDropItem: { _, _ in false })
         let host = NSHostingView(rootView: surface)
         host.frame = .init(x: 0, y: 0, width: 1600, height: 900)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -1421,12 +1424,15 @@ extension WorkflowWorkspacePresentationTests {
         let receiver = try #require(descendants(host).compactMap { $0 as? WorkflowPortDragView }
             .first { $0.port?.nodeID == model.id && $0.port?.input == true && $0.port?.port == "input" })
         let center = CGPoint(x: receiver.bounds.midX, y: receiver.bounds.midY)
-        let point = receiver.convert(center, to: nil)
         #expect(receiver.hitTest(receiver.convert(center, to: receiver.superview)) === receiver)
         #expect(!receiver.registeredDraggedTypes.contains(.init("org.d-workbench.canvas-item")))
         let scope = try #require(receiver.scope), port = try #require(receiver.port)
         let preview = WorkflowLibraryDropPreview()
-        preview.begin(nil, scope: scope, hit: { _ in .port(port) }, assess: { value, port in
+        let measuredCenter = try #require(measuredCenters[port])
+        let map = WorkflowLibraryDropHitMap(graph: original, geometry: WorkflowGraphGeometry(graph: original, tools: c.tools, registry: c.registry), centers: measuredCenters, sizes: measuredSizes)
+        #expect(map.hit(measuredCenter) == .port(port), "Measured host port center must resolve through the actual drop hit map")
+        #expect(map.hit(.init(x: measuredCenter.x - 12, y: measuredCenter.y)) != .port(port))
+        preview.begin(nil, scope: scope, hit: map.hit, assess: { value, port in
             WorkflowLibraryPortDrop.admission(value, port: port, scope: scope, controller: c)
         })
         #expect(WorkflowLibraryPortDrop.admission(transfer, port: port, scope: scope, controller: c) == .ready)
@@ -1512,5 +1518,13 @@ extension WorkflowWorkspacePresentationTests {
         #expect(preview.value == nil && preview.location == nil && preview.feedback == nil)
         preview.begin(nil, scope: scope, hit: { _ in .port(port) }, assess: { _, _ in .checking })
         #expect(preview.consume(scope: scope)); preview.clear(); #expect(!preview.consume(scope: scope))
+        preview.begin(nil, scope: scope, hit: { _ in .port(port) }, assess: { _, _ in .checking })
+        preview.move(to: .zero); #expect(preview.feedback == .blocked("container.dropTarget"), "External files cannot claim port compatibility")
+        let operation = NSItemProvider(), operationBytes = try WorkflowCanvasTransfer.operation(id: "d.text.input", modelID: nil).encoded()
+        operation.registerDataRepresentation(forTypeIdentifier: UTType.workflowCanvasItem.identifier, visibility: .ownProcess) { completion in completion(operationBytes, nil); return nil }
+        preview.begin(operation, scope: scope, hit: { _ in .port(port) }, assess: { _, _ in .checking })
+        preview.move(to: .zero)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(preview.value != nil && preview.feedback == nil, "An operation drag must not advertise an asset connection")
     }
 }

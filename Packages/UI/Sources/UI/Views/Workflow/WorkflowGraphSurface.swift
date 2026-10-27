@@ -294,6 +294,7 @@ struct WorkflowGraphSurface: View {
                                     } else { _ = acceptSurfaceDrop([value], at: raw, scope: scope) }
                                 }
                                 else if let url = URL(dataRepresentation: bytes, relativeTo: nil), url.isFileURL {
+                                    guard destination == .canvas else { throw WorkflowIssue(workflowText(languageStore, "container.dropTarget")) }
                                     _ = acceptFileDrop([url], at: raw, scope: scope)
                                 } else { throw CocoaError(.fileReadUnsupportedScheme) }
                             } catch { controller.errorMessage = error.localizedDescription }

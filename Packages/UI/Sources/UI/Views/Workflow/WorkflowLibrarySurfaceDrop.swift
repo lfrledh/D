@@ -109,10 +109,12 @@ enum WorkflowLibraryDropAdmission: Equatable {
     private var identity: UUID?
     private var progress: Progress?
     private var activeScope: WorkflowCanvasScope?
+    private var isCanvasItem = false
     func begin(_ provider: NSItemProvider?, scope: WorkflowCanvasScope, hit: @escaping (CGPoint) -> WorkflowLibraryDropTarget,
                assess: @escaping (WorkflowCanvasTransfer?, WorkflowPortIdentity) -> WorkflowLibraryDropAdmission) {
         clear(); activeScope = scope; self.hit = hit; self.assess = assess
-        guard let provider, provider.hasItemConformingToTypeIdentifier(UTType.workflowCanvasItem.identifier) else { return }
+        isCanvasItem = provider?.hasItemConformingToTypeIdentifier(UTType.workflowCanvasItem.identifier) == true
+        guard let provider, isCanvasItem else { return }
         let id = UUID(); identity = id
         progress = provider.loadDataRepresentation(forTypeIdentifier: UTType.workflowCanvasItem.identifier) { [weak self] bytes, _ in
             let decoded = bytes.flatMap { try? WorkflowCanvasTransfer.decode($0) }
@@ -129,7 +131,9 @@ enum WorkflowLibraryDropAdmission: Equatable {
         let target = hit?(point)
         guard target != cachedTarget else { return }
         cachedTarget = target
-        if case .port(let port) = target { feedback = assess?(value, port) }
+        if !isCanvasItem { feedback = target == .canvas ? nil : .blocked("container.dropTarget") }
+        else if let value, value.libraryPayload == nil { feedback = nil }
+        else if case .port(let port) = target { feedback = assess?(value, port) }
         else { feedback = nil }
     }
     func consume(scope: WorkflowCanvasScope) -> Bool {
@@ -137,7 +141,7 @@ enum WorkflowLibraryDropAdmission: Equatable {
         clear(); return true
     }
     func clear() {
-        identity = nil; activeScope = nil; progress = nil; value = nil; location = nil
+        identity = nil; activeScope = nil; isCanvasItem = false; progress = nil; value = nil; location = nil
         feedback = nil; cachedTarget = nil; hit = nil; assess = nil
     }
 }
