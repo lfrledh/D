@@ -36,6 +36,9 @@ public actor ModelLibrary {
         var rootBookmark: Data?
         var rootURL: URL?
         var rootIdentity: ModelFileIdentity?
+        var rootVolumeUUID: String?
+        // One explicit remount recovery at a time; never an identity bypass for execution.
+        var rootDeviceBeforeRemount: Int64?
         var downloadCredentialBookmark: Data?
         var downloadCredentialAccount: String?
         var records: [StoredRecord] = []
@@ -489,11 +492,13 @@ public actor ModelLibrary {
         }
         let previousDisk = disk, previousRoot = libraryRoot, previousScope = rootScope, previousLock = libraryLock
         do {
-            try attachRoot(scope, create: !hasManaged)
+            try attachRoot(scope, create: !hasManaged, allowRemountRecovery: true)
             checkAvailabilityNow(ids: Set(disk.records.filter { $0.record.storage == .managed }.map { $0.record.id }))
             try persist()
         }
         catch {
+            // A published index is authoritative even when the directory sync failed.
+            if case ModelAtomicWriteError.publishedButUnsynced = error { throw error }
             disk = previousDisk; libraryRoot = previousRoot; rootScope = previousScope; libraryLock = previousLock
             throw error
         }
@@ -1301,7 +1306,7 @@ public actor ModelLibrary {
         return try stage.child("Content", create: create)
     }
 
-    private func attachRoot(_ scope: ModelScopedLocation, create: Bool) throws {
+    private func attachRoot(_ scope: ModelScopedLocation, create: Bool, allowRemountRecovery: Bool = false) throws {
         let selected = try ModelDirectory(scope.url)
         let root = try selected.child(".d-model-library", create: create)
         let marker = Data(disk.libraryID.uuidString.utf8)
@@ -1311,7 +1316,16 @@ public actor ModelLibrary {
             guard create, try root.entries(expectedPaths: []).isEmpty else { throw ModelLibraryError.unsafePath("模型库目录含未知内容。") }
             try root.atomicWrite(marker, to: "owner.json", replace: false)
         }
-        try validateRootIdentity(root)
+        let volume = try scope.url.resourceValues(forKeys: [.volumeUUIDStringKey]).volumeUUIDString
+        let originalVolume = disk.rootVolumeUUID ?? disk.rootBookmark.flatMap {
+            NSURL.resourceValues(forKeys: [.volumeUUIDStringKey], fromBookmarkData: $0)?[.volumeUUIDStringKey] as? String
+        }
+        let previousIdentity = disk.rootIdentity
+        let remounted = allowRemountRecovery && previousIdentity.map {
+            $0.device != root.identity.device && $0.inode == root.identity.inode &&
+                originalVolume != nil && originalVolume == volume
+        } == true
+        if !remounted { try validateRootIdentity(root) }
         let lock: ModelFileHandle
         if let previous = libraryRoot, previous.identity.sameNode(root.identity), let currentLock = libraryLock {
             lock = currentLock
@@ -1319,6 +1333,8 @@ public actor ModelLibrary {
         _ = try root.child("Installations", create: true); _ = try root.child("Staging", create: true)
         libraryRoot = root; libraryLock = lock; rootScope = scope
         disk.rootBookmark = scope.bookmark; disk.rootURL = scope.url; disk.rootIdentity = root.identity
+        disk.rootVolumeUUID = volume
+        if remounted { disk.rootDeviceBeforeRemount = previousIdentity?.device }
         for index in disk.records.indices where disk.records[index].record.storage == .managed {
             let next = root.url.appendingPathComponent("Installations/" + disk.records[index].record.id.description)
             if let old = disk.records[index].record.directory, old.standardizedFileURL != next.standardizedFileURL {
@@ -1576,7 +1592,7 @@ private final class ModelScopedLocation: Sendable {
         do {
             url = try ModelDirectory.canonicalURL(selected)
             _ = try ModelDirectory(url)
-            bookmark = try selected.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+            bookmark = try selected.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: [.volumeUUIDStringKey], relativeTo: nil)
         } catch { if active { selected.stopAccessingSecurityScopedResource() }; throw error }
     }
     deinit { if active { selected.stopAccessingSecurityScopedResource() } }
@@ -2176,15 +2192,51 @@ extension ModelLibrary {
         guard let root = libraryRoot else { throw ModelLibraryError.unavailable("模型库不可用。") }
         try root.validateLocation()
         let directory = try root.child("Installations/" + id.description)
-        guard original.verifiedRoot?.sameNode(directory.identity) == true else { throw ModelLibraryError.unsafePath("原副本身份已改变。") }
+        let remountTree: ModelRequiredTree?
+        if original.verifiedRoot?.sameNode(directory.identity) != true {
+            // Explicit revalidation only. Admission and runtime FD checks remain strict;
+            // root relocation alone never makes a model runnable.
+            guard original.control?.role != .execution,
+                  let expected = original.verifiedRoot,
+                  expected.device == disk.rootDeviceBeforeRemount,
+                  expected.device != directory.identity.device,
+                  expected.inode == directory.identity.inode,
+                  let volume = disk.rootVolumeUUID,
+                  try root.url.resourceValues(forKeys: [.volumeUUIDStringKey]).volumeUUIDString == volume else {
+                throw ModelLibraryError.unsafePath("原副本身份已改变。")
+            }
+            let current = try directory.requiredTree(paths: Set(original.verifiedFiles.keys))
+            guard !original.verifiedFiles.isEmpty,
+                  current.files.allSatisfy({ path, identity in
+                      identity.device == directory.identity.device &&
+                          original.verifiedFiles[path]?.sameVersionAfterRemount(identity, oldDevice: expected.device) == true
+                  }),
+                  (original.verifiedDirectories ?? [:]).allSatisfy({ path, identity in
+                      identity.device == expected.device && current.directories[path]?.inode == identity.inode &&
+                          current.directories[path]?.device == directory.identity.device
+                  }) else { throw ModelLibraryError.unsafePath("原副本身份已改变。") }
+            remountTree = current
+        } else { remountTree = nil }
         let entry = try entry(for: id)
-        setState(id, .verifying); try persist()
+        setState(id, .verifying)
+        do { try persist() }
+        catch {
+            if case ModelAtomicWriteError.publishedButUnsynced = error {
+                setState(id, .failed)
+                mutate(id) { $0.record.error = error.localizedDescription }
+                try? persist()
+            } else { mutate(id) { $0 = original } }
+            throw error
+        }
         workers[id] = Task { [weak self] in
             guard let self else { return }
             do {
                 let job = Task.detached { try Self.verifyExternal(directory, entry: entry) }
                 let tree = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
                 try Task.checkCancellation()
+                if let remountTree, tree != remountTree {
+                    throw ModelLibraryError.unsafePath("原副本身份已改变。")
+                }
                 await self.verified(id, directory: directory, files: tree.files, directories: tree.directories)
                 await self.workerEnded(id, error: nil)
             } catch { await self.workerEnded(id, error: error) }

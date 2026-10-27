@@ -61,6 +61,118 @@ struct DownloadManagementTests {
         #expect(try ModelDirectory(lease.reference.directory).verify(f.entry.files).count == 2)
         try await library.shutdown()
     }
+    // A remount changes st_dev without changing the original volume or inode.
+    // Alter only persisted fixture metadata; no system mount/permission changes.
+    private func simulateRemountedIndex(_ f: LibraryFixture, volume: String? = nil) throws {
+        let url = f.state.appendingPathComponent("index.json")
+        var json = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        func remap(_ value: Any) -> Any {
+            if let d = value as? [String: Any] {
+                var next = d.mapValues(remap)
+                if d["inode"] != nil, let device = d["device"] as? NSNumber { next["device"] = device.int64Value + 1000 }
+                return next
+            }
+            if let a = value as? [Any] { return a.map(remap) }
+            return value
+        }
+        json = remap(json) as! [String: Any]
+        // Exercise the legacy public bookmark resource value, not just new fields.
+        json.removeValue(forKey: "rootVolumeUUID")
+        let legacyBookmark = try f.destination.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+        #expect(NSURL.resourceValues(forKeys: [.volumeUUIDStringKey], fromBookmarkData: legacyBookmark)?[.volumeUUIDStringKey] as? String != nil)
+        json["rootBookmark"] = legacyBookmark.base64EncodedString()
+        if let volume { json["rootVolumeUUID"] = volume }
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+    }
+
+    @Test func remountedManagedModelRequiresExplicitRootAndFullVerification() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let transfer = FixtureTransfer(f.contents)
+        var owner: ModelLibrary? = try await library(f, transport: transfer)
+        try await owner!.configureRoot(at: f.destination)
+        let task = try await owner!.enqueueDownloads([f.entry.id], postAction: .register)[0]
+        let done = try await wait(owner!) { $0.downloads.first?.state == .completed }
+        let requests = await transfer.requests
+        try await owner!.shutdown(); owner = nil
+        try simulateRemountedIndex(f)
+        owner = try await library(f, transport: transfer)
+        #expect(await owner!.checkAvailability().resources.first?.record.availability == .unavailable)
+        await #expect(throws: ModelLibraryError.self) { _ = try await owner!.resolve(task.resourceID.modelID) }
+        try await owner!.configureRoot(at: f.destination)
+        #expect(await owner!.snapshot().resources.first?.record.availability == .unavailable)
+        await #expect(throws: ModelLibraryError.self) { _ = try await owner!.resolve(task.resourceID.modelID) }
+        try await owner!.reverifyResource(task.resourceID)
+        _ = try await owner!.resolve(task.resourceID.modelID)
+        #expect(await owner!.snapshot().downloads == done.downloads)
+        #expect(await owner!.snapshot().resources.first?.record.registrationState == .registered)
+        #expect(await transfer.requests == requests)
+        try await owner!.shutdown(); owner = nil
+        owner = try await library(f, transport: transfer)
+        _ = try await owner!.resolve(task.resourceID.modelID)
+        #expect(await owner!.snapshot().downloads == done.downloads)
+        try await owner!.shutdown()
+    }
+
+    @Test(arguments: ["wrong-volume", "copied-root", "replaced-installation", "changed-file", "missing-volume"])
+    func remountRecoveryRejectsUnprovenIdentity(kind: String) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let transfer = FixtureTransfer(f.contents)
+        var owner: ModelLibrary? = try await library(f, transport: transfer)
+        try await owner!.configureRoot(at: f.destination)
+        let task = try await owner!.enqueueDownloads([f.entry.id], postAction: .register)[0]
+        let done = try await wait(owner!) { $0.downloads.first?.state == .completed }
+        try await owner!.shutdown(); owner = nil
+        try simulateRemountedIndex(f, volume: kind == "wrong-volume" ? UUID().uuidString : nil)
+        if kind == "missing-volume" {
+            let url = f.state.appendingPathComponent("index.json")
+            var json = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+            json.removeValue(forKey: "rootBookmark")
+            try JSONSerialization.data(withJSONObject: json).write(to: url)
+        }
+        var selected = f.destination
+        if kind == "copied-root" {
+            selected = f.root.appendingPathComponent("copied")
+            try FileManager.default.copyItem(at: f.destination, to: selected)
+        }
+        let installed = f.destination.appendingPathComponent(".d-model-library/Installations/" + task.resourceID.modelID.description)
+        if kind == "replaced-installation" {
+            try FileManager.default.moveItem(at: installed, to: f.root.appendingPathComponent("original"))
+            try f.writeModel(at: installed)
+        }
+        if kind == "changed-file" {
+            try Data("changed".utf8).write(to: installed.appendingPathComponent("config.json"))
+        }
+        owner = try await library(f, transport: transfer)
+        if ["wrong-volume", "copied-root", "missing-volume"].contains(kind) {
+            await #expect(throws: ModelLibraryError.self) { try await owner!.configureRoot(at: selected) }
+        } else {
+            try await owner!.configureRoot(at: selected)
+            await #expect(throws: ModelLibraryError.self) { try await owner!.reverifyResource(task.resourceID) }
+        }
+        await #expect(throws: ModelLibraryError.self) { _ = try await owner!.resolve(task.resourceID.modelID) }
+        #expect(await owner!.snapshot().downloads == done.downloads)
+        #expect(await owner!.snapshot().resources.first?.record.registrationState == .registered)
+        try await owner!.shutdown()
+    }
+
+    @Test(arguments: ["state.beforeWrite", "state.afterRename"])
+    func explicitReverificationSaveFailureHasNoPhantomWorker(point: String) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let transfer = FixtureTransfer(f.contents), fault = FixtureFault()
+        let owner = try await library(f, transport: transfer, fault: fault)
+        try await owner.configureRoot(at: f.destination)
+        let task = try await owner.enqueueDownloads([f.entry.id], postAction: .register)[0]
+        let done = try await wait(owner) { $0.downloads.first?.state == .completed }
+        fault.arm(point)
+        await #expect(throws: (any Error).self) { try await owner.reverifyResource(task.resourceID) }
+        #expect(await owner.snapshot().records.first?.state != .verifying)
+        #expect(await owner.snapshot().downloads == done.downloads)
+        fault.clear()
+        try await owner.reverifyResource(task.resourceID)
+        _ = try await owner.resolve(task.resourceID.modelID)
+        try await owner.shutdown()
+    }
+
     @Test func preparedPostActionDoesNotBlockNextDownload() async throws {
         let f = try LibraryFixture(); defer { f.clean() }
         let transport = FixtureTransfer(f.contents)

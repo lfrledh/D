@@ -16,6 +16,14 @@ struct ModelFileIdentity: Codable, Equatable, Sendable {
         changedSeconds = Int64(value.st_ctimespec.tv_sec); changedNanoseconds = Int64(value.st_ctimespec.tv_nsec)
     }
     func sameNode(_ other: Self) -> Bool { device == other.device && inode == other.inode }
+
+    // Only used before an explicit full revalidation after the original volume
+    // and root have been established. Not used by execution, deletion or resume.
+    func sameVersionAfterRemount(_ other: Self, oldDevice: Int64) -> Bool {
+        device == oldDevice && device != other.device && inode == other.inode && size == other.size &&
+            modifiedSeconds == other.modifiedSeconds && modifiedNanoseconds == other.modifiedNanoseconds &&
+            changedSeconds == other.changedSeconds && changedNanoseconds == other.changedNanoseconds
+    }
 }
 
 /// Only explicitly named paths are inspected. Directory metadata may change when
