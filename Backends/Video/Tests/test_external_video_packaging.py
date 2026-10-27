@@ -99,6 +99,12 @@ class ExternalPackagingTests(unittest.TestCase):
         with mock.patch.object(packaging.core, '_sha256', side_effect=lambda p: hashes.get(Path(p), None) or real(p)):
             packaging.install_ffmpeg_source_materials(staging, ffmpeg, ffprobe, archive)
             self.assertEqual(json.loads((staging / 'Licenses/ffmpeg-9.0.1-SOURCE.json').read_text()), record)
+            notice = folder / record['buildRecipe']['license']['path']
+            self.assertEqual((staging / 'Licenses' / notice.name).read_bytes(), notice.read_bytes())
+            hashes[notice] = '0' * 64
+            with self.assertRaisesRegex(packaging.core.PackagingError, 'recipe license'):
+                packaging.install_ffmpeg_source_materials(staging, ffmpeg, ffprobe, archive)
+            del hashes[notice]
             hashes[staging / 'native/ffprobe'] = '0' * 64
             with self.assertRaisesRegex(packaging.core.PackagingError, 'tool identity'):
                 packaging.install_ffmpeg_source_materials(staging, ffmpeg, ffprobe, archive)

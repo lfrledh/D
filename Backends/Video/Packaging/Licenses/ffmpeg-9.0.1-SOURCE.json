@@ -7,7 +7,23 @@
   "sourceSHA256": "cf38e0e28c7e5605942c4a77755349b0145804a397af37eb1fb4c77cb237f635",
   "buildRecipe": {
     "path": "ffmpeg-9.0.1-homebrew.rb",
-    "sha256": "c350685d70db3a93a983062d28db5e677f7dc7651ba391a269ad6620b589073f"
+    "sha256": "c350685d70db3a93a983062d28db5e677f7dc7651ba391a269ad6620b589073f",
+    "upstreamReference": {
+      "repository": "https://github.com/Homebrew/homebrew-core",
+      "referenceCommit": "9989cb082e65017b0f1980a3111bcec34c249da7",
+      "licenseURL": "https://raw.githubusercontent.com/Homebrew/homebrew-core/9989cb082e65017b0f1980a3111bcec34c249da7/LICENSE.txt",
+      "licenseSHA256": "f80329e58613ad669c0e73cb132d8060b9b2c55e339c73848068e4d1567f4627",
+      "recipeURL": "https://raw.githubusercontent.com/Homebrew/homebrew-core/9989cb082e65017b0f1980a3111bcec34c249da7/Formula/f/ffmpeg.rb",
+      "upstreamRecipeSHA256": "bcfd725055668592e21036c4a961fec7a96da7d043c4f6832c61ba12b88d8609",
+      "normalization": "Remove only the single top-level bottle block; remaining bytes exactly match the bundled installed recipe.",
+      "installedTapCommit": null,
+      "scope": "Verified upstream recipe reference and its license, not an assertion of the unknown installed tap revision."
+    },
+    "license": {
+      "path": "Homebrew-BSD-2-Clause.txt",
+      "sha256": "f80329e58613ad669c0e73cb132d8060b9b2c55e339c73848068e4d1567f4627",
+      "spdx": "BSD-2-Clause"
+    }
   },
   "inputTools": {
     "ffmpeg": {

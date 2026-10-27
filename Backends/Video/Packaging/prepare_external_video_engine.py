@@ -215,12 +215,16 @@ def install_ffmpeg_source_materials(staging, ffmpeg, ffprobe, archive):
     recipe = folder / record['buildRecipe']['path']
     if recipe.is_symlink() or core._sha256(recipe) != record['buildRecipe']['sha256']:
         raise core.PackagingError('FFmpeg build recipe differs')
+    notice = folder / record['buildRecipe']['license']['path']
+    if notice.is_symlink() or not notice.is_file() or core._sha256(notice) != record['buildRecipe']['license']['sha256']:
+        raise core.PackagingError('FFmpeg recipe license differs')
     for name, path in [('ffmpeg', Path(ffmpeg)), ('ffprobe', Path(ffprobe))]:
         expected = record['inputTools'][name]
         for candidate in [path, staging / 'native' / name]:
             if candidate.is_symlink() or not candidate.is_file() or candidate.stat().st_size != expected['byteCount'] or core._sha256(candidate) != expected['sha256']:
                 raise core.PackagingError('FFmpeg input/copied tool identity differs: ' + name)
     copy_file(recipe, staging / 'Licenses' / recipe.name)
+    copy_file(notice, staging / 'Licenses' / notice.name)
     copy_file(folder / 'ffmpeg-9.0.1-SOURCE.json', staging / 'Licenses/ffmpeg-9.0.1-SOURCE.json')
     return record
 
