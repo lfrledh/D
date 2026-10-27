@@ -8,6 +8,8 @@
 
 [持续开发验收授权](MULTI_AGENT_WORKFLOW.zh-CN.md#持续开发验收授权与受阻处理)已永久落现有规程，AGENTS只保留入口。**无必须本人即时处理的授权、退出或保存决定。**短暂系统通知前台及首次冷开观察timeout已保留，正常冷开后Dactive恢复；不绕过工具保护、未改系统权限、未强退。[唯一集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#统一问题清单app-store-v22026-10-26)继续保留tooltip/VoiceOver、所有玻璃瞬态、呈现性能、Store/许可/公开材料的具体缺口。性能仍“勉强可用但不够理想”，24→0无关投影不是FPS。用户项目/模型/个人scheme和证据保留；已停旧候选及临时编译缓存按清单清理。停在用户集中体验和顾问审计，不扩下一轮、不合并、不上传、不发布。
 
+系统提示处理后补验：用户已确认处理，准确612正常App以1080×680当前边界完成原生reader跨界选区及后续B区关闭不穿透，NQ-38-r1/r2已直接展示；未改产品或重建包。旧未送达记录保留，新增文档交付与远端SHA写入现有CurrentD/receipt.json。
+
 以下为前轮交审事实：
 
 当前交审：**D-UI-CONSOLIDATED-01 / ASSET-CONTAINER-LIBRARY-V1 · 原生拖放续验**。实际起点完整`1e2f059db9ae28dab40476f3a86dbc46116bc397`，原专属树/`codex/ui-consolidated-20261020`接续，累计祖先检查0，无他人后继；最终生产 **`825c8223428b222f3d8bdf19f71d9ef12585f11f`**。Lead唯一写入/GUI，两位非实施者源码复核与独立实包复核完成，普通D/个人scheme/用户内容保持。
