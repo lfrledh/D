@@ -836,6 +836,9 @@ extension ModelLibraryModel {
                 guard let validate = self.preparedValidator else { throw ModelLibraryError.unavailable(self.managementText("prepareUnavailable", "执行包验证引擎尚不可用。")) }
                 try await self.library.registerPreparedResource(resource.id, validate: validate)
             } else { try await self.library.registerResource(resource.id) }
+            // The successful inverse action supersedes an earlier unregister receipt.
+            // A failed registration keeps its prior state and the real error.
+            self.preparationNotice = nil
         }
     }
     private func revokeNodePreparation(_ resource: ModelResourceID) {

@@ -498,6 +498,16 @@ extension ModelLibraryPresentationTests {
         #expect((await store.snapshot()).revision == before.revision)
         #expect((await engine.submissions) == 0)
         #expect(record.activeLeaseCount == 0 && record.registrationState == .registered)
+        let resource = try #require(model.snapshot?.resources.first)
+        let downloads = model.snapshot?.downloads
+        await model.unregisterResource(resource)
+        #expect(model.preparationNotice != nil)
+        await model.registerResource(try #require(model.snapshot?.resources.first))
+        #expect(model.errorMessage == nil && model.preparationNotice == nil)
+        #expect(model.snapshot?.resources.first?.record.registrationState == .registered)
+        #expect(model.snapshot?.downloads == downloads)
+        #expect(controller.graphs == graph && controller.canUndo == undo)
+        #expect((await engine.submissions) == 0)
         await owner.closeProject(); try await library.shutdown()
     }
 }
