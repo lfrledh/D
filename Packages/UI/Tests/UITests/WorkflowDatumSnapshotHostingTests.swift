@@ -182,4 +182,21 @@ struct WorkflowDatumSnapshotHostingTests {
         #expect(!reader.isEditable)
     }
 
+    @Test func duplicateOriginalTextKeepsItsOccurrenceWhenTranslatedHeadingsShrink() async throws {
+        let value = WorkflowDatum.record(schema: [.init("a", .text), .init("b", .text)], fields: ["a": .text("SAME"), "b": .text("SAME")])
+        let language = UILanguageStore(preferredLanguages: ["en"])
+        let host = NSHostingView(rootView: WorkflowDatumSnapshotView(value: value).environment(\.dLanguageStore, language))
+        host.frame = CGRect(x: 0, y: 0, width: 600, height: 400)
+        try await settle(host)
+        let reader = try #require(descendants(host).compactMap { $0 as? NSTextView }.first)
+        reader.setSelectedRange((reader.string as NSString).range(of: "SAME"))
+        try language.select("zh-Hans")
+        try await settle(host)
+        #expect(reader.selectedRange() == (reader.string as NSString).range(of: "SAME"))
+        let first: WorkflowDataSchema = .record([.init("a", .text)])
+        let second: WorkflowDataSchema = .record([.init("b", .number(unit: nil), required: false)])
+        #expect(WorkflowDatumSnapshotText.render(.none(first), language: language) != WorkflowDatumSnapshotText.render(.none(second), language: language))
+        #expect(WorkflowDatumSnapshotText.render(.list(element: first, items: []), language: language) != WorkflowDatumSnapshotText.render(.list(element: second, items: []), language: language))
+    }
+
 }

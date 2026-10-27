@@ -504,15 +504,29 @@ struct WorkflowViewerText:NSViewRepresentable {
             let selection = view.selectedRange(), origin = scroll.contentView.bounds.origin
             let previous = view.string as NSString
             let selected = preserve && selection.length > 0 && NSMaxRange(selection) <= previous.length ? previous.substring(with: selection) : nil
+            var ordinal = 0
+            if let selected {
+                var cursor = 0
+                while cursor < selection.location {
+                    let match = previous.range(of: selected, range: NSRange(location: cursor, length: previous.length-cursor))
+                    if match.location == NSNotFound || match.location >= selection.location { break }
+                    ordinal += 1;cursor = NSMaxRange(match)
+                }
+            }
             view.string=text;context.coordinator.last=NSRange(location:0,length:0)
             if preserve {
                 let updated = text as NSString
                 var range = NSRange(location: min(selection.location, updated.length), length: 0)
                 if let selected {
-                    let start = min(selection.location, updated.length)
-                    var match = updated.range(of: selected, range: NSRange(location: start, length: updated.length-start))
-                    if match.location == NSNotFound { match = updated.range(of: selected) }
-                    if match.location != NSNotFound { range = match }
+                    // Preserve the exact occurrence when localized headings change length.
+                    // Searching forward from the old offset can jump to a later equal value.
+                    var cursor = 0
+                    for occurrence in 0...ordinal {
+                        let match = updated.range(of: selected, range: NSRange(location: cursor, length: updated.length-cursor))
+                        if match.location == NSNotFound { break }
+                        if occurrence == ordinal { range = match;break }
+                        cursor = NSMaxRange(match)
+                    }
                 }
                 view.setSelectedRange(range)
                 scroll.contentView.scroll(to: origin);scroll.reflectScrolledClipView(scroll.contentView)

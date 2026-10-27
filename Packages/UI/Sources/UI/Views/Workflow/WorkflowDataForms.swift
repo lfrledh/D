@@ -374,6 +374,10 @@ enum WorkflowDatumSnapshotText {
         let name = workflowFormSchemaName(schema, language: language)
         switch schema {
         case .enumeration(let choices): return name + " [" + choices.joined(separator: ", ") + "]"
+        case .record(let fields):
+            return name + " {" + fields.map { field in
+                field.name + ": " + self.schema(field.type, language: language) + " · " + workflowText(language, field.required ? "workflow.port.required" : "workflow.language.form.optional")
+            }.joined(separator: "; ") + "}"
         case .list(let element), .optional(let element), .result(let element): return name + " · " + self.schema(element, language: language)
         default: return name
         }
