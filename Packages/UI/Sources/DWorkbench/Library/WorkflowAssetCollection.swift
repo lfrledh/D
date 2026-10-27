@@ -112,11 +112,14 @@ public struct WorkflowAssetCollection: Codable, Sendable, Equatable {
         return !excluded.contains(key) && (legacyAssetIDs.contains(asset.id) || asset.role == .original || included[key] != nil)
     }
     public func contains(_ source: WorkflowLibrarySource) -> Bool {
-        guard !excluded.contains(source.key) else { return false }
-        if included[source.key] != nil { return true }
+        // One exact key per lookup. Runtime keys encode and hash the full source;
+        // reuse it only within this call, never as a stale write-validation cache.
+        let key = source.key
+        guard !excluded.contains(key) else { return false }
+        if included[key] != nil { return true }
         switch source {
         case .asset(let reference): return legacyAssetIDs.contains(reference.assetID)
-        case .runtime: return legacyRuntimeKeys.contains(source.key)
+        case .runtime: return legacyRuntimeKeys.contains(key)
         }
     }
     public mutating func set(_ sources: [WorkflowLibrarySource], collected: Bool) throws {
