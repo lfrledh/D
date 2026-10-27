@@ -364,6 +364,75 @@ struct WorkflowModelReadinessTests {
         }
     }
 
+    @Test func recoveredInstallationReopensDraftWithoutGrantingReadiness() async throws {
+        try await withColdFixture { fixture in
+            let owner = await fixture.owner(at: "recovered-library")
+            owner.refreshWorkflowModels()
+            let id = try #require(owner.workflowInstallationID(for: fixture.identity))
+            let graph = owner.workflow?.graphs
+            owner.observeModelAvailability(await fixture.library.snapshot())
+            try await fixture.library.unregister(id)
+            owner.observeModelAvailability(await fixture.library.snapshot())
+            #expect(owner.explicitModelReadiness[fixture.identity] == .unavailable)
+            try await fixture.library.registerResource(.init(rawValue: id.rawValue))
+            owner.observeModelAvailability(await fixture.library.snapshot())
+            #expect(owner.explicitModelReadiness[fixture.identity] == .unknown)
+            #expect(owner.explicitModelIssues[fixture.identity] == nil)
+            #expect(owner.openGraphModelIdentities.isEmpty)
+            #expect(await fixture.validator.calls == 0)
+            await owner.checkExplicitModelReadiness(for: [fixture.identity])
+            #expect(owner.explicitModelReadiness[fixture.identity] == .available)
+            #expect(await fixture.validator.calls == 1)
+            #expect(owner.workflow?.graphs == graph)
+            #expect(owner.workflowInstallationID(for: fixture.identity) == id)
+            #expect(await fixture.engine.submissions == 0)
+            #expect(await owner.requestClose())
+        }
+    }
+
+    @Test func unchangedReadyInventoryCannotEraseAdapterFailure() async throws {
+        try await withColdFixture { fixture in
+            let owner = await fixture.owner(at: "adapter-failure")
+            owner.refreshWorkflowModels()
+            owner.observeModelAvailability(await fixture.library.snapshot())
+            await fixture.validator.arm()
+            let check = Task { await owner.checkExplicitModelReadiness(for: [fixture.identity]) }
+            let deadline = ContinuousClock.now + .seconds(3)
+            while !(await fixture.validator.waiting) && ContinuousClock.now < deadline { await Task.yield() }
+            try #require(await fixture.validator.waiting)
+            await fixture.validator.finish(); await check.value
+            let failure = try #require(owner.explicitModelIssues[fixture.identity])
+            owner.observeModelAvailability(await fixture.library.snapshot())
+            #expect(owner.explicitModelReadiness[fixture.identity] == .unavailable)
+            #expect(owner.explicitModelIssues[fixture.identity] == failure)
+            #expect(await fixture.validator.calls == 1)
+            #expect(await fixture.engine.submissions == 0)
+            #expect(await owner.requestClose())
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func delayedRecoveryEventPreservesNewValidation(explicitSelection: Bool) async throws {
+        try await withColdFixture { fixture in
+            let owner = await fixture.owner(at: "delayed-recovery")
+            owner.refreshWorkflowModels()
+            let id = try #require(owner.workflowInstallationID(for: fixture.identity))
+            try await fixture.library.unregister(id)
+            owner.observeModelAvailability(await fixture.library.snapshot())
+            try await fixture.library.registerResource(.init(rawValue: id.rawValue))
+            if explicitSelection { _ = try await owner.selectWorkflowInstallation(id: id) }
+            else { await owner.checkExplicitModelReadiness(for: [fixture.identity]) }
+            #expect(owner.explicitModelReadiness[fixture.identity] == .available)
+            owner.observeModelAvailability(await fixture.library.snapshot())
+            #expect(owner.explicitModelReadiness[fixture.identity] == .available)
+            #expect(owner.explicitModelIssues[fixture.identity] == nil)
+            await owner.checkExplicitModelReadiness(for: [fixture.identity])
+            #expect(await fixture.validator.calls == 1)
+            #expect(await fixture.engine.submissions == 0)
+            #expect(await owner.requestClose())
+        }
+    }
+
     @MainActor private struct ColdFixture {
         let root: URL
         let model: URL

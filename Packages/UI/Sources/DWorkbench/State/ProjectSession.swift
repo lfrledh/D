@@ -796,6 +796,7 @@ public final class ProjectSession {
         explicitModelReadiness = [:]
         explicitModelIssues = [:]
         explicitModelChecking = []
+        modelAvailabilityObservations = [:]
         store = candidate
         session = createdSession
         projectLease = lease
@@ -1227,6 +1228,7 @@ public final class ProjectSession {
         // was released. Presentation becomes current without a second full scan.
         modelReadinessGeneration = UUID()
         modelAvailabilityRevision = max(modelAvailabilityRevision, installationSnapshot.revision)
+        rememberModelAvailability(identity: identity, installation: id, snapshot: installationSnapshot)
         explicitModelReadiness[identity] = .available; explicitModelIssues[identity] = nil
         if let record = installationSnapshot.records.first(where: { $0.id == id }),
            let stamps = try? WorkflowModelReadiness.stamps(for: record, in: installationSnapshot) {
@@ -1402,6 +1404,33 @@ public final class ProjectSession {
     @ObservationIgnored private var modelReadinessGeneration = UUID()
     @ObservationIgnored private var modelReadinessRequests: [String: UUID] = [:]
     @ObservationIgnored private var modelAvailabilityRevision: UInt64 = 0
+    /// One memory-only observation per current explicit installation binding.
+    /// Pruned with that binding set and cleared on project changes; no file I/O,
+    /// progress, lease counters or last-access timestamps participate.
+    private struct ModelAvailabilityObservation: Equatable {
+        let installation: ModelID
+        let catalogID: String?, revision: String?, directory: URL?
+        let storage: ModelStorageKind?, registration: ModelRegistrationState?
+        let state: ModelInstallationState?, availability: ModelAvailability?
+        let fileState: ModelResourceFileState?, verifiedAt: Date?, role: ModelResourceRole?
+        let parent: ModelResourceID?, executionRevision: String?, recipe: String?
+        let requiredPaths: [String]?
+        init(installation: ModelID, record: ModelRecord?, control: ModelResourceControl?) {
+            self.installation = installation
+            catalogID = record?.catalogID; revision = record?.revision; directory = record?.directory
+            storage = record?.storage; registration = record?.registrationState
+            state = record?.state; availability = record?.availability
+            fileState = control?.fileState; verifiedAt = control?.lastVerified; role = control?.role
+            parent = control?.parentResourceID; executionRevision = control?.executionRevision
+            recipe = control?.preparationRecipe; requiredPaths = control?.requiredPaths
+        }
+    }
+    @ObservationIgnored private var modelAvailabilityObservations: [String: ModelAvailabilityObservation] = [:]
+    private func rememberModelAvailability(identity: String, installation: ModelID, snapshot: ModelLibrarySnapshot) {
+        modelAvailabilityObservations[identity] = .init(installation: installation,
+            record: snapshot.records.first { $0.id == installation },
+            control: snapshot.resources.first { $0.record.id == installation }?.control)
+    }
     /// Only dependencies of the currently open graph are requested by the host.
     /// Nested control bodies and pinned tool bodies belong to that graph.
     public var openGraphModelIdentities: Set<String> {
@@ -1438,10 +1467,18 @@ public final class ProjectSession {
         modelAvailabilityRevision = snapshot.revision
         do {
             let bookmarks = WorkflowModelBookmarks(settings: settings)
-            for identity in try bookmarks.installationIdentities() {
+            let identities = try bookmarks.installationIdentities()
+            modelAvailabilityObservations = modelAvailabilityObservations.filter { identities.contains($0.key) }
+            for identity in identities {
                 guard let id = try bookmarks.installation(for: identity) else { continue }
                 let record = snapshot.records.first { $0.id == id }
-                guard record?.registrationState != .registered || record?.state != .installed || record?.availability != .available else { continue }
+                let observation = ModelAvailabilityObservation(installation: id, record: record,
+                    control: snapshot.resources.first { $0.record.id == id }?.control)
+                let previous = modelAvailabilityObservations.updateValue(observation, forKey: identity)
+                let installed = record?.registrationState == .registered && record?.state == .installed && record?.availability == .available
+                // A recovered copy reopens preparation/selection, never execution.
+                // An unchanged ready snapshot must preserve real adapter failures.
+                guard !installed || (previous != nil && previous != observation) else { continue }
                 modelReadinessGeneration = UUID()
                 if let library = modelLibrary {
                     WorkflowModelReadiness.invalidate(.init(library: ObjectIdentifier(library), installation: id,
@@ -1449,8 +1486,8 @@ public final class ProjectSession {
                 }
                 modelReadinessRequests[identity] = nil
                 explicitModelChecking.remove(identity)
-                explicitModelReadiness[identity] = record?.state == .preparationRequired ? .unprepared : .unavailable
-                explicitModelIssues[identity] = record?.error ?? (record?.state == .preparationRequired
+                explicitModelReadiness[identity] = installed ? .unknown : (record?.state == .preparationRequired ? .unprepared : .unavailable)
+                explicitModelIssues[identity] = installed ? nil : record?.error ?? (record?.state == .preparationRequired
                     ? "模型原始文件已校验，仍需准备执行引擎。" : "模型安装已不可用，请在模型库检查。")
             }
         } catch { workflow?.errorMessage = error.localizedDescription }
@@ -1514,6 +1551,7 @@ public final class ProjectSession {
                           workflowBindingMatches(choice, installation: installation, bookmark: nil),
                           store === capturedStore, modelReadinessGeneration == generation, !isChangingProject,
                           !closePending else { return }
+                    rememberModelAvailability(identity: choice.id, installation: installation, snapshot: snapshot)
                     if !cached || identities == nil {
                         explicitModelChecking.insert(choice.id)
                         explicitModelReadiness[choice.id] = .unknown
@@ -2828,6 +2866,7 @@ public final class ProjectSession {
             explicitModelReadiness = [:]
             explicitModelIssues = [:]
             explicitModelChecking = []
+            modelAvailabilityObservations = [:]
             workflow?.deactivateAfterClose()
             workflow = nil
             session = nil
