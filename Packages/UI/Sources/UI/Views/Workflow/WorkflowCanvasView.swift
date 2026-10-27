@@ -803,7 +803,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                             revealLibrary(.init(controller: controller, source: .call(.init(address: record.address, stepID: record.id)), name: record.step.node.title + " · " + WorkflowHumanPresentation.call(record, in: selectedResultRun.map(WorkflowWorkspacePanels.records) ?? [], language: languageStore)))
                         }.accessibilityIdentifier("call-locate-results")
                         HStack { Text(record.step.node.title).font(.headline);Spacer();WorkflowStatusBadge(status:record.step.status,stale:false) }
-                        if let error=record.step.error { Label(error,systemImage:"exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled) }
+                        if let error=record.step.error { WorkbenchIssueText(raw: error, key: record.step.errorCode).foregroundStyle(.red).textSelection(.enabled) }
                         if record.step.status == .waiting,let run=selectedResultRun {
                             Button(workspaceText(languageStore, "viewReadonly"),systemImage:"arrow.up.right.square") { openCall(run,record:record) }
                                 .disabled(viewerModel == nil)
@@ -1940,7 +1940,7 @@ private struct WorkflowNodeInspector: View {
                     Text(step.node.title).font(.caption).foregroundStyle(.secondary)
                 }
                 if let error = step.error {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                    WorkbenchIssueText(raw: error, key: step.errorCode)
                         .foregroundStyle(.red)
                 }
                 if step.status == .waiting {

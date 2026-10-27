@@ -194,6 +194,7 @@ public struct DualWorkbenchView: View {
         canvasModel.projectSession.openGraphModelIdentities
     }
     @State private var featureHelp = WorkbenchHelpStore()
+    @State private var noticesVisible = false
     public init(model: WorkbenchModel, quickModel: WorkbenchModel, quick: QuickGenerationController,
                 library: ModelLibraryModel, nodeTags: ModelNodeTagStore, metadata: SharedLibraryStore?, metadataIssue: String? = nil, settingsRequest: Binding<UUID?> = .constant(nil), windowHasSheet: Bool = false) {
         self._settingsRequest = settingsRequest
@@ -202,7 +203,7 @@ public struct DualWorkbenchView: View {
     }
     private func t(_ key: String) -> String { workflowText(language, "refinement.shell." + key) }
     private var canPresentSettings: Bool {
-        featureHelp.presentation == nil && !windowHasSheet && !settingsVisible && !libraryVisible && !projectsVisible && !compatibilityVisible && !languageVisible
+        !noticesVisible && featureHelp.presentation == nil && !windowHasSheet && !settingsVisible && !libraryVisible && !projectsVisible && !compatibilityVisible && !languageVisible
             && filesRoute == nil && previewAsset == nil && libraryInfo == nil
             && pendingLibraryDestination == nil && pendingFilesRoute == nil
             && !library.isPresented && !library.isChoosingLocation && !model.hasPendingEditor
@@ -446,6 +447,7 @@ public struct DualWorkbenchView: View {
             sidebars: [action(systemMenuText(language, sidebarState.leading ? "hideLeft" : "showLeft")) { sidebarState.leading.toggle() },
                        action(systemMenuText(language, sidebarState.trailing ? "hideRight" : "showRight")) { sidebarState.trailing.toggle() }],
             help: action(systemMenuText(language, "guide")) { featureHelp.presentation = .init(featureID: nil, token: nil, context: nil) },
+            thirdPartyNotices: action(workflowText(language, "notices.title")) { noticesVisible = true },
             stop: entry == .quick && (quick.category != .text || quick.textPresentation == .single) ? action(systemMenuText(language, "stop"), enabled: originalQuick.isRunning) { Task { await originalQuick.cancel() } } : nil,
             retrySave: entry == .quick && (originalQuick.pendingSaveRunID != nil || originalQuick.saveIssue != nil) ? action(systemMenuText(language, "retrySave"), enabled: !originalQuick.isRunning) { Task { await originalQuick.retrySave() } } : nil)
     }
@@ -597,6 +599,7 @@ public struct DualWorkbenchView: View {
             WorkbenchFeatureGuide(presentation: presentation, store: featureHelp)
                 .environment(\.dLanguageStore, language)
         }
+        .workbenchSheet(isPresented: $noticesVisible, title: workflowText(language, "notices.title")) { WorkbenchThirdPartyNotices().environment(\.dLanguageStore, language) }
         .environment(\.workbenchSidebars, sidebarState)
         .environment(\.workbenchMenuContext, menuContext)
         .environment(\.openWorkbenchSettings, { section in presentSettings(section: section) })

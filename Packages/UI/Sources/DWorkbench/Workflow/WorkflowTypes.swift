@@ -151,7 +151,8 @@ public struct WorkflowStepRun: Codable, Sendable, Equatable, Identifiable {
     public var inputs: [String: WorkflowValue]
     public var outputs: [String: WorkflowValue]
     public var status: WorkflowStepStatus
-    public var error: String?
+    public var error: String? { didSet { errorCode = nil } }
+    public var errorCode: String?
     public var decision: WorkflowDecision?
     public init(id: UUID = UUID(), node: WorkflowNode, signature: String, inputs: [String: WorkflowValue] = [:],
                 outputs: [String: WorkflowValue] = [:], status: WorkflowStepStatus = .queued) {

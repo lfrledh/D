@@ -4948,6 +4948,11 @@
     "container.issue.alreadyCommitted": "这个容器的选择已提交。请查看已保存的决定或继续剩余流程。",
     "container.issue.operationUnavailable": "此操作当前不可用，请查看详细原因并重新检查对象。",
     "container.issue.actionFailed": "本次操作未能完成。请查看详细原因，保留当前内容后重试。",
-    "chat.issue.sessionIdentity": "此会话已存在，请返回该会话后再编辑。"
+    "chat.issue.sessionIdentity": "此会话已存在，请返回该会话后再编辑。",
+    "notices.title": "第三方声明",
+    "notices.scope": "当前 App 随附的许可证与来源记录。原文保留；材料齐全不代表商店分发义务已全部解决。",
+    "notices.unavailable": "这份随包材料无法读取或与清单不符，请核对 App 完整性。",
+    "notices.list": "随包材料列表",
+    "notices.document": "声明原文，只读"
   }
 }

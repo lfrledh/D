@@ -241,6 +241,7 @@ private struct WorkbenchCommands: Commands {
         }
         CommandGroup(replacing: .help) {
             button(current ? workspace?.help : nil, title: text("guide"))
+            button(current ? workspace?.thirdPartyNotices : nil, title: label("notices.title"))
             if let command = canvas?.legend { button(command, title: "") }
         }
     }

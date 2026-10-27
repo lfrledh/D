@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "component": "FFmpeg",
+  "version": "9.0.1",
+  "license": "GPL-3.0-or-later",
+  "sourceURL": "https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz",
+  "sourceSHA256": "cf38e0e28c7e5605942c4a77755349b0145804a397af37eb1fb4c77cb237f635",
+  "buildRecipe": {
+    "path": "ffmpeg-9.0.1-homebrew.rb",
+    "sha256": "c350685d70db3a93a983062d28db5e677f7dc7651ba391a269ad6620b589073f"
+  },
+  "inputTools": {
+    "ffmpeg": {
+      "byteCount": 426496,
+      "sha256": "cebe04356214a938aec846e4fc423de3fc18eda07f64e34e56d55f9963473a20"
+    },
+    "ffprobe": {
+      "byteCount": 253488,
+      "sha256": "81e6262cec5b1f06517c1853041394016ec0503f580aed702e62ac488c4520de"
+    }
+  },
+  "distributionReview": "Source and build facts only. Store distribution and linking obligations are not cleared.",
+  "buildConfiguration": [
+    "ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers",
+    "built with Apple clang version 21.0.0 (clang-2100.1.1.101)",
+    "configuration: --prefix=/opt/homebrew/Cellar/ffmpeg/9.0.1 --enable-shared --enable-pthreads --enable-version3 --cc=clang --host-cflags= --host-ldflags= --enable-ffplay --enable-gpl --enable-libsvtav1 --enable-libopus --enable-libx264 --enable-libmp3lame --enable-libdav1d --enable-libvmaf --enable-libvpx --enable-libx265 --enable-openssl --enable-videotoolbox --enable-audiotoolbox --enable-neon"
+  ]
+}

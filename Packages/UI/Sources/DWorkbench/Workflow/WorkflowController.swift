@@ -1893,11 +1893,12 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
                errorMessage?.contains(failure.localizedDescription) != true {
                 errorMessage = [errorMessage, failure.localizedDescription].compactMap { $0 }.joined(separator: "\n")
             }
+            errorCode = failedRun.steps.last(where: { $0.status == .failed })?.errorCode ?? (failure as? WorkflowIssue)?.code
             progressMessage = failedRun.status == .saving || hasPendingSaves
                 ? "计算已失败，失败记录尚未保存；请重试保存记录。"
                 : "失败记录已保存；流程仍失败。需要重新计算时，请明确重试计算。"
         } else if let failure, !(failure is CancellationError) {
-            errorMessage = failure.localizedDescription
+            reportIssue(failure as? WorkflowIssue ?? WorkflowIssue(failure.localizedDescription))
             setProgress(.init("failed"))
         }
         if hasPendingSaves, failedRun == nil {

@@ -3760,3 +3760,28 @@ extension WorkflowLifecycleTests {
         try await c.close(); try await store.close()
     }
 }
+
+extension WorkflowLifecycleTests {
+    @Test func codedOperationFailureSurvivesSaveAndColdReadWithoutTranslatingDiagnosis() async throws {
+        let (_, store, engine, _) = try await fixture()
+        let definition = try #require(WorkflowRegistry.standard.operation("d.value.input")).definition
+        let registry = try WorkflowRegistry(operations: [.init(definition: definition, execute: { _, _ in
+            throw WorkflowIssue("original fixture failure", code: "container.issue.inputType")
+        })])
+        let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let services = WorkflowServices(store: store, session: session, registry: registry, resolveModel: { _, _ in throw WorkflowIssue("No model in this fixture") })
+        let controller = WorkflowController(services: services, registry: registry)
+        await controller.load(); controller.addBlankGraph(); controller.addNode(operationID: "d.value.input")
+        let node = try #require(controller.graph?.nodes.last)
+        controller.setDataConfiguration(nodeID: node.id, value: .init(value: .text("frozen original")))
+        await controller.run(target: node.id, only: false)
+        let run = try #require(controller.runs.last), step = try #require(run.steps.last)
+        #expect(run.status == .failed && step.error == "original fixture failure" && step.errorCode == "container.issue.inputType")
+        #expect(controller.errorCode == "container.issue.inputType")
+        try await controller.close(); try await store.close()
+        let cold = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await cold.workflowState().archive?.runs.last == run)
+        #expect(await engine.requests.isEmpty)
+        try await cold.close()
+    }
+}

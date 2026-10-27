@@ -145,6 +145,7 @@ struct WorkbenchCommandWindow: NSViewRepresentable {
     public let modes: [WorkbenchChoiceCommand]
     public let sidebars: [WorkbenchGenerationCommand]
     public let help: WorkbenchGenerationCommand
+    public let thirdPartyNotices: WorkbenchGenerationCommand
     public let stop: WorkbenchGenerationCommand?
     public let retrySave: WorkbenchGenerationCommand?
 }

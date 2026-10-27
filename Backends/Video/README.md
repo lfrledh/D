@@ -103,3 +103,5 @@ D-VIDEO-V0-01 的命令行后端已通过 D-VIDEO-WORKBENCH-01 接入基础视�
 - `ExternalVideoRealModelTests`：显式环境选已有profile/pack/engine，正式Runtime生成→准入取消→恢复；不下载、不声称GUI通过。
 - UI包`WorkflowExternalVideoRecipeTests`/`WorkflowExternalVideoServicesTests`：参数和应用服务边界；AV/Store测试另验保存。
 - 真实开发App的登记、节点选择、流式两态、取消/切项目、预览与鼠标操作仍须单独验。较大模型/配置未实测时如实标明，不由小配置结果外推。
+
+ExternalVideo packaging also requires `--ffmpeg-source-archive /absolute/path/to/ffmpeg-9.0.1.tar.xz`. The exact archive SHA256 is recorded in `Packaging/Licenses/ffmpeg-9.0.1-SOURCE.json`. Keep it with the corresponding source delivery materials. The packager checks both original tools and copied tools before relocation; fixed provenance does not itself settle Store distribution obligations.

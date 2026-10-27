@@ -202,6 +202,29 @@ def install_native_notices(staging, libraries):
     copy_file(source / 'SOURCES.json', staging / 'Licenses/native/SOURCES.json')
 
 
+def install_ffmpeg_source_materials(staging, ffmpeg, ffprobe, archive):
+    """Pin the actual tools, recipe and corresponding source before packaging.
+
+    The source archive remains an explicit companion delivery, never inference
+    data. This validates facts; it does not decide Store licensing compatibility.
+    """
+    folder = Path(__file__).resolve().parent / 'Licenses'
+    record = json.loads((folder / 'ffmpeg-9.0.1-SOURCE.json').read_text())
+    if archive is None or Path(archive).is_symlink() or core._sha256(Path(archive)) != record['sourceSHA256']:
+        raise core.PackagingError('FFmpeg requires the exact corresponding source archive')
+    recipe = folder / record['buildRecipe']['path']
+    if recipe.is_symlink() or core._sha256(recipe) != record['buildRecipe']['sha256']:
+        raise core.PackagingError('FFmpeg build recipe differs')
+    for name, path in [('ffmpeg', Path(ffmpeg)), ('ffprobe', Path(ffprobe))]:
+        expected = record['inputTools'][name]
+        for candidate in [path, staging / 'native' / name]:
+            if candidate.is_symlink() or not candidate.is_file() or candidate.stat().st_size != expected['byteCount'] or core._sha256(candidate) != expected['sha256']:
+                raise core.PackagingError('FFmpeg input/copied tool identity differs: ' + name)
+    copy_file(recipe, staging / 'Licenses' / recipe.name)
+    copy_file(folder / 'ffmpeg-9.0.1-SOURCE.json', staging / 'Licenses/ffmpeg-9.0.1-SOURCE.json')
+    return record
+
+
 def verify_ltx_source(archive, site, video):
     if core._sha256(archive) != "99a789280172bfc51c4e4b455e29f55c8b467ac2305131bcf9fe5750a3b03d0e":
         raise core.PackagingError("Pinned LTX source archive differs")
@@ -296,6 +319,7 @@ def prepare(args):
         copy_file(h3 / "LICENSE", staging / "Licenses/h3-MIT.txt")
         for name in ["LICENSE.md", "COPYING.GPLv2", "COPYING.GPLv3", "COPYING.LGPLv2.1", "COPYING.LGPLv3"]:
             copy_file(ffmpeg.parent.parent / name, staging / "Licenses" / ("ffmpeg-" + name))
+        ffmpeg_origin = install_ffmpeg_source_materials(staging, ffmpeg, ffprobe, getattr(args, "ffmpeg_source_archive", None))
         libraries = relocate_tools(staging)
         install_native_notices(staging, libraries)
         vmaf = install_weight_free_vmaf(staging, getattr(args, 'vmaf_no_models', None))
@@ -312,6 +336,9 @@ def prepare(args):
             "ltxSourceFilesVerified": ltx_checked,
             "ltxPatches": ["ltx-reject-token-truncation.json", "ltx25-gemma4-streaming.json"],
             "nativeLibraries": libraries, "weightsBundled": False,
+            "ffmpegSource": "Licenses/ffmpeg-9.0.1-SOURCE.json",
+            "ffmpegSourceArchiveSHA256": ffmpeg_origin["sourceSHA256"],
+            "nativeRelocation": "Copied tools and dependencies are rewritten to bundle-relative loader paths; external build rpaths are removed. VMAF replacement is recorded separately.",
             "distributionReview": "development-only; not a release clearance",
         }, indent=2) + "\n")
         core._validate_tree(staging, "prepared engine", skip=False)
@@ -333,6 +360,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for option in ["python-root", "site-packages", "h3-source", "h3-source-archive", "ltx-source-archive", "ffmpeg", "ffprobe", "output", "identity", "team"]:
         parser.add_argument("--" + option, required=True)
+    parser.add_argument('--ffmpeg-source-archive', type=Path, required=True, help='exact FFmpeg source archive retained with distribution evidence')
     parser.add_argument('--vmaf-no-models', type=Path, help='fixed build_vmaf_without_models.py output, required if FFmpeg links libvmaf')
     try:
         prepare(parser.parse_args())

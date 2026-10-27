@@ -83,6 +83,31 @@ class ExternalPackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(packaging.core.PackagingError, "baseline differs"):
             packaging.verify_ltx_source(archive, site, video)
 
+    def test_ffmpeg_source_materials_require_exact_source_recipe_and_tools(self):
+        folder = packaging.Path(packaging.__file__).resolve().parent / 'Licenses'
+        record = json.loads((folder / 'ffmpeg-9.0.1-SOURCE.json').read_text())
+        archive = self.root / 'source.tar.xz'; archive.write_bytes(b'source')
+        ffmpeg = self.root / 'ffmpeg'; ffprobe = self.root / 'ffprobe'
+        for name, path in [('ffmpeg',ffmpeg),('ffprobe',ffprobe)]:
+            path.write_bytes(b'x' * record['inputTools'][name]['byteCount'])
+        real = packaging.core._sha256
+        hashes = {archive: record['sourceSHA256'], ffmpeg: record['inputTools']['ffmpeg']['sha256'], ffprobe: record['inputTools']['ffprobe']['sha256']}
+        staging = self.root / 'staging'
+        (staging / 'native').mkdir(parents=True)
+        for name, path in [('ffmpeg',ffmpeg),('ffprobe',ffprobe)]:
+            target=staging / 'native' / name; target.write_bytes(path.read_bytes()); hashes[target]=hashes[path]
+        with mock.patch.object(packaging.core, '_sha256', side_effect=lambda p: hashes.get(Path(p), None) or real(p)):
+            packaging.install_ffmpeg_source_materials(staging, ffmpeg, ffprobe, archive)
+            self.assertEqual(json.loads((staging / 'Licenses/ffmpeg-9.0.1-SOURCE.json').read_text()), record)
+            hashes[staging / 'native/ffprobe'] = '0' * 64
+            with self.assertRaisesRegex(packaging.core.PackagingError, 'tool identity'):
+                packaging.install_ffmpeg_source_materials(staging, ffmpeg, ffprobe, archive)
+            hashes[ffmpeg] = '0' * 64
+            with self.assertRaisesRegex(packaging.core.PackagingError, 'tool identity'):
+                packaging.install_ffmpeg_source_materials(self.root / 'bad', ffmpeg, ffprobe, archive)
+            with self.assertRaisesRegex(packaging.core.PackagingError, 'source archive'):
+                packaging.install_ffmpeg_source_materials(self.root / 'missing', ffmpeg, ffprobe, None)
+
     def test_native_executable_path_is_not_python_bin(self):
         native = self.root / "native/ffmpeg"
         native.parent.mkdir()

@@ -353,7 +353,7 @@ import Foundation
             if checkpoint?.state == .saving { throw error }
             // The service retains computed bytes; retry this same call only to publish them.
             try updateRecord(at: address) { record in
-                record.step.status = .saving; record.step.error = error.localizedDescription
+                record.step.status = .saving; record.step.error = error.localizedDescription; record.step.errorCode = (error as? WorkflowIssue)?.code
             }
             if var value = checkpoint { value.state = .saving; value.error = error.localizedDescription; checkpoint = value }
             try await persist()
@@ -363,7 +363,7 @@ import Foundation
             if checkpoint?.records.contains(where: { $0.step.status == .waiting }) == true { throw error }
             try updateRecord(at: address) { record in
                 record.step.status = .failed
-                record.step.error = error.localizedDescription
+                record.step.error = error.localizedDescription; record.step.errorCode = (error as? WorkflowIssue)?.code
                 if let failure = error as? WorkflowOutputValidationFailure { record.step.outputs["raw"] = .asset(failure.raw) }
             }
             do { try await persist() }
