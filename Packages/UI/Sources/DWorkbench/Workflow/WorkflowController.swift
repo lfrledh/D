@@ -23,14 +23,14 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public let registry: WorkflowRegistry
     public private(set) var pendingPausedStopRunID: UUID?
     public private(set) var containerSubmissions: [WorkflowContainerSubmission] = [] { didSet { contentGeneration &+= 1 } }
-    public private(set) var batchStages: [WorkflowBatchStage] = [] { didSet { contentGeneration &+= 1 } }
+    public private(set) var batchStages: [WorkflowBatchStage] = [] { didSet { contentGeneration &+= 1; invalidateContainerStages(oldValue) } }
     @ObservationIgnored private var batchPauseRequested = false
     @ObservationIgnored private var activeBatchID: UUID?
     public private(set) var graphs: [WorkflowGraph] = [] {
         didSet { emptyInsertionRevision = UUID(); displayGraphGeneration &+= 1; contentGeneration &+= 1 }
     }
     @ObservationIgnored private var emptyInsertionRevision = UUID()
-    public private(set) var runs: [WorkflowRun] = [] { didSet { displayHistoryGeneration &+= 1; contentGeneration &+= 1 } }
+    public private(set) var runs: [WorkflowRun] = [] { didSet { displayHistoryGeneration &+= 1; contentGeneration &+= 1; invalidateContainerRuns(oldValue) } }
     public private(set) var tools: [WorkflowToolDefinition] = [] { didSet { displayToolGeneration &+= 1; contentGeneration &+= 1 } }
     @ObservationIgnored private var activeExecutor: WorkflowPlanExecutor? {
         didSet { if activeExecutor == nil { presentationHasExecutor = false } }
@@ -42,7 +42,72 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     }
     public private(set) var collectionRequests: [WorkflowAssetCollectionRequest] = [] { didSet { contentGeneration &+= 1 } }
     public private(set) var collectingAssets = false
-    public var containerGeneration: UInt64 { contentGeneration }
+    // Display epochs are owned by this project controller, bounded to its
+    // current graph/run identities. They do not authorize any data mutation.
+    private var containerNodeEpochs: [UUID: UInt64] = [:]
+    private var containerRunEpochs: [UUID: UInt64] = [:]
+    private var containerPlanEpoch: UInt64 = 0
+    @ObservationIgnored private var containerClock: UInt64 = 0
+    public func containerDisplayRevision(for node: WorkflowNode) -> [UInt64] {
+        [containerNodeEpochs[node.id] ?? 0, containerPlanEpoch, displayToolGeneration] +
+        (node.librarySources ?? []).compactMap { source -> UInt64? in
+            guard case .runtime(let ref) = source else { return nil }
+            return containerRunEpochs[ref.call.address.runID] ?? 0
+        }
+    }
+    private func containerNodes(_ run: WorkflowRun) -> Set<UUID> {
+        Set(run.graph.nodes.map(\.id) + (run.planCheckpoint?.records.map { $0.step.node.id } ?? []))
+    }
+    private func invalidateContainerRuns(_ old: [WorkflowRun]) {
+        let previous = Dictionary(uniqueKeysWithValues: old.map { ($0.id, $0) })
+        let current = Dictionary(uniqueKeysWithValues: runs.map { ($0.id, $0) })
+        var affected = Set<UUID>()
+        for id in Set(previous.keys).union(current.keys) {
+            let before = previous[id], after = current[id]
+            guard before != after else { continue }
+            containerClock &+= 1; containerRunEpochs[id] = containerClock
+            if var normalized = after, let before {
+                // A waiting selection only changes its own card. All other
+                // record/status/provenance changes invalidate the run's cards.
+                let priorRecords = Dictionary(uniqueKeysWithValues: (before.planCheckpoint?.records ?? []).map { ($0.id, $0) })
+                var draftNodes = Set<UUID>()
+                if normalized.planCheckpoint != nil {
+                    for i in normalized.planCheckpoint!.records.indices {
+                        let record = normalized.planCheckpoint!.records[i]
+                        if let prior = priorRecords[record.id] {
+                            if record.step.containerSelectionDraft != prior.step.containerSelectionDraft { draftNodes.insert(record.step.node.id) }
+                            normalized.planCheckpoint!.records[i].step.containerSelectionDraft = prior.step.containerSelectionDraft
+                        }
+                    }
+                }
+                for i in normalized.steps.indices {
+                    normalized.steps[i].containerSelectionDraft = before.steps.first { $0.id == normalized.steps[i].id }?.containerSelectionDraft
+                }
+                if normalized == before { affected.formUnion(draftNodes); continue }
+            }
+            if let before { affected.formUnion(containerNodes(before)) }
+            if let after { affected.formUnion(containerNodes(after)) }
+        }
+        if old.compactMap({ $0.planCheckpoint?.plan }) != runs.compactMap({ $0.planCheckpoint?.plan }) { containerPlanEpoch &+= 1 }
+        containerClock &+= 1
+        for id in affected { containerNodeEpochs[id] = containerClock }
+        let live = Set(graphs.flatMap { $0.nodes.map(\.id) }).union(runs.reduce(into: Set<UUID>()) { $0.formUnion(containerNodes($1)) })
+        containerNodeEpochs = containerNodeEpochs.filter { live.contains($0.key) }
+        containerRunEpochs = containerRunEpochs.filter { current[$0.key] != nil }
+    }
+    private func invalidateContainerStages(_ old: [WorkflowBatchStage]) {
+        let previous = Dictionary(uniqueKeysWithValues: old.map { ($0.id, $0) })
+        let current = Dictionary(uniqueKeysWithValues: batchStages.map { ($0.id, $0) })
+        var runIDs = Set<UUID>()
+        for id in Set(previous.keys).union(current.keys) where previous[id] != current[id] {
+            runIDs.formUnion(previous[id]?.attempts.map(\.runID) ?? [])
+            runIDs.formUnion(current[id]?.attempts.map(\.runID) ?? [])
+        }
+        containerClock &+= 1
+        for run in runs where runIDs.contains(run.id) {
+            for node in containerNodes(run) { containerNodeEpochs[node] = containerClock }
+        }
+    }
     public func canEditContainerCall(_ call: WorkflowCallReference) -> Bool { !closed && !closing && activeRunID != call.address.runID }
     public private(set) var assetCollection: WorkflowAssetCollection?
     private var collectionWriting = false

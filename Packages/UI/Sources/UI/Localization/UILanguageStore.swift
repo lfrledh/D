@@ -57,6 +57,8 @@ public final class UILanguageStore {
         let builtInFallback: String
     }
 
+    var presentationContentRevision: UInt64 { contentRevision }
+
     public var effectiveLanguageIdentifier: String {
         resolvedLanguage.identifier
     }

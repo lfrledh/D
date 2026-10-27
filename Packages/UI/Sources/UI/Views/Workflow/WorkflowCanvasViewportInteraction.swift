@@ -744,6 +744,7 @@ enum WorkflowCanvasUpdateProbe {
     static var canvasBody: (() -> Void)?
     static var surfaceBody: (() -> Void)?
     static var handPointerStyle: ((WorkflowCanvasTool, Bool) -> Void)?
+    static var containerProjection: ((UUID, TimeInterval) -> Void)?
     static var nodeBody: ((UUID) -> Void)?
     static var nodeMenuBuild: ((UUID) -> Void)?
     static var wireHitBuild: ((Double) -> Void)?

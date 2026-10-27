@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
     let id: String
     let itemID: String
     let value: WorkflowValue?
-    let record: WorkflowPlanCallRecord?
+    var record: WorkflowPlanCallRecord?
     let source: WorkflowLibrarySource?
     let failure: String?
     let ordinal: Int
@@ -52,6 +52,46 @@ import UniformTypeIdentifiers
     }
 }
 
+private struct ContainerRefreshIdentity: Equatable {
+    let owner: WorkflowAssetLibraryOwner?
+    let graph: UUID?
+    let path: [WorkflowBodyLocation]
+    let node: WorkflowNode
+    let forcedStep: UUID?
+    let revisions: [UInt64]
+    let language: String?
+    let languageRevision: UInt64?
+    let readable: Bool
+}
+
+/// One projection per shared card/expanded owner. Exact values are compared;
+/// this never substitutes for the controller's fresh write/execute validation.
+struct ContainerProjectionIdentity: Equatable {
+    let owner: WorkflowAssetLibraryOwner?
+    let node: WorkflowNode
+    let scope: WorkflowContainerScope?
+    let runs: [WorkflowRun]
+    let plans: [WorkflowPlan]
+    let tools: [WorkflowToolDefinition]
+    let language: String?
+    let languageRevision: UInt64?
+    static func dependencies(snapshot: WorkflowContainerSnapshot?, sources: [WorkflowLibrarySource], runs: [WorkflowRun]) -> [WorkflowRun] {
+        let sourceIDs = sources.compactMap { source -> UUID? in
+            if case .runtime(let ref) = source { return ref.call.address.runID }; return nil
+        }
+        let ids = Set(sourceIDs).union(snapshot?.runs.map(\.id) ?? [])
+        return runs.filter { ids.contains($0.id) }
+    }
+    static func withoutDrafts(_ run: WorkflowRun) -> WorkflowRun {
+        var result = run
+        if result.planCheckpoint != nil {
+            for i in result.planCheckpoint!.records.indices { result.planCheckpoint!.records[i].step.containerSelectionDraft = nil }
+        }
+        for i in result.steps.indices { result.steps[i].containerSelectionDraft = nil }
+        return result
+    }
+}
+
 @MainActor @Observable final class WorkflowContainerPresentation {
     var showCollectionSettings = false
     var ruleDraft: WorkflowCollectionRuleDraft?
@@ -67,9 +107,20 @@ import UniformTypeIdentifiers
     var rejectAll = false
     var cache = WorkflowLibraryPreviewCache()
     var rows: [ContainerItem] = []
+    fileprivate var projectedIdentity: ContainerProjectionIdentity?
     var playback = WorkflowContainerPlayback()
     var collectionLocation: WorkflowLibraryContext?
     var expanded = false
+    static func submissionSnapshot(displayed: WorkflowContainerSnapshot, fresh: WorkflowContainerSnapshot) throws -> WorkflowContainerSnapshot {
+        guard displayed.projectID == fresh.projectID, displayed.instanceID == fresh.instanceID,
+              displayed.scope == fresh.scope, displayed.stage == fresh.stage, displayed.calls == fresh.calls,
+              displayed.runs.map(ContainerProjectionIdentity.withoutDrafts) == fresh.runs.map(ContainerProjectionIdentity.withoutDrafts) else {
+            throw WorkflowIssue("The displayed container changed before submission.", code: "container.issue.targetChanged")
+        }
+        // Only another call's independent draft may have changed. Controller
+        // still receives and independently validates a complete exact snapshot.
+        return fresh
+    }
     static func hasUndecidedFilter(_ calls: [WorkflowPlanCallRecord]) -> Bool {
         calls.contains { $0.step.node.operationID == WorkflowAssetContainer.filterID && $0.step.status == .waiting && $0.step.decision == nil }
     }
@@ -271,7 +322,10 @@ import UniformTypeIdentifiers
         }.font(.system(size: 11 * scale))
             .padding(12 * scale).frame(height: max(190, height) * scale)
             .contentShape(Rectangle()).workflowNodeControl(node.id)
-            .task(id: controller.containerGeneration) { refresh() }
+            .task(id: ContainerRefreshIdentity(owner: controller.assetLibraryOwner,
+                graph: controller.selectedGraphID, path: controller.bodyPath, node: node, forcedStep: forcedStepID,
+                revisions: controller.containerDisplayRevision(for: node), language: language?.effectiveLanguageIdentifier, languageRevision: language?.presentationContentRevision,
+                readable: controller.canReadLibraryMetadata)) { refresh() }
             .onChange(of: contentVisible) { _, visible in if !visible { presentation.playback.stop() } }
             .onDisappear { presentation.playback.stop() }
             .workbenchSheet(isPresented: settingsPresented, title: t("collectionSettings")) {
@@ -420,13 +474,8 @@ import UniformTypeIdentifiers
         item.displayName(assets: controller.availableAssets, metadata: library?.metadata, fallback: t("item") + " \(item.ordinal)")
     }
     private func refresh() {
-        if let sources = node.librarySources {
-            staticSourceRows = sources.enumerated().map { index, source in
-                do {
-                    let value = try WorkflowAssetContainer.sourceValues([source], runs: controller.runs)[0]
-                    return .init(id: source.key, itemID: source.key, value: value, record: nil, source: source, failure: nil, ordinal: index + 1)
-                } catch { return .init(id: source.key, itemID: source.key, value: nil, record: nil, source: nil, failure: error.localizedDescription, ordinal: index + 1, failureCode: (error as? WorkflowIssue)?.code ?? "container.issue.sourceUnavailable") }
-            }
+        guard controller.canReadLibraryMetadata else {
+            snapshot = nil; rows = []; staticSourceRows = []; presentation.projectedIdentity = nil; return
         }
         let history = forcedStepID == nil ? controller.history(for: node.id) : controller.runs.filter { $0.planCheckpoint?.records.contains(where: { $0.id == forcedStepID }) == true }
         let records = history.flatMap { run in (run.planCheckpoint?.records ?? []).filter { $0.step.node.id == node.id && $0.step.node.operationID == node.operationID } }
@@ -445,6 +494,28 @@ import UniformTypeIdentifiers
         else if selectedScope != nil { snapshot = nil; error = .init("Container target changed.", code: "container.stale") }
         else { snapshot = nil }
         let plans = controller.runs.compactMap { $0.planCheckpoint?.plan }
+        let dependencies = ContainerProjectionIdentity.dependencies(snapshot: snapshot, sources: node.librarySources ?? [], runs: controller.runs)
+        let identity = ContainerProjectionIdentity(owner: controller.assetLibraryOwner, node: node, scope: selectedScope,
+            runs: dependencies.map(ContainerProjectionIdentity.withoutDrafts), plans: plans, tools: controller.tools,
+            language: language?.effectiveLanguageIdentifier, languageRevision: language?.presentationContentRevision)
+        if presentation.projectedIdentity == identity {
+            let records = Dictionary(uniqueKeysWithValues: (snapshot?.calls ?? []).map { ($0.id, $0) })
+            rows = rows.map { row in var value = row; if let record = row.record { value.record = records[record.id] }; return value }
+            return
+        }
+        #if DEBUG
+        let started = CFAbsoluteTimeGetCurrent()
+        defer { WorkflowCanvasUpdateProbe.containerProjection?(node.id, CFAbsoluteTimeGetCurrent() - started) }
+        #endif
+        presentation.projectedIdentity = identity
+        if let sources = node.librarySources {
+            staticSourceRows = sources.enumerated().map { index, source in
+                do {
+                    let value = try WorkflowAssetContainer.sourceValues([source], runs: controller.runs)[0]
+                    return .init(id: source.key, itemID: source.key, value: value, record: nil, source: source, failure: nil, ordinal: index + 1)
+                } catch { return .init(id: source.key, itemID: source.key, value: nil, record: nil, source: nil, failure: error.localizedDescription, ordinal: index + 1, failureCode: (error as? WorkflowIssue)?.code ?? "container.issue.sourceUnavailable") }
+            }
+        }
         rows = projectedRows().map { source in
             var item = source
             item.captureAnnotationKey(owner: controller.assetLibraryOwner)
@@ -497,7 +568,10 @@ import UniformTypeIdentifiers
                     _ = try await controller.retryContainerSaving(saved.scope); refresh(); return
                 }
                 if let saved { intent = saved }
-                else { intent = try await controller.submitContainer(snapshot, choices: choices, repetitions: count, seedStrategy: strategy, endAll: endAll) }
+                else {
+                    let fresh = try WorkflowContainerPresentation.submissionSnapshot(displayed: snapshot, fresh: controller.containerSnapshot(snapshot.scope))
+                    intent = try await controller.submitContainer(fresh, choices: choices, repetitions: count, seedStrategy: strategy, endAll: endAll)
+                }
                 if let next = try await controller.continueContainerSubmission(intent) { await controller.runBatchStage(next) }
                 else if !endAll && otherWaitingCall == nil { error = .init("Other human gates remain.", code: "container.otherGates") }
                 refresh()

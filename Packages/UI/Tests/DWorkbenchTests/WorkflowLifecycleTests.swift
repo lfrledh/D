@@ -3736,3 +3736,27 @@ extension WorkflowLifecycleTests {
         try await c.close(); try await store.close()
     }
 }
+
+
+extension WorkflowLifecycleTests {
+    @Test func containerDisplayEpochsSeparateLayoutDraftAndCollectionFromContent() async throws {
+        let (store, engine, c, a, b, stage) = try await containerFixture()
+        let beforeA = c.containerDisplayRevision(for: a), beforeB = c.containerDisplayRevision(for: b)
+        c.moveNode(id: a.id, x: 144, y: 288)
+        #expect(c.containerDisplayRevision(for: a) == beforeA && c.containerDisplayRevision(for: b) == beforeB)
+        let snapshot = try c.containerSnapshot(.init(stageID: stage, path: [.node(a.id)]))
+        let record = try #require(snapshot.calls.first), input = try #require(record.step.inputs["input"])
+        try c.editContainerSelection(call: .init(address: record.address, stepID: record.id), input: input, selectedIDs: ["value"])
+        #expect(c.containerDisplayRevision(for: a) != beforeA)
+        #expect(c.containerDisplayRevision(for: b) == beforeB, "Unrelated container draft does not invalidate history projection")
+        let afterDraft = c.containerDisplayRevision(for: a)
+        let source = WorkflowLibrarySource.runtime(try .init(call: .init(address: record.address, stepID: record.id), port: "input", value: input, itemID: "value", input: true))
+        try await c.setCollected([source], collected: true, owner: try #require(c.assetLibraryOwner))
+        #expect(c.containerDisplayRevision(for: a) == afterDraft && c.containerDisplayRevision(for: b) == beforeB)
+        let fresh = try c.containerSnapshot(snapshot.scope)
+        _ = try await c.submitContainer(fresh, choices: fresh.calls.map { .init(call: .init(address: $0.address, stepID: $0.id), selectedIDs: ["value"]) })
+        #expect(c.containerDisplayRevision(for: b) != beforeB, "Real decision/next-stage content invalidates dependent cards")
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+}

@@ -1,6 +1,6 @@
 import AppKit
 import DInference
-import DWorkbench
+@testable import DWorkbench
 import Foundation
 import Observation
 import SwiftUI
@@ -1656,5 +1656,95 @@ extension WorkflowWorkspacePresentationTests {
         #expect(old.code == nil && old.reason == "original diagnostic")
         let coded = WorkflowIssue("raw diagnostic", code: "container.issue.targetChanged")
         #expect(try JSONDecoder().decode(WorkflowIssue.self, from: JSONEncoder().encode(coded)) == coded)
+    }
+}
+
+
+extension WorkflowWorkspacePresentationTests {
+    @Test func containerProjectionIgnoresUnrelatedLayoutChanges() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        c.addBlankGraph()
+        for _ in 0..<8 {
+            c.addNode(operationID: WorkflowAssetContainer.previewID)
+            let id = try #require(c.graph?.nodes.last?.id)
+            c.setDataConfiguration(nodeID: id, value: .init(value: .text(String(repeating: "container text ", count: 256))))
+        }
+        let nodes = try #require(c.graph?.nodes)
+        var calls: [UUID: Int] = [:], seconds = 0.0
+        WorkflowCanvasUpdateProbe.containerProjection = { id, duration in calls[id, default: 0] += 1; seconds += duration }
+        defer { WorkflowCanvasUpdateProbe.containerProjection = nil }
+        let host = NSHostingView(rootView: HStack { ForEach(nodes) { node in WorkflowAssetContainerView(controller: c, node: node).frame(width: 140) } })
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 1200, height: 800), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        func settle() async throws { for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) } }
+        try await settle(); #expect(calls.count == 8)
+        calls.removeAll(); seconds = 0
+        for i in 0..<3 { c.moveNode(id: nodes[0].id, x: Double(i * 10 + 100), y: 200); try await settle() }
+        print("NQ container layout: 8 cards / 3 commits / projections=\(calls.values.reduce(0,+)) / CPU-path-seconds=\(seconds)")
+        #expect(calls.isEmpty, "Layout must not rebuild all container content")
+        #expect(await f.engine.submissions == 0)
+        try await f.close()
+    }
+}
+
+
+extension WorkflowWorkspacePresentationTests {
+    @Test func containerSubmissionRefreshAcceptsOnlyOtherCallsDrafts() throws {
+        let a = try #require(WorkflowRegistry.standard.operation(WorkflowAssetContainer.filterID)).definition.makeNode()
+        let b = try #require(WorkflowRegistry.standard.operation(WorkflowAssetContainer.filterID)).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [a, b]), runID = UUID(), project = UUID(), instance = UUID()
+        let plan = WorkflowPlan(graphID: graph.id, graphRevision: graph.revision, steps: [.init(node: a, inputs: []), .init(node: b, inputs: [])])
+        let records = [a,b].map { node in WorkflowPlanCallRecord(address: .init(runID: runID, path: [.node(node.id)]), step: .init(node: node, signature: "fixture", inputs: ["input": .data(.text("frozen"))], status: .waiting)) }
+        var run = WorkflowRun(id: runID, graph: graph, targetNodeID: b.id, status: .waiting)
+        run.planCheckpoint = .init(runID: runID, plan: plan, records: records, state: .waiting)
+        func snapshot(_ run: WorkflowRun) -> WorkflowContainerSnapshot {
+            .init(projectID: project, instanceID: instance, scope: .init(runID: runID, path: [.node(a.id)]), stage: nil, runs: [run])
+        }
+        let displayed = snapshot(run)
+        run.planCheckpoint!.records[1].step.containerSelectionDraft = ["value"]
+        let fresh = snapshot(run)
+        let admitted = try WorkflowContainerPresentation.submissionSnapshot(displayed: displayed, fresh: fresh)
+        #expect(admitted == fresh && admitted.runs[0].planCheckpoint?.records[1].step.containerSelectionDraft == ["value"])
+        run.planCheckpoint!.records[0].step.containerSelectionDraft = ["value"]
+        #expect(throws: WorkflowIssue.self) { try WorkflowContainerPresentation.submissionSnapshot(displayed: displayed, fresh: snapshot(run)) }
+        run = fresh.runs[0]; run.planCheckpoint!.records[1].step.inputs["input"] = .data(.text("changed"))
+        #expect(throws: WorkflowIssue.self) { try WorkflowContainerPresentation.submissionSnapshot(displayed: displayed, fresh: snapshot(run)) }
+        let source = WorkflowLibrarySource.runtime(try .init(call: .init(address: records[1].address, stepID: records[1].id), port: "input", value: .data(.text("frozen")), itemID: "value", input: true))
+        var own = fresh.runs[0]; own.id = UUID()
+        let ownSnapshot = WorkflowContainerSnapshot(projectID: project, instanceID: instance, scope: .init(runID: own.id, path: [.node(a.id)]), stage: nil, runs: [own])
+        #expect(ContainerProjectionIdentity.dependencies(snapshot: ownSnapshot, sources: [source], runs: [own, run]).map(\.id) == [own.id, run.id])
+        #expect(throws: WorkflowIssue.self) { try WorkflowAssetContainer.sourceValues([source], runs: [own, run]) }
+    }
+
+    @Test func nativeTypedRecordAndNominalFixtureUsesFormalStore() async throws {
+        let requested = ProcessInfo.processInfo.environment["D_NQ_NATIVE_FIXTURE_ROOT"].map { URL(fileURLWithPath: $0) }
+        let root = requested ?? URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]!).appendingPathComponent("native-types-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Typed-Record-and-Notes.dproject"), name: "Typed record / nominal notes · synthetic")
+        let notes = try WorkflowNoteSequence(clock: .seconds, notes: [.init(id: "note-a", pitch: 60, start: 0, end: 1, velocity: 0.5), .init(id: "note-b", pitch: 64, start: 1, end: 2, velocity: 0.6)], duration: 2).datum()
+        let file = root.appendingPathComponent("Fixture.notes.json")
+        try JSONEncoder().encode(notes).write(to: file, options: .withoutOverwriting)
+        let imported = try await store.importWorkflowFile(at: file)
+        #expect(imported.record.reference.kind == .notes)
+        var record = try #require(WorkflowRegistry.standard.operation("d.value.input")).definition.makeNode()
+        record.title = "Typed record · synthetic"
+        record.dataConfiguration = .init(value: .record(schema: [.init("title", .text), .init("duration", .number(unit: "seconds"))], fields: ["title": .text("原文 preserved 👩🏽‍🎨"), "duration": .number(2, unit: "seconds")]))
+        var reference = try #require(WorkflowRegistry.standard.operation("d.asset.reference")).definition.makeNode()
+        reference.assetReference = imported.record.reference; reference.title = "Nominal notes · synthetic"
+        var recordView = try #require(WorkflowRegistry.standard.operation(WorkflowAssetContainer.previewID)).definition.makeNode()
+        recordView.parameters["kind"] = .text("record")
+        var notesView = recordView; notesView.id = UUID(); notesView.parameters["kind"] = .text("notes")
+        let graphs = [(record,recordView),(reference,notesView)].map { source, viewer in
+            WorkflowGraph(name: source.title, nodes: [source,viewer], connections: [.init(sourceNode: source.id, targetNode: viewer.id)], layout: [.init(nodeID: source.id, x: 100, y: 140), .init(nodeID: viewer.id, x: 500, y: 140)])
+        }
+        let archive = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: graphs, runs: [], expectedRevision: archive.revision)
+        try await store.close()
+        let cold = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await cold.workflowState().archive?.graphs == graphs)
+
+        try await cold.close()
+        if requested == nil { try FileManager.default.removeItem(at: root) }
     }
 }
