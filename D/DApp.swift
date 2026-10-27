@@ -105,7 +105,6 @@ private struct WorkbenchCommands: Commands {
     let settingsBlocked: Bool
     let requestSettings: () -> Void
     @FocusedValue(\.workbenchGeneration) private var generationCommand
-    @FocusedValue(\.workbenchSave) private var saveCommand
     @FocusedValue(\.workbenchCanvas) private var canvasCommands
     @FocusedValue(\.workbenchWorkspace) private var workspace
     @FocusedValue(\.workbenchAssetExport) private var exportCommand
@@ -121,6 +120,14 @@ private struct WorkbenchCommands: Commands {
     private var canvas: WorkbenchCanvasCommands? {
         guard workspace?.workflow == true, current, canvasCommands?.scope?.permitsCommands == true else { return nil }
         return canvasCommands
+    }
+    private var visibleSave: WorkbenchGenerationCommand? {
+        // Save belongs to the displayed project owner, not the canvas selection
+        // or its SwiftUI focus. The shared owner command revalidates that owner;
+        // the native scope still blocks hidden pages, child panels and sheets.
+        guard current, let workspace, workspace.scope.permitsVisibleCommands,
+              workspace.save.isEnabled else { return nil }
+        return workspace.save
     }
     private var generation: WorkbenchGenerationCommand? { workspace?.workflow == true ? canvas?.run : workspace?.chat == true ? chatCommands?.run : generationCommand }
     private func label(_ key: String, _ fallback: String = "—") -> String { bootstrap.languageStore.text(key, fallback: fallback) }
@@ -164,8 +171,8 @@ private struct WorkbenchCommands: Commands {
             }.disabled(blocked || (NSApp.keyWindow != nil && !current))
         }
         CommandGroup(replacing: .saveItem) {
-            Button(label("layoutInteraction.save", "保存更改")) { if current { (workspace?.workflow == true ? canvas?.save : saveCommand)?.action() } }
-                .keyboardShortcut("s").disabled(!current || (workspace?.workflow == true ? canvas?.save : saveCommand)?.isEnabled != true)
+            Button(label("layoutInteraction.save", "保存更改")) { visibleSave?.action() }
+                .keyboardShortcut("s").disabled(visibleSave?.isEnabled != true)
             button(current ? workspace?.files : nil, title: label("layoutInteraction.projectFiles"))
             if let workspace, !workspace.quickDestination.isEmpty {
                 Menu(label("layoutInteraction.quickDestination")) { choices(workspace.quickDestination) }

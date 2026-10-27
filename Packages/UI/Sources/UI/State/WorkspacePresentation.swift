@@ -135,6 +135,7 @@ struct WorkbenchCommandWindow: NSViewRepresentable {
     public let workflow: Bool
     public let chat: Bool
     public let scope: WorkbenchCommandScope
+    public let save: WorkbenchGenerationCommand
     public let newProject: WorkbenchGenerationCommand
     public let openProject: WorkbenchGenerationCommand
     public let recent: [WorkbenchGenerationCommand]

@@ -375,14 +375,14 @@ public struct DualWorkbenchView: View {
 
     private var saveCommand: WorkbenchGenerationCommand {
         if entry == .workflow, let controller = canvasModel.projectSession.workflow {
-            return .init(title: consistencyText(language, "FLOW-SAVE"), isEnabled: controller.readOnlyReason == nil && !controller.isSaving && !canvasModel.isChangingProject) {
+            return .init(title: consistencyText(language, "FLOW-SAVE"), isEnabled: canPresentSettings && controller.readOnlyReason == nil && !controller.isSaving && !canvasModel.isChangingProject) {
                 guard commandScope.permitsCommands, canPresentSettings, entry == .workflow, canvasModel.projectSession.workflow === controller, controller.readOnlyReason == nil, !controller.isSaving, !canvasModel.isChangingProject else { return }
                 Task { await controller.save() }
             }
         }
         let owner = quick
         let activeChat = quick.category == .text && quick.textPresentation == .chat ? chat : nil
-        return .init(title: t("saveDraft"), isEnabled: !quickOwnerIsChanging) {
+        return .init(title: t("saveDraft"), isEnabled: canPresentSettings && !quickOwnerIsChanging) {
             guard commandScope.permitsCommands, canPresentSettings, entry == .quick, quick === owner, !quickOwnerIsChanging else { return }
             Task {
                 do {
@@ -435,6 +435,7 @@ public struct DualWorkbenchView: View {
             }
         }
         return .init(workflow: entry == .workflow, chat: entry == .quick && quick.category == .text && quick.textPresentation == .chat, scope: commandScope,
+            save: saveCommand,
             newProject: action(consistencyText(language, "menu.file.new")) { Task { if await model.newProject() { navigate(to: .workflow) } } },
             openProject: action(consistencyText(language, "menu.file.open")) { Task { if await model.openProject() { navigate(to: .workflow) } } },
             recent: model.recentProjects.map { project in action(project.name) { Task { if await model.openRecentProject(id: project.id) { navigate(to: .workflow) } } } },

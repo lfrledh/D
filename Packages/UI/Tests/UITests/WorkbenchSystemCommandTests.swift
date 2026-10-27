@@ -12,6 +12,33 @@ import Testing
 }
 
 @Suite(.serialized) @MainActor struct WorkbenchSystemCommandTests {
+    @Test func visibleOwnerCommandResumesOnlyAfterAllChildGatesClose() throws {
+        let window = MenuScopeWindow(contentRect: .init(x: 0, y: 0, width: 1080, height: 680),
+                                     styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.active = true
+        let host = NSHostingView(rootView: Text("Controlled owner"))
+        window.contentView = host
+        let scope = WorkbenchCommandScope(); scope.window = window; scope.sourceView = host
+        defer { window.close() }
+        #expect(scope.permitsVisibleCommands)
+        let preferences = ChatDisplayPreferencesState()
+        let parent = try #require(WorkbenchChildPanelHandle(owner: window, title: "Parent",
+            content: AnyView(Text("Controlled panel")), preferences: preferences, language: nil))
+        defer { parent.close() }
+        #expect(!scope.permitsVisibleCommands)
+        let child = try #require(WorkbenchChildPanelHandle(owner: window, title: "Nested",
+            content: AnyView(Text("Controlled nested panel")), preferences: preferences, language: nil))
+        child.close()
+        #expect(!scope.permitsVisibleCommands)
+        parent.close()
+        // No canvas click or canvas command publication is needed to save the
+        // current owner. A retained but hidden owner must remain ineligible.
+        #expect(scope.permitsVisibleCommands)
+        host.isHidden = true; #expect(!scope.permitsVisibleCommands)
+        host.isHidden = false; #expect(scope.permitsVisibleCommands)
+        window.active = false; #expect(!scope.permitsVisibleCommands)
+    }
+
     @Test func exactWindowScopeRejectsOtherWindowSheetAndDestroyedHost() {
         let main = MenuScopeWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
         let viewer = MenuScopeWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
