@@ -1,8 +1,12 @@
 # 当前行动与接手点
 
-当前执行：**D-UI-CONSOLIDATED-01 / NATIVE-QUALITY-CLOSEOUT-20261027**。从完整`63a782dda440ff6e74eaf949ecc52368e15f0ef3`、生产`825c8223428b222f3d8bdf19f71d9ef12585f11f`接续；正常fetch无后继、祖先检查0、起点索引/工作树干净。原专属树与工作分支不变，Lead唯一写入/桌面，复核只读。先修收录设置关闭保护、跨模式原生Undo、异常本地化，再按有据基线收窄容器更新及原生/发行技术收口。旧825c正常包保留作对照，未提前替换桌面候选。
+当前交审：**D-UI-CONSOLIDATED-01 / NATIVE-QUALITY-CLOSEOUT-20261027**。实际起点完整`63a782dda440ff6e74eaf949ecc52368e15f0ef3`，从生产825c累计线接续；最终生产 **`6129799d30e35652db6b3eb3f2e00aad9d66e170`**。原专属树`D-Worktrees/D-UI-CONSOLIDATED-20261020`、分支`codex/ui-consolidated-20261020`不变，祖先检查0、起点无个人/索引差异；Lead唯一写入/桌面，非实施者源码、证据和实包复核完成。
 
-[持续开发验收授权与受阻处理](MULTI_AGENT_WORKFLOW.zh-CN.md#持续开发验收授权与受阻处理)为现行唯一正文：Mac默认使用，原生键鼠/CGEvent与可恢复专属实例不再逐轮请求；系统本人批准仍按规则集中报告。本轮不合并main、不上传、不发布。原问题仍在唯一集中清单，不新建总表。
+唯一用户入口：桌面 **D 最新版** → `D-Development/CurrentD/Quality-Native-6129799d/D.app`。正常完整Release -O/WMO、无诊断宏、Apple Development签名、七引擎/零权重；同源本地Archive也完成。源码/资源/签名身份一致，完整文档交付及远端读回SHA绑定现有`CurrentD/receipt.json`，不签后改包。
+
+收录设置dirty/保存恢复、Quick跨模式原生Undo、错误本地化、容器有界依赖投影已修；原生又发现并修复⌘Return接线、UUID集合冷读误报、画布初始按下焦点。最终612真实NODE/立即Undo/Redo、PAN/ZOOM/SIDEBAR终态、SCIM组字/模式切换Undo、英文1080两级菜单、typed record和正常Quit→精确PID消失→桌面冷开已亲跑。既有Q4真实生成/保存采用9bf检查点；5a磁盘失败、bbcf跨界选区/玻璃代表对照等未受影响证据按原版沿用。[A01–A14分级回执](tasks/D-UI-CONSOLIDATED-01.md#本轮-a01a14-分级回执)与[最终正常包证据](tasks/D-UI-CONSOLIDATED-01.md#612-最终正常-app冷开与交付)记录边界。
+
+[持续开发验收授权](MULTI_AGENT_WORKFLOW.zh-CN.md#持续开发验收授权与受阻处理)已永久落现有规程，AGENTS只保留入口。**无必须本人即时处理的授权、退出或保存决定。**短暂系统通知前台及首次冷开观察timeout已保留，正常冷开后Dactive恢复；不绕过工具保护、未改系统权限、未强退。[唯一集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#统一问题清单app-store-v22026-10-26)继续保留tooltip/VoiceOver、所有玻璃瞬态、呈现性能、Store/许可/公开材料的具体缺口。性能仍“勉强可用但不够理想”，24→0无关投影不是FPS。用户项目/模型/个人scheme和证据保留；已停旧候选及临时编译缓存按清单清理。停在用户集中体验和顾问审计，不扩下一轮、不合并、不上传、不发布。
 
 以下为前轮交审事实：
 
