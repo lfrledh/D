@@ -70,6 +70,7 @@ struct WorkflowGraphSurface: View {
     @State private var resizeAnchorRaw: CGPoint?
     @State private var cardSizes: [UUID: CGSize] = [:]
     @State private var marquee: WorkflowCanvasMarquee?
+    @State private var libraryDropPreview = WorkflowLibraryDropPreview()
 
     var body: some View {
         #if DEBUG
@@ -262,11 +263,20 @@ struct WorkflowGraphSurface: View {
                            height: (contentSize.height + edge.height * 2) * effectiveZoom)
                     .coordinateSpace(name: WorkflowCanvasCoordinateSpace.name)
                     .contentShape(Rectangle())
-                    .onDrop(of: [.workflowCanvasItem, .fileURL], isTargeted: nil) { providers, location in
+                    .onDrop(of: [.workflowCanvasItem, .fileURL], delegate: WorkflowLibrarySurfaceDrop(preview: libraryDropPreview, scope: scope,
+                        makeHit: {
+                            let map = WorkflowLibraryDropHitMap(graph: graph, geometry: geometry, centers: measuredPortCenters, sizes: cardSizes)
+                            return { point in map.hit(CGPoint(x: point.x / renderZoom - edge.width, y: point.y / renderZoom - edge.height)) }
+                        },
+                        assess: { value, port in WorkflowLibraryPortDrop.admission(value, port: port,
+                            scope: scope, controller: controller) }) { providers, location in
                         guard providers.count == 1, let provider = providers.first,
                               !readOnly, let target = controller.canvasInsertionTarget() else { return false }
                         let raw = geometry.rawPoint(forDisplayPoint: CGPoint(
                             x: location.x / effectiveZoom - edge.width, y: location.y / effectiveZoom - edge.height))
+                        let destination = WorkflowLibraryDropTarget.hit(CGPoint(x: location.x / effectiveZoom - edge.width,
+                            y: location.y / effectiveZoom - edge.height), graph: graph, geometry: geometry,
+                            centers: measuredPortCenters, sizes: cardSizes)
                         let custom = provider.hasItemConformingToTypeIdentifier(UTType.workflowCanvasItem.identifier)
                         Task { @MainActor in
                             do {
@@ -277,14 +287,24 @@ struct WorkflowGraphSurface: View {
                                     }
                                 }
                                 guard controller.isCurrent(target) else { throw WorkflowIssue(workflowText(languageStore, "container.stale")) }
-                                if custom { _ = acceptSurfaceDrop([try WorkflowCanvasTransfer.decode(bytes)], at: raw, scope: scope) }
+                                if custom {
+                                    let value = try WorkflowCanvasTransfer.decode(bytes)
+                                    if value.libraryPayload != nil, case .port(let port) = destination {
+                                        _ = WorkflowLibraryPortDrop.submit(value, port: port, scope: scope, controller: controller, language: languageStore)
+                                    } else { _ = acceptSurfaceDrop([value], at: raw, scope: scope) }
+                                }
                                 else if let url = URL(dataRepresentation: bytes, relativeTo: nil), url.isFileURL {
                                     _ = acceptFileDrop([url], at: raw, scope: scope)
                                 } else { throw CocoaError(.fileReadUnsupportedScheme) }
                             } catch { controller.errorMessage = error.localizedDescription }
                         }
                         return true
-                    }
+                    })
+                    .overlay(alignment: .topLeading) { WorkflowLibraryDropFeedback(preview: libraryDropPreview) }
+                    .onChange(of: scope) { _, _ in libraryDropPreview.clear() }
+                    .onChange(of: renderZoom) { _, _ in libraryDropPreview.clear() }
+                    .onChange(of: edge) { _, _ in libraryDropPreview.clear() }
+                    .onDisappear { libraryDropPreview.clear() }
                     .frame(width: layout.contentSize.width,
                            height: layout.contentSize.height,
                            alignment: .topLeading)
@@ -1387,27 +1407,8 @@ private struct WorkflowNodeCard: View {
                 enabled: !readOnly && tool == .pointer && controller.canEditCanvas,
                 visibleAt: { portVisible(identity, $0) },
                 onClick: { onSelectPort(identity) },
-                onChange: { onPortDrag(identity, $0) }, onEnd: onPortDragEnd,
-                onLibraryDrop: { acceptLibraryAtPort($0, port: port, input: input) })
+                onChange: { onPortDrag(identity, $0) }, onEnd: onPortDragEnd)
         }
-    }
-
-    private func acceptLibraryAtPort(_ item: WorkflowCanvasTransfer, port: WorkflowPortDefinition, input: Bool) -> Bool {
-        guard let payload = item.libraryPayload else { return false }
-        guard input, payload.items.count == 1, !readOnly, controller.canEditCanvas,
-              scope.isCurrent(in: controller), let target = controller.canvasInsertionTarget() else {
-            controller.errorMessage = workflowText(languageStore, "container.dropTarget")
-            return true
-        }
-        let origin = graph.layout.first { $0.nodeID == node.id }
-        Task {
-            do {
-                let sources = try await controller.resolveLibraryDrop(payload.items, owner: payload.owner, target: target)
-                try await controller.insertLibrarySources(sources, owner: payload.owner, target: target,
-                x: (origin?.x ?? 100) - 420, y: origin?.y ?? 100, inputNode: node.id, inputPort: port.id) }
-            catch { controller.errorMessage = error.localizedDescription }
-        }
-        return true
     }
 
     private func acceptAsset(_ items: [WorkflowCanvasTransfer]) -> Bool {

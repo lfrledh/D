@@ -1394,7 +1394,7 @@ extension WorkflowWorkspacePresentationTests {
 
 extension WorkflowWorkspacePresentationTests {
     @Test(arguments: [CGFloat(1), 1.5])
-    func nativeLibraryPortDropUsesVisibleHostAndOneUndo(zoom: CGFloat) async throws {
+    func surfaceLibraryPortDropUsesVisibleHostAndOneUndo(zoom: CGFloat) async throws {
         let f = try await RenderingWorkspaceFixture.make(), c = f.controller
         c.addExample("template")
         let model = try #require(c.graph?.nodes.first { $0.operationID == "d.text.template" })
@@ -1423,14 +1423,17 @@ extension WorkflowWorkspacePresentationTests {
         let center = CGPoint(x: receiver.bounds.midX, y: receiver.bounds.midY)
         let point = receiver.convert(center, to: nil)
         #expect(receiver.hitTest(receiver.convert(center, to: receiver.superview)) === receiver)
-        #expect(receiver.registeredDraggedTypes.contains(.init("org.d-workbench.canvas-item")))
-        let drag = WorkspaceCanvasDropInfo(bytes: try transfer.encoded(), key: "asset", window: window, point: point)
-        defer { drag.draggingPasteboard.releaseGlobally() }
-        #expect(receiver.draggingEntered(drag).contains(.copy))
+        #expect(!receiver.registeredDraggedTypes.contains(.init("org.d-workbench.canvas-item")))
+        let scope = try #require(receiver.scope), port = try #require(receiver.port)
+        let preview = WorkflowLibraryDropPreview()
+        preview.begin(nil, scope: scope, hit: { _ in .port(port) }, assess: { value, port in
+            WorkflowLibraryPortDrop.admission(value, port: port, scope: scope, controller: c)
+        })
+        #expect(WorkflowLibraryPortDrop.admission(transfer, port: port, scope: scope, controller: c) == .ready)
         #expect(c.graph == original, "Hover must not pin assets or edit the graph")
-        try #require(receiver.prepareForDragOperation(drag))
-        try #require(receiver.performDragOperation(drag))
-        #expect(!receiver.performDragOperation(drag), "The same native delivery is consumed once")
+        try #require(preview.consume(scope: scope))
+        try #require(WorkflowLibraryPortDrop.submit(transfer, port: port, scope: scope, controller: c, language: nil))
+        #expect(!preview.consume(scope: scope), "The same surface delivery is consumed once")
         for _ in 0..<50 where c.graph?.nodes.count == original.nodes.count { try await Task.sleep(for: .milliseconds(20)) }
         let after = try #require(c.graph)
         #expect(c.errorMessage == nil)
@@ -1443,56 +1446,71 @@ extension WorkflowWorkspacePresentationTests {
 }
 
 extension WorkflowWorkspacePresentationTests {
-    @Test func nativeLibraryPortDropKeepsGeometryAndRejectsStalePayloads() throws {
-        let root = NSView(frame: .init(x: 0, y: 0, width: 400, height: 240))
-        let view = WorkflowPortDragView(frame: .init(x: 120, y: 90, width: 22, height: 22))
-        root.addSubview(view)
-        let window = NSWindow(contentRect: root.frame, styleMask: [.titled], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false; window.contentView = root
-        defer { window.contentView = nil; window.close() }
-        let project = UUID(), instance = UUID(), graph = UUID()
-        let scope = WorkflowCanvasScope(rootGraphID: graph, rootRevision: UUID(), graphID: graph,
-            bodyPath: [], projectID: project, instanceID: instance)
-        view.scope = scope; view.port = .init(nodeID: UUID(), port: "input", input: true); view.enabled = true
-        let owner = WorkflowAssetLibraryOwner(projectID: project, instanceID: instance)
-        let asset = WorkflowAssetReference(projectID: project, assetID: UUID(), kind: .image, sha256: String(repeating: "a", count: 64))
-        let transfer = WorkflowCanvasTransfer.library(owner: owner, sources: [.asset(asset)])
-        var received: [WorkflowCanvasTransfer] = []
-        view.onLibraryDrop = { received.append($0); return true }
-        let center = view.convert(.init(x: 11, y: 11), to: nil)
-        let drag = WorkspaceCanvasDropInfo(bytes: try transfer.encoded(), key: "fixture", window: window, point: center)
-        defer { drag.draggingPasteboard.releaseGlobally() }
-        // AppKit enters the bounding rectangle before the pointer reaches its ellipse.
-        drag.draggingLocation = view.convert(.init(x: 1, y: 1), to: nil)
-        #expect(view.draggingEntered(drag).isEmpty)
-        drag.draggingLocation = center
-        #expect(view.draggingUpdated(drag).contains(.copy))
-        view.visibleAt = { _ in false }; #expect(view.draggingUpdated(drag).isEmpty)
-        view.visibleAt = { _ in true }; #expect(view.draggingUpdated(drag).contains(.copy))
-        #expect(received.isEmpty)
-        // A graph revision changing after hover cannot redirect the pending drop.
-        view.scope = .init(rootGraphID: graph, rootRevision: UUID(), graphID: graph, bodyPath: [], projectID: project, instanceID: instance)
-        #expect(!view.performDragOperation(drag) && received.isEmpty)
-        view.scope = scope
-        #expect(view.draggingEntered(drag).contains(.copy))
-        drag.draggingPasteboard.clearContents(); drag.draggingPasteboard.setString("changed", forType: .string)
-        #expect(!view.performDragOperation(drag) && received.isEmpty)
-        for invalid in [WorkflowCanvasTransfer.operation(id: "d.text.input", modelID: nil),
-                        .library(owner: .init(projectID: project, instanceID: UUID()), sources: [.asset(asset)]),
-                        .library(owner: owner, sources: [.asset(asset), .asset(.init(projectID: project, assetID: UUID(), kind: .image, sha256: String(repeating: "b", count: 64)))])] {
-            let info = WorkspaceCanvasDropInfo(bytes: try invalid.encoded(), key: "invalid", window: window, point: center)
-            #expect(view.draggingEntered(info).isEmpty && !view.performDragOperation(info) && received.isEmpty)
-            info.draggingPasteboard.releaseGlobally()
+    @Test func surfaceLibraryPortAdmissionRejectsOccupiedStaleAndMultipleWithoutMutation() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        c.addExample("template")
+        let model = try #require(c.graph?.nodes.first { $0.operationID == "d.text.template" })
+        let occupied = try #require(c.graph), port = WorkflowPortIdentity(nodeID: model.id, port: "input", input: true)
+        func scope() throws -> WorkflowCanvasScope {
+            let g = try #require(c.graph)
+            return .init(rootGraphID: g.id, rootRevision: g.revision, graphID: g.id, bodyPath: [], projectID: c.projectID, instanceID: c.projectInstanceID)
         }
-        let valid = WorkspaceCanvasDropInfo(bytes: try transfer.encoded(), key: "valid", window: window, point: center)
-        defer { valid.draggingPasteboard.releaseGlobally() }
-        #expect(view.draggingEntered(valid).contains(.copy))
-        view.removeFromSuperview()
-        #expect(!view.prepareForDragOperation(valid) && !view.performDragOperation(valid))
-        root.addSubview(view)
-        #expect(view.draggingEntered(valid).contains(.copy))
-        #expect(view.performDragOperation(valid))
-        #expect(!view.performDragOperation(valid) && view.draggingEntered(valid).isEmpty)
-        #expect(received == [transfer])
+        let owner = try #require(c.assetLibraryOwner)
+        let ref = WorkflowAssetReference(projectID: owner.projectID, assetID: UUID(), kind: .text, sha256: String(repeating: "a", count: 64))
+        let transfer = WorkflowCanvasTransfer.library(owner: owner, sources: [.asset(ref)])
+        #expect(WorkflowLibraryPortDrop.admission(transfer, port: port, scope: try scope(), controller: c) == .blocked("container.dropOccupied"))
+        #expect(c.graph == occupied)
+        for connection in occupied.connections { c.disconnect(connection.id) }
+        let original = try #require(c.graph), captured = try scope()
+        #expect(WorkflowLibraryPortDrop.admission(nil, port: port, scope: captured, controller: c) == .checking)
+        #expect(WorkflowLibraryPortDrop.admission(transfer, port: port, scope: captured, controller: c) == .ready)
+        let image = WorkflowAssetReference(projectID: owner.projectID, assetID: UUID(), kind: .image, sha256: String(repeating: "b", count: 64))
+        #expect(WorkflowLibraryPortDrop.admission(.library(owner: owner, sources: [.asset(image)]), port: port, scope: captured, controller: c) == .blocked("container.dropIncompatible"))
+        for invalid in [WorkflowCanvasTransfer.operation(id: "d.text.input", modelID: nil),
+                        .library(owner: .init(projectID: owner.projectID, instanceID: UUID()), sources: [.asset(ref)]),
+                        .library(owner: owner, sources: [.asset(ref), .asset(image)])] {
+            #expect(!WorkflowLibraryPortDrop.admission(invalid, port: port, scope: captured, controller: c).permitsDrop)
+        }
+        #expect(c.graph == original && c.runs.isEmpty)
+        c.addBlankGraph(name: "changed")
+        #expect(!WorkflowLibraryPortDrop.admission(transfer, port: port, scope: captured, controller: c).permitsDrop)
+        #expect(await f.engine.submissions == 0)
+        try await f.close()
+    }
+
+    @Test func surfaceDropPortGeometryKeepsEllipseAndFrontNodeOcclusion() throws {
+        let a = try #require(WorkflowRegistry.standard.operation("d.text.template")).definition.makeNode()
+        var b = a; b.id = UUID()
+        let graph = WorkflowGraph(name: "drop", nodes: [a], layout: [.init(nodeID: a.id, x: 200, y: 100)])
+        let geometry = WorkflowGraphGeometry(graph: graph)
+        let frame = try #require(WorkflowConnectionGeometry.nodeFrames(geometry: geometry, sizes: [:])[a.id])
+        let center = CGPoint(x: frame.minX + 1, y: frame.minY + 60)
+        let port = WorkflowPortIdentity(nodeID: a.id, port: "input", input: true)
+        #expect(WorkflowLibraryDropTarget.hit(center, graph: graph, geometry: geometry, centers: [port: center], sizes: [:]) == .port(port))
+        #expect(WorkflowLibraryDropTarget.hit(.init(x: center.x + 10, y: center.y + 10), graph: graph, geometry: geometry, centers: [port: center], sizes: [:]) == .blocked)
+        #expect(WorkflowLibraryDropTarget.hit(.init(x: -1000, y: -1000), graph: graph, geometry: geometry, centers: [port: center], sizes: [:]) == .canvas)
+        var covered = graph; covered.nodes.append(b); covered.layout.append(.init(nodeID: b.id, x: 200, y: 100))
+        #expect(WorkflowLibraryDropTarget.hit(center, graph: covered, geometry: WorkflowGraphGeometry(graph: covered), centers: [port: center], sizes: [:]) == .blocked)
+    }
+
+    @Test func surfaceDropPreviewIsBoundedAndLateCallbacksCannotRestoreExitedState() async throws {
+        let project = UUID(), owner = WorkflowAssetLibraryOwner(projectID: project, instanceID: UUID())
+        let value = WorkflowCanvasTransfer.library(owner: owner, sources: [.asset(.init(projectID: project, assetID: UUID(), kind: .text, sha256: String(repeating: "a", count: 64)))])
+        let bytes = try value.encoded(), provider = NSItemProvider(), sourceProgress = Progress(totalUnitCount: 1)
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.workflowCanvasItem.identifier, visibility: .ownProcess) { completion in
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) { completion(bytes, nil) }; return sourceProgress
+        }
+        let preview = WorkflowLibraryDropPreview(), port = WorkflowPortIdentity(nodeID: UUID(), port: "input", input: true)
+        let scope = WorkflowCanvasScope(rootGraphID: UUID(), rootRevision: UUID(), graphID: UUID(), bodyPath: [], projectID: project, instanceID: owner.instanceID)
+        var checks = 0
+        preview.begin(provider, scope: scope, hit: { _ in .port(port) }, assess: { _, _ in checks += 1; return .checking })
+        preview.move(to: .init(x: 10, y: 10)); preview.move(to: .init(x: 11, y: 10))
+        #expect(checks == 1)
+        preview.clear(); #expect(!preview.consume(scope: scope), "Exit invalidates delayed performDrop")
+        #expect(!sourceProgress.isCancelled, "Hover exit must not cancel the source's shared capture")
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(preview.value == nil && preview.location == nil && preview.feedback == nil)
+        preview.begin(nil, scope: scope, hit: { _ in .port(port) }, assess: { _, _ in .checking })
+        #expect(preview.consume(scope: scope)); preview.clear(); #expect(!preview.consume(scope: scope))
     }
 }
