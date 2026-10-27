@@ -79,12 +79,12 @@ enum WorkflowLibraryDropAdmission: Equatable {
 
     static func submit(_ value: WorkflowCanvasTransfer, port: WorkflowPortIdentity,
                        scope: WorkflowCanvasScope, controller: WorkflowController, language: UILanguageStore?,
-                       onIssue: @escaping @MainActor (String) -> Void = { _ in }) -> Bool {
+                       onIssue: @escaping @MainActor (WorkflowIssue) -> Void = { _ in }) -> Bool {
         guard let payload = value.libraryPayload else { return false }
         let admission = admission(value, port: port, scope: scope, controller: controller)
         guard admission.permitsDrop, let target = controller.canvasInsertionTarget() else {
-            let message = workflowText(language, admission.key)
-            controller.errorMessage = message; onIssue(message); return true
+            let issue = WorkflowIssue("Asset drop rejected before insertion.", code: admission.key)
+            controller.reportIssue(issue); onIssue(issue); return true
         }
         let origin = controller.graph?.layout.first { $0.nodeID == port.nodeID }
         Task {
@@ -92,7 +92,7 @@ enum WorkflowLibraryDropAdmission: Equatable {
                 let sources = try await controller.resolveLibraryDrop(payload.items, owner: payload.owner, target: target)
                 try await controller.insertLibrarySources(sources, owner: payload.owner, target: target,
                     x: (origin?.x ?? 100) - 420, y: origin?.y ?? 100, inputNode: port.nodeID, inputPort: port.port)
-            } catch { controller.errorMessage = error.localizedDescription; onIssue(error.localizedDescription) }
+            } catch { let issue = WorkflowIssue(presenting: error, fallbackCode: "container.issue.actionFailed"); controller.reportIssue(issue); onIssue(issue) }
         }
         return true
     }
@@ -191,6 +191,7 @@ struct WorkflowLibraryDropFeedback: View {
 struct WorkflowLibraryDropIssue: Equatable {
     let scope: WorkflowCanvasScope
     let message: String
+    var code: String? = nil
     func isVisible(in current: WorkflowCanvasScope) -> Bool { scope.identity == current.identity }
 }
 
@@ -203,21 +204,22 @@ struct WorkflowLibraryDropIssue: Equatable {
         let next = UUID(); token = next; self.scope = scope.identity; issue = nil; return next
     }
     func token(for scope: WorkflowCanvasScope) -> UUID? { self.scope == scope.identity ? token : nil }
-    func report(_ message: String, scope: WorkflowCanvasScope, token: UUID) {
+    func report(_ message: String, code: String? = nil, scope: WorkflowCanvasScope, token: UUID) {
         guard self.token == token, self.scope == scope.identity else { return }
-        issue = .init(scope: scope, message: message)
+        issue = .init(scope: scope, message: message, code: code)
     }
     func clear() { token = nil; scope = nil; issue = nil }
 }
 
 struct WorkflowLibraryDropIssueView: View {
     let message: String
+    var code: String? = nil
     let dismiss: () -> Void
     @Environment(\.dLanguageStore) private var language
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            WorkbenchIssueText(raw: message, key: code).foregroundStyle(.orange)
             Button(workflowText(language, "workflow.action.close"), systemImage: "xmark", action: dismiss)
                 .labelStyle(.iconOnly).buttonStyle(WorkbenchGlassButtonStyle(compact: true))
         }.font(.caption).padding(10).frame(maxWidth: 420)

@@ -3,6 +3,7 @@ import SwiftUI
 enum ChatComposerIdentity: Equatable {
     case empty, current(UUID), stale
     static func resolve(captured: UUID, empty: UUID, created: UUID?, selected: UUID?) -> Self {
+        if selected == captured { return .current(captured) }
         if captured == empty {
             if let created, selected == created { return .current(created) }
             return selected == nil ? .empty : .stale

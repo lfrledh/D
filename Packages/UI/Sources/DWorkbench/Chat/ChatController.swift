@@ -307,13 +307,20 @@ import Observation
         guard state.revision == revision, !isBusy else { throw WorkflowIssue("聊天已改变，请重新导出会话包。") }
         return plan
     }
-    @discardableResult public func newSession(title: String = "新对话") throws -> UUID {
+    /// Admit a first editor draft as one state publication. Publishing an empty
+    /// selected session first would make its native editor discard valid Undo.
+    @discardableResult public func newSession(title: String = "新对话", id: UUID = UUID(), initialDraft: String = "") throws -> UUID {
         try requireLoaded()
         guard state.sessions.count < 512, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               title.utf8.count <= 512 else { throw WorkflowIssue("会话标题无效或数量已达上限。") }
-        var session = ChatSession(title: title)
-        session.systemPrompt = defaultSystemPrompt
-        state.sessions.append(session); state.selectedSessionID = session.id; changed(); return session.id
+        guard !state.sessions.contains(where: { $0.id == id }) else {
+            throw WorkflowIssue("The requested chat session identity already exists.", code: "chat.issue.sessionIdentity")
+        }
+        guard initialDraft.utf8.count <= 1_048_576 else { throw WorkflowIssue("草稿超过1MiB。") }
+        var session = ChatSession(id: id, title: title)
+        session.systemPrompt = defaultSystemPrompt; session.draft = initialDraft
+        var next = state; next.sessions.append(session); next.selectedSessionID = id
+        state = next; changed(); return id
     }
     public func selectSession(_ id: UUID) throws { try requireLoaded(); _ = try index(id); state.selectedSessionID = id; changed() }
     public func rename(_ id: UUID, title: String) throws {

@@ -1,4 +1,5 @@
 import AppKit
+import DWorkbench
 import SwiftUI
 import Observation
 
@@ -7,6 +8,7 @@ import Observation
     var asksToClose = false
     var saving = false
     var failure: String?
+    var failureKey: String?
     var allowsDiscard = true
     @ObservationIgnored var dirty = false
     @ObservationIgnored var busy = false
@@ -76,10 +78,10 @@ import Observation
     func discard() { guard active && isCurrentSurface() && allowsDiscard && !saving && !busy else { return }; asksToClose = false; commit() }
     func saveAndClose() {
         guard active, isCurrentSurface(), !saving, !busy, let save else { return }
-        saving = true; failure = nil
+        saving = true; failure = nil; failureKey = nil
         Task { @MainActor in
             do { try await save(); guard active else { return }; saving = false; asksToClose = false; pendingClose = false; commit() }
-            catch { guard active else { return }; saving = false; pendingClose = false; failure = error.localizedDescription }
+            catch { guard active else { return }; saving = false; pendingClose = false; failure = error.localizedDescription; failureKey = (error as? WorkflowIssue)?.code }
         }
     }
 }
@@ -362,7 +364,7 @@ private struct WorkbenchChildSurface: View {
                     shape.fill(Color.black.opacity(0.08)).contentShape(shape).onTapGesture { gate.keepEditing() }
                     VStack(alignment: .leading, spacing: 16) {
                         Text(t(gate.save == nil ? "unsubmitted" : "unsaved")).font(.headline)
-                        if let failure = gate.failure { Text(failure).foregroundStyle(.red).textSelection(.enabled) }
+                        if let failure = gate.failure { WorkbenchIssueText(raw: failure, key: gate.failureKey).foregroundStyle(.red).textSelection(.enabled) }
                         if gate.saving { ProgressView() }
                         HStack {
                             Button(t("keep")) { gate.keepEditing() }.keyboardShortcut(.cancelAction)

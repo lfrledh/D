@@ -1833,3 +1833,89 @@ extension ChatPresentationTests {
         #expect(await engine.submissions==0);try await chat.flush();try await close(store,root:root)
     }
 }
+
+extension ChatPresentationTests {
+    @Test func firstChatDraftAdmissionRejectsDuplicateAndOversizeWithoutPartialSession() async throws {
+        let (chat, _, store, root) = try await fixture(ChatState())
+        let id = UUID()
+        try chat.newSession(id: id, initialDraft: "用户原文 👩🏽‍🎨")
+        let admitted = chat.state
+        #expect(chat.selectedSession?.id == id && chat.selectedSession?.draft == "用户原文 👩🏽‍🎨")
+        #expect(throws: (any Error).self) { try chat.newSession(id: id, initialDraft: "wrong") }
+        #expect(chat.state == admitted)
+        #expect(throws: (any Error).self) { try chat.newSession(initialDraft: String(repeating: "x", count: 1_048_577)) }
+        #expect(chat.state == admitted)
+        try await chat.flush(); try await close(store, root: root)
+    }
+
+    @Test func actualDualWorkbenchRetainsChatEditorUndoAcrossWorkflowNavigation() async throws {
+        let root = fixtureRoot.appendingPathComponent("dual-undo-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let project = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: ChatPresentationNoInference(), backendID: "undo.fixture",
+                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in })
+        }, settings: ChatPresentationMemorySettings())
+        await project.createProject(at: root.appendingPathComponent("Undo.dproject"))
+        let store = try #require(project.currentStore)
+        var navigation = QuickCreationState(); navigation.navigation = .init(selected: .text); navigation.textPresentation = .chat
+        try await store.saveQuickCreationState(navigation, expectedRevision: 0)
+        await project.enableProjectQuick(); await project.openWorkflow()
+        do {
+            let quick = try #require(project.projectQuick), chat = try #require(project.chat)
+            #expect(quick.category == .text && quick.textPresentation == .chat && chat.state.sessions.isEmpty)
+            let model = WorkbenchModel(projectSession: project)
+            model.chatDisplaySettings = .init(appearanceDirectory: root.appendingPathComponent("Appearance"))
+            let library = ModelLibraryModel(library: try await ModelLibrary(stateDirectory: root.appendingPathComponent("models")))
+            let host = NSHostingView(rootView: DualWorkbenchView(model: model, quickModel: model,
+                quick: quick, library: library, nodeTags: ModelNodeTagStore(), metadata: nil))
+            let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 1200, height: 800),
+                styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false; window.contentView = host
+            defer { window.contentView = nil; window.close() }
+            func descendants(_ v: NSView) -> [NSView] { v.subviews.flatMap { [$0] + descendants($0) } }
+            func settle() async throws { for _ in 0..<12 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) } }
+            func editor() throws -> NSTextView {
+                try #require(descendants(host).compactMap { $0 as? NSTextView }.first {
+                    $0.accessibilityIdentifier().hasPrefix("chat-draft-") && !$0.isHiddenOrHasHiddenAncestor
+                })
+            }
+            try await settle()
+            let original = try editor(), undo = try #require(original.undoManager)
+            let modes = try #require(descendants(host).compactMap { $0 as? WorkbenchCategoryDragView }.first {
+                $0.options == [AnyHashable(DualWorkbenchView.Entry.quick), AnyHashable(DualWorkbenchView.Entry.workflow)]
+            })
+            #expect(window.makeFirstResponder(original))
+            undo.beginUndoGrouping(); original.insertText("Draft A", replacementRange: .init(location: 0, length: 0)); undo.endUndoGrouping()
+            try await settle()
+            let sessionA = try #require(chat.state.selectedSessionID)
+            #expect(try editor() === original && original.undoManager === undo)
+            #expect(undo.canUndo)
+            undo.undo()
+            try await settle()
+            #expect(original.string.isEmpty)
+            undo.redo(); try await settle(); #expect(original.string == "Draft A")
+            original.setSelectedRange(.init(location: 2, length: 3))
+            for _ in 0..<3 {
+                modes.onCommit(1); try await settle()
+                #expect(original.window === window && original.isHiddenOrHasHiddenAncestor)
+                #expect(window.firstResponder !== original)
+                modes.onCommit(0); try await settle()
+                #expect(try editor() === original && original.undoManager === undo)
+                #expect(original.selectedRange() == .init(location: 2, length: 3))
+            }
+            undo.undo(); try await settle(); #expect(original.string.isEmpty && chat.selectedSession?.draft == "")
+            undo.redo(); try await settle(); #expect(original.string == "Draft A")
+            let sessionB = try chat.newSession(); try await settle()
+            let other = try editor(), otherUndo = try #require(other.undoManager)
+            #expect(other !== original && otherUndo !== undo)
+            otherUndo.beginUndoGrouping(); other.insertText("Draft B", replacementRange: .init(location: 0, length: 0)); otherUndo.endUndoGrouping()
+            try await settle(); otherUndo.undo(); try await settle()
+            #expect(chat.state.sessions.first(where: { $0.id == sessionA })?.draft == "Draft A")
+            #expect(chat.state.sessions.first(where: { $0.id == sessionB })?.draft == "")
+            try await chat.flush()
+        } catch { await project.closeProject(); throw error }
+        await project.closeProject()
+        try FileManager.default.removeItem(at: root)
+    }
+}

@@ -919,7 +919,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 do {
                     let sources = try await controller.resolveLibraryDrop(payload.items, owner: payload.owner, target: target)
                     try await controller.insertLibrarySources(sources, owner: payload.owner, target: target, x: point.x, y: point.y) }
-                catch { controller.errorMessage = error.localizedDescription }
+                catch { controller.reportIssue(.init(presenting: error, fallbackCode: "container.issue.actionFailed")) }
             }
             return true
         case .output: return false
@@ -1378,13 +1378,15 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             }
             Spacer()
             if let rawError = controller.errorMessage {
-                let error = WorkbenchOwnedIssue.summary(rawError, language: languageStore)
+                let error = controller.errorCode.map { workflowText(languageStore, $0, fallback: rawError) }
+                    ?? WorkbenchOwnedIssue.summary(rawError, language: languageStore)
                     ?? workflowRecoveryErrorText(rawError, runs: controller.runs, language: languageStore)
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
-                    .lineLimit(2)
-                    .help(error)
-                    .accessibilityIdentifier("workflow-error")
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(error, systemImage: "exclamationmark.triangle.fill").lineLimit(2)
+                    if controller.errorCode != nil {
+                        DisclosureGroup(consistencyText(languageStore, "error.original")) { Text(rawError).textSelection(.enabled) }
+                    }
+                }.foregroundStyle(.red).help(error).accessibilityIdentifier("workflow-error")
                 Button(workflowText(languageStore, "workflow.action.close"),
                        systemImage: "xmark") { controller.errorMessage = nil }
                     .labelStyle(.iconOnly)

@@ -289,25 +289,26 @@ struct WorkflowGraphSurface: View {
                                         else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)) }
                                     }
                                 }
-                                guard controller.isCurrent(target) else { throw WorkflowIssue(workflowText(languageStore, "container.stale")) }
+                                guard controller.isCurrent(target) else { throw WorkflowIssue("Drop target changed.", code: "container.stale") }
                                 if custom {
                                     let value = try WorkflowCanvasTransfer.decode(bytes)
                                     if value.libraryPayload != nil, case .port(let port) = destination {
                                         _ = WorkflowLibraryPortDrop.submit(value, port: port, scope: scope, controller: controller, language: languageStore) { message in
-                                            libraryDropIssues.report(message, scope: scope, token: issueToken)
+                                            libraryDropIssues.report(message.reason, code: message.code, scope: scope, token: issueToken)
                                         }
                                     } else {
-                                        if value.libraryPayload != nil, destination == .blocked { throw WorkflowIssue(workflowText(languageStore, "container.dropTarget")) }
+                                        if value.libraryPayload != nil, destination == .blocked { throw WorkflowIssue("Drop target does not accept this source.", code: "container.dropTarget") }
                                         _ = acceptSurfaceDrop([value], at: raw, scope: scope)
                                     }
                                 }
                                 else if let url = URL(dataRepresentation: bytes, relativeTo: nil), url.isFileURL {
-                                    guard destination == .canvas else { throw WorkflowIssue(workflowText(languageStore, "container.dropTarget")) }
+                                    guard destination == .canvas else { throw WorkflowIssue("Drop target does not accept this source.", code: "container.dropTarget") }
                                     _ = acceptFileDrop([url], at: raw, scope: scope)
                                 } else { throw CocoaError(.fileReadUnsupportedScheme) }
                             } catch {
-                                controller.errorMessage = error.localizedDescription
-                                libraryDropIssues.report(error.localizedDescription, scope: scope, token: issueToken)
+                                let issue = WorkflowIssue(presenting: error, fallbackCode: "container.issue.actionFailed")
+                                controller.reportIssue(issue)
+                                libraryDropIssues.report(issue.reason, code: issue.code, scope: scope, token: issueToken)
                             }
                         }
                         return true
@@ -324,7 +325,7 @@ struct WorkflowGraphSurface: View {
                 }
                 .overlay(alignment: .bottom) {
                     if let issue = libraryDropIssues.issue, issue.isVisible(in: scope) {
-                        WorkflowLibraryDropIssueView(message: issue.message) { libraryDropIssues.clear() }
+                        WorkflowLibraryDropIssueView(message: issue.message, code: issue.code) { libraryDropIssues.clear() }
                     }
                 }
                 .scrollIndicators(.never)

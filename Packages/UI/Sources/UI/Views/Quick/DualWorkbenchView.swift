@@ -12,8 +12,9 @@ public struct DualWorkbenchView: View {
     @State private var quickPreviewSelections: [String: [QuickCategory: WorkflowAssetReference]] = [:]
     @State private var useProjectQuick = true
     @State private var modelPickerCategory: QuickCategory?
-    private var usesTemporaryChat: Bool { entry == .quick && quick.category == .text && quick.textPresentation == .chat && automaticQuickModel.temporaryChatModel != nil }
-    private var chatModel: WorkbenchModel { usesTemporaryChat ? (automaticQuickModel.temporaryChatModel ?? quickModel) : quickModel }
+    private var quickUsesTemporaryChat: Bool { quick.category == .text && quick.textPresentation == .chat && automaticQuickModel.temporaryChatModel != nil }
+    private var usesTemporaryChat: Bool { entry == .quick && quickUsesTemporaryChat }
+    private var chatModel: WorkbenchModel { quickUsesTemporaryChat ? (automaticQuickModel.temporaryChatModel ?? quickModel) : quickModel }
     private var selectionModel: WorkbenchModel { usesTemporaryChat ? chatModel : quickModel }
     private var chat: ChatController? { chatModel.projectSession.chat }
     @State private var temporaryChatChanging = false
@@ -172,7 +173,11 @@ public struct DualWorkbenchView: View {
     }
     @State private var settingsContext: SettingsContext?
     @State private var openToolsRequest: ChatToolsNavigationRequest?
-    @State private var issue: String?
+    @State private var issueValue: WorkflowIssue?
+    private var issue: String? {
+        get { issueValue?.reason }
+        nonmutating set { issueValue = newValue.map { WorkflowIssue($0) } }
+    }
     @State private var failedAssetRoute: FilesRoute?
     @Environment(\.dLanguageStore) private var language
     private var canvasModel: WorkbenchModel { model.manifest == nil ? automaticQuickModel : model }
@@ -483,8 +488,7 @@ public struct DualWorkbenchView: View {
                     .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.vertical, 4)
             }
             ZStack {
-                Group {
-                    if entry == .quick {
+                RetainedContentHost(content: Group {
                         if quick.category == .text, let chat {
                             VStack(spacing: 0) {
                                 if quick.textPresentation == .chat {
@@ -536,8 +540,13 @@ public struct DualWorkbenchView: View {
                                 } else { quickSurface }
                             }
                         } else { quickSurface }
-                    }
-                }
+                }.workbenchTheme(paintsCanvas: false).environment(\.dLanguageStore, language)
+                    .preferredColorScheme(automaticQuickModel.chatDisplaySettings.preferences.preferredColorScheme)
+                    .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences),
+                    visible: entry == .quick, identifier: "quick-retained-surface",
+                    fallbackSize: CGSize(width: 760, height: 500))
+                    .transaction { $0.animation = nil }
+                    .accessibilityHidden(entry != .quick)
                 RetainedContentHost(content: WorkflowHostView(model: canvasModel, nodeTags: nodeTags, metadata: metadata, library: library, onQuickUse: useNode,
                     libraryContent: canvasLibraryContent,
                     libraryHeaderContent: { mode in AnyView(libraryBrowser(compact: true, at: { nil }, canvasMode: mode, forCanvas: true, headerOnly: true)) },
@@ -755,7 +764,7 @@ public struct DualWorkbenchView: View {
                     else { filesRoute = failedAssetRoute }
                 }
             }
-        } message: { Text(WorkbenchOwnedIssue.alertMessage(issue ?? "", language: language)) }
+        } message: { WorkbenchIssueText(raw: issue ?? "", key: issueValue?.code) }
         .task {
             if quick.state.drafts.isEmpty && quick.state.navigation == nil { quick.select(operationID: "d.model.language", modelID: "") }
             await refreshLibrary(checkModels: false)
@@ -1386,7 +1395,7 @@ public struct DualWorkbenchView: View {
             }
             try await controller.saveExplicitEdits()
             if canvasModel.projectSession === owner, owner.workflow === controller, navigationIntent == intent, libraryVisible == wasLibraryVisible { libraryVisible = false; navigate(to: .workflow) }
-        } catch { issue = error.localizedDescription }
+        } catch { issueValue = .init(presenting: error, fallbackCode: "container.issue.actionFailed") }
     }
     private func copiedReference(_ reference: WorkflowAssetReference, from source: ProjectStore, to destination: ProjectStore) async throws -> WorkflowAssetReference {
         if destination === source { return reference }

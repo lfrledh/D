@@ -12,6 +12,7 @@ import UniformTypeIdentifiers
     let source: WorkflowLibrarySource?
     let failure: String?
     let ordinal: Int
+    var failureCode: String? = nil
     var runtimeAnnotationKey: String? = nil
     var concept: String? = nil
     var producer: WorkflowNode? = nil
@@ -53,9 +54,7 @@ import UniformTypeIdentifiers
 
 @MainActor @Observable final class WorkflowContainerPresentation {
     var showCollectionSettings = false
-    var ruleEnabled = false
-    var ruleFolder: UUID?
-    var ruleTarget: WorkflowCanvasInsertionTarget?
+    var ruleDraft: WorkflowCollectionRuleDraft?
     var scopes: [WorkflowContainerScope] = []
     var selectedScope: WorkflowContainerScope?
     var snapshot: WorkflowContainerSnapshot?
@@ -64,7 +63,7 @@ import UniformTypeIdentifiers
     var currentItem: String?
     var repetitions = 1
     var seedStrategy: WorkflowBatchSeedStrategy = .fixed
-    var error: String?
+    var error: WorkflowIssue?
     var rejectAll = false
     var cache = WorkflowLibraryPreviewCache()
     var rows: [ContainerItem] = []
@@ -93,9 +92,6 @@ import UniformTypeIdentifiers
     @Environment(\.workflowViewerModel) private var model
     @Environment(\.workflowContainerLibrary) private var library
     private var showCollectionSettings: Bool { get { presentation.showCollectionSettings } nonmutating set { presentation.showCollectionSettings = newValue } }
-    private var ruleEnabled: Bool { get { presentation.ruleEnabled } nonmutating set { presentation.ruleEnabled = newValue } }
-    private var ruleFolder: UUID? { get { presentation.ruleFolder } nonmutating set { presentation.ruleFolder = newValue } }
-    private var ruleTarget: WorkflowCanvasInsertionTarget? { get { presentation.ruleTarget } nonmutating set { presentation.ruleTarget = newValue } }
     private var scopes: [WorkflowContainerScope] { get { presentation.scopes } nonmutating set { presentation.scopes = newValue } }
     private var selectedScope: WorkflowContainerScope? { get { presentation.selectedScope } nonmutating set { presentation.selectedScope = newValue } }
     private var snapshot: WorkflowContainerSnapshot? { get { presentation.snapshot } nonmutating set { presentation.snapshot = newValue } }
@@ -104,7 +100,7 @@ import UniformTypeIdentifiers
     private var currentItem: String? { get { presentation.currentItem } nonmutating set { presentation.currentItem = newValue } }
     private var repetitions: Int { get { presentation.repetitions } nonmutating set { presentation.repetitions = newValue } }
     private var seedStrategy: WorkflowBatchSeedStrategy { get { presentation.seedStrategy } nonmutating set { presentation.seedStrategy = newValue } }
-    private var error: String? { get { presentation.error } nonmutating set { presentation.error = newValue } }
+    private var error: WorkflowIssue? { get { presentation.error } nonmutating set { presentation.error = newValue } }
     private var rejectAll: Bool { get { presentation.rejectAll } nonmutating set { presentation.rejectAll = newValue } }
     private var cache: WorkflowLibraryPreviewCache { get { presentation.cache } nonmutating set { presentation.cache = newValue } }
     init(controller: WorkflowController, node: WorkflowNode, forcedStepID: UUID? = nil, scale: CGFloat = 1, height: CGFloat = 270, presentation: WorkflowContainerPresentation? = nil, headerActions: WorkbenchMenuRows? = nil, expandedPresentation: Bool = false) {
@@ -125,8 +121,10 @@ import UniformTypeIdentifiers
         WorkbenchMenuAction(t("collectAll") + " (\(rows.count))") { collect(rows) }.disabled(rows.isEmpty)
         if [WorkflowAssetContainer.filterID, WorkflowAssetContainer.previewID].contains(node.operationID) {
             WorkbenchMenuAction(t("collectionSettings")) {
-                ruleEnabled = node.collectionRule != nil; ruleFolder = node.collectionRule?.folderID
-                ruleTarget = controller.canvasInsertionTarget(); showCollectionSettings = true
+                guard let target = controller.canvasInsertionTarget(),
+                      let current = controller.graph?.nodes.first(where: { $0.id == node.id }) else { error = .init("Container target changed.", code: "container.stale"); return }
+                presentation.ruleDraft = WorkflowCollectionRuleDraft(controller: controller, node: current, target: target)
+                showCollectionSettings = true
             }
         }
         WorkbenchMenuAction(t("showInLibrary")) { showInLibrary(chosen.isEmpty ? rows : chosen) }.disabled(rows.isEmpty || navigation == nil)
@@ -225,15 +223,18 @@ import UniformTypeIdentifiers
             }
             if let snapshot, !snapshot.collectionComplete { Text(t("collecting")).foregroundStyle(.secondary) }
             if controller.collectionRequests.contains(where: { !$0.completed && $0.error != nil }) {
-                Button(t("retryCollection")) { Task { await retryCollection() } }.help(controller.collectionRequests.first { !$0.completed && $0.error != nil }?.error ?? "")
+                if let request = controller.collectionRequests.first(where: { !$0.completed && $0.error != nil }), let raw = request.error {
+                    WorkbenchIssueText(raw: raw, key: request.errorCode).foregroundStyle(.red)
+                }
+                Button(t("retryCollection")) { Task { await retryCollection() } }
             }
             if let location = presentation.collectionLocation {
                 HStack { Text(t("collectedFiltered")).font(.caption).foregroundStyle(.secondary); Button(t("showInLibrary")) {
-                    guard location.isCurrent(in: controller) else { error = t("stale"); return }
+                    guard location.isCurrent(in: controller) else { error = .init("Container target changed.", code: "container.stale"); return }
                     navigation?.reveal(location)
                 } }
             }
-            if let error { Text(error).foregroundStyle(.red).lineLimit(3).textSelection(.enabled) }
+            if let error { WorkbenchIssueText(raw: error.reason, key: error.code).foregroundStyle(.red) }
             WorkbenchScrollView {
                 if rows.isEmpty { Text(t("empty")).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 80 * scale) }
                 else if grid {
@@ -274,27 +275,9 @@ import UniformTypeIdentifiers
             .onChange(of: contentVisible) { _, visible in if !visible { presentation.playback.stop() } }
             .onDisappear { presentation.playback.stop() }
             .workbenchSheet(isPresented: settingsPresented, title: t("collectionSettings")) {
-                VStack(alignment: .leading, spacing: 16) {
-                    Toggle(t(review ? "collectConfirmed" : "collectNew"), isOn: $presentation.ruleEnabled)
-                    Text(t("ruleFutureOnly")).font(.caption).foregroundStyle(.secondary)
-                    WorkbenchPicker(t("destination"), selection: $presentation.ruleFolder) {
-                        WorkbenchChoice(t("library.collected"), value: Optional<UUID>.none)
-                        if let library {
-                            WorkbenchChoiceForEach(library.metadata.folders.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { folder in
-                                WorkbenchChoice(folder.name, value: Optional(folder.id))
-                            }
-                        }
-                    }.disabled(!ruleEnabled)
-                    HStack {
-                        Button(workspaceText(language, "cancel")) { showCollectionSettings = false }
-                        Spacer()
-                        Button(workspaceText(language, "saveOnly")) {
-                            guard let ruleTarget, controller.isCurrent(ruleTarget), controller.graph?.nodes.first(where: { $0.id == node.id })?.collectionRule == node.collectionRule else { error = t("stale"); return }
-                            controller.setCollectionRule(ruleEnabled ? .init(folderID: ruleFolder) : nil, nodeID: node.id, target: ruleTarget)
-                            Task { do { try await controller.saveExplicitEdits(); showCollectionSettings = false } catch { self.error = error.localizedDescription } }
-                        }
-                    }
-                }.padding(24).frame(width: 460)
+                if let draft = presentation.ruleDraft {
+                    WorkflowCollectionRuleEditor(draft: draft, review: review, library: library)
+                }
             }
             .workbenchSheet(isPresented: rejectionPresented, title: t("rejectAll")) {
                 VStack(alignment: .leading, spacing: 16) {
@@ -365,7 +348,7 @@ import UniformTypeIdentifiers
                         if item.consumers.isEmpty { Text(workflowText(language, "workflow.compatibility.noReceivers")).font(.caption) }
                     }
                 }
-                if let failure = item.failure { Text(failure).foregroundStyle(.red).lineLimit(2) }
+                if let failure = item.failure { WorkbenchIssueText(raw: failure, key: item.failureCode).foregroundStyle(.red) }
             }.frame(maxWidth: .infinity, alignment: .leading)
             VStack(spacing: 4 * scale) {
                 Image(systemName: "hand.draw").font(.system(size: 16 * scale)).frame(width: 28 * scale, height: 28 * scale)
@@ -385,12 +368,12 @@ import UniformTypeIdentifiers
         let isPlaying = playback.reference == reference && playback.transport.state == .playing
         HStack(spacing: 4 * scale) {
             Button {
-                Task { do { try await playback.toggle(reference, controller: controller) } catch { self.error = error.localizedDescription } }
+                Task { do { try await playback.toggle(reference, controller: controller) } catch { self.error = .init(presenting: error, fallbackCode: "container.issue.actionFailed") } }
             } label: { Image(systemName: isPlaying ? "pause.fill" : "play.fill").frame(width: 28 * scale, height: 28 * scale) }
                 .buttonStyle(.plain).accessibilityLabel(workspaceText(language, isPlaying ? "pause" : "play"))
             if playback.reference == reference, let format = playback.format {
                 Slider(value: Binding(get: { Double(playback.transport.positionFrame) }, set: { value in
-                    do { try playback.transport.seek(toFrame: Int64(value)) } catch { self.error = error.localizedDescription }
+                    do { try playback.transport.seek(toFrame: Int64(value)) } catch { self.error = .init(presenting: error, fallbackCode: "container.issue.actionFailed") }
                 }), in: 0...Double(max(1, format.frameCount - 1))).accessibilityLabel(workspaceText(language, "seek"))
             }
         }
@@ -442,7 +425,7 @@ import UniformTypeIdentifiers
                 do {
                     let value = try WorkflowAssetContainer.sourceValues([source], runs: controller.runs)[0]
                     return .init(id: source.key, itemID: source.key, value: value, record: nil, source: source, failure: nil, ordinal: index + 1)
-                } catch { return .init(id: source.key, itemID: source.key, value: nil, record: nil, source: nil, failure: error.localizedDescription, ordinal: index + 1) }
+                } catch { return .init(id: source.key, itemID: source.key, value: nil, record: nil, source: nil, failure: error.localizedDescription, ordinal: index + 1, failureCode: (error as? WorkflowIssue)?.code ?? "container.issue.sourceUnavailable") }
             }
         }
         let history = forcedStepID == nil ? controller.history(for: node.id) : controller.runs.filter { $0.planCheckpoint?.records.contains(where: { $0.id == forcedStepID }) == true }
@@ -459,7 +442,7 @@ import UniformTypeIdentifiers
             } else { selectedScope = scopes.last }
         }
         if let selectedScope, scopes.contains(where: { $0 == selectedScope }) { snapshot = try? controller.containerSnapshot(selectedScope) }
-        else if selectedScope != nil { snapshot = nil; error = t("stale") }
+        else if selectedScope != nil { snapshot = nil; error = .init("Container target changed.", code: "container.stale") }
         else { snapshot = nil }
         let plans = controller.runs.compactMap { $0.planCheckpoint?.plan }
         rows = projectedRows().map { source in
@@ -485,7 +468,7 @@ import UniformTypeIdentifiers
             var ids = record.step.containerSelectionDraft ?? []
             if let i = ids.firstIndex(of: item.itemID) { ids.remove(at: i) } else { ids.append(item.itemID) }
             do { try controller.editContainerSelection(call: .init(address: record.address, stepID: record.id), input: input, selectedIDs: ids); refresh() }
-            catch { self.error = error.localizedDescription }
+            catch { self.error = .init(presenting: error, fallbackCode: "container.issue.actionFailed") }
         } else { if !previewSelection.insert(item.id).inserted { previewSelection.remove(item.id) } }
     }
     private func selectAll(clear: Bool = false, invert: Bool = false) {
@@ -498,7 +481,7 @@ import UniformTypeIdentifiers
                     try controller.editContainerSelection(call: .init(address: record.address, stepID: record.id), input: input, selectedIDs: ids)
                 }
                 refresh()
-            } catch { self.error = error.localizedDescription }
+            } catch { self.error = .init(presenting: error, fallbackCode: "container.issue.actionFailed") }
         } else { previewSelection = clear ? [] : Set(rows.filter { $0.value != nil && $0.failure == nil && (!invert || !previewSelection.contains($0.id)) }.map(\.id)) }
     }
     private func submit(endAll: Bool = false) {
@@ -516,9 +499,9 @@ import UniformTypeIdentifiers
                 if let saved { intent = saved }
                 else { intent = try await controller.submitContainer(snapshot, choices: choices, repetitions: count, seedStrategy: strategy, endAll: endAll) }
                 if let next = try await controller.continueContainerSubmission(intent) { await controller.runBatchStage(next) }
-                else if !endAll && otherWaitingCall == nil { error = t("otherGates") }
+                else if !endAll && otherWaitingCall == nil { error = .init("Other human gates remain.", code: "container.otherGates") }
                 refresh()
-            } catch { self.error = error.localizedDescription }
+            } catch { self.error = .init(presenting: error, fallbackCode: "container.issue.actionFailed") }
         }
     }
     private func retryCollection() async {
@@ -533,14 +516,14 @@ import UniformTypeIdentifiers
         var seen = Set<String>()
         let sources = items.compactMap(\.source).filter { seen.insert($0.key).inserted }
         let location = WorkflowLibraryContext(controller: controller, source: .sources(sources), name: node.title)
-        Task { do { try await controller.setCollected(sources, collected: true, owner: owner); presentation.collectionLocation = location } catch { self.error = error.localizedDescription } }
+        Task { do { try await controller.setCollected(sources, collected: true, owner: owner); presentation.collectionLocation = location } catch { self.error = .init(presenting: error, fallbackCode: "container.issue.actionFailed") } }
     }
     private func open(_ item: ContainerItem) {
         guard let model, let value = item.value, model.projectSession.workflow === controller else { return }
         do {
-            if case .runtime(let source) = item.source { guard try source.resolve(in: controller.runs) == value else { throw WorkflowIssue(t("stale")) } }
+            if case .runtime(let source) = item.source { guard try source.resolve(in: controller.runs) == value else { throw WorkflowIssue("Container source changed.", code: "container.stale") } }
             try model.viewers.open(.init(title: name(item), subtitle: snapshot?.runs.first?.createdAt.formatted() ?? "", value: value, call: { if case .runtime(let source) = item.source { return source.call }; return item.record.map { .init(address: $0.address, stepID: $0.id) } }(), runtimeSource: { if case .runtime(let source) = item.source { return source }; return nil }()), model: model, language: language)
-        } catch { self.error = error.localizedDescription }
+        } catch { self.error = .init(presenting: error, fallbackCode: "container.issue.actionFailed") }
     }
 }
 
@@ -559,7 +542,7 @@ private struct WorkflowContainerStructuredAssetInfo: View {
     @State private var concept: String?
     @State private var producerID: String?
     @State private var receivers: [WorkflowConsumerMatch] = []
-    @State private var failure: String?
+    @State private var failure: WorkflowIssue?
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(concept.map { WorkflowValueCompatibility.conceptTitle($0, language: language) }
@@ -571,7 +554,7 @@ private struct WorkflowContainerStructuredAssetInfo: View {
                 Text(match.displayTitle(language) + " · " + match.displayPort(language) + " · " + workflowText(language, "workflow.compatibility.status." + match.result.status.rawValue)).lineLimit(2)
             }
             if receivers.isEmpty { Text(workflowText(language, "workflow.compatibility.noReceivers")) }
-            if let failure { Text(failure).foregroundStyle(.red).lineLimit(2) }
+            if let failure { WorkbenchIssueText(raw: failure.reason, key: failure.code).foregroundStyle(.red) }
         }.font(.caption).foregroundStyle(.secondary)
         .task(id: Identity(reference: reference, instanceID: controller.projectInstanceID, visible: visible)) {
             concept = nil; producerID = nil; receivers = []; failure = nil
@@ -590,7 +573,7 @@ private struct WorkflowContainerStructuredAssetInfo: View {
                 var seen = Set<String>()
                 receivers = Array(matches.filter { [.direct, .conversion].contains($0.result.status) && seen.insert($0.id).inserted }.prefix(2))
             } catch is CancellationError { }
-            catch { failure = error.localizedDescription }
+            catch { failure = .init(presenting: error, fallbackCode: "container.issue.sourceUnavailable") }
         }
         .onDisappear { concept = nil; producerID = nil; receivers = []; failure = nil }
     }

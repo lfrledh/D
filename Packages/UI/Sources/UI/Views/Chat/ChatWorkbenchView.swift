@@ -533,7 +533,6 @@ struct ChatWorkbenchView: View {
     @Environment(\.workbenchContentVisible) private var workspaceVisible
     @State private var enteringMessages: Set<UUID> = []
     @State private var emptyDraftSession = ChatSession()
-    @State private var firstDraftSessionID: UUID?
     @Environment(\.workbenchModeSize) private var modeSize
     @State private var composerEditorHeight: CGFloat = 0
     @State private var composerFocusRequest: UUID?
@@ -720,7 +719,7 @@ struct ChatWorkbenchView: View {
         }
         .padding(.horizontal, 16).padding(.bottom, 16)
         .background(WorkbenchCommandWindow(scope: commandScope))
-        .focusedSceneValue(\.workbenchChat, chatCommands)
+        .focusedSceneValue(\.workbenchChat, workspaceVisible ? chatCommands : nil)
         .coordinateSpace(name: ChatLayoutSpace.name)
         .environment(\.workbenchMenuContext, "chat:\(ObjectIdentifier(chat)):\(ObjectIdentifier(chat.store)):\(chat.state.selectedSessionID?.uuidString ?? "none")")
         .task(id: openToolsRequest) {
@@ -2194,8 +2193,13 @@ ScrollViewReader { proxy in
                     placeholder: chat.saveIssue == nil
                         ? refinement("draftPlaceholder", "Write a message, or drop files here…", "输入消息，或拖入文件…")
                         : newLabel("draftSaveBlocked", english: "Resolve the save error below to continue editing", chinese: "请先在下方重试保存，再继续编辑"),
-                    focusRequest: composerFocusRequest)
-                    .id((session.id == emptyDraftSession.id || session.id == firstDraftSessionID ? emptyDraftSession.id : session.id).uuidString + ":draft")
+                    focusRequest: composerFocusRequest,
+                    liveValue: Binding(get: {
+                        guard let id = try? composerOwner(session.id, creating: false),
+                              let current = chat.state.sessions.first(where: { $0.id == id }) else { return session.draft }
+                        return current.draft
+                    }, set: { editComposer($0, captured: session.id) }))
+                    .id(session.id.uuidString + ":draft")
                     .fixedSize(horizontal: false, vertical: true)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerEditorHeight = $0 }
                     .chatMeasured("composer-editor", probe: layoutProbe)
@@ -2265,22 +2269,27 @@ ScrollViewReader { proxy in
 
     private func composerOwner(_ captured: UUID, creating: Bool) throws -> UUID? {
         switch ChatComposerIdentity.resolve(captured: captured, empty: emptyDraftSession.id,
-            created: firstDraftSessionID, selected: chat.state.selectedSessionID) {
+            created: nil, selected: chat.state.selectedSessionID) {
         case .current(let id): return id
         case .empty:
             guard creating else { return nil }
-            let created = try chat.newSession(); firstDraftSessionID = created; return created
+            return try chat.newSession(id: emptyDraftSession.id)
         case .stale: return nil
         }
     }
     private func composerIsCurrent(_ captured: UUID) -> Bool {
         ChatComposerIdentity.resolve(captured: captured, empty: emptyDraftSession.id,
-            created: firstDraftSessionID, selected: chat.state.selectedSessionID) != .stale
+            created: nil, selected: chat.state.selectedSessionID) != .stale
     }
     private func editComposer(_ value: String, captured: UUID) {
         do {
-            guard let id = try composerOwner(captured, creating: !value.isEmpty) else { return }
-            try chat.updateDraft(value, sessionID: id)
+            if ChatComposerIdentity.resolve(captured: captured, empty: emptyDraftSession.id,
+                created: nil, selected: chat.state.selectedSessionID) == .empty {
+                guard !value.isEmpty else { return }
+                try chat.newSession(id: emptyDraftSession.id, initialDraft: value)
+            } else if let id = try composerOwner(captured, creating: false) {
+                try chat.updateDraft(value, sessionID: id)
+            }
         } catch { report(error.localizedDescription, for: chat.state.selectedSessionID) }
     }
 
@@ -2341,8 +2350,8 @@ ScrollViewReader { proxy in
     private var chatCommands: WorkbenchChatCommands {
         let controller = chat, id = chat.state.selectedSessionID
         func command(_ title: String, enabled: Bool, _ perform: @escaping () -> Void) -> WorkbenchGenerationCommand {
-            .init(title: title, isEnabled: enabled && !filePanelBusy) {
-                guard commandScope.permitsCommands, chat === controller, chat.state.selectedSessionID == id, !filePanelBusy else { return }
+            .init(title: title, isEnabled: workspaceVisible && enabled && !filePanelBusy) {
+                guard workspaceVisible, commandScope.permitsVisibleCommands, chat === controller, chat.state.selectedSessionID == id, !filePanelBusy else { return }
                 perform()
             }
         }

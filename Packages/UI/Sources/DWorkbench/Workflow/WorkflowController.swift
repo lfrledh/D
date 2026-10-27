@@ -74,7 +74,9 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     }
     public private(set) var isSaving = false
     public private(set) var readOnlyReason: String?
-    public var errorMessage: String?
+    public var errorMessage: String? { didSet { errorCode = nil } }
+    public private(set) var errorCode: String?
+    public func reportIssue(_ issue: WorkflowIssue) { errorMessage = issue.reason; errorCode = issue.code }
     public var mediaPreviewReference: WorkflowAssetReference?
     /// The existing project recording owner may temporarily reserve interactive work.
     @ObservationIgnored public var externalOperationBusy: () -> Bool = { false }
@@ -268,7 +270,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     }
     public func setCollected(_ sources: [WorkflowLibrarySource], collected: Bool, owner: WorkflowAssetLibraryOwner) async throws {
         guard assetLibraryOwner == owner, canEditLibraryMetadata, !collectionWriting, readOnlyReason == nil, let baseline = assetCollection else {
-            throw WorkflowIssue("Project asset library is not ready.")
+            throw WorkflowIssue("Project asset library is not ready.", code: "container.issue.targetChanged")
         }
         collectionWriting = true; defer { collectionWriting = false }
         let project = projectID, instance = projectInstanceID
@@ -276,7 +278,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             if case .asset(let reference) = source { try await services.verifyAsset(reference) }
         }
         guard canEditLibraryMetadata, projectID == project, projectInstanceID == instance, assetCollection == baseline else {
-            throw WorkflowIssue("Asset collection target changed.")
+            throw WorkflowIssue("Asset collection target changed.", code: "container.issue.targetChanged")
         }
         let next = try await services.store.setAssetCollection(sources, collected: collected, expected: baseline)
         if next != baseline {
@@ -299,10 +301,13 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         try await services.store.replaceAssetCollection(next, expected: current)
         collectionRedo.removeLast(); collectionUndo.append(current); assetCollection = next; await onChange()
     }
-    public func setCollectionRule(_ rule: WorkflowAssetCollectionRule?, nodeID: UUID, target: WorkflowCanvasInsertionTarget) {
+    @discardableResult
+    public func setCollectionRule(_ rule: WorkflowAssetCollectionRule?, nodeID: UUID, target: WorkflowCanvasInsertionTarget) -> WorkflowCanvasInsertionTarget? {
         guard isCurrent(target), let node = graph?.nodes.first(where: { $0.id == nodeID }),
-              [WorkflowAssetContainer.filterID, WorkflowAssetContainer.previewID].contains(node.operationID) else { return }
-        edit { graph in guard let index = graph.nodes.firstIndex(where: { $0.id == nodeID }) else { return }; graph.nodes[index].collectionRule = rule }
+              [WorkflowAssetContainer.filterID, WorkflowAssetContainer.previewID].contains(node.operationID) else { return nil }
+        if node.collectionRule == rule { return target }
+        guard edit({ graph in guard let index = graph.nodes.firstIndex(where: { $0.id == nodeID }) else { return }; graph.nodes[index].collectionRule = rule }) else { return nil }
+        return canvasInsertionTarget()
     }
     private func registerCollectionEvents(_ records: [WorkflowPlanCallRecord], previous: [WorkflowPlanCallRecord]) {
         guard let owner = assetLibraryOwner else { return }
@@ -321,26 +326,26 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     @discardableResult public func requestCollection(_ sources: [WorkflowLibrarySource], owner: WorkflowAssetLibraryOwner,
         folderID: UUID?, requestID: UUID) async throws -> String {
         guard assetLibraryOwner == owner, canEditLibraryMetadata, readOnlyReason == nil,
-              !sources.isEmpty, Set(sources.map(\.key)).count == sources.count else { throw WorkflowIssue("Collection target changed.") }
+              !sources.isEmpty, Set(sources.map(\.key)).count == sources.count else { throw WorkflowIssue("Collection target changed.", code: "container.issue.targetChanged") }
         let request = try WorkflowAssetCollectionRequest(trigger: "manual:" + requestID.uuidString, owner: owner,
             sources: sources, folderID: folderID, manualID: requestID)
         if let existing = collectionRequests.first(where: { $0.id == request.id }) {
-            guard existing.owner == owner, existing.sources == sources, existing.folderID == folderID else { throw WorkflowIssue("Collection request identity was reused.") }
+            guard existing.owner == owner, existing.sources == sources, existing.folderID == folderID else { throw WorkflowIssue("Collection request identity was reused.", code: "container.issue.targetChanged") }
             return existing.id
         }
-        guard collectionRequests.filter({ $0.manualID != nil && !$0.completed }).count < 256 else { throw WorkflowIssue("Retry pending collection requests before adding more.") }
+        guard collectionRequests.filter({ $0.manualID != nil && !$0.completed }).count < 256 else { throw WorkflowIssue("Retry pending collection requests before adding more.", code: "container.issue.collectionLimit") }
         let values = try WorkflowAssetContainer.sourceValues(sources, runs: runs)
         for value in values { for ref in WorkflowAssetContainer.references(in: value) { try await services.verifyAsset(ref) } }
-        guard assetLibraryOwner == owner, canEditLibraryMetadata else { throw WorkflowIssue("Collection owner changed.") }
+        guard assetLibraryOwner == owner, canEditLibraryMetadata else { throw WorkflowIssue("Collection owner changed.", code: "container.issue.targetChanged") }
         try await beforeCollectionRequestCommit()
         // Verification suspends. Revalidate identity, capacity and frozen values
         // after the last await, before publishing this durable organization intent.
         _ = try WorkflowAssetContainer.sourceValues(sources, runs: runs)
         if let existing = collectionRequests.first(where: { $0.id == request.id }) {
-            guard existing.owner == owner, existing.sources == sources, existing.folderID == folderID else { throw WorkflowIssue("Collection request identity was reused.") }
+            guard existing.owner == owner, existing.sources == sources, existing.folderID == folderID else { throw WorkflowIssue("Collection request identity was reused.", code: "container.issue.targetChanged") }
             return existing.id
         }
-        guard collectionRequests.filter({ $0.manualID != nil && !$0.completed }).count < 256 else { throw WorkflowIssue("Retry pending collection requests before adding more.") }
+        guard collectionRequests.filter({ $0.manualID != nil && !$0.completed }).count < 256 else { throw WorkflowIssue("Retry pending collection requests before adding more.", code: "container.issue.collectionLimit") }
         let completed = collectionRequests.filter { $0.manualID != nil && $0.completed }.map(\.id)
         if completed.count > 128 { let remove = Set(completed.prefix(completed.count - 128)); collectionRequests.removeAll { remove.contains($0.id) } }
         collectionRequests.append(request); try await persist(); return request.id
@@ -362,13 +367,16 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             !$0.completed && !attempted.contains($0.id) && (retryFailed || $0.error == nil)
         }) {
             attempted.insert(request.id)
+            var failureCode = "container.issue.collectionSavePending"
             do {
-                guard assetLibraryOwner == request.owner else { throw WorkflowIssue("Collection belongs to another project instance.") }
+                guard assetLibraryOwner == request.owner else { throw WorkflowIssue("Collection belongs to another project instance.", code: "container.issue.targetChanged") }
                 try await setCollected(request.sources, collected: true, owner: request.owner)
+                failureCode = "container.issue.collectionClassifyPending"
                 try await classify(request)
+                failureCode = "container.issue.collectionAckPending"
                 guard let current = collectionRequests.firstIndex(where: { $0.id == request.id }),
-                      collectionRequests[current].sources == request.sources, collectionRequests[current].owner == request.owner else { throw WorkflowIssue("Collection request changed while saving.") }
-                collectionRequests[current].completed = true; collectionRequests[current].error = nil
+                      collectionRequests[current].sources == request.sources, collectionRequests[current].owner == request.owner else { throw WorkflowIssue("Collection request changed while saving.", code: "container.issue.targetChanged") }
+                collectionRequests[current].completed = true; collectionRequests[current].error = nil; collectionRequests[current].errorCode = nil
                 let completedManual = collectionRequests.filter { $0.manualID != nil && $0.completed }.map(\.id)
                 if completedManual.count > 128 {
                     let remove = Set(completedManual.filter { $0 != request.id }.prefix(completedManual.count - 128))
@@ -377,7 +385,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
                 try await persist()
             } catch {
                 guard let current = collectionRequests.firstIndex(where: { $0.id == request.id }), collectionRequests[current].sources == request.sources else { errorMessage = error.localizedDescription; break }
-                collectionRequests[current].completed = false; collectionRequests[current].error = error.localizedDescription
+                collectionRequests[current].completed = false; collectionRequests[current].error = error.localizedDescription; collectionRequests[current].errorCode = failureCode
                 do { try await persist() } catch { errorMessage = error.localizedDescription; break }
             }
         }
@@ -710,23 +718,23 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public func resolveLibraryDrop(_ items: [WorkflowLibraryDropItem], owner: WorkflowAssetLibraryOwner,
         target: WorkflowCanvasInsertionTarget? = nil) async throws -> [WorkflowLibrarySource] {
         guard assetLibraryOwner == owner, !items.isEmpty, items.count <= 64,
-              target.map(isCurrent) ?? canEditLibraryMetadata else { throw WorkflowIssue("Drop destination changed.") }
+              target.map(isCurrent) ?? canEditLibraryMetadata else { throw WorkflowIssue("Drop destination changed.", code: "container.issue.targetChanged") }
         // All exact read tokens are checked before the first explicit registration.
         for item in items {
             if case .original(let token) = item {
-                guard token.projectID == owner.projectID, token.instanceID == owner.instanceID else { throw WorkflowIssue("Original belongs to another project instance.") }
+                guard token.projectID == owner.projectID, token.instanceID == owner.instanceID else { throw WorkflowIssue("Original belongs to another project instance.", code: "container.issue.targetChanged") }
                 _ = try await services.store.readOnlyAsset(token)
             }
         }
         var sources: [WorkflowLibrarySource] = []
         for item in items {
-            guard assetLibraryOwner == owner, target.map(isCurrent) ?? canEditLibraryMetadata else { throw WorkflowIssue("Drop destination changed during verification.") }
+            guard assetLibraryOwner == owner, target.map(isCurrent) ?? canEditLibraryMetadata else { throw WorkflowIssue("Drop destination changed during verification.", code: "container.issue.targetChanged") }
             switch item {
             case .source(let source): sources.append(source)
             case .original(let token): sources.append(.asset(try await services.store.pinWorkflowAsset(token.assetID, expected: token)))
             }
         }
-        guard assetLibraryOwner == owner, target.map(isCurrent) ?? canEditLibraryMetadata else { throw WorkflowIssue("Drop destination changed during registration.") }
+        guard assetLibraryOwner == owner, target.map(isCurrent) ?? canEditLibraryMetadata else { throw WorkflowIssue("Drop destination changed during registration.", code: "container.issue.targetChanged") }
         return sources
     }
 
@@ -734,19 +742,19 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public func insertLibrarySources(_ sources: [WorkflowLibrarySource], owner: WorkflowAssetLibraryOwner,
         target: WorkflowCanvasInsertionTarget, x: Double, y: Double, inputNode: UUID? = nil, inputPort: String? = nil) async throws {
         guard assetLibraryOwner == owner, isCurrent(target), !sources.isEmpty, sources.count <= 64, x.isFinite, y.isFinite,
-              Set(sources.map(\.key)).count == sources.count else { throw WorkflowIssue("Asset drop target changed.") }
+              Set(sources.map(\.key)).count == sources.count else { throw WorkflowIssue("Asset drop target changed.", code: "container.issue.targetChanged") }
         let capturedRuns = runs
         let values = try WorkflowAssetContainer.sourceValues(sources, runs: capturedRuns)
         for value in values { for ref in WorkflowAssetContainer.references(in: value) { try await services.verifyAsset(ref) } }
-        guard assetLibraryOwner == owner, isCurrent(target) else { throw WorkflowIssue("Asset drop target changed during validation.") }
-        for source in sources { if case .runtime(let ref) = source { guard try ref.resolve(in: runs) == ref.resolve(in: capturedRuns) else { throw WorkflowIssue("Runtime source changed.") } } }
+        guard assetLibraryOwner == owner, isCurrent(target) else { throw WorkflowIssue("Asset drop target changed during validation.", code: "container.issue.targetChanged") }
+        for source in sources { if case .runtime(let ref) = source { guard try ref.resolve(in: runs) == ref.resolve(in: capturedRuns) else { throw WorkflowIssue("Runtime source changed.", code: "container.issue.targetChanged") } } }
         let output = WorkflowAssetContainer.sourceOutput(sources, values: values)
         var source: WorkflowNode
         if sources.count == 1, case .asset(let ref) = sources[0] {
-            guard let definition = registry.operation("d.asset.reference")?.definition else { throw WorkflowIssue("Asset reference operation is unavailable.") }
+            guard let definition = registry.operation("d.asset.reference")?.definition else { throw WorkflowIssue("Asset reference operation is unavailable.", code: "container.issue.operationUnavailable") }
             source = definition.makeNode(); source.assetReference = ref
         } else {
-            guard let definition = registry.operation(WorkflowAssetContainer.sourceID)?.definition else { throw WorkflowIssue("Source container operation is unavailable.") }
+            guard let definition = registry.operation(WorkflowAssetContainer.sourceID)?.definition else { throw WorkflowIssue("Source container operation is unavailable.", code: "container.issue.operationUnavailable") }
             source = definition.makeNode(); source.librarySources = sources
             source.parameters["kind"] = .text(output?.kind.rawValue ?? "mixed")
             source.dataConfiguration = .init(schema: output?.datum?.schema)
@@ -754,14 +762,14 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         var connection: WorkflowConnection?
         if let inputNode, let inputPort {
             guard sources.count == 1, let output, let node = graph?.nodes.first(where: { $0.id == inputNode }),
-                  graph?.connections.contains(where: { $0.targetNode == inputNode && $0.targetPort == inputPort }) == false else { throw WorkflowIssue("Drop one compatible asset onto an empty input.") }
+                  graph?.connections.contains(where: { $0.targetNode == inputNode && $0.targetPort == inputPort }) == false else { throw WorkflowIssue("Drop one compatible asset onto an empty input.", code: "container.dropTarget") }
             let contract = try WorkflowInputContract(step: .init(node: node, inputs: []), portID: inputPort, tools: tools, registry: registry)
             let match = contract.compatibility(with: output)
-            guard match.status == .direct else { throw WorkflowIssue(match.reason) }
+            guard match.status == .direct else { throw WorkflowIssue(match.reason, code: "container.dropIncompatible") }
             connection = .init(sourceNode: source.id, targetNode: inputNode, targetPort: inputPort)
-        } else if inputNode != nil || inputPort != nil { throw WorkflowIssue("Incomplete input drop target.") }
+        } else if inputNode != nil || inputPort != nil { throw WorkflowIssue("Incomplete input drop target.", code: "container.issue.targetChanged") }
         if target.rootID == nil {
-            guard connection == nil else { throw WorkflowIssue("Input destination disappeared.") }
+            guard connection == nil else { throw WorkflowIssue("Input destination disappeared.", code: "container.issue.targetChanged") }
             let next = WorkflowGraph(name: "新流程", nodes: [source], layout: [.init(nodeID: source.id, x: x, y: y)])
             try registry.validate(next, tools: tools)
             undoStack.append(editSnapshot); redoStack = []; graphs.append(next); selectedGraphID = next.id
@@ -769,9 +777,11 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             guard edit({ graph in
                 graph.nodes.append(source); graph.layout.append(.init(nodeID: source.id, x: x, y: y))
                 if let connection { graph.connections.append(connection) }
-            }) else { throw WorkflowIssue(errorMessage ?? "Cannot insert source container.") }
+            }) else { throw WorkflowIssue(errorMessage ?? "Cannot insert source container.", code: "container.issue.targetChanged") }
         }
-        selectedNodeID = source.id; try await persist(); await onChange()
+        selectedNodeID = source.id
+        do { try await persist(); await onChange() }
+        catch { throw WorkflowIssue(error.localizedDescription, code: "container.issue.dropSavePending") }
     }
     public func addPreviewContainer(after nodeID: UUID, port: String, target: WorkflowCanvasInsertionTarget) throws {
         guard isCurrent(target), let graph, let source = graph.nodes.first(where: { $0.id == nodeID }),
@@ -1849,13 +1859,13 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public func containerSnapshot(_ scope: WorkflowContainerScope) throws -> WorkflowContainerSnapshot {
         guard let projectID, let projectInstanceID, !closed, !closing,
               (scope.stageID == nil) != (scope.runID == nil), !scope.path.isEmpty else {
-            throw WorkflowIssue("Container owner is unavailable.")
+            throw WorkflowIssue("Container owner is unavailable.", code: "container.issue.targetChanged")
         }
         let stage = scope.stageID.flatMap { id in batchStages.first { $0.id == id } }
-        if scope.stageID != nil && stage == nil { throw WorkflowIssue("Container stage is unavailable.") }
+        if scope.stageID != nil && stage == nil { throw WorkflowIssue("Container stage is unavailable.", code: "container.issue.targetChanged") }
         let ids = stage?.attempts.map(\.runID) ?? [scope.runID!]
         let captured = try ids.map { id in
-            guard let run = runs.first(where: { $0.id == id }) else { throw WorkflowIssue("Container run is unavailable.") }
+            guard let run = runs.first(where: { $0.id == id }) else { throw WorkflowIssue("Container run is unavailable.", code: "container.issue.targetChanged") }
             return run
         }
         return .init(projectID: projectID, instanceID: projectInstanceID, scope: scope, stage: stage, runs: captured)
@@ -1871,10 +1881,10 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
               let ci = cp.records.firstIndex(where: { $0.address == call.address && $0.id == call.stepID }),
               cp.records[ci].step.node.operationID == WorkflowAssetContainer.filterID,
               cp.records[ci].step.status == .waiting, cp.records[ci].step.decision == nil,
-              cp.records[ci].step.inputs["input"] == input else { throw WorkflowIssue("Container draft target changed.") }
+              cp.records[ci].step.inputs["input"] == input else { throw WorkflowIssue("Container draft target changed.", code: "container.issue.targetChanged") }
         let items = try WorkflowAssetContainer.items(in: input), ids = Set(selectedIDs)
         guard ids.count == selectedIDs.count, ids.isSubset(of: Set(items.filter(\.selectable).map(\.id))) else {
-            throw WorkflowIssue("Container draft contains unavailable items.")
+            throw WorkflowIssue("Container draft contains unavailable items.", code: "container.issue.selectionUnavailable")
         }
         cp.records[ci].step.containerSelectionDraft = items.filter { ids.contains($0.id) }.map(\.id)
         capture(cp, runIndex: ri)
@@ -1888,39 +1898,39 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         guard !closed, !closing, !isRunning, !isSaving, !hasPendingSaves,
               !toolPublicationBusy, !externalOperationBusy(), readOnlyReason == nil,
               expected.projectID == projectID, expected.instanceID == projectInstanceID,
-              (1...64).contains(repetitions) else { throw WorkflowIssue("Container cannot submit while work or saving is pending.") }
+              (1...64).contains(repetitions) else { throw WorkflowIssue("Container cannot submit while work or saving is pending.", code: "container.issue.targetChanged") }
         if let previous = containerSubmissions.first(where: { $0.scope == expected.scope }) {
             guard previous.choices == choices, previous.repetitions == repetitions, previous.seedStrategy == seedStrategy else {
-                throw WorkflowIssue("This container decision is already committed; start a new run to select differently.")
+                throw WorkflowIssue("This container decision is already committed; start a new run to select differently.", code: "container.issue.alreadyCommitted")
             }
             return previous
         }
         guard try containerSnapshot(expected.scope) == expected, expected.collectionComplete else {
-            throw WorkflowIssue("Wait for every scheduled attempt to reach its gate or terminal state.")
+            throw WorkflowIssue("Wait for every scheduled attempt to reach its gate or terminal state.", code: "container.issue.targetChanged")
         }
         let calls = expected.calls.filter { $0.step.node.operationID == WorkflowAssetContainer.filterID && $0.step.status == .waiting && $0.step.decision == nil }
         guard !calls.isEmpty, choices.count == calls.count,
               zip(calls, choices).allSatisfy({ $0.address == $1.call.address && $0.id == $1.call.stepID }),
               endAll || choices.contains(where: { !$0.selectedIDs.isEmpty }) else {
-            throw WorkflowIssue("Selection must identify every exact waiting call; empty selection requires explicit rejection.")
+            throw WorkflowIssue("Selection must identify every exact waiting call; empty selection requires explicit rejection.", code: "container.issue.selectionUnavailable")
         }
         isRunning = true; cancelled = false; defer { isRunning = false }
         let capturedRuns = runs, capturedBatches = batchStages
         var nextRuns = capturedRuns, nextBatches = capturedBatches
         for (call, choice) in zip(calls, choices) {
-            guard let input = call.step.inputs["input"] else { throw WorkflowIssue("Missing container input.") }
+            guard let input = call.step.inputs["input"] else { throw WorkflowIssue("Missing container input.", code: "container.issue.targetChanged") }
             let output = choice.selectedIDs.isEmpty ? nil : try WorkflowAssetContainer.selecting(choice.selectedIDs, from: input)
             if let output { for ref in WorkflowAssetContainer.references(in: output) { try await services.verifyAsset(ref) } }
-            guard try containerSnapshot(expected.scope) == expected else { throw WorkflowIssue("Container changed during validation.") }
+            guard try containerSnapshot(expected.scope) == expected else { throw WorkflowIssue("Container changed during validation.", code: "container.issue.targetChanged") }
             let decision = WorkflowDecision(waitingStepID: call.id, accepted: output != nil,
                 selectedItemIDs: choice.selectedIDs, typedOutput: output)
             try WorkflowAssetContainer.validateDecision(decision, step: call.step)
             guard let ri = nextRuns.firstIndex(where: { $0.id == call.address.runID }),
                   var cp = nextRuns[ri].planCheckpoint,
-                  let ci = cp.records.firstIndex(where: { $0.id == call.id && $0.address == call.address }) else { throw WorkflowIssue("Missing exact container call.") }
+                  let ci = cp.records.firstIndex(where: { $0.id == call.id && $0.address == call.address }) else { throw WorkflowIssue("Missing exact container call.", code: "container.issue.targetChanged") }
             cp.records[ci].step.decision = decision
             let settler = WorkflowPlanExecutor(registry: registry,
-                executeCall: { _ in throw WorkflowIssue("Container settlement cannot execute a node.") }, save: { _ in })
+                executeCall: { _ in throw WorkflowIssue("Container settlement cannot execute a node.", code: "container.issue.targetChanged") }, save: { _ in })
             let settled = try await settler.settleWaiting(cp, stepID: call.id)
             nextRuns[ri].planCheckpoint = settled
             nextRuns[ri].steps = settled.records.filter { $0.address.path.count == 1 }.map(\.step)
@@ -1937,7 +1947,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         try Task.checkCancellation()
         guard !cancelled else { throw CancellationError() }
         guard runs == capturedRuns, batchStages == capturedBatches,
-              try containerSnapshot(expected.scope) == expected else { throw WorkflowIssue("Container or another draft changed before commit; retry without losing either draft.") }
+              try containerSnapshot(expected.scope) == expected else { throw WorkflowIssue("Container or another draft changed before commit; retry without losing either draft.", code: "container.issue.targetChanged") }
         try WorkflowArchiveInspection.validateScopeHistory(nextRuns, tools: tools, registry: registry)
         try WorkflowBatchValidation.validate(nextBatches, runs: nextRuns, registry: registry)
         let submission = WorkflowContainerSubmission(id: UUID(), scope: expected.scope, choices: choices,
@@ -1947,7 +1957,10 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         }
         runs = nextRuns; batchStages = nextBatches; containerSubmissions.append(submission)
         do { try await persist() }
-        catch { errorMessage = error.localizedDescription; throw error } // Same seeds/IDs remain for save-only recovery.
+        catch {
+            let issue = WorkflowIssue(error.localizedDescription, code: "container.issue.decisionSavePending")
+            reportIssue(issue); throw issue
+        } // Same seeds/IDs remain for save-only recovery.
         await onChange()
         guard !cancelled else { throw CancellationError() }
         return submission

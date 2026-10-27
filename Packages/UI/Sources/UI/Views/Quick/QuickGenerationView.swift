@@ -536,7 +536,7 @@ struct QuickGenerationView: View {
     private var exportMenuCommand: WorkbenchGenerationCommand? {
         guard contentVisible, quick.category == .image || quick.category == .video, let reference = selectedMedia else { return nil }
         return .init(title: systemMenuText(language, "export"), isEnabled: detailRun == nil && preview == nil) {
-            guard commandScope.permitsCommands, contentVisible, selectedMedia == reference else { return }
+            guard commandScope.permitsVisibleCommands, contentVisible, selectedMedia == reference else { return }
             Task { await export(reference, selectionIsCurrent: { selectedMedia == reference }) }
         }
     }

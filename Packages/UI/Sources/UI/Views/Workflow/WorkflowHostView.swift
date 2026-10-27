@@ -52,8 +52,8 @@ struct WorkflowHostView: View {
                             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                             do {
                                 let inserted = try await controller.importCanvasFile(url, owner: owner, target: target, x: point.x, y: point.y)
-                                if !inserted { controller.errorMessage = workflowText(languageStore, "container.importedTargetChanged") }
-                            } catch { controller.errorMessage = error.localizedDescription }
+                                if !inserted { controller.reportIssue(.init("The asset was saved but the target changed before insertion.", code: "container.importedTargetChanged")) }
+                            } catch { controller.reportIssue(.init(presenting: error, fallbackCode: "container.issue.actionFailed")) }
                         }
                         return true
                     }, onQuickUse: onQuickUse, libraryContent: libraryContent, libraryHeaderContent: libraryHeaderContent, libraryProjectName: model.manifest?.name ?? "",

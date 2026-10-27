@@ -109,6 +109,7 @@ public extension FocusedValues {
     weak var sourceView: NSView?
     public init() {}
     public var permitsNavigation: Bool { window?.isKeyWindow == true && window?.attachedSheet == nil && NSApp.modalWindow == nil }
+    public var permitsVisibleCommands: Bool { sourceView.map { !$0.isHiddenOrHasHiddenAncestor } == true && permitsCommands }
     public var permitsCommands: Bool { window?.isKeyWindow == true && window?.attachedSheet == nil && WorkbenchChildPanels.permitsCommands(from: sourceView, on: window) }
 }
 struct WorkbenchCommandWindow: NSViewRepresentable {

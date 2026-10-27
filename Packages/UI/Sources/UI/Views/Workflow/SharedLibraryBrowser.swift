@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 /// One visible receipt follows the existing project-owned request; it never drains
 /// or retries work. A replaced owner cannot publish a stale success destination.
 struct SharedLibraryCollectionFeedback {
-    enum Status: Equatable { case pending, completed, failed(String), obsolete }
+    enum Status: Equatable { case pending, completed, failed(WorkflowIssue), obsolete }
     let requestID: String
     let context: WorkflowLibraryContext
     private(set) var durablyCompleted = false
@@ -20,7 +20,7 @@ struct SharedLibraryCollectionFeedback {
               case .sources(let sources) = context.source,
               let request = controller.collectionRequests.first(where: { $0.id == requestID }),
               request.owner == controller.assetLibraryOwner, request.sources == sources else { return .obsolete }
-        if let error = request.error { return .failed(error) }
+        if let error = request.error { return .failed(.init(error, code: request.errorCode)) }
         if request.completed { return durablyCompleted || !(controller.isSaving || controller.hasPendingSaves) ? .completed : .pending }
         return .pending
     }
@@ -436,6 +436,7 @@ public struct SharedLibraryBrowser: View {
     @State private var compactDetailKey: String?
     @Environment(\.workflowContainerNavigation) private var containerNavigation
     @State private var collectionNotice: String?
+    @State private var collectionNoticeCode: String?
     @State private var collectedLocation: WorkflowLibraryContext?
     @State private var collectionFeedback: SharedLibraryCollectionFeedback?
     @State private var collectionNoticeIntent: UUID?
@@ -582,12 +583,12 @@ public struct SharedLibraryBrowser: View {
             }
             if let collectionNotice {
                 HStack {
-                    Text(collectionNotice).font(.caption).foregroundStyle(.secondary)
+                    WorkbenchIssueText(raw: collectionNotice, key: collectionNoticeCode).font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     if let collectedLocation, let containerNavigation {
                         Button(workflowText(language, "container.showInLibrary")) { containerNavigation.reveal(collectedLocation) }
                     }
-                    Button { self.collectionNotice = nil; collectedLocation = nil; collectionFeedback = nil; collectionNoticeIntent = nil } label: { Image(systemName: "xmark") }
+                    Button { self.collectionNotice = nil; collectionNoticeCode = nil; collectedLocation = nil; collectionFeedback = nil; collectionNoticeIntent = nil } label: { Image(systemName: "xmark") }
                         .accessibilityLabel(word("dismissError", "关闭错误"))
                 }.padding(8)
             }
@@ -1783,7 +1784,7 @@ public struct SharedLibraryBrowser: View {
         if case .tag = target { errorMessage = workflowText(language, "container.tagDrop"); return true }
         let folder: UUID? = { if case .folder(let id) = target { return id }; return nil }()
         let requestID = UUID()
-        collectionNoticeIntent = requestID; collectionFeedback = nil; collectionNotice = nil; collectedLocation = nil
+        collectionNoticeIntent = requestID; collectionFeedback = nil; collectionNotice = nil; collectionNoticeCode = nil; collectedLocation = nil
         Task {
             do {
                 let sources = try await controller.resolveLibraryDrop(payload.items, owner: payload.owner)
@@ -1798,7 +1799,7 @@ public struct SharedLibraryBrowser: View {
                     }
                 }
                 if collectionNoticeIntent == requestID { refreshCollectionFeedback() }
-            } catch { if collectionNoticeIntent == requestID, insertionController === controller, controller.assetLibraryOwner == payload.owner { collectionNotice = error.localizedDescription; collectedLocation = nil } }
+            } catch { if collectionNoticeIntent == requestID, insertionController === controller, controller.assetLibraryOwner == payload.owner { collectionNotice = error.localizedDescription; collectionNoticeCode = (error as? WorkflowIssue)?.code ?? "container.issue.collectionSavePending"; collectedLocation = nil } }
         }
         return true
     }
@@ -1806,16 +1807,16 @@ public struct SharedLibraryBrowser: View {
         guard let feedback = collectionFeedback else { return }
         switch feedback.status(in: insertionController) {
         case .pending:
-            collectionNotice = workflowText(language, "container.collectionPending"); collectedLocation = nil
+            collectionNoticeCode = "container.collectionPending"; collectionNotice = "Collection pending."; collectedLocation = nil
         case .completed:
             if !feedback.durablyCompleted {
                 var confirmed = feedback; confirmed.acknowledgeCompletion(in: insertionController); collectionFeedback = confirmed
             }
-            collectionNotice = workflowText(language, "container.collectedFiltered"); collectedLocation = feedback.context
+            collectionNoticeCode = "container.collectedFiltered"; collectionNotice = "Collection saved."; collectedLocation = feedback.context
         case .failed(let reason):
-            collectionNotice = reason; collectedLocation = nil
+            collectionNotice = reason.reason; collectionNoticeCode = reason.code; collectedLocation = nil
         case .obsolete:
-            collectionNotice = nil; collectedLocation = nil; collectionFeedback = nil; collectionNoticeIntent = nil
+            collectionNotice = nil; collectionNoticeCode = nil; collectedLocation = nil; collectionFeedback = nil; collectionNoticeIntent = nil
         }
     }
     private func dragEntries(for key: String) -> [SharedLibraryBrowserEntry] {

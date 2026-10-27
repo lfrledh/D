@@ -15,7 +15,7 @@ public struct WorkflowRuntimeAssetSource: Codable, Sendable, Equatable {
         switch value {
         case .collection, .data(.list): self.itemID = itemID; wholeValue = itemID == nil ? true : nil
         default:
-            guard itemID == nil || itemID == "value" else { throw WorkflowIssue("Invalid scalar item identity.") }
+            guard itemID == nil || itemID == "value" else { throw WorkflowIssue("Invalid scalar item identity.", code: "container.issue.sourceUnavailable") }
             self.itemID = nil; wholeValue = true
         }
         outputDigest = try Self.digest(value)
@@ -44,7 +44,7 @@ public struct WorkflowRuntimeAssetSource: Codable, Sendable, Equatable {
         // redirect an already collected preview to the later filtered output.
         let isInput = [WorkflowAssetContainer.filterID, "d.asset.choose", "d.text.confirm"].contains(record.step.node.operationID) && port == "preview"
         let key = isInput ? "input" : port
-        guard let value = (isInput ? record.step.inputs : record.step.outputs)[key] else { throw WorkflowIssue("Output is unavailable.") }
+        guard let value = (isInput ? record.step.inputs : record.step.outputs)[key] else { throw WorkflowIssue("Output is unavailable.", code: "container.issue.sourceUnavailable") }
         return try .init(call: .init(address: record.address, stepID: record.id), port: key, value: value, itemID: itemID, input: isInput)
     }
     public static func digest(_ value: WorkflowValue) throws -> String {
@@ -56,7 +56,7 @@ public struct WorkflowRuntimeAssetSource: Codable, Sendable, Equatable {
               (input == true
                 ? [WorkflowAssetContainer.filterID, "d.asset.choose", "d.text.confirm"].contains(record.step.node.operationID) && [.waiting, .completed, .partial, .rejected].contains(record.step.status)
                 : [.completed, .partial].contains(record.step.status)) else {
-            throw WorkflowIssue("Wait until this output has a stable saved version before collecting it.")
+            throw WorkflowIssue("Wait until this output has a stable saved version before collecting it.", code: "container.issue.sourceUnsettled")
         }
         _ = try resolve(in: runs)
     }
@@ -64,19 +64,19 @@ public struct WorkflowRuntimeAssetSource: Codable, Sendable, Equatable {
         guard let run = runs.first(where: { $0.id == call.address.runID }),
               let record = run.planCheckpoint?.records.first(where: { $0.address == call.address && $0.id == call.stepID }),
               let output = (input == true ? record.step.inputs : record.step.outputs)[port], try Self.digest(output) == outputDigest else {
-            throw WorkflowIssue("The exact saved output is no longer available.")
+            throw WorkflowIssue("The exact saved output is no longer available.", code: "container.issue.sourceUnavailable")
         }
         let expectedWhole: Bool?
         switch output {
         case .collection, .data(.list): expectedWhole = itemID == nil ? true : nil
         default:
-            guard itemID == nil else { throw WorkflowIssue("Saved scalar member identity is inconsistent.") }
+            guard itemID == nil else { throw WorkflowIssue("Saved scalar member identity is inconsistent.", code: "container.issue.sourceUnavailable") }
             expectedWhole = true
         }
-        guard wholeValue == expectedWhole, input != false else { throw WorkflowIssue("Saved output member identity is inconsistent.") }
+        guard wholeValue == expectedWhole, input != false else { throw WorkflowIssue("Saved output member identity is inconsistent.", code: "container.issue.sourceUnavailable") }
         if let itemID {
             guard let item = try WorkflowAssetContainer.items(in: output).first(where: { $0.id == itemID }),
-                  item.selectable, let value = item.value else { throw WorkflowIssue("The selected output item is unavailable.") }
+                  item.selectable, let value = item.value else { throw WorkflowIssue("The selected output item is unavailable.", code: "container.issue.sourceUnavailable") }
             return value
         }
         return output
@@ -121,15 +121,15 @@ public struct WorkflowAssetCollection: Codable, Sendable, Equatable {
     }
     public mutating func set(_ sources: [WorkflowLibrarySource], collected: Bool) throws {
         guard sources.count <= 4096, Set(sources.map(\.key)).count == sources.count else {
-            throw WorkflowIssue("Invalid asset collection selection.")
+            throw WorkflowIssue("Invalid asset collection selection.", code: "container.issue.sourceUnavailable")
         }
         for source in sources {
             retained[source.key] = source
-            if let existing = included[source.key], existing != source { throw WorkflowIssue("Asset identity changed before collection.") }
+            if let existing = included[source.key], existing != source { throw WorkflowIssue("Asset identity changed before collection.", code: "container.issue.sourceUnavailable") }
             if collected { included[source.key] = source; excluded.remove(source.key) }
             else { included.removeValue(forKey: source.key); excluded.insert(source.key) }
         }
-        guard retained.count <= 32768, included.count + excluded.count <= 32768 else { throw WorkflowIssue("Asset collection size limit reached.") }
+        guard retained.count <= 32768, included.count + excluded.count <= 32768 else { throw WorkflowIssue("Asset collection size limit reached.", code: "container.issue.collectionLimit") }
     }
 }
 
@@ -143,7 +143,7 @@ public struct WorkflowAssetLibraryOwner: Sendable, Equatable, Codable {
 public struct WorkflowAssetCollectionRule: Codable, Sendable, Equatable {
     public let id: UUID
     public let folderID: UUID?
-    public init(folderID: UUID? = nil) { id = UUID(); self.folderID = folderID }
+    public init(id: UUID = UUID(), folderID: UUID? = nil) { self.id = id; self.folderID = folderID }
 }
 
 /// An outbox for organization only, owned by the existing project archive.
@@ -158,8 +158,9 @@ public struct WorkflowAssetCollectionRequest: Codable, Sendable, Equatable, Iden
     public let manualID: UUID?
     public var completed = false
     public var error: String?
+    public var errorCode: String?
     public init(trigger: String, owner: WorkflowAssetLibraryOwner, sources: [WorkflowLibrarySource], folderID: UUID?, origin: WorkflowCallReference? = nil, manualID: UUID? = nil) throws {
-        guard !sources.isEmpty, sources.count <= 4096 else { throw WorkflowIssue("Invalid collection request size.") }
+        guard !sources.isEmpty, sources.count <= 4096 else { throw WorkflowIssue("Invalid collection request size.", code: "container.issue.collectionLimit") }
         self.owner = owner; self.sources = sources; self.folderID = folderID; self.origin = origin; self.manualID = manualID
         id = SHA256.hash(data: Data(trigger.utf8)).map { String(format: "%02x", $0) }.joined()
     }
@@ -190,7 +191,7 @@ extension WorkflowLibrarySource {
     public func metadataKey(owner: WorkflowAssetLibraryOwner, runs: [WorkflowRun]) throws -> String {
         switch self {
         case .asset(let ref):
-            guard ref.projectID == owner.projectID else { throw WorkflowIssue("Asset project differs from collection owner.") }
+            guard ref.projectID == owner.projectID else { throw WorkflowIssue("Asset project differs from collection owner.", code: "container.issue.sourceUnavailable") }
             return "asset:" + ref.projectID.uuidString + ":" + ref.assetID.uuidString
         case .runtime(let ref):
             return try ref.annotationIdentity(owner: owner, value: ref.resolve(in: runs)).storageKey

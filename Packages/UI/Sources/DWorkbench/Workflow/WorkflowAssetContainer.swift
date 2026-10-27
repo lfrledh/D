@@ -47,7 +47,7 @@ public enum WorkflowAssetContainer {
         switch value {
         case .collection(let candidates):
             guard candidates.count <= 8, Set(candidates.map(\.id)).count == candidates.count else {
-                throw WorkflowIssue("Container candidate identities are invalid.")
+                throw WorkflowIssue("Container candidate identities are invalid.", code: "container.issue.invalidSources")
             }
             return candidates.map { candidate in
                 Item(id: candidate.id.uuidString, value: candidate.asset.map(WorkflowValue.asset),
@@ -68,7 +68,7 @@ public enum WorkflowAssetContainer {
         let items = try items(in: input), ids = Set(selected)
         guard !ids.isEmpty, ids.count == selected.count,
               ids.isSubset(of: Set(items.filter(\.selectable).map(\.id))) else {
-            throw WorkflowIssue("Select available items from this exact container call.")
+            throw WorkflowIssue("Select available items from this exact container call.", code: "container.issue.selectionUnavailable")
         }
         switch input {
         case .collection(let values): return .collection(values.filter { ids.contains($0.id.uuidString) })
@@ -82,14 +82,14 @@ public enum WorkflowAssetContainer {
         guard step.node.operationID == filterID, decision.waitingStepID == step.id,
               decision.output == nil, decision.selectedCandidateID == nil,
               let ids = decision.selectedItemIDs, let input = step.inputs["input"] else {
-            throw WorkflowIssue("Container decision is not bound to this call.")
+            throw WorkflowIssue("Container decision is not bound to this call.", code: "container.issue.selectionUnavailable")
         }
         if decision.accepted {
             let expected = try selecting(ids, from: input)
             let ordered = try items(in: input).filter { Set(ids).contains($0.id) }.map(\.id)
-            guard expected == decision.typedOutput, ids == ordered else { throw WorkflowIssue("Container selection changed its frozen value or order.") }
+            guard expected == decision.typedOutput, ids == ordered else { throw WorkflowIssue("Container selection changed its frozen value or order.", code: "container.issue.selectionUnavailable") }
         } else {
-            guard ids.isEmpty, decision.typedOutput == nil else { throw WorkflowIssue("Rejected container has an output.") }
+            guard ids.isEmpty, decision.typedOutput == nil else { throw WorkflowIssue("Rejected container has an output.", code: "container.issue.selectionUnavailable") }
         }
     }
 
@@ -160,7 +160,7 @@ enum WorkflowContainerOperations {
             interaction: review ? .containerReview : .none),
             execute: { context, services in
                 guard let input = context.inputs["input"], input.kind.rawValue == context.node.parameters["kind"]?.string else {
-                    throw WorkflowIssue("Container input does not match its declared type.")
+                    throw WorkflowIssue("Container input does not match its declared type.", code: "container.issue.inputType")
                 }
                 try input.datum?.validate(as: context.node.dataConfiguration?.schema)
                 for reference in WorkflowAssetContainer.references(in: input) { try await services.verifyAsset(reference) }
@@ -172,13 +172,13 @@ enum WorkflowContainerOperations {
         outputs: [.init("output", "资产列表", kinds: kinds)],
         fields: [.init("kind", "数据类型", .choice(["mixed"] + kinds.map(\.rawValue)), .text("mixed"))]), validate: { node in
             if let sources = node.librarySources {
-                guard !sources.isEmpty, sources.count <= 64, Set(sources.map(\.key)).count == sources.count else { throw WorkflowIssue("Invalid exact container sources.") }
+                guard !sources.isEmpty, sources.count <= 64, Set(sources.map(\.key)).count == sources.count else { throw WorkflowIssue("Invalid exact container sources.", code: "container.issue.invalidSources") }
                 return
             }
-            guard let configuration = node.dataConfiguration else { throw WorkflowIssue("Missing container source.") }
+            guard let configuration = node.dataConfiguration else { throw WorkflowIssue("Missing container source.", code: "container.issue.invalidSources") }
             if let value = configuration.value { try value.validate() }
             guard configuration.items.count <= 4096, Set(configuration.items.map(\.id)).count == configuration.items.count else {
-                throw WorkflowIssue("Invalid source group identities.")
+                throw WorkflowIssue("Invalid source group identities.", code: "container.issue.invalidSources")
             }
             for item in configuration.items { try item.value.validate() }
         }, execute: { context, services in
@@ -186,13 +186,13 @@ enum WorkflowContainerOperations {
                 let values = try await services.resolveLibrarySources(sources)
                 for value in values { for ref in WorkflowAssetContainer.references(in: value) { try await services.verifyAsset(ref) } }
                 guard let output = WorkflowAssetContainer.sourceOutput(sources, values: values) else {
-                    guard context.node.parameters["kind"]?.string == "mixed" else { throw WorkflowIssue("Source group type changed.") }
+                    guard context.node.parameters["kind"]?.string == "mixed" else { throw WorkflowIssue("Source group type changed.", code: "container.issue.inputType") }
                     return .outputs([:])
                 }
-                guard output.kind.rawValue == context.node.parameters["kind"]?.string else { throw WorkflowIssue("Source type differs from its declared port.") }
+                guard output.kind.rawValue == context.node.parameters["kind"]?.string else { throw WorkflowIssue("Source type differs from its declared port.", code: "container.issue.inputType") }
                 return .outputs(["output": output])
             }
-            guard let configuration = context.node.dataConfiguration else { throw WorkflowIssue("Missing container source.") }
+            guard let configuration = context.node.dataConfiguration else { throw WorkflowIssue("Missing container source.", code: "container.issue.invalidSources") }
             let values = configuration.value.map { [$0] } ?? configuration.items.map(\.value)
             for value in values { for reference in value.assetReferences { try await services.verifyAsset(reference) } }
             if let value = configuration.value { return .outputs(["output": .data(value)]) }

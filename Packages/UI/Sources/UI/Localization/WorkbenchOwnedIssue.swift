@@ -1,4 +1,5 @@
 import SwiftUI
+import DWorkbench
 
 /// Exact D-owned UI guard messages only; never mutates the stored diagnostic.
 /// Unknown/backend text remains verbatim. The original is available separately.
@@ -61,13 +62,22 @@ import SwiftUI
 }
 struct WorkbenchIssueText: View {
     let raw: String
+    var key: String? = nil
     @Environment(\.dLanguageStore) private var language
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(WorkbenchOwnedIssue.summary(raw, language: language) ?? ChatErrorText.display(raw, language: language))
-            if let summary = WorkbenchOwnedIssue.summary(raw, language: language), summary != raw {
+            Text(key.map { workflowText(language, $0, fallback: raw) } ?? WorkbenchOwnedIssue.summary(raw, language: language) ?? ChatErrorText.display(raw, language: language))
+            if key != nil || WorkbenchOwnedIssue.summary(raw, language: language).map({ $0 != raw }) == true {
                 DisclosureGroup(consistencyText(language, "error.original")) { Text(raw).textSelection(.enabled) }
             }
         }
+    }
+}
+
+// Captures diagnostics without translating business identity or matching sentences.
+extension WorkflowIssue {
+    init(presenting error: any Error, fallbackCode: String) {
+        self = error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription)
+        if code == nil { code = fallbackCode }
     }
 }

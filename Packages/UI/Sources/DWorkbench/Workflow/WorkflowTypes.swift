@@ -212,7 +212,9 @@ public struct WorkflowIssue: Error, LocalizedError, Codable, Sendable, Equatable
     public var nodeID: UUID?
     public var port: String?
     public var reason: String
-    public init(_ reason: String, nodeID: UUID? = nil, port: String? = nil) { self.reason = reason; self.nodeID = nodeID; self.port = port }
+    /// Stable presentation identity; legacy diagnostics decode without it.
+    public var code: String?
+    public init(_ reason: String, nodeID: UUID? = nil, port: String? = nil, code: String? = nil) { self.reason = reason; self.nodeID = nodeID; self.port = port; self.code = code }
     public var errorDescription: String? { [port.map { "端口 \($0)" }, reason].compactMap { $0 }.joined(separator: "：") }
 }
 

@@ -1252,7 +1252,7 @@ extension WorkflowWorkspacePresentationTests {
         let failedID = try await c.requestCollection(sources, owner: owner, folderID: UUID(), requestID: UUID())
         let failed = SharedLibraryCollectionFeedback(requestID: failedID, context: feedback.context)
         await c.processCollectionRequests { _ in throw WorkflowIssue("controlled classification failure") }
-        #expect(failed.status(in: c) == .failed("controlled classification failure"))
+        #expect(failed.status(in: c) == .failed(.init("controlled classification failure", code: "container.issue.collectionClassifyPending")))
         #expect(feedback.status(in: c) == .completed)
         #expect(await f.engine.submissions == 0)
         try await other.close(); try await f.close()
@@ -1466,7 +1466,7 @@ extension WorkflowWorkspacePresentationTests {
         let transfer = WorkflowCanvasTransfer.library(owner: owner, sources: [.asset(ref)])
         #expect(WorkflowLibraryPortDrop.admission(transfer, port: port, scope: try scope(), controller: c) == .blocked("container.dropOccupied"))
         var reported: [String] = []
-        #expect(WorkflowLibraryPortDrop.submit(transfer, port: port, scope: try scope(), controller: c, language: nil, onIssue: { reported.append($0) }))
+        #expect(WorkflowLibraryPortDrop.submit(transfer, port: port, scope: try scope(), controller: c, language: nil, onIssue: { reported.append($0.reason) }))
         #expect(reported.count == 1 && reported.first == c.errorMessage)
         let issue = WorkflowLibraryDropIssue(scope: try scope(), message: try #require(reported.first))
         #expect(issue.isVisible(in: try scope()))
@@ -1558,5 +1558,103 @@ extension WorkflowWorkspacePresentationTests {
         preview.move(to: .zero)
         try await Task.sleep(for: .milliseconds(100))
         #expect(preview.value != nil && preview.feedback == nil, "An operation drag must not advertise an asset connection")
+    }
+}
+
+extension WorkflowWorkspacePresentationTests {
+    @Test func collectionRuleDraftProtectsEffectiveChangesAndRetriesOnlySave() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        c.addBlankGraph(); c.addNode(operationID: WorkflowAssetContainer.previewID)
+        let node = try #require(c.graph?.nodes.last), initial = try #require(c.canvasInsertionTarget())
+        var saves = 0
+        let draft = WorkflowCollectionRuleDraft(controller: c, node: node, target: initial, flush: {
+            saves += 1
+            if saves == 1 { throw CocoaError(.fileWriteNoPermission) }
+            try await c.saveExplicitEdits()
+        })
+        #expect(!draft.dirty)
+        draft.enabled = true; #expect(draft.dirty)
+        draft.enabled = false; draft.folderID = UUID(); #expect(!draft.dirty, "Disabled folder is not an effective rule change")
+        draft.folderID = nil; draft.enabled = true
+        await #expect(throws: WorkflowIssue.self) { try await draft.save() }
+        #expect(draft.dirty && draft.applied && !draft.saving && draft.failure?.code == "container.issue.ruleSave")
+        let appliedRevision = try #require(c.graph?.revision)
+        #expect(c.graph?.nodes.last?.collectionRule == draft.value)
+        let appliedRule = c.graph?.nodes.last?.collectionRule
+        try await draft.save()
+        #expect(saves == 2 && c.graph?.revision == appliedRevision && draft.failure == nil && !draft.dirty)
+        #expect(c.graph?.nodes.last?.collectionRule == appliedRule)
+        #expect(c.runs.isEmpty && c.collectionRequests.isEmpty)
+        let requests = await f.engine.submissions; #expect(requests == 0)
+        c.undo(); #expect(c.graph?.nodes.last?.collectionRule == nil, "One edit, even after save retry")
+        try await f.close()
+    }
+
+    @Test func collectionRuleDraftRejectsChangedOwnerAndDuplicateInFlightSave() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        c.addBlankGraph(); c.addNode(operationID: WorkflowAssetContainer.previewID)
+        let node = try #require(c.graph?.nodes.last), target = try #require(c.canvasInsertionTarget())
+        var completion: CheckedContinuation<Void, Never>?
+        var saves = 0
+        let draft = WorkflowCollectionRuleDraft(controller: c, node: node, target: target, flush: {
+            saves += 1; await withCheckedContinuation { completion = $0 }
+        })
+        draft.enabled = true
+        let task = Task { try await draft.save() }
+        for _ in 0..<50 where completion == nil { await Task.yield() }
+        let release = try #require(completion)
+        #expect(draft.saving && draft.applied)
+        await #expect(throws: WorkflowIssue.self) { try await draft.save() }
+        #expect(saves == 1)
+        c.addBlankGraph(name: "Different exact graph")
+        release.resume()
+        try await task.value
+        #expect(!draft.dirty && draft.saved && draft.failure == nil && c.graph?.nodes.isEmpty == true)
+        #expect(c.runs.isEmpty && c.collectionRequests.isEmpty)
+        try await f.close()
+    }
+}
+
+
+extension WorkflowWorkspacePresentationTests {
+    @Test func collectionRuleRetrySurvivesUnrelatedLayoutAndNavigationWithoutReapplying() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        c.addBlankGraph(); c.addNode(operationID: WorkflowAssetContainer.previewID)
+        let node = try #require(c.graph?.nodes.last), original = try #require(c.graph?.id)
+        var saves = 0
+        let draft = WorkflowCollectionRuleDraft(controller: c, node: node, target: try #require(c.canvasInsertionTarget()), flush: {
+            saves += 1; if saves == 1 { throw CocoaError(.fileWriteNoPermission) }
+            try await c.saveExplicitEdits()
+        })
+        draft.enabled = true
+        await #expect(throws: (any Error).self) { try await draft.save() }
+        let appliedRule = try #require(c.graph?.nodes.first?.collectionRule)
+        c.moveNode(id: node.id, x: 90, y: 120); c.addBlankGraph(name: "Other")
+        let other = c.graph
+        #expect(draft.dirty && !draft.allowsDiscard)
+        try await draft.save()
+        #expect(!draft.dirty && saves == 2 && c.graph == other)
+        #expect(c.graphs.first(where: { $0.id == original })?.nodes.first?.collectionRule == appliedRule)
+        #expect(c.runs.isEmpty && c.collectionRequests.isEmpty)
+        #expect(await f.engine.submissions == 0)
+        try await f.close()
+    }
+
+    @Test func containerIssueKeysResolveInBothLanguagesAndLegacyDiagnosticsSurvive() throws {
+        let keys = ["ruleBusy", "ruleTarget", "ruleSave", "sourceUnavailable", "sourceUnsettled",
+            "selectionUnavailable", "targetChanged", "inputType", "invalidSources", "collectionLimit",
+            "collectionSavePending", "collectionClassifyPending", "collectionAckPending", "dropSavePending",
+            "decisionSavePending", "busy", "alreadyCommitted", "operationUnavailable", "actionFailed"].map { "container.issue." + $0 }
+            + ["container.importedTargetChanged", "chat.issue.sessionIdentity"]
+        #expect(keys.count >= 20)
+        for locale in ["zh-Hans", "en"] {
+            let settings = UserDefaults(suiteName: "D.issue.fixture." + UUID().uuidString)!
+            let language = UILanguageStore(settings: settings, preferredLanguages: [locale]); try language.select(locale)
+            for key in keys { #expect(language.text(key, fallback: "MISSING") != "MISSING") }
+        }
+        let old = try JSONDecoder().decode(WorkflowIssue.self, from: Data(#"{"reason":"original diagnostic"}"#.utf8))
+        #expect(old.code == nil && old.reason == "original diagnostic")
+        let coded = WorkflowIssue("raw diagnostic", code: "container.issue.targetChanged")
+        #expect(try JSONDecoder().decode(WorkflowIssue.self, from: JSONEncoder().encode(coded)) == coded)
     }
 }
