@@ -90,7 +90,7 @@ D-VIDEO-V0-01 的命令行后端已通过 D-VIDEO-WORKBENCH-01 接入基础视�
 
 ### 一次准备，普通Xcode构建复用
 
-`Packaging/prepare_external_video_engine.py --help`给出全部显式输入：已有独立Python、固定LTX依赖、固定H3源码/二进制/档案、LTX源码档案、FFmpeg/ffprobe、全新输出目录及既有开发identity/team。不下载、不读取私钥、不改全局环境或普通App。先核对固定源码及补丁，将依赖重定位到新副本，再逐个签名/校验复制的原生文件，最后形成清单。源目录和此前引擎不动；不能只用外层App的`codesign --deep`推断Resources里所有动态库可加载。
+`Packaging/prepare_external_video_engine.py --help`给出全部显式输入：已有独立Python、固定LTX依赖、固定H3源码/二进制/档案、LTX源码档案、FFmpeg/ffprobe、`--ffmpeg-source-archive`指定的固定9.0.1官方源码档案（校验SHA-256）、全新输出目录及既有开发identity/team。不下载、不读取私钥、不改全局环境或普通App。先核对固定源码及补丁，将依赖重定位到新副本，再逐个签名/校验复制的原生文件，最后形成清单。源目录和此前引擎不动；不能只用外层App的`codesign --deep`推断Resources里所有动态库可加载。
 
 在`prepare-development-resources.py`配置的`engines`中增加可选`ExternalVideoEngine.dengine`，指向上述输出；仍须保留原有四个引擎。将生成资源目录写入忽略的`Development/Development.local.xcconfig`，现有D Nodes scheme正常构建会核验、复制资源并照原方案签名。模型权重不进入这个视频引擎或App。
 

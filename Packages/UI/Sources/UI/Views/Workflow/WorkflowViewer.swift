@@ -484,9 +484,10 @@ struct WorkflowViewerText:NSViewRepresentable {
     let text:String
     let query:String
     let next:Int
+    var readingIdentity: WorkflowDatum? = nil
     @Environment(\.chatDisplayPreferences) private var preferences
     @Environment(\.colorScheme) private var scheme
-    final class Coordinator { var query="";var next=0;var last=NSRange(location:0,length:0) }
+    final class Coordinator { var query="";var next=0;var last=NSRange(location:0,length:0);var readingIdentity:WorkflowDatum? }
     func makeCoordinator()->Coordinator { Coordinator() }
     func makeNSView(context:Context)->NSScrollView {
         let view=NSTextView();view.isEditable=false;view.isSelectable=true;view.isRichText=false;view.usesFindBar=true
@@ -498,7 +499,26 @@ struct WorkflowViewerText:NSViewRepresentable {
     func updateNSView(_ scroll:NSScrollView,context:Context) {
         guard let view=scroll.documentView as? NSTextView else { return }
         WorkbenchNativeTextAppearance.apply(scroll,editor:view,color:NSColor(preferences.resolvedAppearance.palette(for:scheme).foregroundColor))
-        if !view.string.utf8.elementsEqual(text.utf8) { view.string=text;context.coordinator.last=NSRange(location:0,length:0) }
+        if !view.string.utf8.elementsEqual(text.utf8) {
+            let preserve = readingIdentity != nil && context.coordinator.readingIdentity == readingIdentity
+            let selection = view.selectedRange(), origin = scroll.contentView.bounds.origin
+            let previous = view.string as NSString
+            let selected = preserve && selection.length > 0 && NSMaxRange(selection) <= previous.length ? previous.substring(with: selection) : nil
+            view.string=text;context.coordinator.last=NSRange(location:0,length:0)
+            if preserve {
+                let updated = text as NSString
+                var range = NSRange(location: min(selection.location, updated.length), length: 0)
+                if let selected {
+                    let start = min(selection.location, updated.length)
+                    var match = updated.range(of: selected, range: NSRange(location: start, length: updated.length-start))
+                    if match.location == NSNotFound { match = updated.range(of: selected) }
+                    if match.location != NSNotFound { range = match }
+                }
+                view.setSelectedRange(range)
+                scroll.contentView.scroll(to: origin);scroll.reflectScrolledClipView(scroll.contentView)
+            }
+        }
+        context.coordinator.readingIdentity = readingIdentity
         guard context.coordinator.query != query || context.coordinator.next != next else { return }
         let changed=context.coordinator.query != query
         context.coordinator.query=query;context.coordinator.next=next

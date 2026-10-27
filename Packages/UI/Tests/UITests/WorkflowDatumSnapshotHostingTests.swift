@@ -43,7 +43,11 @@ struct WorkflowDatumSnapshotHostingTests {
     }
 
     private func numbers(_ host: NSView) -> [String] {
-        descendants(host).compactMap { ($0 as? NSTextField)?.stringValue }
+        descendants(host).flatMap { view -> [String] in
+            if let field = view as? NSTextField { return [field.stringValue] }
+            if let text = view as? NSTextView { return text.string.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) } }
+            return []
+        }
     }
 
     private func labels(_ root: NSObject) -> Set<String> {
@@ -108,8 +112,7 @@ struct WorkflowDatumSnapshotHostingTests {
         fixture.result = value(22, ["After-A", "After-B"])
         try await settle(host)
         #expect(numbers(host).contains("22.0") && !numbers(host).contains("11.0"))
-        // Offscreen AppKit does not expose SwiftUI's drawn enum buttons.
-        // Exercise replacement of that field's schema through native controls.
+        // The same field can change schema while the native read-only reader stays mounted.
         fixture.result = .record(schema: [.init("choice", .number(unit: nil))], fields: ["choice": .number(33, unit: nil)])
         try await settle(host)
         #expect(numbers(host).contains("33.0") && !numbers(host).contains("22.0"))
@@ -130,4 +133,53 @@ struct WorkflowDatumSnapshotHostingTests {
         #expect(descendants(host).contains { $0 === text })
         #expect(text.selectedRange() == selection)
     }
+    @Test func snapshotUsesSelectableReadOnlyReaderWithoutEditorCommands() async throws {
+        let value = WorkflowDatum.record(schema: [.init("title", .text)], fields: ["title": .text("原文 👩🏽‍🎨")])
+        let host = NSHostingView(rootView: WorkflowDatumSnapshotView(value: value))
+        host.frame = CGRect(x: 0, y: 0, width: 600, height: 400)
+        try await settle(host)
+        let readers = descendants(host).compactMap { $0 as? NSTextView }
+        #expect(readers.count == 1)
+        #expect(readers.allSatisfy { !$0.isEditable && $0.isSelectable && !$0.drawsBackground })
+        #expect(readers.first?.string.contains("原文 👩🏽‍🎨") == true)
+        #expect(!descendants(host).contains { $0 is NSButton || $0 is NSTextField })
+        #expect(value.fields?["title"] == .text("原文 👩🏽‍🎨"))
+    }
+
+    @Test func snapshotTextDistinguishesMissingEmptyNoneAndResultWithoutChangingData() throws {
+        let language = UILanguageStore(preferredLanguages: ["en"])
+        let fields: [WorkflowRecordField] = [.init("second", .text), .init("first", .optional(.text), required: false)]
+        let value = WorkflowDatum.record(schema: fields, fields: ["second": .text("")])
+        let rendered = WorkflowDatumSnapshotText.render(value, language: language)
+        #expect(rendered.range(of: "second")!.lowerBound < rendered.range(of: "first")!.lowerBound)
+        #expect(rendered.contains("(Empty text)") && rendered.contains("Value not provided"))
+        #expect(WorkflowDatumSnapshotText.render(.none(.text), language: language).contains("No value"))
+        let list = WorkflowDatum.list(element: .number(unit: "s"), items: [.init(id: "b", value: .number(2, unit: "s")), .init(id: "a", value: .number(1, unit: "s"))])
+        #expect(WorkflowDatumSnapshotText.render(list, language: language) == "List · Number (s)\n[1]\n  2.0 s\n\n[2]\n  1.0 s")
+        let result = WorkflowDatum.result(.init(status: .failed, expected: .text, issues: ["原始 diagnostic"]))
+        #expect(WorkflowDatumSnapshotText.render(result, language: language).contains("Failed\n\nResult · Text\n\nValue not provided\n\n原始 diagnostic"))
+        #expect(WorkflowDatumSnapshotText.render(.enumeration("A", choices: ["A", "B"]), language: language) != WorkflowDatumSnapshotText.render(.enumeration("A", choices: ["A", "C"]), language: language))
+        #expect(WorkflowDatumSnapshotText.render(.list(element: .text, items: []), language: language) != WorkflowDatumSnapshotText.render(.list(element: .number(unit: nil), items: []), language: language))
+        #expect(WorkflowDatumSnapshotText.render(result, language: language) != WorkflowDatumSnapshotText.render(.result(.init(status: .failed, expected: .boolean, issues: ["原始 diagnostic"])), language: language))
+        try language.select("zh-Hans")
+        #expect(WorkflowDatumSnapshotText.render(result, language: language).contains("处理失败"))
+        #expect(value.fields?["second"] == .text("") && value.fields?["first"] == nil)
+    }
+
+    @Test func recordLanguageRefreshKeepsSelectedOriginalTextAndReaderIdentity() async throws {
+        let fixture = SnapshotFixture(.record(schema: [.init("title", .text)], fields: ["title": .text("原文 preserved 👩🏽‍🎨")]))
+        let language = UILanguageStore(preferredLanguages: ["zh-Hans"])
+        let host = NSHostingView(rootView: SnapshotHarness(fixture: fixture).environment(\.dLanguageStore, language))
+        host.frame = CGRect(x: 0, y: 0, width: 750, height: 700)
+        try await settle(host)
+        let reader = try #require(descendants(host).compactMap { $0 as? NSTextView }.first { $0.string.contains("原文 preserved") })
+        reader.setSelectedRange((reader.string as NSString).range(of: "原文 preserved"))
+        try language.select("en");fixture.progress += 1
+        try await settle(host)
+        #expect(descendants(host).contains { $0 === reader })
+        #expect((reader.string as NSString).substring(with: reader.selectedRange()) == "原文 preserved")
+        #expect(reader.string.contains("Text") && reader.string.contains("Required"))
+        #expect(!reader.isEditable)
+    }
+
 }

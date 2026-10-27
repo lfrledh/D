@@ -86,9 +86,10 @@ struct WorkbenchThirdPartyNotices: View {
                         VStack(alignment: .leading) {
                             Text(file.group).font(.caption).foregroundStyle(.secondary)
                             Text(file.relativePath).font(.caption).lineLimit(2)
-                        }.tag(file.id)
+                        }.tag(file.id).listRowBackground(Color.clear)
                     }
-                }.frame(width: 250).accessibilityLabel(t("list"))
+                }.listStyle(.plain).scrollContentBackground(.hidden)
+                .frame(width: 250).accessibilityLabel(t("list"))
                 NoticeReadOnlyText(text: bodyText).accessibilityLabel(t("document"))
             }
         }.padding(20).frame(width: 760, height: 540)

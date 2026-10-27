@@ -358,15 +358,55 @@ enum WorkflowFormSupport {
 @MainActor
 struct WorkflowDatumSnapshotView: View {
     let value: WorkflowDatum
-    @State private var generation = UUID()
+    @Environment(\.dLanguageStore) private var language
 
     var body: some View {
-        WorkflowDatumEditor(value: .constant(value)).disabled(true)
-            .id(generation)
-            // Editors deliberately keep incomplete drafts. A published result
-            // has no draft: replace only this read-only subtree on a new value.
-            // Unchanged results, neighboring editors and the inspector retain identity.
-            .onChange(of: value) { _, _ in generation = UUID() }
+        // Published values have no editor draft or schema-changing controls.
+        // Keep one selectable native reader; unchanged text retains selection.
+        WorkflowViewerText(text: WorkflowDatumSnapshotText.render(value, language: language), query: "", next: 0, readingIdentity: value)
+            .frame(minHeight: 240, idealHeight: 360)
+    }
+}
+
+@MainActor
+enum WorkflowDatumSnapshotText {
+    static func schema(_ schema: WorkflowDataSchema, language: UILanguageStore?) -> String {
+        let name = workflowFormSchemaName(schema, language: language)
+        switch schema {
+        case .enumeration(let choices): return name + " [" + choices.joined(separator: ", ") + "]"
+        case .list(let element), .optional(let element), .result(let element): return name + " · " + self.schema(element, language: language)
+        default: return name
+        }
+    }
+    static func render(_ value: WorkflowDatum, language: UILanguageStore?) -> String {
+        func t(_ key: String) -> String { workflowText(language, "workflow.snapshot." + key) }
+        func indent(_ text: String) -> String { text.components(separatedBy: "\n").map { "  " + $0 }.joined(separator: "\n") }
+        switch value {
+        case .text(let text): return text.isEmpty ? t("emptyText") : text
+        case .number(let number, let unit): return String(number) + (unit.map { " " + $0 } ?? "")
+        case .boolean(let flag): return t(flag ? "true" : "false")
+        case .enumeration(let selected, let choices): return selected + "\n" + schema(.enumeration(choices), language: language)
+        case .record(let schema, let fields):
+            if schema.isEmpty { return t("emptyRecord") }
+            return schema.map { field in
+                field.name + " · " + self.schema(field.type, language: language) + (" · " + workflowText(language, field.required ? "workflow.port.required" : "workflow.language.form.optional")) + "\n" +
+                    indent(fields[field.name].map { render($0, language: language) } ?? t("missing"))
+            }.joined(separator: "\n\n")
+        case .list(let element, let items):
+            let heading = schema(.list(element), language: language) + "\n"
+            if items.isEmpty { return heading + t("emptyList") }
+            return heading + items.enumerated().map { index, item in
+                "[" + String(index + 1) + "]\n" + indent(render(item.value, language: language))
+            }.joined(separator: "\n\n")
+        case .none(let schema): return self.schema(.optional(schema), language: language) + " · " + t("none")
+        case .result(let result):
+            var lines = [t("result." + result.status.rawValue), schema(.result(result.expected), language: language)]
+            lines.append(result.value.map { render($0, language: language) } ?? t("missing"))
+            lines.append(contentsOf: result.issues) // Original diagnostics are data, never translated.
+            return lines.joined(separator: "\n\n")
+        case .asset(let asset):
+            return workflowFormSchemaName(.asset(asset.kind), language: language) + "\n" + asset.assetID.uuidString
+        }
     }
 }
 
