@@ -31,9 +31,9 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSScrollView {
-        // Only attachment composers opt in. Other question/system editors keep
-        // NSTextView's normal text/paste/drag behavior.
-        let editor: NSTextView = onFileDrop == nil ? NSTextView() : FileDropTextView()
+        // Only submit/attachment composers opt in. Other question/system editors
+        // keep NSTextView's normal text/paste/drag behavior.
+        let editor: NSTextView = onFileDrop == nil && onSubmit == nil ? NSTextView() : FileDropTextView()
         (editor as? FileDropTextView)?.onFileDrop = onFileDrop
         editor.isRichText = false
         editor.allowsUndo = true
@@ -329,6 +329,25 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
 /// can see them. Intercept only file URLs at the native destination; do not turn
 /// ordinary pasted path strings into file access or change text dragging.
 @MainActor final class FileDropTextView: NSTextView {
+    // Command-Return has no default AppKit insertNewline binding. The visible
+    // composer owns it; do not install a global menu shortcut on retained pages.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.type == .keyDown, event.keyCode == 36 || event.keyCode == 76,
+              event.modifierFlags.intersection([.shift, .control, .option, .command]) == .command,
+              let window, window.isKeyWindow, window.firstResponder === self,
+              !isHiddenOrHasHiddenAncestor, isEditable, !hasMarkedText(),
+              window.attachedSheet == nil, NSApp.modalWindow == nil,
+              WorkbenchChildPanels.permitsCommands(from: self, on: window),
+              !WorkbenchPopupOverlay.isPresented(on: window),
+              let coordinator = delegate as? TextSourcesQuestionEditor.Coordinator else {
+            return super.performKeyEquivalent(with: event)
+        }
+        // Holding the shortcut must not dispatch repeated requests.
+        if event.isARepeat { return true }
+        if coordinator.submitIfAllowed(self, modifiers: event.modifierFlags) { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+
     // Drawing only: no overlay receiver, text storage, selection or Undo entry.
     var placeholder: String? {
         didSet { if oldValue != placeholder { needsDisplay = true } }
