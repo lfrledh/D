@@ -46,6 +46,10 @@ struct QuickGenerationView: View {
     @State private var inputIssue: String?
     @State private var inputIssueCode: String?
     @State private var inputNotice: String?
+    @State private var inputNoticeKey: String?
+    private var displayedInputNotice: String? {
+        inputNoticeKey.map { workflowText(language, $0) } ?? inputNotice
+    }
     @State private var inputAction: InputAction?
     @State private var preview: WorkflowAssetReference?
     @Environment(\.dLanguageStore) private var language
@@ -218,11 +222,11 @@ struct QuickGenerationView: View {
         }
         .onChange(of: quick.state.selectedDraftID) { _, _ in
             inputAction?.feedbackValid = false
-            inputIssue = nil; inputIssueCode = nil; inputNotice = nil; history = false
+            inputIssue = nil; inputIssueCode = nil; inputNotice = nil; inputNoticeKey = nil; history = false
         }
         .onChange(of: ObjectIdentifier(quick)) { _, _ in
             inputAction?.feedbackValid = false
-            inputIssue = nil; inputIssueCode = nil; inputNotice = nil
+            inputIssue = nil; inputIssueCode = nil; inputNotice = nil; inputNoticeKey = nil
         }
         .task(id: audioIdentity) {
             audioPlayback.stop()
@@ -232,7 +236,7 @@ struct QuickGenerationView: View {
             await audioPlayback.select(reference, store: quick.store)
         }
         .onChange(of: selectedResults[.audio]) { _, _ in
-            if quick.category == .audio { inputIssue = nil; inputIssueCode = nil; inputNotice = nil }
+            if quick.category == .audio { inputIssue = nil; inputIssueCode = nil; inputNotice = nil; inputNoticeKey = nil }
         }
         .onChange(of: contentVisible) { _, visible in if !visible { audioPlayback.stop() } }
         .onDisappear { inputAction?.feedbackValid = false; audioPlayback.stop() }
@@ -371,7 +375,7 @@ struct QuickGenerationView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                             }
                             if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error { WorkbenchIssueText(raw: issue, key: inputIssue == nil && quick.inputIssue == issue ? quick.inputIssueCode : nil).foregroundStyle(.red).textSelection(.enabled) }
-                            if let inputNotice { Text(inputNotice).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
+                            if let notice = displayedInputNotice { Text(notice).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                         } else {
                             if let error = quick.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
                             ContentUnavailableView(baselineText(language, "label.48ccfc0d2104"), systemImage: "square.stack.3d.up",
@@ -480,14 +484,14 @@ struct QuickGenerationView: View {
                 Text(audioText("empty")).foregroundStyle(.secondary); Spacer()
             }
             if quick.visibleRuns.contains(where: QuickAudioPresentation.hasUnexpectedOutput) { Text(audioText("outputMismatch")).font(.caption).foregroundStyle(.red) }
-            if let inputNotice { Text(inputNotice).font(.caption).foregroundStyle(.secondary) }
+            if let notice = displayedInputNotice { Text(notice).font(.caption).foregroundStyle(.secondary) }
         }.padding(12).frame(maxWidth: .infinity, maxHeight: .infinity).workbenchPanel(cornerRadius: 20)
     }
     private func saveAudio(_ reference: WorkflowAssetReference) async {
         guard !savingAudio else { return }
         let source = quick.store, owner = model.projectSession
         guard owner.currentStore === source else { return }
-        savingAudio = true; inputIssue = nil; inputIssueCode = nil; inputNotice = nil
+        savingAudio = true; inputIssue = nil; inputIssueCode = nil; inputNotice = nil; inputNoticeKey = nil
         defer { savingAudio = false }
         do {
             if owner.workflow == nil { await owner.openWorkflow() }
@@ -496,7 +500,7 @@ struct QuickGenerationView: View {
             try await controller.setCollected([.asset(reference)], collected: true, owner: identity)
             onAssetsChanged()
             guard quick.store === source, selectedMedia == reference else { return }
-            inputIssue = nil; inputIssueCode = nil; inputNotice = audioText("saved")
+            inputIssue = nil; inputIssueCode = nil; inputNoticeKey = "quick.audio.saved"
         } catch { if quick.store === source, selectedMedia == reference { inputIssue = error.localizedDescription; inputIssueCode = (error as? WorkflowIssue)?.code } }
     }
     private var currentRuns: [QuickRunRecord] {
@@ -624,6 +628,7 @@ struct QuickGenerationView: View {
             ? inputLabel("cancelled", english: "Import cancelled. Already saved assets remain in the library; the current input was not changed.",
                          chinese: "导入已取消；已保存的素材仍在资料库，当前输入未修改。")
             : result.message
+        inputNoticeKey = nil
         inputNotice = result.copied > 0
             ? inputLabel("copied", english: "Assets from another project were copied into this project; the originals are unchanged.",
                          chinese: "跨项目素材已复制到当前项目；来源原件保持不变。")
