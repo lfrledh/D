@@ -126,6 +126,12 @@ class OfflineACEMixin:
     _ace_runtime_root: Path
     _ace_record: VerificationRecord
 
+    def _get_project_root(self) -> str:
+        # Upstream progress estimates are writable run data. The process starts
+        # in the short-lived access bootstrap, which must remain manifest-only.
+        # Do not use cwd, caller environment, or the original model directory.
+        return str(self._ace_runtime_root.parent)
+
     def _ensure_models_present(self, *, checkpoint_path: Path, config_path: str,
                                prefer_source: str | None, vae_variant: str | None = None):
         if config_path != "acestep-v15-xl-sft" or checkpoint_path != self._ace_runtime_root / "checkpoints":
@@ -245,7 +251,10 @@ def make_handler(vendor_root: Path, manifest: dict[str, Any], view: Path, model:
     from acestep.handler import AceStepHandler
 
     class OfflineACEHandler(OfflineACEMixin, AceStepHandler):
-        pass
+        def __init__(self):
+            # AceStepHandler resolves its progress-cache path during init.
+            self._ace_runtime_root = view
+            super().__init__()
 
     handler = OfflineACEHandler()
     handler._ace_manifest = manifest

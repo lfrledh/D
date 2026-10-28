@@ -489,6 +489,30 @@ sys.exit(code)
         changed = dict(self.manifest, sourceRevision="other")
         with self.assertRaises(contract.ACEContractError): record.check(changed)
 
+    def test_handler_progress_cache_stays_in_owned_run(self):
+        record = self.admitted_record()
+        view = runtime.prepare_runtime_view(self.run, self.model, self.vendor, self.manifest, record)
+        record = record.with_view(view)
+        bootstrap = self.root / "access-bootstrap"
+        bootstrap.mkdir()
+        class Handler:
+            def _get_project_root(self):
+                return str(bootstrap)  # Official fallback: launch cwd.
+            def __init__(self):
+                self.progress_path = Path(self._get_project_root()) / ".cache/acestep/progress_estimates.json"
+                self.progress_path.parent.mkdir(parents=True)
+                self.progress_path.write_text('{"records": []}')
+        previous_path = list(sys.path)
+        try:
+            with mock.patch.dict(sys.modules, {"acestep": types.ModuleType("acestep"),
+                    "acestep.handler": types.SimpleNamespace(AceStepHandler=Handler)}):
+                handler = runtime.make_handler(self.vendor, self.manifest, view, self.model, record)
+            self.assertEqual(handler.progress_path, self.run / ".cache/acestep/progress_estimates.json")
+            self.assertEqual(list(bootstrap.iterdir()), [])
+            record.check(self.manifest, model=self.model, vendor=self.vendor, view=view)
+        finally:
+            sys.path[:] = previous_path
+
     def test_record_rejects_same_size_file_change(self):
         record = self.admitted_record()
         weight = self.model / contract.XL_ROOT / "model-00001-of-00004.safetensors"
