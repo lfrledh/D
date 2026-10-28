@@ -70,7 +70,7 @@ enum WorkflowMusicOperations {
             .init("chords", "和声", kinds: [.record, .chords], required: false)], outputs: [.init("output", "音乐", kinds: [.audio])],
         fields: [.init("promptText", "意图", .text(multiline: true), .text("Solo piano, clear melody.")),
             .init("durationFrames", "时长（25Hz帧）", .integer, .integer(100)),
-            .init("seed", "种子", .text(multiline: false), .text("42")), WorkflowLanguageOperations.modelField], modelKind: .music, quickCategory: .audio), execute: { c, s in
+            .init("seed", "种子", .text(multiline: false), .text("42")), WorkflowLanguageOperations.modelField], modelKind: .music, quickCategory: .audio, quickAudio: .mrt2Text), execute: { c, s in
             let prompt = try await WorkflowLanguageOperations.text(c.inputs["prompt"], fallback: c.node.parameters["promptText"]?.string ?? "", services: s)
             let notes: WorkflowNoteSequence?
             if let value = c.inputs["notes"] { notes = try WorkflowNoteSequence(datum: await datum(value, services: s)) } else { notes = nil }

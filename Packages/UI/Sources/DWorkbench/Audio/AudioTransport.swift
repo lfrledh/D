@@ -22,7 +22,10 @@ struct AudioRecordingResult: Sendable, Equatable {
     ) throws -> Bool
     func pause() -> Int64
     func stop()
+    func setVolume(_ value: Float)
 }
+
+@MainActor extension AudioPlaybackDevice { func setVolume(_ value: Float) {} }
 
 @MainActor protocol AudioRecordingDevice: AnyObject {
     var url: URL { get }
@@ -45,6 +48,11 @@ public final class AudioTransport: NSObject {
     public private(set) var positionFrame: Int64 = 0
     public private(set) var recordingSeconds: Double = 0
     public private(set) var errorMessage: String?
+    public private(set) var volume: Float = 1
+    public func setVolume(_ value: Float) {
+        guard value.isFinite else { return }
+        volume = min(1, max(0, value)); playback?.setVolume(volume)
+    }
     public private(set) var recordedURL: URL?
     public var recordingDidFinish: (@MainActor @Sendable (URL, String?) -> Void)?
 
@@ -96,6 +104,7 @@ public final class AudioTransport: NSObject {
         stopProgressTimer()
         playback?.stop()
         playback = candidate
+        candidate.setVolume(volume)
         playbackFormat = format
         playbackRange = candidateRange
         positionFrame = candidateRange.startFrame
@@ -554,6 +563,8 @@ private final class AVFoundationAudioDeviceFactory: AudioTransportDeviceFactory 
 
 @MainActor
 private final class AVFoundationPlaybackDevice: AudioPlaybackDevice {
+    private var volume: Float = 1
+    func setVolume(_ value: Float) { volume = value; node?.volume = value }
     private let file: AVAudioFile
     private var engine: AVAudioEngine?
     private var node: AVAudioPlayerNode?
@@ -609,6 +620,7 @@ private final class AVFoundationPlaybackDevice: AudioPlaybackDevice {
             engine = newEngine
             node = newNode
         }
+        node.volume = volume
         if !engine.isRunning { try engine.start() }
 
         let operationID = UUID()

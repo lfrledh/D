@@ -165,8 +165,11 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     }
     public var inputIssue: String? { inputValidationIssue?.localizedDescription }
     public var inputIssueCode: String? { inputValidationIssue?.code }
-    private var inputValidationIssue: WorkflowIssue? {
-        guard let draft, let definition = WorkflowRegistry.standard.definition(for: draft.node) else { return nil }
+    public var audioRequiresWorkflow: Bool { draft.map(QuickAudioPresentation.requiresWorkflow) ?? false }
+    private var inputValidationIssue: WorkflowIssue? { draft.flatMap { Self.validationIssue($0) ?? QuickAudioPresentation.batchIssue($0) } }
+    public static func validationIssue(_ draft: QuickDraft) -> WorkflowIssue? {
+        guard let definition = WorkflowRegistry.standard.definition(for: draft.node) else { return WorkflowIssue("Unknown operation") }
+        if let issue = QuickAudioPresentation.validationIssue(draft) { return issue }
         guard (1...8).contains(draft.attempts) else { return WorkflowIssue("快速生成一次支持 1–8 次独立尝试。") }
         for field in definition.fields {
             guard let raw = draft.fieldText[field.id] else { continue }
@@ -225,12 +228,17 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         } catch { self.error = error.localizedDescription }
     }
     public func select(operationID: String, modelID: String) {
+        selectDraft(operationID: operationID, modelID: modelID, preserveHistorical: false)
+    }
+    private func selectDraft(operationID: String, modelID: String, preserveHistorical: Bool) {
         guard isLoaded, let operation = WorkflowRegistry.standard.operation(operationID),
               operation.definition.modelKind != nil else { return }
         let key = operationID + "|" + modelID
         if !state.drafts.contains(where: { $0.id == key }) {
+            guard preserveHistorical || operation.definition.quickCategory != .audio || operation.definition.quickAudio != nil else { return }
             var node = operation.definition.makeNode()
             node.parameters["modelID"] = .text(modelID)
+            if operation.definition.quickAudio != nil { node.parameters["promptText"] = .text("") }
             // The text field remains editable; no output from a previous model is reused.
             if WorkflowModelRoutes.isLanguage(operationID) { node.parameters["outputMode"] = .text("text") }
             if WorkflowModelRoutes.isImage(operationID) { node.parameters["count"] = .integer(1) }
@@ -246,6 +254,19 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     public func setParameter(_ key: String, value: WorkflowScalar, draftID: String) {
         guard isLoaded, let index = state.drafts.firstIndex(where: { $0.id == draftID }), key != "modelID" else { return }
         state.drafts[index].node.parameters[key] = value; scheduleSave()
+    }
+    public func setAudioDurationSeconds(_ text: String, draftID: String) {
+        guard isLoaded, let index = state.drafts.firstIndex(where: { $0.id == draftID }),
+              QuickAudioPresentation.form(for: state.drafts[index]) == .mrt2Text else { return }
+        state.drafts[index].fieldText["quickDurationSeconds"] = text
+        if let frames = QuickAudioPresentation.frames(seconds: text) {
+            state.drafts[index].node.parameters["durationFrames"] = .integer(frames)
+        }
+        scheduleSave()
+    }
+    public func canRetry(_ run: QuickRunRecord) -> Bool {
+        allowsSubmission() && isLoaded && !isRunning && saveIssue == nil && pendingSaveRunID == nil &&
+            [.failed, .cancelled, .interrupted, .partial].contains(run.status) && Self.validationIssue(run.draft) == nil
     }
     public func setAttempts(_ count: Int, draftID: String) {
         guard (1...8).contains(count), let index = state.drafts.firstIndex(where: { $0.id == draftID }) else { return }
@@ -370,7 +391,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         if WorkflowModelRoutes.isImage(node.operationID), !(1...8).contains(node.parameters["count"]?.integer ?? 1) {
             error = "此图像节点的候选次数不在 1–8 范围，原快速草稿未改变。"; return
         }
-        select(operationID: node.operationID, modelID: model)
+        selectDraft(operationID: node.operationID, modelID: model, preserveHistorical: true)
         guard let index = state.drafts.firstIndex(where: { $0.id == state.selectedDraftID }) else { return }
         state.drafts[index].node = node; state.drafts[index].inputs = inputs
         if WorkflowModelRoutes.isImage(node.operationID) {
@@ -422,11 +443,13 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     public func retryAttempt(_ id: UUID) {
         guard allowsSubmission(), isLoaded, !isRunning, saveIssue == nil, pendingSaveRunID == nil,
               let previous = state.runs.first(where: { $0.id == id }),
-              [.failed, .cancelled, .interrupted, .partial].contains(previous.status) else { return }
+              canRetry(previous) else { return }
         var captured = previous.draft; captured.attempts = 1
         launch([captured], retryOf: id)
     }
     private func launch(_ attempts: [QuickDraft], retryOf: UUID? = nil) {
+        guard !attempts.isEmpty else { return }
+        if let issue = attempts.compactMap(Self.validationIssue).first { error = issue.localizedDescription; return }
         isRunning = true; cancelRequested = false; error = nil; streamingText = ""; phase = "正在保存输入…"
         let batch = UUID()
         runTask = Task { [self] in

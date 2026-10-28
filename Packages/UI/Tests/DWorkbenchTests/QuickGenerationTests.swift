@@ -462,6 +462,39 @@ struct QuickGenerationTests {
         try await quick.flush(); try await canvas.close(); try await store.close()
     }
 
+    @Test(arguments: ["d.music.generate", WorkflowModelRoutes.ace])
+    func complexAudioDraftColdReadAndExactWorkflowTransfer(operation: String) async throws {
+        let (store, engine, quick, canvas) = try await fixture()
+        var node = try #require(WorkflowRegistry.standard.operation(operation)?.definition.makeNode())
+        node.parameters["modelID"] = .text("fixture:audio-exact")
+        let inputs: [String: WorkflowValue]
+        if operation == "d.music.generate" {
+            inputs = ["notes": .data(try WorkflowNoteSequence(clock: .seconds, notes: [], duration: 4).datum())]
+            node.parameters["durationFrames"] = .integer(123)
+        } else {
+            let bytes = try WorkflowMusicPrograms.render(sequence: .init(clock: .seconds, notes: [], duration: 1), sampleRate: 48000)
+            let ref = try await store.publishWorkflowAsset(data: bytes, mediaType: "audio/wav", name: "source", operationID: "d.asset.import").record.reference
+            inputs = ["source": .asset(ref), "reference": .asset(ref)]
+            node.parameters["mode"] = .text("cover")
+            node.parameters["coverStrength"] = .decimal(0.6)
+        }
+        quick.useSettings(node, inputs: inputs)
+        let original = try #require(quick.draft)
+        #expect(!quick.canStart); #expect(quick.audioRequiresWorkflow)
+        try await quick.flush()
+        #expect(try await store.quickCreationState().drafts.contains(original))
+        canvas.addBlankGraph(); let target = try #require(canvas.canvasInsertionTarget())
+        try await canvas.insertQuickSettings(original, target: target)
+        let transferred = try #require(canvas.graph?.nodes.first(where: { $0.operationID == operation }))
+        #expect(transferred.parameters == original.node.parameters)
+        #expect(canvas.graph?.connections.filter { $0.targetNode == transferred.id }.count == inputs.count)
+        #expect(quick.draft == original); #expect(await engine.requests.isEmpty)
+        try await quick.flush(); try await canvas.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await reopened.quickCreationState().drafts.contains(original))
+        try await reopened.close()
+    }
+
     @Test func unknownStateAndSameRevisionExternalEditNeverOverwritten() async throws {
         let (store, _, quick, canvas) = try await fixture()
         try await quick.flush()

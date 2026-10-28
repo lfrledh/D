@@ -28,7 +28,7 @@ enum WorkflowACEOperation {
             .init("repaintStrength", "Repaint 强度", .decimal, .decimal(1)),
             .init("startFrame", "重绘起始采样帧", .integer, .integer(0)),
             .init("endFrame", "重绘结束采样帧（不含）", .integer, .integer(48000)),
-            .init("seed", "种子", .text(multiline: false), .text("42")), WorkflowLanguageOperations.modelField], modelKind: .music, quickCategory: .audio),
+            .init("seed", "种子", .text(multiline: false), .text("42")), WorkflowLanguageOperations.modelField], modelKind: .music, quickCategory: .audio, quickAudio: .aceGenerate),
         validate: { node in
             let p = node.parameters
             guard let seed = UInt64(p["seed"]?.string ?? ""), seed <= UInt32.max,

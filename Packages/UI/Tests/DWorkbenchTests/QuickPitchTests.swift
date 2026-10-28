@@ -32,25 +32,35 @@ struct QuickPitchTests {
         let asset = try await store.publishWorkflowAsset(data: bytes, mediaType: "audio/wav", name: "fixture source", operationID: "d.asset.import")
         return (store, bytes, asset.record.reference)
     }
-    @Test(arguments: [false, true]) func realQuickCommandPinsAttemptAndSaveRetryDoesNotInferAgain(failPublication: Bool) async throws {
+    @Test(arguments: [false, true]) func historicalAdmittedAttemptAndSaveRetryPreserveIdentityWithoutNewQuickAdmission(failPublication: Bool) async throws {
         let (store, original, ref) = try await fixture()
         let engine = QuickPitchEngine(root: store.rootURL)
         let session = WorkbenchSession(engine: engine, backendID: "fixture.pitch", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
-        let quick = QuickGenerationController(store: store) {
-            WorkflowServices(store: store, session: session) { _, identity in
-                .init(identity: identity, reference: .init(directory: store.rootURL, revision: PitchAnalysisRequest.modelSHA256), backendID: "fixture.pitch")
-            }
+        let services = WorkflowServices(store: store, session: session) { _, identity in
+            .init(identity: identity, reference: .init(directory: store.rootURL, revision: PitchAnalysisRequest.modelSHA256), backendID: "fixture.pitch")
         }
-        await quick.load(); quick.select(operationID: "d.music.pitch", modelID: "fixture:exact-pitch")
-        quick.setInput("input", value: .asset(ref), draftID: try #require(quick.draft?.id))
-        try await quick.flush()
-        let frozen = try #require(quick.draft)
+        // This was admitted by the historical version before Quick's scope narrowed.
+        // Persist the exact frozen attempt; current Quick must not newly admit pitch.
+        var node = WorkflowMusicOperations.pitch.definition.makeNode()
+        node.parameters["modelID"] = .text("fixture:exact-pitch")
+        let frozen = QuickDraft(id: "d.music.pitch|fixture:exact-pitch", node: node, inputs: ["input": .asset(ref)])
+        var state = try await store.quickCreationState()
+        var run = QuickRunRecord(id: UUID(), draft: frozen, createdAt: Date(), status: .running, outputs: [:], candidates: [], issue: nil)
+        state.runs = [run]
+        state.revision = try await store.saveQuickCreationState(state, expectedRevision: state.revision)
+        let context = WorkflowExecutionContext(node: frozen.node, stepID: run.id, inputs: frozen.inputs)
         let workflows = store.rootURL.appendingPathComponent("Workflows")
         if failPublication { try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: workflows.path) }
         defer { if failPublication { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: workflows.path) } }
-        #expect(quick.canStart)
-        quick.start(); await quick.waitForCompletion()
-        let run = try #require(quick.state.runs.last)
+        try services.beginPlan()
+        do {
+            guard case .outputs(let values) = try await services.executeCall(context) else { Issue.record("Expected outputs"); return }
+            run.outputs = values
+            #expect(!failPublication)
+        } catch {
+            #expect(failPublication); #expect(services.hasPendingSaves)
+            run.status = .failed
+        }
         let requests = await engine.requests
         #expect(requests.count == 1)
         let request = try #require(requests.first)
@@ -59,20 +69,22 @@ struct QuickPitchTests {
         #expect(input.source.assetID == ref.assetID && input.source.contentSHA256 == ref.sha256)
         #expect(run.draft == frozen)
         if failPublication {
-            #expect(quick.pendingSaveRunID == run.id)
+            #expect(services.hasPendingSaves)
             #expect(run.status == .failed)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: workflows.path)
-            await quick.retrySave()
-            #expect(quick.pendingSaveRunID == nil)
+            run.outputs = try await services.retryQuickPublications(context)
+            #expect(!services.hasPendingSaves)
             #expect(await engine.requests.count == 1)
         }
-        let saved = try #require(quick.state.runs.last)
+        run.status = .completed; state.runs = [run]
+        state.revision = try await store.saveQuickCreationState(state, expectedRevision: state.revision)
+        let saved = try #require(state.runs.last)
         #expect(saved.status == .completed)
         let output = try #require(saved.outputs["pitch"]?.asset)
         let record = try #require(try await store.workflowState().archive?.assets.first { $0.reference == output })
         #expect(record.parents == [ref] && record.stepID == run.id)
         #expect(try await store.workflowData(ref) == original)
-        try await quick.prepareForTermination(); try await store.close()
+        try await store.close()
         let reopened = try await ProjectStore.open(at: store.rootURL)
         #expect(try await reopened.quickCreationState().runs.last == saved)
         #expect(try await reopened.workflowData(ref) == original)

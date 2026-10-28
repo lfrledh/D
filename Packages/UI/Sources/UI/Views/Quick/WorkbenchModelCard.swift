@@ -12,6 +12,7 @@ struct WorkbenchModelCard: View {
     var canChange = true
     var changeUnavailableReason: String? = nil
     var usingDefault = false
+    var compact = false
     @Environment(\.dLanguageStore) private var language
     @State private var details = false
     @Environment(\.workbenchMenuContext) private var helpOwner
@@ -28,6 +29,7 @@ struct WorkbenchModelCard: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(name).workbenchHelp("MODEL-CARD").font(.system(size: 15, weight: .semibold)).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             if definition.modelKind != nil { ModelSpecificationSummary(descriptor: descriptor) }
+            if !compact {
             Text(WorkflowCanvasPresentation.operationDetail(definition, language: language)).workbenchHelp("MODEL-PURPOSE")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 4) {
@@ -39,6 +41,7 @@ struct WorkbenchModelCard: View {
                     Text(consistencyText(language, "copy.output") + " · " + WorkflowCanvasPresentation.portTitle(operationID: definition.id, port: port, input: false, language: language))
                 }
             }.workbenchHelp("MODEL-IO").font(.caption).fixedSize(horizontal: false, vertical: true)
+            }
             if usingDefault && definition.modelKind != nil { Text(consistencyText(language, "copy.usingDefault")).font(.caption) }
             if definition.modelKind != nil { Text(status).workbenchHelp("MODEL-STATUS").font(.callout).foregroundStyle(.secondary) }
             HStack {

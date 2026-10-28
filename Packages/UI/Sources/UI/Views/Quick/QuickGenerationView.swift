@@ -38,10 +38,13 @@ struct QuickGenerationView: View {
     @State private var detailRun: QuickRunRecord?
     @State private var pendingPreview: WorkflowAssetReference?
     @State private var advanced = false
+    @State private var audioPlayback = QuickAudioPlayback()
+    @State private var savingAudio = false
     @State private var history = false
     @State private var commandScope = WorkbenchCommandScope()
     @Environment(\.workbenchContentVisible) private var contentVisible
     @State private var inputIssue: String?
+    @State private var inputIssueCode: String?
     @State private var inputNotice: String?
     @State private var inputAction: InputAction?
     @State private var preview: WorkflowAssetReference?
@@ -76,7 +79,9 @@ struct QuickGenerationView: View {
                             Button(refinementText("resultDetails", fallback: "结果详情"), systemImage: "info.circle") { detailRun = run }
                         }
                     }
-                    if quick.category == .image || quick.category == .video {
+                    if quick.category == .audio {
+                        audioStage
+                    } else if quick.category == .image || quick.category == .video {
                         mediaStage
                     } else {
                         WorkbenchScrollView {
@@ -89,7 +94,9 @@ struct QuickGenerationView: View {
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                    if let definition, let draft = quick.draft,
+                    if quick.category == .audio {
+                        QuickAudioInput(quick: quick, continueInWorkflow: onSettingsToCanvas)
+                    } else if let definition, let draft = quick.draft,
                        !definition.fields.filter({ ["task", "promptText"].contains($0.id) }).isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             ForEach(definition.fields.filter { ["task", "promptText"].contains($0.id) }) { field in
@@ -99,7 +106,7 @@ struct QuickGenerationView: View {
                         }.frame(maxHeight: min(180, geometry.size.height * 0.28))
                     }
                     if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error {
-                        WorkbenchIssueText(raw: issue, key: inputIssue == nil && quick.inputIssue == issue ? quick.inputIssueCode : nil).font(.caption).foregroundStyle(.red).lineLimit(3).textSelection(.enabled)
+                        WorkbenchIssueText(raw: issue, key: inputIssue != nil ? inputIssueCode : (quick.inputIssue == issue ? quick.inputIssueCode : nil)).font(.caption).foregroundStyle(.red).lineLimit(3).textSelection(.enabled)
                     }
                     generationBar
                     }.padding(12).workbenchPanel(cornerRadius: 16)
@@ -118,9 +125,12 @@ struct QuickGenerationView: View {
                     .padding(.trailing, WorkbenchSidebarLayout.occupiedWidth(rightShown, leading: false, available: geometry.size.width))
                     .workbenchMorph(value: leftShown).workbenchMorph(value: rightShown)
                 WorkbenchSidebar(leading: true, expanded: leftShown,
-                    title: consistencyText(language, "tabs." + leftTab.rawValue),
+                    title: quick.category == .audio ? audioText("settings") : consistencyText(language, "tabs." + leftTab.rawValue),
                     identifier: "quick-settings-toggle", hostIdentifier: "quick-settings-host",
                     toggle: { sidebars.leading.toggle() }) {
+                        if quick.category == .audio {
+                            WorkbenchScrollView { VStack(alignment: .leading, spacing: 16) { modelHeader; QuickAudioSettings(quick: quick) }.padding(.bottom, 16) }
+                        } else {
                         VStack(spacing: 0) {
                             WorkbenchSidebarTabs(title: consistencyText(language, "tabs.tools"), selection: $leftTab, choices: [
                                 (.settings, consistencyText(language, "tabs.settings")), (.assets, consistencyText(language, "tabs.assets"))], helpPrefix: "TAB-QUICK-LEFT-")
@@ -143,32 +153,34 @@ struct QuickGenerationView: View {
                             }
                         }
                     }
+                }
                 WorkbenchSidebar(leading: false, expanded: rightShown,
-                    title: consistencyText(language, "tabs." + rightTab.rawValue),
+                    title: quick.category == .audio ? audioText(rightTab == .results ? "assets" : "history") : consistencyText(language, "tabs." + rightTab.rawValue),
                     identifier: "quick-assets-toggle", hostIdentifier: "quick-assets-host",
                     toggle: { sidebars.trailing.toggle() }) {
                         VStack(spacing: 0) {
                             WorkbenchSidebarTabs(title: consistencyText(language, "tabs.output"), selection: $rightTab, choices: [
-                                (.results, consistencyText(language, "tabs.results")), (.history, consistencyText(language, "tabs.history"))], helpPrefix: "TAB-QUICK-RIGHT-")
+                                (.results, quick.category == .audio ? audioText("assets") : consistencyText(language, "tabs.results")), (.history, quick.category == .audio ? audioText("history") : consistencyText(language, "tabs.history"))], helpPrefix: "TAB-QUICK-RIGHT-")
                             WorkbenchSidebarPages(selection: rightTab, choices: RightTab.allCases, identifier: "quick-right") { tab in
                                 if tab == .results {
                         WorkbenchScrollView {
                             LazyVStack(alignment: .leading, spacing: 10) {
-                                Text(refinementText("resultsAndCandidates", fallback: "结果与候选")).font(.caption.bold())
+                                if quick.category != .audio { Text(refinementText("resultsAndCandidates", fallback: "结果与候选")).font(.caption.bold()) }
                                 ForEach(mediaReferences, id: \.self) { reference in
                                     Button { selectedResults[quick.category] = reference } label: {
                                         VStack(alignment: .leading, spacing: 4) {
                                             if reference.kind == .image { QuickAssetPreview(store: quick.store, reference: reference, compact: true).frame(height: 100) }
-                                            QuickInputAssetName(store: quick.store, reference: reference)
-                                            Text(WorkflowCanvasPresentation.kind(reference.kind, language: language)).font(.caption).foregroundStyle(.secondary)
+                                            if quick.category == .audio { QuickAudioCandidate(store: quick.store, reference: reference, attempt: run(containing: reference)?.attemptIndex) }
+                                            else { QuickInputAssetName(store: quick.store, reference: reference)
+                                            Text(WorkflowCanvasPresentation.kind(reference.kind, language: language)).font(.caption).foregroundStyle(.secondary) }
                                         }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
                                             .background(selectedMedia == reference ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 10))
                                             .contentShape(.interaction, RoundedRectangle(cornerRadius: 10))
                                     }.buttonStyle(.plain)
                                 }
                                 if mediaReferences.isEmpty {
-                                    ForEach(quick.visibleRuns) { run in runCard(run) }
-                                    if quick.visibleRuns.isEmpty { Text(refinementText("noResults", fallback: "尚无结果")).foregroundStyle(.secondary).padding() }
+                                    if quick.category != .audio { ForEach(quick.visibleRuns) { run in runCard(run) } }
+                                    if quick.visibleRuns.isEmpty || quick.category == .audio { Text(refinementText("noResults", fallback: "尚无结果")).foregroundStyle(.secondary).padding() }
                                 }
                             }.padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 16)
                         }
@@ -202,25 +214,38 @@ struct QuickGenerationView: View {
         }
         .onChange(of: quick.state.selectedDraftID) { _, _ in
             inputAction?.feedbackValid = false
-            inputIssue = nil; inputNotice = nil; history = false
+            inputIssue = nil; inputIssueCode = nil; inputNotice = nil; history = false
         }
         .onChange(of: ObjectIdentifier(quick)) { _, _ in
             inputAction?.feedbackValid = false
-            inputIssue = nil; inputNotice = nil
+            inputIssue = nil; inputIssueCode = nil; inputNotice = nil
         }
-        .onDisappear { inputAction?.feedbackValid = false }
+        .task(id: audioIdentity) {
+            audioPlayback.stop()
+            guard contentVisible, quick.category == .audio, detailRun == nil, preview == nil, let reference = selectedMedia else { return }
+            // Pin before loading so a new batch cannot replace an existing selection.
+            selectedResults[.audio] = reference
+            await audioPlayback.select(reference, store: quick.store)
+        }
+        .onChange(of: selectedResults[.audio]) { _, _ in
+            if quick.category == .audio { inputIssue = nil; inputIssueCode = nil; inputNotice = nil }
+        }
+        .onChange(of: contentVisible) { _, visible in if !visible { audioPlayback.stop() } }
+        .onDisappear { inputAction?.feedbackValid = false; audioPlayback.stop() }
     }
     private var modelHeader: some View {
             VStack(alignment: .leading, spacing: 10) {
                 if let definition {
                     WorkbenchModelCard(definition: definition, modelID: quick.draft?.node.parameters["modelID"]?.string,
                         choices: model.projectSession.explicitModelChoices,
-                        status: readinessTitle(quick.draft?.node.parameters["modelID"]?.string ?? ""), change: onChooseModel)
+                        status: readinessTitle(quick.draft?.node.parameters["modelID"]?.string ?? ""), change: onChooseModel, compact: quick.category == .audio)
                     WorkflowModelPreparationView(identity: quick.draft?.node.parameters["modelID"]?.string ?? "",
                         fallbackReady: model.projectSession.explicitModelReadiness[quick.draft?.node.parameters["modelID"]?.string ?? ""] == .available)
-                } else { Button(consistencyText(language, "MODEL-CHANGE"), action: onChooseModel) }
+                } else { Button(quick.category == .audio ? audioText("chooseModel") : consistencyText(language, "MODEL-CHANGE"), action: onChooseModel) }
                 if let draft = quick.draft {
-                    Button(baselineText(language, "label.7d9795fa3684")) { onSettingsToCanvas(draft) }
+                    if quick.category == .audio {
+                        WorkbenchMenu { WorkbenchMenuAction(audioText("continue")) { onSettingsToCanvas(draft) } } label: { Image(systemName: "ellipsis").frame(width: 28, height: 28) }.help(audioText("details"))
+                    } else { Button(baselineText(language, "label.7d9795fa3684")) { onSettingsToCanvas(draft) } }
                 }
             }.padding(20)
     }
@@ -347,11 +372,11 @@ struct QuickGenerationView: View {
                 Spacer()
                 if quick.isRunning {
                     ProgressView().controlSize(.small)
-                    Button(baselineText(language, "label.ea6aa5fbc2d9")) { Task { await quick.cancel() } }
+                    Button(quick.category == .audio ? audioText("stop") : baselineText(language, "label.ea6aa5fbc2d9")) { Task { await quick.cancel() } }
                 } else if quick.pendingSaveRunID != nil || quick.saveIssue != nil {
-                    Button(baselineText(language, "label.fb412bfea70f")) { Task { await quick.retrySave() } }
+                    Button(quick.category == .audio ? audioText("retrySave") : baselineText(language, "label.fb412bfea70f")) { Task { await quick.retrySave() } }
                 } else {
-                    Button(baselineText(language, "label.1ad1463fe16f")) { quick.start() }.buttonStyle(WorkbenchPrimaryButtonStyle())
+                    Button(quick.category == .audio ? audioText("generate") : baselineText(language, "label.1ad1463fe16f")) { quick.start() }.buttonStyle(WorkbenchPrimaryButtonStyle())
                         .disabled(!quick.canStart)
                         .accessibilityIdentifier("quick-generate")
                 }
@@ -369,7 +394,7 @@ struct QuickGenerationView: View {
         for run in quick.visibleRuns {
             for reference in references(run) where !result.contains(reference) { result.append(reference) }
         }
-        return result
+        return quick.category == .audio ? result.filter { $0.kind == .audio } : result
     }
     private var selectedMedia: WorkflowAssetReference? {
         if let selected = selectedResults[quick.category], mediaReferences.contains(selected) { return selected }
@@ -406,6 +431,59 @@ struct QuickGenerationView: View {
             }
         }.padding(12).workbenchPanel(cornerRadius: 16).accessibilityIdentifier("quick-fixed-preview")
     }
+    private func audioText(_ key: String) -> String { workflowText(language, "quick.audio." + key) }
+    private var audioIdentity: String {
+        guard quick.category == .audio, contentVisible else { return "inactive" }
+        return "\(ObjectIdentifier(quick.store)):\(quick.category.rawValue):\(selectedMedia?.assetID.uuidString ?? "none"):\(selectedMedia?.version.uuidString ?? "none"):\(contentVisible):\(detailRun?.id.uuidString ?? "none"):\(preview?.assetID.uuidString ?? "none")"
+    }
+    private var audioStage: some View {
+        VStack(spacing: 16) {
+            if let reference = selectedMedia {
+                HStack {
+                    QuickAudioCandidate(store: quick.store, reference: reference, attempt: run(containing: reference)?.attemptIndex)
+                    Spacer()
+                    Button(audioText("details"), systemImage: "info.circle") { detailRun = run(containing: reference) }.labelStyle(.iconOnly).help(audioText("details"))
+                    WorkbenchMenu {
+                        WorkbenchMenuAction(audioText("save"), systemImage: "square.and.arrow.down") { Task { await saveAudio(reference) } }.disabled(savingAudio)
+                        WorkbenchMenuAction(audioText("export"), systemImage: "square.and.arrow.up") { Task { await export(reference) } }
+                        WorkbenchMenuAction(audioText("continue")) { onResultToCanvas(reference) }
+                    } label: { Image(systemName: "ellipsis").frame(width: 28, height: 28) }.help(audioText("details"))
+                }
+                Spacer(minLength: 8)
+                QuickAudioPlayer(playback: audioPlayback, beforePlay: {
+                    model.projectSession.audio?.transport.stopPlayback()
+                    model.projectSession.audioCreationTransport.stopPlayback()
+                })
+                Spacer(minLength: 8)
+                HStack {
+                    Button(audioText("previous"), systemImage: "chevron.left") { stepCandidate(-1) }.labelStyle(.iconOnly).help(audioText("previous")).disabled(reference == mediaReferences.first)
+                    Text("\((mediaReferences.firstIndex(of: reference) ?? 0) + 1) / \(mediaReferences.count)").monospacedDigit()
+                    Button(audioText("next"), systemImage: "chevron.right") { stepCandidate(1) }.labelStyle(.iconOnly).help(audioText("next")).disabled(reference == mediaReferences.last)
+                }
+            } else {
+                Spacer(); Image(systemName: "waveform").font(.largeTitle).foregroundStyle(.secondary)
+                Text(audioText("empty")).foregroundStyle(.secondary); Spacer()
+            }
+            if quick.visibleRuns.contains(where: QuickAudioPresentation.hasUnexpectedOutput) { Text(audioText("outputMismatch")).font(.caption).foregroundStyle(.red) }
+            if let inputNotice { Text(inputNotice).font(.caption).foregroundStyle(.secondary) }
+        }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity).workbenchPanel(cornerRadius: 20)
+    }
+    private func saveAudio(_ reference: WorkflowAssetReference) async {
+        guard !savingAudio else { return }
+        let source = quick.store, owner = model.projectSession
+        guard owner.currentStore === source else { return }
+        savingAudio = true; inputIssue = nil; inputIssueCode = nil; inputNotice = nil
+        defer { savingAudio = false }
+        do {
+            if owner.workflow == nil { await owner.openWorkflow() }
+            guard owner.currentStore === source, let controller = owner.workflow,
+                  controller.services.store === source, let identity = controller.assetLibraryOwner else { throw WorkflowIssue("Project changed.", code: "container.issue.targetChanged") }
+            try await controller.setCollected([.asset(reference)], collected: true, owner: identity)
+            onAssetsChanged()
+            guard quick.store === source, selectedMedia == reference else { return }
+            inputIssue = nil; inputIssueCode = nil; inputNotice = audioText("saved")
+        } catch { if quick.store === source, selectedMedia == reference { inputIssue = error.localizedDescription; inputIssueCode = (error as? WorkflowIssue)?.code } }
+    }
     private var currentRuns: [QuickRunRecord] {
         guard let latest = quick.visibleRuns.first else { return [] }
         return quick.visibleRuns.filter { ($0.batchID ?? $0.id) == (latest.batchID ?? latest.id) }
@@ -435,7 +513,8 @@ struct QuickGenerationView: View {
                                 }
                                 ForEach(references(run), id: \.assetID) { reference in
                                     VStack(alignment: .leading) {
-                                        QuickAssetPreview(store: quick.store, reference: reference, compact: true)
+                                        if quick.category == .audio { QuickAudioCandidate(store: quick.store, reference: reference, attempt: run.attemptIndex) }
+                                        else { QuickAssetPreview(store: quick.store, reference: reference, compact: true) }
                                         HStack {
                                             Button(baselineText(language, "label.db8db0530432")) {
                                                 if detailRun != nil { pendingPreview = reference; detailRun = nil }
@@ -449,8 +528,9 @@ struct QuickGenerationView: View {
                                 if let issue = run.issue { Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
                                 if [.failed, .cancelled, .interrupted, .partial].contains(run.status) {
                                     Button(baselineText(language, "retry.generate", fallback: "按本次输入重新生成")) { quick.retryAttempt(run.id) }
-                                        .disabled(quick.isRunning || quick.pendingSaveRunID != nil || quick.saveIssue != nil)
+                                        .disabled(!quick.canRetry(run))
                                 }
+                                if QuickAudioPresentation.requiresWorkflow(run.draft) { Button(audioText("continue")) { onSettingsToCanvas(run.draft) } }
                                 if run.retryOf != nil { Text(baselineText(language, "retry.record", fallback: "这是一次重新生成，原记录仍保留。")).font(.caption).foregroundStyle(.secondary) }
                                 DisclosureGroup(baselineText(language, "label.b27824d6e4d6")) {
                                     Text(String(data: (try? JSONEncoder().encode(run.draft)) ?? Data(), encoding: .utf8) ?? "")
@@ -513,7 +593,7 @@ struct QuickGenerationView: View {
             await applyInput(try QuickInputImport.clipboardItems(), port: port, draft: draft, ticket: ticket)
         } catch {
             if canShowInputFeedback(ticket, draft: draft, controller: controller, store: store) {
-                inputIssue = error.localizedDescription
+                inputIssue = error.localizedDescription; inputIssueCode = (error as? WorkflowIssue)?.code
             }
         }
     }
@@ -524,6 +604,7 @@ struct QuickGenerationView: View {
                                                 resolveSharedAsset: onResolveSharedAsset)
         if result.published > 0 { onAssetsChanged() }
         guard canShowInputFeedback(ticket, draft: draft, controller: controller, store: store) else { return }
+        inputIssueCode = nil
         inputIssue = result.cancelled
             ? inputLabel("cancelled", english: "Import cancelled. Already saved assets remain in the library; the current input was not changed.",
                          chinese: "导入已取消；已保存的素材仍在资料库，当前输入未修改。")
@@ -534,11 +615,11 @@ struct QuickGenerationView: View {
             : nil
     }
     private func editInput(_ action: () throws -> Void) {
-        do { try action(); inputIssue = nil }
-        catch { inputIssue = error.localizedDescription }
+        do { try action(); inputIssue = nil; inputIssueCode = nil }
+        catch { inputIssue = error.localizedDescription; inputIssueCode = (error as? WorkflowIssue)?.code }
     }
     private var exportMenuCommand: WorkbenchGenerationCommand? {
-        guard contentVisible, quick.category == .image || quick.category == .video, let reference = selectedMedia else { return nil }
+        guard contentVisible, [.image, .video, .audio].contains(quick.category), let reference = selectedMedia else { return nil }
         return .init(title: systemMenuText(language, "export"), isEnabled: detailRun == nil && preview == nil) {
             guard commandScope.permitsVisibleCommands, contentVisible, selectedMedia == reference else { return }
             Task { await export(reference, selectionIsCurrent: { selectedMedia == reference }) }
@@ -557,7 +638,7 @@ struct QuickGenerationView: View {
                 panel.title = systemMenuText(language, "export")
                 return await panel.begin() == .OK ? panel.url : nil
             }
-        } catch { inputIssue = error.localizedDescription }
+        } catch { inputIssue = error.localizedDescription; inputIssueCode = (error as? WorkflowIssue)?.code }
     }
 
 }
@@ -588,11 +669,13 @@ struct QuickParameterField: View {
     let onChange: (WorkflowScalar) -> Void
     let raw: String?
     let onRaw: (String) -> Void
+    var titleOverride: String? = nil
+    var hidesTitle = false
     @Environment(\.dLanguageStore) private var language
-    private var title: String { WorkflowCanvasPresentation.fieldTitle(operationID: operationID, field: field, language: language) }
+    private var title: String { titleOverride ?? WorkflowCanvasPresentation.fieldTitle(operationID: operationID, field: field, language: language) }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.subheadline)
+            if !hidesTitle { Text(title).font(.subheadline) }
             switch field.kind {
             case .text(let multiline):
                 if multiline {

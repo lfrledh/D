@@ -1410,6 +1410,7 @@ public final class ProjectSession {
     public func supportsQuick(operationID: String, identity: String, category: QuickCategory, conversation: Bool) -> Bool {
         guard let definition = WorkflowRegistry.standard.operation(operationID)?.definition,
               definition.quickCategory == category,
+              category != .audio || definition.quickAudio != nil,
               WorkflowModelRoutes.draftChoice(operationID: operationID, modelID: identity) != nil else { return false }
         // Existing controls can supply text, individual media assets, and declared
         // media lists. Required generic records/collections stay in the workflow.
