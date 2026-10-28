@@ -1,6 +1,10 @@
 # 当前行动与接手点
 
-当前施工：**MODEL-FILES-READINESS-COPY-B2-20261028**，从完整 `38c9158019f0c85231fd7766fbd2ff80f2df6648` 与生产 cf2fb633 原专属树接续；Lead唯一写入。两个文件使用方式、准确模型状态通知、Quick目录约束与第一批02真实标签已实施，正在定向回归/正常Release收口。**02最终决定已批准，下文历史待决不再约束本轮；Quick整套侧栏提案仍待确认。** [本轮分级回执](tasks/D-UI-CONSOLIDATED-01.md#model-files-readiness-copy-b2-20261028实施中)。当前桌面候选在完成新包前仍为下述cf2fb633，不用它冒充本轮验收。
+当前交审：**MODEL-FILES-READINESS-COPY-B2-20261028**，起点完整 `38c9158019f0c85231fd7766fbd2ff80f2df6648`；原专属树/分支累计接续，fetch无遗漏后继、祖先exit0。最终生产 **`c464b6e41b2ef30131ccd7cfa46bb4b80dfc769c`**。两个文件使用方式、准确模型状态通知、固定节点/Quick同目录和第一批02真实标签已实施；**02最终批准已落实，旧待决仅是历史。Quick整套侧栏提案仍待确认。** [A01–A30分级回执](tasks/D-UI-CONSOLIDATED-01.md#model-files-readiness-copy-b2-20261028)。
+
+桌面 **D 最新版** → `CurrentD/Model-Files-c464b6e4/D.app`；正常完整Release、Apple Development签名、七引擎/零第三方权重。真实SwiftF0原位运行、缺源失败即时状态、显式副本选用/源隔离/冷开独立执行和保存保持完成；没有新下载。副本最终run F3D320F4 completed/2输出；最后正常冷开5423。原四条历史、草稿与chat保持；旧包及独立编译缓存清理，模型/项目/证据保留。
+
+**不宣称全部验收通过**：V01–V08无本轮像素（已有屏幕访问前置false/CUA不可用），大资源转换/普通App长下载三节点/标签全路径及英文窄窗仍按准确等级保留。非catalog旧精确配置尚缺完整副本配方，原位兼容保留，是工程例外。固定目录已支持两路径，不以这项例外隐藏缺口。完整交付及远端SHA绑定既有`CurrentD/receipt.json`。停在用户/顾问审阅，不合并main、不上传或发布。最新用户性能评价仍为NODE/PAN明显改善、ZOOM多数满意；本轮无全面性能调查。
 
 以下为上轮交付事实：
 
