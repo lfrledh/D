@@ -1180,7 +1180,7 @@ public actor ModelLibrary {
             $0.verifiedRoot = directory.identity; $0.verifiedFiles = files; $0.verifiedDirectories = directories
             $0.record.directory = directory.url; $0.record.downloadedBytes = $0.record.totalBytes
             $0.record.state = needsPreparation && $0.control?.role != .execution ? .preparationRequired : .installed
-            $0.record.error = nil; $0.record.availability = .available
+            $0.record.error = nil; $0.record.availability = .available; $0.record.locationIssue = nil
             if $0.control == nil { $0.control = .init(fileState: .verified, origin: .local) }
             $0.control?.fileState = .verified; $0.control?.lastVerified = Date()
 

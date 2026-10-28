@@ -746,6 +746,13 @@ extension ModelLibraryTests {
         let lease = try await library.acquire(copy)
         await library.release(lease)
         #expect(await library.availabilityCheckCount == before + 1, "Successful admission adds no display scan")
+        try fixture.writeModel(at: fixture.source)
+        try await library.reverifyResource(.init(rawValue: original.rawValue))
+        let recovered = try #require(await library.snapshot().records.first { $0.id == original })
+        #expect(recovered.availability == .available && recovered.locationIssue == nil)
+        #expect(recovered.registrationState == .registered)
+        let restored = try await library.acquire(original)
+        await library.release(restored)
         try await library.shutdown()
     }
     @Test func memorySnapshotDoesNotInspectFilesButExplicitCheckAndAdmissionDo() async throws {
