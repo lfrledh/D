@@ -115,6 +115,7 @@ public final class ModelLibraryModel {
     public var selectedResource: ModelResourceID?
     public var selectedTask: UUID?
     private(set) var selectionTitle: String?
+    @ObservationIgnored private var selectionGeneration = UUID()
     @ObservationIgnored private var selectionIsCurrent: (() -> Bool)?
     var currentSelectionTitle: String? { selectionIsCurrent?() == true ? selectionTitle : nil }
     func captureSelectionPresentation(_ title: String, isCurrent: @escaping () -> Bool) {
@@ -716,7 +717,41 @@ public final class ModelLibraryModel {
 }
 
 extension ModelLibraryModel {
-    public func clearSelectionContext() { selectionTitle = nil; selectionIsCurrent = nil; selectionAction = nil; configurationSelectionAction = nil; selectionID = nil; selectionIdentity = nil }
+    public func clearSelectionContext() { selectionGeneration = UUID(); selectionTitle = nil; selectionIsCurrent = nil; selectionAction = nil; configurationSelectionAction = nil; selectionID = nil; selectionIdentity = nil }
+    /// Moving from acquisition to existing files keeps the captured object, not
+    /// whichever node or Quick draft happens to be selected later.
+    func showExistingAcquisition(requestID: UUID, entry: ModelCatalogEntry, resource: ModelResource? = nil) {
+        guard let request = acquisitionRequest, request.id == requestID,
+              (request.catalogIDs.contains(entry.id) || (request.target == nil && request.catalogIDs.isEmpty)), catalog.contains(entry),
+              resource.map({ Self.acquisitionResources(entry, snapshot: snapshot).contains($0) }) ?? true else { return }
+        if let target = request.target {
+            guard target.isCurrent(), Self.nodeDownloadEntry(operationID: target.operationID, identity: target.identity, catalog: catalog) == entry else {
+                errorMessage = managementText("targetChanged", "选用目标或配置已改变，资源保留。"); return
+            }
+            let generation = UUID()
+            let current: @MainActor () -> Bool = { [weak self] in
+                self?.isPresented == true && self?.selectionGeneration == generation && target.isCurrent()
+            }
+            presentSelection(identity: target.identity) { [weak self] id in
+                guard let self else { return }
+                guard self.selectionGeneration == generation, self.isPresented else { return }
+                guard current(), self.snapshot?.runnableResources(identity: target.identity).contains(where: { $0.record.id == id }) == true else {
+                    self.errorMessage = self.managementText("targetChanged", "选用目标或配置已改变，资源保留。"); return
+                }
+                do {
+                    try await target.bind(id, current)
+                    guard current() else { return }
+                    self.isPresented = false; self.clearSelectionContext()
+                } catch {
+                    if self.selectionGeneration == generation, self.isPresented { self.errorMessage = error.localizedDescription }
+                }
+            }
+            selectionGeneration = generation
+            captureSelectionPresentation(target.title, isCurrent: current)
+        } else { presentManagement() }
+        resourceSearch = entry.title; resourceFilter = "all"; selectedResource = resource?.id
+        acquisitionRequest = nil
+    }
     public func presentManagement() {
         clearSelectionContext()
         workspace = "resources"

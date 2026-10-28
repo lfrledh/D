@@ -851,6 +851,70 @@ extension ModelLibraryPresentationTests {
         #expect(try Data(contentsOf: source.appendingPathComponent("payload.bin")) == bytes)
         try await library.shutdown()
     }
+
+    @Test func existingAcquisitionCopiesKeepExactTargetAndRevokeStaleSelection() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("AcquisitionCopies-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fixed = try #require(ModelCatalog.entries().first { $0.id == ModelCatalog.flux2ID })
+        let bytes = Data(repeating: 0x41, count: 4096), transfer = PresentationTransfer()
+        let entry = ModelCatalogEntry(id: fixed.id, title: "Exact copies", repository: "fixture/copies", revision: fixed.revision,
+            files: [.init(path: "payload.bin", size: UInt64(bytes.count), sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())],
+            workflowProfileID: fixed.workflowProfileID, workflowIdentity: fixed.workflowIdentity)
+        let library = try await ModelLibrary(stateDirectory: root.appendingPathComponent("state"), catalog: [entry], transport: transfer)
+        var ids: [ModelID] = []
+        for name in ["missing", "ready"] {
+            let source = root.appendingPathComponent(name)
+            try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+            try bytes.write(to: source.appendingPathComponent("payload.bin"))
+            ids.append(try await library.registerExisting(at: source, catalogID: entry.id))
+        }
+        try FileManager.default.removeItem(at: root.appendingPathComponent("missing/payload.bin"))
+        do { _ = try await library.resolve(ids[0]); Issue.record("Missing original unexpectedly resolved") }
+        catch { /* Execution admission publishes only the failed installation. */ }
+        let model = ModelLibraryModel(library: library); await model.refresh()
+        var current = true, bound: [ModelID] = []
+        var delayFailure = false
+        var pending: CheckedContinuation<Void, Error>?
+        func show() async throws {
+            await model.requestNodeAcquisition(operationID: try #require(entry.workflowProfileID), identity: try #require(entry.workflowIdentity),
+                title: "Captured target", isCurrent: { current }) { id, authorized in
+                if delayFailure { try await withCheckedThrowingContinuation { pending = $0 } }
+                #expect(authorized()); _ = try await library.resolve(id)
+                #expect(authorized()); bound.append(id)
+            }
+            let request = try #require(model.acquisitionRequest)
+            model.showExistingAcquisition(requestID: request.id, entry: entry)
+            #expect(model.acquisitionRequest == nil && model.selectionIdentity == entry.workflowIdentity)
+            #expect(model.currentSelectionTitle == "Captured target" && bound.isEmpty)
+        }
+        try await show()
+        let select = try #require(model.selectionAction)
+        await select(ids[0]); #expect(bound.isEmpty && model.errorMessage != nil)
+        await select(ModelID()); #expect(bound.isEmpty)
+        current = false; await select(ids[1]); #expect(bound.isEmpty)
+        current = true; model.presentManagement(); await select(ids[1]); #expect(bound.isEmpty)
+        try await show()
+        let live = try #require(model.selectionAction)
+        await live(ids[1]); #expect(bound == [ids[1]] && !model.isPresented)
+        await live(ids[1]); #expect(bound == [ids[1]], "Completed picker cannot bind twice")
+        #expect(await transfer.count == 0 && model.snapshot?.downloads.isEmpty == true)
+        bound = []; try await show(); delayFailure = true
+        let suspended = try #require(model.selectionAction)
+        let selecting = Task { await suspended(ids[1]) }
+        for _ in 0..<100 where pending == nil { await Task.yield() }
+        let continuation = try #require(pending)
+        model.presentManagement(); model.errorMessage = "New view diagnostic"
+        continuation.resume(throwing: WorkflowIssue("Old selection failed"))
+        await selecting.value
+        #expect(bound.isEmpty && model.errorMessage == "New view diagnostic")
+        model.requestAcquisition() // Ordinary catalog selection starts without a preselected ID.
+        let browse = try #require(model.acquisitionRequest)
+        model.showExistingAcquisition(requestID: browse.id, entry: entry)
+        #expect(model.selectionAction == nil && model.selectionIdentity == nil && model.workspace == "resources")
+        try await library.shutdown()
+    }
 }
 
 

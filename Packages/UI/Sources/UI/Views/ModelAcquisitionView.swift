@@ -143,7 +143,7 @@ struct ModelAcquisitionView: View {
         } else if model.rootURL == nil && available.count > 0 {
             Button(t("chooseRoot")) { Task { await model.chooseRoot() } }.buttonStyle(WorkbenchPrimaryButtonStyle()).disabled(!model.canChooseRoot)
         } else if selected.count == 1, let entry = selected.first, matchingResources(entry).count > 1 {
-            Button(t("viewExisting")) { model.resourceSearch = entry.title; model.workspace = "resources"; model.acquisitionRequest = nil }.buttonStyle(WorkbenchPrimaryButtonStyle())
+            Button(t("viewExisting")) { model.showExistingAcquisition(requestID: request.id, entry: entry) }.buttonStyle(WorkbenchPrimaryButtonStyle())
         } else if selected.count == 1, let entry = selected.first, let current = task(entry) {
             Button(t(ModelAcquisitionPresentation.taskActionKey(current.state))) { model.selectedTask = current.id; model.workspace = "downloads"; model.acquisitionRequest = nil }.buttonStyle(WorkbenchPrimaryButtonStyle())
         } else if selected.count == 1, let entry = selected.first, let current = resource(entry), current.control.fileState == .verified {
@@ -171,7 +171,7 @@ struct ModelAcquisitionView: View {
     }
     @ViewBuilder private func existingActions(_ entry: ModelCatalogEntry) -> some View {
         if matchingResources(entry).count > 1 {
-            Button(t("viewExisting")) { model.resourceSearch = entry.title; model.workspace = "resources"; model.acquisitionRequest = nil }
+            Button(t("viewExisting")) { model.showExistingAcquisition(requestID: request.id, entry: entry) }
         } else if let current = task(entry) {
             Text(t(ModelAcquisitionPresentation.taskMessageKey(current.state))).font(.caption)
             Button(t(ModelAcquisitionPresentation.taskActionKey(current.state))) { model.selectedTask = current.id; model.workspace = "downloads"; model.acquisitionRequest = nil }
@@ -209,7 +209,8 @@ struct ModelAcquisitionView: View {
         Task { await model.confirmAcquisition(requestID: request.id, entries: entries, register: register, useTarget: use) }
     }
     private func viewResource(_ resource: ModelResource) {
-        model.selectedResource = resource.id; model.workspace = "resources"; model.acquisitionRequest = nil
+        guard let entry = model.presentationEntry(for: resource.record) else { return }
+        model.showExistingAcquisition(requestID: request.id, entry: entry, resource: resource)
     }
 }
 
