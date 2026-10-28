@@ -192,6 +192,7 @@ struct QuickGenerationTests {
     @Test func invalidOrderedInputIsVisibleAndOnlyExplicitSnapshotClearAllowsImport() async throws {
         let (store, engine, quick, canvas) = try await fixture()
         quick.select(operationID: WorkflowModelRoutes.fluxDev, modelID: "image:dev")
+        quick.setParameter("promptText", value: .text("Controlled input test"), draftID: try #require(quick.draft?.id))
         let draftID = try #require(quick.draft?.id)
         let port = try #require(quick.definition?.inputs.first(where: { $0.assetListKind == .image }))
         let image = try await store.publishWorkflowAsset(data: imageData(), mediaType: "image/png",
@@ -865,4 +866,25 @@ struct QuickGenerationTests {
         }
     }
 
+}
+
+
+extension QuickGenerationTests {
+    @Test func parameterPromptsRemainValidAndConditionalSourceCannotDisappear() async throws {
+        let (store, _, _, canvas) = try await fixture()
+        let quick = QuickGenerationController(store: store) { throw WorkflowIssue("No inference") }
+        await quick.load()
+        for operation in [WorkflowModelRoutes.qwen35, "d.image.generate", "d.video.generate", WorkflowModelRoutes.ace] {
+            quick.select(operationID: operation, modelID: "fixture")
+            #expect(quick.draft?.node.operationID == operation)
+            quick.setParameter(operation == WorkflowModelRoutes.qwen35 ? "task" : "promptText", value: .text("Controlled prompt"), draftID: try #require(quick.draft?.id))
+            #expect(quick.inputIssue == nil)
+        }
+        let draft = try #require(quick.draft)
+        quick.setParameter("mode", value: .text("cover"), draftID: draft.id)
+        #expect(quick.inputIssue != nil && !quick.canStart)
+        quick.setParameter("mode", value: .text("generate"), draftID: draft.id)
+        #expect(quick.inputIssue == nil)
+        try await quick.prepareForTermination(); try await canvas.close(); try await store.close()
+    }
 }

@@ -45,11 +45,13 @@ public struct WorkflowExecutionContext: Sendable {
 public struct WorkflowOperation: Sendable {
     public let definition: WorkflowOperationDefinition
     public let validate: @Sendable (WorkflowNode) throws -> Void
+    public let validateResolvedInputs: @Sendable (WorkflowNode, [String: WorkflowValue]) throws -> Void
     public let execute: @MainActor @Sendable (WorkflowExecutionContext, any WorkflowOperationServices) async throws -> WorkflowOperationResult
     public init(definition: WorkflowOperationDefinition,
                 validate: @escaping @Sendable (WorkflowNode) throws -> Void = { _ in },
+                validateResolvedInputs: @escaping @Sendable (WorkflowNode, [String: WorkflowValue]) throws -> Void = { _, _ in },
                 execute: @escaping @MainActor @Sendable (WorkflowExecutionContext, any WorkflowOperationServices) async throws -> WorkflowOperationResult) {
-        self.definition = definition; self.validate = validate; self.execute = execute
+        self.definition = definition; self.validate = validate; self.validateResolvedInputs = validateResolvedInputs; self.execute = execute
     }
 }
 

@@ -330,6 +330,12 @@ public final class SharedLibraryStore {
         }
     }
 
+    public func applyCollectionOrganization(_ request: WorkflowAssetCollectionRequest, runs: [WorkflowRun]) throws {
+        let keys = Set(try request.sources.map { try $0.metadataKey(owner: request.owner, runs: runs) })
+        if let folder = request.folderID { try addMembers(keys, to: folder) }
+        if let tags = request.tagIDs, !tags.isEmpty { try addTags(tags, to: keys) }
+    }
+
     public func addTags(_ ids: Set<UUID>, to keys: Set<String>) throws {
         try change { value in
             guard ids.allSatisfy({ value.tags[$0] != nil }) else { throw SharedLibraryError.missingTag }

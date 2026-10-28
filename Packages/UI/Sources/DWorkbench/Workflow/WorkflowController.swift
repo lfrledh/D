@@ -1048,6 +1048,11 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     }
 
     public func setParameter(nodeID: UUID, key: String, value: WorkflowScalar) {
+        if key == "modelID", let node = graph?.nodes.first(where: { $0.id == nodeID }),
+           let existing = node.parameters[key]?.string, !existing.isEmpty, value.string != existing,
+           registry.definition(for: node, tools: tools)?.modelKind != nil {
+            reportIssue(.init("A fixed model node cannot change model identity.", code: "workflow.model.fixedIdentity")); return
+        }
         edit { g in guard let i = g.nodes.firstIndex(where: { $0.id == nodeID }) else { return }; g.nodes[i].parameters[key] = value }
     }
     public func setDataConfiguration(nodeID: UUID, value: WorkflowDataConfiguration?) {

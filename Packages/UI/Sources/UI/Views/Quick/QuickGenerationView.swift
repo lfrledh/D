@@ -99,7 +99,7 @@ struct QuickGenerationView: View {
                         }.frame(maxHeight: min(180, geometry.size.height * 0.28))
                     }
                     if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error {
-                        Text(issue).font(.caption).foregroundStyle(.red).lineLimit(3).textSelection(.enabled)
+                        WorkbenchIssueText(raw: issue, key: inputIssue == nil && quick.inputIssue == issue ? quick.inputIssueCode : nil).font(.caption).foregroundStyle(.red).lineLimit(3).textSelection(.enabled)
                     }
                     generationBar
                     }.padding(12).workbenchPanel(cornerRadius: 16)
@@ -216,6 +216,8 @@ struct QuickGenerationView: View {
                     WorkbenchModelCard(definition: definition, modelID: quick.draft?.node.parameters["modelID"]?.string,
                         choices: model.projectSession.explicitModelChoices,
                         status: readinessTitle(quick.draft?.node.parameters["modelID"]?.string ?? ""), change: onChooseModel)
+                    WorkflowModelPreparationView(identity: quick.draft?.node.parameters["modelID"]?.string ?? "",
+                        fallbackReady: model.projectSession.explicitModelReadiness[quick.draft?.node.parameters["modelID"]?.string ?? ""] == .available)
                 } else { Button(consistencyText(language, "MODEL-CHANGE"), action: onChooseModel) }
                 if let draft = quick.draft {
                     Button(baselineText(language, "label.7d9795fa3684")) { onSettingsToCanvas(draft) }
@@ -328,7 +330,7 @@ struct QuickGenerationView: View {
                             Text(baselineText(language, "label.3238f75ca285"))
                                 .font(.caption).foregroundStyle(.secondary)
                             }
-                            if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
+                            if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error { WorkbenchIssueText(raw: issue, key: inputIssue == nil && quick.inputIssue == issue ? quick.inputIssueCode : nil).foregroundStyle(.red).textSelection(.enabled) }
                             if let inputNotice { Text(inputNotice).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                         } else {
                             if let error = quick.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }

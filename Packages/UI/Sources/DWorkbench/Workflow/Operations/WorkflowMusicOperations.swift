@@ -8,7 +8,7 @@ enum WorkflowMusicOperations {
     private static let recordOutput = WorkflowPortDefinition("output", "结果", kinds: [.record])
     static let pitch = WorkflowOperation(definition: .init(id: "d.music.pitch", title: "识别哼唱音高", detail: "SwiftF0＋连续音符分段；保留原声及连续音高，不等于 Basic Pitch。",
         inputs: [.init("input", "单声部原声", kinds: [.audio])], outputs: [recordOutput, .init("pitch", "连续音高", kinds: [.pitch])],
-        fields: [WorkflowLanguageOperations.modelField], modelKind: .pitch), execute: { c, s in
+        fields: [WorkflowLanguageOperations.modelField], modelKind: .pitch, quickCategory: .audio), execute: { c, s in
             let input = try WorkflowExecution.inputAsset("input", kind: .audio, context: c)
             let ref = try await s.analyzePitch(input, context: c)
             let result = try JSONDecoder().decode(PitchAnalysisResult.self, from: await s.readData(ref))
@@ -70,7 +70,7 @@ enum WorkflowMusicOperations {
             .init("chords", "和声", kinds: [.record, .chords], required: false)], outputs: [.init("output", "音乐", kinds: [.audio])],
         fields: [.init("promptText", "意图", .text(multiline: true), .text("Solo piano, clear melody.")),
             .init("durationFrames", "时长（25Hz帧）", .integer, .integer(100)),
-            .init("seed", "种子", .text(multiline: false), .text("42")), WorkflowLanguageOperations.modelField], modelKind: .music), execute: { c, s in
+            .init("seed", "种子", .text(multiline: false), .text("42")), WorkflowLanguageOperations.modelField], modelKind: .music, quickCategory: .audio), execute: { c, s in
             let prompt = try await WorkflowLanguageOperations.text(c.inputs["prompt"], fallback: c.node.parameters["promptText"]?.string ?? "", services: s)
             let notes: WorkflowNoteSequence?
             if let value = c.inputs["notes"] { notes = try WorkflowNoteSequence(datum: await datum(value, services: s)) } else { notes = nil }

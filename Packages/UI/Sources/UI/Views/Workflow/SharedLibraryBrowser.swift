@@ -975,7 +975,7 @@ public struct SharedLibraryBrowser: View {
         let identity: String
         if case .assetInstance(_, let instance, _) = entry.selection { identity = String(instance.uuidString.prefix(8)) }
         else { identity = entry.id }
-        return .init(key: entry.item.key, title: entry.item.title + " · " + identity, legacy: entry.legacyTags, legacyFailure: entry.legacyFailure, activityID: entry.id)
+        return .init(key: entry.item.key, title: entry.item.title + " · " + identity, legacy: entry.legacyTags, legacyFailure: entry.legacyFailure, activityID: entry.id, contentKind: entry.item.contentKind, inputs: entry.item.inputs, outputs: entry.item.outputs)
     }
     private func openTagEditor(activityIDs: Set<String>, add: Set<UUID> = [], remove: Set<UUID> = []) {
         let selected = SharedLibraryBrowserLogic.tagEditEntries(activityIDs, in: entries)
@@ -1425,7 +1425,6 @@ public struct SharedLibraryBrowser: View {
                     if canvasMode?.resourceCategory == nil && scope != .kind(.asset) {
                         contentConditionGroup(word("inputs", "可接收"), path: \.inputs)
                         contentConditionGroup(word("outputs", "可输出"), path: \.outputs)
-                        factConditions(word("purpose", "用途"), path: \.concepts)
                         factConditions(word("model", "模型 / 实现"), path: \.producers)
                     }
                     Divider()
@@ -1794,9 +1793,7 @@ public struct SharedLibraryBrowser: View {
                     refreshCollectionFeedback()
                 }
                 await controller.processCollectionRequests { request in
-                    if let folderID = request.folderID {
-                        try store.addMembers(Set(try request.sources.map { try $0.metadataKey(owner: request.owner, runs: controller.runs) }), to: folderID)
-                    }
+                    try store.applyCollectionOrganization(request, runs: controller.runs)
                 }
                 if collectionNoticeIntent == requestID { refreshCollectionFeedback() }
             } catch { if collectionNoticeIntent == requestID, insertionController === controller, controller.assetLibraryOwner == payload.owner { collectionNotice = error.localizedDescription; collectionNoticeCode = (error as? WorkflowIssue)?.code ?? "container.issue.collectionSavePending"; collectedLocation = nil } }

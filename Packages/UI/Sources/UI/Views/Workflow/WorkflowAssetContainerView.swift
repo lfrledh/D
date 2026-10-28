@@ -178,7 +178,7 @@ struct ContainerProjectionIdentity: Equatable {
             WorkbenchMenuAction(t("collectionSettings")) {
                 guard let target = controller.canvasInsertionTarget(),
                       let current = controller.graph?.nodes.first(where: { $0.id == node.id }) else { error = .init("Container target changed.", code: "container.stale"); return }
-                presentation.ruleDraft = WorkflowCollectionRuleDraft(controller: controller, node: current, target: target)
+                presentation.ruleDraft = WorkflowCollectionRuleDraft(controller: controller, node: current, target: target, tagStore: library)
                 showCollectionSettings = true
             }
         }
@@ -589,9 +589,9 @@ struct ContainerProjectionIdentity: Equatable {
     }
     private func retryCollection() async {
         await controller.processCollectionRequests(retryFailed: true) { request in
-            guard let folder = request.folderID else { return }
+            guard request.folderID != nil || request.tagIDs?.isEmpty == false else { return }
             guard let library, controller.assetLibraryOwner == request.owner else { throw SharedLibraryError.staleAnnotation }
-            try library.addMembers(Set(try request.sources.map { try $0.metadataKey(owner: request.owner, runs: controller.runs) }), to: folder)
+            try library.applyCollectionOrganization(request, runs: controller.runs)
         }
     }
     private func collect(_ items: [ContainerItem]) {

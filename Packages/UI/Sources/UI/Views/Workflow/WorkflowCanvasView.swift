@@ -1747,7 +1747,7 @@ private struct WorkflowNodeInspector: View {
             if let definition = controller.registry.definition(for: node, tools: controller.tools) {
                 WorkbenchModelCard(definition: definition, modelID: resolvedModelID(node, definition: definition),
                     choices: controller.modelChoices, status: workbenchModelReadinessText(modelReadiness[resolvedModelID(node, definition: definition) ?? ""] ?? .unknown, language: languageStore),
-                    change: definition.modelKind == nil || resultsOnly ? nil : modelPicker(for: definition.modelKind),
+                    change: nil,
                     canChange: !readOnly && controller.canEditCanvas,
                     changeUnavailableReason: canvasHelpReason(controller, readOnly: readOnly, language: languageStore),
                     usingDefault: node.parameters["modelID"]?.string?.isEmpty != false)
@@ -2198,14 +2198,6 @@ private struct WorkflowFieldEditor: View {
                         .font(.system(size: 13, weight: .medium))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    WorkbenchMenu(workflowText(languageStore, "workflow.action.chooseModel")) {
-                        WorkbenchMenuForEach(modelChoices) { choice in
-                            WorkbenchMenuAction(choice.displayName) { onChange(.text(choice.id)) }
-                        }
-                        if !modelChoices.isEmpty { WorkbenchMenuDivider() }
-                        WorkbenchMenuAction(workflowText(languageStore, "workflow.model.import"),
-                               action: modelPicker)
-                    }.disabled(readOnly)
                 }
             } else {
                 editor

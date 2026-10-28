@@ -153,7 +153,7 @@ extension ModelLibraryPresentationTests {
         }
         let resource = try #require((await library.snapshot()).resources.first { $0.record.catalogID == target.id })
         try #require(resource.record.registrationState == .registered)
-        let registrationEvents = resource.control.events.filter { $0.action == "registered" }.count
+        var registrationEvents = resource.control.events.filter { $0.action == "registered" }.count
         try await library.pauseQueue()
         let model = ModelLibraryModel(library: library)
         var entered = false, bound = false
@@ -170,11 +170,13 @@ extension ModelLibraryPresentationTests {
         let operation = try #require(target.workflowProfileID), identity = try #require(target.workflowIdentity)
         let prepare = Task { await model.prepareNode(operationID: operation, identity: identity, isCurrent: { true }) { _, _ in bound = true } }
         for _ in 0..<500 { if entered { break }; await Task.yield() }
-        let suspended = entered
+        let callbackWasNotEntered = !entered
+        await prepare.value
+        registrationEvents = (await library.snapshot()).resources.first { $0.id == resource.id }!.control.events.filter { $0.action == "registered" }.count
         await model.unregisterResource(resource)
         await gate.open(); await prepare.value
         for _ in 0..<5 { await model.refresh() }
-        #expect(suspended && !bound && model.preparingNodeIdentities.isEmpty)
+        #expect(callbackWasNotEntered && !bound && model.preparingNodeIdentities.isEmpty)
         let final = try #require(model.snapshot?.resources.first { $0.id == resource.id })
         #expect(final.record.registrationState == .unregistered && final.control.fileState == .verified)
         #expect(final.id == resource.id)
@@ -365,8 +367,10 @@ extension ModelLibraryPresentationTests {
                 let resource = try #require(model.snapshot?.resources.first)
                 #expect(await transport.count == 1)
                 #expect(resource.record.revision == entry.revision && resource.control.fileState == .verified)
-                let shouldBind = ["new", "files-only", "existing-files", "delete-old-history"].contains(scenario)
-                #expect(bound == (shouldBind ? [resource.record.id] : []))
+                #expect(bound.isEmpty, "Accepted acquisition never binds the current view")
+                if !["registration-failed", "raw-video"].contains(scenario) {
+                    #expect(resource.record.registrationState == .registered)
+                }
                 #expect(model.preparingNodeIdentities.isEmpty)
                 if scenario == "files-only" { #expect(model.snapshot?.downloads.first?.postAction == .filesOnly) }
                 if scenario == "existing-files" { #expect(model.snapshot?.downloads.isEmpty == true) }
@@ -378,8 +382,8 @@ extension ModelLibraryPresentationTests {
                     faults.withLock { $0.armed = false }
                     try await library.pauseQueue() // Unrelated save cannot resurrect success.
                 }
-                if scenario == "bind-failed" { #expect(model.errorMessage?.contains("adapter validation") == true) }
-                if scenario == "target-changed" { #expect(model.errorMessage != nil) }
+                if scenario == "bind-failed" { #expect(model.errorMessage == nil, "The view callback must not run after acquisition") }
+                if scenario == "target-changed" { #expect(model.errorMessage == nil, "Navigation after acceptance must not reject service completion") }
                 if scenario == "raw-video" { #expect(model.preparationNotice != nil && resource.record.state == .preparationRequired) }
             }
             await transport.open(); try await library.shutdown()
@@ -402,7 +406,7 @@ extension ModelLibraryPresentationTests {
 
 extension ModelLibraryPresentationTests {
     @Test(arguments: [false, true])
-    func explicitUnregisterRevokesNodePreparationEvenDuringBinding(duringBinding: Bool) async throws {
+    func explicitUnregisterRevokesNodePreparationBeforeOrAfterPresentation(duringBinding: Bool) async throws {
         let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
             .appendingPathComponent("NodeRevocation-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -432,8 +436,8 @@ extension ModelLibraryPresentationTests {
         var refresh: Task<Void, Never>?
         if duringBinding {
             refresh = Task { await model.refresh() }
-            for _ in 0..<500 { if entered { break }; await Task.yield() }
-            try #require(entered)
+            await refresh?.value
+            #expect(!entered, "No completion binding is retained")
         }
         await model.unregisterResource(resource)
         await gate.open(); await refresh?.value
@@ -453,7 +457,7 @@ private actor NodeBindingGate {
 }
 
 extension ModelLibraryPresentationTests {
-    @Test func preparedDraftBindsRealProjectInstallationWithoutEditingGraphOrSubmitting() async throws {
+    @Test func preparedDraftRegistersWithoutBindingOrEditingGraphOrSubmitting() async throws {
         let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
             .appendingPathComponent("NodeProjectBinding-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -491,9 +495,14 @@ extension ModelLibraryPresentationTests {
         }
         #expect(model.errorMessage == nil)
         let record = try #require(model.snapshot?.resources.first?.record)
-        #expect(owner.workflowInstallationID(for: identity) == record.id)
-        #expect(owner.explicitModelReadiness[identity] == .available)
-        #expect(controller.modelChoices.contains { $0.id == identity })
+        #expect(owner.workflowInstallationID(for: identity) == nil, "Acquisition must not rewrite an explicit installation choice")
+        owner.observeModelAvailability(try #require(model.snapshot))
+        for _ in 0..<500 {
+            if owner.explicitModelReadiness[identity] == .available { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(owner.explicitModelReadiness[identity] == .available, "The event-owned check must finish without another view action")
+        #expect(controller.graph?.nodes.contains { $0.parameters["modelID"]?.string == identity } == true)
         #expect(controller.graphs == graph && controller.canUndo == undo)
         #expect((await store.snapshot()).revision == before.revision)
         #expect((await engine.submissions) == 0)
@@ -661,7 +670,7 @@ extension ModelLibraryPresentationTests {
 }
 
 extension ModelLibraryPresentationTests {
-    @Test func lastCompletionWhileAnotherBindingSuspendsIsDrainedWithoutPolling() async throws {
+    @Test func lastCompletionAcrossTwoAcquisitionsIsDrainedWithoutPolling() async throws {
         let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
             .appendingPathComponent("QualityBinding-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -685,19 +694,18 @@ extension ModelLibraryPresentationTests {
             entered = true; await gate.wait()
             guard authorized() else { return }; bound.append(id)
         }
-        try await library.resumeQueue()
-        for _ in 0..<500 { if entered { break }; try await Task.sleep(for: .milliseconds(5)) }
-        #expect(entered)
         await model.prepareNode(operationID: try #require(entries[1].workflowProfileID), identity: try #require(entries[1].workflowIdentity), isCurrent: { true }) { id, authorized in
             guard authorized() else { return }; bound.append(id)
         }
+        model.isPresented = false; model.clearSelectionContext()
+        try await library.resumeQueue()
+        await gate.open()
         for _ in 0..<500 {
-            if await library.snapshot().downloads.filter({ $0.state == .completed }).count == 2 { break }
+            if model.preparingNodeIdentities.isEmpty && model.snapshot?.resources.filter({ $0.record.registrationState == .registered }).count == 2 { break }
             try await Task.sleep(for: .milliseconds(5))
         }
-        await gate.open()
-        for _ in 0..<500 { if bound.count == 2 { break }; try await Task.sleep(for: .milliseconds(5)) }
-        #expect(bound.count == 2 && Set(bound).count == 2)
+        #expect(bound.isEmpty)
+        #expect(model.snapshot?.resources.filter { $0.record.registrationState == .registered }.count == 2)
         #expect(model.preparingNodeIdentities.isEmpty)
         #expect(await library.availabilityCheckCount == 1, "Configure root only; byte events cannot scan files")
         #expect(await transfer.count == 2)

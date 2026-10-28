@@ -118,3 +118,44 @@ extension WorkflowAssetContainerTests {
         #expect(try WorkflowRuntimeAssetSource.projectedItems(call: a.call, port: "output", value: list).map(\.source) == [a, b])
     }
 }
+
+
+extension WorkflowAssetContainerTests {
+    @Test func tagRulesEncodeDeterministicallyAndPreserveLegacyAbsence() throws {
+        let id = UUID(), tags = [UUID(), UUID(), UUID()]
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let a = WorkflowAssetCollectionRule(id: id, tagIDs: Set(tags))
+        let b = WorkflowAssetCollectionRule(id: id, tagIDs: Set(tags.reversed()))
+        let bytes = try encoder.encode(a)
+        #expect(bytes == (try encoder.encode(b)))
+        #expect(try JSONDecoder().decode(WorkflowAssetCollectionRule.self, from: bytes) == a)
+        let legacy = WorkflowAssetCollectionRule(id: id, folderID: UUID())
+        let legacyBytes = try encoder.encode(legacy)
+        #expect(!String(decoding: legacyBytes, as: UTF8.self).contains("tagIDs"))
+        #expect(try JSONDecoder().decode(WorkflowAssetCollectionRule.self, from: legacyBytes) == legacy)
+        let source = WorkflowLibrarySource.asset(.init(projectID: UUID(), assetID: UUID(), kind: .video, sha256: String(repeating: "a", count: 64)))
+        let owner = WorkflowAssetLibraryOwner(projectID: UUID(), instanceID: UUID())
+        let request = try WorkflowAssetCollectionRequest(trigger: "same", owner: owner, sources: [source], folderID: nil, tagIDs: Set(tags))
+        let reversed = try WorkflowAssetCollectionRequest(trigger: "same", owner: owner, sources: [source], folderID: nil, tagIDs: Set(tags.reversed()))
+        #expect(try encoder.encode(request) == encoder.encode(reversed))
+        #expect(try JSONDecoder().decode(WorkflowAssetCollectionRequest.self, from: encoder.encode(request)) == request)
+    }
+    @Test @MainActor func collectionTagsMergeWithoutChangingSystemFactsOrLegacyFolders() throws {
+        let store = try SharedLibraryStore(), project = UUID()
+        let tags = try store.createTags(["old", "new"])
+        let source = WorkflowLibrarySource.asset(.init(projectID: project, assetID: UUID(), kind: .video, sha256: String(repeating: "a", count: 64)))
+        let owner = WorkflowAssetLibraryOwner(projectID: project, instanceID: UUID())
+        let key = try source.metadataKey(owner: owner, runs: [])
+        try store.addTags([tags[0]], to: [key])
+        let request = try WorkflowAssetCollectionRequest(trigger: "tags", owner: owner, sources: [source], folderID: nil, tagIDs: [tags[1]])
+        try store.applyCollectionOrganization(request, runs: [])
+        try store.applyCollectionOrganization(request, runs: [])
+        #expect(store.metadata.tagAssignments[key] == Set(tags))
+        let empty = try WorkflowAssetCollectionRequest(trigger: "empty", owner: owner, sources: [source], folderID: nil, tagIDs: [])
+        try store.applyCollectionOrganization(empty, runs: [])
+        #expect(store.metadata.tagAssignments[key] == Set(tags))
+        #expect(source == request.sources[0])
+        #expect(request.sources[0] == empty.sources[0])
+        #expect(store.metadata.folders.isEmpty)
+    }
+}

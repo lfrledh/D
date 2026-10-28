@@ -65,7 +65,7 @@ enum WorkflowTextOperations {
                 .init("temperature", "温度", .decimal, .decimal(0.7)),
                 .init("topP", "Top P", .decimal, .decimal(0.95)),
                 .init("modelID", "模型内容身份", .text(multiline: false), .text("")),
-            ], modelKind: .text
+            ], modelKind: .text, quickCategory: .text
         ),
         validate: { node in
             try WorkflowLimits.positive(WorkflowScalarReader.integer("maximumOutputTokens", in: node), field: "maximumOutputTokens", node: node)

@@ -1768,3 +1768,46 @@ extension WorkflowWorkspacePresentationTests {
         if requested == nil { try FileManager.default.removeItem(at: root) }
     }
 }
+
+
+extension WorkflowWorkspacePresentationTests {
+    @Test func collectionRuleTagDraftKeepsPendingInputAndOnlyCreatesOnEnabledSave() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        c.addBlankGraph(); c.addNode(operationID: WorkflowAssetContainer.previewID)
+        let node = try #require(c.graph?.nodes.last), target = try #require(c.canvasInsertionTarget())
+        let library = try SharedLibraryStore(fileURL: f.root.appendingPathComponent("tags.json"))
+        let draft = WorkflowCollectionRuleDraft(controller: c, node: node, target: target, tagStore: library)
+        draft.enabled = true; draft.tagName = "unfinished"
+        #expect(draft.dirty)
+        await #expect(throws: WorkflowIssue.self) { try await draft.save() }
+        #expect(!draft.applied && !draft.saved && library.metadata.tags.isEmpty)
+        draft.tagName = ""; draft.newTagNames = ["new"]
+        draft.enabled = false
+        try await draft.save()
+        #expect(library.metadata.tags.isEmpty && c.graph?.nodes.last?.collectionRule == nil)
+        let again = WorkflowCollectionRuleDraft(controller: c, node: try #require(c.graph?.nodes.last), target: try #require(c.canvasInsertionTarget()), tagStore: library)
+        again.enabled = true; again.newTagNames = ["new"]
+        try await again.save()
+        let tags = try #require(c.graph?.nodes.last?.collectionRule?.tagIDs)
+        #expect(tags.count == 1 && Set(library.metadata.tags.keys) == tags)
+        let cold = try SharedLibraryStore(fileURL: f.root.appendingPathComponent("tags.json"))
+        #expect(Set(cold.metadata.tags.keys) == tags)
+        #expect(await f.engine.submissions == 0)
+        try await f.close()
+    }
+    @Test func collectionRuleTagDraftRejectsMissingStoreAndDeletedTag() async throws {
+        let f = try await RenderingWorkspaceFixture.make(), c = f.controller
+        c.addBlankGraph(); c.addNode(operationID: WorkflowAssetContainer.previewID)
+        let node = try #require(c.graph?.nodes.last), target = try #require(c.canvasInsertionTarget())
+        let draft = WorkflowCollectionRuleDraft(controller: c, node: node, target: target)
+        draft.enabled = true; draft.newTagNames = ["retained"]
+        await #expect(throws: WorkflowIssue.self) { try await draft.save() }
+        #expect(draft.dirty && !draft.applied && draft.newTagNames == ["retained"])
+        let store = try SharedLibraryStore()
+        let stale = WorkflowCollectionRuleDraft(controller: c, node: node, target: target, tagStore: store)
+        stale.enabled = true; stale.tagIDs = [UUID()]
+        await #expect(throws: WorkflowIssue.self) { try await stale.save() }
+        #expect(stale.failure?.code == "container.issue.tagChanged" && !stale.applied)
+        try await f.close()
+    }
+}

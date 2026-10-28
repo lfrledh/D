@@ -131,6 +131,7 @@ public final class ModelLibraryModel {
     @ObservationIgnored public var selectionAction: (@MainActor (ModelID) async -> Void)?
     @ObservationIgnored public var preparedValidator: (@Sendable (URL) async throws -> ModelReference)?
     @ObservationIgnored private let language: UILanguageStore?
+    public private(set) var localFileSelection: ModelLocalFileSelection?
     public var errorMessage: String?
     public private(set) var preparationNotice: String?
     public private(set) var snapshot: ModelLibrarySnapshot?
@@ -148,8 +149,6 @@ public final class ModelLibraryModel {
         let token = UUID()
         let entry: ModelCatalogEntry
         let resource: ModelResourceID
-        let isCurrent: @MainActor () -> Bool
-        let bind: @MainActor (ModelID, @escaping @MainActor () -> Bool) async throws -> Void
     }
     @ObservationIgnored private var nodePreparations: [String: NodePreparation] = [:]
     @ObservationIgnored private var reconcilingNodePreparations = false
@@ -320,8 +319,10 @@ public final class ModelLibraryModel {
         for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification] {
             volumeObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
                 guard let volume = notification.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL else { return }
+                let disconnected = notification.name == NSWorkspace.didUnmountNotification
                 Task { @MainActor [weak self] in
                     guard let self, self.observationGeneration == generation else { return }
+                    if disconnected { await self.library.noteVolumeDisconnected(volume) }
                     await self.volumeChanged(volume)
                 }
             })
@@ -406,16 +407,24 @@ public final class ModelLibraryModel {
                 byResource[resource.record.id] = .make(record: resource.record, control: resource.control,
                     task: tasks[resource.id]?.last, requiresPreparation: entry.preparation != .none)
             }
-            if let requested = nodePreparations[identity]?.resource {
+            if snapshot.runnableResources(identity: identity).count == 1, let ready = snapshot.runnableResources(identity: identity).first {
+                values[identity] = byResource[ready.record.id]
+            } else if let requested = nodePreparations[identity]?.resource {
                 values[identity] = byResource[requested.modelID] ?? .init(resource: requested, taskID: nil, attemptID: nil,
                     phase: "copyUnavailable", completed: nil, total: nil, issue: nil)
-            } else if candidates.count == 1, let resource = candidates.first { values[identity] = byResource[resource.record.id] }
+            } else if let selected = Self.preferredResource(candidates) { values[identity] = byResource[selected.record.id] }
             else if candidates.count > 1 { values[identity] = .init(resource: nil, taskID: nil, attemptID: nil, phase: "ambiguousCopies", completed: nil, total: nil, issue: nil) }
             else { values[identity] = nil }
         }
         nodePreparationPresentation.replace(values, resources: byResource)
     }
 
+    static func preferredResource(_ candidates: [ModelResource]) -> ModelResource? {
+        let active = candidates.filter { ![.deleted, .deleting].contains($0.control.fileState) }
+        let ready = active.filter { $0.record.registrationState == .registered && $0.record.state == .installed }
+        if ready.count == 1 { return ready.first }
+        return active.count == 1 ? active.first : nil
+    }
     public func clearError() { errorMessage = nil }
 
     public func chooseRoot() async {
@@ -444,6 +453,38 @@ public final class ModelLibraryModel {
         defer { globalOperation = nil }
         do { try await library.configureRoot(at: url) }
         catch { report(error, context: managementText("rootFailed", "无法连接这个模型库位置")) }
+        await refresh()
+    }
+
+    public func chooseLocalFiles(catalogID: String) async {
+        guard !isChoosingLocation, globalOperation == nil else { return }
+        isChoosingLocation = true; localFileSelection = nil; errorMessage = nil
+        let panel = NSOpenPanel()
+        panel.title = managementText("local.title")
+        panel.message = managementText("importExternalMessage")
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
+        let response = await panel.begin()
+        defer { isChoosingLocation = false }
+        guard response == .OK, let url = panel.url else { return }
+        do { localFileSelection = try await library.inspectLocalFiles(at: url, catalogID: catalogID, validatePrepared: preparedValidator) }
+        catch { report(error, context: managementText("importFailed")) }
+    }
+    public func submitLocalFiles(storage: ModelStorageKind) async {
+        guard let selection = localFileSelection, globalOperation == nil, !isChoosingLocation else { return }
+        globalOperation = storage == .managed ? .copying : .registering; errorMessage = nil; preparationNotice = nil
+        // Retained by the application model, not a sheet task or selected node.
+        let task = Task { @MainActor in
+            do {
+                let id = try await library.registerLocalFiles(selection, storage: storage, validatePrepared: preparedValidator)
+                selectedResource = .init(rawValue: id.rawValue)
+                preparationNotice = managementText(storage == .managed ? "local.copied" : "local.registered")
+                workspace = "resources"; localFileSelection = nil
+            } catch is CancellationError { preparationNotice = managementText("local.cancelled") }
+            catch { report(error, context: managementText("importFailed")) }
+        }
+        importTask = task
+        await task.value
+        importTask = nil; globalOperation = nil
         await refresh()
     }
 
@@ -490,7 +531,14 @@ public final class ModelLibraryModel {
         guard rootURL != nil else { return }
         globalOperation = .copying
         let task = Task { @MainActor in
-            do { _ = try await library.copyExistingToLibrary(id) }
+            do {
+                let current = await library.snapshot()
+                guard let record = current.records.first(where: { $0.id == id }), let directory = record.directory else {
+                    throw WorkflowIssue("Model file record changed.", code: "modelManagement.recordChanged")
+                }
+                let selection = try await library.inspectLocalFiles(at: directory, catalogID: record.catalogID, validatePrepared: preparedValidator)
+                _ = try await library.registerLocalFiles(selection, storage: .managed, validatePrepared: preparedValidator)
+            }
             catch is CancellationError { }
             catch { report(error, context: managementText("copyFailed", "复制未完成；原位置登记仍保留")) }
         }
@@ -647,6 +695,7 @@ public final class ModelLibraryModel {
     }
 
     func credentialMessage(_ error: Error) -> String {
+        if let issue = error as? WorkflowIssue, let key = issue.code { return workflowText(language, key) + "\n" + issue.reason }
         guard let issue = error as? ModelCredentialIssue else { return error.localizedDescription }
         let message = managementText("accessError." + issue.localizationKey)
         return issue.statusCode.map { message.replacingOccurrences(of: "{code}", with: String($0)) } ?? message
@@ -748,7 +797,6 @@ extension ModelLibraryModel {
             // files-only task is not silently rewritten by enqueueDownloads.
             let tasks = try await library.enqueueDownloads([entry.id], postAction: .register)
             let current = await library.snapshot()
-            guard isCurrent() else { throw WorkflowIssue(nodeText("targetChanged", "目标已改变；下载和文件保留，未绑定到其他节点。")) }
             let candidates = current.resources.filter {
                 $0.record.catalogID == entry.id && $0.record.revision == entry.revision
                     && $0.record.storage == .managed && $0.control.role == .original
@@ -759,7 +807,7 @@ extension ModelLibraryModel {
                 throw WorkflowIssue(nodeText("copyChanged", "模型副本无法唯一确认；资源保留，请在模型与下载中检查。"))
             }
             guard nodePreparationRevocations[resource, default: 0] == revocations[resource, default: 0] else { return false }
-            nodePreparations[identity] = .init(entry: entry, resource: resource, isCurrent: isCurrent, bind: bind)
+            nodePreparations[identity] = .init(entry: entry, resource: resource)
             selectedResource = resource; selectedTask = tasks.first?.id; workspace = "downloads"
             await refresh()
             return errorMessage == nil
@@ -792,7 +840,6 @@ extension ModelLibraryModel {
                 }
             }
             do {
-                guard request.isCurrent() else { throw WorkflowIssue(nodeText("targetChanged", "目标已改变；下载和文件保留，未绑定到其他节点。")) }
                 guard let resource = current.resources.first(where: { $0.id == request.resource }),
                       resource.record.catalogID == request.entry.id, resource.record.revision == request.entry.revision,
                       resource.control.fileState != .deleted && resource.control.fileState != .deleting else {
@@ -815,14 +862,10 @@ extension ModelLibraryModel {
                     // already-running files-only task after its exact copy finishes.
                     try await library.registerResource(request.resource)
                 }
-                guard request.isCurrent(), nodePreparations[identity]?.token == request.token else {
-                    throw WorkflowIssue(nodeText("targetChanged", "目标已改变；下载和文件保留，未绑定到其他节点。"))
-                }
-                try await request.bind(resource.record.id) { [weak self] in
-                    self?.nodePreparations[identity]?.token == request.token && request.isCurrent()
-                }
+                // Registration is application-owned. Exact model resolution reads
+                // this inventory; completion never edits whichever graph is visible.
                 guard nodePreparations[identity]?.token == request.token else { continue }
-                preparationNotice = nodeText("ready", "此节点的模型副本已登记并通过校验；尚未运行计算。")
+                preparationNotice = managementText("local.registeredPendingAdmission", "模型文件已登记；执行适配仍需检查，尚未开始生成。")
                 finished = true
             } catch {
                 errorMessage = error.localizedDescription; finished = true

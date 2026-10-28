@@ -270,10 +270,12 @@ public struct WorkflowOperationDefinition: Sendable, Equatable, Identifiable {
     public var fields: [WorkflowFieldDefinition]
     public var modelKind: WorkflowModelKind?
     public var interaction: WorkflowInteraction
+    /// Existing operation declares its Quick task; no separate model whitelist.
+    public var quickCategory: QuickCategory?
     public init(id: String, version: Int = 1, title: String, detail: String, inputs: [WorkflowPortDefinition],
-                outputs: [WorkflowPortDefinition], fields: [WorkflowFieldDefinition] = [], modelKind: WorkflowModelKind? = nil, interaction: WorkflowInteraction = .none) {
+                outputs: [WorkflowPortDefinition], fields: [WorkflowFieldDefinition] = [], modelKind: WorkflowModelKind? = nil, interaction: WorkflowInteraction = .none, quickCategory: QuickCategory? = nil) {
         self.id = id; self.version = version; self.title = title; self.detail = detail
-        self.inputs = inputs; self.outputs = outputs; self.fields = fields; self.modelKind = modelKind; self.interaction = interaction
+        self.inputs = inputs; self.outputs = outputs; self.fields = fields; self.modelKind = modelKind; self.interaction = interaction; self.quickCategory = quickCategory
     }
     public func makeNode() -> WorkflowNode {
         WorkflowNode(operationID: id, definitionVersion: version, title: title,

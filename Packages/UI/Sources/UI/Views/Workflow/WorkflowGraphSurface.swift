@@ -1206,34 +1206,11 @@ private struct WorkflowNodeCard: View {
                             .font(.system(size: 10 * scale)).foregroundStyle(.tint).allowsHitTesting(false)
                     }
                     WorkflowNodeActivityView(state: controller.services.activity, nodeID: node.id, graphID: graph.id, scale: scale)
-                    WorkflowModelPreparationView(identity: modelIdentity, scale: scale)
-            if !collapsed && modelNotReady {
-                VStack(alignment: .leading, spacing: 5 * scale) {
-                    Label(workflowText(languageStore, "workflow.node.prepare.notReady"), systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange).font(.system(size: 11 * scale, weight: .semibold)).allowsHitTesting(false)
-                    if let entry = downloadEntry, let prepareNode {
-                        Button {
-                            guard scope.isCurrent(in: controller) else { return }
-                            prepareNode(node.id)
-                        } label: {
-                            Text(workflowText(languageStore,
-                                preparingModels.contains(modelIdentity) ? "workflow.node.prepare.pending" : "workflow.node.prepare.download",
-                                fallback: preparingModels.contains(modelIdentity) ? "正在准备模型…" : "下载模型并登记"))
-                        }
-                        .buttonStyle(WorkbenchGlassButtonStyle())
-                        .workflowNodeControl(node.id)
-                        .disabled(readOnly || !controller.canEditCanvas || preparingModels.contains(modelIdentity))
-                        .accessibilityIdentifier("workflow-node-prepare-" + node.id.uuidString)
-                        Text(entry.preparation == .none
-                            ? workflowText(languageStore, "workflow.node.prepare.noRun")
-                            : workflowText(languageStore, "workflow.node.prepare.raw"))
-                            .font(.system(size: 10 * scale)).foregroundStyle(.secondary).allowsHitTesting(false)
-                    } else {
-                        Text(workflowText(languageStore, "workflow.node.prepare.localOnly"))
-                            .font(.system(size: 10 * scale)).foregroundStyle(.secondary).allowsHitTesting(false)
-                    }
-                }
-            }
+                    WorkflowModelPreparationView(identity: modelIdentity, scale: scale,
+                        fallbackReady: modelReadiness[modelIdentity] == .available,
+                        onPrepare: !collapsed && downloadEntry != nil && prepareNode != nil ? {
+                            guard scope.isCurrent(in: controller) else { return }; prepareNode?(node.id)
+                        } : nil, permitsPreparation: !readOnly && controller.canEditCanvas, nodeID: node.id)
 
                     if definition == nil {
                         Label(workflowText(languageStore, "workflow.node.unknownOperation"), systemImage: "questionmark.diamond")

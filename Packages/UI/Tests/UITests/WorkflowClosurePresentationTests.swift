@@ -1,5 +1,7 @@
 import DWorkbench
 import Foundation
+import Observation
+import Synchronization
 import Testing
 @testable import UI
 
@@ -174,5 +176,41 @@ extension WorkflowClosurePresentationTests {
             #expect(ModelSpecificationPresentation(descriptor: inputOnly, language: language).precisionValue == workflowText(language, "model.spec.weight.inputOnly"))
         }
         #expect(known.modelIdentity == "Qwen/Qwen3.5-9B" && wrongRevision.title == "User 999B Q8")
+    }
+}
+
+
+extension WorkflowClosurePresentationTests {
+    @Test func modelProgressCellsShareExactIdentityWithoutWakingOtherModel() {
+        let state = WorkflowModelPreparationState(), record = ModelID()
+        let a = state.cell(identity: "A", installation: nil)
+        let anotherA = state.cell(identity: "A", installation: nil)
+        let b = state.cell(identity: "B", installation: nil)
+        let exact = state.cell(identity: "A", installation: record)
+        #expect(a === anotherA)
+        let changesA = Mutex(0), changesB = Mutex(0), changesExact = Mutex(0)
+        withObservationTracking { _ = a.value } onChange: { changesA.withLock { $0 += 1 } }
+        withObservationTracking { _ = b.value } onChange: { changesB.withLock { $0 += 1 } }
+        withObservationTracking { _ = exact.value } onChange: { changesExact.withLock { $0 += 1 } }
+        let progress = WorkflowModelPreparation(resource: .init(), taskID: UUID(), attemptID: UUID(), phase: "downloading", completed: 3, total: 5, issue: nil)
+        state.replace(["A": progress], resources: [:])
+        #expect(changesA.withLock { $0 } == 1)
+        #expect(changesB.withLock { $0 } == 0 && changesExact.withLock { $0 } == 0)
+        #expect(exact.value == nil) // An explicit missing copy never falls back.
+        let ready = WorkflowModelPreparation(resource: progress.resource, taskID: progress.taskID, attemptID: progress.attemptID, phase: "registered", completed: nil, total: nil, issue: nil)
+        state.replace(["A": ready], resources: [:])
+        #expect(a.value == ready)
+        #expect(state.cell(identity: "A", installation: nil).value == ready)
+        #expect(b.value == nil)
+    }
+
+    @Test func approvedB2CopyIsAvailableInBothLanguagesAndDoesNotAlterIdentity() throws {
+        let language = UILanguageStore(preferredLanguages: ["zh-Hans"])
+        let keys = ["local.original", "local.copy", "local.copyRegister", "local.originalUnsupported", "local.registered", "local.copied", "missingFiles", "offlineDrive", "fileAuthorization", "multipleFiles", "recordChanged", "tokenizerExternal", "refreshAvailability.help"]
+        for locale in ["zh-Hans", "en"] {
+            try language.select(locale)
+            for key in keys { #expect(language.text("modelManagement." + key, fallback: "MISSING") != "MISSING") }
+            #expect(language.text("modelManagement.local.size", fallback: "MISSING", arguments: ["size": "9.1 GB"]).contains("9.1 GB"))
+        }
     }
 }

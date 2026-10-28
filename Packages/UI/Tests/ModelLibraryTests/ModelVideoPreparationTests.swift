@@ -1,3 +1,4 @@
+import DInference
 import Darwin
 import Foundation
 import Testing
@@ -201,4 +202,57 @@ struct ModelVideoPreparationTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.destination.path).allSatisfy { $0.hasPrefix(".d-video-preparing-") })
     }
 
+}
+
+
+extension ModelVideoPreparationTests {
+    @Test func localFileModesPrepareOneFinalCopyAndKeepOriginalReadOnly() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let raw = entry(fixture)
+        let entry = ModelCatalogEntry(id: raw.id, title: raw.title, repository: raw.repository, revision: raw.revision,
+            files: raw.files, workflowProfileID: raw.workflowProfileID, workflowIdentity: "video:fixture-execution", preparation: .required)
+        var library: ModelLibrary? = try await ModelLibrary(stateDirectory: fixture.state, catalog: [entry])
+        try await library!.configureRoot(at: fixture.destination)
+        let source = try ModelDirectory(fixture.source), before = try source.entries()
+        let validate: @Sendable (URL) async throws -> ModelReference = { url in .init(directory: url, revision: "fixture-execution") }
+        let selection = try await library!.inspectLocalFiles(at: fixture.source, catalogID: entry.id, validatePrepared: validate)
+        #expect(!selection.supportsOriginal && !selection.prepared)
+        await #expect(throws: (any Error).self) { _ = try await library!.registerLocalFiles(selection, storage: .external, validatePrepared: validate) }
+        let copy = try await library!.registerLocalFiles(selection, storage: .managed, validatePrepared: validate)
+        let resources = await library!.snapshot().resources
+        #expect(resources.filter { $0.record.storage == .managed }.count == 1)
+        #expect(resources.first { $0.record.id == copy }?.control.role == .execution)
+        let output = try await library!.resolve(copy).directory
+        #expect(try source.entries() == before)
+        #expect(try await library!.registerLocalFiles(selection, storage: .managed, validatePrepared: validate) == copy)
+        try await library!.reverifyResource(.init(rawValue: copy.rawValue), preparedValidator: validate)
+        #expect(try await library!.resolve(copy).directory == output)
+        // Managed files may never be aliased under a second external owner.
+        let managed = try await library!.inspectLocalFiles(at: output, catalogID: entry.id, validatePrepared: validate)
+        await #expect(throws: (any Error).self) { _ = try await library!.registerLocalFiles(managed, storage: .external, validatePrepared: validate) }
+        try await library!.shutdown(); library = nil
+        try FileManager.default.moveItem(at: fixture.source, to: fixture.root.appendingPathComponent("isolated-source"))
+        let cold = try await ModelLibrary(stateDirectory: fixture.state, catalog: [entry])
+        #expect(try await cold.resolve(copy).directory == output)
+        #expect(try ModelDirectory(output).verify(ModelVideoPreparation.requiredFiles(in: ModelDirectory(output), entry: entry)).count == entry.files.count + 1)
+        try await cold.deleteOwnedCopy(.init(rawValue: copy.rawValue))
+        #expect(!FileManager.default.fileExists(atPath: output.path))
+        try await cold.shutdown()
+    }
+
+    @Test func preparedMarkerWithoutWeightsNeverRegisters() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let raw = entry(fixture)
+        let entry = ModelCatalogEntry(id: raw.id, title: raw.title, repository: raw.repository, revision: raw.revision,
+            files: raw.files, workflowProfileID: raw.workflowProfileID, workflowIdentity: "video:fixture-execution", preparation: .required)
+        let fake = fixture.root.appendingPathComponent("incomplete")
+        try FileManager.default.createDirectory(at: fake.appendingPathComponent("model"), withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "profile": "minimax-h3-fl2va-bf16-full-v1", "modelRevision": entry.revision]).write(to: fake.appendingPathComponent("D-VIDEO-PACK.json"))
+        let library = try await ModelLibrary(stateDirectory: fixture.state, catalog: [entry])
+        let validate: @Sendable (URL) async throws -> ModelReference = { .init(directory: $0, revision: "fixture-execution") }
+        let selection = try await library.inspectLocalFiles(at: fake, catalogID: entry.id, validatePrepared: validate)
+        await #expect(throws: (any Error).self) { _ = try await library.registerLocalFiles(selection, storage: .external, validatePrepared: validate) }
+        #expect(await library.snapshot().records.isEmpty)
+        try await library.shutdown()
+    }
 }

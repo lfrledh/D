@@ -185,6 +185,7 @@ public enum ModelInstallationState: String, Codable, Sendable {
     case registered, queued, downloading, pausing, paused, verifying, publishing, installed, preparationRequired, failed
 }
 public enum ModelAvailability: String, Codable, Sendable { case available, unavailable, needsAuthorization }
+public enum ModelLocationIssue: String, Codable, Sendable { case missingFiles, offlineDrive, fileAuthorization, recordChanged }
 public enum ModelStorageKind: String, Codable, Sendable { case managed, external }
 
 public struct ModelRecord: Identifiable, Codable, Sendable, Equatable {
@@ -197,6 +198,7 @@ public struct ModelRecord: Identifiable, Codable, Sendable, Equatable {
     public var downloadedBytes: UInt64
     public private(set) var totalBytes: UInt64
     public var error: String?
+    public var locationIssue: ModelLocationIssue?
     public var directory: URL?
     public var activeLeaseCount: Int
     public var registrationState: ModelRegistrationState = .registered
@@ -211,7 +213,7 @@ public struct ModelRecord: Identifiable, Codable, Sendable, Equatable {
         self.activeLeaseCount = activeLeaseCount; self.registrationState = registrationState
     }
     private enum CodingKeys: String, CodingKey {
-        case id, catalogID, revision, storage, state, availability, downloadedBytes, totalBytes, error, directory, activeLeaseCount, registrationState
+        case id, catalogID, revision, storage, state, availability, downloadedBytes, totalBytes, error, directory, activeLeaseCount, registrationState, locationIssue
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -223,6 +225,7 @@ public struct ModelRecord: Identifiable, Codable, Sendable, Equatable {
             error: try c.decodeIfPresent(String.self, forKey: .error), directory: try c.decodeIfPresent(URL.self, forKey: .directory),
             activeLeaseCount: try c.decode(Int.self, forKey: .activeLeaseCount),
             registrationState: try c.decodeIfPresent(ModelRegistrationState.self, forKey: .registrationState) ?? (state == .installed ? .registered : .unregistered))
+        locationIssue = try c.decodeIfPresent(ModelLocationIssue.self, forKey: .locationIssue)
     }
 }
 
@@ -376,5 +379,35 @@ public struct ModelReadOnlyConfiguration: Identifiable, Sendable, Equatable {
     public let selectable: Bool
     public init(id: String, title: String, identity: String, location: URL?, selectable: Bool = false) {
         self.id = id; self.title = title; self.identity = identity; self.location = location; self.selectable = selectable
+    }
+}
+
+/// Captured by an explicit directory chooser; submitting rechecks the physical root.
+public struct ModelLocalFileSelection: Sendable {
+    public let directory: URL
+    public let catalogID: String
+    public let prepared: Bool
+    public let supportsOriginal: Bool
+    public let estimatedBytes: UInt64?
+    let rootIdentity: ModelFileIdentity
+}
+
+extension ModelLibrarySnapshot {
+    /// Pure inventory projection. Explicit installation preferences take precedence
+    /// at the caller; raw provenance never competes with runnable prepared output.
+    public func uniqueRunnableResource(identity: String) -> ModelResource? {
+        let values = runnableResources(identity: identity)
+        return values.count == 1 ? values.first : nil
+    }
+    public func runnableResources(identity: String) -> [ModelResource] {
+        resources.filter { resource in
+            guard resource.record.registrationState == .registered, resource.record.state == .installed,
+                  resource.record.availability == .available, resource.control.fileState == .verified,
+                  let entry = catalog.first(where: { $0.id == resource.record.catalogID && $0.revision == resource.record.revision }) else { return false }
+            if resource.control.role == .execution {
+                return identity == "video:" + (resource.control.executionRevision ?? "")
+            }
+            return entry.preparation == .none && entry.workflowIdentity == identity
+        }
     }
 }

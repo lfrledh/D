@@ -23,6 +23,7 @@ public actor ModelLibrary {
         var deletion: DeletionIntent?
         var retiredLocations: [RetiredLocation]?
     }
+    private struct LocalPublication: Codable { let record: StoredRecord; let stagePath: String? }
     private struct RetiredLocation: Codable, Sendable { let url: URL; let root: ModelFileIdentity? }
     private struct DeletionIntent: Codable, Sendable {
         let path: String
@@ -73,6 +74,7 @@ public actor ModelLibrary {
     private var queuePausing = false
     private var cleanupReservations: Set<ModelID> = []
     private var cancelledOperations: Set<ModelID> = []
+    private var localRegistrationFailures: [ModelID: any Error] = [:]
     private var copyJob: Task<[String: ModelFileIdentity], any Error>?
     private var currentCopy: ModelCopyProgress? { didSet { stateDidChange() } }
     private var copyKnownFiles: [String: ModelFileIdentity] = [:]
@@ -114,6 +116,15 @@ public actor ModelLibrary {
                 throw ModelLibraryError.integrity("模型库索引版本无效或记录重复，原文件已保留。")
             }
         } else { disk = DiskState() }
+        // A local publication survives an index-write failure. Recover only the
+        // exact library-owned journal, never scan/adopt arbitrary model folders.
+        if try Self.exists("local-publication.json", in: directory) {
+            let pending = try JSONDecoder().decode(LocalPublication.self, from: directory.read("local-publication.json", maximum: 32 * 1024 * 1024)).record
+            guard pending.record.storage == .managed, pending.publicationRoot != nil else {
+                throw ModelLibraryError.integrity("Invalid local model publication recovery record.")
+            }
+            if !disk.records.contains(where: { $0.record.id == pending.record.id }) { disk.records.append(pending) }
+        }
         var migratedWanIDs = Set<ModelID>()
         var correctedACESourceIDs = Set<ModelID>()
         for index in disk.records.indices {
@@ -177,6 +188,7 @@ public actor ModelLibrary {
                 try attachRoot(scope, create: false)
             } catch { libraryRoot = nil; rootScope = nil }
         }
+        try recoverLocalPublication()
         for value in disk.records where value.record.storage == .external {
             if let bookmark = value.bookmark {
                 do { externalScopes[value.record.id] = try ModelScopedLocation.restore(bookmark) }
@@ -302,6 +314,16 @@ public actor ModelLibrary {
     /// resource scope before one actor-isolated pass. The pass has no suspension:
     /// root/record replacement cannot interleave or accept a stale result. Admission
     /// (resolve/acquire/register/delete) retains its stronger, independent checks.
+    public func noteVolumeDisconnected(_ volume: URL) {
+        let prefix = volume.standardizedFileURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/"
+        for index in disk.records.indices {
+            guard let path = disk.records[index].record.directory?.standardizedFileURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+                  (path + "/").hasPrefix(prefix) else { continue }
+            disk.records[index].record.locationIssue = .offlineDrive
+            disk.records[index].record.availability = .unavailable
+            disk.revision &+= 1
+        }
+    }
     public func checkAvailability(ids: Set<ModelID>? = nil) async -> ModelLibrarySnapshot {
         if let ids { requestedChecks.formUnion(ids) } else { checkAll = true }
         if let availabilityCheck { return await availabilityCheck.value }
@@ -359,6 +381,17 @@ public actor ModelLibrary {
                     location = scope.url; availability = .available
                 } catch { availability = .unavailable }
             } else { availability = .needsAuthorization }
+            let locationIssue: ModelLocationIssue?
+            if availability == .available { locationIssue = nil }
+            else if availability == .needsAuthorization { locationIssue = .fileAuthorization }
+            else if stored.record.locationIssue == .offlineDrive { locationIssue = .offlineDrive }
+            else if let path = location?.path ?? stored.record.directory?.path {
+                var info = stat()
+                if lstat(path, &info) != 0 {
+                    locationIssue = errno == ENOENT ? .missingFiles : ([EACCES, EPERM].contains(errno) ? .fileAuthorization : .recordChanged)
+                } else { locationIssue = .recordChanged }
+            } else { locationIssue = .recordChanged }
+            if locationIssue != stored.record.locationIssue { disk.records[index].record.locationIssue = locationIssue; disk.revision &+= 1 }
             if availability != stored.record.availability || location != stored.record.directory {
                 disk.records[index].record.availability = availability
                 disk.records[index].record.directory = location
@@ -632,12 +665,13 @@ public actor ModelLibrary {
                                checkpoint: @escaping @Sendable (UInt64) throws -> Void,
                                afterIndexRename: @escaping @Sendable () throws -> Void = {}) async throws -> ModelID {
         try requireAdmission(); try requireIdleWorker(); try Task.checkCancellation()
+        try recoverLocalPublication()
         let original = try stored(sourceID)
         guard original.record.storage == .external,
               [.installed, .preparationRequired].contains(original.record.state) else {
             throw ModelLibraryError.unavailable("请先校验保留原位置的模型，再复制到模型库。")
         }
-        if let existing = disk.records.first(where: { $0.record.catalogID == original.record.catalogID && $0.record.storage == .managed }) {
+        if let existing = disk.records.first(where: { $0.record.catalogID == original.record.catalogID && $0.record.storage == .managed && $0.control?.role == original.control?.role && $0.control?.parentResourceID?.modelID == sourceID && $0.control?.fileState != .deleted }) {
             guard [.installed, .preparationRequired].contains(existing.record.state) else {
                 throw ModelLibraryError.busy("已有同版本受管理安装尚未完成，请先处理该记录。")
             }
@@ -646,11 +680,14 @@ public actor ModelLibrary {
         }
         let entry = try entry(for: sourceID)
         guard let root = libraryRoot else { throw ModelLibraryError.unavailable("复制前请先选择模型库位置。") }
-        try root.validateLocation(); try requireSpace(entry.totalBytes)
+        try root.validateLocation()
         let source = try resolved(original)
+        let copyFiles = try original.control?.role == .execution ? Self.preparedFiles(in: source, entry: entry) : entry.files
+        let totalBytes = copyFiles.reduce(UInt64(0)) { $0 + $1.size }
+        try requireSpace(totalBytes)
         let verifiedSource = try stored(sourceID)
         let expected = ModelRequiredTree(files: verifiedSource.verifiedFiles, directories: verifiedSource.verifiedDirectories ?? [:])
-        guard try source.requiredTree(paths: Set(entry.files.map(\.path))) == expected else {
+        guard try source.requiredTree(paths: Set(copyFiles.map(\.path))) == expected else {
             throw ModelLibraryError.integrity("原始模型必要文件已改变，请重新校验。")
         }
         let id = ModelID()
@@ -683,19 +720,19 @@ public actor ModelLibrary {
         let lease = ModelUsageLease(id: UUID(), modelID: sourceID,
                                     reference: .init(directory: source.url, revision: entry.revision))
         leases[lease.id] = lease; disk.revision &+= 1
-        currentCopy = .init(sourceID: sourceID, copiedBytes: 0, totalBytes: entry.totalBytes)
+        currentCopy = .init(sourceID: sourceID, copiedBytes: 0, totalBytes: totalBytes)
         defer {
             release(lease); copyJob = nil; currentCopy = nil; copyKnownFiles = [:]
             scheduleDownloads()
             disk.revision &+= 1
         }
         let job = Task.detached { [self] in
-            try await content.copyRequired(entry.files, from: source, expected: expected) { path, bytes, identity in
-                await self.noteCopy(path: path, bytes: bytes, identity: identity, sourceID: sourceID, total: entry.totalBytes)
+            try await content.copyRequired(copyFiles, from: source, expected: expected) { path, bytes, identity in
+                await self.noteCopy(path: path, bytes: bytes, identity: identity, sourceID: sourceID, total: totalBytes)
                 try checkpoint(bytes)
             }
             try Task.checkCancellation()
-            return try content.verify(entry.files)
+            return try content.verify(copyFiles)
         }
         copyJob = job
         var publishedFiles: [String: ModelFileIdentity]?
@@ -703,12 +740,23 @@ public actor ModelLibrary {
         do {
             let verified = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
             try Task.checkCancellation()
-            guard try source.requiredTree(paths: Set(entry.files.map(\.path))) == expected,
-                  try content.entries(expectedPaths: Set(entry.files.map(\.path))) == verified else {
+            guard try source.requiredTree(paths: Set(copyFiles.map(\.path))) == expected,
+                  try content.entries(expectedPaths: Set(copyFiles.map(\.path))) == verified else {
                 throw ModelLibraryError.integrity("发布前原始文件或复制内容已改变。")
             }
             let installations = try root.child("Installations")
             try root.validateLocation(); try content.validateLocation()
+            var copiedControl = original.control ?? .init(fileState: .verified, origin: .local)
+            copiedControl.origin = .local; copiedControl.downloadOwner = nil
+            copiedControl.parentResourceID = .init(rawValue: sourceID.rawValue)
+            let publishedRecord = StoredRecord(record: .init(id: id, catalogID: entry.id, revision: entry.revision,
+                storage: .managed, state: original.record.state,
+                availability: .available, downloadedBytes: totalBytes, totalBytes: totalBytes,
+                error: nil, directory: installations.url.appendingPathComponent(id.description), activeLeaseCount: 0, registrationState: original.record.registrationState),
+                recipeIdentity: try Self.recipeIdentity(entry), verifiedFiles: verified,
+                verifiedRoot: content.identity, publicationRoot: content.identity,
+                control: copiedControl)
+            try stageLocalPublication(publishedRecord, stagePath: "Staging/" + id.description + "/Content")
             guard renameatx_np(stage.descriptor, "Content", installations.descriptor, id.description, UInt32(RENAME_EXCL)) == 0 else {
                 throw ModelDirectory.failure("原子发布复制模型")
             }
@@ -719,30 +767,22 @@ public actor ModelLibrary {
             try Task.checkCancellation()
             let installed = try installations.child(id.description)
             guard installed.identity.sameNode(content.identity),
-                  try installed.entries(expectedPaths: Set(entry.files.map(\.path))) == verified else {
+                  try installed.entries(expectedPaths: Set(copyFiles.map(\.path))) == verified else {
                 throw ModelLibraryError.integrity("发布后复制文件已改变，已保留原件。")
             }
-            let previous = disk
-            disk.records.append(StoredRecord(record: .init(id: id, catalogID: entry.id, revision: entry.revision,
-                storage: .managed, state: entry.preparation == .required ? .preparationRequired : .installed,
-                availability: .available, downloadedBytes: entry.totalBytes, totalBytes: entry.totalBytes,
-                error: nil, directory: installed.url, activeLeaseCount: 0, registrationState: original.record.registrationState),
-                recipeIdentity: try Self.recipeIdentity(entry), verifiedFiles: verified,
-                verifiedRoot: installed.identity, publicationRoot: installed.identity,
-                control: .init(fileState: .verified, origin: .local)))
-            do { try persist(afterRename: afterIndexRename) }
+            indexPublished = true // Published bytes are never deleted because index saving failed.
+            do { try commitLocalPublication(publishedRecord, afterRename: afterIndexRename) }
             catch {
                 if case ModelAtomicWriteError.publishedButUnsynced(let reason) = error {
                     indexPublished = true
                     throw ModelLibraryError.storage("复制模型及索引已发布，但索引目录同步未确认；已保留完整复制目录：\(installed.url.path)。\(reason.localizedDescription)")
                 }
-                disk = previous
                 throw error
             }
             try? cleanupCopyStage(stage: stage, staging: staging, marker: marker, content: nil)
             return id
         } catch {
-            if indexPublished {
+            if indexPublished || (try? Self.exists("local-publication.json", in: stateDirectory)) == true {
                 // The replacement index is already visible. Removing the copy would
                 // leave a durable record pointing at missing content after reopen.
                 try? cleanupCopyStage(stage: stage, staging: staging, marker: marker, content: nil)
@@ -752,7 +792,7 @@ public actor ModelLibrary {
                 let installations = try root.child("Installations")
                 let installed = try installations.child(id.description)
                 guard installed.identity.sameNode(content.identity),
-                      try installed.entries(expectedPaths: Set(entry.files.map(\.path))) == publishedFiles else {
+                      try installed.entries(expectedPaths: Set(copyFiles.map(\.path))) == publishedFiles else {
                     throw ModelLibraryError.unsafePath("复制目录发布后发生变化，未回退；原件与索引未覆盖。")
                 }
                 try installed.removeKnownFiles(publishedFiles)
@@ -825,7 +865,8 @@ public actor ModelLibrary {
                           previous.control?.executionRevision == nil || previous.control?.executionRevision == reference.revision else {
                         throw ModelLibraryError.integrity("执行包身份与原记录不符。")
                     }
-                    verified = try directory.requiredTree(paths: Set(previous.control?.requiredPaths ?? []))
+                    let job = Task.detached { try directory.verifyRequired(Self.preparedFiles(in: directory, entry: entry)) }
+                    verified = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
                 } else {
                     let job = Task.detached { try Self.verifyExternal(directory, entry: entry) }
                     verified = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
@@ -894,7 +935,7 @@ public actor ModelLibrary {
     public func prepareVideo(_ id: ModelID, in selectedParent: URL) async throws -> URL {
         try await prepareVideo(id, in: selectedParent, checkpoint: { _ in })
     }
-    func prepareVideo(_ id: ModelID, in selectedParent: URL, checkpoint: @escaping @Sendable (Int) throws -> Void) async throws -> URL {
+    func prepareVideo(_ id: ModelID, in selectedParent: URL, checkpoint: @escaping @Sendable (Int) throws -> Void, managedOutput: ModelID? = nil) async throws -> URL {
         try requireAdmission(); try requireIdleWorker()
         guard try canPrepareVideo(id) else { throw ModelLibraryError.unavailable("此模型暂未提供原生准备操作。") }
         let original = try stored(id), entry = try entry(for: id)
@@ -903,14 +944,30 @@ public actor ModelLibrary {
         let parent = try ModelDirectory(scope.url)
         let lease = ModelUsageLease(id: UUID(), modelID: id, reference: .init(directory: source.url, revision: entry.revision))
         leases[lease.id] = lease; disk.revision &+= 1
-        let name = entry.id + "-" + UUID().uuidString
+        let name = managedOutput?.description ?? (entry.id + "-" + UUID().uuidString)
         let converter = wanPreparation
+        let journal = stateDirectory
+        let writeIntent: @Sendable (ModelDirectory, [String: ModelFileIdentity]) throws -> Void = { stage, files in
+            guard let managedOutput else { return }
+            var control = ModelResourceControl(fileState: .verified, origin: .prepared)
+            control.role = .execution; control.parentResourceID = .init(rawValue: id.rawValue)
+            control.requiredPaths = files.keys.sorted(); control.preparationRecipe = original.recipeIdentity
+            let tree = try stage.requiredTree(paths: Set(files.keys))
+            let size = files.values.reduce(UInt64(0)) { $0 + UInt64(max(0, $1.size)) }
+            let record = StoredRecord(record: .init(id: managedOutput, catalogID: entry.id, revision: entry.revision,
+                storage: .managed, state: .installed, availability: .available, downloadedBytes: size, totalBytes: size,
+                error: nil, directory: parent.url.appendingPathComponent(name), activeLeaseCount: 0, registrationState: .unregistered),
+                recipeIdentity: original.recipeIdentity, verifiedFiles: tree.files, verifiedDirectories: tree.directories,
+                verifiedRoot: stage.identity, publicationRoot: stage.identity, control: control)
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+            try journal.atomicWrite(encoder.encode(LocalPublication(record: record, stagePath: "Installations/" + stage.url.lastPathComponent)), to: "local-publication.json", replace: true)
+        }
         let conversion = Task.detached {
             if ModelWanPreparation.supports(entry), let converter {
                 return try await ModelWanPreparation.prepare(source: source, entry: entry, parent: parent, name: name,
-                    externalRawProjection: original.record.storage == .external && ModelWanPreparation.allowsExternalRawProjection(entry), converter: converter)
+                    externalRawProjection: original.record.storage == .external && ModelWanPreparation.allowsExternalRawProjection(entry), converter: converter, beforePublish: writeIntent)
             }
-            return try ModelVideoPreparation.prepare(source: source, entry: entry, parent: parent, name: name, checkpoint: checkpoint)
+            return try ModelVideoPreparation.prepare(source: source, entry: entry, parent: parent, name: name, checkpoint: checkpoint, beforePublish: writeIntent)
         }
         let job = Task { [weak self] in
             try await withTaskCancellationHandler {
@@ -918,7 +975,7 @@ public actor ModelLibrary {
                 guard let self else { throw CancellationError() }
                 // The tracked operation includes inventory publication, so shutdown
                 // drains this commit before releasing scopes and the source lease.
-                try await self.recordPreparedOutput(url, parentID: id)
+                try await self.recordPreparedOutput(url, parentID: id, managedID: managedOutput)
                 return url
             } onCancel: { conversion.cancel() }
         }
@@ -969,6 +1026,7 @@ public actor ModelLibrary {
 
     public func remove(_ id: ModelID) async throws {
         try requireAdmission(); try requireIdleWorker()
+        try recoverLocalPublication()
         guard !leases.values.contains(where: { $0.modelID == id }) else { throw ModelLibraryError.busy("该模型仍用于运行或排队任务，不能移除。") }
         let value = try stored(id)
         if value.record.storage == .external {
@@ -999,7 +1057,8 @@ public actor ModelLibrary {
                 throw ModelLibraryError.unsafePath("已发布目录尚无完整校验记录，请先恢复校验；未删除或遗忘该目录。")
             }
             let directory = try resolved(original)
-            let files = try entry(for: id).files
+            let entry = try entry(for: id)
+            let files = try original.control?.role == .execution ? Self.preparedFiles(in: directory, entry: entry) : entry.files
             let job = Task.detached { try directory.verify(files) }
             let verified = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
             try Task.checkCancellation()
@@ -2058,10 +2117,11 @@ extension ModelLibrary {
     }
     public func deleteOwnedCopy(_ resource: ModelResourceID) async throws {
         try requireAdmission(); try requireIdleWorker(allowingCleanup: resource.modelID)
+        try recoverLocalPublication()
         let id = resource.modelID, value = try stored(id)
         guard value.record.storage == .managed, !leases.values.contains(where: { $0.modelID == id }),
               !(disk.downloads ?? []).contains(where: { $0.resourceID == resource && !$0.state.isTerminal && $0.state != .paused }),
-              !disk.records.contains(where: { $0.control?.parentResourceID == resource && $0.control?.fileState != .deleted }) else {
+              !disk.records.contains(where: { $0.control?.parentResourceID == resource && $0.control?.role != .execution && $0.control?.fileState != .deleted }) else {
             throw ModelLibraryError.busy("该副本不受 D 管理，或仍有任务、准备副本及使用引用。")
         }
         guard value.control?.fileState != .deleted else { return }
@@ -2069,7 +2129,7 @@ extension ModelLibrary {
         if value.deletion == nil {
             let published = try Self.exists("Installations/" + id.description, in: root)
             let directory = published ? try resolved(value) : try stagingContent(id, create: true)
-            let files = try directory.entries(expectedPaths: Set(try entry(for: id).files.map(\.path)))
+            let files = try directory.entries(expectedPaths: value.control?.role == .execution ? Set(value.verifiedFiles.keys) : Set(try entry(for: id).files.map(\.path)))
             if !published {
                 guard files.allSatisfy({ value.files[$0.key]?.identity.sameNode($0.value) == true }) else {
                     throw ModelLibraryError.unsafePath("暂存中有未知文件；未删除。")
@@ -2108,25 +2168,26 @@ extension ModelLibrary {
 
 
 extension ModelLibrary {
-    private func recordPreparedOutput(_ url: URL, parentID: ModelID) throws {
+    private func recordPreparedOutput(_ url: URL, parentID: ModelID, managedID: ModelID? = nil) throws {
         let parent = try stored(parentID), scope = try ModelScopedLocation(url), directory = try ModelDirectory(scope.url)
         let files = try directory.entries()
         let tree = try directory.requiredTree(paths: Set(files.keys))
-        let id = ModelID()
+        let id = managedID ?? ModelID()
         var control = ModelResourceControl(fileState: .verified, origin: .prepared)
         control.role = .execution; control.parentResourceID = .init(rawValue: parentID.rawValue)
         control.preparationRecipe = parent.recipeIdentity; control.lastVerified = now(); control.requiredPaths = files.keys.sorted()
         // The preparer owns publication. Inventory conservatively treats the output
         // as external; this command never authorizes arbitrary output deletion.
-        disk.records.append(StoredRecord(record: .init(id: id, catalogID: parent.record.catalogID, revision: parent.record.revision,
-            storage: .external, state: .installed, availability: .available,
+        let publishedRecord = StoredRecord(record: .init(id: id, catalogID: parent.record.catalogID, revision: parent.record.revision,
+            storage: managedID == nil ? .external : .managed, state: .installed, availability: .available,
             downloadedBytes: files.values.reduce(0) { $0 + UInt64(max(0, $1.size)) },
             totalBytes: files.values.reduce(0) { $0 + UInt64(max(0, $1.size)) }, error: nil, directory: scope.url,
             activeLeaseCount: 0, registrationState: .unregistered), bookmark: scope.bookmark,
             recipeIdentity: parent.recipeIdentity, verifiedFiles: tree.files, verifiedDirectories: tree.directories,
-            verifiedRoot: directory.identity, control: control))
-        externalScopes[id] = scope; event(id, "prepared")
-        try persist(purpose: "prepared")
+            verifiedRoot: directory.identity, publicationRoot: managedID == nil ? nil : directory.identity, control: control)
+        externalScopes[id] = scope
+        if managedID != nil { try commitLocalPublication(publishedRecord) }
+        else { disk.records.append(publishedRecord); event(id, "prepared"); try persist(purpose: "prepared") }
     }
     public func registerPreparedResource(_ resource: ModelResourceID,
         validate: @escaping @Sendable (URL) async throws -> ModelReference) async throws {
@@ -2231,20 +2292,209 @@ extension ModelLibrary {
         workers[id] = Task { [weak self] in
             guard let self else { return }
             do {
-                let job = Task.detached { try Self.verifyExternal(directory, entry: entry) }
+                let job = Task.detached { try original.control?.role == .execution ? directory.verifyRequired(Self.preparedFiles(in: directory, entry: entry)) : Self.verifyExternal(directory, entry: entry) }
                 let tree = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
                 try Task.checkCancellation()
                 if let remountTree, tree != remountTree {
                     throw ModelLibraryError.unsafePath("原副本身份已改变。")
                 }
                 await self.verified(id, directory: directory, files: tree.files, directories: tree.directories)
+                if original.control?.role == .execution { await self.restoreVerifiedExecutionState(id, original: original) }
                 await self.workerEnded(id, error: nil)
             } catch { await self.workerEnded(id, error: error) }
         }
         await workers[id]?.value
         if let error = try stored(id).record.error { throw ModelLibraryError.integrity(error) }
     }
+    private func restoreVerifiedExecutionState(_ id: ModelID, original: StoredRecord) {
+        mutate(id) { $0.record.state = .installed; $0.record.registrationState = original.record.registrationState }
+        try? persist(purpose: "executionReverified")
+    }
     public func checkKnownResourceRegistration(_ reference: ModelReference) throws {
         if let lease = try acquireKnownResource(reference) { release(lease) }
+    }
+}
+
+
+extension ModelLibrary {
+    /// Explicit chooser inspection only; never called from a view's body or idle refresh.
+    public func inspectLocalFiles(at url: URL, catalogID: String,
+        validatePrepared: (@Sendable (URL) async throws -> ModelReference)?) async throws -> ModelLocalFileSelection {
+        let entry = try catalogEntry(catalogID), scope = try ModelScopedLocation(url)
+        let directory = try ModelDirectory(scope.url)
+        let isPrepared = try Self.exists("D-VIDEO-PACK.json", in: directory) || Self.exists("D-VIDEO-PREPARED.json", in: directory)
+        if isPrepared {
+            guard entry.preparation != .none, let validatePrepared else { throw ModelLibraryError.unavailable("Prepared model validation is unavailable.") }
+            let reference = try await validatePrepared(directory.url)
+            guard reference.directory.standardizedFileURL == directory.url.standardizedFileURL,
+                  entry.workflowIdentity == "video:" + (reference.revision ?? "") else {
+                throw ModelLibraryError.integrity("Prepared files do not match this exact model and precision.")
+            }
+            return .init(directory: directory.url, catalogID: entry.id, prepared: true, supportsOriginal: true,
+                         estimatedBytes: nil, rootIdentity: directory.identity)
+        }
+        // Validate the selected layout before offering a file-use promise; full
+        // content verification remains part of the accepted operation.
+        _ = try directory.requiredTree(paths: Set(entry.files.map(\.path)))
+        return .init(directory: directory.url, catalogID: entry.id, prepared: false,
+                     supportsOriginal: entry.preparation == .none, estimatedBytes: entry.totalBytes, rootIdentity: directory.identity)
+    }
+
+    public func registerLocalFiles(_ selection: ModelLocalFileSelection, storage: ModelStorageKind,
+        validatePrepared: (@Sendable (URL) async throws -> ModelReference)?) async throws -> ModelID {
+        try requireAdmission(); try requireIdleWorker(); try Task.checkCancellation()
+        try recoverLocalPublication()
+        let scope = try ModelScopedLocation(selection.directory), directory = try ModelDirectory(scope.url)
+        guard directory.identity == selection.rootIdentity else { throw ModelLibraryError.integrity("Selected model folder changed. Choose it again.") }
+        let entry = try catalogEntry(selection.catalogID)
+        guard storage == .managed || selection.supportsOriginal else { throw ModelLibraryError.unavailable("This format requires a model copy.") }
+        if selection.prepared {
+            guard let validatePrepared else { throw ModelLibraryError.unavailable("Prepared model validation is unavailable.") }
+            return try await registerPreparedLocal(at: directory.url, entry: entry, storage: storage, validate: validatePrepared)
+        }
+        let prior = Set(disk.records.map { $0.record.id })
+        let source = try await registerExternal(at: directory.url, catalogID: entry.id)
+        if storage == .external { return source }
+        // Source inventory is provenance. A new copy request does not also
+        // authorize the source as a second execution installation.
+        if !prior.contains(source), try stored(source).record.registrationState == .registered { try unregister(source) }
+        if entry.preparation == .none {
+            let result = try await copyExistingToLibrary(source)
+            try registerResource(.init(rawValue: result.rawValue))
+            return result
+        }
+        guard let validatePrepared, let root = libraryRoot else { throw ModelLibraryError.unavailable("Choose a model library and a supported preparation engine.") }
+        try root.validateLocation()
+        // Retry an already published exact prepared child, including registration
+        // failure, without rerunning conversion or copying the raw source first.
+        if let prior = disk.records.first(where: { $0.control?.parentResourceID?.modelID == source &&
+            $0.control?.role == .execution && $0.control?.fileState == .verified && $0.record.storage == .managed }) {
+            try await registerPreparedResource(.init(rawValue: prior.record.id.rawValue), validate: validatePrepared)
+            return prior.record.id
+        }
+        let id = ModelID(), parent = try root.child("Installations")
+        _ = try await prepareVideo(source, in: parent.url, checkpoint: { _ in }, managedOutput: id)
+        try await registerPreparedResource(.init(rawValue: id.rawValue), validate: validatePrepared)
+        return id
+    }
+
+    private func registerPreparedLocal(at url: URL, entry: ModelCatalogEntry, storage: ModelStorageKind,
+        validate: @escaping @Sendable (URL) async throws -> ModelReference) async throws -> ModelID {
+        let scope = try ModelScopedLocation(url), source = try ModelDirectory(scope.url)
+        if let owner = disk.records.first(where: { $0.record.storage == .managed && $0.verifiedRoot?.sameNode(source.identity) == true }) {
+            guard owner.record.catalogID == entry.id, storage == .managed else { throw ModelLibraryError.busy("This folder already belongs to a managed installation; use its existing record.") }
+            return owner.record.id
+        }
+        let existing = disk.records.first { $0.record.catalogID == entry.id && $0.control?.role == .execution &&
+            $0.record.storage == .external && $0.verifiedRoot?.sameNode(source.identity) == true }
+        let sourceID: ModelID
+        if let existing { sourceID = existing.record.id }
+        else {
+            let id = ModelID()
+            let job = Task.detached { try source.verifyRequired(Self.preparedFiles(in: source, entry: entry)) }
+            // Hold the same serialized heavy-operation slot through full verification,
+            // adapter validation and record publication. Shutdown drains this task.
+            workers[id] = Task { [weak self] in
+                guard let self else { return }
+                do {
+                    let tree = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
+                    let reference = try await validate(source.url)
+                    try Task.checkCancellation()
+                    guard entry.workflowIdentity == "video:" + (reference.revision ?? ""),
+                          reference.directory.standardizedFileURL == source.url.standardizedFileURL,
+                          try source.requiredTree(paths: Set(tree.files.keys)) == tree else {
+                        throw ModelLibraryError.integrity("Prepared model identity changed; files retained.")
+                    }
+                    try await self.recordExternalPrepared(id, entry: entry, source: source, scope: scope, tree: tree, reference: reference)
+                } catch { await self.setLocalRegistrationFailure(id, error: error) }
+            }
+            let worker = workers[id]
+            await withTaskCancellationHandler { await worker?.value } onCancel: { worker?.cancel() }
+            workers[id] = nil
+            defer { localRegistrationFailures[id] = nil; scheduleDownloads() }
+            if let error = localRegistrationFailures[id] { throw error }
+            try Task.checkCancellation()
+            sourceID = id
+        }
+        if storage == .external {
+            try await registerPreparedResource(.init(rawValue: sourceID.rawValue), validate: validate)
+            return sourceID
+        }
+        let result = try await copyExistingToLibrary(sourceID)
+        try await registerPreparedResource(.init(rawValue: result.rawValue), validate: validate)
+        return result
+    }
+    private static func preparedFiles(in directory: ModelDirectory, entry: ModelCatalogEntry) throws -> [ModelFile] {
+        if ModelWanPreparation.supports(entry) { return try ModelWanPreparation.requiredFiles(in: directory, entry: entry) }
+        return try ModelVideoPreparation.requiredFiles(in: directory, entry: entry)
+    }
+    private func recordExternalPrepared(_ id: ModelID, entry: ModelCatalogEntry, source: ModelDirectory,
+        scope: ModelScopedLocation, tree: ModelRequiredTree, reference: ModelReference) throws {
+        var control = ModelResourceControl(fileState: .verified, origin: .local)
+        control.role = .execution; control.executionRevision = reference.revision
+        control.lastVerified = now(); control.requiredPaths = tree.files.keys.sorted()
+        let size = tree.files.values.reduce(UInt64(0)) { $0 + UInt64(max(0, $1.size)) }
+        disk.records.append(.init(record: .init(id: id, catalogID: entry.id, revision: entry.revision,
+            storage: .external, state: .installed, availability: .available, downloadedBytes: size, totalBytes: size,
+            error: nil, directory: source.url, activeLeaseCount: 0, registrationState: .unregistered), bookmark: scope.bookmark,
+            recipeIdentity: try Self.recipeIdentity(entry), verifiedFiles: tree.files, verifiedDirectories: tree.directories,
+            verifiedRoot: source.identity, control: control))
+        externalScopes[id] = scope
+        try persist(purpose: "localPreparedSource")
+    }
+    private func setLocalRegistrationFailure(_ id: ModelID, error: any Error) { localRegistrationFailures[id] = error }
+
+}
+
+
+extension ModelLibrary {
+    /// Capacity one, serialized with local copy/preparation. The intent precedes
+    /// publication, carries exact root/leaves, and is retired only after durable index.
+    private func stageLocalPublication(_ record: StoredRecord, stagePath: String) throws {
+        try recoverLocalPublication()
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        try stateDirectory.atomicWrite(encoder.encode(LocalPublication(record: record, stagePath: stagePath)), to: "local-publication.json", replace: false)
+    }
+    private func recoverLocalPublication() throws {
+        guard try Self.exists("local-publication.json", in: stateDirectory), let root = libraryRoot else { return }
+        let pending = try JSONDecoder().decode(LocalPublication.self, from: stateDirectory.read("local-publication.json", maximum: 32 * 1024 * 1024))
+        let record = pending.record, final = "Installations/" + record.record.id.description
+        try root.validateLocation()
+        if !(try Self.exists(final, in: root)) {
+            guard let stagePath = pending.stagePath else { throw ModelLibraryError.storage("Published model location is missing; recovery retained.") }
+            let stage = try root.child(stagePath)
+            guard record.publicationRoot?.sameNode(stage.identity) == true,
+                  try stage.entries(expectedPaths: Set(record.verifiedFiles.keys)) == record.verifiedFiles else { throw ModelLibraryError.integrity("Model recovery files changed; all files retained.") }
+            let (parent, leaf) = try root.parent(stagePath); defer { Darwin.close(parent) }
+            let destination = try root.child("Installations")
+            guard renameatx_np(parent, leaf, destination.descriptor, record.record.id.description, UInt32(RENAME_EXCL)) == 0,
+                  fsync(parent) == 0, fsync(destination.descriptor) == 0 else { throw ModelDirectory.failure("Recover model publication") }
+        }
+        let directory = try root.child(final)
+        guard record.publicationRoot?.sameNode(directory.identity) == true,
+              try directory.entries(expectedPaths: Set(record.verifiedFiles.keys)) == record.verifiedFiles else { throw ModelLibraryError.integrity("Published recovery identity changed; files retained.") }
+        if !disk.records.contains(where: { $0.record.id == record.record.id }) { disk.records.append(record) }
+        try persist(purpose: "localRecovery")
+        try clearLocalPublication()
+    }
+    private func clearLocalPublication() throws {
+        let identity = try stateDirectory.fileIdentity("local-publication.json")
+        // The state directory also owns the index. Remove this exact journal,
+        // not a whole-directory model-file set.
+        let (parent, name) = try stateDirectory.parent("local-publication.json")
+        defer { Darwin.close(parent) }
+        guard try stateDirectory.fileIdentity("local-publication.json") == identity,
+              unlinkat(parent, name, 0) == 0, fsync(parent) == 0 else {
+            throw ModelLibraryError.storage("Could not retire model publication recovery record.")
+        }
+    }
+    private func commitLocalPublication(_ record: StoredRecord, afterRename: @escaping @Sendable () throws -> Void = {}) throws {
+        // A preparer has already persisted its exact pre-publication intent.
+        guard try Self.exists("local-publication.json", in: stateDirectory) else { throw ModelLibraryError.storage("Model publication recovery record is missing; files retained.") }
+        let pending = try JSONDecoder().decode(LocalPublication.self, from: stateDirectory.read("local-publication.json", maximum: 32 * 1024 * 1024))
+        guard pending.record.record.id == record.record.id else { throw ModelLibraryError.integrity("Model publication owner changed.") }
+        if !disk.records.contains(where: { $0.record.id == record.record.id }) { disk.records.append(record) }
+        try persist(afterRename: afterRename)
+        try clearLocalPublication()
     }
 }

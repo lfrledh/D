@@ -146,7 +146,17 @@ public struct WorkflowAssetLibraryOwner: Sendable, Equatable, Codable {
 public struct WorkflowAssetCollectionRule: Codable, Sendable, Equatable {
     public let id: UUID
     public let folderID: UUID?
-    public init(id: UUID = UUID(), folderID: UUID? = nil) { self.id = id; self.folderID = folderID }
+    /// Nil preserves legacy folder rules without rewriting frozen history.
+    public let tagIDs: Set<UUID>?
+    public init(id: UUID = UUID(), folderID: UUID? = nil, tagIDs: Set<UUID>? = nil) {
+        self.id = id; self.folderID = folderID; self.tagIDs = tagIDs
+    }
+    private enum CodingKeys: String, CodingKey { case id, folderID, tagIDs }
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id); try c.encodeIfPresent(folderID, forKey: .folderID)
+        try c.encodeIfPresent(tagIDs?.sorted { $0.uuidString < $1.uuidString }, forKey: .tagIDs)
+    }
 }
 
 /// An outbox for organization only, owned by the existing project archive.
@@ -157,15 +167,25 @@ public struct WorkflowAssetCollectionRequest: Codable, Sendable, Equatable, Iden
     public let owner: WorkflowAssetLibraryOwner
     public let sources: [WorkflowLibrarySource]
     public let folderID: UUID?
+    public let tagIDs: Set<UUID>?
     public let origin: WorkflowCallReference?
     public let manualID: UUID?
     public var completed = false
     public var error: String?
     public var errorCode: String?
-    public init(trigger: String, owner: WorkflowAssetLibraryOwner, sources: [WorkflowLibrarySource], folderID: UUID?, origin: WorkflowCallReference? = nil, manualID: UUID? = nil) throws {
+    public init(trigger: String, owner: WorkflowAssetLibraryOwner, sources: [WorkflowLibrarySource], folderID: UUID?, tagIDs: Set<UUID>? = nil, origin: WorkflowCallReference? = nil, manualID: UUID? = nil) throws {
         guard !sources.isEmpty, sources.count <= 4096 else { throw WorkflowIssue("Invalid collection request size.", code: "container.issue.collectionLimit") }
-        self.owner = owner; self.sources = sources; self.folderID = folderID; self.origin = origin; self.manualID = manualID
+        self.owner = owner; self.sources = sources; self.folderID = folderID; self.tagIDs = tagIDs; self.origin = origin; self.manualID = manualID
         id = SHA256.hash(data: Data(trigger.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+    private enum CodingKeys: String, CodingKey { case id, owner, sources, folderID, tagIDs, origin, manualID, completed, error, errorCode }
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id); try c.encode(owner, forKey: .owner); try c.encode(sources, forKey: .sources)
+        try c.encodeIfPresent(folderID, forKey: .folderID)
+        try c.encodeIfPresent(tagIDs?.sorted { $0.uuidString < $1.uuidString }, forKey: .tagIDs)
+        try c.encodeIfPresent(origin, forKey: .origin); try c.encodeIfPresent(manualID, forKey: .manualID)
+        try c.encode(completed, forKey: .completed); try c.encodeIfPresent(error, forKey: .error); try c.encodeIfPresent(errorCode, forKey: .errorCode)
     }
     public static func event(_ record: WorkflowPlanCallRecord, previous: WorkflowPlanCallRecord?, owner: WorkflowAssetLibraryOwner) throws -> Self? {
         guard let rule = record.step.node.collectionRule else { return nil }
@@ -186,7 +206,7 @@ public struct WorkflowAssetCollectionRequest: Codable, Sendable, Equatable, Iden
         }.filter { seen.insert($0.key).inserted }
         guard !sources.isEmpty else { return nil }
         return try .init(trigger: rule.id.uuidString + ":" + record.id.uuidString,
-            owner: owner, sources: sources, folderID: rule.folderID, origin: .init(address: record.address, stepID: record.id))
+            owner: owner, sources: sources, folderID: rule.folderID, tagIDs: rule.tagIDs, origin: .init(address: record.address, stepID: record.id))
     }
 }
 

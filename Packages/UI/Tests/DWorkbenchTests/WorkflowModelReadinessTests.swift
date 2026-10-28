@@ -558,3 +558,28 @@ struct WorkflowModelReadinessTests {
         try await library.shutdown()
     }
 }
+
+
+extension WorkflowModelReadinessTests {
+    @Test func unrelatedUnavailableInstallationCannotCancelAnotherAdmission() async throws {
+        try await withColdFixture { fixture in
+            let owner = await fixture.owner(at: "unrelated-notification")
+            try WorkflowModelBookmarks(settings: fixture.settings).rememberInstallation(identity: "image:unrelated-missing", id: ModelID())
+            owner.refreshWorkflowModels()
+            await fixture.validator.arm(fail: false)
+            let check = Task { await owner.checkExplicitModelReadiness(for: [fixture.identity]) }
+            let deadline = ContinuousClock.now + .seconds(3)
+            while !(await fixture.validator.waiting), ContinuousClock.now < deadline { await Task.yield() }
+            try #require(await fixture.validator.waiting)
+            let snapshot = await fixture.library.snapshot()
+            owner.observeModelAvailability(snapshot)
+            owner.observeModelAvailability(snapshot)
+            await fixture.validator.finish(); await check.value
+            #expect(owner.explicitModelReadiness[fixture.identity] == .available)
+            #expect(owner.explicitModelReadiness["image:unrelated-missing"] == .unavailable)
+            #expect(await fixture.validator.calls == 1)
+            #expect(await fixture.engine.submissions == 0)
+            #expect(await owner.requestClose())
+        }
+    }
+}

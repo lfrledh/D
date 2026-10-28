@@ -23,6 +23,8 @@ public struct TextExecutionCapability: Codable, Equatable, Sendable {
             controlFidelity: .approximate)
     }
 
+    public var supportsOrderedMessages: Bool { profile == Self.qwen35VLMProfile }
+
     public func validate(_ request: TextRequest) throws {
         _ = try resolve(request)
     }

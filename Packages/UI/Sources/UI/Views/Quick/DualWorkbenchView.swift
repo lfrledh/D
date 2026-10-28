@@ -798,8 +798,8 @@ public struct DualWorkbenchView: View {
             Button(workspaceText(language, "cancel"),role:.cancel) { pendingLegacyPreview=nil }.keyboardShortcut(.cancelAction)
         } message: { Text(workspaceText(language, "pinExplanation")) }
         .onChange(of: model.manifest?.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
-        .onChange(of: quickModelIdentity) { _, _ in Task { await checkDemandReadiness() } }
-        .onChange(of: graphModelIdentities) { _, _ in Task { await checkDemandReadiness() } }
+
+
     }
     public var body: some View {
         presentedWorkspace
@@ -883,11 +883,17 @@ public struct DualWorkbenchView: View {
                     return workspaceAssetEntries.filter { $0.item.kind == .asset && category.contains($0.item.contentKind) }
                 }
                 _ = entries // Refresh the complete semantic inputs before selecting.
-                return libraryProjection.selection(canvasMode: canvasMode, family: canvasMode == .nodes || compact ? nil : modelPickerCategory)
+                let candidates = libraryProjection.selection(canvasMode: canvasMode, family: nil)
+                guard !forCanvas, let family = modelPickerCategory else { return candidates }
+                return candidates.filter { value in
+                    guard case .operation(let operation, let identity) = value.selection, let identity else { return false }
+                    return selectionModel.projectSession.supportsQuick(operationID: operation, identity: identity,
+                        category: family, conversation: family == .text && quick.textPresentation == .chat)
+                }
             }()
             let collectAction: (([SharedLibraryBrowserEntry], Bool) -> Void)? = !forCanvas || canvasMode?.resourceCategory == nil ? nil : { values, collect in collectLibraryEntries(values, collect) }
             SharedLibraryBrowser(entries: sourceEntries, store: metadata, compact: compact, allowsImport: canvasMode?.resourceCategory != nil, canvasMode:canvasMode,
-                scopeDescription: ([model.manifest?.name, automaticQuickModel.manifest == nil ? nil : layoutText(language, "independent")].compactMap { $0 }).joined(separator: " · "),
+                scopeDescription: ([!forCanvas ? modelPickerCategory.map { workflowText(language, "quick.requiredTask." + $0.rawValue) } : nil, model.manifest?.name, automaticQuickModel.manifest == nil ? nil : layoutText(language, "independent")].compactMap { $0 }).joined(separator: " · "),
                 importTargetDescription: forCanvas ? canvasModel.manifest?.name ?? "—" : quickImportTitle,
                 state: canvasMode.flatMap { canvasLibraryStates[$0] } ?? (compact ? compactLibraryState : fullLibraryState),
                 onCollect: collectAction,
@@ -1008,10 +1014,14 @@ public struct DualWorkbenchView: View {
         quickModel.projectSession.refreshWorkflowModels()
         if model.projectSession !== quickModel.projectSession { model.projectSession.refreshWorkflowModels() }
         let installationSnapshot = await library.library.snapshot()
-        quickModel.projectSession.observeModelAvailability(installationSnapshot)
-        if model.projectSession !== quickModel.projectSession { model.projectSession.observeModelAvailability(installationSnapshot) }
-        if checkModels { await quickModel.projectSession.checkExplicitModelReadiness() }
-        else { await checkDemandReadiness() }
+        let quickDemand = Set([quickModelIdentity].compactMap { $0 }.filter { !$0.isEmpty })
+        quickModel.projectSession.observeModelAvailability(installationSnapshot,
+            demanded: quickDemand.union(quickModel.projectSession.openGraphModelIdentities))
+        if model.projectSession !== quickModel.projectSession {
+            model.projectSession.observeModelAvailability(installationSnapshot, demanded: model.projectSession.openGraphModelIdentities)
+        }
+        if checkModels { await checkDemandReadiness() }
+
         let otherStore = model.projectSession.currentStore
         var snapshots = [await automaticQuick.store.snapshot()]
         if let otherStore, otherStore !== automaticQuick.store {
@@ -1061,6 +1071,7 @@ public struct DualWorkbenchView: View {
                         }
                         return (source, try await source.pinWorkflowAsset(assetID), asset.name)
                     }, textWorkspaceActions: AnyView(singleTextActions))
+                    .environment(\.workflowModelPreparation, library.nodePreparationPresentation)
                     .id(quick.store.rootURL.standardizedFileURL.path)
                     .disabled(quickOwnerIsChanging)
     }
@@ -1081,7 +1092,7 @@ public struct DualWorkbenchView: View {
     /// Only an explicit model/settings selection changes the future chat configuration.
     private func applySelectedModelToChat() {
         guard quick.category == .text, let node = quick.draft?.node else { return }
-        guard [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(node.operationID) else {
+        guard selectionModel.projectSession.supportsQuick(operationID: node.operationID, identity: node.parameters["modelID"]?.string ?? "", category: .text, conversation: true) else {
             // The selected legacy model has single-turn semantics. Show its real
             // surface rather than silently retaining a different chat model.
             captureChatReading()
@@ -1098,7 +1109,7 @@ public struct DualWorkbenchView: View {
     /// Temporary selection never writes the ordinary Quick draft or its navigation.
     private func selectModel(operation: String, identity: String) throws {
         if usesTemporaryChat, let chat {
-            guard [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(operation),
+            guard selectionModel.projectSession.supportsQuick(operationID: operation, identity: identity, category: .text, conversation: true),
                   var node = WorkflowRegistry.standard.operation(operation)?.definition.makeNode() else {
                 throw WorkflowIssue("临时聊天需要支持有序消息的文字模型；其他能力请返回普通快速生成。")
             }
@@ -1113,6 +1124,9 @@ public struct DualWorkbenchView: View {
         guard !quickOwnerIsChanging else { issue = "项目正在切换，当前快速草稿未改变。"; return }
         guard case .operation(let operation, let id) = value.selection,
               let id, WorkflowRegistry.standard.operation(operation)?.definition.modelKind != nil else { presentLibraryDestination(.info(value)); return }
+        if let family = modelPickerCategory,
+           !selectionModel.projectSession.supportsQuick(operationID: operation, identity: id, category: family,
+                conversation: family == .text && quick.textPresentation == .chat) { issue = workflowText(language, "quick.incompatibleTask"); return }
         do { try selectModel(operation: operation, identity: id) }
         catch { issue = error.localizedDescription; return }
         navigate(to: .quick)

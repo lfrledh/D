@@ -65,10 +65,9 @@ struct WorkflowHostView: View {
                     .environment(\.workflowContainerLibrary,metadata)
                     .task(id: "collection:\(controller.collectionRequests.last?.id ?? "none"):\(controller.collectionDrainReady)") {
                         await controller.processCollectionRequests { request in
-                            guard let folder = request.folderID else { return }
+                            guard request.folderID != nil || request.tagIDs?.isEmpty == false else { return }
                             guard let metadata, model.projectSession.workflow === controller, controller.assetLibraryOwner == request.owner else { throw SharedLibraryError.staleAnnotation }
-                            let keys = try Set(request.sources.map { try $0.metadataKey(owner: request.owner, runs: controller.runs) })
-                            try metadata.addMembers(keys, to: folder)
+                            try metadata.applyCollectionOrganization(request, runs: controller.runs)
                         }
                     }
                     .environment(\.workflowPrepareNode, preparationAction(controller: controller))

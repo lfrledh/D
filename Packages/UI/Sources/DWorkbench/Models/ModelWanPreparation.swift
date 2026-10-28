@@ -30,7 +30,7 @@ enum ModelWanPreparation {
     }
     private struct Original: Decodable { var path: String; var size: UInt64; var sha256: String }
 
-    static func verifiedFiles(in stage: ModelDirectory, entry: ModelCatalogEntry) throws -> [String: ModelFileIdentity] {
+    static func requiredFiles(in stage: ModelDirectory, entry: ModelCatalogEntry) throws -> [ModelFile] {
         let marker = "D-VIDEO-PREPARED.json"
         let data = try stage.read(marker, maximum: 2 * 1024 * 1024)
         let value = try JSONDecoder().decode(Manifest.self, from: data)
@@ -64,11 +64,15 @@ enum ModelWanPreparation {
         guard counts == ["text": 242, "diffusion": 825, "vae": 194] else { throw ModelLibraryError.integrity("Wan 模型张量不完整。") }
         let markerFile = ModelFile(path: marker, size: UInt64(data.count), sha256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())
         let tokenizerFiles = WanTokenizerResource.files.map { ModelFile(path: $0.preparedPath, size: $0.size, sha256: $0.sha256) }
-        return try stage.verify(files + tokenizerFiles + [markerFile])
+        return files + tokenizerFiles + [markerFile]
+    }
+
+    static func verifiedFiles(in stage: ModelDirectory, entry: ModelCatalogEntry) throws -> [String: ModelFileIdentity] {
+        try stage.verify(requiredFiles(in: stage, entry: entry))
     }
 
     static func prepare(source: ModelDirectory, entry: ModelCatalogEntry, parent: ModelDirectory,
-                        name: String, externalRawProjection: Bool = false, converter: Converter) async throws -> URL {
+                        name: String, externalRawProjection: Bool = false, converter: Converter, beforePublish: @Sendable (ModelDirectory, [String: ModelFileIdentity]) throws -> Void = { _, _ in }) async throws -> URL {
         guard supports(entry), try ModelDirectory.parts(name).count == 1 else { throw ModelLibraryError.invalidCatalog("此资源不是固定 Wan 转换配方。") }
         guard !externalRawProjection || allowsExternalRawProjection(entry) else {
             throw ModelLibraryError.invalidCatalog("原始目录投影仅适用于固定 Wan 外部仓。")
@@ -96,6 +100,7 @@ enum ModelWanPreparation {
                   try stage.entries(expectedPaths: Set(verified.keys)) == verified else { throw ModelLibraryError.integrity("准备期间原件或执行包发生变化；未发布。") }
             try source.validateLocation(); try parent.validateLocation(); try stage.validateLocation()
             try Task.checkCancellation()
+            try beforePublish(stage, verified)
             guard renameatx_np(parent.descriptor, stageName, parent.descriptor, name, UInt32(RENAME_EXCL)) == 0 else { throw ModelDirectory.failure("发布 Wan 执行包") }
             guard fsync(parent.descriptor) == 0 else { throw ModelLibraryError.storage("Wan 执行包已发布但目录同步失败，文件保留。") }
             let published = try parent.child(name)

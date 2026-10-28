@@ -53,10 +53,10 @@ import Testing
         #expect(t("container.arrived", ["count": "6"]) == "已收到6项")
         #expect(t("container.saveSettings") == "保存设置")
         #expect(t("metadata.panel.workspace.saveOnly") == "重试保存")
-        #expect(t("container.collectionDefaultDestination") == "已收录")
+        #expect(t("container.collectionDefaultDestination") == "不添加标签直接保存")
         #expect(t("container.library.collected") == "已保存到资产库")
-        #expect(t("container.collectionSettings") == "自动保存到项目资产库…")
-        #expect(t("container.collectConfirmed") == "确认后，将已选资产加入资产库")
+        #expect(t("container.collectionSettings") == "设置")
+        #expect(t("container.collectConfirmed") == "自动将合格候选保存到项目资产库")
         #expect(t("container.otherGates.pending") != t("container.otherGates.saved"))
         #expect(t("container.enlarge") != t("container.viewFullContent"))
         try language.select("en")
@@ -64,7 +64,7 @@ import Testing
         #expect(t("container.runCount", ["inputs": "2", "repetitions": "4", "total": "8"]) == "2 inputs × 4 repetitions each = 8 downstream runs")
         #expect(t("container.useContinue", ["count": "2"]) == "Use Selected Items and Continue (2)")
         #expect(t("modelAcquisition.available", ["selected": "3", "available": "1"]) == "3 selected; 1 can be downloaded now.")
-        #expect(t("container.collectionDefaultDestination") == "Collected")
+        #expect(t("container.collectionDefaultDestination") == "Save without adding tags")
         #expect(language.diagnostics.isEmpty)
     }
 

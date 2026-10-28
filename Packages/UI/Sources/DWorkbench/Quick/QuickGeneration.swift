@@ -29,13 +29,7 @@ public struct QuickRunRecord: Codable, Sendable, Equatable, Identifiable {
 public enum QuickCategory: String, Codable, Sendable, CaseIterable {
     case text, image, video, audio
     public static func category(for operationID: String) -> QuickCategory? {
-        switch WorkflowRegistry.standard.operation(operationID)?.definition.modelKind {
-        case .text: .text
-        case .image: .image
-        case .video: .video
-        case .music, .pitch: .audio
-        case nil: nil
-        }
+        WorkflowRegistry.standard.operation(operationID)?.definition.quickCategory
     }
 }
 public enum QuickTextPresentation: String, Codable, Sendable { case chat, single }
@@ -169,22 +163,26 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         guard let id = activeRunID, state.runs.first(where: { $0.id == id })?.draft.id == state.selectedDraftID else { return "" }
         return streamingText
     }
-    public var inputIssue: String? {
+    public var inputIssue: String? { inputValidationIssue?.localizedDescription }
+    public var inputIssueCode: String? { inputValidationIssue?.code }
+    private var inputValidationIssue: WorkflowIssue? {
         guard let draft, let definition = WorkflowRegistry.standard.definition(for: draft.node) else { return nil }
-        guard (1...8).contains(draft.attempts) else { return "快速生成一次支持 1–8 次独立尝试。" }
+        guard (1...8).contains(draft.attempts) else { return WorkflowIssue("快速生成一次支持 1–8 次独立尝试。") }
         for field in definition.fields {
             guard let raw = draft.fieldText[field.id] else { continue }
             switch field.kind {
-            case .integer: if Int(raw) == nil { return field.title + "需要整数" }
-            case .decimal: if Double(raw)?.isFinite != true { return field.title + "需要有效数值" }
+            case .integer: if Int(raw) == nil { return WorkflowIssue(field.title + "需要整数") }
+            case .decimal: if Double(raw)?.isFinite != true { return WorkflowIssue(field.title + "需要有效数值") }
             default: break
             }
         }
         for port in definition.inputs where port.assetListKind != nil {
             guard let value = draft.inputs[port.id] else { continue }
             do { _ = try Self.assetItems(from: value, port: port) }
-            catch { return port.title + "：" + error.localizedDescription }
+            catch { return WorkflowIssue(port.title + "：" + error.localizedDescription) }
         }
+        do { try WorkflowRegistry.standard.validateInputs(draft.inputs, node: draft.node, connectedPorts: []) }
+        catch { return error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription) }
         return nil
     }
     public var canStart: Bool {

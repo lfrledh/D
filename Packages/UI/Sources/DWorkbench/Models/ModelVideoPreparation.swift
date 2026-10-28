@@ -1,3 +1,4 @@
+import CryptoKit
 import Darwin
 import Foundation
 
@@ -14,8 +15,18 @@ enum ModelVideoPreparation {
         }
     }
 
+    static func requiredFiles(in directory: ModelDirectory, entry: ModelCatalogEntry) throws -> [ModelFile] {
+        guard let profile = profile(for: entry) else { throw ModelLibraryError.invalidCatalog("Unsupported prepared model recipe.") }
+        let marker = "D-VIDEO-PACK.json", data = try directory.read("D-VIDEO-PACK.json", maximum: 65536)
+        guard let descriptor = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              descriptor["schemaVersion"] as? Int == 1, descriptor["profile"] as? String == profile,
+              descriptor["modelRevision"] as? String == entry.revision else { throw ModelLibraryError.integrity("Prepared model descriptor differs from its fixed recipe.") }
+        return entry.files.map { ModelFile(path: "model/" + $0.path, size: $0.size, sha256: $0.sha256, digestAlgorithm: $0.digestAlgorithm) }
+            + [.init(path: marker, size: UInt64(data.count), sha256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())]
+    }
+
     static func prepare(source: ModelDirectory, entry: ModelCatalogEntry, parent: ModelDirectory,
-                        name: String, checkpoint: @Sendable (Int) throws -> Void = { _ in }) throws -> URL {
+                        name: String, checkpoint: @Sendable (Int) throws -> Void = { _ in }, beforePublish: @Sendable (ModelDirectory, [String: ModelFileIdentity]) throws -> Void = { _, _ in }) throws -> URL {
         guard let profile = profile(for: entry), try ModelDirectory.parts(name).count == 1 else {
             throw ModelLibraryError.invalidCatalog("此资源需要尚未接入的转换步骤，不会伪造执行包。")
         }
@@ -64,6 +75,7 @@ enum ModelVideoPreparation {
             }
             try source.validateLocation(); try parent.validateLocation(); try stage.validateLocation()
             try Task.checkCancellation()
+            try beforePublish(stage, publishedFiles)
             guard renameatx_np(parent.descriptor, stageName, parent.descriptor, name, UInt32(RENAME_EXCL)) == 0 else {
                 throw ModelDirectory.failure("发布执行包")
             }
@@ -85,7 +97,7 @@ enum ModelVideoPreparation {
         }
     }
 
-    private static func copy(_ path: String, from source: ModelDirectory, to destination: String, in target: ModelDirectory) throws {
+    static func copy(_ path: String, from source: ModelDirectory, to destination: String, in target: ModelDirectory) throws {
         let input = try source.openFile(path); defer { Darwin.close(input) }
         let original = try ModelDirectory.identity(input, regular: true)
         let (parent, name) = try target.parent(destination, create: true); defer { Darwin.close(parent) }

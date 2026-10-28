@@ -34,7 +34,7 @@ enum WorkflowExternalVideoOperations {
         if h3 { inputs.append(.init("lastFrame", "尾帧 PNG", kinds: [.image], required: false)) }
         return WorkflowOperation(definition: .init(id: recipe.operationID, title: title, detail: detail,
             inputs: inputs,
-            outputs: [.init("output", "含声音的视频", kinds: [.video])], fields: fields, modelKind: .video),
+            outputs: [.init("output", "含声音的视频", kinds: [.video])], fields: fields, modelKind: .video, quickCategory: .video),
             validate: { node in
                 guard let seed = UInt64(node.parameters["seed"]?.string ?? "") else { throw WorkflowIssue("视频种子无效。") }
                 // Connected prompt values are validated after input binding; parameter

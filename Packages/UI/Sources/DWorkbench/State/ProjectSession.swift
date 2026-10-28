@@ -797,6 +797,7 @@ public final class ProjectSession {
         explicitModelIssues = [:]
         explicitModelChecking = []
         modelAvailabilityObservations = [:]
+        unboundModelAvailabilityObservations = [:]
         store = candidate
         session = createdSession
         projectLease = lease
@@ -1066,6 +1067,14 @@ public final class ProjectSession {
         if let installation = try WorkflowModelBookmarks(settings: settings).installation(for: identity) {
             guard let library = modelLibrary else { throw WorkflowIssue("模型库当前不可用；未改用其他目录。") }
             return try await resolveInstalledWorkflowModel(installation, kind: kind, identity: identity, session: session, library: library)
+        }
+        if let library = modelLibrary,
+           !(try WorkflowModelBookmarks(settings: settings).entries()).contains(where: { $0.identity == identity && $0.kind == kind }) {
+            let matches = await library.snapshot().runnableResources(identity: identity)
+            guard matches.count <= 1 else { throw WorkflowIssue("Multiple file records exist for this model.", code: "modelManagement.multipleFiles") }
+            if let resource = matches.first {
+                return try await resolveInstalledWorkflowModel(resource.record.id, kind: kind, identity: identity, session: session, library: library)
+            }
         }
         if let adapter = session.modelAdapters.first(where: { $0.kind == kind && $0.identity == identity }) {
             guard let entry = try WorkflowModelBookmarks(settings: settings).entries().first(where: { $0.identity == identity && $0.kind == kind }) else {
@@ -1398,6 +1407,21 @@ public final class ProjectSession {
         let id = defaultWorkflowModel(target.kind)
         if !id.isEmpty { controller.bindModel(id, to: target) }
     }
+    public func supportsQuick(operationID: String, identity: String, category: QuickCategory, conversation: Bool) -> Bool {
+        guard let definition = WorkflowRegistry.standard.operation(operationID)?.definition,
+              definition.quickCategory == category,
+              WorkflowModelRoutes.draftChoice(operationID: operationID, modelID: identity) != nil else { return false }
+        // Existing controls can supply text, individual media assets, and declared
+        // media lists. Required generic records/collections stay in the workflow.
+        let media: Set<WorkflowDataKind> = [.image, .video, .audio, .text]
+        guard definition.inputs.filter(\.required).allSatisfy({ port in
+            port.kinds.contains(.text) || !Set(port.kinds).isDisjoint(with: media) || port.assetListKind.map(media.contains) == true
+        }) else { return false }
+        if conversation {
+            return session?.modelAdapters.first(where: { $0.operationID == operationID && $0.identity == identity })?.textCapability?.supportsOrderedMessages == true
+        }
+        return true
+    }
     public private(set) var explicitModelReadiness: [String: SharedLibraryReadiness] = [:]
     public private(set) var explicitModelIssues: [String: String] = [:]
     public private(set) var explicitModelChecking: Set<String> = []
@@ -1426,6 +1450,7 @@ public final class ProjectSession {
         }
     }
     @ObservationIgnored private var modelAvailabilityObservations: [String: ModelAvailabilityObservation] = [:]
+    @ObservationIgnored private var unboundModelAvailabilityObservations: [String: [ModelAvailabilityObservation]] = [:]
     private func rememberModelAvailability(identity: String, installation: ModelID, snapshot: ModelLibrarySnapshot) {
         modelAvailabilityObservations[identity] = .init(installation: installation,
             record: snapshot.records.first { $0.id == installation },
@@ -1462,13 +1487,45 @@ public final class ProjectSession {
     }
     /// Installation state can revoke an earlier readiness observation. It cannot
     /// grant execution: only the real resolver above can validate an installation.
-    public func observeModelAvailability(_ snapshot: ModelLibrarySnapshot) {
+    public func observeModelAvailability(_ snapshot: ModelLibrarySnapshot, demanded: Set<String>? = nil) {
+        let demands = demanded ?? openGraphModelIdentities
         guard snapshot.revision >= modelAvailabilityRevision else { return }
         modelAvailabilityRevision = snapshot.revision
         do {
             let bookmarks = WorkflowModelBookmarks(settings: settings)
             let identities = try bookmarks.installationIdentities()
             modelAvailabilityObservations = modelAvailabilityObservations.filter { identities.contains($0.key) }
+            let legacy = Set(try bookmarks.entries().map(\.identity))
+            let currentUnbound = Set(snapshot.catalog.compactMap(\.workflowIdentity)).subtracting(identities).subtracting(legacy)
+            unboundModelAvailabilityObservations = unboundModelAvailabilityObservations.filter { currentUnbound.contains($0.key) }
+            for entry in snapshot.catalog {
+                guard let identity = entry.workflowIdentity, !identities.contains(identity), !legacy.contains(identity) else { continue }
+                let ready = snapshot.runnableResources(identity: identity)
+                let observations = snapshot.resources.filter { $0.record.catalogID == entry.id }.sorted { $0.id.description < $1.id.description }
+                    .map { ModelAvailabilityObservation(installation: $0.record.id, record: $0.record, control: $0.control) }
+                // Progress/lease timestamps never reset an execution failure or
+                // propagate through the entire graph. Only file-state changes do.
+                let previous = unboundModelAvailabilityObservations[identity]
+                guard previous != observations else { continue }
+                unboundModelAvailabilityObservations[identity] = observations
+                let supported = session.map { session in
+                    session.modelAdapters.contains { $0.identity == identity }
+                    || session.videoAdapters.contains { "video:" + $0.modelIdentity == identity }
+                    || (entry.id == ModelCatalog.flux2ID)
+                    || (entry.workflowProfileID == "d.model.language" && session.validateTextModel != nil)
+                    || (entry.workflowProfileID == "d.music.generate" && session.validateMusicModel != nil)
+                    || (entry.workflowProfileID == "d.video.generate" && session.validateVideoModel != nil)
+                } ?? false
+                let state: SharedLibraryReadiness = !supported ? .unsupported : (ready.count == 1 ? .unknown : (ready.isEmpty ? .unprepared : .unavailable))
+                if explicitModelReadiness[identity] != state { explicitModelReadiness[identity] = state }
+                explicitModelIssues[identity] = ready.count > 1 ? "Multiple file records exist for this model." : nil
+                modelReadinessRequests[identity] = nil
+                if supported, ready.count == 1, previous != nil || demands.contains(identity) {
+                    // One coordinated demand after a durable installation change,
+                    // not a node/view task and never a progress/asset refresh timer.
+                    Task { [weak self] in await self?.checkExplicitModelReadiness(for: [identity]) }
+                }
+            }
             for identity in identities {
                 guard let id = try bookmarks.installation(for: identity) else { continue }
                 let record = snapshot.records.first { $0.id == id }
@@ -1478,8 +1535,9 @@ public final class ProjectSession {
                 let installed = record?.registrationState == .registered && record?.state == .installed && record?.availability == .available
                 // A recovered copy reopens preparation/selection, never execution.
                 // An unchanged ready snapshot must preserve real adapter failures.
-                guard !installed || (previous != nil && previous != observation) else { continue }
-                modelReadinessGeneration = UUID()
+                guard previous != observation, !installed || previous != nil else { continue }
+                // A resource change invalidates only its own demand. Unrelated
+                // progress/unavailability cannot cancel another model's admission.
                 if let library = modelLibrary {
                     WorkflowModelReadiness.invalidate(.init(library: ObjectIdentifier(library), installation: id,
                                                             identity: identity))
@@ -1489,6 +1547,7 @@ public final class ProjectSession {
                 explicitModelReadiness[identity] = installed ? .unknown : (record?.state == .preparationRequired ? .unprepared : .unavailable)
                 explicitModelIssues[identity] = installed ? nil : record?.error ?? (record?.state == .preparationRequired
                     ? "模型原始文件已校验，仍需准备执行引擎。" : "模型安装已不可用，请在模型库检查。")
+                if installed { Task { [weak self] in await self?.checkExplicitModelReadiness(for: [identity]) } }
             }
         } catch { workflow?.errorMessage = error.localizedDescription }
     }
@@ -1616,6 +1675,24 @@ public final class ProjectSession {
                     guard currentStamps == stamps else {
                         WorkflowModelReadiness.invalidate(key, matching: stamps)
                         throw WorkflowIssue("核验期间模型文件已改变。")
+                    }
+                } else if let library = modelLibrary, let resource = await library.snapshot().uniqueRunnableResource(identity: choice.id) {
+                    let id = resource.record.id
+                    let checked = await library.checkAvailability(ids: [id])
+                    guard let record = checked.records.first(where: { $0.id == id }) else { throw WorkflowIssue("Model record changed.", code: "modelManagement.recordChanged") }
+                    let stamps = try WorkflowModelReadiness.stamps(for: record, in: checked)
+                    let key = WorkflowModelReadiness.Key(library: ObjectIdentifier(library), installation: id, identity: choice.id)
+                    explicitModelChecking.insert(choice.id)
+                    try await WorkflowModelReadiness.check(key, stamps: stamps, force: identities == nil) {
+                        let binding = try await self.resolveInstalledWorkflowModel(id, kind: choice.kind, identity: choice.id, session: session, library: library)
+                        await binding.release()
+                    }
+                    let latest = await library.checkAvailability(ids: [id])
+                    guard latest.uniqueRunnableResource(identity: choice.id)?.record.id == id,
+                          let current = latest.records.first(where: { $0.id == id }),
+                          (try? WorkflowModelReadiness.stamps(for: current, in: latest)) == stamps else {
+                        WorkflowModelReadiness.invalidate(key, matching: stamps)
+                        throw WorkflowIssue("Model files changed during validation.", code: "modelManagement.recordChanged")
                     }
                 } else {
                     guard modelReadinessRequests[choice.id] == request,
@@ -2867,6 +2944,7 @@ public final class ProjectSession {
             explicitModelIssues = [:]
             explicitModelChecking = []
             modelAvailabilityObservations = [:]
+            unboundModelAvailabilityObservations = [:]
             workflow?.deactivateAfterClose()
             workflow = nil
             session = nil

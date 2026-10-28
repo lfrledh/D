@@ -322,6 +322,7 @@ public struct WorkflowRegistry: Sendable {
             }
             if port.assetListKind != nil { _ = try port.resolveAssets(value) }
         }
+        try operation(node.operationID)?.validateResolvedInputs(node, inputs)
     }
 
     private static func validateSchema(_ definition: WorkflowOperationDefinition) throws {

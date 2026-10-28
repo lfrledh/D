@@ -355,7 +355,7 @@ struct ModelLibraryTests {
         try await library.shutdown()
     }
 
-    @Test func copyIndexFailureRollsBackPublishedContent() async throws {
+    @Test func copyIndexFailureRetainsPublishedContentForSaveOnlyRecovery() async throws {
         let fixture = try LibraryFixture(); defer { fixture.clean() }
         let library = try await fixture.library()
         try await library.configureRoot(at: fixture.destination)
@@ -365,12 +365,16 @@ struct ModelLibraryTests {
         try FileManager.default.moveItem(at: index, to: backup)
         try FileManager.default.createDirectory(at: index, withIntermediateDirectories: false)
         await #expect(throws: ModelLibraryError.self) { _ = try await library.copyExistingToLibrary(sourceID) }
-        #expect(await library.snapshot().records.map(\.id) == [sourceID])
+        #expect(await library.snapshot().records.count == 2)
         let published = fixture.destination.appendingPathComponent(".d-model-library/Installations")
-        #expect(try FileManager.default.contentsOfDirectory(atPath: published.path).isEmpty)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: published.path).count == 1)
         try await expectSameVerifiedSource(library, id: sourceID, fixture: fixture)
         try FileManager.default.removeItem(at: index)
         try FileManager.default.moveItem(at: backup, to: index)
+        let originalPublished = try FileManager.default.contentsOfDirectory(atPath: published.path)
+        let resumed = try await library.copyExistingToLibrary(sourceID)
+        #expect(originalPublished == [resumed.description])
+        #expect(try FileManager.default.contentsOfDirectory(atPath: published.path) == originalPublished)
         try await library.shutdown()
     }
 

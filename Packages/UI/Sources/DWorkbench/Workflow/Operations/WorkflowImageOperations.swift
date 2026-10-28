@@ -23,7 +23,7 @@ enum WorkflowImageOperations {
                 .init("memoryBudgetGiB", "显式内存预算 GiB（0使用运行时策略）", .integer, .integer(0)),
                 .init("loadingStrategy", "加载方式", .choice(["staged", "ssdLayered"]), .text("staged")),
                 .init("modelID", "模型内容身份", .text(multiline: false), .text("")),
-            ], modelKind: .image
+            ], modelKind: .image, quickCategory: .image
         ),
         validate: { node in
             try WorkflowLimits.positive(WorkflowScalarReader.integer("width", in: node), field: "width", node: node)
@@ -42,6 +42,11 @@ enum WorkflowImageOperations {
             }
             let count = try WorkflowScalarReader.integer("count", in: node)
             guard (1 ... 8).contains(count) else { throw WorkflowIssue("count 必须为 1...8。", nodeID: node.id) }
+        },
+        validateResolvedInputs: { node, inputs in
+            if inputs["prompt"] == nil, node.parameters["promptText"]?.string?.isEmpty != false {
+                throw WorkflowIssue("A generation prompt is required.", nodeID: node.id, port: "prompt", code: "workflow.input.promptRequired")
+            }
         },
         execute: { context, services in
             try WorkflowExecution.requireModel(in: context.node)

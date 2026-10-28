@@ -57,7 +57,7 @@ struct SharedAssetMetadataPanel: View {
                             if let onEdit { onEdit(request) } else { editing = request }
                         }.accessibilityIdentifier("asset-annotations-edit").workbenchHelp("RESULT-INFO", target: "asset:\(snapshot.projectID):\(snapshot.instanceID):\(snapshot.asset.id):\(snapshot.record?.reference)")
                     }
-                    SharedLibraryTagSection(store: library, target: .init(key: logicalKey, title: snapshot.asset.name, legacy: snapshot.asset.tags), validateTarget: validate)
+                    SharedLibraryTagSection(store: library, target: .init(key: logicalKey, title: snapshot.asset.name, legacy: snapshot.asset.tags, contentKind: snapshot.asset.workflowContentKind), validateTarget: validate)
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
             GroupBox(t("technical")) {
@@ -271,7 +271,7 @@ struct RuntimeValueMetadataPanel: View {
                 draft = Draft(expected: annotation, initial: annotation ?? .init(name: title), identity: identity, validate: validate)
             }.accessibilityIdentifier("runtime-annotations-edit")
             SharedLibraryTagSection(store: library,
-                target: .init(key: identity.storageKey, title: annotation?.name ?? title, legacy: []), validateTarget: validate)
+                target: .init(key: identity.storageKey, title: annotation?.name ?? title, legacy: [], contentKind: value.kind), validateTarget: validate)
             Text(metadataText(language, "runtimeOwnership", "", "")).font(.caption).foregroundStyle(.secondary)
         }
         .workbenchSheet(item: $draft, title: workflowText(language, "childPanel.name.metadata")) { captured in

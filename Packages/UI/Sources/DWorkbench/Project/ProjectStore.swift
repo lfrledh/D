@@ -3459,7 +3459,7 @@ extension ProjectStore {
                     guard request.manualID == nil,
                           let record = archive.runs.first(where: { $0.id == origin.address.runID })?.planCheckpoint?.records.first(where: { $0.id == origin.stepID && $0.address == origin.address }),
                           let expected = try WorkflowAssetCollectionRequest.event(record, previous: nil, owner: request.owner),
-                          request.id == expected.id, request.sources == expected.sources, request.folderID == expected.folderID else { throw WorkflowIssue("Collection request differs from its frozen origin.") }
+                          request.id == expected.id, request.sources == expected.sources, request.folderID == expected.folderID, request.tagIDs == expected.tagIDs else { throw WorkflowIssue("Collection request differs from its frozen origin.") }
                 } else {
                     guard let manualID = request.manualID,
                           request.id == (try WorkflowAssetCollectionRequest(trigger: "manual:" + manualID.uuidString, owner: request.owner, sources: request.sources, folderID: request.folderID, manualID: manualID)).id else { throw WorkflowIssue("Manual collection identity mismatch.") }

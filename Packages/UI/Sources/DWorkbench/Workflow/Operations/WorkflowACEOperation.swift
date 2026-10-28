@@ -28,7 +28,7 @@ enum WorkflowACEOperation {
             .init("repaintStrength", "Repaint 强度", .decimal, .decimal(1)),
             .init("startFrame", "重绘起始采样帧", .integer, .integer(0)),
             .init("endFrame", "重绘结束采样帧（不含）", .integer, .integer(48000)),
-            .init("seed", "种子", .text(multiline: false), .text("42")), WorkflowLanguageOperations.modelField], modelKind: .music),
+            .init("seed", "种子", .text(multiline: false), .text("42")), WorkflowLanguageOperations.modelField], modelKind: .music, quickCategory: .audio),
         validate: { node in
             let p = node.parameters
             guard let seed = UInt64(p["seed"]?.string ?? ""), seed <= UInt32.max,
@@ -37,6 +37,10 @@ enum WorkflowACEOperation {
                   ACELoadingStrategy(rawValue: p["loadingStrategy"]?.string ?? "resident") != nil,
                   let duration = p["duration"]?.decimal, duration.isFinite, duration > 0,
                   ["generate", "cover", "repaint"].contains(p["mode"]?.string ?? "") else { throw WorkflowIssue("ACE参数无效。") }
+        }, validateResolvedInputs: { node, inputs in
+            if ["cover", "repaint"].contains(node.parameters["mode"]?.string ?? ""), inputs["source"] == nil {
+                throw WorkflowIssue("Cover / repaint requires source audio.", nodeID: node.id, port: "source", code: "workflow.input.aceSourceRequired")
+            }
         }, execute: { c, s in .outputs(["output": .asset(try await s.generateACE(context: c))]) })
 
     static func request(node: WorkflowNode, prompt: String, lyrics: String,

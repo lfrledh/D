@@ -24,7 +24,7 @@ enum WorkflowLanguageOperations {
             .init("outputMode", "输出", .choice(visual ? ["text", "json", "response"] : ["text", "json"]), .text("text")),
             .init("maximumPromptTokens", "输入 token 上限", .integer, .integer(2048)),
             .init("maximumOutputTokens", "输出 token 上限", .integer, .integer(256)),
-            .init("temperature", "温度", .decimal, .decimal(0.7)), .init("topP", "Top P", .decimal, .decimal(0.95)), modelField] + visualFields + (visual ? WorkflowLanguageMessageForm.fields : []), modelKind: .text),
+            .init("temperature", "温度", .decimal, .decimal(0.7)), .init("topP", "Top P", .decimal, .decimal(0.95)), modelField] + visualFields + (visual ? WorkflowLanguageMessageForm.fields : []), modelKind: .text, quickCategory: .text),
         validate: { node in
             guard (1...(visual ? 262144 : 32768)).contains(try WorkflowScalarReader.integer("maximumPromptTokens", in: node)),
                   (1...(visual ? 262144 : 8192)).contains(try WorkflowScalarReader.integer("maximumOutputTokens", in: node)) else { throw WorkflowIssue("文字 token 范围无效。") }
@@ -119,7 +119,7 @@ enum WorkflowLanguageOperations {
             .init("steps", "步数", .integer, .integer(WorkflowVideoPresets.fullPreview.steps)),
             .init("guidance", "引导", .decimal, .decimal(WorkflowVideoPresets.fullPreview.guidance)),
             .init("scheduleShift", "采样偏移", .decimal, .decimal(WorkflowVideoPresets.fullPreview.scheduleShift)),
-            .init("seed", "种子", .text(multiline: false), .text("42")), modelField], modelKind: .video),
+            .init("seed", "种子", .text(multiline: false), .text("42")), modelField], modelKind: .video, quickCategory: .video),
         execute: { context, services in .outputs(["output": .asset(try await services.generateVideo(context: context))]) })
 
     @MainActor static func text(_ value: WorkflowValue?, fallback: String = "", services: any WorkflowOperationServices) async throws -> String {

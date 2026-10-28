@@ -12,7 +12,7 @@ struct WorkflowModelPreparation: Equatable {
     let issue: String?
     static func make(record: ModelRecord, control: ModelResourceControl, task: ModelDownloadTask?, requiresPreparation: Bool) -> Self {
         let phase: String
-        if record.availability == .unavailable { phase = "unavailable" }
+        if record.availability == .unavailable { phase = record.locationIssue?.rawValue ?? "unavailable" }
         else if record.availability == .needsAuthorization { phase = "authorization" }
         else if record.state == .verifying { phase = "verifyingModel" }
         else if record.state == .publishing { phase = "publishingModel" }
@@ -30,16 +30,40 @@ struct WorkflowModelPreparation: Equatable {
             issue: task?.postActionError ?? task?.error ?? record.error)
     }
 }
-@MainActor @Observable final class WorkflowModelPreparationState {
+/// One cell per visible exact requirement/installation. Weak registry entries
+/// are pruned on access/publication; snapshots are bounded by current inventory.
+/// Progress mutates the matching cell, never an observable dictionary of all models.
+@MainActor @Observable final class WorkflowModelPreparationCell {
+    var value: WorkflowModelPreparation?
+    init(_ value: WorkflowModelPreparation?) { self.value = value }
+}
+@MainActor final class WorkflowModelPreparationState {
     private(set) var values: [String: WorkflowModelPreparation] = [:]
     private(set) var resources: [ModelID: WorkflowModelPreparation] = [:]
+    private struct WeakCell { weak var cell: WorkflowModelPreparationCell? }
+    private var identities: [String: WeakCell] = [:]
+    private var installations: [ModelID: WeakCell] = [:]
     func replace(_ values: [String: WorkflowModelPreparation], resources: [ModelID: WorkflowModelPreparation]) {
-        if self.values != values { self.values = values }
-        if self.resources != resources { self.resources = resources }
+        self.values = values; self.resources = resources
+        identities = identities.filter { $0.value.cell != nil }
+        installations = installations.filter { $0.value.cell != nil }
+        for (key, weak) in identities { if weak.cell?.value != values[key] { weak.cell?.value = values[key] } }
+        for (key, weak) in installations { if weak.cell?.value != resources[key] { weak.cell?.value = resources[key] } }
+    }
+    func cell(identity: String, installation: ModelID?) -> WorkflowModelPreparationCell {
+        if let installation {
+            if let cell = installations[installation]?.cell { return cell }
+            installations = installations.filter { $0.value.cell != nil }
+            let cell = WorkflowModelPreparationCell(resources[installation]); installations[installation] = .init(cell: cell)
+            return cell
+        }
+        if let cell = identities[identity]?.cell { return cell }
+        identities = identities.filter { $0.value.cell != nil }
+        let cell = WorkflowModelPreparationCell(values[identity]); identities[identity] = .init(cell: cell)
+        return cell
     }
     func value(identity: String, installation: ModelID?) -> WorkflowModelPreparation? {
-        if let installation { return resources[installation] }
-        return values[identity]
+        installation.map { resources[$0] } ?? values[identity]
     }
 }
 private struct WorkflowModelInstallationsKey: EnvironmentKey { static let defaultValue: [String: ModelID] = [:] }
@@ -59,19 +83,54 @@ extension EnvironmentValues {
 struct WorkflowModelPreparationView: View {
     let identity: String
     var scale: CGFloat = 1
+    var fallbackReady = false
+    var onPrepare: (() -> Void)? = nil
+    var permitsPreparation = true
+    var nodeID: UUID? = nil
     @Environment(\.dLanguageStore) private var language
     @Environment(\.workflowModelPreparation) private var state
     @Environment(\.workflowModelInstallations) private var installations
     var body: some View {
-        if let value = state?.value(identity: identity, installation: installations[identity]) {
+        if let state {
+            WorkflowModelPreparationCellView(cell: state.cell(identity: identity, installation: installations[identity]), scale: scale, fallbackReady: fallbackReady, onPrepare: onPrepare, permitsPreparation: permitsPreparation, nodeID: nodeID)
+        }
+    }
+}
+private struct WorkflowModelPreparationCellView: View {
+    let cell: WorkflowModelPreparationCell
+    let scale: CGFloat
+    let fallbackReady: Bool
+    let onPrepare: (() -> Void)?
+    let permitsPreparation: Bool
+    let nodeID: UUID?
+    @Environment(\.dLanguageStore) private var language
+    var body: some View {
+        if let value = cell.value {
             VStack(alignment: .leading, spacing: 3 * scale) {
-                Text(workflowText(language, "workflow.preparation." + value.phase))
+                Text(workflowText(language, "workflow.preparation." + (value.phase == "registered" && fallbackReady ? "ready" : value.phase)))
                 if let completed = value.completed, let total = value.total, total > 0 {
                     ProgressView(value: Double(min(completed, total)), total: Double(total))
                     Text(ByteCountFormatter.string(fromByteCount: Int64(clamping: completed), countStyle: .file) + " / " + ByteCountFormatter.string(fromByteCount: Int64(clamping: total), countStyle: .file)).monospacedDigit()
                 }
-                if let issue = value.issue { Text(issue).lineLimit(2) }
+
             }.font(.system(size: 10 * scale)).foregroundStyle(.secondary).allowsHitTesting(false)
         }
+        if let onPrepare, cell.value?.phase != "registered", !fallbackReady {
+            let busy = ["queued", "downloading", "verifying", "publishing", "verifyingModel", "publishingModel", "registering"].contains(cell.value?.phase ?? "")
+            Button(action: onPrepare) {
+                Text(workflowText(language, busy ? "workflow.node.prepare.pending" : "workflow.node.prepare.download"))
+            }.buttonStyle(WorkbenchGlassButtonStyle())
+                .disabled(!permitsPreparation || busy)
+                .accessibilityIdentifier("workflow-node-prepare-" + (nodeID?.uuidString ?? "quick"))
+                .modifier(ModelPreparationNodeControl(nodeID: nodeID))
+        }
+
+    }
+}
+
+private struct ModelPreparationNodeControl: ViewModifier {
+    let nodeID: UUID?
+    @ViewBuilder func body(content: Content) -> some View {
+        if let nodeID { content.workflowNodeControl(nodeID) } else { content }
     }
 }

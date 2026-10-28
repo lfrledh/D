@@ -8,6 +8,9 @@ struct SharedLibraryTagTarget: Identifiable {
     var legacy: [String] = []
     var legacyFailure: String? = nil
     var activityID: String? = nil
+    var contentKind: WorkflowDataKind? = nil
+    var inputs: Set<WorkflowDataKind> = []
+    var outputs: Set<WorkflowDataKind> = []
     var id: String { activityID ?? key }
     var isRuntime: Bool { WorkflowValueIdentity.isStorageKey(key) }
     static func legacy(_ state: ModelNodeTagReadState) -> (names: [String], failure: String?) {
@@ -29,6 +32,7 @@ struct SharedLibraryTagSection: View {
     private func text(_ key: String, _ fallback: String) -> String { workflowText(language, "metadata.tags." + key, fallback: fallback) }
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
+            SharedLibrarySystemTags(target: target)
             Text(text("title", "组织标签")).font(.subheadline.weight(.semibold))
             if let store {
                 let ids = store.metadata.tagAssignments[target.key] ?? []
@@ -80,6 +84,7 @@ struct SharedLibraryTagEditor: View {
             Text(targets.map(\.title).joined(separator: " · ")).lineLimit(3)
             if targets.contains(where: { !$0.isRuntime }) { Text(text("storage", "")).font(.caption).foregroundStyle(.secondary) }
             if targets.contains(where: \.isRuntime) { Text(text("runtimeStorage", "")).font(.caption).foregroundStyle(.secondary) }
+            ForEach(targets) { SharedLibrarySystemTags(target: $0) }
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(orderedTags) { tag in
@@ -238,5 +243,25 @@ struct WorkflowAssetMetadataHost: View {
                 throw WorkflowIssue("Metadata target is no longer open / 元数据所属项目实例或对象已改变。草稿未提交。")
             }
         }
+    }
+}
+
+/// Facts are derived from the same entry as browsing; user tags never change them.
+private struct SharedLibrarySystemTags: View {
+    let target: SharedLibraryTagTarget
+    @Environment(\.dLanguageStore) private var language
+    var body: some View {
+        if target.contentKind != nil || !target.inputs.isEmpty || !target.outputs.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(workflowText(language, "metadata.tags.systemFacts")).font(.caption.weight(.semibold))
+                if let kind = target.contentKind { Text(WorkflowCanvasPresentation.kind(kind, language: language)) }
+                if !target.inputs.isEmpty { row("metadata.tags.inputs", target.inputs) }
+                if !target.outputs.isEmpty { row("metadata.tags.outputs", target.outputs) }
+            }.font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+        }
+    }
+    private func row(_ key: String, _ kinds: Set<WorkflowDataKind>) -> some View {
+        Text(workflowText(language, key) + ": " + kinds.sorted { $0.rawValue < $1.rawValue }
+            .map { WorkflowCanvasPresentation.kind($0, language: language) }.joined(separator: " · "))
     }
 }
