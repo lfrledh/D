@@ -273,13 +273,20 @@ def _open_exact(path: Path, *, directory: bool = False) -> int:
     """Walk from the filesystem root with no symlink following at any component."""
     if not path.is_absolute():
         raise ACEContractError("ACE admitted path is not absolute", "configuration")
-    fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
+    # A security-scoped leaf grants traversal, not directory enumeration of
+    # /Volumes or the user's parent folders. Preserve the no-follow walk while
+    # requesting only search access for directories (as the access manifest does).
+    search = os.O_SEARCH | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    fd = os.open("/", search)
     try:
         for index, part in enumerate(path.parts[1:]):
             last = index == len(path.parts) - 2
-            flags = os.O_RDONLY | os.O_NOFOLLOW
-            if not last or directory:
-                flags |= os.O_DIRECTORY
+            is_directory = not last or directory
+            if last and not directory:
+                is_directory = stat.S_ISDIR(os.stat(part, dir_fd=fd, follow_symlinks=False).st_mode)
+            flags = search if is_directory else (
+                os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+                | getattr(os, "O_NONBLOCK", 0))
             next_fd = os.open(part, flags, dir_fd=fd)
             os.close(fd)
             fd = next_fd

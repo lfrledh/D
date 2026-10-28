@@ -4,6 +4,7 @@ import hashlib
 import contextlib
 import json
 import os
+import stat
 from pathlib import Path
 import struct
 import subprocess
@@ -518,6 +519,24 @@ sys.exit(code)
         source_parent.mkdir()
         with self.assertRaisesRegex(contract.ACEContractError, str(source_parent)):
             record.check(self.manifest)
+
+    def test_record_needs_search_not_directory_enumeration(self):
+        # Reproduce the sandbox distinction: the admitted model is readable,
+        # but its ancestors have search access without directory read access.
+        original = os.open
+        visited = []
+        def search_only(path, flags, *args, **kwargs):
+            info = os.stat(path, dir_fd=kwargs.get("dir_fd"), follow_symlinks=False)
+            if stat.S_ISDIR(info.st_mode):
+                if not flags & os.O_SEARCH:
+                    raise PermissionError("ancestor enumeration is not granted")
+                visited.append(str(path))
+            return original(path, flags, *args, **kwargs)
+        with mock.patch.object(os, "open", side_effect=search_only):
+            record = self.admitted_record()
+            record.check(self.manifest)
+        self.assertIn("/", visited)
+        self.assertIn(self.model.name, visited)
 
     def test_record_rejects_parent_symlink(self):
         record = self.admitted_record()
