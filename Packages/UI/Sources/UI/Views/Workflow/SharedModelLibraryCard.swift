@@ -101,7 +101,7 @@ struct SharedModelVariantCard: View {
             .contentShape(RoundedRectangle(cornerRadius: 12)).onTapGesture(perform: choose)
             .accessibilityIdentifier("model-variant-card-" + entry.id)
     }
-    private var primaryTitle: String { selectingQuickModel ? workflowText(language, "action.chooseModel") : t("add") }
+    private var primaryTitle: String { selectingQuickModel ? workflowText(language, "workflow.action.chooseModel") : t("add") }
     @ViewBuilder private func functionRow(_ definition: WorkflowOperationDefinition) -> some View {
         let title = WorkflowCanvasPresentation.operationTitle(definition, language: language)
         let reason = insertionIssue(definition.id)

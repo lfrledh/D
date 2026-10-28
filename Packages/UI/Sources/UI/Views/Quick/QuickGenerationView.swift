@@ -95,7 +95,11 @@ struct QuickGenerationView: View {
                     }
                     VStack(alignment: .leading, spacing: 8) {
                     if quick.category == .audio {
-                        QuickAudioInput(quick: quick, continueInWorkflow: onSettingsToCanvas)
+                        let compactAudio = geometry.size.height < 720
+                        let lyrics = quick.draft?.node.parameters["vocal"]?.string == "lyrics" && !quick.audioRequiresWorkflow
+                        WorkbenchScrollView {
+                            QuickAudioInput(quick: quick, continueInWorkflow: onSettingsToCanvas, compact: compactAudio)
+                        }.frame(height: quick.audioRequiresWorkflow ? 94 : lyrics ? (compactAudio ? 198 : 234) : (compactAudio ? 78 : 94))
                     } else if let definition, let draft = quick.draft,
                        !definition.fields.filter({ ["task", "promptText"].contains($0.id) }).isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
@@ -437,7 +441,7 @@ struct QuickGenerationView: View {
         return "\(ObjectIdentifier(quick.store)):\(quick.category.rawValue):\(selectedMedia?.assetID.uuidString ?? "none"):\(selectedMedia?.version.uuidString ?? "none"):\(contentVisible):\(detailRun?.id.uuidString ?? "none"):\(preview?.assetID.uuidString ?? "none")"
     }
     private var audioStage: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 8) {
             if let reference = selectedMedia {
                 HStack {
                     QuickAudioCandidate(store: quick.store, reference: reference, attempt: run(containing: reference)?.attemptIndex)
@@ -449,12 +453,12 @@ struct QuickGenerationView: View {
                         WorkbenchMenuAction(audioText("continue")) { onResultToCanvas(reference) }
                     } label: { Image(systemName: "ellipsis").frame(width: 28, height: 28) }.help(audioText("details"))
                 }
-                Spacer(minLength: 8)
+                Spacer(minLength: 0)
                 QuickAudioPlayer(playback: audioPlayback, beforePlay: {
                     model.projectSession.audio?.transport.stopPlayback()
                     model.projectSession.audioCreationTransport.stopPlayback()
                 })
-                Spacer(minLength: 8)
+                Spacer(minLength: 0)
                 HStack {
                     Button(audioText("previous"), systemImage: "chevron.left") { stepCandidate(-1) }.labelStyle(.iconOnly).help(audioText("previous")).disabled(reference == mediaReferences.first)
                     Text("\((mediaReferences.firstIndex(of: reference) ?? 0) + 1) / \(mediaReferences.count)").monospacedDigit()
@@ -466,7 +470,7 @@ struct QuickGenerationView: View {
             }
             if quick.visibleRuns.contains(where: QuickAudioPresentation.hasUnexpectedOutput) { Text(audioText("outputMismatch")).font(.caption).foregroundStyle(.red) }
             if let inputNotice { Text(inputNotice).font(.caption).foregroundStyle(.secondary) }
-        }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity).workbenchPanel(cornerRadius: 20)
+        }.padding(12).frame(maxWidth: .infinity, maxHeight: .infinity).workbenchPanel(cornerRadius: 20)
     }
     private func saveAudio(_ reference: WorkflowAssetReference) async {
         guard !savingAudio else { return }

@@ -11,7 +11,11 @@ import Testing
         let quick = QuickGenerationController(store: store) { throw WorkflowIssue("No inference") }
         await quick.load(); quick.select(operationID: "d.music.generate", modelID: "fixture:audio")
         let language = UILanguageStore(preferredLanguages: ["zh-Hans"])
-        let host = NSHostingView(rootView: QuickAudioInput(quick: quick, continueInWorkflow: { _ in }).environment(\.dLanguageStore, language))
+        func input(compact: Bool) -> some View {
+            WorkbenchScrollView { QuickAudioInput(quick: quick, continueInWorkflow: { _ in }, compact: compact) }
+                .frame(height: compact ? 78 : 94).environment(\.dLanguageStore, language)
+        }
+        let host = NSHostingView(rootView: input(compact: true))
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 500, height: 230), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
         window.contentView = host; defer { window.contentView = nil }
         func settle() async throws { for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) } }
@@ -24,7 +28,7 @@ import Testing
         try await settle()
         text.setMarkedText("zhong", selectedRange: .init(location: 5, length: 0), replacementRange: .init(location: 6, length: 0))
         #expect(text.hasMarkedText())
-        try await quick.flush(); try language.select("en"); window.setContentSize(.init(width: 360, height: 220)); try await settle()
+        try await quick.flush(); try language.select("en"); window.setContentSize(.init(width: 360, height: 220)); host.rootView = input(compact: false); try await settle()
         #expect(try editor() === text); #expect(text.hasMarkedText()); #expect(text.string == "Piano zhong")
         text.insertText("中", replacementRange: text.markedRange()); try await settle()
         #expect(quick.draft?.node.parameters["promptText"] == .text("Piano 中"))
@@ -32,6 +36,7 @@ import Testing
         text.undoManager?.undo(); try await settle()
         #expect(!text.hasMarkedText()); #expect(quick.state.runs.isEmpty)
         #expect(language.text("quick.audio.description", fallback: "missing") == "Music description")
+        #expect(workflowText(language, "workflow.action.chooseModel") == "Choose Model")
         try language.select("zh-Hans"); #expect(language.text("quick.audio.generate", fallback: "missing") == "生成音频")
         try await quick.prepareForTermination(); try await store.close()
     }

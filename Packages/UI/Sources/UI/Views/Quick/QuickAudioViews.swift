@@ -53,6 +53,7 @@ struct QuickAudioSettings: View {
 struct QuickAudioInput: View {
     @Bindable var quick: QuickGenerationController
     let continueInWorkflow: (QuickDraft) -> Void
+    var compact = false
     @Environment(\.dLanguageStore) private var language
     var body: some View {
         if let draft = quick.draft {
@@ -82,7 +83,7 @@ struct QuickAudioInput: View {
                 accessibilityIdentifier: "quick-audio-" + key, accessibilityLabel: audioText(language, title),
                 onEdit: { quick.setParameter(key, value: .text($0), draftID: draft.id) },
                 placeholder: placeholder.map { audioText(language, $0) })
-                .id([draft.id, key]).frame(height: key == "lyricsText" ? 72 : 64).padding(4).workbenchInputSurface()
+                .id([draft.id, key]).frame(height: key == "lyricsText" ? (compact ? 56 : 72) : (compact ? 48 : 64)).padding(4).workbenchInputSurface()
         }
     }
 }
@@ -121,21 +122,25 @@ struct QuickAudioPlayer: View {
     @Environment(\.dLanguageStore) private var language
     @State private var issue: String?
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 8) {
             if let format = playback.format {
                 let transport = playback.transport
-                Button(audioText(language, transport.state == .playing ? "pause" : "play"), systemImage: transport.state == .playing ? "pause.fill" : "play.fill") {
-                    if transport.state == .playing { transport.pause() }
-                    else { beforePlay(); perform { try transport.play() } }
-                }.labelStyle(.iconOnly).font(.title).frame(width: 48, height: 48)
-                    .help(audioText(language, transport.state == .playing ? "pause" : "play"))
-                    .accessibilityIdentifier("quick-audio-play")
-                Slider(value: Binding(get: { Double(transport.positionFrame) }, set: { frame in perform { try transport.seek(toFrame: min(format.frameCount - 1, Int64(frame))) } }), in: 0...Double(max(1, format.frameCount)))
-                    .accessibilityLabel(audioText(language, "position"))
-                HStack {
-                    Text(time(Double(transport.positionFrame) / format.sampleRate))
-                    Spacer(); Text(time(Double(format.frameCount) / format.sampleRate))
-                }.font(.caption.monospacedDigit())
+                HStack(spacing: 12) {
+                    Button(audioText(language, transport.state == .playing ? "pause" : "play"), systemImage: transport.state == .playing ? "pause.fill" : "play.fill") {
+                        if transport.state == .playing { transport.pause() }
+                        else { beforePlay(); perform { try transport.play() } }
+                    }.labelStyle(.iconOnly).font(.title2).frame(width: 36, height: 36)
+                        .help(audioText(language, transport.state == .playing ? "pause" : "play"))
+                        .accessibilityIdentifier("quick-audio-play")
+                    VStack(spacing: 4) {
+                        Slider(value: Binding(get: { Double(transport.positionFrame) }, set: { frame in perform { try transport.seek(toFrame: min(format.frameCount - 1, Int64(frame))) } }), in: 0...Double(max(1, format.frameCount)))
+                            .accessibilityLabel(audioText(language, "position"))
+                        HStack {
+                            Text(time(Double(transport.positionFrame) / format.sampleRate))
+                            Spacer(); Text(time(Double(format.frameCount) / format.sampleRate))
+                        }.font(.caption.monospacedDigit())
+                    }
+                }
                 HStack {
                     Image(systemName: "speaker.wave.2")
                     Slider(value: Binding(get: { Double(transport.volume) }, set: { transport.setVolume(Float($0)) }), in: 0...1)
