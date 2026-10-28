@@ -1,5 +1,15 @@
 # 当前行动与接手点
 
+当前交审：**QUICK-AUDIO-SIMPLIFY-COPY-20261029**。实际起点`301e4d065fcdc3dd9c742dfbdcbdd307bd11879f`，原专属工作树/`codex/ui-consolidated-20261020`累计接续；最终生产 **`5d7adde16b04cd76e4e7ef57a805fda05b19f3fd`**。Quick音频仅MRT2文字、ACE generate纯音乐/含歌词；中央一个播放器、紧凑候选、精确旧稿恢复/无损转图、40双语键已实施。正常App发现的选择误插图、窄窗越界、旧稿入口与ACE遍历/缓存两次失败均同轮修正并独立只读复核。[A01–A20及V01–V06](tasks/D-UI-CONSOLIDATED-01.md#quick-audio-simplify-copy-20261029交审)。
+
+唯一入口：桌面 **D 最新版** → `CurrentD/Quick-Audio-5d7adde1/D.app`。正常完整Release/-O/WMO/开发签名/七引擎/零第三方权重、无诊断注入。最终普通App真实MRT2 4秒及ACE含歌词5.2秒均completed/发布、播放/seek、精确保存/独立导出；48438正常退出→桌面冷开48666，原9run/3旧稿/chat与全部20run/5稿及收录保持，无自动重推理。同版中英1080×612真实图已在会话展示。完整文档交付与远端读回绑定既有`CurrentD/receipt.json`，不签后改App。
+
+72 Workbench＋18 UI主定向方法、34 ACE路径/缓存方法及后续有影响定向回归通过（重复子集不相加）；源码、普通App、真实模型、历史沿用和未验分开。没有新的本人权限/退出请求；只留用户试听/视觉、VoiceOver及现场组字等明确未验，原B2/顶区/玻璃/首拖项不自动关闭。画布性能沿用用户NODE/PAN明显改善、ZOOM多数满意评价；本轮无全面调查。正常候选已供用户/顾问审阅，不扩下一轮、不合并、不上传商店、不发布。
+
+以下截图恢复与B2段落为前序检查点，旧“当前候选/正在”不覆盖上方入口。
+
+**2026-10-29截图恢复补验：** 当前Computer Use已重新连接，生产c464b6e4的当前窗口、切应用返回、设置子窗口3张真实图成功并已在会话展示；1280×820pt/中文，未改产品、未重启或更换D、未发鼠标事件，无新本人权限请求。接手点HEAD仍301e4d06，当前仅3份现有文档增量；原图/记录见B2证据目录`screenshot-recovery-20261029`及[集中审计](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#截图通道恢复检查点2026-10-29)。下方“CUA不可用/无像素”为上轮当时事实，其他未验不因此全关闭。
+
 当前交审：**MODEL-FILES-READINESS-COPY-B2-20261028**，起点完整 `38c9158019f0c85231fd7766fbd2ff80f2df6648`；原专属树/分支累计接续，fetch无遗漏后继、祖先exit0。最终生产 **`c464b6e41b2ef30131ccd7cfa46bb4b80dfc769c`**。两个文件使用方式、准确模型状态通知、固定节点/Quick同目录和第一批02真实标签已实施；**02最终批准已落实，旧待决仅是历史。Quick整套侧栏提案仍待确认。** [A01–A30分级回执](tasks/D-UI-CONSOLIDATED-01.md#model-files-readiness-copy-b2-20261028)。
 
 桌面 **D 最新版** → `CurrentD/Model-Files-c464b6e4/D.app`；正常完整Release、Apple Development签名、七引擎/零第三方权重。真实SwiftF0原位运行、缺源失败即时状态、显式副本选用/源隔离/冷开独立执行和保存保持完成；没有新下载。副本最终run F3D320F4 completed/2输出；最后正常冷开5423。原四条历史、草稿与chat保持；旧包及独立编译缓存清理，模型/项目/证据保留。
