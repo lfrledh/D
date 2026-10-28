@@ -387,7 +387,7 @@ struct QuickGenerationView: View {
     }
     private var generationBar: some View {
             HStack {
-                Text(quick.isRunning ? quick.phase : refinementText("saveNote", fallback: "输入与结果保存到快速创作记录")).font(.caption).foregroundStyle(.secondary)
+                Text(quick.isRunning ? quick.phase : (quick.category == .audio ? displayedInputNotice : nil) ?? refinementText("saveNote", fallback: "输入与结果保存到快速创作记录")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 if quick.isRunning {
                     ProgressView().controlSize(.small)
@@ -484,7 +484,6 @@ struct QuickGenerationView: View {
                 Text(audioText("empty")).foregroundStyle(.secondary); Spacer()
             }
             if quick.visibleRuns.contains(where: QuickAudioPresentation.hasUnexpectedOutput) { Text(audioText("outputMismatch")).font(.caption).foregroundStyle(.red) }
-            if let notice = displayedInputNotice { Text(notice).font(.caption).foregroundStyle(.secondary) }
         }.padding(12).frame(maxWidth: .infinity, maxHeight: .infinity).workbenchPanel(cornerRadius: 20)
     }
     private func saveAudio(_ reference: WorkflowAssetReference) async {
