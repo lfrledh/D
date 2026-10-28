@@ -466,11 +466,16 @@ public final class ModelLibraryModel {
         let response = await panel.begin()
         defer { isChoosingLocation = false }
         guard response == .OK, let url = panel.url else { return }
+        await chooseLocalFiles(at: url, catalogID: catalogID)
+    }
+    func chooseLocalFiles(at url: URL, catalogID: String) async {
         do { localFileSelection = try await library.inspectLocalFiles(at: url, catalogID: catalogID, validatePrepared: preparedValidator) }
         catch { report(error, context: managementText("importFailed")) }
     }
-    public func submitLocalFiles(storage: ModelStorageKind) async {
-        guard let selection = localFileSelection, globalOperation == nil, !isChoosingLocation else { return }
+    @discardableResult
+    public func submitLocalFiles(storage: ModelStorageKind) async -> Bool {
+        guard let selection = localFileSelection, globalOperation == nil, !isChoosingLocation else { return false }
+        var committed = false
         globalOperation = storage == .managed ? .copying : .registering; errorMessage = nil; preparationNotice = nil
         // Retained by the application model, not a sheet task or selected node.
         let task = Task { @MainActor in
@@ -478,14 +483,15 @@ public final class ModelLibraryModel {
                 let id = try await library.registerLocalFiles(selection, storage: storage, validatePrepared: preparedValidator)
                 selectedResource = .init(rawValue: id.rawValue)
                 preparationNotice = managementText(storage == .managed ? "local.copied" : "local.registered")
-                workspace = "resources"; localFileSelection = nil
+                workspace = "resources"; localFileSelection = nil; committed = true
             } catch is CancellationError { preparationNotice = managementText("local.cancelled") }
             catch { report(error, context: managementText("importFailed")) }
         }
         importTask = task
         await task.value
-        importTask = nil; globalOperation = nil
         await refresh()
+        importTask = nil; globalOperation = nil
+        return committed
     }
 
     public func registerExisting(catalogID: String = ModelCatalog.flux2ID,

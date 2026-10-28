@@ -522,7 +522,15 @@ public struct ModelLibraryView: View {
                     }
                     Text(text("local.noGeneration")).font(.caption).foregroundStyle(.secondary)
                     Button(text(importStorage == .managed ? "local.copyRegister" : "local.title")) {
-                        Task { await model.submitLocalFiles(storage: importStorage) }
+                        let submittedCatalog = importCatalogID, submittedStorage = importStorage
+                        Task {
+                            if await model.submitLocalFiles(storage: submittedStorage),
+                               importCatalogID == submittedCatalog, importStorage == submittedStorage,
+                               model.localFileSelection == nil {
+                                // A committed registration is no longer an unsaved form.
+                                importCatalogID = ""; importStorage = .external
+                            }
+                        }
                     }.buttonStyle(WorkbenchPrimaryButtonStyle())
                         .disabled(model.globalOperation != nil || model.hasActiveWork || (importStorage == .external && !selection.supportsOriginal) || (importStorage == .managed && model.rootURL == nil))
                         .accessibilityIdentifier("model-local-submit")

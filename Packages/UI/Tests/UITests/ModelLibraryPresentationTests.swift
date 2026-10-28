@@ -845,3 +845,38 @@ extension ModelLibraryPresentationTests {
         try await library.shutdown()
     }
 }
+
+
+extension ModelLibraryPresentationTests {
+    @Test func localFileSubmissionClearsOnlyCommittedDraft() async throws {
+        let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+        let root = URL(fileURLWithPath: base).appendingPathComponent("LocalDraft-" + UUID().uuidString)
+        let source = root.appendingPathComponent("source")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bytes = Data(repeating: 0x41, count: 4096)
+        let file = source.appendingPathComponent("payload.bin")
+        try bytes.write(to: file)
+        let entry = ModelCatalogEntry(id: "local-draft", title: "Local draft fixture", repository: "fixture/ui", revision: String(repeating: "a", count: 40),
+            files: [.init(path: "payload.bin", size: UInt64(bytes.count), sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())])
+        let library = try await ModelLibrary(stateDirectory: root.appendingPathComponent("state"), catalog: [entry])
+        let model = ModelLibraryModel(library: library)
+        await model.chooseLocalFiles(at: source, catalogID: entry.id)
+        #expect(model.localFileSelection != nil)
+        try Data(repeating: 0x42, count: 4096).write(to: file)
+        let failed = await model.submitLocalFiles(storage: .external)
+        #expect(!failed && model.localFileSelection != nil && model.errorMessage != nil)
+        let afterFailure = await library.snapshot()
+        #expect(afterFailure.records.allSatisfy { $0.registrationState != .registered })
+        try bytes.write(to: file)
+        await model.chooseLocalFiles(at: source, catalogID: entry.id)
+        let saved = await model.submitLocalFiles(storage: .external)
+        #expect(saved && model.localFileSelection == nil && model.errorMessage == nil)
+        let afterSuccess = await library.snapshot()
+        #expect(afterSuccess.records.filter { $0.registrationState == .registered }.count == 1)
+        let duplicate = await model.submitLocalFiles(storage: .external)
+        let afterDuplicate = await library.snapshot()
+        #expect(!duplicate && afterDuplicate.records == afterSuccess.records)
+        try await library.shutdown()
+    }
+}
