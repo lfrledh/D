@@ -10,6 +10,13 @@ struct WorkflowModelPreparation: Equatable {
     let completed: UInt64?
     let total: UInt64?
     let issue: String?
+    func displayPhase(ready: Bool, hasExplicitInstallation: Bool) -> String {
+        // A validated legacy bookmark is an exact choice even though it has no
+        // inventory ID. Other copies do not make that choice ambiguous. Never
+        // override an actual missing, revoked or failed installation state.
+        if ready && (phase == "registered" || (!hasExplicitInstallation && phase == "ambiguousCopies")) { return "ready" }
+        return phase
+    }
     static func make(record: ModelRecord, control: ModelResourceControl, task: ModelDownloadTask?, requiresPreparation: Bool) -> Self {
         let phase: String
         if record.availability == .unavailable { phase = record.locationIssue?.rawValue ?? "unavailable" }
@@ -92,12 +99,13 @@ struct WorkflowModelPreparationView: View {
     @Environment(\.workflowModelInstallations) private var installations
     var body: some View {
         if let state {
-            WorkflowModelPreparationCellView(cell: state.cell(identity: identity, installation: installations[identity]), scale: scale, fallbackReady: fallbackReady, onPrepare: onPrepare, permitsPreparation: permitsPreparation, nodeID: nodeID)
+            WorkflowModelPreparationCellView(cell: state.cell(identity: identity, installation: installations[identity]), hasExplicitInstallation: installations[identity] != nil, scale: scale, fallbackReady: fallbackReady, onPrepare: onPrepare, permitsPreparation: permitsPreparation, nodeID: nodeID)
         }
     }
 }
 private struct WorkflowModelPreparationCellView: View {
     let cell: WorkflowModelPreparationCell
+    let hasExplicitInstallation: Bool
     let scale: CGFloat
     let fallbackReady: Bool
     let onPrepare: (() -> Void)?
@@ -107,7 +115,7 @@ private struct WorkflowModelPreparationCellView: View {
     var body: some View {
         if let value = cell.value {
             VStack(alignment: .leading, spacing: 3 * scale) {
-                Text(workflowText(language, "workflow.preparation." + (value.phase == "registered" && fallbackReady ? "ready" : value.phase)))
+                Text(workflowText(language, "workflow.preparation." + value.displayPhase(ready: fallbackReady, hasExplicitInstallation: hasExplicitInstallation)))
                 if let completed = value.completed, let total = value.total, total > 0 {
                     ProgressView(value: Double(min(completed, total)), total: Double(total))
                     Text(ByteCountFormatter.string(fromByteCount: Int64(clamping: completed), countStyle: .file) + " / " + ByteCountFormatter.string(fromByteCount: Int64(clamping: total), countStyle: .file)).monospacedDigit()

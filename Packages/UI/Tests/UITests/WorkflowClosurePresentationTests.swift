@@ -181,6 +181,21 @@ extension WorkflowClosurePresentationTests {
 
 
 extension WorkflowClosurePresentationTests {
+    @Test func validatedLegacyChoiceDoesNotBecomeAmbiguousWhenAnotherCopyIsRegistered() {
+        func value(_ phase: String) -> WorkflowModelPreparation {
+            .init(resource: nil, taskID: nil, attemptID: nil, phase: phase, completed: nil, total: nil, issue: nil)
+        }
+        #expect(value("ambiguousCopies").displayPhase(ready: true, hasExplicitInstallation: false) == "ready")
+        #expect(value("ambiguousCopies").displayPhase(ready: false, hasExplicitInstallation: false) == "ambiguousCopies")
+        #expect(value("ambiguousCopies").displayPhase(ready: true, hasExplicitInstallation: true) == "ambiguousCopies")
+        for phase in ["unavailable", "authorization", "deleted", "failedModel", "missingFiles", "offlineDrive"] {
+            #expect(value(phase).displayPhase(ready: true, hasExplicitInstallation: false) == phase)
+        }
+        let state = WorkflowModelPreparationState(), selected = ModelID()
+        state.replace(["model": value("ambiguousCopies")], resources: [selected: value("registered")])
+        #expect(state.cell(identity: "model", installation: selected).value?.phase == "registered")
+        #expect(state.cell(identity: "model", installation: ModelID()).value == nil)
+    }
     @Test func modelProgressCellsShareExactIdentityWithoutWakingOtherModel() {
         let state = WorkflowModelPreparationState(), record = ModelID()
         let a = state.cell(identity: "A", installation: nil)

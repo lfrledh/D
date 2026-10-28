@@ -19,6 +19,13 @@ struct ModelLibraryPresentationTests {
         let model = ModelLibraryModel(library: library)
         await model.refresh()
 
+        model.presentSelection(identity: "pitch:exact") { _ in }
+        #expect(model.permitsSelection(identity: "pitch:exact"))
+        #expect(!model.permitsSelection(identity: "pitch:other") && !model.permitsSelection(identity: nil))
+        model.presentManagement()
+        #expect(model.selectionIdentity == nil && model.selectionAction == nil)
+        #expect(model.permitsSelection(identity: "text:other"))
+
         let idleChange = Mutex(false)
         withObservationTracking { _ = model.snapshot } onChange: { idleChange.withLock { $0 = true } }
         await model.refresh()

@@ -254,13 +254,13 @@ public struct DualWorkbenchView: View {
         captureChatReading(); navigationIntent = UUID()
         entry = destination
     }
-    private func presentQuickModelSelection() {
+    private func presentQuickModelSelection(expectedIdentity: String? = nil) {
         let owner = selectionModel.projectSession, temporary = usesTemporaryChat, controller = quick
         let store = owner.currentStore
         let selectedDraftID = controller.draft?.id, selectedChatID = chat?.state.selectedSessionID
         let selectedIdentity = quickModelIdentity, selectedConfiguration = chat?.selectedSession?.configuration
         let intent = navigationIntent, sourceEntry = entry
-        library.presentSelection(selected: owner.workflowInstallationID(for: quickModelIdentity)) { id in
+        library.presentSelection(selected: owner.workflowInstallationID(for: quickModelIdentity), identity: expectedIdentity) { id in
             do {
                 guard !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
                       temporary == usesTemporaryChat, quick === controller,
@@ -270,7 +270,8 @@ public struct DualWorkbenchView: View {
                     throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。"))
                 }
                 let choice = try await owner.selectWorkflowInstallation(id: id) { choice in
-                    guard !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
+                    guard expectedIdentity == nil || choice.id == expectedIdentity,
+                          !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
                           temporary == usesTemporaryChat, quick === controller,
                           controller.draft?.id == selectedDraftID, chat?.state.selectedSessionID == selectedChatID,
                           quickModelIdentity == selectedIdentity, chat?.selectedSession?.configuration == selectedConfiguration,
@@ -303,7 +304,8 @@ public struct DualWorkbenchView: View {
         }
         library.configurationSelectionAction = { item in
             do {
-                guard !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
+                guard expectedIdentity == nil || item.identity == expectedIdentity,
+                      !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
                       temporary == usesTemporaryChat, quick === controller,
                       controller.draft?.id == selectedDraftID, chat?.state.selectedSessionID == selectedChatID,
                       quickModelIdentity == selectedIdentity, chat?.selectedSession?.configuration == selectedConfiguration,
@@ -1053,6 +1055,9 @@ public struct DualWorkbenchView: View {
     }
     private var quickSurface: some View {
         let owner = quick.store.rootURL.standardizedFileURL.path
+        let installations: [String: ModelID] = quickModelIdentity.flatMap { identity in
+            quickModel.projectSession.workflowInstallationID(for: identity).map { [identity: $0] }
+        } ?? [:]
         return QuickGenerationView(quick: quick, model: quickModel,
                     selectedResults: Binding(get: { quickPreviewSelections[owner] ?? [:] },
                         set: { quickPreviewSelections[owner] = $0 }), onChooseModel: { openModelChoices(quick.category) },
@@ -1072,6 +1077,7 @@ public struct DualWorkbenchView: View {
                         return (source, try await source.pinWorkflowAsset(assetID), asset.name)
                     }, textWorkspaceActions: AnyView(singleTextActions))
                     .environment(\.workflowModelPreparation, library.nodePreparationPresentation)
+                    .environment(\.workflowModelInstallations, installations)
                     .id(quick.store.rootURL.standardizedFileURL.path)
                     .disabled(quickOwnerIsChanging)
     }
@@ -1131,7 +1137,7 @@ public struct DualWorkbenchView: View {
         catch { issue = error.localizedDescription; return }
         navigate(to: .quick)
         let owner = selectionModel.projectSession
-        if owner.explicitModelReadiness[id] != .available {
+        if owner.explicitModelReadiness[id] != .available || (library.snapshot?.runnableResources(identity: id).count ?? 0) > 1 {
             // A catalog identity chooses a draft, not an installed copy. Keep the
             // explicit copy picker reachable from ordinary Chat/Quick selection.
             // Capture before the catalog closes; never retarget during dismissal.
@@ -1143,7 +1149,7 @@ public struct DualWorkbenchView: View {
                       quick === controller, quick.draft?.id == draftID,
                       chat?.state.selectedSessionID == sessionID, usesTemporaryChat == temporary,
                       quickModelIdentity == id else { issue = t("targetChanged"); return }
-                presentQuickModelSelection()
+                presentQuickModelSelection(expectedIdentity: id)
             })
             returnToLibrary = false
         } else { libraryVisible = false }

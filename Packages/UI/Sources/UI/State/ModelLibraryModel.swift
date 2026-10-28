@@ -124,6 +124,10 @@ public final class ModelLibraryModel {
         catalog.first { $0.id == record.catalogID && $0.revision == record.revision }
     }
     public var selectionID: ModelID?
+    public private(set) var selectionIdentity: String?
+    func permitsSelection(identity: String?) -> Bool {
+        selectionIdentity == nil || selectionIdentity == identity
+    }
     public private(set) var readOnlyConfigurations: [ModelReadOnlyConfiguration] = []
     @ObservationIgnored public var inventoryProvider: (@MainActor () throws -> [ModelReadOnlyConfiguration])?
     @ObservationIgnored public var explicitRegistration: (@MainActor (URL, WorkflowModelKind) async throws -> Void)?
@@ -712,7 +716,7 @@ public final class ModelLibraryModel {
 }
 
 extension ModelLibraryModel {
-    public func clearSelectionContext() { selectionTitle = nil; selectionIsCurrent = nil; selectionAction = nil; configurationSelectionAction = nil; selectionID = nil }
+    public func clearSelectionContext() { selectionTitle = nil; selectionIsCurrent = nil; selectionAction = nil; configurationSelectionAction = nil; selectionID = nil; selectionIdentity = nil }
     public func presentManagement() {
         clearSelectionContext()
         workspace = "resources"
@@ -725,9 +729,9 @@ extension ModelLibraryModel {
     public func loadInventory() {
         do { readOnlyConfigurations = try inventoryProvider?() ?? [] } catch { errorMessage = error.localizedDescription }
     }
-    public func presentSelection(selected: ModelID? = nil, action: @escaping @MainActor (ModelID) async -> Void) {
+    public func presentSelection(selected: ModelID? = nil, identity: String? = nil, action: @escaping @MainActor (ModelID) async -> Void) {
         clearSelectionContext(); workspace = "resources"; loadInventory()
-        selectionAction = action; selectionID = selected; isPresented = true
+        selectionAction = action; selectionID = selected; selectionIdentity = identity; isPresented = true
     }
     public func importConfiguration(kind: WorkflowModelKind) async {
         guard !isChoosingLocation, globalOperation == nil, let register = explicitRegistration else { return }

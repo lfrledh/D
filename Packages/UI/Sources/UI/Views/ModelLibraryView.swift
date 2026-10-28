@@ -58,13 +58,22 @@ public struct ModelLibraryView: View {
             case "unavailable": include = record.availability != .available
             default: include = true
             }
-            return matches && include
+            let identity = resource.control.role == .execution
+                ? resource.control.executionRevision.map { "video:" + $0 }
+                : model.presentationEntry(for: record)?.workflowIdentity
+            return matches && include && model.permitsSelection(identity: identity)
         }
     }
     private var downloads: [ModelDownloadTask] {
         (model.snapshot?.downloads ?? []).filter { task in
             (model.taskSearch.isEmpty || (model.catalog.first { $0.id == task.catalogID }?.title ?? task.catalogID).localizedStandardContains(model.taskSearch)) &&
             ModelDownloadListFilter.includes(task, filter: model.taskFilter)
+        }
+    }
+    private var configurations: [ModelReadOnlyConfiguration] {
+        model.readOnlyConfigurations.filter {
+            model.permitsSelection(identity: $0.identity) && (model.resourceSearch.isEmpty ||
+                $0.title.localizedStandardContains(model.resourceSearch) || $0.identity.localizedStandardContains(model.resourceSearch))
         }
     }
     public var body: some View {
@@ -294,9 +303,9 @@ public struct ModelLibraryView: View {
                     }.padding(.vertical, 7).tag(resource.id).contentShape(Rectangle())
                         .onTapGesture { model.selectedResource = resource.id; narrowDetail = true }
                 }
-                if model.resourceFilter == "all", !model.readOnlyConfigurations.isEmpty {
+                if model.resourceFilter == "all", !configurations.isEmpty {
                     Section(text("configured", "已有配置 · 只读")) {
-                        ForEach(model.readOnlyConfigurations.filter { model.resourceSearch.isEmpty || $0.title.localizedStandardContains(model.resourceSearch) || $0.identity.localizedStandardContains(model.resourceSearch) }) { item in
+                        ForEach(configurations) { item in
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(item.title).font(.headline)
                                 ModelSpecificationFields(descriptor: ModelNodeCatalog.entries.first { $0.id == item.identity }, font: .caption)
@@ -311,14 +320,14 @@ public struct ModelLibraryView: View {
                     }
                 }
             }.listStyle(.inset).focusEffectDisabled().scrollPosition($model.resourceListScroll).accessibilityIdentifier("model-manager-resources")
-                .overlay { if resources.isEmpty && model.readOnlyConfigurations.isEmpty { ContentUnavailableView(text("noResources", "没有匹配资源"), systemImage: "shippingbox") } }
+                .overlay { if resources.isEmpty && (model.resourceFilter != "all" || configurations.isEmpty) { ContentUnavailableView(text("noResources", "没有匹配资源"), systemImage: "shippingbox") } }
         } else { downloadRows }
     }
 
     @ViewBuilder private var detail: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if model.workspace == "resources", let resource = model.snapshot?.resources.first(where: { $0.id == model.selectedResource }) {
+                if model.workspace == "resources", let resource = resources.first(where: { $0.id == model.selectedResource }) {
                     resourceDetail(resource)
                 } else if model.workspace == "downloads", let task = model.snapshot?.downloads.first(where: { $0.id == model.selectedTask }) {
                     downloadDetail(task)
