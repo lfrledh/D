@@ -422,6 +422,11 @@ public struct SharedLibraryBrowser: View {
     private let tagValidation: (SharedLibraryBrowserEntry) -> (() throws -> Void)
     private var captureFileImport: (() -> WorkbenchAssetImportCommand?)?
     private var headerOnly = false
+    private var selectingQuickModel = false
+
+    func quickModelSelection(_ value: Bool) -> Self {
+        var copy = self; copy.selectingQuickModel = value; return copy
+    }
 
     @Environment(\.dLanguageStore) private var language
     @Environment(\.workflowLibraryContext) private var workflowContext
@@ -845,19 +850,18 @@ public struct SharedLibraryBrowser: View {
     }
     private func modelCard(_ entry: SharedLibraryBrowserEntry) -> some View {
         SharedModelVariantCard(entry: entry, selected: selectedKeys.contains(entry.id), focused: entryKeyboardFocus == entry.id,
-            readiness: readinessName(entry.item.readiness), query: query.text,
+            readiness: readinessName(entry.item.readiness), query: query.text, selectingQuickModel: selectingQuickModel,
             expanded: Binding(get: { state.expandedModelFunctions.contains(entry.id) }, set: { if $0 { state.expandedModelFunctions.insert(entry.id) } else { state.expandedModelFunctions.remove(entry.id) } }),
             choose: { selectedKeys = [entry.id]; focusedKey = entry.id; entryKeyboardFocus = entry.id },
             info: { selectedKeys = [entry.id]; focusedKey = entry.id; compactDetailKey = entry.id },
             add: { function in
-                guard let current = SharedModelLibraryCard.resolve(entry, function: function, current: entries), canAdd(current) else { errorMessage = word("staleEntry", "条目已变化，请重新选择。"); return }
-                onAdd(current)
+                dispatchFunction(selectingQuickModel ? .use : .add, entry: entry, function: function)
             }, drag: { function in
                 guard let current = SharedModelLibraryCard.resolve(entry, function: function, current: entries), canAdd(current) else { return NSItemProvider() }
                 return SharedLibraryBrowserLogic.dragProvider(for: current, controller: insertionController)
             }, insertionIssue: { function in
-                guard let current = SharedModelLibraryCard.resolve(entry, function: function, current: entries), SharedLibraryBrowserLogic.allows(.add, entry: current) else { return word("unavailable", "当前不可用") }
-                return insertionIssue(current)
+                guard let current = SharedModelLibraryCard.resolve(entry, function: function, current: entries), SharedLibraryBrowserLogic.allows(selectingQuickModel ? .use : .add, entry: current) else { return word("unavailable", "当前不可用") }
+                return selectingQuickModel ? nil : insertionIssue(current)
             }, prepare: { dispatch(.prepare, key: entry.id) },
             prepareTitle: SharedLibraryBrowserLogic.allows(.prepare, entry: entry) ? prepareLabel(for: entry) : nil)
             .focusable().focused($entryKeyboardFocus, equals: entry.id).focusEffectDisabled()
@@ -1208,7 +1212,7 @@ public struct SharedLibraryBrowser: View {
                 .buttonStyle(WorkbenchGlassButtonStyle(compact: true))
                 .accessibilityLabel(selectedKeys.contains(entry.id)
                     ? word("deselect", "取消选择") : word("select", "选择"))
-                if SharedLibraryBrowserLogic.allows(.add, entry: entry) {
+                if !selectingQuickModel, SharedLibraryBrowserLogic.allows(.add, entry: entry) {
                     Button { dispatch(.add,key:entry.id) } label: { Image(systemName:"plus.circle") }
                         .buttonStyle(WorkbenchGlassButtonStyle(compact:true))
                         .accessibilityLabel(word("addCanvas","添加画布"))
@@ -1257,7 +1261,7 @@ public struct SharedLibraryBrowser: View {
             }
         }
         if SharedLibraryBrowserLogic.allows(.location, entry: entry) { WorkbenchMenuAction(word("location", "在访达显示来源")) { dispatch(.location, key: entry.id) } }
-        if SharedModelLibraryCard.functions(entry).count <= 1, SharedLibraryBrowserLogic.allows(.add, entry: entry) { WorkbenchMenuAction(word("addCanvas", "添加画布")) { dispatch(.add, key: entry.id) }.disabled(!canAdd(entry)) }
+        if !selectingQuickModel, SharedModelLibraryCard.functions(entry).count <= 1, SharedLibraryBrowserLogic.allows(.add, entry: entry) { WorkbenchMenuAction(word("addCanvas", "添加画布")) { dispatch(.add, key: entry.id) }.disabled(!canAdd(entry)) }
     }
 
     private var detailPane: some View {
@@ -1284,8 +1288,10 @@ public struct SharedLibraryBrowser: View {
                         Spacer()
                         Button(word("quickUse", "快速用")) { dispatchFunction(.use, entry: entry, function: function.id) }
                             .disabled(!canUse(entry))
-                        Button(word("addCanvas", "添加画布")) { dispatchFunction(.add, entry: entry, function: function.id) }
-                            .disabled(SharedModelLibraryCard.resolve(entry, function: function.id, current: entries).map { !canAdd($0) } ?? true)
+                        if !selectingQuickModel {
+                            Button(word("addCanvas", "添加画布")) { dispatchFunction(.add, entry: entry, function: function.id) }
+                                .disabled(SharedModelLibraryCard.resolve(entry, function: function.id, current: entries).map { !canAdd($0) } ?? true)
+                        }
                     }
                 }
             }
@@ -1297,7 +1303,7 @@ public struct SharedLibraryBrowser: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            if functions.count <= 1, SharedLibraryBrowserLogic.allows(.add, entry: entry) {
+            if !selectingQuickModel, functions.count <= 1, SharedLibraryBrowserLogic.allows(.add, entry: entry) {
                 Button(word("addCanvas", "添加画布")) { dispatch(.add, key: entry.id) }
                     .accessibilityIdentifier("shared-library-add").workbenchHelp("LIB-ENTRY-ADD", target: "entry:\(entry.id):\(entry.selection):\(entry.metadataSnapshot?.instanceID)")
                     .disabled(!canAdd(entry))

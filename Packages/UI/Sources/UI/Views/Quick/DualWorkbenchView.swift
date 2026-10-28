@@ -912,6 +912,7 @@ public struct DualWorkbenchView: View {
                 queryContext: libraryQueryContext(forCanvas: forCanvas),
                 annotationSave: libraryAnnotationSave)
                 .importingFiles { canvasMode?.resourceCategory != nil ? captureLibraryImport(forCanvas: forCanvas) : nil }
+                .quickModelSelection(!forCanvas && modelPickerCategory != nil)
                 .headerActionsOnly(headerOnly)
                 .environment(\.workflowLibraryInsertionController, canvasModel.projectSession.workflow)
         } else {

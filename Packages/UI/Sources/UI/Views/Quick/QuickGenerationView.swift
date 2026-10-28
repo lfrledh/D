@@ -105,7 +105,7 @@ struct QuickGenerationView: View {
                             }
                         }.frame(maxHeight: min(180, geometry.size.height * 0.28))
                     }
-                    if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error {
+                    if let issue = inputIssue ?? (quick.category == .audio && quick.inputIssueCode == "quick.audio.complex" ? nil : quick.inputIssue) ?? quick.saveIssue ?? quick.error {
                         WorkbenchIssueText(raw: issue, key: inputIssue != nil ? inputIssueCode : (quick.inputIssue == issue ? quick.inputIssueCode : nil)).font(.caption).foregroundStyle(.red).lineLimit(3).textSelection(.enabled)
                     }
                     generationBar

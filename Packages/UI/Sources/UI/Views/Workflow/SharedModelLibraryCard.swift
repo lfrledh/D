@@ -57,6 +57,7 @@ struct SharedModelVariantCard: View {
     let focused: Bool
     let readiness: String
     let query: String
+    var selectingQuickModel = false
     @Binding var expanded: Bool
     let choose: () -> Void
     let info: () -> Void
@@ -100,18 +101,20 @@ struct SharedModelVariantCard: View {
             .contentShape(RoundedRectangle(cornerRadius: 12)).onTapGesture(perform: choose)
             .accessibilityIdentifier("model-variant-card-" + entry.id)
     }
-    private func functionRow(_ definition: WorkflowOperationDefinition) -> some View {
+    private var primaryTitle: String { selectingQuickModel ? workflowText(language, "action.chooseModel") : t("add") }
+    @ViewBuilder private func functionRow(_ definition: WorkflowOperationDefinition) -> some View {
         let title = WorkflowCanvasPresentation.operationTitle(definition, language: language)
         let reason = insertionIssue(definition.id)
-        return HStack(spacing: 4) {
+        let row = HStack(spacing: 4) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.callout)
                 Text(definition.inputs.map { WorkflowCanvasPresentation.portTitle(operationID: definition.id, port: $0, input: true, language: language) }.joined(separator: ", ") + " → " + definition.outputs.map { WorkflowCanvasPresentation.portTitle(operationID: definition.id, port: $0, input: false, language: language) }.joined(separator: ", "))
                     .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }.frame(maxWidth: .infinity, alignment: .leading)
-            Button { add(definition.id) } label: { Image(systemName: "plus") }
+            Button { add(definition.id) } label: { Image(systemName: selectingQuickModel ? "checkmark" : "plus") }
                 .buttonStyle(WorkbenchIconButtonStyle()).disabled(reason != nil)
-                .help(reason ?? t("add") + " · " + title).accessibilityLabel(t("add") + " · " + title)
-        }.padding(.vertical, 4).contentShape(Rectangle()).onDrag { drag(definition.id) }
+                .help(reason ?? primaryTitle + " · " + title).accessibilityLabel(primaryTitle + " · " + title)
+        }.padding(.vertical, 4).contentShape(Rectangle())
+        if selectingQuickModel { row } else { row.onDrag { drag(definition.id) } }
     }
 }
