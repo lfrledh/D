@@ -5092,6 +5092,7 @@
     "modelManagement.local.existingConfiguration": "Other exact configurations supported by an existing engine",
     "modelManagement.local.legacyCopyUnavailable": "This legacy configuration uses the original files. No complete copy recipe is registered, so D will not copy files or create a download task.",
     "workflow.preparation.ready": "Model ready",
-    "modelManagement.local.registeredPendingAdmission": "Model files are registered. Execution compatibility still needs checking; generation has not started."
+    "modelManagement.local.registeredPendingAdmission": "Model files are registered. Execution compatibility still needs checking; generation has not started.",
+    "quick.audio.draftChanged": "This creation has changed. Select it again."
   }
 }

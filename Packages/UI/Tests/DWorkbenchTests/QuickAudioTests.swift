@@ -93,6 +93,17 @@ struct QuickAudioTests {
         #expect(calls == 0); #expect(c.state.runs == [run])
         c.select(operationID: "d.music.pitch", modelID: "fixture:new")
         #expect(c.draft == pitch)
+        c.select(operationID: "d.music.generate", modelID: "fixture:mrt")
+        #expect(c.visibleRuns.isEmpty)
+        let allDrafts = c.state.drafts
+        var stale = pitch; stale.node.title = "changed"
+        #expect(throws: WorkflowIssue.self) { try c.resumeAudioDraft(stale) }
+        #expect(c.draft?.id != pitch.id)
+        try c.resumeAudioDraft(pitch)
+        #expect(c.draft == pitch); #expect(c.visibleRuns == [run]); #expect(c.state.drafts == allDrafts)
+        #expect(c.state.navigation?.lastDrafts["audio"] == pitch.id)
+        c.start(); c.retryAttempt(run.id); await c.waitForCompletion()
+        #expect(calls == 0); #expect(c.state.runs == [run])
         try await c.prepareForTermination(); try await store.close()
         let reopened = try await ProjectStore.open(at: store.rootURL)
         #expect(try await reopened.quickCreationState().runs == [run])
@@ -116,6 +127,9 @@ struct QuickAudioTests {
         #expect(c.draft?.node.parameters["lyricsText"] == nil)
         c.select(operationID: WorkflowModelRoutes.ace, modelID: "fixture:ace")
         #expect(c.draft?.node.parameters["lyricsText"] == .text("keep me"))
+        let previous = try #require(c.state.drafts.first { $0.id == mrt })
+        try c.resumeAudioDraft(previous)
+        #expect(c.draft == previous); #expect(c.state.runs.isEmpty)
         try await c.prepareForTermination(); try await store.close()
     }
     @Test func playbackIsExplicitSwitchStopsAndLateLoadCannotReturn() async throws {

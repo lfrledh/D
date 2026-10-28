@@ -5092,6 +5092,7 @@
     "modelManagement.local.existingConfiguration": "已有引擎支持的其他精确配置",
     "modelManagement.local.legacyCopyUnavailable": "此旧配置使用原文件；当前目录没有完整副本配方，D 不会复制或创建下载任务。",
     "workflow.preparation.ready": "模型已就绪",
-    "modelManagement.local.registeredPendingAdmission": "模型文件已登记；执行适配仍需检查，尚未开始生成。"
+    "modelManagement.local.registeredPendingAdmission": "模型文件已登记；执行适配仍需检查，尚未开始生成。",
+    "quick.audio.draftChanged": "创作已改变，请重新选择。"
   }
 }

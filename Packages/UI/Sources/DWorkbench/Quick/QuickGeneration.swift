@@ -230,6 +230,16 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     public func select(operationID: String, modelID: String) {
         selectDraft(operationID: operationID, modelID: modelID, preserveHistorical: false)
     }
+    /// Restore an existing exact draft; never recreate simplified defaults or execute it.
+    public func resumeAudioDraft(_ captured: QuickDraft) throws {
+        guard isLoaded, QuickCategory.category(for: captured.node.operationID) == .audio,
+              state.drafts.first(where: { $0.id == captured.id }) == captured else {
+            throw WorkflowIssue("This creation has changed. Select it again.", code: "quick.audio.draftChanged")
+        }
+        var navigation = state.navigation ?? navigationFromExistingDrafts()
+        navigation.selected = .audio; navigation.lastDrafts[QuickCategory.audio.rawValue] = captured.id
+        state.navigation = navigation; state.selectedDraftID = captured.id; scheduleSave()
+    }
     private func selectDraft(operationID: String, modelID: String, preserveHistorical: Bool) {
         guard isLoaded, let operation = WorkflowRegistry.standard.operation(operationID),
               operation.definition.modelKind != nil else { return }

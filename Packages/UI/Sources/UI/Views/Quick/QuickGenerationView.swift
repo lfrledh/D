@@ -248,7 +248,18 @@ struct QuickGenerationView: View {
                 } else { Button(quick.category == .audio ? audioText("chooseModel") : consistencyText(language, "MODEL-CHANGE"), action: onChooseModel) }
                 if let draft = quick.draft {
                     if quick.category == .audio {
-                        WorkbenchMenu { WorkbenchMenuAction(audioText("continue")) { onSettingsToCanvas(draft) } } label: { Image(systemName: "ellipsis").frame(width: 28, height: 28) }.help(audioText("details"))
+                        WorkbenchMenu {
+                            WorkbenchMenuAction(audioText("continue")) { onSettingsToCanvas(draft) }
+                            let previous = quick.state.drafts.filter { $0.id != draft.id && QuickCategory.category(for: $0.node.operationID) == .audio }
+                            if !previous.isEmpty {
+                                WorkbenchSubmenu(refinementText("pastCreations")) {
+                                    WorkbenchMenuForEach(previous) { saved in
+                                        WorkbenchMenuAction(saved.node.title) { editInput { try quick.resumeAudioDraft(saved) } }
+                                    }
+                                }
+                            }
+                        } label: { Image(systemName: "ellipsis").frame(width: 28, height: 28) }.help(audioText("details"))
+                            .environment(\.workbenchMenuContext, "quick-audio-history:\(ObjectIdentifier(quick)):\(ObjectIdentifier(quick.store)):\(draft.id)")
                     } else { Button(baselineText(language, "label.7d9795fa3684")) { onSettingsToCanvas(draft) } }
                 }
             }.padding(20)
