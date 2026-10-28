@@ -78,9 +78,8 @@ final class ModelDirectory: Sendable {
     /// Canonicalize only an explicitly selected/state root, never a child model path.
     /// Foundation standardization aliases /private/var back to symlink /var on macOS.
     static func canonicalURL(_ url: URL) throws -> URL {
-        guard url.isFileURL, !url.path.contains("\0"), let path = realpath(url.path, nil) else {
-            throw failure("解析已授权目录")
-        }
+        guard url.isFileURL, !url.path.contains("\0") else { throw ModelLibraryError.unsafePath("需要有效本地目录。") }
+        guard let path = realpath(url.path, nil) else { throw accessFailure("解析已授权目录") }
         defer { free(path) }
         return URL(fileURLWithPath: String(cString: path), isDirectory: true)
     }
@@ -92,11 +91,11 @@ final class ModelDirectory: Sendable {
         let parts = url.path.split(separator: "/").map(String.init)
         guard parts.allSatisfy({ $0 != "." && $0 != ".." }) else { throw ModelLibraryError.unsafePath("目录路径包含非规范分量。") }
         var fd = Darwin.open("/", parts.isEmpty ? readFlags : O_SEARCH | O_NOFOLLOW | O_CLOEXEC)
-        guard fd >= 0 else { throw failure("打开文件系统") }
+        guard fd >= 0 else { throw accessFailure("打开文件系统") }
         for (index, part) in parts.enumerated() {
             let next = Darwin.openat(fd, part, index == parts.count - 1 ? readFlags : O_SEARCH | O_NOFOLLOW | O_CLOEXEC)
             let code = errno; Darwin.close(fd)
-            guard next >= 0 else { throw failure("打开目录 \(part)", code: code) }
+            guard next >= 0 else { throw accessFailure("打开目录 \(part)", code: code) }
             fd = next
         }
         return fd
@@ -123,7 +122,7 @@ final class ModelDirectory: Sendable {
             for part in try Self.parts(path) {
                 if create, mkdirat(fd, part, 0o700) != 0, errno != EEXIST { throw Self.failure("创建模型目录") }
                 let next = Darwin.openat(fd, part, Self.readFlags)
-                guard next >= 0 else { throw Self.failure("打开模型子目录") }
+                guard next >= 0 else { throw Self.accessFailure("打开模型子目录") }
                 Darwin.close(fd); fd = next
             }
             return fd
@@ -143,7 +142,7 @@ final class ModelDirectory: Sendable {
         defer { Darwin.close(parent) }
         let flags = (writing ? O_RDWR : O_RDONLY) | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC | (create ? O_CREAT | O_EXCL : 0)
         let fd = Darwin.openat(parent, name, flags, 0o600)
-        guard fd >= 0 else { throw Self.failure("打开模型文件 \(path)") }
+        guard fd >= 0 else { throw Self.accessFailure("打开模型文件 \(path)") }
         do { _ = try Self.identity(fd, regular: true); return fd }
         catch { Darwin.close(fd); throw error }
     }
@@ -425,9 +424,10 @@ final class ModelDirectory: Sendable {
 
     static func identity(_ fd: Int32, regular: Bool) throws -> ModelFileIdentity {
         var value = stat()
-        guard fstat(fd, &value) == 0, value.st_mode & S_IFMT == (regular ? S_IFREG : S_IFDIR),
+        guard fstat(fd, &value) == 0 else { throw accessFailure("检查文件类型") }
+        guard value.st_mode & S_IFMT == (regular ? S_IFREG : S_IFDIR),
               !regular || value.st_nlink == 1 else {
-            throw failure("检查文件类型")
+            throw ModelLibraryError.unsafePath("模型文件类型或硬链接不符合要求。")
         }
         return ModelFileIdentity(value)
     }
@@ -443,5 +443,8 @@ final class ModelDirectory: Sendable {
     }
     static func failure(_ action: String, code: Int32 = errno) -> ModelLibraryError {
         .storage("\(action)：\(String(cString: strerror(code)))")
+    }
+    private static func accessFailure(_ action: String, code: Int32 = errno) -> ModelLibraryError {
+        .fileAccess(reason: "\(action)：\(String(cString: strerror(code)))", code: code)
     }
 }

@@ -349,6 +349,7 @@ public actor ModelLibrary {
             guard ids == nil || ids!.contains(stored.record.id) else { continue }
             var availability = stored.record.availability
             var location = stored.record.directory
+            var fileFailure: Int32?
             // Viewing never hashes files, adopts legacy identities, or mutates registration.
             // Full required-tree verification stays at explicit admission/verification.
             if stored.control?.fileState == .deleted || stored.deletion != nil { availability = .unavailable }
@@ -364,7 +365,10 @@ public actor ModelLibrary {
                         }
                         location = directory.url
                     }
-                } catch { availability = .unavailable }
+                } catch {
+                    availability = .unavailable
+                    if case ModelLibraryError.fileAccess(_, let code) = error { fileFailure = code }
+                }
             } else if let scope = externalScopes[stored.record.id] {
                 do {
                     let directory = try ModelDirectory(scope.url)
@@ -379,12 +383,17 @@ public actor ModelLibrary {
                         }
                     }
                     location = scope.url; availability = .available
-                } catch { availability = .unavailable }
+                } catch {
+                    availability = .unavailable
+                    if case ModelLibraryError.fileAccess(_, let code) = error { fileFailure = code }
+                }
             } else { availability = .needsAuthorization }
             let locationIssue: ModelLocationIssue?
             if availability == .available { locationIssue = nil }
             else if availability == .needsAuthorization { locationIssue = .fileAuthorization }
             else if stored.record.locationIssue == .offlineDrive { locationIssue = .offlineDrive }
+            else if fileFailure == ENOENT { locationIssue = .missingFiles }
+            else if fileFailure == EACCES || fileFailure == EPERM { locationIssue = .fileAuthorization }
             else if let path = location?.path ?? stored.record.directory?.path {
                 var info = stat()
                 if lstat(path, &info) != 0 {
@@ -924,8 +933,16 @@ public actor ModelLibrary {
             }
             throw ModelLibraryError.unavailable("模型尚未完成安装和完整校验。")
         }
-        let directory = try resolved(value)
-        return .init(directory: directory.url, revision: value.control?.executionRevision ?? value.record.revision)
+        do {
+            let directory = try resolved(value)
+            return .init(directory: directory.url, revision: value.control?.executionRevision ?? value.record.revision)
+        } catch {
+            // Admission already found a problem. Publish only this resource's
+            // current file state, without a view action or a whole-library scan.
+            // Preserve the original diagnostic and never grant a lease on failure.
+            checkAvailabilityNow(ids: [id])
+            throw error
+        }
     }
     public func canPrepareVideo(_ id: ModelID) throws -> Bool {
         try stored(id).record.state == .preparationRequired && (ModelVideoPreparation.profile(for: entry(for: id)) != nil || (wanPreparation != nil && ModelWanPreparation.supports(entry(for: id))))

@@ -711,6 +711,43 @@ struct ModelLibraryTests {
 }
 
 extension ModelLibraryTests {
+    @Test func unsafeLinkedFileIsNotMisreportedFromStaleErrno() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let library = try await fixture.library()
+        let id = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        let file = fixture.source.appendingPathComponent("weights/payload.bin")
+        try FileManager.default.linkItem(at: file, to: fixture.root.appendingPathComponent("second-link"))
+        let fd = Darwin.open(file.path, O_RDONLY); try #require(fd >= 0)
+        defer { Darwin.close(fd) }
+        errno = ENOENT
+        do { _ = try ModelDirectory.identity(fd, regular: true); Issue.record("Hardlink must be rejected") }
+        catch { guard case ModelLibraryError.unsafePath = error else { Issue.record("Stale errno changed the meaning: \(error)"); return } }
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.acquire(id) }
+        #expect(await library.snapshot().records.first?.locationIssue == .recordChanged)
+        try await library.shutdown()
+    }
+    @Test func admissionFailurePublishesMissingLeafWithoutAViewRefresh() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let library = try await fixture.library()
+        try await library.configureRoot(at: fixture.destination)
+        let original = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        let copy = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id, storage: .managed)
+        let other = try #require(await library.snapshot().records.first { $0.id == copy })
+        var events = await library.changes().makeAsyncIterator()
+        _ = await events.next()
+        let before = await library.availabilityCheckCount
+        try FileManager.default.removeItem(at: fixture.source.appendingPathComponent("weights/payload.bin"))
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.acquire(original) }
+        let changed = try #require(await events.next())
+        let failed = try #require(changed.records.first { $0.id == original })
+        #expect(failed.availability == .unavailable && failed.locationIssue == .missingFiles && failed.activeLeaseCount == 0)
+        #expect(changed.records.first { $0.id == copy } == other)
+        #expect(await library.availabilityCheckCount == before + 1)
+        let lease = try await library.acquire(copy)
+        await library.release(lease)
+        #expect(await library.availabilityCheckCount == before + 1, "Successful admission adds no display scan")
+        try await library.shutdown()
+    }
     @Test func memorySnapshotDoesNotInspectFilesButExplicitCheckAndAdmissionDo() async throws {
         let fixture = try LibraryFixture(); defer { fixture.clean() }
         let library = try await fixture.library()
