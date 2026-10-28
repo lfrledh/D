@@ -60,6 +60,7 @@ struct QuickGenerationView: View {
             ?? ModelNodeCatalog.entries.first { descriptor in WorkflowModelKind.allCases.contains { id == $0.rawValue + ":" + descriptor.revision } }?.title
             ?? (id.isEmpty ? refinementText("chooseModel", fallback: "选择一个模型") : refinementText("modelNotReady", fallback: "指定模型未准备"))
     }
+    @Environment(\.workbenchQuickContentTop) private var quickContentTop
     var body: some View {
         GeometryReader { geometry in
             let shown = WorkbenchSidebarLayout.visible(available: geometry.size.width, leading: sidebars.leading, trailing: sidebars.trailing)
@@ -112,6 +113,7 @@ struct QuickGenerationView: View {
                     .workbenchMeasureLayout("quick-center")
                 .transaction { $0.animation = nil }
                     .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
+                    .padding(.top, quickContentTop)
                     .padding(.leading, WorkbenchSidebarLayout.occupiedWidth(leftShown, leading: true, available: geometry.size.width))
                     .padding(.trailing, WorkbenchSidebarLayout.occupiedWidth(rightShown, leading: false, available: geometry.size.width))
                     .workbenchMorph(value: leftShown).workbenchMorph(value: rightShown)

@@ -251,10 +251,6 @@ struct WorkflowGraphSurface: View {
                     if let marquee, marquee.scope == scope {
                         Rectangle()
                             .fill(Color.accentColor.opacity(0.13))
-                            .overlay {
-                                Rectangle().stroke(Color.accentColor,
-                                    style: StrokeStyle(lineWidth: 1, dash: [5, 3]))
-                            }
                             .frame(width: marquee.rect.width * effectiveZoom, height: marquee.rect.height * effectiveZoom)
                             .position(x: marquee.rect.midX * effectiveZoom, y: marquee.rect.midY * effectiveZoom)
                             .allowsHitTesting(false)
@@ -1080,10 +1076,6 @@ private struct WorkflowNodeInspectButtonStyle: ButtonStyle {
                     .fill(Color.accentColor.opacity(configuration.isPressed ? 0.32 : inspecting ? 0.16 : 0))
             }
             .background { Color.clear.workbenchPanel(cornerRadius: 5 * scale) }
-            .overlay {
-                RoundedRectangle(cornerRadius: 5 * scale)
-                    .strokeBorder(Color.accentColor.opacity(inspecting || configuration.isPressed ? 0.7 : 0))
-            }
             .contentShape(RoundedRectangle(cornerRadius: 5 * scale))
     }
 }
@@ -1263,14 +1255,13 @@ private struct WorkflowNodeCard: View {
         }
         .overlay {
             RoundedRectangle(cornerRadius: 13 * scale, style: .continuous)
-                .stroke(selected ? Color.accentColor : (modelNotReady ? Color.orange : Color.secondary.opacity(0.25)),
-                        lineWidth: (selected ? 3 : 1) * scale)
+                .fill(Color.primary.opacity(selected ? 0.10 : 0))
                 .frame(width: cardWidth * scale)
                 .allowsHitTesting(false)
         }
         .overlay(alignment: .topLeading) {
             if let resizePreview {
-                RoundedRectangle(cornerRadius: 13 * scale).stroke(Color.accentColor, style: .init(lineWidth: 1, dash: [4, 3]))
+                RoundedRectangle(cornerRadius: 13 * scale).fill(Color.primary.opacity(0.08))
                     .frame(width: resizePreview.width * scale, height: resizePreview.height * scale)
                     .padding(.leading, 11 * scale).allowsHitTesting(false)
             }

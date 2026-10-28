@@ -104,9 +104,10 @@ struct ChatMessageIconStyle: ButtonStyle {
         let configuration: Configuration
         @State private var hovered = false
         @Environment(\.isEnabled) private var enabled
+        @Environment(\.isFocused) private var focused
         var body: some View {
             configuration.label.contentShape(Rectangle())
-                .background(.primary.opacity(configuration.isPressed ? 0.12 : hovered && enabled ? 0.07 : 0), in: RoundedRectangle(cornerRadius: 6))
+                .background(.primary.opacity(configuration.isPressed ? 0.12 : (hovered || focused) && enabled ? 0.07 : 0), in: RoundedRectangle(cornerRadius: 6))
                 .opacity(enabled ? 1 : 0.4)
                 .onHover { hovered = $0 }
         }

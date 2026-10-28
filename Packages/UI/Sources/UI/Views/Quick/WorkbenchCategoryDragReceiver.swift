@@ -94,6 +94,8 @@ final class WorkbenchCategoryDragView: NSView {
     private var resignObserver: NSObjectProtocol?
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { false }
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard enabled, available.contains(selection), geometry.count > 0, !isHiddenOrHasHiddenAncestor else { return nil }

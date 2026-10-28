@@ -392,6 +392,7 @@ private struct WorkbenchThemeModifier: ViewModifier {
     func body(content: Content) -> some View {
         let palette = preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? systemScheme)
         content.foregroundStyle(palette.foregroundColor, palette.secondaryColor)
+            .focusEffectDisabled()
             .tint(palette.accentColor)
             .buttonStyle(WorkbenchGlassButtonStyle())
             .menuStyle(WorkbenchGlassMenuStyle())
@@ -454,6 +455,7 @@ struct WorkbenchGlassSegments<Value: Hashable>: View {
     var identifiers: [String]? = nil
     var owner: AnyHashable? = nil
     var standard = false
+    var trackThickness: CGFloat? = nil
     var direction: WorkbenchSegmentGeometry.Direction = .horizontal
     var unavailable: Set<Value> = []
     var minimumItemLength: CGFloat = 0
@@ -468,7 +470,7 @@ struct WorkbenchGlassSegments<Value: Hashable>: View {
     @State private var pressed: Int?
     private var indices: Set<Int> { Set(choices.indices.filter { !unavailable.contains(choices[$0].0) }) }
     private var index: Int { choices.firstIndex(where: { $0.0 == selection }) ?? -1 }
-    private var thickness: CGFloat { standard ? 44 : 32 }
+    private var thickness: CGFloat { trackThickness ?? (standard ? 44 : 32) }
     private var itemMinimum: CGFloat {
         if standard && minimumItemLength == 0 { return 66 }
         return max(minimumItemLength, (choices.map { ($0.1 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: NSFont.systemFontSize)]).width }.max() ?? 0) + 24)
@@ -517,13 +519,7 @@ struct WorkbenchGlassSegments<Value: Hashable>: View {
                         .animation(preview == nil ? motion : nil, value: preview ?? CGFloat(index))
                         .animation(reduceMotion || preferences.resolvedAppearance.motion == 0 ? nil : .easeOut(duration: 0.1), value: preview != nil || pressed == index)
                 }
-                if let focus, let focusedIndex = choices.firstIndex(where: { $0.0 == focus }) {
-                    let rect = geometry.lens(CGFloat(focusedIndex), engagement: 0)
-                    Capsule().strokeBorder(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 2)
-                        .frame(width: rect.width, height: rect.height)
-                        .offset(x: rect.minX, y: rect.minY)
-                        .allowsHitTesting(false).accessibilityHidden(true)
-                }
+
             }.frame(width: geometry.slotSize.width, height: geometry.slotSize.height)
                 .onChange(of: geometry) { _, _ in clear() }
         }
@@ -673,16 +669,13 @@ private struct WorkbenchButtonFeedback<S: InsettableShape>: ViewModifier {
     let isPressed: Bool
     var ink: Color = .accentColor
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.isFocused) private var focused
     @State private var hovered = false
 
     func body(content: Content) -> some View {
         content
             .overlay {
-                shape.fill(ink.opacity(isEnabled ? (isPressed ? 0.22 : hovered ? 0.10 : 0) : 0))
-                    .allowsHitTesting(false)
-            }
-            .overlay {
-                shape.strokeBorder(ink.opacity(isEnabled && hovered ? 0.32 : 0), lineWidth: 1)
+                shape.fill(ink.opacity(isEnabled ? (isPressed ? 0.22 : (hovered || focused) ? 0.10 : 0) : 0))
                     .allowsHitTesting(false)
             }
             .contentShape(.interaction, shape)

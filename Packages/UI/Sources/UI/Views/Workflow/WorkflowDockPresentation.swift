@@ -68,12 +68,22 @@ enum WorkflowDockLayout {
 
 struct WorkflowDockButtonStyle: ButtonStyle {
     var expand = false
-    @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(.caption)
-            .frame(maxWidth: expand ? .infinity : nil).frame(height: 32)
-            .background(.primary.opacity(configuration.isPressed ? 0.15 : 0.065), in: Capsule())
-            .contentShape(Capsule()).opacity(enabled ? 1 : 0.4)
+        FeedbackBody(configuration: configuration, expand: expand)
+    }
+    private struct FeedbackBody: View {
+        let configuration: Configuration
+        let expand: Bool
+        @Environment(\.isEnabled) private var enabled
+        @Environment(\.isFocused) private var focused
+        @State private var hovered = false
+        var body: some View {
+            configuration.label.font(.caption)
+                .frame(maxWidth: expand ? .infinity : nil).frame(height: 32)
+                .background(.primary.opacity(configuration.isPressed ? 0.15 : enabled && (focused || hovered) ? 0.11 : 0.065), in: Capsule())
+                .contentShape(Capsule()).opacity(enabled ? 1 : 0.4)
+                .onHover { hovered = $0 }
+        }
     }
 }
 

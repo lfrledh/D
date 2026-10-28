@@ -650,6 +650,7 @@ struct ChatWorkbenchView: View {
             .flatMap { $0.contextChoices?.tags ?? [] })).sorted()
     }
 
+    @Environment(\.workbenchQuickContentTop) private var quickContentTop
     var body: some View {
         GeometryReader { geometry in
             let shown = WorkbenchSidebarLayout.visible(available: geometry.size.width + 32, leading: showSidebar, trailing: showInspector)
@@ -684,6 +685,7 @@ struct ChatWorkbenchView: View {
                 .frame(width: max(0, geometry.size.width
                     - WorkbenchSidebarLayout.occupiedWidth(sidebarShown, leading: true, available: geometry.size.width + 32)
                     - WorkbenchSidebarLayout.occupiedWidth(inspectorShown, leading: false, available: geometry.size.width + 32)))
+                .padding(.top, quickContentTop)
                 .workbenchMeasureLayout("chat-center")
                 .transaction { $0.animation = nil }
                 // This is a transparent layout region, not a drawing surface.

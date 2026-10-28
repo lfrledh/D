@@ -830,7 +830,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         host.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
         func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
-        let receiver = try #require(descendants(host).compactMap { $0 as? WorkbenchCategoryDragView }.first { $0.geometry.thickness == 44 })
+        let receiver = try #require(descendants(host).compactMap { $0 as? WorkbenchCategoryDragView }.first { $0.geometry.count == 4 && $0.geometry.length == 264 && $0.geometry.thickness == 32 })
         var rootUpdates = 0, retainedUpdates = 0
         WorkbenchCategoryUpdateProbe.workbenchBody = { rootUpdates += 1 }
         WorkbenchCategoryUpdateProbe.retainedUpdate = { retainedUpdates += 1 }

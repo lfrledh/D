@@ -374,6 +374,7 @@ public struct WorkflowCanvasView: View {
         // interaction; an explicit focus-only shape leaves child focus and hits intact.
         .contentShape(.focusEffect, Rectangle())
         .focusable()
+        .focusEffectDisabled()
         .focused($workspaceKeyboardFocused)
         .onChange(of: contentVisible) { _, visible in
             if !visible { workspaceKeyboardFocused = false }
@@ -1325,7 +1326,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 canvasTool = canvasTool == .hand ? .pointer : .hand
             } label: {
                 Image(systemName: "hand.draw").foregroundStyle(canvasTool == .hand ? Color.accentColor : .primary)
-                    .overlay { Circle().strokeBorder(Color.accentColor.opacity(canvasTool == .hand ? 0.7 : 0), lineWidth: 1.5).frame(width: 36, height: 36) }
+                    .background { Circle().fill(Color.primary.opacity(canvasTool == .hand ? 0.10 : 0)).frame(width: 36, height: 36) }
             }.buttonStyle(WorkbenchIconButtonStyle(diameter: 40, panel: true))
                 .disabled(viewportInteractionLocked).accessibilityLabel(text("refinement.workflow.hand", "手形"))
                 .accessibilityAddTraits(canvasTool == .hand ? .isSelected : [])

@@ -453,6 +453,7 @@ public struct DualWorkbenchView: View {
             retrySave: entry == .quick && (originalQuick.pendingSaveRunID != nil || originalQuick.saveIssue != nil) ? action(systemMenuText(language, "retrySave"), enabled: !originalQuick.isRunning) { Task { await originalQuick.retrySave() } } : nil)
     }
     @State private var modeSize = CGSize(width: 232, height: 52)
+    @State private var navigationTop: CGFloat = 48
     @State private var windowControlSize = CGSize(width: 80, height: 32)
     private var modeSwitcher: some View {
         WorkbenchGlassSegments(title: t("workspaceMode"), selection: Binding(get: { entry }, set: { navigate(to: $0) }),
@@ -470,16 +471,7 @@ public struct DualWorkbenchView: View {
         #endif
         VStack(spacing: 0) {
             if entry == .quick {
-                HStack(spacing: 12) {
-                    Spacer(minLength: 0)
-                    let dragOwner = quick
-                    let dragStore = quickModel.projectSession.currentStore
-                    WorkbenchCategoryPicker(selection: quick.category, owner: ObjectIdentifier(quick), enabled: !quickOwnerIsChanging) { category in
-                        guard entry == .quick, quick === dragOwner, quickModel.projectSession.currentStore === dragStore else { return }
-                        selectCategory(category)
-                    }.workbenchHelp("QUICK-MODALITY")
-                    Spacer(minLength: 0)
-                }.padding(.horizontal, 16).frame(height: 52)
+                Color.clear.frame(height: 52).allowsHitTesting(false)
             }
             if entry == .quick, let identity = quickModelIdentity,
                quickModel.projectSession.explicitModelChecking.contains(identity) {
@@ -575,6 +567,19 @@ public struct DualWorkbenchView: View {
 
         }
         .frame(minWidth: WorkbenchSidebarLayout.minimumWindowWidth, minHeight: 580)
+        .background(WorkbenchTopNavigationMeasure { navigationTop = $0 })
+        .environment(\.workbenchQuickContentTop, max(0, navigationTop + 40 + 8 - 52))
+        .overlay(alignment: .top) {
+            if entry == .quick {
+                let dragOwner = quick
+                let dragStore = quickModel.projectSession.currentStore
+                WorkbenchCategoryPicker(selection: quick.category, owner: ObjectIdentifier(quick), enabled: !quickOwnerIsChanging) { category in
+                    guard entry == .quick, quick === dragOwner, quickModel.projectSession.currentStore === dragStore else { return }
+                    selectCategory(category)
+                }.workbenchHelp("QUICK-MODALITY")
+                    .frame(width: 264, height: 40).padding(.top, navigationTop)
+            }
+        }
         .environment(\.workbenchModeSize, modeSize)
         .environment(\.workbenchWindowControlSize, windowFullScreen ? CGSize(width: 80, height: 32) : windowControlSize)
         .overlay(alignment: .topLeading) {

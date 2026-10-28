@@ -153,7 +153,7 @@ struct GenerationInspector: View {
             }
             .workbenchInputSurface()
             .overlay(RoundedRectangle(cornerRadius: 10)
-                .stroke(promptFocused ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: 1))
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 1))
             Text(workflowText(legacyLanguage, "consistency.legacy.GenerationInspector.70"))
                 .font(.caption).foregroundStyle(.secondary)
         }

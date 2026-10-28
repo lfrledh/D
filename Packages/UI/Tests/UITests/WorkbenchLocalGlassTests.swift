@@ -166,6 +166,42 @@ private actor LocalGlassNoInference: InferenceEngine {
         #expect(!window.titlebarAppearsTransparent && !window.styleMask.contains(.fullSizeContentView))
     }
 
+    @Test func chromePropertiesRecoverIndependentlyOfUnchangedButtons() throws {
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 400), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let root = NSView(frame: window.contentView!.bounds); window.contentView = root
+        defer { window.contentView = nil; window.close() }
+        let candidate = WorkbenchWindowTitlebar(window: window, invalidate: {})
+        let chrome = try #require(candidate)
+        defer { chrome.restore() }
+        let buttons = [NSWindow.ButtonType.closeButton, .zoomButton].compactMap { window.standardWindowButton($0) }
+        let frames = buttons.map(\.frame), parents = buttons.map(\.superview)
+        for notification in [NSWindow.didUpdateNotification, NSWindow.didBecomeKeyNotification, NSWindow.didBecomeMainNotification] {
+            window.titlebarAppearsTransparent = false; window.titleVisibility = .visible; window.titlebarSeparatorStyle = .line
+            NotificationCenter.default.post(name: notification, object: window)
+            #expect(window.titlebarAppearsTransparent && window.titleVisibility == .hidden && window.titlebarSeparatorStyle == .none)
+            #expect(buttons.map(\.frame) == frames && zip(buttons, parents).allSatisfy { $0.superview === $1 })
+        }
+        window.titlebarAppearsTransparent = false
+        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
+        #expect(window.titlebarAppearsTransparent)
+    }
+
+    @Test func navigationClearanceUsesWindowCoordinatesAndPressedLens() {
+        for top in [CGFloat(680), 1080] {
+            let y = WorkbenchTopNavigationGeometry.top(rootTop: top, layoutTop: top - 28, safeTop: 0, controlsBottom: top - 40)
+            #expect(y == 48)
+            let large = WorkbenchTopNavigationGeometry.top(rootTop: top, layoutTop: top - 70, safeTop: 24, controlsBottom: top - 44)
+            #expect(large == 78)
+            let full = WorkbenchTopNavigationGeometry.top(rootTop: top, layoutTop: top, safeTop: 0, controlsBottom: nil)
+            #expect(full == 8)
+        }
+        let geometry = WorkbenchSegmentGeometry(count: 4, length: 264, thickness: 32)
+        #expect(geometry.track.height == 32 && geometry.slotSize == CGSize(width: 264, height: 40))
+        #expect(geometry.lens(0, engagement: 1).height == 36)
+        #expect(CGRect(origin: .zero, size: geometry.slotSize).contains(geometry.lens(3, engagement: 1)))
+    }
+
     @Test func floatingChromeHandlesLateAndReplacedNativeButtonsWithoutResize() throws {
         let window = DeferredChromeWindow(contentRect: .init(x: 0, y: 0, width: 640, height: 400), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -292,11 +328,36 @@ private actor LocalGlassNoInference: InferenceEngine {
             defer { window.contentView = nil; window.close() }
             func children(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + children($0) } }
             for _ in 0..<20 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
-            let modes = try #require(children(host).compactMap { $0 as? WorkbenchCategoryDragView }.first { $0.geometry.count == 2 && $0.geometry.thickness == 32 })
+            // Exercise the measured Quick slot before changing pages. These
+            // are real hosting/hit-test coordinates, not a desktop gesture claim.
+            for size in [CGSize(width: 1080, height: 680), CGSize(width: 1440, height: 900)] {
+                window.setContentSize(size)
+                for _ in 0..<20 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+                let category = try #require(children(host).compactMap { $0 as? WorkbenchCategoryDragView }.first { $0.geometry.count == 4 })
+                let slot = category.convert(category.bounds, to: nil)
+                let controlHost = try #require(window.standardWindowButton(.closeButton)?.superview as? WorkbenchWindowControlHost)
+                let controlBottom = controlHost.convert(controlHost.bounds, to: nil).minY
+                #expect(category.bounds.size == CGSize(width: 264, height: 40))
+                #expect(slot.maxY <= min(window.contentLayoutRect.maxY, controlBottom) - 7.9)
+                let frameView = try #require(host.superview)
+                for x in [category.presentation.minX + 1, category.presentation.midX, category.presentation.maxX - 1] {
+                    let point = category.convert(CGPoint(x: x, y: category.presentation.midY), to: nil)
+                    let hit = try #require(frameView.hitTest(frameView.superview?.convert(point, from: nil) ?? point))
+                    #expect(hit === category)
+                    let down = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: 1,
+                        windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+                    hit.mouseDown(with: down)
+                    let up = try #require(NSEvent.mouseEvent(with: .leftMouseUp, location: point, modifierFlags: [], timestamp: 2,
+                        windowNumber: window.windowNumber, context: nil, eventNumber: 2, clickCount: 1, pressure: 0))
+                    hit.mouseUp(with: up)
+                    #expect(window.dragEvents.isEmpty)
+                }
+            }
+            let modes = try #require(children(host).compactMap { $0 as? WorkbenchCategoryDragView }.first { $0.options == [AnyHashable(DualWorkbenchView.Entry.quick), AnyHashable(DualWorkbenchView.Entry.workflow)] })
             modes.onCommit(1) // Select the real workflow page; this is component setup, not a native gesture.
             for _ in 0..<20 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
             let region = try #require(children(host).compactMap { $0 as? WorkbenchWindowDragRegion.View }.first)
-            #expect(region.bounds.width >= 72 && region.bounds.height == 32)
+            #expect(region.bounds.width >= 72 && region.bounds.height == 28)
             #expect(region.owner?.root?.titlebar?.window === window)
             let probe = try #require(children(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
             try #require(modes.selection == 1)
@@ -304,7 +365,7 @@ private actor LocalGlassNoInference: InferenceEngine {
             try #require(!probe.isHiddenOrHasHiddenAncestor && !scroll.isHiddenOrHasHiddenAncestor && !scroll.visibleRect.isEmpty)
             try #require(probe.navigationAllowed())
             let frameView = try #require(host.superview)
-            for local in [CGPoint(x: 1, y: 1), CGPoint(x: region.bounds.midX, y: region.bounds.midY), CGPoint(x: region.bounds.maxX - 1, y: 31)] {
+            for local in [CGPoint(x: 1, y: 1), CGPoint(x: region.bounds.midX, y: region.bounds.midY), CGPoint(x: region.bounds.maxX - 1, y: 27)] {
                 let point = region.convert(local, to: nil)
                 let hit = try #require(frameView.hitTest(frameView.superview?.convert(point, from: nil) ?? point))
                 #expect(hit === region)

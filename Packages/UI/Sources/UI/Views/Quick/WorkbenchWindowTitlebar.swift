@@ -56,11 +56,15 @@ import SwiftUI
         for name in [NSWindow.willEnterFullScreenNotification, NSWindow.didEnterFullScreenNotification,
                      NSWindow.willExitFullScreenNotification, NSWindow.didExitFullScreenNotification,
                      NSWindow.didDeminiaturizeNotification, NSWindow.didResizeNotification, NSWindow.didUpdateNotification,
+                     NSWindow.didBecomeKeyNotification, NSWindow.didBecomeMainNotification,
                      NSWindow.didChangeBackingPropertiesNotification, WorkbenchWindowChrome.transitionFailed] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.transition(name) }
             })
         }
+        observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: NSApp, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshGeometry() }
+        })
     }
     private func applyChrome() {
         guard let window else { return }
@@ -89,6 +93,13 @@ import SwiftUI
     private func transition(_ name: Notification.Name) {
         guard let window else { return }
         if name == NSWindow.didUpdateNotification {
+            // Property repair is independent of native-button ownership. No
+            // writes occur when already correct, even during ordinary updates.
+            if !updating && !restored {
+                updating = true
+                applyChrome()
+                updating = false
+            }
             // AppKit may reinstall its standard controls after a scene update.
             // Reconcile only changed ownership/frames; ordinary updates do no
             // layout, state publication, backdrop invalidation or window writes.
@@ -266,5 +277,62 @@ struct WorkbenchWindowDragRegion: NSViewRepresentable {
         override var mouseDownCanMoveWindow: Bool { false }
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
         override func mouseDown(with event: NSEvent) { owner?.root?.titlebar?.drag(with: event) }
+    }
+}
+
+/// Measured in the same window coordinates as the actual navigation slot. This
+/// reserves only central Quick content; sidebars and the graph do not move.
+enum WorkbenchTopNavigationGeometry {
+    static func top(rootTop: CGFloat, layoutTop: CGFloat, safeTop: CGFloat, controlsBottom: CGFloat?) -> CGFloat {
+        max(0, rootTop - layoutTop, safeTop, controlsBottom.map { rootTop - $0 } ?? 0) + 8
+    }
+}
+struct WorkbenchTopNavigationMeasure: NSViewRepresentable {
+    let changed: (CGFloat) -> Void
+    func makeNSView(context: Context) -> View { let view = View(); view.changed = changed; return view }
+    func updateNSView(_ view: View, context: Context) { view.changed = changed; view.measure() }
+    static func dismantleNSView(_ view: View, coordinator: ()) { view.stop() }
+    final class View: NSView {
+        var changed: ((CGFloat) -> Void)?
+        private var observation: NSKeyValueObservation?
+        private var notifications: [NSObjectProtocol] = []
+        private var reported: CGFloat?
+        private var ticket = UUID()
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow(); stop()
+            guard let window else { return }
+            observation = window.observe(\.contentLayoutRect, options: [.new]) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.measure() }
+            }
+            for name in [NSWindow.didResizeNotification, NSWindow.didBecomeKeyNotification, NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
+                notifications.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.measure() }
+                })
+            }
+            measure()
+        }
+        override func layout() { super.layout(); measure() }
+        func stop() { observation = nil; notifications.forEach(NotificationCenter.default.removeObserver); notifications = []; ticket = UUID(); reported = nil }
+        func measure() {
+            guard let window, bounds.height > 0 else { return }
+            let rootTop = convert(bounds, to: nil).maxY
+            let buttonHost = window.standardWindowButton(.closeButton)?.superview as? WorkbenchWindowControlHost
+            let bottom = buttonHost.flatMap { $0.isHiddenOrHasHiddenAncestor || window.styleMask.contains(.fullScreen) ? nil : $0.convert($0.bounds, to: nil).minY }
+            let next = WorkbenchTopNavigationGeometry.top(rootTop: rootTop, layoutTop: window.contentLayoutRect.maxY, safeTop: safeAreaInsets.top, controlsBottom: bottom)
+            guard next.isFinite, reported != next else { return }
+            reported = next; let stamp = UUID(); ticket = stamp
+            DispatchQueue.main.async { [weak self, weak window] in
+                guard let self, self.ticket == stamp, self.window === window, window != nil else { return }
+                self.changed?(next)
+            }
+        }
+    }
+}
+private struct WorkbenchQuickContentTopKey: EnvironmentKey { static let defaultValue: CGFloat = 0 }
+extension EnvironmentValues {
+    var workbenchQuickContentTop: CGFloat {
+        get { self[WorkbenchQuickContentTopKey.self] }
+        set { self[WorkbenchQuickContentTopKey.self] = newValue }
     }
 }

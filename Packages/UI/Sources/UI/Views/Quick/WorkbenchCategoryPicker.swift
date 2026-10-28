@@ -14,7 +14,7 @@ struct WorkbenchCategoryPicker: View {
             selection: Binding(get: { selection }, set: onSelect),
             choices: QuickCategory.allCases.map { ($0, workflowText(language, "quick.category.\($0.rawValue)", fallback: $0.rawValue)) },
             identifiers: QuickCategory.allCases.map { "quick-category-\($0.rawValue)" },
-            owner: AnyHashable(owner), standard: true)
+            owner: AnyHashable(owner), standard: true, trackThickness: 32)
             .frame(width: 264).disabled(!enabled).accessibilityIdentifier("quick-category")
     }
 }

@@ -55,6 +55,7 @@ struct ChatLegacyActionMenu: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSPopUpButton {
         let button = NSPopUpButton(frame: .zero, pullsDown: true)
+        button.focusRingType = .none
         button.usesItemFromMenu = true
         button.autoenablesItems = false
         context.coordinator.install(on: button)

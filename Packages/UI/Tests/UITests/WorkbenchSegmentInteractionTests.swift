@@ -37,7 +37,7 @@ import UniformTypeIdentifiers
 
     @Test(arguments: [WorkbenchSegmentGeometry.Direction.horizontal, .vertical])
     func releaseOnlyAndContextCancellation(direction: WorkbenchSegmentGeometry.Direction) throws {
-        let geometry = WorkbenchSegmentGeometry(direction: direction, count: 4, length: 264, thickness: 44)
+        let geometry = WorkbenchSegmentGeometry(direction: direction, count: 4, length: 264, thickness: 32)
         let window = SegmentFixtureWindow(contentRect: .init(origin: .zero, size: geometry.slotSize), styleMask: [], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         let root = NSView(frame: .init(origin: .zero, size: geometry.slotSize))
@@ -45,6 +45,7 @@ import UniformTypeIdentifiers
         window.contentView = root; root.addSubview(receiver)
         defer { receiver.cancel(); window.contentView = nil; window.close() }
         receiver.geometry = geometry; receiver.presentation = geometry.lens(0, engagement: 0)
+        #expect(!receiver.mouseDownCanMoveWindow && receiver.acceptsFirstMouse(for: nil))
         let owner = NSObject(); receiver.owner = AnyHashable(ObjectIdentifier(owner))
         var values: [CGFloat?] = [], commits: [Int] = []
         var finishes = 0; receiver.onFinish = { finishes += 1 }
