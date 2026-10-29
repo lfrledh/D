@@ -423,6 +423,31 @@ struct WorkflowLocalizationTests {
         #expect(decoded.systemTitle == nil && decoded.name == legacy.name)
     }
 
+    @Test func batchReviewCountUsesCurrentExactRunsWithoutRewritingLedger() throws {
+        let node = try #require(WorkflowRegistry.standard.operation("d.control.human")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [node])
+        var runs = (0..<16).map { _ in WorkflowRun(graph: graph, targetNodeID: node.id,
+            steps: [.init(node: node, signature: "frozen", status: .waiting)], status: .waiting) }
+        let attempts = runs.enumerated().map { index, run in
+            var attempt = WorkflowBatchAttempt(ordinal: index + 1, runID: run.id); attempt.state = .waiting; return attempt
+        }
+        let stage = WorkflowBatchStage(name: "Existing batch", repetitions: 16, attempts: attempts)
+        let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
+        let frozenStage = try encoder.encode(stage)
+        func count() -> Int { WorkflowBatchPanel.pendingReviewCount(stage, runsByID: Dictionary(uniqueKeysWithValues: runs.map { ($0.id, $0) })) }
+        #expect(count() == 16)
+        runs[14].status = .cancelled // Even stale waiting records cannot reopen a terminal run.
+        runs[15].steps[0].status = .completed // Decision saved; explicit continuation is separate.
+        #expect(count() == 14)
+        #expect(WorkflowBatchPanel.pendingReviews(in: runs[14]).isEmpty)
+        #expect(WorkflowBatchPanel.pendingReviews(in: runs[15]).isEmpty)
+        runs[0].status = .saving
+        #expect(count() == 13)
+        runs.remove(at: 1)
+        #expect(count() == 12) // No fallback to another run with the same node/name.
+        #expect(try encoder.encode(stage) == frozenStage)
+    }
+
     @Test func waitingPausedAndSavedHumanDecisionAreDifferent() throws {
         let en = UILanguageStore(preferredLanguages: ["en"]); try en.select("en")
         let graph = WorkflowGraph(), plan = WorkflowPlan(graphID: graph.id, graphRevision: graph.revision, steps: [])

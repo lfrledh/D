@@ -12,6 +12,7 @@ import SwiftUI
     @State private var showPlan = false
     private func text(_ key: String, _ zh: String = "", _ en: String = "") -> String { workspaceText(language, key, zh, en) }
     var body: some View {
+        let runsByID = Dictionary(uniqueKeysWithValues: controller.runs.map { ($0.id, $0) })
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(text("batchReview")).font(.caption)
@@ -32,7 +33,7 @@ import SwiftUI
                                 Text(workflowText(language, "workflow.batch.state." + stage.state.rawValue)).font(.caption)
                                 Text(stage.createdAt, style: .time).font(.caption)
                                 Spacer()
-                                let waiting = stage.attempts.filter { $0.state == .waiting }.count
+                                let waiting = Self.pendingReviewCount(stage, runsByID: runsByID)
                                 let complete = stage.attempts.filter { $0.state == .completed }.count
                                 Text("\(complete)/\(stage.attempts.count) " + text("batchCompleted") +
                                      " · \(waiting) " + text("batchWaiting")).font(.caption)
@@ -46,7 +47,7 @@ import SwiftUI
                                 }
                             }
                             ForEach(stage.attempts) { attempt in
-                                if let run = controller.runs.first(where: { $0.id == attempt.runID }) { row(attempt, stageID: stage.id, run: run) }
+                                if let run = runsByID[attempt.runID] { row(attempt, stageID: stage.id, run: run) }
                             }
                         }.padding(8).background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
                     }
@@ -87,6 +88,19 @@ import SwiftUI
             }
     }
 
+    // The dispatch ledger records where an attempt first stopped. Human decisions
+    // can settle that run later; current work must use its exact live run record.
+    static func pendingReviews(in run: WorkflowRun) -> [WorkflowPlanCallRecord] {
+        guard run.status == .waiting, run.planCheckpoint?.state != .paused else { return [] }
+        return WorkflowWorkspacePanels.records(in: run).filter { $0.step.status == .waiting }
+    }
+    static func pendingReviewCount(_ stage: WorkflowBatchStage, runsByID: [UUID: WorkflowRun]) -> Int {
+        stage.attempts.filter { attempt in
+            guard attempt.state != .savingBlocked, let run = runsByID[attempt.runID] else { return false }
+            return !pendingReviews(in: run).isEmpty
+        }.count
+    }
+
     // Only the candidate-review surface selects assets. Generic human forms and
     // text review keep their own label without changing the inspected call.
     static func reviewActionKey(for step: WorkflowStepRun, registry: WorkflowRegistry) -> String {
@@ -123,7 +137,7 @@ import SwiftUI
                     revealLibrary(.init(controller: controller, source: .attempt(stage: stageID, attempt: attempt.id, run: run.id), name: WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: language)))
                 }.accessibilityIdentifier("attempt-locate-results")
             }
-            ForEach(controller.callRecords(runID: run.id).filter { $0.step.status == .waiting }) { record in
+            ForEach(Self.pendingReviews(in: run)) { record in
                 Button(text(Self.reviewActionKey(for: record.step, registry: controller.registry))) { inspect(run, record) }
             }
             if let intent = controller.containerSubmission(forParent: run.id), intent.choices.first(where: { !$0.selectedIDs.isEmpty })?.call.address.runID == run.id {
