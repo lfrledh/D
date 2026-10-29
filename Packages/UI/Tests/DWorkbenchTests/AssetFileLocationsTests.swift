@@ -223,6 +223,22 @@ struct AssetFileLocationsTests {
         #expect(try await store.workflowState().archive?.assets.first?.reference == imported.record.reference)
         try await store.close()
     }
+    @Test func folderLookupRejectsNonFileAndKeepsTypedDiagnostic() async throws {
+        let (root, store, source) = try await fixture()
+        let imported = try await store.importWorkflowMediaFile(at: source, mode: .reference)
+        let before = await store.snapshot()
+        let folder = root.appendingPathComponent("lookup")
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent(source.lastPathComponent), withIntermediateDirectories: true)
+        let result = try #require(try await store.relocateAssets(in: folder).first)
+        #expect(result.id == imported.asset.id)
+        #expect(result.outcome == .failed)
+        let failure = try #require(result.failure)
+        #expect(failure.issue == .unsafeFile)
+        #expect(failure.diagnostic.contains("ProjectStoreError"))
+        #expect(await store.snapshot() == before)
+        #expect(try await store.workflowData(imported.record.reference) == Data(contentsOf: source))
+        try await store.close()
+    }
     @Test func cancelledCollectionAndRequiredSymlinkPreserveRecord() async throws {
         let (root, store, source) = try await fixture()
         let imported = try await store.importWorkflowMediaFile(at: source, mode: .reference)

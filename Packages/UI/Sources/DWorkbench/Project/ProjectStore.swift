@@ -4996,7 +4996,7 @@ extension ProjectStore {
             }
             guard matches.count == 1 else {
                 let error = failures.first
-                let failure = error.map { AssetFileOperationFailure(AssetFileOperationFailure.classify($0), diagnostic: $0.localizedDescription) }
+                let failure = error.map { AssetFileOperationFailure(AssetFileOperationFailure.classify($0), diagnostic: String(reflecting: $0) + "\n" + $0.localizedDescription) }
                 results.append(.init(id: asset.id, matched: false, message: error?.localizedDescription ?? (matches.isEmpty ? "No matching file" : "Multiple matching files"),
                     outcome: matches.isEmpty && error != nil ? .failed : (matches.isEmpty ? .noMatch : .ambiguous), assetName: asset.name, sourcePath: source, failure: failure)); continue
             }
