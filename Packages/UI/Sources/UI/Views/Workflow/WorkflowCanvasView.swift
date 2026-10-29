@@ -1206,7 +1206,8 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
     private func runDock(width: CGFloat) -> some View {
         HStack(spacing: 8) {
-            Text(dockSummary).font(.caption).lineLimit(1).help(dockSummary)
+            Text(dockSummary).font(.caption).lineLimit(1)
+                .help(controller.progressPresentation?.code == "phase.lowMemoryExecution" ? workflowText(languageStore, "memory.runningHelp") : dockSummary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("workflow-run-summary")
             dockMainAction.frame(width: 112, height: 32)

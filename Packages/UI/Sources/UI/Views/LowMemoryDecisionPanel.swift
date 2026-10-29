@@ -94,8 +94,6 @@ struct LowMemoryExecutionDetails: View {
                     VStack(alignment: .leading, spacing: 6) {
                         let used = record.method?.rawValue ?? record.preferredMode
                         LabeledContent(text(record.state == .completed ? "actualMethod" : "proposedMethod"), value: text(used == "ssdLayered" ? "layered" : used))
-                        if record.state == .completed, record.method == .layered { Text(text("layeredHelp")) }
-                        if record.state == .completed, record.decision == .allowedByPreference { Text(text("allowedHelp")) }
                         if record.explicitlySelected { Text(text("explicit")) }
                         else if let decision = record.decision {
                             Text(text(decision == .userStopped ? "stopped" : decision == .denyByPreference ? "denied" : decision.rawValue))
