@@ -2163,15 +2163,15 @@ private struct WorkflowFixedToolSheet: View {
                                 Text(workflowText(language, "workflow.port.inputs"))
                                     .font(.subheadline.weight(.semibold))
                                 ForEach(interface.inputs) { input in
-                                    Text(input.name + " · " + String(describing: input.type)
-                                        + (input.required ? " · 必选" : " · 可选"))
+                                    Text(input.name + " · " + WorkflowDatumSnapshotText.schema(input.type, language: language)
+                                        + " · " + workflowText(language, input.required ? "workflow.port.required" : "workflow.port.optional"))
                                         .font(.callout)
                                 }
                                 Text(workflowText(language, "workflow.port.outputs"))
                                     .font(.subheadline.weight(.semibold))
                                 ForEach(interface.outputs) { output in
-                                    Text(output.name + " · " + output.port + " · "
-                                        + String(describing: output.schema)).font(.callout)
+                                    Text(output.name + " · " + WorkflowDatumSnapshotText.schema(output.schema, language: language)).font(.callout)
+                                    WorkflowTechnicalDetails(value: output.nodeID.uuidString + "." + output.port)
                                 }
                             } else {
                                 Text(workflowText(language, "canvas.tool.noInterface", fallback: "未声明公开端口"))
@@ -2189,8 +2189,8 @@ private struct WorkflowFixedToolSheet: View {
                                     Text(identity.detail ?? "").font(.caption).foregroundStyle(.secondary)
                                     WorkflowTechnicalDetails(value: node.operationID + "\n" + node.id.uuidString)
                                     if let definition {
-                                        Text(definition.inputs.map(\.id).joined(separator: ", ") + " → "
-                                            + definition.outputs.map(\.id).joined(separator: ", "))
+                                        Text(definition.inputs.map { WorkflowCanvasPresentation.portTitle(operationID: definition.id, port: $0, input: true, language: language) }.joined(separator: ", ") + " → "
+                                            + definition.outputs.map { WorkflowCanvasPresentation.portTitle(operationID: definition.id, port: $0, input: false, language: language) }.joined(separator: ", "))
                                             .font(.caption).foregroundStyle(.secondary)
                                     }
                                 }

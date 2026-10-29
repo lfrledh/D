@@ -33,7 +33,7 @@ private func workflowFormSchemaName(_ schema: WorkflowDataSchema, language: UILa
     case .optional: key = "workflow.language.form.type.optional"; fallback = "Optional"
     case .result: key = "workflow.language.form.type.result"; fallback = "Result"
     case .asset(let kind):
-        key = "workflow.language.form.type.asset"; fallback = "Asset ({kind})"; arguments["kind"] = kind.rawValue
+        key = "workflow.language.form.type.asset"; fallback = "Asset ({kind})"; arguments["kind"] = workflowText(language, "workflow.kind." + kind.rawValue, fallback: kind.rawValue)
     }
     return workflowFormText(language, key, fallback: fallback, arguments: arguments)
 }

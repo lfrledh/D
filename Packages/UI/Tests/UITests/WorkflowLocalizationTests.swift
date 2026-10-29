@@ -18,6 +18,19 @@ private actor LocalizationNoInferenceEngine: InferenceEngine {
 @Suite(.serialized) @MainActor
 struct WorkflowLocalizationTests {
     @Test(arguments: ["zh-Hans", "en"])
+    func fixedInterfaceSchemaKeepsUserNamesAndUsesLocalizedTypes(locale: String) throws {
+        let language = UILanguageStore(preferredLanguages: [locale]); try language.select(locale)
+        let field = WorkflowRecordField("用户字段 / User field", .asset(.image), required: false)
+        let schema = WorkflowDataSchema.record([field])
+        let rendered = WorkflowDatumSnapshotText.schema(schema, language: language)
+        #expect(rendered.contains(field.name))
+        #expect(rendered.contains(workflowText(language, "workflow.kind.image")))
+        #expect(rendered.contains(workflowText(language, "workflow.language.form.optional")))
+        #expect(schema == .record([field]))
+        #expect(!rendered.contains("WorkflowDataSchema") && !rendered.contains("DWorkbench."))
+    }
+
+    @Test(arguments: ["zh-Hans", "en"])
     func failureRecordFeedbackTranslatesWithoutChangingDiagnostics(locale: String) throws {
         let language = UILanguageStore(preferredLanguages: [locale]); try language.select(locale)
         let pending = "计算已失败，失败记录尚未保存；请重试保存记录。"
