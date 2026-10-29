@@ -58,6 +58,17 @@ import Testing
 }
 
 extension WorkflowClosurePresentationTests {
+    @Test func nodeActivityDoesNotRepeatPhaseButKeepsDistinctProgress() {
+        for phase in ["awaitingLowMemoryDecision", "lowMemoryExecution", "generating"] {
+            #expect(WorkflowNodeActivityPresentation.secondaryMessage(phase: phase, message: .init("phase." + phase)) == nil)
+            let detailed = WorkflowProgressMessage("phase." + phase, ["completed": "2"])
+            #expect(WorkflowNodeActivityPresentation.secondaryMessage(phase: phase, message: detailed) == detailed)
+            let progress = WorkflowProgressMessage("candidateProgress", ["index": "2", "count": "3"])
+            #expect(WorkflowNodeActivityPresentation.secondaryMessage(phase: phase, message: progress) == progress)
+        }
+        #expect(WorkflowNodeActivityPresentation.secondaryMessage(phase: "lowMemoryExecution", message: .init("phase.saving")) != nil)
+    }
+
     @Test func dynamicCopyUsesResourcesWhileFactsAndUserTextRemainUnchanged() throws {
         let language = UILanguageStore(preferredLanguages: ["zh-Hans"])
         let message = WorkflowProgressMessage("candidateProgress", ["index": "2", "count": "3", "completed": "5", "total": "8"])
