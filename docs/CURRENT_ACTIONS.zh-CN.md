@@ -1,5 +1,7 @@
 # 当前行动与接手点
 
+**2026-10-29 B4补验交审：** 起点完整`9a583fdec0a7432c0a99f28c347a70c7dd4377de`，原树/分支接续、祖先0、无其他写入者。最终生产 **`ecda08c81c5ba9ec26693fc804abc7f2e518bd92`**；桌面 **D 最新版** → `CurrentD/Workflow-View-ecda08c8/D.app`，正常完整Release/Apple Development签名/七引擎/零权重，无诊断注入。真实冷开保持150%及原落点；音乐无效数字提交门禁、实际人工提交/明确继续、SCIM组字/取消/Undo/Redo、固定工具中英只读详情均补验。46个不重复定向方法通过，非实施者复核实际差分与档案；0191原生失败、旧key-window前置失败保留。最终33791同版冷开，8专属图/3运行保留（2程序完成、1模型准入失败），无自动重算。原B4/Quick/用户资产与个人scheme保持；无强退、无性能扩项。完整文档交付及远端SHA绑定既有CurrentD回执。[当前分级回执](tasks/D-UI-CONSOLIDATED-01.md#b4原生补验与冷开视野2026-10-29)／[唯一集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#b4冷开视野与剩余原生补验2026-10-29)。重推理Stop因估算内存超过当前预算而未进入执行，仍未验；全输入/Tab及其他旧边界继续开放，无新增本人请求。停在用户视觉与顾问审计，不自动下一批。下方d714为前次交付事实，旧“当前”不覆盖此入口。
+
 当前交审：**WORKFLOW-RUN-COPY-B4-20261029**。原工作树/分支从B3完整`a4607f45f87a98e840bac2eb26e493c29f960a58`累计接续；fetch与祖先exit0、干净起点、无其他写入者。最终生产 **`d71497c25a1596b821c5225c7df02cf778ffb9c3`**。B4-01—08双语及必要状态/身份修补完成，现场长原因挤标题及旧批次待筛选计数错误已修；容器继续、模型/标签/音频/B3文件事务和性能保护保持。[A01—A22分级回执](tasks/D-UI-CONSOLIDATED-01.md#workflow-run-copy-b4-20261029)／[唯一集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#工作流运行b4收口2026-10-29)。
 
 桌面 **D 最新版** → `CurrentD/Workflow-Run-d71497c2/D.app`。正常完整Release/-O/WMO/DEBUG_DYLIB=NO/Apple Development签名/七引擎/零权重，无诊断注入。最终6523正常退出→PID消失→桌面冷开6863（19:55 JST），路径/包内生产SHA一致；39条程序运行、3批次阶段冷读保留，无新模型下载/推理。完整交付SHA及远端读回由既有CurrentD/receipt.json绑定，不签后改App。
