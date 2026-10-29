@@ -154,6 +154,8 @@ private actor ConfigurationPanelEngine: InferenceEngine {
         var edited = saved; edited.prompt = "Updated for later use"
         try ChatConfigurationActions.savePreset(edited, captureCurrentConfiguration: false,
             sessionID: id, chat: chat)
+        #expect(chat.state.presets.first?.configuration == saved.configuration)
+        #expect(chat.state.presets.first?.prompt == edited.prompt)
         #expect(chat.selectedSession?.systemPrompt == "Explain clearly")
         try chat.removePreset(duplicateID)
         #expect(chat.state.presets.map(\.id) == [saved.id])

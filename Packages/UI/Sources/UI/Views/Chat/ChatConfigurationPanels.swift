@@ -230,8 +230,9 @@ struct ChatPresetsPanel: View {
                     .id("selection:" + (editingID?.uuidString ?? "new"))
                     .accessibilityLabel(text("selection", "Selection instruction (optional)", "选段指令（可选）"))
                     .frame(height: 70).workbenchInputSurface()
-                Toggle(text("capture", "Capture current model settings", "保存当前模型参数"),
+                Toggle(text(editingID == nil ? "capture" : "updateConfiguration", "Save model and parameters", "保存模型和参数"),
                     isOn: $captureConfiguration)
+                    .help(editingID == nil ? "" : text("updateConfigurationHelp", "", ""))
                     .disabled(session?.configuration == nil)
                 if invalidCapture {
                     Text(text("invalid", "Finish the current numeric input before capturing settings.",
@@ -241,6 +242,7 @@ struct ChatPresetsPanel: View {
                 HStack {
                     Button(text("restore", "Restore saved version", "恢复已保存版本")) { load(original) }
                         .disabled(original == nil)
+                        .help(text("restoreHelp", "", ""))
                     Spacer()
                     Button(text("cancel", "Cancel", "取消")) { editorOpen = false; draftLoaded = false; issue = nil }
                     Button(text("save", "Save preset", "保存预设"), action: save)
@@ -305,7 +307,7 @@ struct ChatComparisonPanel: View {
         case .text(let text): text
         case .integer(let number): String(number)
         case .decimal(let number): String(number)
-        case .flag(let flag): String(describing: flag)
+        case .flag(let flag): workflowText(language, "chat.configurationValue." + (flag ? "on" : "off"))
         }
     }
 
@@ -329,8 +331,10 @@ struct ChatComparisonPanel: View {
                     Text(text("system", "System prompt", "系统提示") + ": " + source.systemPrompt)
                         .textSelection(.enabled)
                     Text(text("mediaPorts", "Media ports", "媒体端口") + ": " +
-                         (source.inputs.keys.sorted().joined(separator: ", ").isEmpty ? "—" :
-                          source.inputs.keys.sorted().joined(separator: ", ")))
+                         (source.inputs.isEmpty ? "—" : source.inputs.keys.sorted().map { key in
+                             WorkflowCanvasPresentation.portTitle(operationID: source.node.operationID, portID: key,
+                                 fallback: key, input: true, language: language)
+                         }.joined(separator: ", ")))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 ScrollView(.horizontal) {
@@ -347,6 +351,7 @@ struct ChatComparisonPanel: View {
                     }
                     .disabled(!ChatConfigurationActions.canCompare(session, source: source, chat: chat))
                     .accessibilityIdentifier("chat-comparison-new")
+                    .help(text("compareHelp", "", ""))
                     Button(text("reproduce", "Reproduce source exactly", "精确重现原回答")) {
                         launch { try await chat.reproduce(sourceAttemptID, sessionID: sessionID) }
                     }
@@ -354,6 +359,7 @@ struct ChatComparisonPanel: View {
                         isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil,
                         hasSaveIssue: chat.saveIssue != nil) || !chat.isLoaded)
                     .accessibilityIdentifier("chat-comparison-reproduce")
+                    .help(workflowText(language, "chat.clarity.reproduceHelp"))
                 }
                 Text(text("draft", "Your unsent draft is preserved. Choosing an answer selects its branch without generating.",
                     "未发送草稿会保留。选择回答只切换分支，不会生成。"))
@@ -380,8 +386,11 @@ struct ChatComparisonPanel: View {
                 text("candidate", "Candidate", "候选回答"))
                 .font(.subheadline.bold())
             Text(status(attempt)).font(.caption).foregroundStyle(.secondary)
-            Text(text("model", "Model", "模型") + ": " +
-                 (attempt.node.parameters["modelID"]?.string ?? "—"))
+            let descriptor = attempt.node.parameters["modelID"]?.string.flatMap {
+                WorkflowModelRoutes.draftChoice(operationID: attempt.node.operationID, modelID: $0)
+            }.flatMap { SharedLibraryProjection.descriptor(for: $0) }
+            Text(text("model", "Model", "模型") + ": " + (descriptor?.title ?? workflowText(language, "chat.clarity.notRecorded")))
+            ModelSpecificationFields(descriptor: descriptor, font: .caption)
                 .font(.caption).textSelection(.enabled)
             Text(text("seed", "Seed", "种子") + ": " +
                  (attempt.node.parameters["seed"]?.string ?? "—"))
@@ -391,7 +400,10 @@ struct ChatComparisonPanel: View {
                     !["modelID", "seed", "messagesJSON", "task", "outputMode"].contains($0)
                 }, id: \.self) { key in
                     if let value = attempt.node.parameters[key] {
-                        Text(key + ": " + scalar(value)).font(.caption).textSelection(.enabled)
+                        let definition = WorkflowRegistry.standard.operation(attempt.node.operationID)?.definition
+                        let field = definition?.fields.first { $0.id == key }
+                        let title = field.map { WorkflowCanvasPresentation.fieldTitle(operationID: attempt.node.operationID, field: $0, language: language) } ?? key
+                        Text(title + ": " + (value.string.map { WorkflowCanvasPresentation.choiceTitle(fieldID: key, value: $0, language: language) } ?? scalar(value))).font(.caption).textSelection(.enabled)
                     }
                 }
             }

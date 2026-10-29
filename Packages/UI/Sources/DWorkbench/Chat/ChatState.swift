@@ -62,6 +62,7 @@ public struct ChatMessage: Codable, Sendable, Equatable, Identifiable {
 }
 
 public struct ChatAttempt: Codable, Sendable, Equatable, Identifiable {
+    public var executionRecords: [InferenceExecutionRecord]?
     public enum Status: String, Codable, Sendable { case running, completed, partial, cancelled, failed, interrupted, saving }
     public let id: UUID
     public let sessionID: UUID

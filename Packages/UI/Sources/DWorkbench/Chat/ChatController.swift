@@ -3,11 +3,30 @@ import CryptoKit
 import Foundation
 import Observation
 
+public enum ChatGenerationPhase: String, Sendable {
+    case preparing, generating, stopping, saving, completed, length, stopped, failed
+    case awaitingLowMemoryDecision, lowMemoryExecution
+    public static func updated(by code: String, previous: Self, cancelling: Bool) -> Self {
+        if cancelling { return .stopping }
+        switch code {
+        case "savingResult": return .saving
+        case "phase.cancelling": return .stopping
+        case "phase.awaitingLowMemoryDecision": return .awaitingLowMemoryDecision
+        case "phase.lowMemoryExecution": return .lowMemoryExecution
+        case "phase.running", "phase.generatingRaw": return previous == .lowMemoryExecution ? previous : .generating
+        case "preparingContext", "phase.preparing", "phase.verifyingModel",
+             "phase.tokenizing", "phase.loadingModel", "phase.preparingContext": return previous == .lowMemoryExecution ? previous : .preparing
+        default: return previous // Ordinary successful release is not a user stop.
+        }
+    }
+}
+
 @MainActor @Observable public final class ChatController {
     public private(set) var state = ChatState()
     public private(set) var isLoaded = false
     public private(set) var isRunning = false
-    public private(set) var phase = ""
+    public private(set) var phase = "" // Raw diagnostic only. UI uses displayPhase.
+    public private(set) var displayPhase: ChatGenerationPhase = .preparing
     public private(set) var error: String?
     public private(set) var saveIssue: String?
     public private(set) var activeSessionID: UUID?
@@ -808,7 +827,7 @@ import Observation
         let sibling = ChatMessage(parentID: old.parentID, role: .user, text: text, attachments: old.attachments, knowledgeExcerpts: old.knowledgeExcerpts)
         state.sessions[i].messages.append(sibling); state.sessions[i].selectedLeafID = sibling.id; changed(); return sibling.id
     }
-    @discardableResult public func forkSession(_ id: UUID, leafID: UUID? = nil) throws -> UUID {
+    @discardableResult public func forkSession(_ id: UUID, leafID: UUID? = nil, titleSuffix: String = " · 分支") throws -> UUID {
         try requireLoaded(); guard state.sessions.count < 512 else { throw WorkflowIssue("会话数量已达上限。") }
         let source = state.sessions[try index(id)]
         let leaf = leafID ?? source.selectedLeafID
@@ -816,7 +835,7 @@ import Observation
         if let activeAttemptID, path.contains(where: { $0.attemptID == activeAttemptID }) {
             throw WorkflowIssue("这条路径仍在生成，请等待停止后再分叉。")
         }
-        var fork = ChatSession(title: Self.derivedTitle(source.title, suffix: " · 分支"))
+        var fork = ChatSession(title: Self.derivedTitle(source.title, suffix: titleSuffix))
         fork.messages = path; fork.attempts = source.attempts.filter { a in path.contains(where: { $0.attemptID == a.id }) }.map { a in
             // Attempt provenance remains tied to its originating session. A fork's copied
             // immutable history is not eligible for retry or mutation of that attempt.
@@ -874,7 +893,8 @@ import Observation
         state.sessions[i].contextChoices = choices
         if deleted { cancelToolsForClosedSession(sessionID) }; changed()
     }
-    @discardableResult public func adoptAnswer(_ messageID: UUID, text: String, sessionID: UUID) throws -> UUID {
+    @discardableResult public func adoptAnswer(_ messageID: UUID, text: String, sessionID: UUID,
+                                             origin: ChatTextRevision.Origin? = nil) throws -> UUID {
         try requireLoaded(); let i = try index(sessionID), session = state.sessions[i]
         guard session.contextChoices?.deletedAt == nil, !session.archived,
               let message = session.messages.first(where: { $0.id == messageID && $0.role == .assistant }),
@@ -886,7 +906,11 @@ import Observation
             throw WorkflowIssue("运行中或待处理工具的回答不能作为人工正文采用。")
         }
         var choices = session.contextChoices ?? .init()
-        let revision = ChatTextRevision(messageID: messageID, text: text)
+        let original = attempt.response?.finalText ?? attempt.rawText
+        let verifiedOrigin: ChatTextRevision.Origin? = origin == .partialAccepted
+            ? (text == original && attempt.status != .completed ? .partialAccepted : nil)
+            : (text != original ? .edited : nil)
+        let revision = ChatTextRevision(messageID: messageID, text: text, origin: verifiedOrigin)
         choices.adoptedRevisionIDs.removeAll { id in choices.revisions.contains { $0.id == id && $0.messageID == messageID } }
         choices.revisions.append(revision); choices.adoptedRevisionIDs.append(revision.id)
         choices.excludedMessageIDs.removeAll { $0 == messageID }
@@ -1365,12 +1389,24 @@ import Observation
         return result
     }
 
+    private var preparingSendSessionID: UUID?
+    private var automaticSearchIncluded = false
+    public func hasPendingAutomaticSearch(for session: ChatSession) -> Bool {
+        session.webOptions?.allowed == true && session.webOptions?.automaticSearch == true &&
+        session.webOptions?.provider != nil && !session.archived && session.contextChoices?.deletedAt == nil &&
+        !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isRunning &&
+        !(preparingSendSessionID == session.id && automaticSearchIncluded)
+    }
+
     public func send(sessionID: UUID) async throws {
         try requireLoaded()
         guard !hasInvalidParameterText(sessionID: sessionID) else {
             throw WorkflowIssue("回答参数仍有未完成或无效输入，请先修正。")
         }
         guard allowsSubmission(), !isRunning, pendingSaveAttemptID == nil else { throw WorkflowIssue("已有聊天推理或待保存结果；请等待或重试保存。其他会话可以继续编辑。") }
+        guard preparingSendSessionID == nil else { throw WorkflowIssue("正在准备本次请求。", code: "chat.phase.preparing") }
+        preparingSendSessionID = sessionID; automaticSearchIncluded = false
+        defer { preparingSendSessionID = nil; automaticSearchIncluded = false }
         try await prepareAutomaticWeb(sessionID: sessionID)
         let i = try index(sessionID), session = state.sessions[i]
         if session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -1498,7 +1534,7 @@ import Observation
             }
             if let firstMessageTitle { state.sessions[i].title = firstMessageTitle }
         }
-        changed(); isCancelling = false; error = nil; isRunning = true; activeSessionID = sessionID; activeAttemptID = attemptID; phase = "正在保存冻结输入…"
+        changed(); isCancelling = false; error = nil; isRunning = true; activeSessionID = sessionID; activeAttemptID = attemptID; phase = "正在保存冻结输入…"; displayPhase = .preparing
         pendingTerminalNotices.insert(attemptID)
         runTask = Task { [self] in
             defer { isRunning = false; isCancelling = false; activeSessionID = nil; activeAttemptID = nil; runTask = nil
@@ -1509,7 +1545,14 @@ import Observation
                 try await flush() // Immutable attempt is durable before model admission.
                 if isCancelling { throw CancellationError() }
                 let service = try makeServices(); services = service
-                service.progress = { [weak self] value in self?.phase = value }
+                service.progress = { [weak self] value in
+                    guard let self, self.activeAttemptID == attemptID else { return }
+                    self.phase = value
+                }
+                service.progressEvent = { [weak self] message in
+                    guard let self, self.activeAttemptID == attemptID, !self.isCancelling else { return }
+                    self.displayPhase = .updated(by: message.code, previous: self.displayPhase, cancelling: self.isCancelling)
+                }
                 service.languagePreviewChanged = { [weak self] stepID, text in
                     guard let self, self.isRunning, self.activeAttemptID == stepID, !text.isEmpty,
                           let si = self.state.sessions.firstIndex(where: { $0.id == sessionID }),
@@ -1523,14 +1566,17 @@ import Observation
                 try service.beginPlan()
                 let result = try await service.executeCall(.init(node: prepared.0, stepID: attemptID, inputs: prepared.2))
                 guard case .outputs(let values) = result, let raw = values["raw"]?.asset ?? values["output"]?.asset else { throw WorkflowIssue("文字输出缺少已发布原文。") }
+                displayPhase = .saving
                 try await finishAttempt(sessionID: sessionID, attemptID: attemptID, reference: raw)
                 phase = state.sessions.first(where: { $0.id == sessionID })?.attempts.first(where: { $0.id == attemptID })?.response?.finishReason == .length
                     ? "Length limit · partial answer kept / 长度上限 · 部分回答已保留" : "Completed / 已完成"
+                displayPhase = .saving
                 try await flush()
             } catch {
                 if services?.hasPendingSaves == true { pendingSaveAttemptID = attemptID }
                 if let si = state.sessions.firstIndex(where: { $0.id == sessionID }),
                    let ai = state.sessions[si].attempts.firstIndex(where: { $0.id == attemptID }) {
+                    state.sessions[si].attempts[ai].executionRecords = services?.executionRecords(for: attemptID)
                     let refs = (try? await store.workflowAssets(forStepID: attemptID)) ?? []
                     if let raw = refs.first, let response = try? await services?.readLanguageResponse(raw) {
                         state.sessions[si].attempts[ai].output = raw
@@ -1545,6 +1591,7 @@ import Observation
                 }
                 self.error = error is CancellationError ? nil : error.localizedDescription
                 phase = error is CancellationError ? "已停止" : "生成失败"
+                displayPhase = error is CancellationError ? .stopped : .failed
                 do { try await flush() } catch { saveIssue = error.localizedDescription }
             }
         }
@@ -1553,6 +1600,7 @@ import Observation
         guard let si = state.sessions.firstIndex(where: { $0.id == sessionID }),
               let ai = state.sessions[si].attempts.firstIndex(where: { $0.id == attemptID }) else { throw WorkflowIssue("尝试记录已丢失。") }
         let response = try await services?.readLanguageResponse(reference)
+        state.sessions[si].attempts[ai].executionRecords = services?.executionRecords(for: attemptID)
         let raw = try await store.workflowText(reference)
         state.sessions[si].attempts[ai].output = reference
         state.sessions[si].attempts[ai].response = response ?? TextResponse(rawText: raw, finalText: raw, finishReason: .stop)
@@ -1637,7 +1685,7 @@ import Observation
         guard let task = runTask else { return }
         if !isCancelling {
             isCancelling = true
-            phase = "正在取消并释放资源…"
+            phase = "正在取消并释放资源…"; displayPhase = .stopping
             await services?.cancel()
         }
         // Every caller waits for the same run, even when the signal was already sent.
@@ -1916,6 +1964,7 @@ import Observation
             }
             if let ai = state.sessions[si].toolActivities?.firstIndex(where: { $0.id == activityID }) { state.sessions[si].toolActivities?[ai].output = reference }
             let adopted = state.sessions[si].attachments.first { $0.reference == reference }
+            if expectedInput != nil, preparingSendSessionID == sessionID { automaticSearchIncluded = true }
             changed(); try await flush()
             try expectedInput?.validate(state.sessions[try index(sessionID)], addedAttachment: adopted)
             return

@@ -95,7 +95,7 @@ private enum ChatDetail: Identifiable {
     case edit(ChatEdit), preview(WorkflowAssetReference)
     case projectAttachments(UUID)
     case request(ChatAttempt)
-    case message(ChatSession, ChatMessage, ChatAttempt?), raw(UUID, String)
+    case message(ChatSession, ChatMessage, ChatAttempt?), raw(UUID, String), searchHit(ChatSearchHit)
     case comparison(UUID, UUID), presetImport([ChatPromptPreset], Data)
     case conversationImport(Data, String)
     case quote(UUID, ChatQuoteSource), artifact(ChatArtifactContent), fields([ChatAnswerField])
@@ -106,6 +106,7 @@ private enum ChatDetail: Identifiable {
         case .request(let attempt): "request-\(attempt.id)"
         case .message(let session, let message, _): "message-detail-\(session.id)-\(message.id)"
         case .raw(let id, _): "raw-output-\(id)"
+        case .searchHit(let hit): "search-\(hit.sessionID)-\(hit.messageID?.uuidString ?? "title")-\(hit.revisionID?.uuidString ?? "original")"
         case .projectAttachments(let owner): "project-attachments-\(owner)"
         case .preview(let reference): "preview-\(reference.assetID)"
         case .comparison(let session, let attempt): "compare-\(session)-\(attempt)"
@@ -146,6 +147,7 @@ enum ChatContextSessionList {
     static func open(_ hit: ChatSearchHit, in chat: ChatController) throws -> ChatSearchJump? {
         guard let session = chat.state.sessions.first(where: { $0.id == hit.sessionID }),
               session.contextChoices?.deletedAt == nil else { throw WorkflowIssue("对话已删除或不存在。") }
+        guard ChatHistorySearch.isCurrent(hit, in: session) else { throw WorkflowIssue("搜索命中的内容已变化，请重新搜索。", code: "chat.error.searchChanged") }
         try chat.selectSession(session.id)
         guard let messageID = hit.messageID else { return nil }
         // An ancestor is already visible; changing the leaf would discard the rest of this path.
@@ -156,7 +158,7 @@ enum ChatContextSessionList {
     }
 
     static func adopt(_ text: String, messageID: UUID, sessionID: UUID,
-                      in chat: ChatController) throws {
+                      in chat: ChatController, origin: ChatTextRevision.Origin? = nil) throws {
         guard chat.state.selectedSessionID == sessionID else {
             throw WorkflowIssue("请返回原对话后再采用此回答。")
         }
@@ -165,7 +167,7 @@ enum ChatContextSessionList {
               canAdopt(session.attempts.first(where: { $0.id == attemptID }), in: chat) else {
             throw WorkflowIssue("回答仍在运行、待保存或等待工具完成，不能采用。")
         }
-        _ = try chat.adoptAnswer(messageID, text: text, sessionID: sessionID)
+        _ = try chat.adoptAnswer(messageID, text: text, sessionID: sessionID, origin: origin)
     }
 
     static func choices(_ session: ChatSession, mutate: (inout ChatContextChoices) -> Void,
@@ -199,7 +201,7 @@ enum ChatContextSessionList {
     }
 }
 
-enum ChatContextRowStatus: Equatable {
+enum ChatContextRowStatus: String, Equatable {
     case currentQuestion, excluded, summarized, adopted, included
 
     static func forMessage(_ message: ChatMessage, in session: ChatSession, summaryUses: [ChatContextSummary] = []) -> Self {
@@ -560,6 +562,7 @@ struct ChatWorkbenchView: View {
     @State private var userScrollingTranscript = false
     @State private var scrollRestoration: ChatScrollRestoration?
     @State private var issues: [UUID: String] = [:]
+    @State private var issueCodes: [UUID: String] = [:]
     @State private var globalIssue: String?
     @State private var newPresetName = ""
     @State private var filePanelBusy = false
@@ -630,8 +633,8 @@ struct ChatWorkbenchView: View {
             hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
             invalidFields: chat.invalidParameterFields)
     }
-    private func report(_ message: String?, for sessionID: UUID?) {
-        if let sessionID { issues[sessionID] = message }
+    private func report(_ message: String?, for sessionID: UUID?, code: String? = nil) {
+        if let sessionID { issues[sessionID] = message; issueCodes[sessionID] = code }
         else { globalIssue = message }
     }
     private func visibleSessions(_ sessions: [ChatSession]) -> [ChatSession] {
@@ -757,6 +760,12 @@ struct ChatWorkbenchView: View {
                     WorkbenchScrollView { Text(text).font(.body.monospaced()).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
                 }.padding(20)
 
+            case .searchHit(let hit):
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(label(hit.textVersion == .selected ? "searchSelectedVersion" : "searchOriginalVersion", "")).font(.caption)
+                    Button(label("copy", "复制"), systemImage: "doc.on.doc") { copy(hit.sourceText) }
+                    WorkbenchScrollView { Text(hit.sourceText).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
+                }.padding(20)
             case .request(let attempt):
                 VStack(alignment: .leading) {
                     HStack {
@@ -993,6 +1002,7 @@ ScrollViewReader { proxy in
             TextField(newLabel("lexicalSearch", english: "Lexical search", chinese: "词法搜索"), text: $search)
                 .textFieldStyle(WorkbenchGlassTextFieldStyle())
                 .accessibilityIdentifier("chat-history-search")
+                .help(label("searchHelp", ""))
                 .disabled(showDeleted)
             HStack {
                 Toggle(label("archived", "已归档"), isOn: $showArchived)
@@ -1020,12 +1030,18 @@ ScrollViewReader { proxy in
                                     if let currentID = chat.state.selectedSessionID { saveScrollState(for: currentID, captureReadingPoint: true) }
                                     searchJump = try ChatContextCommands.open(hit, in: chat)
                                     closeNarrowPanel()
-                                } catch { report(error.localizedDescription, for: hit.sessionID) }
+                                    if hit.textVersion != nil { present(.searchHit(hit)) }
+                                } catch {
+                                    report(error.localizedDescription, for: hit.sessionID, code: (error as? WorkflowIssue)?.code)
+                                }
                             } label: {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(titles[hit.sessionID] ?? "")
                                         .font(.caption).bold().lineLimit(1)
                                     Text(searchExcerpt(hit)).lineLimit(2)
+                                    if let version = hit.textVersion {
+                                        Text(label(version == .selected ? "searchSelectedVersion" : "searchOriginalVersion", "")).font(.caption2).foregroundStyle(.secondary)
+                                    }
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                             }.buttonStyle(WorkbenchRowButtonStyle())
                                 .accessibilityLabel(newLabel("searchResult", english: "Open search result: ", chinese: "打开搜索结果：") + searchExcerpt(hit))
@@ -1126,8 +1142,9 @@ ScrollViewReader { proxy in
                let owner = chat.state.sessions.first(where: { $0.id == active }) {
                 HStack {
                     ProgressView().controlSize(.small)
-                    Text(label("runningIn", "正在生成：") + owner.title + " · " + chat.phase)
+                    Text(owner.title + " · " + workflowText(language, "chat.phase." + chat.displayPhase.rawValue))
                         .font(.caption).lineLimit(2)
+                        .help(chat.displayPhase == .lowMemoryExecution ? workflowText(language, "memory.runningHelp") : "")
                     Spacer()
                 }.padding(.horizontal, 16).padding(.vertical, 8)
             }
@@ -1610,11 +1627,14 @@ ScrollViewReader { proxy in
             Text(newLabel("contextPreviewNote", english: "Current path and draft only. This preview does not send or change them.",
                 chinese: "仅显示当前路径与草稿；预览不会发送或修改它们。"))
                 .font(.caption).foregroundStyle(.secondary)
+            if chat.hasPendingAutomaticSearch(for: session) {
+                Text(label("pendingSearchNote", "")).font(.caption).foregroundStyle(.secondary)
+            }
             let result = Result { try chat.contextPreview(sessionID: session.id) }
             let summaries = (try? result.get().summaryUses) ?? []
             ForEach(chat.selectedPath) { message in
                 let status = ChatContextRowStatus.forMessage(message, in: session, summaryUses: summaries)
-                Text(newLabel("contextRow.\(status)", english: status.english, chinese: status.chinese) +
+                Text(newLabel("contextRow.\(status.rawValue)", english: status.english, chinese: status.chinese) +
                      " · " + branchSummary(message))
                     .font(.caption).lineLimit(2)
                     .chatMeasured("context-row-\(message.id.uuidString)", probe: layoutProbe)
@@ -1622,11 +1642,11 @@ ScrollViewReader { proxy in
             }
             switch result {
             case .success(let plan):
-                Text(newLabel("conservativeBudget", english: "Conservative input estimate (not exact tokenization): ",
-                    chinese: "保守输入估计（非精确分词）：") + String(plan.estimatedTokens))
+                Text(label("inputEstimateHelp", "")).font(.caption).foregroundStyle(.secondary)
+                Text(workflowText(language, "chat.estimatedInput", arguments: ["count": String(plan.estimatedTokens)]))
                     .font(.caption)
                 if let limit = session.configuration?.parameters["maximumPromptTokens"]?.integer {
-                    Text(newLabel("configuredLimit", english: "Configured input limit: ", chinese: "所选输入上限：") + String(limit))
+                    Text(workflowText(language, "chat.inputLimit", arguments: ["count": String(limit)]))
                         .font(.caption)
                     if plan.estimatedTokens > limit {
                         Text(newLabel("overEstimate", english: "Estimate exceeds the configured limit.",
@@ -1790,7 +1810,7 @@ ScrollViewReader { proxy in
             perform(sessionID: session.id) { present(.quote(session.id, try chat.quoteSource(kind: .message, id: message.id, sessionID: session.id))) }
         })
         if ChatContextRowStatus.forMessage(message, in: session).canExclude {
-            result.append(.init(id: "context", title: excluded ? newLabel("includeContext", english: "Include in context", chinese: "回纳上下文") : newLabel("excludeContext", english: "Exclude from context", chinese: "排除上下文")) {
+            result.append(.init(id: "context", title: excluded ? newLabel("includeContext", english: "Include in context", chinese: "回纳上下文") : newLabel("excludeContext", english: "Exclude from context", chinese: "排除上下文"), help: label("contextChangeHelp", "")) {
                 changeMessageChoice(session: session) { value in
                     if value.excludedMessageIDs.contains(message.id) { value.excludedMessageIDs.removeAll { $0 == message.id } }
                     else { value.excludedMessageIDs.append(message.id) }
@@ -1812,7 +1832,7 @@ ScrollViewReader { proxy in
                 result += [
                     .init(id: "inspect", title: newLabel("inspectRequest", english: "Inspect frozen request", chinese: "检查冻结请求")) { openDataInspector(attemptID: attempt.id) },
                     .init(id: "compare", title: newLabel("compareAnswers", english: "Compare answers…", chinese: "比较回答…")) { present(.comparison(session.id, attempt.id)) },
-                    .init(id: "reproduce", title: clarity("reproduce"), enabled: ChatRunAdmission.allowsReplay(session, attempt: attempt, isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil)) {
+                    .init(id: "reproduce", title: clarity("reproduce"), enabled: ChatRunAdmission.allowsReplay(session, attempt: attempt, isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil), help: clarity("reproduceHelp")) {
                         Task { guard stillCurrent(true) else { return }; await run(sessionID: session.id) { try await chat.reproduce(attempt.id, sessionID: session.id) } }
                     }
                 ]
@@ -1834,8 +1854,8 @@ ScrollViewReader { proxy in
                 }
             ]
             if let attempt, attempt.status != .completed {
-                result.append(.init(id: "adopt-partial", title: newLabel("adoptPartial", english: "Adopt current partial answer", chinese: "采用当前部分回答"), enabled: canAdopt) {
-                    perform(sessionID: session.id) { try ChatContextCommands.adopt(attempt.response?.finalText ?? attempt.rawText, messageID: message.id, sessionID: session.id, in: chat) }
+                result.append(.init(id: "adopt-partial", title: newLabel("adoptPartial", english: "Adopt current partial answer", chinese: "采用当前部分回答"), enabled: canAdopt, help: label("adoptPartialHelp", "")) {
+                    perform(sessionID: session.id) { try ChatContextCommands.adopt(attempt.response?.finalText ?? attempt.rawText, messageID: message.id, sessionID: session.id, in: chat, origin: .partialAccepted) }
                 })
             }
             if !revisions.isEmpty {
@@ -1843,15 +1863,15 @@ ScrollViewReader { proxy in
                     perform(sessionID: session.id) { try ChatContextCommands.selectVersion(nil, messageID: message.id, sessionID: session.id, in: chat) }
                 }]
                 versions += revisions.enumerated().map { index, revision in
-                    .init(id: revision.id.uuidString, title: newLabel("manualVersion", english: "Manual version ", chinese: "人工版本 ") + String(index + 1) + " · " + String(revision.text.prefix(28)), selected: adoptedID == revision.id) {
+                    .init(id: revision.id.uuidString, title: workflowText(language, "chat.textVersion", arguments: ["index": String(index + 1)]) + " · " + String(revision.text.prefix(28)), selected: adoptedID == revision.id) {
                         perform(sessionID: session.id) { try ChatContextCommands.selectVersion(revision.id, messageID: message.id, sessionID: session.id, in: chat) }
                     }
                 }
                 result.append(.init(id: "versions", title: newLabel("answerVersions", english: "Answer versions", chinese: "回答版本"), enabled: canAdopt, children: versions))
             }
         }
-        result.append(.init(id: "fork", title: clarity("fork")) {
-            perform(sessionID: session.id) { _ = try chat.forkSession(session.id, leafID: message.id) }
+        result.append(.init(id: "fork", title: clarity("fork"), help: clarity("forkHelp")) {
+            perform(sessionID: session.id) { _ = try chat.forkSession(session.id, leafID: message.id, titleSuffix: label("branchSuffix", " · 分支")) }
         })
         if session.selectedAnswer(messageID: message.id) != nil {
             result += [
@@ -1908,6 +1928,7 @@ ScrollViewReader { proxy in
     private var detailTitle: String {
         switch sheets.detail {
         case .raw: clarity("raw")
+        case .searchHit: label("lexicalResults", "搜索结果")
         case .message: clarity("detailsTitle")
         default: workflowText(language, "childPanel.name.messages")
         }
@@ -1935,8 +1956,10 @@ ScrollViewReader { proxy in
         let commands = messageMenuItems(message, session: session, attempt: attempt, siblings: siblings)
         let menu = organizedMessageMenu(commands, user: message.role == .user)
         let selectedAnswer = session.selectedAnswer(messageID: message.id)
-        let noticeKeys = ChatMessageNotices.keys(attempt: attempt, edited: selectedAnswer?.revisionID != nil,
-            pendingSave: attempt.map { chat.hasUnsavedResult($0.id) } == true)
+        let revision = session.contextChoices?.revisions.first { $0.id == selectedAnswer?.revisionID }
+        let noticeKeys = ChatMessageNotices.keys(attempt: attempt, edited: selectedAnswer?.revisionID != nil, revisionOrigin: revision?.origin,
+            pendingSave: attempt.map { chat.hasUnsavedResult($0.id) } == true,
+            activePhase: attempt?.id == chat.activeAttemptID ? chat.displayPhase : nil)
         let context = "message:\(session.id):\(message.id):\(attempt?.id.uuidString ?? "none"):\(selectedAnswer?.revisionID?.uuidString ?? "original")"
         return ChatBubbleLayout(user: message.role == .user) {
             ChatMessageChrome(user: message.role == .user, latestAnswer: latestAnswer) { open in
@@ -1975,7 +1998,7 @@ ScrollViewReader { proxy in
         VStack(alignment: .leading, spacing: 12) {
             LabeledContent(clarity("sender"), value: message.role == .user ? label("you", "你") : label("assistant", "助手"))
             LabeledContent(clarity("time"), value: attempt?.createdAt.formatted() ?? clarity("notRecorded"))
-            LabeledContent(clarity("displayedVersion"), value: selected?.revisionID != nil ? clarity("edited") : clarity("originalVersion"))
+            LabeledContent(clarity("displayedVersion"), value: selected?.revisionID != nil ? clarity(ChatMessageNotices.revisionKey(session.contextChoices?.revisions.first { $0.id == selected?.revisionID }?.origin)) : clarity("originalVersion"))
             if let attempt {
                 let snapshot = ChatRequestInspection(attempt: attempt)
                 Text(clarity("recordedModel")).font(.headline)
@@ -1989,12 +2012,13 @@ ScrollViewReader { proxy in
                 if let parameters = snapshot.sections.first(where: { $0.id == "parameters" }) {
                     DisclosureGroup(clarity("parameters")) { requestFields(parameters, attempt: attempt) }
                 }
+                LowMemoryExecutionDetails(records: attempt.executionRecords ?? [])
                 ChatRunFeedbackView(chat: chat, attempt: attempt)
                 Divider()
                 LabeledContent(clarity("state"), value: status(attempt))
                 LabeledContent(label("finish", "结束原因"), value: attempt.response.map { finish($0.finishReason) } ?? clarity("notRecorded"))
                 if chat.hasUnsavedResult(attempt.id) || attempt.status == .saving { Text(clarity("notSaved")) }
-                if let issue = attempt.issue { WorkbenchIssueText(raw: issue).foregroundStyle(.red).textSelection(.enabled) }
+                if let issue = attempt.issue { WorkbenchIssueText(raw: issue, key: LowMemoryExecutionPresentation.nonExecutionCode(attempt.executionRecords)).foregroundStyle(.red).textSelection(.enabled) }
                 if chat.hasUnsavedResult(attempt.id), let issue = chat.saveIssue { WorkbenchIssueText(raw: issue).textSelection(.enabled) }
                 if let report = ChatChannelPresentation(attempt).formatReport {
                     Text(report.status == .valid ? label("validFormat", "原文符合请求的格式") : clarity("invalidFormat"))
@@ -2119,7 +2143,7 @@ ScrollViewReader { proxy in
                 }
             }
             if let issue = issues[session.id] {
-                WorkbenchIssueText(raw: issue).font(.caption).foregroundStyle(.red)
+                WorkbenchIssueText(raw: issue, key: issueCodes[session.id]).font(.caption).foregroundStyle(.red)
             }
             if let issue = chat.saveIssue {
                 Text(label("projectSaveIssue", "项目聊天保存失败：") + issue).font(.caption).foregroundStyle(.red)
@@ -2239,7 +2263,7 @@ ScrollViewReader { proxy in
             }
             .padding(.horizontal, 16)
             if let issue = issues[session.id] {
-                WorkbenchIssueText(raw: issue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                WorkbenchIssueText(raw: issue, key: issueCodes[session.id]).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             if let saveIssue = chat.saveIssue, saveIssue != issues[session.id] {
                 Text(label("projectSaveIssue", "项目聊天保存失败：") + saveIssue)
@@ -2429,12 +2453,12 @@ ScrollViewReader { proxy in
     private func perform(sessionID: UUID? = nil, clearOnSuccess: Bool = true, _ action: () throws -> Void) {
         let owner = sessionID ?? chat.state.selectedSessionID
         do { try action(); if clearOnSuccess { report(nil, for: owner) } }
-        catch { report(error.localizedDescription, for: owner) }
+        catch { report(error.localizedDescription, for: owner, code: (error as? WorkflowIssue)?.code) }
     }
     private func run(sessionID: UUID, _ action: () async throws -> Void) async {
         guard chat.state.selectedSessionID == sessionID else { return }
         do { try await action(); report(nil, for: sessionID) }
-        catch { report(error.localizedDescription, for: sessionID) }
+        catch { report(error.localizedDescription, for: sessionID, code: (error as? WorkflowIssue)?.code) }
     }
     private func savePreset(_ session: ChatSession) {
         let name = newPresetName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2472,7 +2496,7 @@ ScrollViewReader { proxy in
         guard await panel.begin() == .OK, let url = panel.url, owner === chat, store === chat.store,
               chat.state.sessions.contains(where: { $0.id == sessionID }) else { return }
         do { try chat.configureSearchCredential(url, provider: provider); report(nil, for: sessionID) }
-        catch { report(error.localizedDescription, for: sessionID) }
+        catch { report(error.localizedDescription, for: sessionID, code: (error as? WorkflowIssue)?.code) }
     }
 
     private func chooseKnowledgeDirectory(for sessionID: UUID) async {
@@ -2520,7 +2544,7 @@ ScrollViewReader { proxy in
             onAssetsChanged(); try Task.checkCancellation()
             try await owner.transcribeSpeech(asset.record.reference, sessionID: sessionID, locale: locale)
             report(nil, for: sessionID)
-        } catch { report(error.localizedDescription, for: sessionID) }
+        } catch { report(error.localizedDescription, for: sessionID, code: (error as? WorkflowIssue)?.code) }
     }
     private func pasteAttachments(sessionID: UUID) async {
         // Explicit user action only; never poll the clipboard or follow web URLs.
@@ -2537,7 +2561,7 @@ ScrollViewReader { proxy in
             _ = try await owner.addPastedPNG(png, sessionID: sessionID)
             onAssetsChanged()
             report(nil, for: sessionID)
-        } catch { report(error.localizedDescription, for: sessionID) }
+        } catch { report(error.localizedDescription, for: sessionID, code: (error as? WorkflowIssue)?.code) }
     }
     private func importURLs(_ urls: [URL], sessionID: UUID, knowledge: Bool = false,
                             directoryEntries: [ChatKnowledgeDirectoryInventory.Entry] = []) async {
@@ -2630,7 +2654,7 @@ ScrollViewReader { proxy in
                 }
             }
             report(failures.isEmpty ? nil : failures.joined(separator: "\n"), for: sessionID)
-        } catch { report(error.localizedDescription, for: sessionID) }
+        } catch { report(error.localizedDescription, for: sessionID, code: (error as? WorkflowIssue)?.code) }
     }
     private func importConversation() async {
         guard !filePanelBusy else { return }
@@ -2679,7 +2703,7 @@ ScrollViewReader { proxy in
             defer { if scoped { directory.stopAccessingSecurityScopedResource() } }
             _ = try await store.exportChatPresets(presets, exportID: UUID(), directory: directory)
             report(nil, for: sessionID)
-        } catch { report(error.localizedDescription, for: sessionID) }
+        } catch { report(error.localizedDescription, for: sessionID, code: (error as? WorkflowIssue)?.code) }
     }
 
     private func exportSessionPackage(sessionID: UUID) async {
@@ -2697,7 +2721,7 @@ ScrollViewReader { proxy in
             let activity = try owner.beginExternalActivity(); defer { owner.endExternalActivity(activity) }
             _ = try await ProjectBackup.create(plan, at: destination)
             report(nil, for: sessionID)
-        } catch { report(error.localizedDescription, for: sessionID) }
+        } catch { report(error.localizedDescription, for: sessionID, code: (error as? WorkflowIssue)?.code) }
     }
 
     private func export(sessionID: UUID, markdown: Bool, html: Bool = false) async {
@@ -2731,7 +2755,7 @@ ScrollViewReader { proxy in
             _ = try await store.exportWorkflowAssets([reference], name: html ? "D-chat-html" : markdown ? "D-chat-markdown" : "D-chat-text",
                                                       exportID: UUID(), directory: directory)
             report(nil, for: sessionID)
-        } catch { report(error.localizedDescription, for: sessionID) }
+        } catch { report(error.localizedDescription, for: sessionID, code: (error as? WorkflowIssue)?.code) }
     }
     private func saveFinal(_ messageID: UUID, sessionID: UUID, useInWorkflow: Bool) async {
         let owner = chat
@@ -2747,7 +2771,7 @@ ScrollViewReader { proxy in
                 if useInWorkflow { onSavedAsset(asset) }
             }
             report(nil, for: sessionID)
-        } catch { report(error.localizedDescription, for: sessionID) }
+        } catch { report(error.localizedDescription, for: sessionID, code: (error as? WorkflowIssue)?.code) }
     }
 
     private func present(_ item: ChatDetail) {
@@ -2848,6 +2872,7 @@ private struct ChatEditForm: View {
                 case .defaultSystem: newLabel("editDefaultSystem", english: "Default system prompt for new conversations", chinese: "新会话默认系统提示")
             }
             Text(title).font(.headline)
+            if edit.kind == .message { Text(label("editMessageNote", "")).font(.caption).foregroundStyle(.secondary) }
             if edit.kind == .answer {
                 Text(newLabel("originalPreserved", english: "The original model output stays unchanged. Save explicitly to adopt this version.",
                     chinese: "原始模型输出保持不变；明确保存后才采用此版本。"))
@@ -2865,7 +2890,7 @@ private struct ChatEditForm: View {
             HStack {
                 Spacer()
                 WorkbenchRequestCloseButton(title: label("cancel", "取消"), fallback: onCancel)
-                Button(applied ? label("retrySave", "重试保存（不重新生成）") : edit.kind == .message ? label("createBranch", "创建分支") : label("save", "保存")) {
+                Button(applied ? label("retrySave", "重试保存（不重新生成）") : edit.kind == .message ? label("createBranch", "创建分支") : edit.kind == .answer ? label("saveAndUse", "保存并采用") : label("save", "保存")) {
                     saving = true
                     Task { defer { saving = false }; do { try await saveDraft(); onSaved() } catch { saveFailure = error.localizedDescription } }
                 }

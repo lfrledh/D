@@ -66,13 +66,26 @@ struct ChatMessageClarityTests {
         var value = original; value.status = .failed; value.response = nil; value.rawText = "partial bytes"
         let keys = ChatMessageNotices.keys(attempt: value, edited: false, pendingSave: true)
         #expect(keys.contains("failed") && keys.contains("unparsed") && keys.contains("notSaved"))
-        let edited = ChatMessageNotices.keys(attempt: value, edited: true, pendingSave: false)
+        let edited = ChatMessageNotices.keys(attempt: value, edited: true, revisionOrigin: .edited, pendingSave: false)
         #expect(edited.contains("failed") && edited.contains("edited") && !edited.contains("unparsed"))
+        let legacy = ChatMessageNotices.keys(attempt: value, edited: true, pendingSave: false)
+        #expect(legacy.contains("versionSelected") && !legacy.contains("edited") && legacy.contains("unparsed"))
+        let partial = ChatMessageNotices.keys(attempt: value, edited: true, revisionOrigin: .partialAccepted, pendingSave: false)
+        #expect(partial.contains("partialSelected") && partial.contains("failed") && !partial.contains("edited") && partial.contains("unparsed"))
         value.status = .partial; value.response = .init(rawText: "limited", finalText: "limited", finishReason: .length)
         #expect(ChatMessageNotices.keys(attempt: value, edited: false, pendingSave: false).contains("length"))
         value.status = .completed; value.outputFormat = .init(kind: .json)
         #expect(ChatMessageNotices.keys(attempt: value, edited: false, pendingSave: false).contains("invalidFormat"))
     }
+    @Test func activeStageDoesNotClaimGenerationWhileWaitingForPermission() {
+        var (_, _, attempt) = fixture(); attempt.status = .running; attempt.response = nil; attempt.rawText = ""
+        for phase in [ChatGenerationPhase.preparing, .awaitingLowMemoryDecision, .lowMemoryExecution, .stopping, .saving] {
+            let keys = ChatMessageNotices.keys(attempt: attempt, edited: false, pendingSave: false, activePhase: phase)
+            #expect(keys.contains("phase." + phase.rawValue))
+            #expect(!keys.contains("generating") && !keys.contains("emptyBody"))
+        }
+    }
+
     @Test func menuKeepsCommandsAndFixedPrimaryOrder() {
         let ids = ["copy", "favorite", "quote", "fork", "context", "generate", "new-candidate", "compare", "adopt", "adopt-partial", "candidates", "versions", "reproduce", "save", "workflow", "artifact", "fields", "speak", "pause-reading", "resume-reading", "stop-reading", "sources", "raw", "details"]
         var executed: [String] = []

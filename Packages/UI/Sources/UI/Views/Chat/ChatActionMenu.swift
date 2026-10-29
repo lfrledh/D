@@ -6,6 +6,7 @@ import SwiftUI
 struct ChatActionMenuItem: Identifiable {
     let id: String
     let title: String
+    let help: String?
     let enabled: Bool
     let selected: Bool
     let isSeparator: Bool
@@ -14,9 +15,10 @@ struct ChatActionMenuItem: Identifiable {
     let action: (@MainActor () -> Void)?
 
     init(id: String, title: String, enabled: Bool = true, selected: Bool = false,
-         children: [ChatActionMenuItem]? = nil, isSeparator: Bool = false, action: (@MainActor () -> Void)? = nil) {
+         children: [ChatActionMenuItem]? = nil, isSeparator: Bool = false, help: String? = nil, action: (@MainActor () -> Void)? = nil) {
         self.id = id
         self.title = title
+        self.help = help
         self.enabled = enabled
         self.selected = selected
         self.isSeparator = isSeparator
@@ -83,6 +85,7 @@ struct ChatLegacyActionMenu: NSViewRepresentable {
         private struct RowPresentation: Equatable {
             let id: String
             let title: String
+            let help: String?
             let enabled: Bool
             let selected: Bool
             let isSeparator: Bool
@@ -90,7 +93,7 @@ struct ChatLegacyActionMenu: NSViewRepresentable {
             let hasAction: Bool
 
             init(_ item: ChatActionMenuItem) {
-                id = item.id; title = item.title; enabled = item.enabled; selected = item.selected; isSeparator = item.isSeparator
+                id = item.id; title = item.title; help = item.help; enabled = item.enabled; selected = item.selected; isSeparator = item.isSeparator
                 children = item.children?.map(Self.init)
                 hasAction = item.action != nil
             }
@@ -210,6 +213,7 @@ struct ChatLegacyActionMenu: NSViewRepresentable {
                 if value.isSeparator { menu.addItem(.separator()); continue }
                 let item = NSMenuItem(title: value.title, action: nil, keyEquivalent: "")
                 item.representedObject = value.id
+                item.toolTip = value.help
                 item.isEnabled = parentEnabled && value.enabled
                 item.state = value.selected ? .on : .off
                 if let children = value.children {
@@ -354,7 +358,7 @@ struct ChatLegacyActionMenu: NSViewRepresentable {
             .environment(\.workbenchMenuContext, inherited + ":" + contextID)
     }
     static func convert(_ item: ChatActionMenuItem) -> WorkbenchPopupItem {
-        .init(id: item.id, title: item.title, enabled: item.enabled, checked: item.selected,
+        .init(id: item.id, title: item.title, help: item.help, enabled: item.enabled, checked: item.selected,
             separator: item.isSeparator, children: (item.children ?? []).map(convert), isCurrent: item.isCurrent, action: item.action)
     }
 }

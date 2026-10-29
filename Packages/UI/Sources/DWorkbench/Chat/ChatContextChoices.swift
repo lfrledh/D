@@ -2,12 +2,16 @@ import Foundation
 
 /// User decisions are versions alongside model output, never edits to the output.
 public struct ChatTextRevision: Codable, Sendable, Equatable, Identifiable {
+    public enum Origin: String, Codable, Sendable { case edited, partialAccepted }
     public let id: UUID
     public let messageID: UUID
     public let text: String
     public let createdAt: Date
-    public init(id: UUID = UUID(), messageID: UUID, text: String, createdAt: Date = Date()) {
+    /// Nil preserves old records without inventing an edit event.
+    public let origin: Origin?
+    public init(id: UUID = UUID(), messageID: UUID, text: String, createdAt: Date = Date(), origin: Origin? = nil) {
         self.id = id; self.messageID = messageID; self.text = text; self.createdAt = createdAt
+        self.origin = origin
     }
 }
 

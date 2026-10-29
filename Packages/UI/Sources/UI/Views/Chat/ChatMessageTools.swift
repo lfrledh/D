@@ -35,7 +35,7 @@ extension ChatActionMenuItem {
         let guarded: (@MainActor () -> Void)?
         if let action { guarded = { if valid() { action() } } } else { guarded = nil }
         var value = Self(id: id, title: title, enabled: enabled, selected: selected,
-            children: children?.map { $0.validated(valid) }, isSeparator: isSeparator, action: guarded)
+            children: children?.map { $0.validated(valid) }, isSeparator: isSeparator, help: help, action: guarded)
         value.isCurrent = { isCurrent() && valid() }
         return value
     }
@@ -163,11 +163,14 @@ struct ChatMessageTools: View {
 /// Main failure and incomplete output are independent of publication failure.
 /// Normal completion deliberately contributes no status row.
 enum ChatMessageNotices {
-    static func keys(attempt: ChatAttempt?, edited: Bool, pendingSave: Bool) -> [String] {
+    static func revisionKey(_ origin: ChatTextRevision.Origin?) -> String {
+        switch origin { case .edited: "edited"; case .partialAccepted: "partialSelected"; case nil: "versionSelected" }
+    }
+    static func keys(attempt: ChatAttempt?, edited: Bool, revisionOrigin: ChatTextRevision.Origin? = nil, pendingSave: Bool, activePhase: ChatGenerationPhase? = nil) -> [String] {
         var result: [String] = []
         if let attempt {
             switch attempt.status {
-            case .running: result.append("generating")
+            case .running: result.append(activePhase.map { "phase." + $0.rawValue } ?? "generating")
             case .saving: break
             case .completed: break
             case .cancelled: result.append("stopped")
@@ -177,13 +180,13 @@ enum ChatMessageNotices {
             if attempt.response?.finishReason == .length { result.append("length") }
             if attempt.response?.finishReason == .incomplete, !result.contains("partial") { result.append("partial") }
             let presentation = ChatChannelPresentation(attempt)
-            if !edited, presentation.isUnseparatedRaw { result.append(attempt.status == .running ? "preview" : "unparsed") }
-            if !edited, !presentation.isUnseparatedRaw, presentation.text.isEmpty { result.append("emptyBody") }
+            if revisionOrigin != .edited, presentation.isUnseparatedRaw { result.append(attempt.status == .running ? "preview" : "unparsed") }
+            if attempt.status != .running, revisionOrigin != .edited, !presentation.isUnseparatedRaw, presentation.text.isEmpty { result.append("emptyBody") }
             if presentation.formatReport?.status == .invalid { result.append("invalidFormat") }
             if !(attempt.response?.toolCalls.isEmpty ?? true) { result.append("toolsUnexecuted") }
             if pendingSave || attempt.status == .saving { result.append("notSaved") }
         }
-        if edited { result.append("edited") }
+        if edited { result.append(revisionKey(revisionOrigin)) }
         return result
     }
 }
@@ -196,8 +199,11 @@ struct ChatMessageNoticeView: View {
     var body: some View {
         if !keys.isEmpty || attempt?.issue != nil {
             VStack(alignment: .leading, spacing: 2) {
-                let summary = keys.map { workflowText(language, "chat.clarity." + $0) }.joined(separator: " · ")
-                if let issue = attempt?.issue {
+                let summary = keys.map { workflowText(language, ($0.hasPrefix("phase.") ? "chat." : "chat.clarity.") + $0) }.joined(separator: " · ")
+                if let code = LowMemoryExecutionPresentation.nonExecutionCode(attempt?.executionRecords) {
+                    Text(workflowText(language, code)).foregroundStyle(.secondary)
+                    if keys.contains("notSaved") { Text(workflowText(language, "chat.clarity.notSaved")).foregroundStyle(.red) }
+                } else if let issue = attempt?.issue {
                     (Text(summary + (summary.isEmpty ? "" : " · ")) + Text(WorkbenchOwnedIssue.summary(issue, language: language) ?? ChatErrorText.display(issue, language: language)))
                         .lineLimit(2).foregroundStyle(.red)
                 } else { Text(summary).lineLimit(2).foregroundStyle(.secondary) }
