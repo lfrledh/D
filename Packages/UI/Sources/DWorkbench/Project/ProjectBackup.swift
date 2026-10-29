@@ -67,6 +67,7 @@ public enum ProjectBackupError: LocalizedError, Sendable {
     case unsafePath(String)
     case alreadyExists(String)
     case invalidPackage(String)
+    case incompleteRequiresConfirmation([String])
     case integrity(String)
     case publishedIntegrity(String)
     case insufficientSpace
@@ -78,6 +79,7 @@ public enum ProjectBackupError: LocalizedError, Sendable {
         switch self {
         case .unsafePath: return "备份位置或文件路径不安全。请重新选择有效位置。"
         case .alreadyExists: return "目标位置已有文件。请选择其他名称，现有文件未被覆盖。"
+        case .incompleteRequiresConfirmation: return "Incomplete backup requires explicit confirmation."
         case .invalidPackage: return "备份包无效或不完整。请检查备份来源。"
         case .integrity: return "备份文件核对失败。请检查原文件或备份包。"
         case .publishedIntegrity: return "已发布的结果核对失败；本操作未删除结果，请检查所选位置，勿直接重试。"
@@ -376,7 +378,7 @@ private extension ProjectBackup {
         defer { Darwin.close(backupFD) }
         let manifest = try loadManifest(in: backupFD)
         let verified = try inspect(manifest: manifest, in: backupFD, directory: source, verifyFiles: true)
-        guard verified.complete || allowIncomplete else { throw ProjectBackupError.invalidPackage("incomplete backup requires opt-in") }
+        guard verified.complete || allowIncomplete else { throw ProjectBackupError.incompleteRequiresConfirmation(verified.missing) }
         let parent = try directory(target.deletingLastPathComponent())
         defer { Darwin.close(parent) }
         try absent(target.lastPathComponent, in: parent)
@@ -434,7 +436,7 @@ private extension ProjectBackup {
     static func makeManifest(_ plan: ProjectBackupPlan, allowIncomplete: Bool) throws -> Manifest {
         guard plan.files.count <= maxEntries, plan.missing.count <= maxEntries,
               plan.modelDependencies.count <= maxEntries else { throw ProjectBackupError.invalidPackage("too many entries") }
-        guard plan.missing.isEmpty || allowIncomplete else { throw ProjectBackupError.invalidPackage("incomplete backup requires opt-in") }
+        guard plan.missing.isEmpty || allowIncomplete else { throw ProjectBackupError.incompleteRequiresConfirmation(plan.missing) }
         var paths = Set<String>()
         var entries = [Entry]()
         var total: UInt64 = 0

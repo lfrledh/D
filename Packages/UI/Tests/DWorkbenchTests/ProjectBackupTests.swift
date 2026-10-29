@@ -9,6 +9,26 @@ import Testing
 struct ProjectBackupTests {
     private enum Interrupted: Error { case now }
 
+    @Test func onlyTypedMissingFilesCanRequestIncompleteRestore() async throws {
+        try await fixture { root in
+            let data = Data("available".utf8)
+            let plan = ProjectBackupPlan(projectID: UUID(), revision: 0, files: [
+                .init(relativePath: "available.txt", sourceURL: nil, data: data, sha256: hash(data), byteCount: UInt64(data.count))
+            ], missing: ["unavailable.txt"])
+            let backup = root.appendingPathComponent("partial")
+            do { _ = try await ProjectBackup.create(plan, at: backup); Issue.record("Missing confirmation") }
+            catch ProjectBackupError.incompleteRequiresConfirmation(let missing) { #expect(missing == ["unavailable.txt"]) }
+            _ = try await ProjectBackup.create(plan, at: backup, allowIncomplete: true)
+            do { _ = try await ProjectBackup.restore(at: backup, to: root.appendingPathComponent("refused")); Issue.record("Missing restore confirmation") }
+            catch ProjectBackupError.incompleteRequiresConfirmation(let missing) { #expect(missing == ["unavailable.txt"]) }
+            // A damaged available file is not an incomplete opt-in, even if the package is partial.
+            try Data("corrupt".utf8).write(to: backup.appendingPathComponent("available.txt"))
+            do { _ = try await ProjectBackup.restore(at: backup, to: root.appendingPathComponent("corrupt"), allowIncomplete: true); Issue.record("Corrupt package restored") }
+            catch ProjectBackupError.incompleteRequiresConfirmation { Issue.record("Corruption disguised as missing file") }
+            catch ProjectBackupError.integrity {}
+        }
+    }
+
     @Test func posixFailureReportsOperationAndNeverPublishes() async throws {
         try await fixture { root in
             let blocked = root.appendingPathComponent("blocked")

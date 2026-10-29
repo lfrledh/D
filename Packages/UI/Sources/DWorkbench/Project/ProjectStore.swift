@@ -4713,7 +4713,7 @@ extension ProjectStore {
             data = try AssetLocationFiles.withResolved(location) { try AssetLocationFiles.read($0, maximum: limit).data }
         }
         if cancellable { try Task.checkCancellation() }
-        guard data.count == placements.byteCount, AssetLocationFiles.hash(data) == placements.sha256 else { throw ProjectStoreError.externalModification }
+        guard data.count == placements.byteCount, AssetLocationFiles.hash(data) == placements.sha256 else { throw AssetFileOperationFailure(.contentMismatch, diagnostic: "Active file content does not match recorded digest") }
         return data
     }
 
@@ -4729,33 +4729,37 @@ extension ProjectStore {
         var uses = [AssetKnownUse]()
         if let reference = record?.reference {
             var historyNodePaths = [String]()
+            var historyDisplayPaths = [[AssetKnownUse.PathPart]]()
             func inspect(_ graph: WorkflowGraph, root: WorkflowGraph, tool: WorkflowToolDefinition? = nil,
-                         rootNodeID: UUID? = nil, path: [String] = [], depth: Int = 0, history: Bool = false) throws {
+                         rootNodeID: UUID? = nil, path: [String] = [], displayPath: [AssetKnownUse.PathPart] = [], depth: Int = 0, history: Bool = false) throws {
                 try Task.checkCancellation()
                 guard depth <= 16 else { throw WorkflowIssue("素材使用位置超过嵌套深度上限。") }
                 for node in graph.nodes {
                     let nodePath = path + ["流程 \(graph.name) (\(graph.id))", "节点 \(node.title) (\(node.id))"]
+                    let visiblePath = displayPath + [.graph(graph.name, graph.id), .node(node.title, node.id)]
                     let targetNodeID = rootNodeID ?? node.id
                     if try WorkflowCheckpointValidation.assetReferences(in: node).contains(reference) {
                         if history {
                             historyNodePaths.append(nodePath.joined(separator: " / "))
+                            historyDisplayPaths.append(visiblePath)
                         } else {
                             let owner = tool.map { "tool:\($0.id):\($0.version)" } ?? "graph:\(root.id)"
                             uses.append(.init(id: owner + ":" + nodePath.joined(separator: "/"), kind: .graph,
                                 title: tool.map { "工具 · \($0.name) · v\($0.version)" } ?? root.name,
                                 detail: (tool == nil ? "当前流程 · " : "工具定义 · ") + nodePath.joined(separator: " / "),
-                                graphID: tool == nil ? root.id : nil, nodeID: tool == nil ? targetNodeID : nil, assetID: nil))
+                                graphID: tool == nil ? root.id : nil, nodeID: tool == nil ? targetNodeID : nil, assetID: nil,
+                                displayName: tool?.name ?? root.name, path: visiblePath, toolVersion: tool?.version))
                         }
                     }
-                    func nested(_ body: WorkflowGraph, _ label: String) throws {
+                    func nested(_ body: WorkflowGraph, _ label: String, _ part: AssetKnownUse.PathPart) throws {
                         try inspect(body, root: root, tool: tool, rootNodeID: targetNodeID,
-                            path: nodePath + [label], depth: depth + 1, history: history)
+                            path: nodePath + [label], displayPath: visiblePath + [part], depth: depth + 1, history: history)
                     }
                     switch node.control {
                     case .branch(_, let then, let otherwise):
-                        try nested(then, "Branch then"); try nested(otherwise, "Branch otherwise")
-                    case .map(let body, _): try nested(body, "Map body")
-                    case .loop(let body, _, _, _): try nested(body, "Loop body")
+                        try nested(then, "Branch then", .branchTrue); try nested(otherwise, "Branch otherwise", .branchFalse)
+                    case .map(let body, _): try nested(body, "Map body", .mapBody)
+                    case .loop(let body, _, _, _): try nested(body, "Loop body", .loopBody)
                     case .invoke, nil: break
                     }
                 }
@@ -4773,13 +4777,15 @@ extension ProjectStore {
             for run in archive.runs {
                 if try WorkflowCheckpointValidation.assetReferences(in: run).contains(reference) {
                     historyNodePaths.removeAll(keepingCapacity: true)
+                    historyDisplayPaths.removeAll(keepingCapacity: true)
                     try inspect(run.graph, root: run.graph, history: true)
                     let location = historyNodePaths.first ?? "步骤或恢复点记录"
                     let additional = historyNodePaths.count > 1 ? " · 另 \(historyNodePaths.count - 1) 个节点" : ""
                     uses.append(.init(id: "run:\(run.id)", kind: .run,
                         title: "运行 \(run.id.uuidString)",
                         detail: "历史流程 · \(run.graph.name) (\(run.graph.id)) · \(location)\(additional) · 运行证据 · \(run.createdAt.formatted())",
-                        graphID: nil, nodeID: nil, assetID: nil))
+                        graphID: nil, nodeID: nil, assetID: nil, displayName: run.graph.name,
+                        path: historyDisplayPaths.first ?? [], createdAt: run.createdAt, additionalNodeCount: max(0, historyNodePaths.count - 1)))
                 }
             }
         }
@@ -4791,6 +4797,7 @@ extension ProjectStore {
                 ?? asset.metadata.pitch?.contentSHA256
             let status: AssetLocationStatus
             var reason: String?
+            var issue: AssetFileIssue?
             do {
                 let fd = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD)
                 defer { Darwin.close(fd) }
@@ -4802,17 +4809,18 @@ extension ProjectStore {
                 }
                 try Task.checkCancellation()
                 status = deep && digest != nil ? .verified : .pendingVerification
-                reason = digest == nil ? "旧素材没有固定摘要，不能确认内容版本。" : (deep ? nil : "尚未显式核对本位置内容。")
+                reason = digest == nil ? "No recorded content digest" : (deep ? nil : "Content not explicitly verified")
+                issue = digest == nil ? .missingDigest : (deep ? nil : .unverified)
             } catch is CancellationError { throw CancellationError() }
-            catch ProjectStoreError.externalModification { status = .changed; reason = "当前字节与登记版本不同；旧版本未改。" }
-            catch ProjectStoreError.unsafePath { status = .corrupt; reason = "位置不是安全的独立普通文件。" }
+            catch ProjectStoreError.externalModification { status = .changed; reason = "Content digest differs"; issue = .contentMismatch }
+            catch ProjectStoreError.unsafePath { status = .corrupt; reason = "Not a safe regular file"; issue = .unsafeFile }
             catch {
                 // Older ProjectFiles errors retain prose, not an errno. Do not infer absence
                 // or permission loss from that text; keep the actual failure visible.
-                status = .pendingVerification; reason = error.localizedDescription
+                status = .pendingVerification; reason = error.localizedDescription; issue = .checkFailed
             }
             return .init(asset: asset, contentSHA256: digest, byteCount: nil,
-                         locations: [.init(location: location, status: status, reason: reason, resolvedURL: location.url)], selectedLocationID: id,
+                         locations: [.init(location: location, status: status, reason: reason, resolvedURL: location.url, issue: issue)], selectedLocationID: id,
                          knownUseCount: uses.count, knownUses: uses)
         }
         var states = [AssetLocationInspection]()
@@ -4834,8 +4842,8 @@ extension ProjectStore {
                 let verified = location.lastVerifiedAt != nil && location.fingerprint == AssetFileFingerprint(file)
                 let contentChecked = deep
                 states.append(.init(location: location, status: contentChecked || verified ? .verified : .pendingVerification,
-                    reason: contentChecked || verified ? nil : "文件身份变化或尚未显式核对内容。", resolvedURL: rootURL.appendingPathComponent(asset.relativePath)))
-            } catch { states.append(.init(location: location, status: error as? ProjectStoreError == .externalModification ? .changed : .missing, reason: error.localizedDescription, resolvedURL: nil)) }
+                    reason: contentChecked || verified ? nil : "文件身份变化或尚未显式核对内容。", resolvedURL: rootURL.appendingPathComponent(asset.relativePath), issue: contentChecked || verified ? nil : .metadataChanged))
+            } catch { states.append(.init(location: location, status: error as? ProjectStoreError == .externalModification ? .changed : .pendingVerification, reason: error.localizedDescription, resolvedURL: nil, issue: error as? ProjectStoreError == .externalModification ? .contentMismatch : AssetFileOperationFailure.classify(error))) }
         }
         try Task.checkCancellation()
         return .init(asset: asset, contentSHA256: placements.sha256, byteCount: placements.byteCount,
@@ -4881,7 +4889,7 @@ extension ProjectStore {
             ?? archive?.assets.first(where: { $0.reference.assetID == id })?.reference.sha256
             ?? asset.metadata.imageContentSHA256 ?? asset.metadata.audio?.contentSHA256
             ?? asset.metadata.video?.contentSHA256 ?? asset.metadata.pitch?.contentSHA256
-        guard let knownDigest else { throw WorkflowIssue("旧素材没有固定内容摘要，无法确认版本；原记录保留。") }
+        guard let knownDigest else { throw AssetFileOperationFailure(.missingDigest, diagnostic: "No recorded content digest") }
         let placements = asset.fileLocations
         let chosenID = locationID ?? placements?.preferredLocationID ?? id
         guard let location = placements?.locations.first(where: { $0.id == chosenID })
@@ -4894,7 +4902,7 @@ extension ProjectStore {
         if let url { read = try AssetLocationFiles.read(url, maximum: format.maximumBytes) }
         else { read = try AssetLocationFiles.withResolved(location) { try AssetLocationFiles.read($0, maximum: format.maximumBytes) } }
         guard UInt64(read.data.count) == (placements?.byteCount ?? UInt64(read.data.count)),
-              AssetLocationFiles.hash(read.data) == knownDigest else { throw ProjectStoreError.externalModification }
+              AssetLocationFiles.hash(read.data) == knownDigest else { throw AssetFileOperationFailure(.contentMismatch, diagnostic: "Selected file digest does not match") }
         try Task.checkCancellation()
         let currentFingerprint: AssetFileFingerprint
         if let url { currentFingerprint = try AssetLocationFiles.fingerprint(url) }
@@ -4926,10 +4934,10 @@ extension ProjectStore {
         let archive = try workflowState().archive
         guard let expected = asset.fileLocations?.sha256 ?? archive?.assets.first(where: { $0.reference.assetID == id })?.reference.sha256
             ?? asset.metadata.imageContentSHA256 ?? asset.metadata.audio?.contentSHA256 ?? asset.metadata.video?.contentSHA256 ?? asset.metadata.pitch?.contentSHA256 else {
-            throw WorkflowIssue("旧素材没有固定内容摘要，无法确认同版本；请作为新素材导入，原记录保留。")
+            throw AssetFileOperationFailure(.missingDigest, diagnostic: "No recorded content digest for relink")
         }
         let read = try AssetLocationFiles.read(source, maximum: format.maximumBytes)
-        guard AssetLocationFiles.hash(read.data) == expected else { throw ProjectStoreError.externalModification }
+        guard AssetLocationFiles.hash(read.data) == expected else { throw AssetFileOperationFailure(.contentMismatch, diagnostic: "Relink content digest does not match") }
         let location = try AssetLocationFiles.register(source, read: read, role: .externalOriginal)
         var placements = asset.fileLocations ?? .init(sha256: expected, byteCount: UInt64(read.data.count), preferredLocationID: id,
             locations: [.init(id: id, libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy)])
@@ -4957,18 +4965,48 @@ extension ProjectStore {
     public func relocateAssets(in folder: URL) throws -> [AssetRelocationResult] {
         try checkLocation()
         let fd = try ProjectFiles.openDirectory(folder); defer { Darwin.close(fd) }
+        let assets = manifest.assets.filter { $0.fileLocations != nil }
         var results = [AssetRelocationResult]()
-        for asset in manifest.assets where asset.fileLocations != nil {
+        for asset in assets {
+            if Task.isCancelled {
+                results.append(.init(id: asset.id, matched: false, message: "Not processed after cancellation", outcome: .notProcessed, assetName: asset.name, sourcePath: asset.fileLocations?.locations.first?.url?.path)); continue
+            }
             guard let placements = asset.fileLocations else { continue }
             let names = Set(placements.locations.compactMap { $0.url?.lastPathComponent })
-            let matches = names.compactMap { name -> URL? in
+            var matches = [URL](), failures = [Error]()
+            var cancelled = false
+            for name in names.sorted() {
                 let url = folder.appendingPathComponent(name)
-                guard let format = WorkflowMediaFormat.descriptor(asset.mediaType), let bytes = try? AssetLocationFiles.read(url, maximum: format.maximumBytes), AssetLocationFiles.hash(bytes.data) == placements.sha256 else { return nil }
-                return url
+                var info = stat()
+                let found = lstat(url.path, &info), code = errno
+                if found != 0, code == ENOENT { continue }
+                do {
+                    try Task.checkCancellation()
+                    if found != 0 { throw NSError(domain: NSPOSIXErrorDomain, code: Int(code)) }
+                    guard let format = WorkflowMediaFormat.descriptor(asset.mediaType) else { continue }
+                    let bytes = try AssetLocationFiles.read(url, maximum: format.maximumBytes)
+                    if AssetLocationFiles.hash(bytes.data) == placements.sha256 { matches.append(url) }
+                } catch is CancellationError { cancelled = true; break }
+                catch { failures.append(error) }
             }
-            guard matches.count == 1 else { results.append(.init(id: asset.id, matched: false, message: matches.isEmpty ? "未找到同内容文件，原位置保留。" : "有多个同内容候选，请逐项选择。")); continue }
-            do { try relocateAsset(asset.id, to: matches[0]); results.append(.init(id: asset.id, matched: true, message: "已核对同一内容版本。")) }
-            catch { results.append(.init(id: asset.id, matched: false, message: error.localizedDescription)) }
+            let source = placements.locations.first(where: { $0.id == placements.preferredLocationID })?.url?.path
+            if cancelled {
+                results.append(.init(id: asset.id, matched: false, message: "Cancelled while locating", outcome: .cancelled, assetName: asset.name, sourcePath: source)); continue
+            }
+            guard matches.count == 1 else {
+                let error = failures.first
+                let failure = error.map { AssetFileOperationFailure(AssetFileOperationFailure.classify($0), diagnostic: $0.localizedDescription) }
+                results.append(.init(id: asset.id, matched: false, message: error?.localizedDescription ?? (matches.isEmpty ? "No matching file" : "Multiple matching files"),
+                    outcome: matches.isEmpty && error != nil ? .failed : (matches.isEmpty ? .noMatch : .ambiguous), assetName: asset.name, sourcePath: source, failure: failure)); continue
+            }
+            do {
+                try Task.checkCancellation()
+                try relocateAsset(asset.id, to: matches[0])
+                results.append(.init(id: asset.id, matched: true, message: "Relinked", outcome: .relocated, assetName: asset.name, sourcePath: source))
+            } catch {
+                results.append(.init(id: asset.id, matched: false, message: error.localizedDescription, outcome: error is CancellationError ? .cancelled : .failed,
+                    assetName: asset.name, sourcePath: source, failure: .init(AssetFileOperationFailure.classify(error), diagnostic: error.localizedDescription)))
+            }
         }
         return results
     }
@@ -4985,6 +5023,12 @@ extension ProjectStore {
 
     /// One file transaction, not a move. The old location is retained until the new bytes and manifest publish.
     public func collectAsset(_ id: UUID, to libraryFolder: URL? = nil) throws {
+        try collectAsset(id, to: libraryFolder, checkpoint: { _ in })
+    }
+    func collectAsset(_ id: UUID, to libraryFolder: URL?, checkpoint: @escaping (AssetCopyCheckpoint) throws -> Void) throws {
+        var published: URL?
+        var stage: AssetFileOperationFailure.Stage = .notPublished
+        do {
         try checkLocation(); try Task.checkCancellation()
         guard let index = manifest.assets.firstIndex(where: { $0.id == id }), let format = WorkflowMediaFormat.descriptor(manifest.assets[index].mediaType) else { throw ProjectStoreError.missingAsset }
         let asset = manifest.assets[index]
@@ -4994,7 +5038,7 @@ extension ProjectStore {
         let archive = try workflowState().archive
         let expected = asset.fileLocations?.sha256 ?? archive?.assets.first(where: { $0.reference.assetID == id })?.reference.sha256
             ?? asset.metadata.imageContentSHA256 ?? asset.metadata.audio?.contentSHA256 ?? asset.metadata.video?.contentSHA256 ?? asset.metadata.pitch?.contentSHA256
-        if let expected, digest != expected { throw ProjectStoreError.externalModification }
+        if let expected, digest != expected { throw AssetFileOperationFailure(.contentMismatch, diagnostic: "Copy source content does not match recorded digest") }
         if libraryFolder == nil, asset.fileLocations == nil { return } // Already stored in this project.
         var placements = asset.fileLocations ?? .init(sha256: digest, byteCount: UInt64(data.count), preferredLocationID: id,
             locations: [.init(id: id, libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy)])
@@ -5003,18 +5047,24 @@ extension ProjectStore {
             let fd = try ProjectFiles.openDirectory(libraryFolder); defer { Darwin.close(fd) }
             var vfs = statvfs(); guard fstatvfs(fd, &vfs) == 0 else { throw ProjectFiles.error() }
             let available = UInt64(vfs.f_bavail).multipliedReportingOverflow(by: UInt64(vfs.f_frsize))
-            guard !available.overflow, available.partialValue >= UInt64(data.count) else { throw ProjectStoreError.io("目标库空间不足，原位置未变。") }
+            guard !available.overflow, available.partialValue >= UInt64(data.count) else { throw AssetFileOperationFailure(.insufficientSpace, diagnostic: "Insufficient destination capacity before copy") }
             let name = "D-" + id.uuidString + "-" + UUID().uuidString + "." + format.suffix
-            try ProjectFiles.publish(in: fd, name: name, replacing: false) { out in
+            try ProjectFiles.publish(in: fd, name: name, replacing: false, afterRename: {
+                let url = libraryFolder.appendingPathComponent(name)
+                published = url; stage = .writtenSync
+                try checkpoint(.published(url))
+            }) { out in
                 try data.withUnsafeBytes { bytes in
                     var offset = 0
                     while offset < bytes.count { try Task.checkCancellation(); let count = min(1024 * 1024, bytes.count - offset); try ProjectFiles.writeAll(UnsafeRawBufferPointer(rebasing: bytes[offset..<(offset + count)]), to: out); offset += count }
                 }
             }
             let copied = libraryFolder.appendingPathComponent(name)
+            stage = .writtenVerification
             let frozen = try AssetLocationFiles.read(copied, maximum: data.count)
             guard frozen.data == data else { throw ProjectStoreError.externalModification }
             location = try AssetLocationFiles.register(copied, read: frozen, role: .independentCopy)
+            try checkpoint(.verified(copied))
         } else {
             if asset.relativePath.hasPrefix("WorkflowAssets/") {
                 _ = try stageWorkflowMedia(data, assetID: id, suffix: format.suffix, limit: format.maximumBytes)
@@ -5033,22 +5083,43 @@ extension ProjectStore {
         }
         try Task.checkCancellation()
         // Recheck a mutable original before updating which location owns future reads.
-        guard try readAssetData(asset, limit: format.maximumBytes) == data else { throw ProjectStoreError.externalModification }
+        guard try readAssetData(asset, limit: format.maximumBytes) == data else { throw AssetFileOperationFailure(.contentMismatch, diagnostic: "Copy source changed before location commit") }
         if let existing = placements.locations.firstIndex(where: { $0.id == location.id }) {
             placements.locations[existing] = location
         } else { placements.locations.append(location) }
         placements.preferredLocationID = location.id; try placements.validate()
         var candidate = manifest; candidate.assets[index].fileLocations = placements
+        if let published { stage = .writtenCommit; try checkpoint(.beforeCommit(published)) }
         try commit(candidate)
+        } catch {
+            if let published {
+                throw AssetFileOperationFailure(AssetFileOperationFailure.classify(error), stage: stage,
+                    destination: published, diagnostic: error.localizedDescription)
+            }
+            throw error
+        }
     }
 
     public func collectProjectMedia() throws -> [AssetRelocationResult] {
+        try collectProjectMedia(afterItem: { _ in })
+    }
+    func collectProjectMedia(afterItem: (AssetRelocationResult) -> Void) throws -> [AssetRelocationResult] {
         let snapshot = try projectFileOverview()
         var results = [AssetRelocationResult]()
         for item in snapshot.assets where item.asset.fileLocations != nil {
-            try Task.checkCancellation()
-            do { try collectAsset(item.asset.id); results.append(.init(id: item.asset.id, matched: true, message: "已收纳到本项目，不再依赖原位置。")) }
-            catch { results.append(.init(id: item.asset.id, matched: false, message: error.localizedDescription)) }
+            let source = item.locations.first(where: { $0.id == item.selectedLocationID })?.resolvedURL?.path
+            if Task.isCancelled {
+                results.append(.init(id: item.asset.id, matched: false, message: "Not processed after cancellation", outcome: .notProcessed, assetName: item.asset.name, sourcePath: source)); continue
+            }
+            do {
+                try collectAsset(item.asset.id)
+                results.append(.init(id: item.asset.id, matched: true, message: "Copied into project", outcome: .collected, assetName: item.asset.name, sourcePath: source))
+            } catch {
+                results.append(.init(id: item.asset.id, matched: false, message: error.localizedDescription,
+                    outcome: error is CancellationError ? .cancelled : .failed, assetName: item.asset.name, sourcePath: source,
+                    failure: error as? AssetFileOperationFailure ?? .init(AssetFileOperationFailure.classify(error), diagnostic: error.localizedDescription)))
+            }
+            if let result = results.last { afterItem(result) }
         }
         return results
     }

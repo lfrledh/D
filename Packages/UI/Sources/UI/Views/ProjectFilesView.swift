@@ -30,10 +30,10 @@ enum ProjectFilesPresentation {
         isActive: @escaping @MainActor () -> Bool,
         saveDrafts: @escaping @MainActor (ProjectStore, UUID) async throws -> Void) async throws -> ProjectBackupReceipt {
         try Task.checkCancellation()
-        guard isActive() else { throw WorkflowIssue("项目已切换；备份未创建。") }
+        guard isActive() else { throw ProjectFilesViewError.staleProject }
         try await saveDrafts(store, instanceID)
         try Task.checkCancellation()
-        guard isActive() else { throw WorkflowIssue("项目已切换；备份未创建。") }
+        guard isActive() else { throw ProjectFilesViewError.staleProject }
         return try await store.createBackup(at: url, modelLibrary: modelLibrary,
             includingModels: models, allowIncomplete: allowIncomplete)
     }
@@ -147,9 +147,10 @@ struct ProjectFilesView: View {
     @Environment(\.dLanguageStore) private var language
     @State private var overview: ProjectFileOverview?
     @State private var selectedAssetID: UUID?
-    @State private var message: String?
+    @State private var message: ProjectFilesMessage?
     @State private var results: [AssetRelocationResult] = []
     @State private var receipt: ProjectBackupReceipt?
+    @State private var receiptKind: ProjectFileOperation?
     @State private var restoredURL: URL?
     @State private var models: [ModelRecord] = []
     @State private var modelTitles: [String: String] = [:]
@@ -158,44 +159,41 @@ struct ProjectFilesView: View {
     @State private var pendingRestore: (URL, URL)?
     @State private var job: Task<Void, Never>?
     @State private var busy = false
-    @State private var checkedSelections: Set<UUID> = []
 
-    private func word(_ key: String, _ fallback: String) -> String {
-        language?.text("files." + key, fallback: fallback) ?? fallback
-    }
+    private func word(_ key: String) -> String { workflowText(language, "files." + key) }
     private var selected: AssetLocationOverview? { overview?.assets.first { $0.asset.id == selectedAssetID } }
     private func bytes(_ value: UInt64) -> String { ByteCountFormatter.string(fromByteCount: Int64(clamping: value), countStyle: .file) }
-    private func date(_ value: Date?) -> String { value?.formatted(date: .abbreviated, time: .shortened) ?? word("unknown", "未知") }
+    private func date(_ value: Date?) -> String { value?.formatted(date: .abbreviated, time: .shortened) ?? word("unknown") }
     private func role(_ value: AssetLocationRole) -> String {
         switch value {
-        case .externalOriginal: word("role.original", "外部原件")
-        case .independentCopy: word("role.library", "独立资料库副本")
-        case .projectCopy: word("role.project", "项目内副本")
+        case .externalOriginal: word("role.original")
+        case .independentCopy: word("role.library")
+        case .projectCopy: word("role.project")
         }
     }
     private func status(_ value: AssetLocationStatus) -> String {
         switch value {
-        case .verified: word("status.verified", "已核对")
-        case .pendingVerification: word("status.pending", "待核对")
-        case .offline: word("status.offline", "磁盘离线")
-        case .needsAuthorization: word("status.authorization", "需要文件访问权限")
-        case .missing: word("status.missing", "文件缺失")
-        case .changed: word("status.changed", "内容已变")
-        case .corrupt: word("status.corrupt", "位置无效")
-        case .previewOnly: word("status.preview", "仅预览")
+        case .verified: word("status.verified")
+        case .pendingVerification: word("status.pending")
+        case .offline: word("status.offline")
+        case .needsAuthorization: word("status.authorization")
+        case .missing: word("status.missing")
+        case .changed: word("status.changed")
+        case .corrupt: word("status.corrupt")
+        case .previewOnly: word("status.preview")
         }
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Button(word("back", "返回"), action: onClose).keyboardShortcut(.cancelAction)
-                Text(word("title", "项目文件与位置")).font(.title2.bold())
+                Button(word("back"), action: onClose).keyboardShortcut(.cancelAction)
+                Text(word("title")).font(.title2.bold())
                 Spacer()
                 if busy { ProgressView() }
-                Button(word("cancel", "取消当前操作")) { job?.cancel() }.disabled(!busy)
+                Button(word("cancel")) { job?.cancel() }.disabled(!busy)
             }
             if let overview {
-                Text("\(word("external", "外部引用")) \(overview.externalCount) · \(word("collectBytes", "收纳需复制")) \(bytes(overview.bytesToCollect))")
+                Text("\(word("external")) \(overview.externalCount) · \(word("collectBytes")) \(bytes(overview.bytesToCollect))")
                     .font(.headline)
                 Text(consistencyText(consistencyLanguage, "remaining.5e684d0ea7f7"))
                     .font(.caption).foregroundStyle(.secondary)
@@ -207,24 +205,24 @@ struct ProjectFilesView: View {
                     List(overview.assets, id: \.asset.id, selection: $selectedAssetID) { item in
                         VStack(alignment: .leading) {
                             Text(item.asset.name)
-                            Text(ProjectFilesPresentation.selectedStatus(item).map(status) ?? word("unknown", "未知"))
+                            Text(ProjectFilesPresentation.selectedStatus(item).map(status) ?? word("unknown"))
                                 .font(.caption).foregroundStyle(.secondary)
                         }.tag(item.asset.id)
                     }.frame(minWidth: 220).disabled(busy)
-                    ScrollView { if let selected { inspector(selected) } else { Text(word("choose", "选择素材查看位置")) } }
+                    ScrollView { if let selected { inspector(selected) } else { Text(word("choose")) } }
                         .frame(minWidth: 370, maxWidth: .infinity)
                 }
                 HStack {
-                    Button(word("collectAll", "收纳项目媒体…")) { collectAll() }.disabled(busy || overview.externalCount == 0)
-                    Button(word("findFolder", "从所选文件夹定位…")) { relocateFolder() }.disabled(busy)
+                    Button(word("collectAll")) { collectAll() }.help(word("collect.help")).disabled(busy || overview.externalCount == 0)
+                    Button(word("findFolder")) { relocateFolder() }.help(word("findFolder.help")).disabled(busy)
                     Spacer()
-                    Button(word("backup", "创建手动备份…")) { prepareBackup() }.disabled(busy)
-                    Button(word("restore", "恢复手动备份…")) { prepareRestore() }.disabled(busy)
+                    Button(word("backup")) { prepareBackup() }.disabled(busy)
+                    Button(word("restore")) { prepareRestore() }.disabled(busy)
                 }
-            } else if isActive() { ProgressView(word("loading", "读取项目文件…")) }
+            } else if isActive() { ProgressView(word("loading")) }
             else { Text(consistencyText(consistencyLanguage, "remaining.de3479cae49b")) }
             if !models.isEmpty {
-                DisclosureGroup(word("models", "可选：包含模型资源（默认不选）")) {
+                DisclosureGroup(word("models")) {
                     ForEach(models, id: \.id) { record in
                         let eligible = (record.state == .installed || record.state == .preparationRequired)
                             && record.availability == .available
@@ -234,72 +232,82 @@ struct ProjectFilesView: View {
                             Text("\(modelTitles[record.catalogID] ?? record.catalogID) · \(bytes(record.totalBytes))")
                         }.disabled(!eligible || busy)
                         if record.state == .preparationRequired {
-                            Text(word("rawUnavailable", "原始资源可随备份保留；恢复后仍需准备才能用于推理。"))
+                            Text(word("rawUnavailable"))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    Text(word("modelsNote", "恢复后 Models 文件夹不会自动登记；请在模型库正常登记。"))
+                    Text(word("modelsNote"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
             if !results.isEmpty {
-                Text(word("results", "逐项结果")).font(.headline)
-                ForEach(results) { result in Text("\(result.matched ? "✓" : "⚠") \(result.message)").textSelection(.enabled) }
+                Text(word("results")).font(.headline)
+                ForEach(results) { result in VStack(alignment: .leading, spacing: 3) {
+                    Text(result.assetName ?? result.id.uuidString).font(.subheadline.bold())
+                    Text(ProjectFilesMessage.result(result).text(language))
+                    if results.filter({ $0.assetName == result.assetName }).count > 1 {
+                        Text(result.sourcePath ?? String(result.id.uuidString.prefix(8))).font(.caption).foregroundStyle(.secondary)
+                    }
+                    DisclosureGroup(word("technical")) {
+                        Text(result.id.uuidString + "\n" + result.message + (result.sourcePath.map { "\n" + $0 } ?? "")).font(.caption.monospaced()).textSelection(.enabled)
+                    }
+                } }
             }
             if let receipt {
-                Text(receipt.complete ? word("backupComplete", "备份／恢复完成") : word("backupPartial", "不完整备份／恢复"))
+                Text(receiptKind == .restore ? (receipt.complete ? word("restoreComplete") : word("restorePartial")) : (receipt.complete ? word("backupComplete") : word("backupPartial")))
                     .font(.headline)
                 Text(receipt.directory.path).textSelection(.enabled)
-                Text("\(receipt.fileCount) · \(bytes(receipt.byteCount))")
+                Text(workflowText(language, "files.receipt.count", arguments: ["count": String(receipt.fileCount)]) + " · " + bytes(receipt.byteCount))
                 ForEach(receipt.missing, id: \.self) { Text($0).textSelection(.enabled) }
             }
-            if let restoredURL {
-                Button(word("openRestored", "打开已恢复项目")) {
-                    Task { if let error = await onOpenRestored(restoredURL) { message = error } }
+            if receiptKind == .restore, let restoredURL {
+                Button(word("openRestored")) {
+                    Task { if let error = await onOpenRestored(restoredURL) { message = .init(key: "files.error.open", diagnostic: error) } }
                 }
                     .disabled(busy)
             }
-            if let message { Text(message).foregroundStyle(.secondary).textSelection(.enabled) }
+            if let message {
+                Text(message.text(language)).foregroundStyle(.secondary).textSelection(.enabled)
+                if let diagnostic = message.diagnostic {
+                    DisclosureGroup(word("technical")) { Text(diagnostic).font(.caption.monospaced()).textSelection(.enabled) }
+                }
+            }
         }
         .padding(20).frame(minWidth: 760, minHeight: 520)
         .task(id: instanceID) { await refresh(); await loadModels() }
-        .onChange(of: selectedAssetID) { _, id in
-            guard let id, checkedSelections.insert(id).inserted else { return }
-            start(refreshMedia: false) { store in
-                try await store.verifyAssetLocation(id)
-                return word("verifiedNow", "所选素材内容已核对。")
-            }
-        }
         .onDisappear { job?.cancel() }
-        .workbenchConfirmation(word("incomplete", "备份缺少文件"), isPresented: Binding(get: { pendingBackup != nil }, set: { if !$0 { pendingBackup = nil } })) {
-            Button(word("cancel", "取消"), role: .cancel) { pendingBackup = nil }.keyboardShortcut(.cancelAction)
-            Button(word("continueIncomplete", "明确创建不完整备份")) {
+        .workbenchConfirmation(word("incomplete"), isPresented: Binding(get: { pendingBackup != nil }, set: { if !$0 { pendingBackup = nil } })) {
+            Button(workflowText(language, "workflow.action.cancel"), role: .cancel) { pendingBackup = nil }.keyboardShortcut(.defaultAction)
+            Button(word("backupIncomplete.continue")) {
                 if let pendingBackup { runBackup(at: pendingBackup.0, models: pendingBackup.1, allowIncomplete: true) }
                 pendingBackup = nil
-            }.keyboardShortcut(.defaultAction)
-        } message: { Text(pendingBackup?.2.joined(separator: "\n") ?? "") }
-        .workbenchConfirmation(word("restoreIncomplete", "恢复可能缺少文件"), isPresented: Binding(get: { pendingRestore != nil }, set: { if !$0 { pendingRestore = nil } })) {
-            Button(word("cancel", "取消"), role: .cancel) { pendingRestore = nil }.keyboardShortcut(.cancelAction)
-            Button(word("continueIncomplete", "明确恢复不完整备份")) {
+            }
+        } message: { Text(word("backupIncomplete.help") + "\n\n" + (pendingBackup?.2.joined(separator: "\n") ?? "")) }
+        .workbenchConfirmation(word("restoreIncomplete"), isPresented: Binding(get: { pendingRestore != nil }, set: { if !$0 { pendingRestore = nil } })) {
+            Button(workflowText(language, "workflow.action.cancel"), role: .cancel) { pendingRestore = nil }.keyboardShortcut(.defaultAction)
+            Button(word("restoreIncomplete.continue")) {
                 if let pendingRestore { runRestore(from: pendingRestore.0, to: pendingRestore.1, allowIncomplete: true) }
                 pendingRestore = nil
-            }.keyboardShortcut(.defaultAction)
-        } message: { Text(word("restoreWarning", "仅显式继续才会保留缺失项；结果将标为不完整。")) }
+            }
+        } message: { Text(word("restoreWarning")) }
     }
     @ViewBuilder private func inspector(_ item: AssetLocationOverview) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(item.asset.name).font(.headline)
-            Text("\(word("knownUse", "本项目已知使用")) \(item.knownUseCount)")
+            Text("\(word("knownUse")) \(item.knownUseCount)")
             ForEach(item.knownUses) { use in
                 HStack {
                     VStack(alignment: .leading) {
-                        Text(use.title).font(.caption.weight(.semibold))
-                        Text(use.detail).font(.caption2).foregroundStyle(.secondary)
+                        Text(ProjectFilesMessage.useTitle(use, language: language)).font(.caption.weight(.semibold))
+                        Text(ProjectFilesMessage.useSummary(use, language: language)).font(.caption2).foregroundStyle(.secondary)
+                    }
+                    DisclosureGroup(word("technical")) {
+                        Text(use.id + "\n" + use.title + "\n" + use.detail).font(.caption.monospaced()).textSelection(.enabled)
                     }
                     Spacer()
                     if let graphID = use.graphID, let nodeID = use.nodeID {
                         Button(consistencyText(consistencyLanguage, "remaining.27af6ebe6592")) {
-                            if !onOpenGraph(graphID, nodeID) { message = consistencyText(consistencyLanguage, "remaining.2ce262102d83") }
+                            if !onOpenGraph(graphID, nodeID) { message = .key("consistency.remaining.2ce262102d83") }
                         }.disabled(busy)
                     } else if let assetID = use.assetID {
                         Button(consistencyText(consistencyLanguage, "remaining.d5ba98aa2f62")) { selectedAssetID = assetID }.disabled(busy)
@@ -309,8 +317,10 @@ struct ProjectFilesView: View {
                     }
                 }
             }
-            Text("SHA-256: \(item.contentSHA256 ?? word("unknown", "未知"))").font(.caption.monospaced()).textSelection(.enabled)
-            Text("\(word("size", "已知字节")): \(item.byteCount.map(bytes) ?? word("unknown", "未知"))")
+            DisclosureGroup(word("technical")) {
+                Text(item.asset.id.uuidString + "\nSHA-256: " + (item.contentSHA256 ?? word("unknown"))).font(.caption.monospaced()).textSelection(.enabled)
+            }
+            Text("\(word("size")): \(item.byteCount.map(bytes) ?? word("unknown"))")
             ForEach(item.locations) { location in
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
@@ -320,45 +330,57 @@ struct ProjectFilesView: View {
                         Spacer()
                         Text(status(location.status))
                     }
-                    Text(location.resolvedURL?.path ?? location.location.url?.path ?? word("unknown", "未知"))
+                    Text(location.resolvedURL?.path ?? location.location.url?.path ?? word("unknown"))
                         .font(.caption).textSelection(.enabled)
-                    if let reason = location.reason { Text(reason).font(.caption).foregroundStyle(.orange) }
-                    if location.status == .needsAuthorization { Text(word("authorization.help", "请重新选择文件位置，允许 D 访问这些文件。")).font(.caption) }
-                    Text("\(word("registered", "登记")): \(item.asset.fileLocations == nil ? word("unknown", "未知") : date(location.location.registeredAt)) · \(word("verified", "上次核对")): \(date(location.location.lastVerifiedAt)) · \(location.location.role == .externalOriginal ? consistencyText(consistencyLanguage, "remaining.19fb176689ad") : consistencyText(consistencyLanguage, "remaining.16bddd9faed3")): \(date(location.location.contentCreatedAt))")
+                    if let issue = location.issue { Text(word("issue." + issue.rawValue)).font(.caption).foregroundStyle(.orange) }
+                    if let reason = location.reason {
+                        DisclosureGroup(word("technical")) { Text(reason).font(.caption.monospaced()).textSelection(.enabled) }
+                    }
+                    if location.status == .needsAuthorization { Text(word("authorization.help")).font(.caption) }
+                    Text("\(word("registered")): \(item.asset.fileLocations == nil ? word("unknown") : date(location.location.registeredAt)) · \(word("verified")): \(date(location.location.lastVerifiedAt)) · \(location.location.role == .externalOriginal ? consistencyText(consistencyLanguage, "remaining.19fb176689ad") : consistencyText(consistencyLanguage, "remaining.16bddd9faed3")): \(date(location.location.contentCreatedAt))")
                         .font(.caption).foregroundStyle(.secondary)
                     Button(consistencyText(consistencyLanguage, "remaining.ded07da9efc6")) { reveal(location) }
                         .disabled(busy || !canReveal(location))
                     if location.id != item.selectedLocationID {
-                        Button(word("useLocation", "核对并使用此位置")) { useLocation(item.asset.id, location.id) }.disabled(busy)
+                        Button(word("useLocation")) { useLocation(item.asset.id, location.id) }.help(word("useLocation.help")).disabled(busy)
                     }
                 }.padding(8).background(Color.secondary.opacity(0.08)).cornerRadius(8)
             }
-            HStack {
-                Button(word("verify", "核对内容")) { start(refreshMedia: false) { store in
-                    try await store.verifyAssetLocation(item.asset.id)
-                    return word("verifiedNow", "内容核对完成；时间与文件身份已记录。")
-                } }.disabled(busy)
-                Button(word("findFile", "定位同内容文件…")) { relocateFile(item.asset.id) }.disabled(busy)
-                Button(word("collectOne", "复制入项目…")) { start { store in
-                    try await store.collectAsset(item.asset.id)
-                    return word("collected", "已复制入项目；原件保留。")
-                } }.disabled(busy)
-                Button(word("copyLibrary", "复制到独立资料库…")) { collectToFolder(item.asset.id) }.disabled(busy)
+            ViewThatFits(in: .horizontal) {
+                fileActions(item, vertical: false).fixedSize(horizontal: true, vertical: false)
+                fileActions(item, vertical: true)
             }
-            Text(word("changedNote", "若字节不同，请作为新素材导入；旧记录不会自动替换。"))
-                .font(.caption).foregroundStyle(.secondary)
-            Button(word("importNew", "导入资产")) {
+            Text(word("changedNote")).font(.caption).foregroundStyle(.secondary)
+            Button(word("importNew")) {
                 Task {
                     guard let (url, mode) = await NativeAssetImportPanel.choose(language: language) else { return }
                     start { store in
                         let access = url.startAccessingSecurityScopedResource()
                         defer { if access { url.stopAccessingSecurityScopedResource() } }
                         _ = try await store.importWorkflowMediaFile(at: url, mode: mode)
-                        return word("importedNew", "已导入资产，原文件保留。")
+                        return "files.importedNew"
                     }
                 }
             }.disabled(busy)
         }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+    private func fileActions(_ item: AssetLocationOverview, vertical: Bool) -> some View {
+        let layout = vertical ? AnyLayout(VStackLayout(alignment: .leading)) : AnyLayout(HStackLayout())
+        return layout {
+                Button(word("verify")) { start(kind: .verify, refreshMedia: false) { store in
+                    try await store.verifyAssetLocation(item.asset.id)
+                    return "files.verifiedNow"
+                } }.disabled(busy)
+                Button(word("findFile")) { relocateFile(item.asset.id) }.help(word("relink.help")).disabled(busy)
+                Button(word("collectOne")) { start(kind: .collect) { store in
+                    try await store.collectAsset(item.asset.id)
+                    return "files.collected"
+                } }.help(word("collect.help")).disabled(busy)
+                Button(word("copyLibrary")) { collectToFolder(item.asset.id) }.help(word("move.help")).disabled(busy)
+            }
+    }
+    private func clearOutcome() {
+        message = nil; results = []; receipt = nil; receiptKind = nil; restoredURL = nil
     }
     private func refresh() async {
         do {
@@ -366,7 +388,7 @@ struct ProjectFilesView: View {
             guard isActive() else { return }
             overview = value
             if selectedAssetID == nil { selectedAssetID = initialAssetID ?? value.assets.first?.asset.id }
-        } catch { if isActive() { message = error.localizedDescription } }
+        } catch { if isActive() { message = .failure(error) } }
     }
     private func loadModels() async {
         let snapshot = await modelLibrary.snapshot()
@@ -374,17 +396,17 @@ struct ProjectFilesView: View {
         models = snapshot.records
         modelTitles = Dictionary(uniqueKeysWithValues: snapshot.catalog.map { ($0.id, $0.title) })
     }
-    private func start(refreshMedia: Bool = true,
+    private func start(kind: ProjectFileOperation = .general, refreshMedia: Bool = true,
                        _ operation: @escaping @MainActor (ProjectStore) async throws -> String) {
         guard !busy, isActive() else { return }
-        busy = true; message = nil; results = []
+        busy = true; clearOutcome()
         let captured = store
         job = Task {
             do {
                 let text = try await operation(captured)
-                if isActive() { message = text }
-            } catch is CancellationError { if isActive() { message = word("cancelled", "操作已取消；请查看刷新后的状态确认已完成项。") } }
-            catch { if isActive() { message = error.localizedDescription } }
+                if isActive() { message = .key(text) }
+            } catch is CancellationError { if isActive() { message = .key("files.cancelled.single") } }
+            catch { if isActive() { message = .failure(error, operation: kind) } }
             await ProjectFilesPresentation.refreshAfterOperation(store: captured, instanceID: instanceID,
                 refreshMedia: refreshMedia,
                 onContentsChanged: onContentsChanged, refreshOverview: {
@@ -393,9 +415,10 @@ struct ProjectFilesView: View {
             busy = false; job = nil
         }
     }
-    private func chooseFolder(_ title: String) async -> URL? {
+    private func chooseFolder(_ title: String, message: String? = nil) async -> URL? {
         let panel = NSOpenPanel(); panel.title = title
-        panel.prompt = word("chooseFolder", "选择文件夹…")
+        if let message { panel.message = message }
+        panel.prompt = word("chooseFolder")
         panel.canChooseDirectories = true; panel.canChooseFiles = false
         return await panel.begin() == .OK ? panel.url : nil
     }
@@ -409,17 +432,17 @@ struct ProjectFilesView: View {
                 try checkRevealFile(url)
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } else {
-                guard let bookmark = inspection.location.bookmark else { throw WorkflowIssue("此位置需要重新授权。") }
+                guard let bookmark = inspection.location.bookmark else { throw ProjectFilesViewError.authorization }
                 var stale = false
                 url = try URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope, .withoutUI],
                     relativeTo: nil, bookmarkDataIsStale: &stale)
-                guard !stale else { throw WorkflowIssue("位置授权已过期，请重新定位。") }
+                guard !stale else { throw ProjectFilesViewError.authorization }
                 let access = url.startAccessingSecurityScopedResource()
                 defer { if access { url.stopAccessingSecurityScopedResource() } }
                 try checkRevealFile(url)
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             }
-        } catch { message = error.localizedDescription }
+        } catch { message = .failure(error) }
     }
     private func canReveal(_ inspection: AssetLocationInspection) -> Bool {
         inspection.status == .verified || inspection.status == .pendingVerification || inspection.status == .changed
@@ -427,68 +450,69 @@ struct ProjectFilesView: View {
     private func checkRevealFile(_ url: URL) throws {
         var file = stat()
         guard lstat(url.path, &file) == 0, file.st_mode & S_IFMT == S_IFREG, file.st_nlink == 1 else {
-            throw WorkflowIssue("该位置当前不是可显示的独立普通文件，请重新定位。")
+            throw ProjectFilesViewError.reveal
         }
     }
     private func relocateFile(_ id: UUID) {
         Task {
-            let panel = NSOpenPanel(); panel.title = word("findFile", "定位同内容文件…")
-            panel.prompt = word("chooseFile", "选择文件…")
+            let panel = NSOpenPanel(); panel.title = word("findFile")
+            panel.prompt = word("chooseFile")
+            panel.message = word("relink.help")
             panel.canChooseDirectories = false
             guard await panel.begin() == .OK, let url = panel.url else { return }
-            start { store in
+            start(kind: .relink) { store in
                 let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
                 try await store.relocateAsset(id, to: url)
-                return word("relocated", "已核对同一内容版本。")
+                return "files.relocated"
             }
         }
     }
     private func relocateFolder() {
         Task {
-            guard let url = await chooseFolder(word("findFolder", "从所选文件夹定位…")) else { return }
+            guard let url = await chooseFolder(word("findFolder"), message: word("findFolder.help")) else { return }
             start { store in
                 let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
                 let values = try await store.relocateAssets(in: url)
                 if isActive() { results = values }
-                return ProjectFilesPresentation.allSucceeded(values) ? word("relocated", "已核对同一内容版本。") : word("partial", "部分项目未匹配，原位置保留。")
+                return values.contains(where: { $0.outcome == .cancelled || $0.outcome == .notProcessed }) ? "files.cancelled" : (ProjectFilesPresentation.allSucceeded(values) ? "files.relocated" : "files.partial")
             }
         }
     }
     private func useLocation(_ id: UUID, _ location: UUID) {
-        start { store in try await store.useAssetLocation(id, locationID: location); return word("locationChosen", "已使用核对通过的位置。") }
+        start(kind: .verify) { store in try await store.useAssetLocation(id, locationID: location); return "files.locationChosen" }
     }
     private func collectToFolder(_ id: UUID) {
         Task {
-            guard let url = await chooseFolder(word("copyLibrary", "复制到独立资料库…")) else { return }
-            start { store in
+            guard let url = await chooseFolder(word("move.destination"), message: word("move.help")) else { return }
+            start(kind: .move) { store in
                 let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
                 try await store.collectAsset(id, to: url)
-                return word("libraryCopied", "独立副本已登记；原件保留。")
+                return "files.libraryCopied"
             }
         }
     }
     private func collectAll() {
-        start { store in
+        start(kind: .collect) { store in
             let values = try await store.collectProjectMedia()
             if isActive() { results = values }
-            return ProjectFilesPresentation.allSucceeded(values) ? word("collected", "已复制入项目；原件保留。") : word("partial", "部分素材未收纳；查看逐项结果。")
+            return values.contains(where: { $0.outcome == .cancelled || $0.outcome == .notProcessed }) ? "files.cancelled" : (ProjectFilesPresentation.allSucceeded(values) ? "files.collected" : "files.partial")
         }
     }
     private func prepareBackup() {
         Task {
             guard !busy, isActive() else { return }
-            let panel = NSSavePanel(); panel.title = word("backup", "创建手动备份…")
+            let panel = NSSavePanel(); panel.title = word("backup")
             panel.nameFieldStringValue = "D-Backup.dbackup"
             panel.canCreateDirectories = true
             guard await panel.begin() == .OK, let url = panel.url, !busy, isActive() else { return }
-            guard !FileManager.default.fileExists(atPath: url.path) else { message = word("exists", "目标已存在；请选择新名称。"); return }
+            guard !FileManager.default.fileExists(atPath: url.path) else { message = .key("files.exists"); return }
             let ids = Array(chosenModels)
-            busy = true
+            busy = true; clearOutcome()
             job = Task {
                 do {
                     try await saveDraftsForBackup(store, instanceID)
                     try Task.checkCancellation()
-                    guard isActive() else { throw WorkflowIssue("项目已切换；备份未创建。") }
+                    guard isActive() else { throw ProjectFilesViewError.staleProject }
                     let plan = try await store.backupPlan()
                     try Task.checkCancellation()
                     guard isActive() else { busy = false; job = nil; return }
@@ -496,41 +520,42 @@ struct ProjectFilesView: View {
                     if !plan.missing.isEmpty { pendingBackup = (url, ids, plan.missing) }
                     else { runBackup(at: url, models: ids, allowIncomplete: false) }
                 } catch is CancellationError {
-                    if isActive() { message = word("cancelled", "操作已取消。") }
+                    if isActive() { message = .key("files.cancelled.single") }
                     busy = false; job = nil
                 } catch {
-                    if isActive() { message = error.localizedDescription }
+                    if isActive() { message = .failure(error, operation: .backup) }
                     busy = false; job = nil
                 }
             }
         }
     }
     private func runBackup(at url: URL, models ids: [ModelID], allowIncomplete: Bool) {
-        start { store in
+        start(kind: .backup) { store in
             let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
             let value = try await ProjectFilesPresentation.createBackup(at: url, store: store,
                 instanceID: instanceID, modelLibrary: modelLibrary, models: ids,
                 allowIncomplete: allowIncomplete, isActive: isActive, saveDrafts: saveDraftsForBackup)
-            if isActive() { receipt = value }
-            return value.complete ? word("backupComplete", "备份完成") : word("backupPartial", "不完整备份已创建")
+            if isActive() { receipt = value; receiptKind = .backup }
+            return value.complete ? "files.backupComplete" : "files.backupPartial"
         }
     }
     private func prepareRestore() {
         Task {
-            let source = NSOpenPanel(); source.title = word("restore", "恢复手动备份…")
+            let source = NSOpenPanel(); source.title = word("restore")
             source.canChooseFiles = false; source.canChooseDirectories = true
             guard await source.begin() == .OK, let backup = source.url else { return }
-            let destination = NSSavePanel(); destination.title = word("restoreDestination", "选择新的 .dproject 位置")
+            let destination = NSSavePanel(); destination.title = word("restoreDestination")
+            destination.message = word("restoreDestination.help")
             destination.nameFieldStringValue = "Restored.dproject"
             destination.allowedContentTypes = ProjectDocumentType.allowedContentTypes
             guard await destination.begin() == .OK, let target = destination.url else { return }
-            guard !FileManager.default.fileExists(atPath: target.path) else { message = word("exists", "目标已存在；请选择新名称。"); return }
+            guard !FileManager.default.fileExists(atPath: target.path) else { message = .key("files.exists"); return }
             runRestore(from: backup, to: target, allowIncomplete: false)
         }
     }
     private func runRestore(from backup: URL, to target: URL, allowIncomplete: Bool) {
         guard !busy, isActive() else { return }
-        busy = true; message = nil
+        busy = true; clearOutcome()
         job = Task {
             let sourceAccess = backup.startAccessingSecurityScopedResource()
             let targetAccess = target.startAccessingSecurityScopedResource()
@@ -543,14 +568,13 @@ struct ProjectFilesView: View {
                 let value = try await ProjectStore.restoreBackup(at: backup, to: target,
                     allowIncomplete: allowIncomplete)
                 guard isActive() else { return }
-                receipt = value
+                receipt = value; receiptKind = .restore
                 restoredURL = target
-                message = value.complete ? word("restoreComplete", "恢复完成。可打开独立项目；模型权重请在模型库登记。")
-                    : word("restorePartial", "不完整恢复已保留；请检查缺失项。")
-            } catch is CancellationError { if isActive() { message = word("cancelled", "操作已取消。") } }
-            catch ProjectBackupError.invalidPackage(let reason) where !allowIncomplete && reason.contains("incomplete backup") {
+                message = .key(value.complete ? "files.restoreComplete" : "files.restorePartial")
+            } catch is CancellationError { if isActive() { message = .key("files.cancelled.single") } }
+            catch ProjectBackupError.incompleteRequiresConfirmation where !allowIncomplete {
                 if isActive() { pendingRestore = (backup, target) }
-            } catch { if isActive() { message = error.localizedDescription } }
+            } catch { if isActive() { message = .failure(error, operation: .restore) } }
         }
     }
 }

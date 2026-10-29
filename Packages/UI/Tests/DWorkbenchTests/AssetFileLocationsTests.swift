@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import Synchronization
 @testable import DWorkbench
 
 @Suite("Fixed media versions and locations", .serialized)
@@ -11,6 +12,134 @@ struct AssetFileLocationsTests {
         try Data("原文 e\u{301} 👩🏽‍🎨".utf8).write(to: source)
         return (root, try await ProjectStore.create(at: root.appendingPathComponent("项目.dproject"), name: "位置"), source)
     }
+    @Test func browsingDoesNotHashButExplicitVerificationAndUseStillDo() async throws {
+        let (_, store, source) = try await fixture()
+        let asset = try await store.importWorkflowMediaFile(at: source, mode: .reference)
+        let before = await store.snapshot()
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: source.path)
+        let count = Mutex(0)
+        try await AssetLocationFiles.$didHash.withValue({ count.withLock { $0 += 1 } }) {
+            for _ in 0..<3 {
+                _ = try await store.projectFileOverview()
+                let detail = try await store.assetLocationOverview(asset.asset.id)
+                #expect(detail.locations.first?.status == .pendingVerification)
+                #expect(detail.locations.first?.issue == .metadataChanged)
+            }
+            #expect(count.withLock { $0 } == 0)
+            #expect(await store.snapshot() == before)
+            try await store.verifyAssetLocation(asset.asset.id)
+            #expect(count.withLock { $0 } == 1)
+            _ = try await store.workflowData(asset.record.reference)
+            #expect(count.withLock { $0 } > 1)
+        }
+        try Data("different content".utf8).write(to: source)
+        do { try await store.collectAsset(asset.asset.id); Issue.record("Changed bytes accepted") }
+        catch let failure as AssetFileOperationFailure { #expect(failure.issue == .contentMismatch) }
+        await #expect(throws: (any Error).self) { try await store.workflowData(asset.record.reference) }
+        try await store.close()
+    }
+
+    @Test func moveKeepsIndependentSourceAndPreferredLocationAcrossColdOpenAndExport() async throws {
+        let (root, store, source) = try await fixture()
+        let asset = try await store.importWorkflowMediaFile(at: source, mode: .reference)
+        let original = try Data(contentsOf: source)
+        let destination = root.appendingPathComponent("new location")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+        try await store.collectAsset(asset.asset.id, to: destination)
+        let locations = try #require((await store.snapshot()).assets.first?.fileLocations)
+        let selected = try #require(locations.locations.first { $0.id == locations.preferredLocationID })
+        #expect(selected.role == .independentCopy)
+        let copy = try #require(selected.url)
+        #expect(try Data(contentsOf: source) == original)
+        #expect(try Data(contentsOf: copy) == original)
+        #expect(try AssetLocationFiles.fingerprint(source).inode != AssetLocationFiles.fingerprint(copy).inode)
+        try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect((await reopened.snapshot()).assets.first?.fileLocations == locations)
+        let isolated = root.appendingPathComponent("source isolated.txt")
+        try FileManager.default.moveItem(at: source, to: isolated)
+        #expect(try await reopened.workflowData(asset.record.reference) == original)
+        let output = root.appendingPathComponent("delivery.txt")
+        try await reopened.export(assetID: asset.asset.id, to: output)
+        #expect((await reopened.snapshot()).assets.first?.fileLocations == locations)
+        try Data("changed export".utf8).write(to: output)
+        #expect(try await reopened.workflowData(asset.record.reference) == original)
+        try FileManager.default.moveItem(at: isolated, to: source)
+        try await reopened.close()
+    }
+
+    @Test(arguments: [0, 1, 2]) func publishedCopyFailuresRetainBothFilesAndDoNotClaimSuccess(point: Int) async throws {
+        let (root, store, source) = try await fixture()
+        let asset = try await store.importWorkflowMediaFile(at: source, mode: .reference)
+        let before = await store.snapshot(), original = try Data(contentsOf: source)
+        let destination = root.appendingPathComponent("failed destination")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+        do {
+            try await store.collectAsset(asset.asset.id, to: destination, checkpoint: { phase in
+                switch (point, phase) {
+                case (0, .published), (1, .verified), (2, .beforeCommit): throw CancellationError()
+                default: break
+                }
+            })
+            Issue.record("Expected published failure")
+        } catch let failure as AssetFileOperationFailure {
+            #expect(failure.stage == (point == 0 ? .writtenSync : (point == 1 ? .writtenVerification : .writtenCommit)))
+            let copy = try #require(failure.destination)
+            #expect(try Data(contentsOf: copy) == original)
+        }
+        #expect(try Data(contentsOf: source) == original)
+        #expect(await store.snapshot() == before)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: destination.path).count == 1)
+        try await store.close()
+    }
+
+    @Test func realManifestConflictAfterCopyRetainsSourceAndPublishedCopy() async throws {
+        let (root, store, source) = try await fixture()
+        let asset = try await store.importWorkflowMediaFile(at: source, mode: .reference)
+        let before = await store.snapshot()
+        let manifestURL = store.rootURL.appendingPathComponent(ProjectStore.manifestFilename)
+        let originalManifest = try Data(contentsOf: manifestURL)
+        var external = before
+        external.name = "Changed by another writer"
+        let conflictingManifest = try ProjectFiles.manifestData(external)
+        let destination = root.appendingPathComponent("commit conflict")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+        do {
+            try await store.collectAsset(asset.asset.id, to: destination, checkpoint: { phase in
+                if case .beforeCommit = phase { try conflictingManifest.write(to: manifestURL) }
+            })
+            Issue.record("Actual commit must reject external manifest change")
+        } catch let failure as AssetFileOperationFailure {
+            #expect(failure.stage == .writtenCommit)
+            #expect(try Data(contentsOf: #require(failure.destination)) == Data(contentsOf: source))
+        }
+        #expect(await store.snapshot() == before)
+        #expect(try Data(contentsOf: manifestURL) == conflictingManifest)
+        try originalManifest.write(to: manifestURL)
+        try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect((await reopened.snapshot()).assets.first?.fileLocations == before.assets.first?.fileLocations)
+        try await reopened.close()
+    }
+
+    @Test func cancellationReturnsCommittedBatchRowsAndUnprocessedNames() async throws {
+        let (root, store, source) = try await fixture()
+        let first = try await store.importWorkflowMediaFile(at: source, mode: .reference)
+        let secondSource = root.appendingPathComponent("second.txt")
+        try Data("second content".utf8).write(to: secondSource)
+        let second = try await store.importWorkflowMediaFile(at: secondSource, mode: .reference)
+        let job = Task {
+            try await store.collectProjectMedia(afterItem: { _ in withUnsafeCurrentTask { $0?.cancel() } })
+        }
+        let rows = try await job.value
+        #expect(rows.count == 2 && rows[0].matched && !rows[1].matched)
+        #expect(rows[0].outcome == .collected && rows[1].outcome == .notProcessed)
+        #expect(Set(rows.map(\.id)) == Set([first.asset.id, second.asset.id]))
+        #expect(rows.allSatisfy { $0.assetName != nil })
+        #expect(try await store.projectFileOverview().externalCount == 1)
+        try await store.close()
+    }
+
     @Test func referenceDoesNotCopyAndInputSnapshotDoesNotChange() async throws {
         let (_, store, source) = try await fixture()
         let imported = try await store.importWorkflowMediaFile(at: source, mode: .reference)

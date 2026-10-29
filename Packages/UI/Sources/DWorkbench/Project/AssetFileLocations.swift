@@ -60,12 +60,53 @@ public struct AssetFileLocations: Codable, Sendable, Equatable {
         }
     }
 }
+/// Display reasons are values; diagnostics remain available to CLI and technical details.
+public enum AssetFileIssue: String, Sendable {
+    case metadataChanged, contentMismatch, unsafeFile, authorization, offline, missing
+    case unverified, missingDigest, checkFailed, insufficientSpace
+}
+public struct AssetFileOperationFailure: Error, LocalizedError, Sendable {
+    public enum Stage: Sendable { case notPublished, writtenVerification, writtenCommit, writtenSync }
+    public let issue: AssetFileIssue
+    public let stage: Stage
+    public let destination: URL?
+    public let diagnostic: String
+    public var errorDescription: String? { diagnostic }
+    public init(_ issue: AssetFileIssue, stage: Stage = .notPublished, destination: URL? = nil, diagnostic: String) {
+        self.issue = issue; self.stage = stage; self.destination = destination; self.diagnostic = diagnostic
+    }
+    public static func classify(_ error: Error) -> AssetFileIssue {
+        if let failure = error as? Self { return failure.issue }
+        if let error = error as? ProjectStoreError {
+            switch error {
+            case .unsafePath: return .unsafeFile
+            case .missingAsset: return .missing
+            default: break // externalModification can mean the project changed, not file content.
+            }
+        }
+        let e = error as NSError
+        if e.domain == NSPOSIXErrorDomain {
+            switch Int32(e.code) {
+            case EACCES, EPERM: return .authorization
+            case ENOENT: return .missing
+            case ENOSPC: return .insufficientSpace
+            default: break
+            }
+        }
+        if e.domain == NSCocoaErrorDomain, e.code == NSFileReadNoPermissionError { return .authorization }
+        return .checkFailed
+    }
+}
+
+enum AssetCopyCheckpoint: Sendable { case published(URL), verified(URL), beforeCommit(URL) }
+
 public struct AssetLocationInspection: Sendable, Identifiable {
     public var id: UUID { location.id }
     public let location: AssetFileLocation
     public let status: AssetLocationStatus
     public let reason: String?
     public let resolvedURL: URL?
+    public var issue: AssetFileIssue? = nil
 }
 public struct AssetLocationOverview: Sendable {
     public let asset: ProjectAsset
@@ -85,6 +126,14 @@ public struct AssetKnownUse: Sendable, Identifiable {
     public let graphID: UUID?
     public let nodeID: UUID?
     public let assetID: UUID?
+    public enum PathPart: Sendable, Equatable {
+        case graph(String, UUID), node(String, UUID), branchTrue, branchFalse, mapBody, loopBody
+    }
+    public var displayName: String? = nil
+    public var path: [PathPart] = []
+    public var createdAt: Date? = nil
+    public var additionalNodeCount: Int = 0
+    public var toolVersion: Int? = nil
 }
 public struct AssetLibraryAvailability: Sendable, Identifiable {
     public var id: UUID { libraryID }
@@ -106,6 +155,11 @@ public struct AssetRelocationResult: Sendable, Identifiable {
     public let id: UUID
     public let matched: Bool
     public let message: String
+    public enum Outcome: Sendable { case relocated, collected, noMatch, ambiguous, failed, cancelled, notProcessed }
+    public var outcome: Outcome = .failed
+    public var assetName: String? = nil
+    public var sourcePath: String? = nil
+    public var failure: AssetFileOperationFailure? = nil
 }
 
 /// Opens only a user-selected file, never enumerates ancestors or follows links.
@@ -151,7 +205,11 @@ enum AssetLocationFiles {
         }
         return .init(data: data, fingerprint: .init(after))
     }
-    static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+    @TaskLocal static var didHash: (@Sendable () -> Void)?
+    static func hash(_ data: Data) -> String {
+        didHash?()
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
     static func register(_ url: URL, read: Read, role: AssetLocationRole) throws -> AssetFileLocation {
         let bookmark = try url.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess], includingResourceValuesForKeys: nil, relativeTo: nil)
         let created = try? url.resourceValues(forKeys: [.creationDateKey]).creationDate
@@ -169,10 +227,10 @@ enum AssetLocationFiles {
                      lastVerifiedAt: Date(), contentCreatedAt: created)
     }
     static func withResolved<T>(_ location: AssetFileLocation, _ body: (URL) throws -> T) throws -> T {
-        guard let bookmark = location.bookmark else { throw ProjectStoreError.io("此位置需要重新授权。") }
+        guard let bookmark = location.bookmark else { throw AssetFileOperationFailure(.authorization, diagnostic: "Missing location bookmark") }
         var stale = false
         let url = try URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope, .withoutUI], relativeTo: nil, bookmarkDataIsStale: &stale)
-        guard !stale else { throw ProjectStoreError.io("此位置授权已过期，请重新定位。") }
+        guard !stale else { throw AssetFileOperationFailure(.authorization, diagnostic: "Stale location bookmark") }
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         return try body(url)
@@ -188,20 +246,20 @@ enum AssetLocationFiles {
                     else if let original = location.url, original.path.hasPrefix("/Volumes/"), original.pathComponents.count > 2,
                             !FileManager.default.fileExists(atPath: "/Volumes/" + original.pathComponents[2]) { status = .offline }
                     else { status = .missing }
-                    return .init(location: location, status: status, reason: String(cString: strerror(code)), resolvedURL: url)
+                    return .init(location: location, status: status, reason: String(cString: strerror(code)), resolvedURL: url, issue: status == .offline ? .offline : (status == .needsAuthorization ? .authorization : .missing))
                 }
-                guard s.st_mode & S_IFMT == S_IFREG, s.st_nlink == 1 else { return .init(location: location, status: .corrupt, reason: "位置不是独立普通文件。", resolvedURL: url) }
+                guard s.st_mode & S_IFMT == S_IFREG, s.st_nlink == 1 else { return .init(location: location, status: .corrupt, reason: "Location is not an independent regular file", resolvedURL: url, issue: .unsafeFile) }
                 if !deep {
                     let status: AssetLocationStatus = location.lastVerifiedAt != nil && location.fingerprint == AssetFileFingerprint(s) ? .verified : .pendingVerification
-                    return .init(location: location, status: status, reason: status == .verified ? nil : "文件身份变化，使用前需核对内容。", resolvedURL: url)
+                    return .init(location: location, status: status, reason: status == .verified ? nil : "文件身份变化，使用前需核对内容。", resolvedURL: url, issue: status == .verified ? nil : .metadataChanged)
                 }
                 let current = try read(url, maximum: maximum)
                 let valid = current.data.count == expected.byteCount && hash(current.data) == expected.sha256
                 return .init(location: location, status: valid ? .verified : .changed,
-                             reason: valid ? nil : "当前字节与登记版本不同；旧版本未改。", resolvedURL: url)
+                             reason: valid ? nil : "Content digest does not match recorded version", resolvedURL: url, issue: valid ? nil : .contentMismatch)
             }
         } catch {
-            var status: AssetLocationStatus = .needsAuthorization
+            var status: AssetLocationStatus = AssetFileOperationFailure.classify(error) == .authorization ? .needsAuthorization : .pendingVerification
             if let original = location.url {
                 var s = stat()
                 let result = lstat(original.path, &s)
@@ -212,7 +270,15 @@ enum AssetLocationFiles {
                 } else if result == 0, s.st_mode & S_IFMT != S_IFREG { status = .corrupt }
             }
             if error as? ProjectStoreError == .externalModification { status = .changed }
-            return .init(location: location, status: status, reason: error.localizedDescription, resolvedURL: location.url)
+            let issue: AssetFileIssue = switch status {
+            case .offline: .offline
+            case .missing: .missing
+            case .corrupt: .unsafeFile
+            case .needsAuthorization: .authorization
+            case .changed: .contentMismatch
+            default: .checkFailed
+            }
+            return .init(location: location, status: status, reason: error.localizedDescription, resolvedURL: location.url, issue: issue)
         }
     }
 }

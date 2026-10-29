@@ -12,6 +12,35 @@ private actor FilePresentationNoInferenceEngine: InferenceEngine {
 
 @Suite("Project file status presentation")
 struct ProjectFilesPresentationTests {
+    @Test @MainActor func typedMessagesKeepOperationStageAndUserNamesAcrossLanguages() throws {
+        for locale in ["zh-Hans", "en"] {
+            let language = UILanguageStore(preferredLanguages: [locale])
+            let backup = ProjectFilesMessage.failure(ProjectBackupError.insufficientSpace, operation: .backup)
+            let restore = ProjectFilesMessage.failure(ProjectBackupError.insufficientSpace, operation: .restore)
+            #expect(backup.key == "files.error.backupSpace" && restore.key == "files.error.restoreSpace")
+            #expect(backup.text(language) != restore.text(language))
+            let damaged = ProjectFilesMessage.failure(ProjectBackupError.invalidPackage("incomplete backup requires opt-in"), operation: .restore)
+            #expect(damaged.key == "files.error.invalidBackup")
+            #expect(ProjectFilesMessage.failure(ProjectBackupError.invalidPackage("anything"), operation: .backup).key == "files.error.invalidBackupInput")
+            let written = ProjectFilesMessage.failure(ProjectBackupError.posix(.init(operation: "sync", code: 28, published: true, existingBackup: false)), operation: .backup)
+            #expect(written.key == "files.error.writtenSync")
+            let existing = ProjectFilesMessage.failure(ProjectBackupError.posix(.init(operation: "read", code: 28, published: false, existingBackup: true)), operation: .restore)
+            #expect(existing.key == "files.error.existingBackup")
+            let mismatch = ProjectFilesMessage.failure(AssetFileOperationFailure(.contentMismatch, diagnostic: "arbitrary diagnostic"), operation: .relink)
+            #expect(mismatch.key == "files.error.relinkMismatch")
+            #expect(ProjectFilesMessage.failure(ProjectStoreError.externalModification).key == "files.error.projectChanged")
+            let use = AssetKnownUse(id: "fixed", kind: .graph, title: "原名 Original", detail: "raw Branch then and UUID", graphID: nil, nodeID: nil, assetID: nil,
+                displayName: "原名 Original", path: [.branchTrue, .mapBody, .node("用户名称 User", UUID())])
+            #expect(ProjectFilesMessage.useTitle(use, language: language) == "原名 Original")
+            let summary = ProjectFilesMessage.useSummary(use, language: language)
+            #expect(summary.contains("用户名称 User"))
+            #expect(!summary.contains("Branch then") && !summary.contains("UUID"))
+            let result = AssetRelocationResult(id: UUID(), matched: false, message: "private diagnostic", outcome: .noMatch, assetName: "Same.txt")
+            #expect(!ProjectFilesMessage.result(result).text(language).contains("private diagnostic"))
+            #expect(workflowText(language, "files.move.help").contains(locale == "en" ? "will not be deleted" : "不会删除"))
+        }
+    }
+
     @Test func missingReferenceStaysMissingAndPartialResultStaysPartial() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("file-presentation-" + UUID().uuidString)
