@@ -302,7 +302,7 @@ struct ProjectFilesView: View {
                         Text(ProjectFilesMessage.useSummary(use, language: language)).font(.caption2).foregroundStyle(.secondary)
                     }
                     DisclosureGroup(word("technical")) {
-                        Text(use.id + "\n" + use.title + "\n" + use.detail).font(.caption.monospaced()).textSelection(.enabled)
+                        Text(ProjectFilesMessage.usePath(use, language: language) + "\n" + use.id + "\n" + use.title + "\n" + use.detail).font(.caption.monospaced()).textSelection(.enabled)
                     }
                     Spacer()
                     if let graphID = use.graphID, let nodeID = use.nodeID {

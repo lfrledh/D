@@ -4772,7 +4772,8 @@ extension ProjectStore {
                 uses.append(.init(id: "asset:\(child)", kind: .derivedAsset,
                     title: childAsset?.name ?? child.uuidString,
                     detail: "派生素材 · \(derived.operationID)", graphID: nil, nodeID: nil,
-                    assetID: childAsset.flatMap { WorkflowMediaFormat.descriptor($0.mediaType) == nil ? nil : child }))
+                    assetID: childAsset.flatMap { WorkflowMediaFormat.descriptor($0.mediaType) == nil ? nil : child },
+                    displayName: childAsset?.name))
             }
             for run in archive.runs {
                 if try WorkflowCheckpointValidation.assetReferences(in: run).contains(reference) {

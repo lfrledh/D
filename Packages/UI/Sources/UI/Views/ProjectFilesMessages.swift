@@ -78,7 +78,7 @@ struct ProjectFilesMessage {
     }
 
     static func useTitle(_ value: AssetKnownUse, language: UILanguageStore?) -> String {
-        value.displayName ?? value.title
+        value.displayName ?? (value.kind == .derivedAsset ? workflowText(language, "files.use.derived") : value.title)
     }
     static func useSummary(_ value: AssetKnownUse, language: UILanguageStore?) -> String {
         let key = switch value.kind {
@@ -88,7 +88,16 @@ struct ProjectFilesMessage {
         }
         var parts = [workflowText(language, key)]
         if let date = value.createdAt { parts.append(date.formatted(date: .abbreviated, time: .shortened)) }
-        parts += value.path.map { part in
+        if let name = value.path.reversed().compactMap({ part -> String? in
+            if case .node(let name, _) = part { return name }; return nil
+        }).first { parts.append(name) }
+        if value.additionalNodeCount > 0 {
+            parts.append(workflowText(language, "files.use.additional", arguments: ["count": String(value.additionalNodeCount)]))
+        }
+        return parts.joined(separator: " / ")
+    }
+    static func usePath(_ value: AssetKnownUse, language: UILanguageStore?) -> String {
+        value.path.map { part in
             switch part {
             case .graph(let name, _), .node(let name, _): return name
             case .branchTrue: return workflowText(language, "files.use.branchTrue")
@@ -96,12 +105,9 @@ struct ProjectFilesMessage {
             case .mapBody: return workflowText(language, "files.use.mapBody")
             case .loopBody: return workflowText(language, "files.use.loopBody")
             }
-        }
-        if value.additionalNodeCount > 0 {
-            parts.append(workflowText(language, "files.use.additional", arguments: ["count": String(value.additionalNodeCount)]))
-        }
-        return parts.joined(separator: " / ")
+        }.joined(separator: " / ")
     }
+
 }
 
 enum ProjectFilesViewError: Error {
