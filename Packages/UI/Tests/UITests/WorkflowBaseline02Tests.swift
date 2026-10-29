@@ -67,6 +67,112 @@ struct WorkflowBaseline02Tests {
         #expect(changed.title == "任务注释" && changed.detail?.contains("未识别的工具") == true)
     }
 
+    @Test func canvasViewsPersistBoundedExactInstancesWithoutPerEventWrites() throws {
+        let suite = "D.CanvasViews.Test." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        let project = UUID(), instance = UUID(), graph = UUID(), node = UUID()
+        let outer = WorkflowCanvasViewContext(projectID: project, rootGraphID: graph, bodyPath: [], instanceID: instance)
+        let inner = WorkflowCanvasViewContext(projectID: project, rootGraphID: graph,
+            bodyPath: [.init(nodeID: node, slot: "true")], instanceID: instance)
+        let other = WorkflowCanvasViewContext(projectID: project, rootGraphID: graph, bodyPath: [], instanceID: UUID())
+        let memory = WorkflowCanvasViewStateStore(settings: settings, capacity: 2)
+        for x in 0..<120 {
+            memory.capture(zoom: 1.5, rawVisibleCenter: CGPoint(x: x, y: -42), selectedNodeID: node, for: outer)
+        }
+        #expect(memory.writeCount == 0 && settings.data(forKey: WorkflowCanvasViewStateStore.storageKey) == nil)
+        memory.capture(zoom: 0.75, rawVisibleCenter: .init(x: -100, y: 400), selectedNodeID: nil, for: inner)
+        memory.capture(zoom: 1.5, rawVisibleCenter: .init(x: 120, y: -42), selectedNodeID: node, for: outer, makeCurrent: false)
+        #expect(memory.lastContext(projectID: project, instanceID: instance) == inner)
+        memory.flush(); #expect(memory.writeCount == 1)
+        let cold = WorkflowCanvasViewStateStore(settings: settings, capacity: 2)
+        #expect(cold.state(for: outer) == memory.state(for: outer))
+        #expect(cold.state(for: inner) == memory.state(for: inner))
+        #expect(cold.state(for: other) == nil)
+        #expect(cold.lastContext(projectID: project, instanceID: instance) == inner)
+        cold.capture(zoom: 2, rawVisibleCenter: .zero, selectedNodeID: nil, for: other); cold.flush()
+        let bounded = WorkflowCanvasViewStateStore(settings: settings, capacity: 2)
+        #expect(bounded.state(for: outer) == nil && bounded.state(for: inner) != nil && bounded.state(for: other) != nil)
+        let bytes = settings.data(forKey: WorkflowCanvasViewStateStore.storageKey)
+        bounded.capture(zoom: .nan, rawVisibleCenter: .zero, selectedNodeID: nil, for: other)
+        bounded.capture(zoom: 1, rawVisibleCenter: .init(x: CGFloat.infinity, y: 0), selectedNodeID: nil, for: other)
+        bounded.flush(); #expect(settings.data(forKey: WorkflowCanvasViewStateStore.storageKey) == bytes)
+        let damaged = Data("invalid record".utf8); settings.set(damaged, forKey: WorkflowCanvasViewStateStore.storageKey)
+        let protected = WorkflowCanvasViewStateStore(settings: settings)
+        #expect(protected.invalidStoredRecord)
+        protected.capture(zoom: 1, rawVisibleCenter: .zero, selectedNodeID: nil, for: outer); protected.flush()
+        #expect(settings.data(forKey: WorkflowCanvasViewStateStore.storageKey) == damaged)
+    }
+
+    @Test(arguments: [false, true]) func coldCanvasHostRestoresZoomAndLogicalCenterWithoutEditingGraph(outsideExtent: Bool) async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("canvas-cold-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "D.CanvasCold.Test." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Cold.dproject"), name: "Cold")
+        let engine = Baseline02NoInferenceEngine()
+        let runtime = WorkbenchSession(engine: engine, backendID: "never",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let services = WorkflowServices(store: store, session: runtime,
+            resolveText: { throw WorkflowIssue("No inference") }, resolveImage: { throw WorkflowIssue("No inference") })
+        let original = WorkflowController(services: services); await original.load()
+        original.addBlankGraph(); original.addExample("text"); await original.save()
+        let graph = try #require(original.graph)
+        let context = WorkflowCanvasViewContext(projectID: original.projectID, rootGraphID: graph.id,
+            bodyPath: [], instanceID: original.projectInstanceID)
+        let target = outsideExtent ? CGPoint(x: -100_000, y: -100_000) : CGPoint(x: 520, y: 280)
+        let saved = WorkflowCanvasViewMemory(zoom: 1.5, rawVisibleCenter: target, selectedNodeID: graph.nodes.last?.id)
+        let before = WorkflowCanvasViewStateStore(settings: settings); before.save(saved, for: context); before.flush()
+        let controller = WorkflowController(services: services); await controller.load()
+        #expect(controller.graph?.id != graph.id) // Loading the archive defaults to its first graph.
+        let graphs = controller.graphs, runs = controller.runs, undo = controller.canUndo
+        let memory = WorkflowCanvasViewStateStore(settings: settings)
+        var observed: WorkflowCanvasScrollObservation?
+        let view = WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
+            onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in })
+            .rememberingCanvas(in: memory).observingScroll { _, observation in observed = observation }
+        let host = NSHostingView(rootView: view)
+        host.frame = .init(x: 0, y: 0, width: 1080, height: 612)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.close() }
+        for _ in 0..<80 {
+            host.layoutSubtreeIfNeeded()
+            if let observed, abs(observed.zoom - 1.5) < 0.001,
+               observed.hasReachedRestoredCenter(target) { break }
+            try await Task.sleep(for: .milliseconds(15))
+        }
+        let actual = try #require(observed)
+        #expect(controller.graph?.id == graph.id)
+        #expect(abs(actual.zoom - saved.zoom) < 0.001)
+        #expect(actual.hasReachedRestoredCenter(target))
+        #expect(controller.graphs == graphs && controller.runs == runs && controller.canUndo == undo)
+        #expect(await engine.calls == 0)
+        #expect(memory.state(for: context)?.rawVisibleCenter == actual.visibleRawCenter)
+        if !outsideExtent {
+            host.frame.size = .init(width: 1240, height: 760)
+            for _ in 0..<30 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) }
+            #expect(abs(try #require(observed).visibleRawCenter.x - 520) < 1)
+            #expect(abs(try #require(observed).visibleRawCenter.y - 280) < 1)
+        }
+        func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
+        let probe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+        let scroll = try #require(probe.enclosingScrollView)
+        let moved = CGPoint(x: scroll.contentView.bounds.minX + 80, y: scroll.contentView.bounds.minY + 50)
+        probe.onPan(true, scroll.contentView.bounds.origin, scroll.contentView.bounds.size)
+        scroll.contentView.scroll(to: moved); scroll.reflectScrolledClipView(scroll.contentView)
+        probe.onPan(false, scroll.contentView.bounds.origin, scroll.contentView.bounds.size)
+        for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) }
+        let changed = try #require(memory.state(for: context))
+        #expect(changed.rawVisibleCenter != actual.visibleRawCenter)
+        memory.flush()
+        #expect(WorkflowCanvasViewStateStore(settings: settings).state(for: context) == changed)
+    }
+
     @Test func viewMemorySeparatesNestedBodiesAndRestoresSelection() {
         let project = UUID(), root = UUID(), node = UUID()
         let outer = WorkflowCanvasViewContext(projectID: project, rootGraphID: root, bodyPath: [])
@@ -381,7 +487,7 @@ struct WorkflowBaseline02Tests {
         controller.addExample("text")
         let originalGraph = try #require(controller.graph)
         let originalContext = WorkflowCanvasViewContext(projectID: controller.projectID,
-            rootGraphID: originalGraph.id, bodyPath: [])
+            rootGraphID: originalGraph.id, bodyPath: [], instanceID: controller.projectInstanceID)
         var observations: [WorkflowCanvasViewContext: [CGPoint]] = [:]
         let view = WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
             onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in })
@@ -455,7 +561,7 @@ struct WorkflowBaseline02Tests {
         let blankGraph = try #require(controller.graph)
         #expect(blankGraph.id != originalGraph.id)
         let blankContext = WorkflowCanvasViewContext(projectID: controller.projectID,
-            rootGraphID: blankGraph.id, bodyPath: [])
+            rootGraphID: blankGraph.id, bodyPath: [], instanceID: controller.projectInstanceID)
         var blankOffset = CGPoint(x: CGFloat.infinity, y: CGFloat.infinity)
         let blankGeometry = WorkflowGraphGeometry(graph: blankGraph, tools: controller.tools,
             registry: controller.registry)

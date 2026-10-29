@@ -60,6 +60,7 @@ struct WorkflowHostView: View {
                     onSharedAssetDrop: onSharedAssetDrop, acceptsLegacyAsset: acceptsLegacyAsset, captureControls:AnyView(captureControls),
                     publishDocumentDescription: model.projectSession.text != nil && !model.isChangingProject ? layoutText(languageStore, "documentHelp", arguments: ["source": model.manifest?.documents.first(where: { $0.id == model.projectSession.text?.editor.document.id })?.name ?? "—", "target": controller.graph?.name ?? model.manifest?.name ?? "—"]) : nil,
                     destinationEnabled: !model.isBusy && !model.isChangingProject && controller.readOnlyReason == nil)
+                    .rememberingCanvas(in: model.workflowCanvasViews)
                     .expandingLibrary(onExpandLibrary)
                     .environment(\.workflowViewerModel,model)
                     .environment(\.workflowContainerLibrary,metadata)

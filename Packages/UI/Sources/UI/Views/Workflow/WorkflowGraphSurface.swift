@@ -333,7 +333,8 @@ struct WorkflowGraphSurface: View {
                         containerSize: size, zoom: effectiveZoom,
                         visibleRawCenter: WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                             viewportSize: size, zoom: effectiveZoom,
-                            translation: geometry.translation).visibleRawCenter(offset: scroll.contentOffset))
+                            translation: geometry.translation).visibleRawCenter(offset: scroll.contentOffset),
+                        contentSize: scroll.contentSize)
                 } action: { _, observation in
                     scrollTracking.offset = observation.contentOffset
                     if !scrollTracking.isPanning { onScrollObservation(viewContext, observation) }
@@ -1512,6 +1513,20 @@ struct WorkflowCanvasScrollObservation: Equatable {
     let zoom: CGFloat
     var isGestureEnd = false
     let visibleRawCenter: CGPoint
+    var contentSize: CGSize? = nil
+
+    /// A saved logical center can become unreachable after graph or window
+    /// geometry changes. Accept the actual clamped endpoint, not an endless
+    /// wait for coordinates outside the native scroll surface.
+    func hasReachedRestoredCenter(_ target: CGPoint) -> Bool {
+        guard zoom.isFinite, zoom > 0, let contentSize,
+              containerSize.width > 0, containerSize.height > 0 else { return false }
+        let wanted = CGPoint(x: contentOffset.x + (target.x - visibleRawCenter.x) * zoom,
+                             y: contentOffset.y + (target.y - visibleRawCenter.y) * zoom)
+        let clamped = CGPoint(x: max(0, min(max(0, contentSize.width - containerSize.width), wanted.x)),
+                              y: max(0, min(max(0, contentSize.height - containerSize.height), wanted.y)))
+        return abs(contentOffset.x - clamped.x) < 1 && abs(contentOffset.y - clamped.y) < 1
+    }
 }
 
 struct WorkflowCanvasScope: Equatable {

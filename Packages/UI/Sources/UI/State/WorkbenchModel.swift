@@ -12,6 +12,7 @@ public final class WorkbenchModel {
     @ObservationIgnored let viewers = WorkflowViewerCoordinator()
     public func suspendContentViewers() { viewers.suspend() }
     var chatDisplaySettings = ChatDisplayPreferencesState()
+    @ObservationIgnored var workflowCanvasViews = WorkflowCanvasViewStateStore()
     @ObservationIgnored private var chatReadingState = ChatReadingStateStore()
     func readingState(for chat: ChatController) -> ChatReadingStateStore {
         // A disappearing old view keeps its own state object; it cannot rebind or
@@ -492,6 +493,7 @@ public final class WorkbenchModel {
         self.language = language
         self.audioPanels = audioPanels ?? NativeAudioWorkbenchPanels(language: language)
         chatDisplaySettings = displaySettingsOwner?.chatDisplaySettings ?? ChatDisplayPreferencesState(settings: settings, appearanceDirectory: appearanceDirectory)
+        workflowCanvasViews = displaySettingsOwner?.workflowCanvasViews ?? WorkflowCanvasViewStateStore(settings: settings)
         projectSession = ProjectSession(sessionFactory: sessionFactory, settings: settings,
                                         modelLibrary: modelLibrary, audioEnabled: audioEnabled,
                                         audioRecordingEnabled: audioRecordingEnabled,
@@ -769,6 +771,7 @@ public final class WorkbenchModel {
         guard !refuseEditorClose() else { return false }
         guard !isChoosingLocation else { return false }
         viewers.suspend()
+        workflowCanvasViews.flush()
         let closed = await projectSession.requestClose()
         if closed { chatReadingState.reset() }
         return closed
@@ -777,6 +780,7 @@ public final class WorkbenchModel {
         guard !refuseEditorClose() else { return false }
         guard !isChoosingLocation else { return false }
         viewers.suspend()
+        workflowCanvasViews.flush()
         let closed = await projectSession.cancelAndCloseProject()
         if closed { chatReadingState.reset() }
         return closed

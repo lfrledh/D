@@ -3885,9 +3885,32 @@ extension WorkflowLifecycleTests {
         }
         let controls = try WorkflowLanguageExamples.make(.data)
         graphs.append(controls.graph)
+        var tools = controls.tools
+        let followup = ProcessInfo.processInfo.environment["D_B4_FOLLOWUP_FIXTURE"] == "1"
+        if followup {
+            var input = try #require(c.registry.operation("d.value.input")).definition.makeNode()
+            input.title = "B4 音符样本 / Sample notes"
+            input.dataConfiguration = .init(value: try WorkflowNoteSequence(clock: .seconds,
+                notes: [.init(id: "note-A", pitch: 60, start: 0, end: 1, velocity: 0.7)], duration: 2).datum())
+            var human = try #require(c.registry.operation("d.control.human")).definition.makeNode()
+            human.title = "B4 编辑音乐内容 / Edit music content"
+            human.parameters["kind"] = .text("editMusic")
+            human.dataConfiguration = .init(schema: WorkflowNoteSequence.schema(clock: .seconds))
+            let end = try #require(c.registry.operation("d.value.return")).definition.makeNode()
+            graphs.append(.init(name: "B4 音乐内容 Music", nodes: [input, human, end],
+                connections: [.init(sourceNode: input.id, targetNode: human.id), .init(sourceNode: human.id, targetNode: end.id)],
+                layout: [.init(nodeID: input.id, x: 40, y: 140), .init(nodeID: human.id, x: 350, y: 140), .init(nodeID: end.id, x: 660, y: 140)]))
+            let existing = try WorkflowLanguageExamples.make(.images)
+            let tool = try #require(existing.tools.first)
+            tools += existing.tools
+            var invoke = try #require(c.registry.operation("d.control.invoke")).definition.makeNode()
+            invoke.title = "B4 固定版本 / Fixed version"
+            invoke.control = .invoke(.init(id: tool.id, version: tool.version, digest: try WorkflowPlanCompiler.digest(tool)))
+            graphs.append(.init(name: "B4 固定工具 Fixed tool", nodes: [invoke], layout: [.init(nodeID: invoke.id, x: 300, y: 180)]))
+        }
         let initial = try #require(try await store.workflowState().archive)
-        _ = try await store.saveWorkflow(graphs: graphs, runs: [], expectedRevision: initial.revision, tools: controls.tools)
-        await c.load(); #expect(c.graphs.count == 5)
+        _ = try await store.saveWorkflow(graphs: graphs, runs: [], expectedRevision: initial.revision, tools: tools)
+        await c.load(); #expect(c.graphs.count == (followup ? 7 : 5))
         #expect(await engine.requests.isEmpty)
         try await c.close(); try await store.close()
         let destination = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_B4_NATIVE_FIXTURE"]))

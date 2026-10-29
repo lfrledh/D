@@ -13,6 +13,8 @@ private final class WorkflowCanvasCameraPresentation {
     @ObservationIgnored var insertionPoint = CGPoint(x: 170, y: 130)
     @ObservationIgnored var context: WorkflowCanvasViewContext?
     @ObservationIgnored var owner: ObjectIdentifier?
+    @ObservationIgnored var restoredOwner: ObjectIdentifier?
+    @ObservationIgnored var restoringCenter: CGPoint?
 
     init(context: WorkflowCanvasViewContext? = nil, owner: ObjectIdentifier? = nil) {
         self.context = context; self.owner = owner
@@ -32,9 +34,10 @@ private struct WorkflowCanvasCameraScope<Content: View>: View {
         content(Binding(get: { camera.zoom }, set: { value in
             let current = WorkflowCanvasViewContext(projectID: controller.projectID,
                 rootGraphID: controller.rootGraph?.id,
-                bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init))
+                bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init), instanceID: controller.projectInstanceID)
             guard camera.owner == ObjectIdentifier(controller),
                   camera.context == context, current == context else { return }
+            camera.restoringCenter = nil // A new user zoom supersedes a pending restoration.
             camera.zoom = value
             changed()
         }))
@@ -205,7 +208,9 @@ public struct WorkflowCanvasView: View {
     @State private var navigationRequest: WorkflowCanvasNavigationRequest?
     @State private var viewportInteractionLocked = false
     @FocusState private var workspaceKeyboardFocused: Bool
-    @State private var viewStates = WorkflowCanvasViewStateStore()
+    @State private var localViewStates = WorkflowCanvasViewStateStore()
+    private var persistedViewStates: WorkflowCanvasViewStateStore?
+    private var viewStates: WorkflowCanvasViewStateStore { persistedViewStates ?? localViewStates }
     @State private var pendingConnection: WorkflowPendingConnection?
     @State private var selectedConnectionID: UUID?
     @State private var runPreview: WorkflowRunPreview?
@@ -265,9 +270,12 @@ public struct WorkflowCanvasView: View {
         self.onReturnText = onReturnText
         _camera = State(initialValue: WorkflowCanvasCameraPresentation(context: WorkflowCanvasViewContext(projectID: controller.projectID,
             rootGraphID: controller.rootGraph?.id,
-            bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init)), owner: ObjectIdentifier(controller)))
+            bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init), instanceID: controller.projectInstanceID), owner: ObjectIdentifier(controller)))
     }
 
+    func rememberingCanvas(in store: WorkflowCanvasViewStateStore) -> Self {
+        var copy = self; copy.persistedViewStates = store; return copy
+    }
     func expandingLibrary(_ action: ((WorkflowCanvasLibraryMode, WorkflowLibraryContext?, @escaping () -> Void, WorkflowContainerNavigation) -> Void)?) -> Self {
         var copy = self; copy.onExpandLibrary = action; return copy
     }
@@ -319,7 +327,7 @@ public struct WorkflowCanvasView: View {
         .onChange(of: ObjectIdentifier(controller)) { _, _ in
             panelsState = .init(); workspaceDraft=nil;runOptions = .init();runSettingsVisible=false;recordsDetail=false;visitedRecords=false;visitedRecordsDetail=false;resourceContext=nil;returnResourceCategory=nil
             camera.owner = ObjectIdentifier(controller)
-            restoreViewContext(viewContext)
+            restoreInitialViewContext()
         }
         .onChange(of: panelsState.preparation) { _, tab in visitedPreparation.insert(tab) }
         .onChange(of: panelsState.output) { _, tab in visitedOutput.insert(tab) }
@@ -338,8 +346,9 @@ public struct WorkflowCanvasView: View {
             }
         }
         .onChange(of: viewContext) { _, next in restoreViewContext(next) }
-        .onAppear { camera.owner = ObjectIdentifier(controller); camera.context = viewContext }
+        .onAppear { restoreInitialViewContext() }
         .onDisappear {
+            viewStates.flush()
             if camera.owner == ObjectIdentifier(controller) { camera.owner = nil; camera.context = nil }
         }
         .onChange(of: viewportInteractionLocked) { _, locked in viewportLockObserver?(locked) }
@@ -465,14 +474,21 @@ public struct WorkflowCanvasView: View {
                     viewportSizeObserver: { canvasViewport = $0 },
                     portCenterObserver: portCenterObserver,
                     onScrollObservation: { context, observation in
-                        guard camera.owner == ObjectIdentifier(controller) else { return }
+                        guard camera.owner == ObjectIdentifier(controller),
+                              camera.restoredOwner == ObjectIdentifier(controller) else { return }
                         if observation.isGestureEnd {
                             // An interrupted pan may finish after another graph has mounted.
                             // Save its captured context without moving the new graph's insertion point.
                             viewStates.capture(zoom: observation.zoom, rawVisibleCenter: observation.visibleRawCenter,
-                                selectedNodeID: viewStates.state(for: context)?.selectedNodeID, for: context)
+                                selectedNodeID: viewStates.state(for: context)?.selectedNodeID, for: context, makeCurrent: false)
                         }
                         guard context == viewContext, camera.context == context else { return }
+                        if observation.isGestureEnd { camera.restoringCenter = nil }
+                        if let target = camera.restoringCenter {
+                            guard abs(observation.zoom - camera.zoom) < 0.0001,
+                                  observation.hasReachedRestoredCenter(target) else { return }
+                            camera.restoringCenter = nil
+                        }
                         camera.visibleCenter = observation.visibleRawCenter
                         camera.insertionPoint = observation.visibleRawCenter
                         rememberViewContext()
@@ -1110,6 +1126,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
     private func changeMenuZoom(multiplier: CGFloat = 1, actual: Bool = false) {
         guard camera.owner == ObjectIdentifier(controller), camera.context == viewContext else { return }
+        camera.restoringCenter = nil
         camera.zoom = actual ? 1 : WorkflowCanvasLayoutPolicy.restoredZoom(camera.zoom * multiplier)
         rememberViewContext()
     }
@@ -1421,11 +1438,12 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
 
     private var viewContext: WorkflowCanvasViewContext {
         WorkflowCanvasViewContext(projectID: controller.projectID, rootGraphID: controller.rootGraph?.id,
-            bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init))
+            bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init), instanceID: controller.projectInstanceID)
     }
 
     private func rememberViewContext() {
-        guard camera.owner == ObjectIdentifier(controller), camera.context == viewContext else { return }
+        guard camera.owner == ObjectIdentifier(controller), camera.context == viewContext,
+              camera.restoredOwner == ObjectIdentifier(controller), camera.restoringCenter == nil else { return }
         viewStates.capture(zoom: camera.zoom, rawVisibleCenter: camera.visibleCenter,
             selectedNodeID: controller.selectedNodeID, for: viewContext)
     }
@@ -1437,7 +1455,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         return {
             let current = WorkflowCanvasViewContext(projectID: controller.projectID,
                 rootGraphID: controller.rootGraph?.id,
-                bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init))
+                bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init), instanceID: controller.projectInstanceID)
             guard camera.owner == ObjectIdentifier(controller), camera.context == context,
                   current == context else { return nil }
             return camera.insertionPoint
@@ -1462,16 +1480,36 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                                         width: WorkflowCanvasLayoutPolicy.nodeWidth, height: height))
         }
         guard let fitted = WorkflowCanvasFit.view(for: bounds, viewport: canvasViewport.clip) else { return }
+        camera.restoringCenter = nil
         camera.zoom = fitted.zoom
         rememberViewContext()
         navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: fitted.center)
     }
 
+    private func restoreInitialViewContext() {
+        camera.owner = ObjectIdentifier(controller)
+        if camera.restoredOwner != ObjectIdentifier(controller),
+           let last = viewStates.lastContext(projectID: controller.projectID, instanceID: controller.projectInstanceID),
+           let root = controller.graphs.first(where: { $0.id == last.rootGraphID }) {
+            controller.selectedGraphID = root.id
+            let path = last.bodyPath.map { WorkflowBodyLocation(nodeID: $0.nodeID, slot: $0.slot) }
+            // A removed body is not another body with the same label. Fall back
+            // to this root without showing a stale navigation error or editing it.
+            if (try? WorkflowGraphEditing.body(in: root, path: path)) != nil {
+                for location in path { controller.openBody(nodeID: location.nodeID, slot: location.slot) }
+            }
+        }
+        camera.restoredOwner = ObjectIdentifier(controller)
+        restoreViewContext(viewContext)
+    }
+
     private func restoreViewContext(_ context: WorkflowCanvasViewContext) {
         camera.context = nil
+        camera.restoringCenter = nil
         if let saved = viewStates.state(for: context) {
             camera.zoom = WorkflowCanvasLayoutPolicy.restoredZoom(saved.zoom)
             camera.visibleCenter = saved.rawVisibleCenter
+            camera.restoringCenter = saved.rawVisibleCenter
             navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: saved.rawVisibleCenter)
             controller.selectedNodeID = controller.graph?.nodes.contains(where: { $0.id == saved.selectedNodeID }) == true
                 ? saved.selectedNodeID : nil
