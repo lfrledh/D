@@ -34,7 +34,7 @@ public struct AudioRequest: Codable, Sendable, Equatable {
     public let prompt: String
     public let durationSeconds: Double
     public let seed: UInt64
-    public let parameters: AudioSynthesisParameters
+    public internal(set) var parameters: AudioSynthesisParameters
     public let source: AudioSourceReference?
     public let editRegion: AudioEditRegion?
 

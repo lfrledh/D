@@ -878,6 +878,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                             }
                             Text(String(describing:record.step.node.parameters)).font(.caption).textSelection(.enabled)
                         }
+                        LowMemoryExecutionDetails(records: record.step.executionRecords ?? [])
                         WorkflowTechnicalDetails(value:String(describing:record.address)+"\n"+record.id.uuidString)
                     }.padding(12).frame(maxWidth:.infinity,alignment:.leading)
                 }
@@ -1422,6 +1423,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 Text(controller.pausePendingPresentation.map { workflowProgressText(.init($0), language: languageStore) } ?? (controller.progressMessage.isEmpty && controller.progressPresentation == nil
                      ? workflowText(languageStore, "workflow.status.runningNow")
                      : controller.progressPresentation.map { workflowProgressText($0, language: languageStore) } ?? workflowRecoveryProgressText(controller.progressMessage, language: languageStore)))
+                    .help(controller.progressPresentation?.code == "phase.lowMemoryExecution" ? workflowText(languageStore, "memory.runningHelp") : "")
             } else if !controller.progressMessage.isEmpty || controller.progressPresentation != nil {
                 Text(controller.progressPresentation.map { workflowProgressText($0, language: languageStore) } ?? workflowRecoveryProgressText(controller.progressMessage, language: languageStore)).foregroundStyle(.secondary)
             }
@@ -1912,10 +1914,10 @@ private struct WorkflowNodeInspector: View {
                     Text(workflowText(languageStore, "workflow.parameters.none"))
                         .foregroundStyle(.secondary)
                 }
-                ForEach(definition.fields.filter { !WorkflowParameterPresentation.advanced.contains($0.id) }) { field in
+                ForEach(definition.fields.filter { WorkflowParameterPresentation.isVisible($0, node: node) && !WorkflowParameterPresentation.advanced.contains($0.id) }) { field in
                     fieldEditor(field, node: node, definition: definition)
                 }
-                let advanced = definition.fields.filter { WorkflowParameterPresentation.advanced.contains($0.id) }
+                let advanced = definition.fields.filter { WorkflowParameterPresentation.isVisible($0, node: node) && WorkflowParameterPresentation.advanced.contains($0.id) }
                 if !advanced.isEmpty {
                     DisclosureGroup(workflowText(languageStore, "workspace.advanced")) {
                         ForEach(advanced) { field in fieldEditor(field, node: node, definition: definition) }
@@ -2307,6 +2309,10 @@ private struct WorkflowFieldEditor: View {
             }
             .labelsHidden()
             .disabled(readOnly)
+            if ["loadingStrategy", "memoryStrategySelection"].contains(field.id) {
+                Text(workflowText(languageStore, value.string == "automatic" ? "memory.automaticHelp" : "memory.fixedHelp"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if field.id == "loadingStrategy", WorkflowModelRoutes.rejectsTextLoading(modelIdentity: modelIdentity, strategy: "ssdLayered") {
                 Text(workflowText(languageStore, "workflow.loading.quantizedRestriction"))
                     .font(.caption).foregroundStyle(value.string == "ssdLayered" ? .orange : .secondary)
@@ -3240,7 +3246,17 @@ enum WorkflowCanvasPresentation {
     }
 
     @MainActor static func choiceTitle(fieldID: String, value: String, language: UILanguageStore?) -> String {
+        if ["thinking", "preserveThinking", "reasoningEffort"].contains(fieldID),
+           ["model", "on", "off", "low", "medium", "high", "xhigh"].contains(value) {
+            return workflowText(language, "chat.configurationValue." + value)
+        }
+        if fieldID == "memoryStrategySelection" {
+            return workflowText(language, value == "automatic" ? "memory.automatic" : "memory.fixed")
+        }
         guard fieldID == "loadingStrategy" else { return value }
+        if value == "automatic" { return workflowText(language, "memory.automatic") }
+        if value == "resident" { return workflowText(language, "memory.resident") }
+        if value == "ssdLayered" { return workflowText(language, "memory.layered") }
         let fallback: String
         switch value {
         case "resident": fallback = "常驻内存（精度不变）"
@@ -3256,7 +3272,8 @@ enum WorkflowCanvasPresentation {
         field: WorkflowFieldDefinition,
         language: UILanguageStore?
     ) -> String {
-        workflowText(language, "workflow.operation.\(operationID).field.\(field.id)", fallback: field.title)
+        if ["loadingStrategy", "memoryStrategySelection"].contains(field.id) { return workflowText(language, "memory.loading") }
+        return workflowText(language, "workflow.operation.\(operationID).field.\(field.id)", fallback: field.title)
     }
 
     @MainActor static func portTitle(

@@ -34,6 +34,17 @@ struct WorkflowImageHistoryFailure: LocalizedError {
     private let registry: WorkflowRegistry
     private var bindings: [UUID: WorkflowModelBinding] = [:]
     private var activeRun: InferenceRun?
+    private var recordedExecutionStep: UUID?
+    private var recordedExecutions: [InferenceExecutionRecord] = []
+    public func executionRecords(for stepID: UUID) -> [InferenceExecutionRecord] {
+        recordedExecutionStep == stepID ? recordedExecutions : []
+    }
+    private func retainExecutionRecord(_ run: InferenceRun) async {
+        guard let record = await run.executionRecord() else { return }
+        if let index = recordedExecutions.firstIndex(where: { $0.submissionID == record.submissionID }) {
+            recordedExecutions[index] = record
+        } else { recordedExecutions.append(record) }
+    }
     private var languageCallActive = false
     private var admissionStarted = false
     private var backgroundLanguageAdmission = false
@@ -236,6 +247,9 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         try registry.validate(context.node)
         try registry.validateInputs(context.inputs, node: context.node, connectedPorts: Set(context.inputs.keys))
         languageCallActive = true
+        if recordedExecutionStep != context.stepID {
+            recordedExecutionStep = context.stepID; recordedExecutions.removeAll(keepingCapacity: false)
+        }
         activity.begin(context)
         let activityTask = activityBridge()
         defer { activityTask.cancel() }
@@ -352,6 +366,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         languagePreview = text
         languagePreviewChanged(request.id, text)
         let outcome = await run.outcome(); activeRun = nil
+        await retainExecutionRecord(run)
         if case .failed(let authoritativeFailure) = outcome {
             switch authoritativeFailure {
             case .inputIntegrityChanged, .resourceCleanupUnconfirmed: throw authoritativeFailure
@@ -448,7 +463,8 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         try capability?.validate(input)
         return InferenceRequest(id: context.stepID, model: binding.reference, input: .text(input),
             memoryBudgetBytes: try WorkflowLanguageMessageForm.memoryBudgetBytes(p),
-            priority: backgroundLanguageAdmission ? .background : nil)
+            priority: backgroundLanguageAdmission ? .background : nil,
+            loadingSelection: p["loadingStrategy"] == .text("automatic") ? .automatic : nil)
     }
     /// Uses the same request construction and model lease without entering inference.
     public func previewLanguageTemplate(node: WorkflowNode, inputs: [String: WorkflowValue]) async throws -> TextTemplatePreview {
@@ -574,7 +590,8 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         let budget = context.node.parameters["memoryBudgetGiB"]?.integer ?? 0
         guard budget >= 0, let gib = UInt64(exactly: budget), gib <= UInt64(Int64.max) / 1_073_741_824 else { throw WorkflowIssue("内存预算无效。") }
         let request = InferenceRequest(id: context.stepID, model: binding.reference, input: input,
-            memoryBudgetBytes: gib == 0 ? nil : gib * 1_073_741_824)
+            memoryBudgetBytes: gib == 0 ? nil : gib * 1_073_741_824,
+            loadingSelection: context.node.parameters["loadingStrategy"]?.string == "automatic" || context.node.parameters["memoryStrategySelection"]?.string == "automatic" ? .automatic : nil)
         let (result, _) = try await infer(request, binding: binding)
         guard result.artifacts.count == 1, let artifact = result.artifacts.first, artifact.mediaType == mediaType else { throw WorkflowIssue("模型未交付预期的单个完整媒体。") }
         let data = try await (session.artifactStore ?? store).readWorkflowBackendMedia(artifact, request: request)
@@ -723,7 +740,8 @@ struct WorkflowImageHistoryFailure: LocalizedError {
                     guard let recipe = binding.imageRecipe else { throw WorkflowIssue("此图像实现缺少执行配方。") }
                     let input = try recipe.request(node: context.node, prompt: prompt, seed: UInt64(old.seed)!, references: inputRefs)
                     let request = InferenceRequest(id: attempt, model: binding.reference, input: .image(input),
-                        memoryBudgetBytes: try WorkflowLanguageMessageForm.memoryBudgetBytes(p))
+                        memoryBudgetBytes: try WorkflowLanguageMessageForm.memoryBudgetBytes(p),
+                        loadingSelection: p["loadingStrategy"]?.string == "automatic" ? .automatic : nil)
                     try checkCancellation()
                     let run = try await session.engine.submit(request, backendID: binding.backendID)
                     activeRun = run
@@ -737,6 +755,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
                         }
                     } catch { streamFailure = error; await run.cancel() }
                     let outcome = await run.outcome(); activeRun = nil
+                    await retainExecutionRecord(run)
                     if case .failed(let failure) = outcome {
                         switch failure {
                         case .inputIntegrityChanged, .resourceCleanupUnconfirmed: throw failure

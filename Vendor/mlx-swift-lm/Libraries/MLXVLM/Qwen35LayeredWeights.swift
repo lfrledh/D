@@ -36,6 +36,7 @@ final class Qwen35LayeredWeights {
     private let indexURL: URL?
     private let indexIdentity: Identity?
     private let indexAdmitted: Bool?
+    private let quantization: BaseConfiguration.PerLayerQuantization?
     static let maximumHeaderBytes: UInt64 = 16 * 1024 * 1024
     static let maximumIndexBytes: UInt64 = 4 * 1024 * 1024
 
@@ -74,7 +75,10 @@ final class Qwen35LayeredWeights {
     }
 
     static func identityToken(_ url: URL) throws -> String {
-        let value = try identity(url)
+        token(try identity(url))
+    }
+
+    private static func token(_ value: Identity) -> String {
         return "\(value.device):\(value.inode):\(value.size):" +
             "\(value.modifiedSeconds):\(value.modifiedNanoseconds):" +
             "\(value.changedSeconds):\(value.changedNanoseconds)"
@@ -83,7 +87,10 @@ final class Qwen35LayeredWeights {
     /// Test seam after selection and before lazy MLX arrays are evaluated.
     var beforeSelectedEvaluation: (() throws -> Void)?
 
-    init(directory: URL, fileSelection: ModelFileSelection? = nil) throws {
+    init(directory: URL, fileSelection: ModelFileSelection? = nil,
+         quantization: BaseConfiguration.PerLayerQuantization? = nil,
+         expectedFileIdentities: [String: String]? = nil) throws {
+        self.quantization = quantization
         _ = try Self.identity(directory, directory: true)
         let files: [URL]
         if let fileSelection {
@@ -99,6 +106,13 @@ final class Qwen35LayeredWeights {
         for file in files {
             try Task.checkCancellation()
             identities[file] = try Self.identity(file)
+            if let expectedFileIdentities {
+                let root = directory.standardizedFileURL.path + "/"
+                guard file.standardizedFileURL.path.hasPrefix(root),
+                      expectedFileIdentities[String(file.standardizedFileURL.path.dropFirst(root.count))] == Self.token(identities[file]!) else {
+                    throw Failure.invalid("stage index does not match approved file: " + file.lastPathComponent)
+                }
+            }
             let handle = try Self.openVerified(file, expected: identities[file]!)
             defer { try? handle.close() }
             guard identities[file]!.size >= 8 else {
@@ -164,6 +178,10 @@ final class Qwen35LayeredWeights {
         }
         if (fileSelection?.contains("model.safetensors.index.json") ?? true) && lstat(index.path, &indexStat) == 0 {
             indexIdentity = try Self.identity(index)
+            if let expectedFileIdentities,
+               expectedFileIdentities["model.safetensors.index.json"] != Self.token(indexIdentity!) {
+                throw Failure.invalid("index does not match approved identity")
+            }
             let data = try Self.readBounded(index, maximum: Self.maximumIndexBytes)
             guard try Self.identity(index) == indexIdentity else {
                 throw Failure.invalid("safetensors index changed while reading")
@@ -181,12 +199,18 @@ final class Qwen35LayeredWeights {
                 throw Failure.invalid("index references unknown tensor \(key)")
             }
         }
+        try Self.validatePackedHeaders(entries, quantization: quantization)
         self.identity = identities
         self.entries = entries
         self.metadata = metadata
         self.indexURL = indexIdentity == nil ? nil : index
         self.indexIdentity = indexIdentity
         self.indexAdmitted = fileSelection?.contains("model.safetensors.index.json")
+        for (name, expected) in expectedFileIdentities ?? [:] {
+            guard try Self.identityToken(directory.appendingPathComponent(name)) == expected else {
+                throw Failure.invalid("approved file changed before stage loading: " + name)
+            }
+        }
     }
 
     private static func identity(_ url: URL, directory: Bool = false) throws -> Identity {
@@ -377,7 +401,13 @@ final class Qwen35LayeredWeights {
             let arrays = try loadArrays(url: file)
             var slice: [String: MLXArray] = [:]
             for key in byShard[file]! {
-                guard let array = arrays[key], array.dtype == (entries[key]!.dtype == "BF16" ? .bfloat16 : .float32),
+                let expected: DType = switch entries[key]!.dtype {
+                case "BF16": .bfloat16
+                case "F16": .float16
+                case "U32": .uint32
+                default: .float32
+                }
+                guard let array = arrays[key], array.dtype == expected,
                       array.shape == entries[key]!.shape else {
                     throw Failure.invalid("tensor changed or missing: \(key)")
                 }
@@ -395,6 +425,7 @@ final class Qwen35LayeredWeights {
     func loadResident(into model: Qwen35) throws {
         let (weights, files) = try selected({ !Self.isDecoderKey($0) &&
             !Self.normalized($0).hasPrefix("vision_tower.") }, model: model)
+        try installPackedModules(in: model, weights: weights, prefix: "")
         try model.update(parameters: ModuleParameters.unflattened(weights), verify: [.all])
         try beforeSelectedEvaluation?()
         try checkedEval(model)
@@ -410,6 +441,7 @@ final class Qwen35LayeredWeights {
             guard key.hasPrefix(prefix) else { throw Failure.invalid("wrong layer key \(key)") }
             local[String(key.dropFirst(prefix.count))] = value
         }
+        try installPackedModules(in: layer, weights: local, prefix: prefix)
         try layer.update(parameters: ModuleParameters.unflattened(local), verify: [.all])
         try beforeSelectedEvaluation?()
         try checkedEval(layer)
@@ -424,10 +456,76 @@ final class Qwen35LayeredWeights {
             guard key.hasPrefix(fullPrefix) else { throw Failure.invalid("wrong vision key \(key)") }
             local[String(key.dropFirst(fullPrefix.count))] = value
         }
+        try installPackedModules(in: part, weights: local, prefix: fullPrefix)
         try part.update(parameters: ModuleParameters.unflattened(local), verify: [.all])
         try beforeSelectedEvaluation?()
         try checkedEval(part)
         try verify(files)
+    }
+
+    /// Quantized stages use the same MLX modules and the stored packed tensors as
+    /// resident loading. No full float checkpoint or replacement quantization exists.
+    private func installPackedModules(in module: Module, weights: [String: MLXArray], prefix: String) throws {
+        var updates: [(String, Module)] = []
+        for (name, child) in module.leafModules().flattened() {
+            guard let scales = weights[name + ".scales"] else { continue }
+            guard let q = quantization?.quantization(layer: prefix + name),
+                  let weight = weights[name + ".weight"],
+                  let biases = weights[name + ".biases"],
+                  weight.dtype == .uint32, weight.ndim == 2,
+                  [4, 8].contains(q.bits), [32, 64, 128].contains(q.groupSize), q.mode == .affine else {
+                throw Failure.invalid("invalid packed parameter group: " + prefix + name)
+            }
+            let expected: [Int]
+            if let linear = child as? Linear { expected = linear.weight.shape }
+            else if let embedding = child as? Embedding { expected = embedding.weight.shape }
+            else { throw Failure.invalid("packed tensors target a non-quantizable module: " + prefix + name) }
+            guard expected.count == 2, weight.dim(0) == expected[0],
+                  weight.dim(1) * (32 / q.bits) == expected[1],
+                  expected[1] % q.groupSize == 0,
+                  scales.shape == [expected[0], expected[1] / q.groupSize],
+                  biases.shape == scales.shape, biases.dtype == scales.dtype else {
+                throw Failure.invalid("packed dimensions disagree with module: " + prefix + name)
+            }
+            if let linear = child as? Linear {
+                let bias = weights[name + ".bias"]
+                guard (linear.bias == nil) == (bias == nil),
+                      bias == nil || bias?.shape == linear.bias?.shape else {
+                    throw Failure.invalid("linear bias disagrees with configured module: " + prefix + name)
+                }
+                updates.append((name, QuantizedLinear(weight: weight, bias: weights[name + ".bias"],
+                    scales: scales, biases: biases, groupSize: q.groupSize, bits: q.bits, mode: q.mode)))
+            } else {
+                updates.append((name, QuantizedEmbedding(weight: weight, scales: scales, biases: biases,
+                    groupSize: q.groupSize, bits: q.bits, mode: q.mode)))
+            }
+        }
+        module.update(modules: ModuleChildren.unflattened(updates))
+    }
+
+    private static func validatePackedHeaders(_ entries: [String: Entry],
+                                             quantization: BaseConfiguration.PerLayerQuantization?) throws {
+        let normalizedEntries = Dictionary(entries.map { (normalized($0.key), $0.value) },
+                                           uniquingKeysWith: { first, _ in first })
+        guard normalizedEntries.count == entries.count else { throw Failure.invalid("normalized key collision") }
+        for (name, entry) in normalizedEntries {
+            let quantized = entry.dtype == "U32" || name.hasSuffix(".scales") || name.hasSuffix(".biases")
+            guard quantized else { continue }
+            let prefix = String(name.dropLast(name.split(separator: ".").last!.count + 1))
+            guard let q = quantization?.quantization(layer: prefix),
+                  [4, 8].contains(q.bits), [32, 64, 128].contains(q.groupSize), q.mode == .affine,
+                  let weight = normalizedEntries[prefix + ".weight"],
+                  let scales = normalizedEntries[prefix + ".scales"],
+                  let biases = normalizedEntries[prefix + ".biases"],
+                  weight.dtype == "U32", weight.shape.count == 2,
+                  weight.shape[1] <= Int.max / (32 / q.bits),
+                  scales.shape == [weight.shape[0], weight.shape[1] * (32 / q.bits) / q.groupSize],
+                  weight.shape[1] * (32 / q.bits) % q.groupSize == 0,
+                  ["BF16", "F16"].contains(scales.dtype), biases.dtype == scales.dtype,
+                  biases.shape == scales.shape else {
+                throw Failure.invalid("invalid quantization metadata or parameter group: " + prefix)
+            }
+        }
     }
 
     private func verify(_ files: [URL]) throws {
@@ -475,9 +573,11 @@ final class Qwen35LayeredWeights {
 /// Shared narrow header rules used by the loader and the resource estimator.
 public enum Qwen35LayeredFileValidation {
     /// Official 9B BF16 checkpoints retain these linear-attention parameters in
-    /// FP32. Keep their stored precision; this does not permit quantized tensors.
+    /// FP32. Packed weight groups receive additional config and shape validation.
     public static func byteWidth(name: String, dtype: String) -> UInt64? {
         if dtype == "BF16" { return 2 }
+        if dtype == "U32" && name.hasSuffix(".weight") { return 4 }
+        if dtype == "F16" && (name.hasSuffix(".scales") || name.hasSuffix(".biases")) { return 2 }
         guard dtype == "F32" else { return nil }
         let parts = name.split(separator: ".")
         guard let layer = parts.firstIndex(of: "layers"), layer > 0,

@@ -3,7 +3,11 @@ import DInference
 /// A separate lifetime from the runtime's queue: finished jobs do not accumulate in the scheduler.
 actor RunCompletion {
     private var result: RunOutcome?
+    private var executionRecord: InferenceExecutionRecord?
     private var waiters: [CheckedContinuation<RunOutcome, Never>] = []
+
+    func record(_ value: InferenceExecutionRecord) { executionRecord = value }
+    func record() -> InferenceExecutionRecord? { executionRecord }
 
     func wait() async -> RunOutcome {
         if let result { return result }

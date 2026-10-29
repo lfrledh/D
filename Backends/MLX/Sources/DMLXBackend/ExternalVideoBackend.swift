@@ -6,7 +6,7 @@ import Foundation
 /// Fixed local implementations share DRuntime and the process-wide compute lease.
 /// Only this owner spawns/terminates the process group; the Python driver cannot
 /// create another session. Released compute never deletes an emitted artifact.
-public actor ExternalVideoBackend: InferenceBackend {
+public actor ExternalVideoBackend: InferenceExecutionPlanning {
     public nonisolated let descriptor: BackendDescriptor
     private let configuration: ExternalVideoBackendConfiguration
     private var lease: UUID?
@@ -47,7 +47,17 @@ public actor ExternalVideoBackend: InferenceBackend {
         let (workspace, overflow) = units.multipliedReportingOverflow(by: 96)
         let (total, overflow2) = (baseGiB * 1_073_741_824).addingReportingOverflow(workspace)
         guard !overflow, !overflow2 else { throw InferenceFailure.invalidRequest("Video estimate overflows.") }
-        return ResourceEstimate(peakBytes: total, confidence: .estimated)
+        // LTX 2.3 streams diffusion only; its Gemma3 text tower remains resident.
+        // Exact checkpoint bytes: Adapters/Resources/gemma3-{bf16,q4-test}.json.
+        // Keep an explicit 2 GiB estimated activation/loading allowance for the
+        // fixed 1024-token encoder. This is an estimate, not measured process RSS.
+        let textStage: UInt64
+        switch configuration.profile {
+        case .ltx23BF16Full: textStage = 26_388_550_536 + 2 * 1_073_741_824
+        case .ltx23Q8GemmaQ4: textStage = 8_028_675_248 + 2 * 1_073_741_824
+        default: textStage = 0
+        }
+        return ResourceEstimate(peakBytes: max(total, textStage), confidence: .estimated)
     }
 
     private func inspect(_ request: InferenceRequest) throws -> (VideoRequest, Data) {
@@ -71,13 +81,66 @@ public actor ExternalVideoBackend: InferenceBackend {
         return (video, manifest)
     }
 
+    /// Only called during request admission, never from a view or per-node refresh.
+    /// The existing fixed provider still hashes its exact code-owned inventory before loading.
+    private func planSeal(_ request: InferenceRequest) throws -> ModelExecutionSeal {
+        _ = try inspect(request)
+        var names = [ExternalVideoModelManifest.filename]
+        for component in ["model"] + (configuration.profile.textEncoderRevision == nil ? [] : ["text_encoder"]) {
+            let root = request.model.directory.appendingPathComponent(component)
+            let rootIdentity = try AudioFileSystem.directoryIdentity(root, label: "Video model component")
+            let startCount = names.count
+            var enumerationFailure: Error?
+            guard let enumerator = FileManager.default.enumerator(at: root,
+                includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey],
+                options: [], errorHandler: { _, error in enumerationFailure = error; return false }) else {
+                throw InferenceFailure.invalidRequest("Cannot enumerate the selected video model pack.")
+            }
+            for case let file as URL in enumerator {
+                try Task.checkCancellation()
+                let relative = String(file.path.dropFirst(request.model.directory.path.count + 1))
+                let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey])
+                guard values.isSymbolicLink != true, relative.split(separator: "/").count <= 12,
+                      names.count < 4096 else { throw InferenceFailure.invalidRequest("Video model inventory exceeds the bounded file policy.") }
+                if values.isRegularFile == true { names.append(relative) }
+                else if values.isDirectory != true { throw InferenceFailure.invalidRequest("Unsupported file in video model pack.") }
+            }
+            if let enumerationFailure { throw enumerationFailure }
+            guard names.count > startCount,
+                  try AudioFileSystem.directoryIdentity(root, label: "Video model component recheck") == rootIdentity else {
+                throw InferenceFailure.inputIntegrityChanged("Video model component is empty or changed while planning.")
+            }
+        }
+        return try ModelExecutionSeal.capture(request.model, backend: descriptor, names: names)
+    }
+    public func lowMemoryPlans(for request: InferenceRequest) async throws -> [InferenceExecutionPlan] {
+        let seal = try planSeal(request)
+        return [.init(request: try request.lowMemoryRequest(method: .streaming), method: .streaming,
+            strategyVersion: 1, modelIdentityToken: seal.token)]
+    }
+    public func validate(_ plan: InferenceExecutionPlan, for original: InferenceRequest) async throws {
+        try plan.validateSemantics(original: original)
+        guard plan.method == .streaming, plan.strategyVersion == 1,
+              try planSeal(original).token == plan.modelIdentityToken else {
+            throw InferenceFailure.inputIntegrityChanged("Approved video weights or execution plan changed.")
+        }
+    }
+    public func execute(_ plan: InferenceExecutionPlan, for original: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await validate(plan, for: original)
+        return try await execute(plan.request, expectedPlan: plan, emit: emit)
+    }
     public func execute(_ request: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await execute(request, expectedPlan: nil, emit: emit)
+    }
+    private func execute(_ request: InferenceRequest, expectedPlan: InferenceExecutionPlan?,
                         emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         guard !executing, lease == nil, drained else { throw InferenceFailure.backendFailed("Previous video execution has not been released.") }
         executing = true
         defer { executing = false }
         do {
-            let result = try await executeOwned(request, emit: emit)
+            let result = try await executeOwned(request, expectedPlan: expectedPlan, emit: emit)
             try finishAccessAfterDrain()
             return result
         } catch {
@@ -102,14 +165,20 @@ public actor ExternalVideoBackend: InferenceBackend {
         try access.finish()
     }
 
-    private func executeOwned(_ request: InferenceRequest,
+    private func executeOwned(_ request: InferenceRequest, expectedPlan: InferenceExecutionPlan?,
                               emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         try Task.checkCancellation()
         let (video, manifest) = try inspect(request)
         let manifestURL = request.model.directory.appendingPathComponent(ExternalVideoModelManifest.filename)
         let (frozenManifest, manifestIdentity) = try AudioFileSystem.readRegularFile(manifestURL, label: "video manifest snapshot", maximumBytes: 16_384)
         guard frozenManifest == manifest else { throw InferenceFailure.inputIntegrityChanged("Video pack changed during admission.") }
+        if let expectedPlan, try planSeal(request).token != expectedPlan.modelIdentityToken {
+            throw InferenceFailure.inputIntegrityChanged("Approved video weights changed before loading.")
+        }
         let token = UUID(); try await MLXExecutionLease.shared.acquire(token); lease = token
+        if let expectedPlan, try planSeal(request).token != expectedPlan.modelIdentityToken {
+            throw InferenceFailure.inputIntegrityChanged("Approved video weights changed while waiting for compute.")
+        }
         if request.model.directory.startAccessingSecurityScopedResource() { retainedModelScope = request.model.directory }
         let scopedFrames = [video.firstFrame, video.lastFrame].compactMap { $0?.url }
             .filter { $0.startAccessingSecurityScopedResource() }
@@ -172,6 +241,10 @@ public actor ExternalVideoBackend: InferenceBackend {
                 throw InferenceFailure.inputIntegrityChanged("Video frozen input verification failed: \(error.localizedDescription)")
             }
         }.value
+        if let expectedPlan {
+            // Check all drained outcomes before publishing, including cancellation.
+            try await Task.detached { try await self.validate(expectedPlan, for: request) }.value
+        }
         try finishAccessAfterDrain()
         switch terminal.reason {
         case .cancelled: throw CancellationError()

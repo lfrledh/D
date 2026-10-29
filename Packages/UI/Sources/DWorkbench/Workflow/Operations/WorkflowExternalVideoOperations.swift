@@ -21,6 +21,7 @@ enum WorkflowExternalVideoOperations {
             .init("steps", "步数", .integer, .integer(h3 ? 20 : 30)),
             .init("guidance", h3 ? "引导（固定1）" : "CFG 引导", .decimal, .decimal(h3 ? 1 : 3)),
             .init("seed", "种子", .text(multiline: false), .text("42")),
+            .init("memoryStrategySelection", "加载策略选择", .choice(["fixed", "automatic"]), .text("fixed")),
             .init("streamWeights", "流式加载扩散权重", .flag, .flag(true)),
             .init("memoryBudgetGiB", "显式内存预算 GiB（0使用运行时策略）", .integer, .integer(0)),
             WorkflowLanguageOperations.modelField,

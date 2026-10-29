@@ -517,7 +517,7 @@
                      return MambaCache()
                  }
                  if let maxKVSize {
-@@ -898,16 +991,63 @@
+@@ -898,16 +991,68 @@
  // MARK: - Model
  
  public class Qwen35: Module, VLMModel {
@@ -554,11 +554,16 @@
 +    public func loadLayeredWeights(from directory: URL,
 +                                   expectedConfiguration: Data? = nil,
 +                                   expectedConfigurationIdentity: String? = nil,
-+                                   fileSelection: ModelFileSelection? = nil) throws {
++                                   fileSelection: ModelFileSelection? = nil,
++                                   expectedFileIdentities: [String: String]? = nil) throws {
 +        guard languageModel.model.layered else {
 +            throw Qwen35LayeredWeights.Failure.invalid("model was constructed for resident loading")
 +        }
-+        let weights = try Qwen35LayeredWeights(directory: directory, fileSelection: fileSelection)
++        let quantization = try expectedConfiguration.map {
++            try JSONDecoder().decode(BaseConfiguration.self, from: $0).perLayerQuantization
++        } ?? nil
++        let weights = try Qwen35LayeredWeights(directory: directory, fileSelection: fileSelection,
++                                             quantization: quantization, expectedFileIdentities: expectedFileIdentities)
 +        if let expectedConfiguration {
 +            let file = directory.appendingPathComponent("config.json")
 +            let current = try Qwen35LayeredWeights.readBounded(file, maximum: 4 * 1024 * 1024)
@@ -582,7 +587,7 @@
      }
  
      public var vocabularySize: Int { config.vocabSize }
-@@ -982,7 +1122,7 @@
+@@ -982,7 +1127,7 @@
      public func prepare(
          _ input: LMInput,
          cache: [any KVCache],
@@ -591,7 +596,7 @@
      ) throws -> PrepareResult {
          let inputIds = input.text.tokens
  
-@@ -990,7 +1130,7 @@
+@@ -990,7 +1135,7 @@
          var imageFrames: [THW]?
          var videoFrames: [THW]?
  
@@ -600,7 +605,7 @@
          var pixelParts: [MLXArray] = []
  
          if let image = input.image {
-@@ -1012,7 +1152,7 @@
+@@ -1012,7 +1157,7 @@
                  .nilIfEmpty
          {
              let textEmbeds = languageModel.model.embedTokens(inputIds)
@@ -609,7 +614,7 @@
              let visionFeatures = visionHidden.asType(textEmbeds.dtype)
  
              let (mergedEmbeds, _) = try mergeInputIdsWithImageFeatures(
-@@ -1026,6 +1166,36 @@
+@@ -1026,6 +1171,36 @@
          }
  
          let typedCache = castCache(cache)
@@ -646,7 +651,7 @@
          let output = withPreparedCache(cache, lengths: input.text.sequenceLengths) {
              languageModel(
                  inputIds,
-@@ -1041,6 +1211,79 @@
+@@ -1041,6 +1216,79 @@
          }
  
          return .logits(output)
@@ -726,7 +731,7 @@
      }
  
      public func callAsFunction(
-@@ -1118,9 +1361,12 @@
+@@ -1118,9 +1366,12 @@
              sanitized[key] = value
          }
  
@@ -1005,7 +1010,7 @@
                      remainVideos -= 1
 --- /dev/null
 +++ b/Libraries/MLXVLM/Qwen35LayeredWeights.swift
-@@ -0,0 +1,573 @@
+@@ -0,0 +1,673 @@
 +import Foundation
 +import Darwin
 +import CoreFoundation
@@ -1044,6 +1049,7 @@
 +    private let indexURL: URL?
 +    private let indexIdentity: Identity?
 +    private let indexAdmitted: Bool?
++    private let quantization: BaseConfiguration.PerLayerQuantization?
 +    static let maximumHeaderBytes: UInt64 = 16 * 1024 * 1024
 +    static let maximumIndexBytes: UInt64 = 4 * 1024 * 1024
 +
@@ -1082,7 +1088,10 @@
 +    }
 +
 +    static func identityToken(_ url: URL) throws -> String {
-+        let value = try identity(url)
++        token(try identity(url))
++    }
++
++    private static func token(_ value: Identity) -> String {
 +        return "\(value.device):\(value.inode):\(value.size):" +
 +            "\(value.modifiedSeconds):\(value.modifiedNanoseconds):" +
 +            "\(value.changedSeconds):\(value.changedNanoseconds)"
@@ -1091,7 +1100,10 @@
 +    /// Test seam after selection and before lazy MLX arrays are evaluated.
 +    var beforeSelectedEvaluation: (() throws -> Void)?
 +
-+    init(directory: URL, fileSelection: ModelFileSelection? = nil) throws {
++    init(directory: URL, fileSelection: ModelFileSelection? = nil,
++         quantization: BaseConfiguration.PerLayerQuantization? = nil,
++         expectedFileIdentities: [String: String]? = nil) throws {
++        self.quantization = quantization
 +        _ = try Self.identity(directory, directory: true)
 +        let files: [URL]
 +        if let fileSelection {
@@ -1107,6 +1119,13 @@
 +        for file in files {
 +            try Task.checkCancellation()
 +            identities[file] = try Self.identity(file)
++            if let expectedFileIdentities {
++                let root = directory.standardizedFileURL.path + "/"
++                guard file.standardizedFileURL.path.hasPrefix(root),
++                      expectedFileIdentities[String(file.standardizedFileURL.path.dropFirst(root.count))] == Self.token(identities[file]!) else {
++                    throw Failure.invalid("stage index does not match approved file: " + file.lastPathComponent)
++                }
++            }
 +            let handle = try Self.openVerified(file, expected: identities[file]!)
 +            defer { try? handle.close() }
 +            guard identities[file]!.size >= 8 else {
@@ -1172,6 +1191,10 @@
 +        }
 +        if (fileSelection?.contains("model.safetensors.index.json") ?? true) && lstat(index.path, &indexStat) == 0 {
 +            indexIdentity = try Self.identity(index)
++            if let expectedFileIdentities,
++               expectedFileIdentities["model.safetensors.index.json"] != Self.token(indexIdentity!) {
++                throw Failure.invalid("index does not match approved identity")
++            }
 +            let data = try Self.readBounded(index, maximum: Self.maximumIndexBytes)
 +            guard try Self.identity(index) == indexIdentity else {
 +                throw Failure.invalid("safetensors index changed while reading")
@@ -1189,12 +1212,18 @@
 +                throw Failure.invalid("index references unknown tensor \(key)")
 +            }
 +        }
++        try Self.validatePackedHeaders(entries, quantization: quantization)
 +        self.identity = identities
 +        self.entries = entries
 +        self.metadata = metadata
 +        self.indexURL = indexIdentity == nil ? nil : index
 +        self.indexIdentity = indexIdentity
 +        self.indexAdmitted = fileSelection?.contains("model.safetensors.index.json")
++        for (name, expected) in expectedFileIdentities ?? [:] {
++            guard try Self.identityToken(directory.appendingPathComponent(name)) == expected else {
++                throw Failure.invalid("approved file changed before stage loading: " + name)
++            }
++        }
 +    }
 +
 +    private static func identity(_ url: URL, directory: Bool = false) throws -> Identity {
@@ -1385,7 +1414,13 @@
 +            let arrays = try loadArrays(url: file)
 +            var slice: [String: MLXArray] = [:]
 +            for key in byShard[file]! {
-+                guard let array = arrays[key], array.dtype == (entries[key]!.dtype == "BF16" ? .bfloat16 : .float32),
++                let expected: DType = switch entries[key]!.dtype {
++                case "BF16": .bfloat16
++                case "F16": .float16
++                case "U32": .uint32
++                default: .float32
++                }
++                guard let array = arrays[key], array.dtype == expected,
 +                      array.shape == entries[key]!.shape else {
 +                    throw Failure.invalid("tensor changed or missing: \(key)")
 +                }
@@ -1403,6 +1438,7 @@
 +    func loadResident(into model: Qwen35) throws {
 +        let (weights, files) = try selected({ !Self.isDecoderKey($0) &&
 +            !Self.normalized($0).hasPrefix("vision_tower.") }, model: model)
++        try installPackedModules(in: model, weights: weights, prefix: "")
 +        try model.update(parameters: ModuleParameters.unflattened(weights), verify: [.all])
 +        try beforeSelectedEvaluation?()
 +        try checkedEval(model)
@@ -1418,6 +1454,7 @@
 +            guard key.hasPrefix(prefix) else { throw Failure.invalid("wrong layer key \(key)") }
 +            local[String(key.dropFirst(prefix.count))] = value
 +        }
++        try installPackedModules(in: layer, weights: local, prefix: prefix)
 +        try layer.update(parameters: ModuleParameters.unflattened(local), verify: [.all])
 +        try beforeSelectedEvaluation?()
 +        try checkedEval(layer)
@@ -1432,10 +1469,76 @@
 +            guard key.hasPrefix(fullPrefix) else { throw Failure.invalid("wrong vision key \(key)") }
 +            local[String(key.dropFirst(fullPrefix.count))] = value
 +        }
++        try installPackedModules(in: part, weights: local, prefix: fullPrefix)
 +        try part.update(parameters: ModuleParameters.unflattened(local), verify: [.all])
 +        try beforeSelectedEvaluation?()
 +        try checkedEval(part)
 +        try verify(files)
++    }
++
++    /// Quantized stages use the same MLX modules and the stored packed tensors as
++    /// resident loading. No full float checkpoint or replacement quantization exists.
++    private func installPackedModules(in module: Module, weights: [String: MLXArray], prefix: String) throws {
++        var updates: [(String, Module)] = []
++        for (name, child) in module.leafModules().flattened() {
++            guard let scales = weights[name + ".scales"] else { continue }
++            guard let q = quantization?.quantization(layer: prefix + name),
++                  let weight = weights[name + ".weight"],
++                  let biases = weights[name + ".biases"],
++                  weight.dtype == .uint32, weight.ndim == 2,
++                  [4, 8].contains(q.bits), [32, 64, 128].contains(q.groupSize), q.mode == .affine else {
++                throw Failure.invalid("invalid packed parameter group: " + prefix + name)
++            }
++            let expected: [Int]
++            if let linear = child as? Linear { expected = linear.weight.shape }
++            else if let embedding = child as? Embedding { expected = embedding.weight.shape }
++            else { throw Failure.invalid("packed tensors target a non-quantizable module: " + prefix + name) }
++            guard expected.count == 2, weight.dim(0) == expected[0],
++                  weight.dim(1) * (32 / q.bits) == expected[1],
++                  expected[1] % q.groupSize == 0,
++                  scales.shape == [expected[0], expected[1] / q.groupSize],
++                  biases.shape == scales.shape, biases.dtype == scales.dtype else {
++                throw Failure.invalid("packed dimensions disagree with module: " + prefix + name)
++            }
++            if let linear = child as? Linear {
++                let bias = weights[name + ".bias"]
++                guard (linear.bias == nil) == (bias == nil),
++                      bias == nil || bias?.shape == linear.bias?.shape else {
++                    throw Failure.invalid("linear bias disagrees with configured module: " + prefix + name)
++                }
++                updates.append((name, QuantizedLinear(weight: weight, bias: weights[name + ".bias"],
++                    scales: scales, biases: biases, groupSize: q.groupSize, bits: q.bits, mode: q.mode)))
++            } else {
++                updates.append((name, QuantizedEmbedding(weight: weight, scales: scales, biases: biases,
++                    groupSize: q.groupSize, bits: q.bits, mode: q.mode)))
++            }
++        }
++        module.update(modules: ModuleChildren.unflattened(updates))
++    }
++
++    private static func validatePackedHeaders(_ entries: [String: Entry],
++                                             quantization: BaseConfiguration.PerLayerQuantization?) throws {
++        let normalizedEntries = Dictionary(entries.map { (normalized($0.key), $0.value) },
++                                           uniquingKeysWith: { first, _ in first })
++        guard normalizedEntries.count == entries.count else { throw Failure.invalid("normalized key collision") }
++        for (name, entry) in normalizedEntries {
++            let quantized = entry.dtype == "U32" || name.hasSuffix(".scales") || name.hasSuffix(".biases")
++            guard quantized else { continue }
++            let prefix = String(name.dropLast(name.split(separator: ".").last!.count + 1))
++            guard let q = quantization?.quantization(layer: prefix),
++                  [4, 8].contains(q.bits), [32, 64, 128].contains(q.groupSize), q.mode == .affine,
++                  let weight = normalizedEntries[prefix + ".weight"],
++                  let scales = normalizedEntries[prefix + ".scales"],
++                  let biases = normalizedEntries[prefix + ".biases"],
++                  weight.dtype == "U32", weight.shape.count == 2,
++                  weight.shape[1] <= Int.max / (32 / q.bits),
++                  scales.shape == [weight.shape[0], weight.shape[1] * (32 / q.bits) / q.groupSize],
++                  weight.shape[1] * (32 / q.bits) % q.groupSize == 0,
++                  ["BF16", "F16"].contains(scales.dtype), biases.dtype == scales.dtype,
++                  biases.shape == scales.shape else {
++                throw Failure.invalid("invalid quantization metadata or parameter group: " + prefix)
++            }
++        }
 +    }
 +
 +    private func verify(_ files: [URL]) throws {
@@ -1483,9 +1586,11 @@
 +/// Shared narrow header rules used by the loader and the resource estimator.
 +public enum Qwen35LayeredFileValidation {
 +    /// Official 9B BF16 checkpoints retain these linear-attention parameters in
-+    /// FP32. Keep their stored precision; this does not permit quantized tensors.
++    /// FP32. Packed weight groups receive additional config and shape validation.
 +    public static func byteWidth(name: String, dtype: String) -> UInt64? {
 +        if dtype == "BF16" { return 2 }
++        if dtype == "U32" && name.hasSuffix(".weight") { return 4 }
++        if dtype == "F16" && (name.hasSuffix(".scales") || name.hasSuffix(".biases")) { return 2 }
 +        guard dtype == "F32" else { return nil }
 +        let parts = name.split(separator: ".")
 +        guard let layer = parts.firstIndex(of: "layers"), layer > 0,
@@ -1581,33 +1686,54 @@
 +}
 --- a/Libraries/MLXVLM/VLMModelFactory.swift
 +++ b/Libraries/MLXVLM/VLMModelFactory.swift
-@@ -311,11 +311,14 @@
+@@ -311,11 +311,15 @@
  
      public init(
          typeRegistry: ModelTypeRegistry<LanguageModel>, processorRegistry: ProcessorTypeRegistry,
 -        modelRegistry: AbstractModelRegistry
 +        modelRegistry: AbstractModelRegistry, layeredQwen35: Bool = false,
-+        fileSelection: ModelFileSelection? = nil
++        fileSelection: ModelFileSelection? = nil, expectedModelIdentities: [String: String]? = nil
      ) {
          self.typeRegistry = typeRegistry
          self.processorRegistry = processorRegistry
          self.modelRegistry = modelRegistry
 +        self.layeredQwen35 = layeredQwen35
 +        self.fileSelection = fileSelection
++        self.expectedModelIdentities = expectedModelIdentities
      }
  
      /// Shared instance with default behavior.
-@@ -331,6 +334,8 @@
+@@ -331,21 +335,45 @@
  
      /// registry of model id to configuration, e.g. `mlx-community/paligemma-3b-mix-448-8bit`
      public let modelRegistry: AbstractModelRegistry
 +    private let layeredQwen35: Bool
 +    private let fileSelection: ModelFileSelection?
++    private let expectedModelIdentities: [String: String]?
++
++    private func verifyExpectedFiles(in directory: URL) throws {
++        for (name, expected) in expectedModelIdentities ?? [:] {
++            guard try Qwen35LayeredFileValidation.identity(directory.appendingPathComponent(name)) == expected else {
++                throw Qwen35LayeredWeights.Failure.invalid("approved file changed: " + name)
++            }
++        }
++    }
  
      public func _load(
          configuration: ResolvedModelConfiguration,
-@@ -342,10 +347,18 @@
+         tokenizerLoader: any TokenizerLoader
+     ) async throws -> sending ModelContext {
+         let modelDirectory = configuration.modelDirectory
++        try verifyExpectedFiles(in: modelDirectory)
+ 
+         // Load config.json once and decode for both base config and model-specific config
          let configurationURL = modelDirectory.appending(component: "config.json")
++        let configurationIdentity: String? = try layeredQwen35
++            ? Qwen35LayeredFileValidation.identity(configurationURL) : nil
++        if let expectedModelIdentities,
++           configurationIdentity != expectedModelIdentities["config.json"] {
++            throw Qwen35LayeredWeights.Failure.invalid("configuration does not match approved identity")
++        }
          let configData: Data
          do {
 -            configData = try Data(contentsOf: configurationURL)
@@ -1618,23 +1744,21 @@
              throw ModelFactoryError.configurationFileError(
                  configurationURL.lastPathComponent, configuration.name, error)
 +        }
-+        let configurationIdentity: String?
-+        if layeredQwen35 {
-+            configurationIdentity = try Qwen35LayeredFileValidation.identity(configurationURL)
-+        } else {
-+            configurationIdentity = nil
++        if let configurationIdentity,
++           try Qwen35LayeredFileValidation.identity(configurationURL) != configurationIdentity {
++            throw Qwen35LayeredWeights.Failure.invalid("configuration changed while reading")
          }
          let baseConfig: BaseConfiguration
          do {
-@@ -357,8 +370,16 @@
+@@ -357,8 +385,16 @@
  
          let model: LanguageModel
          do {
 -            model = try await typeRegistry.createModel(
 -                configuration: configData, modelType: baseConfig.modelType)
 +            if layeredQwen35 {
-+                guard baseConfig.modelType == "qwen3_5", baseConfig.perLayerQuantization == nil else {
-+                    throw Qwen35LayeredWeights.Failure.invalid("only unquantized Qwen3.5 supports layered loading")
++                guard baseConfig.modelType == "qwen3_5" else {
++                    throw Qwen35LayeredWeights.Failure.invalid("only dense Qwen3.5 supports layered loading")
 +                }
 +                let config = try Qwen35LayeredFileValidation.configuration(configData)
 +                model = Qwen35(config, layered: true)
@@ -1645,7 +1769,7 @@
          } catch let error as DecodingError {
              throw ModelFactoryError.configurationDecodingError(
                  configurationURL.lastPathComponent, configuration.name, error)
-@@ -367,12 +388,23 @@
+@@ -367,12 +403,23 @@
          // Load EOS token IDs from config.json, with optional override from generation_config.json
          var eosTokenIds = Set(baseConfig.eosTokenIds?.values ?? [])
          let generationConfigURL = modelDirectory.appending(component: "generation_config.json")
@@ -1673,7 +1797,7 @@
          if let genEosIds = generationConfig?.eosTokenIds?.values {
              eosTokenIds = Set(genEosIds)  // Override per Python mlx-lm behavior
          }
-@@ -393,11 +425,18 @@
+@@ -393,11 +440,19 @@
          // but the config file is small and model loading is not a high-concurrency path.
          async let tokenizerTask = tokenizerLoader.load(
              from: configuration.tokenizerDirectory)
@@ -1688,7 +1812,8 @@
 +            try layered.loadLayeredWeights(from: modelDirectory,
 +                                           expectedConfiguration: configData,
 +                                           expectedConfigurationIdentity: configurationIdentity,
-+                                           fileSelection: fileSelection)
++                                           fileSelection: fileSelection,
++                                           expectedFileIdentities: expectedModelIdentities)
 +        } else {
 +            try loadWeights(modelDirectory: modelDirectory, model: model,
 +                perLayerQuantization: baseConfig.perLayerQuantization,
@@ -1697,7 +1822,15 @@
  
          let tokenizer = try await tokenizerTask
          let processorConfigData: Data
-@@ -457,15 +496,20 @@
+@@ -441,6 +496,7 @@
+             eosTokenIds: mutableConfiguration.eosTokenIds,
+             toolCallFormat: mutableConfiguration.toolCallFormat)
+ 
++        try verifyExpectedFiles(in: modelDirectory)
+         return .init(
+             configuration: modelConfig, model: model, processor: processor,
+             tokenizer: tokenizer)
+@@ -457,15 +513,20 @@
  /// Loads processor configuration, preferring preprocessor_config.json over processor_config.json.
  /// Marked async to enable parallel scheduling via async let, though the underlying I/O is synchronous.
  /// Throws ProcessorConfigError wrapping any underlying error with the filename.
@@ -1736,7 +1869,7 @@
          // source compile of swift-syntax.
 --- /dev/null
 +++ b/Tests/MLXLMTests/Qwen35LayeredTests.swift
-@@ -0,0 +1,532 @@
+@@ -0,0 +1,571 @@
 +import Foundation
 +import MLX
 +import MLXLMCommon
@@ -1769,20 +1902,39 @@
 +        return try Qwen35LayeredFileValidation.configuration(Data(json.utf8))
 +    }
 +
-+    static func make(originalLayout: Bool = false) throws -> Self {
++    static func make(originalLayout: Bool = false, bits: Int? = nil, mixed: Bool = false) throws -> Self {
 +        let config = try configuration()
 +        let resident = withRandomState(MLXRandom.RandomState(seed: 17)) { Qwen35(config) }
-+        let weights = Dictionary(uniqueKeysWithValues: resident.parameters().flattened().map {
++        let floatWeights = Dictionary(uniqueKeysWithValues: resident.parameters().flattened().map {
 +            ($0.0, $0.1.asType($0.0.hasSuffix(".linear_attn.A_log") || $0.0.hasSuffix(".linear_attn.norm.weight") ? .float32 : .bfloat16))
 +        })
-+        try resident.update(parameters: ModuleParameters.unflattened(weights), verify: [.all])
++        try resident.update(parameters: ModuleParameters.unflattened(floatWeights), verify: [.all])
++        var configurationData: Data?
++        if let bits {
++            quantize(model: resident, filter: { path, child -> (groupSize: Int, bits: Int, mode: QuantizationMode)? in
++                guard child is Linear || child is Embedding else { return nil }
++                if mixed && path == "language_model.lm_head" { return nil }
++                return (64, mixed && path == "language_model.model.embed_tokens" ? 8 : bits, .affine)
++            })
++            var quantization: [String: Any] = ["group_size": 64, "bits": bits]
++            if mixed {
++                quantization["language_model.lm_head"] = false
++                quantization["language_model.model.embed_tokens"] = ["group_size": 64, "bits": 8]
++            }
++            configurationData = try JSONSerialization.data(withJSONObject: [
++                "model_type": "qwen3_5", "quantization": quantization])
++        }
 +        try checkedEval(resident)
++        let weights = Dictionary(uniqueKeysWithValues: resident.parameters().flattened())
 +        resident.evaluateResidentLayersForComparison = true
 +        guard let root = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] else {
 +            throw Qwen35LayeredWeights.Failure.invalid("D_TEST_TEMP_DIR is required for this test")
 +        }
 +        let directory = URL(fileURLWithPath: root).appendingPathComponent(UUID().uuidString)
 +        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
++        if let configurationData {
++            try configurationData.write(to: directory.appendingPathComponent("config.json"))
++        }
 +        var shards = [[String: MLXArray](), [String: MLXArray]()]
 +        var map: [String: String] = [:]
 +        for (index, key) in weights.keys.sorted().enumerated() {
@@ -1820,7 +1972,7 @@
 +        try JSONSerialization.data(withJSONObject: index).write(to:
 +            directory.appendingPathComponent("model.safetensors.index.json"))
 +        let layered = Qwen35(config, layered: true)
-+        try layered.loadLayeredWeights(from: directory)
++        try layered.loadLayeredWeights(from: directory, expectedConfiguration: configurationData)
 +        return Self(resident: resident, layered: layered, directory: directory)
 +    }
 +}
@@ -1876,9 +2028,9 @@
 +}
 +
 +@Suite(.serialized) struct QwenLayeredTests {
-+@Test("Three linear and one attention block match BF16 resident prefill and decode")
-+func qwenLayeredMatchesResident() throws {
-+    let fixture = try TinyQwenFixture.make()
++@Test("Same BF16/Q4/Q8 checkpoint matches resident prefill and decode", arguments: [0, 4, 8, 48])
++func qwenLayeredMatchesResident(mode: Int) throws {
++    let fixture = try TinyQwenFixture.make(bits: mode == 0 ? nil : (mode == 48 ? 4 : mode), mixed: mode == 48)
 +    defer { try? FileManager.default.removeItem(at: fixture.directory) }
 +    #expect(fixture.layered.loraLayers.isEmpty)
 +    #expect(!fixture.layered.layeredVisionIsResident)
@@ -1912,6 +2064,26 @@
 +    #expect((layeredCache[0] as? MambaCache)?[0] != nil)
 +    #expect((layeredCache[0] as? MambaCache)?[1] != nil)
 +    #expect(!fixture.layered.layeredVisionIsResident)
++}
++
++@Test("Packed headers require matching quantization and approved shard identities")
++func qwenPackedMetadataAndSealAreRequired() throws {
++    let fixture = try TinyQwenFixture.make(bits: 4)
++    defer { try? FileManager.default.removeItem(at: fixture.directory) }
++    let config = try Data(contentsOf: fixture.directory.appendingPathComponent("config.json"))
++    let quantization = try JSONDecoder().decode(BaseConfiguration.self, from: config).perLayerQuantization
++    #expect(throws: (any Error).self) { _ = try Qwen35LayeredWeights(directory: fixture.directory) }
++    let invalid = BaseConfiguration.PerLayerQuantization(quantization: .init(groupSize: 7, bits: 4), perLayerQuantization: [:])
++    #expect(throws: (any Error).self) { _ = try Qwen35LayeredWeights(directory: fixture.directory, quantization: invalid) }
++    let names = try FileManager.default.contentsOfDirectory(atPath: fixture.directory.path)
++    let seal = try Dictionary(uniqueKeysWithValues: names.map { ($0, try Qwen35LayeredFileValidation.identity(fixture.directory.appendingPathComponent($0))) })
++    _ = try Qwen35LayeredWeights(directory: fixture.directory, quantization: quantization, expectedFileIdentities: seal)
++    let shard = fixture.directory.appendingPathComponent("model-00001-of-00002.safetensors")
++    let replacement = fixture.directory.appendingPathComponent("replacement")
++    try Data(contentsOf: shard).write(to: replacement)
++    try FileManager.default.removeItem(at: shard)
++    try FileManager.default.moveItem(at: replacement, to: shard)
++    #expect(throws: (any Error).self) { _ = try Qwen35LayeredWeights(directory: fixture.directory, quantization: quantization, expectedFileIdentities: seal) }
 +}
 +
 +@Test("Missing or changed layer shard throws before a decode completes")

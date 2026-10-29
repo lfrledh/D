@@ -30,6 +30,7 @@ public struct WorkbenchSession: Sendable {
     public let shutdown: @Sendable () async -> Void
     public let cleanup: @Sendable () async throws -> Void
     public let validateModel: @Sendable (URL) async throws -> Void
+    public let lowMemoryDecisions: LowMemoryDecisionStore?
 
     /// A workspace may drain its own requests, but must not shut down the App runtime.
     public func borrowed(artifactStore: ProjectStore) -> Self {
@@ -42,7 +43,7 @@ public struct WorkbenchSession: Sendable {
             audioCapability: audioCapability, musicCapability: musicCapability,
             videoBackendID: videoBackendID, validateVideoModel: validateVideoModel,
             videoCapability: videoCapability, videoAdapters: videoAdapters, modelAdapters: modelAdapters, defaultMemoryBudgetBytes: defaultMemoryBudgetBytes,
-            pitchBackendID: pitchBackendID, pitchModel: pitchModel)
+            pitchBackendID: pitchBackendID, pitchModel: pitchModel, lowMemoryDecisions: lowMemoryDecisions)
         value.artifactStore = artifactStore
         return value
     }
@@ -69,7 +70,9 @@ public struct WorkbenchSession: Sendable {
                 videoAdapters: [WorkflowVideoAdapter] = [],
                 modelAdapters: [WorkflowModelAdapter] = [],
                 defaultMemoryBudgetBytes: UInt64 = 12 * 1024 * 1024 * 1024,
-                pitchBackendID: String? = nil, pitchModel: ModelReference? = nil) {
+                pitchBackendID: String? = nil, pitchModel: ModelReference? = nil,
+                lowMemoryDecisions: LowMemoryDecisionStore? = nil) {
+        self.lowMemoryDecisions = lowMemoryDecisions
         self.pitchBackendID = pitchBackendID
         self.pitchModel = pitchModel
         self.videoBackendID = videoBackendID
@@ -105,19 +108,23 @@ public struct WorkbenchRuntimeStatus: Sendable {
     /// D-owned display identity, separate from a backend's original phase text.
     public let phaseCode: String?
     public let queuedRunIDs: [UUID]
+    public let lowMemoryMethod: LowMemoryMethod?
 
-    public init(activeRunID: UUID?, phase: String?, queuedRunIDs: [UUID], state: JobState? = nil, phaseCode: String? = nil) {
+    public init(activeRunID: UUID?, phase: String?, queuedRunIDs: [UUID], state: JobState? = nil,
+                phaseCode: String? = nil, lowMemoryMethod: LowMemoryMethod? = nil) {
         self.activeRunID = activeRunID
         self.phase = phase
         self.state = state
         self.phaseCode = phaseCode
         self.queuedRunIDs = queuedRunIDs
+        self.lowMemoryMethod = lowMemoryMethod
     }
 }
 
 public extension WorkbenchRuntimeStatus {
     func phaseCode(for runID: UUID) -> String? {
         if activeRunID == runID {
+            if lowMemoryMethod != nil && state != .cancelling && state != .releasing { return "lowMemoryExecution" }
             if let phaseCode { return phaseCode }
             return state.map { $0 == .generating ? "running" : $0.rawValue }
         }

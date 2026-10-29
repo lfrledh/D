@@ -1164,8 +1164,8 @@
     {
       "path": "Libraries/MLXVLM/Models/Qwen35.swift",
       "upstreamSHA256": "94ece218b65aa528373dde25347513b6758db6a59f82f175f2dde48c2aebc49e",
-      "sha256": "e5fe02839a65e4b85513f8840884eff1efc6b27addd9d2f61ba49de7e08234cd",
-      "size": 57450
+      "sha256": "02029db72103c449d474ed4bfa163df7cc1689b100f8dcd25c843fcfdd6aa4ca",
+      "size": 57823
     },
     {
       "path": "Libraries/MLXVLM/Models/Qwen35MoE.swift",
@@ -1194,8 +1194,8 @@
     {
       "path": "Libraries/MLXVLM/Qwen35LayeredWeights.swift",
       "upstreamSHA256": null,
-      "sha256": "c92eb44f7addf9ca6e2c0b43cc1625b982ed7acddf4946ab96b667425124694d",
-      "size": 27375,
+      "sha256": "dd32cbe82ec4b9ca3d7b3bca5a80d28a43b452f4a7b49504d2f70d7efd193628",
+      "size": 33609,
       "origin": "D local addition"
     },
     {
@@ -1213,8 +1213,8 @@
     {
       "path": "Libraries/MLXVLM/VLMModelFactory.swift",
       "upstreamSHA256": "f754278a81c182a60dfdbab4871fbbf09ddb4bc77307272f310b9a5a1c24d292",
-      "sha256": "a9efe8335e429514e0f6e30704238626f05bbe4d621e160daa4df3c970143ab6",
-      "size": 22412
+      "sha256": "276ed1c8f317285f698111ff007bd36e739e139efc9f946e2ffc2c4995ce6477",
+      "size": 23483
     },
     {
       "path": "Package.swift",
@@ -1405,8 +1405,8 @@
     {
       "path": "Tests/MLXLMTests/Qwen35LayeredTests.swift",
       "upstreamSHA256": null,
-      "sha256": "7da6cdb3f7e41607f6b8bce195c263a705d0d9ae0ffd7246cf26df649c2ec66e",
-      "size": 29447,
+      "sha256": "a1051ada41223bf0fb10777292a059f5b9d049d0ed48c5383e49b24f3467ebb0",
+      "size": 32434,
       "origin": "D local addition"
     },
     {
@@ -1666,7 +1666,7 @@
   "patches": [
     {
       "path": "patches/mlx-lm-local-integration.patch",
-      "sha256": "74b996da8a2489d4a5aa4bd4f85412df7b8d943797dbf6d04600e6409a44222b",
+      "sha256": "a173cab127e08b23362b9d5b59070cd000a35c580410cac253deff9770963781",
       "description": "Complete D delta from the fixed upstream snapshot; supersedes historical presampled-only patch."
     }
   ]

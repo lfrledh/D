@@ -15,6 +15,7 @@ public actor InferenceRuntime: InferenceEngine {
 
     private let configuration: RuntimeConfiguration
     private let backends: [String: any InferenceBackend]
+    private let decideLowMemory: (@Sendable (LowMemoryProposal) async throws -> LowMemoryDecision)?
     private var entries: [UUID: Entry] = [:]
     private var queue: [UUID] = []
     private var activeRunID: UUID?
@@ -22,8 +23,10 @@ public actor InferenceRuntime: InferenceEngine {
     private var reservedBytes: UInt64 = 0
     private var worker: Task<Void, Never>?
     private var isClosed = false
+    private var lowMemoryMethod: LowMemoryMethod?
 
-    public init(backends: [any InferenceBackend], configuration: RuntimeConfiguration) throws {
+    public init(backends: [any InferenceBackend], configuration: RuntimeConfiguration,
+                decideLowMemory: (@Sendable (LowMemoryProposal) async throws -> LowMemoryDecision)? = nil) throws {
         var registry: [String: any InferenceBackend] = [:]
         for backend in backends {
             let id = backend.descriptor.id
@@ -34,6 +37,7 @@ public actor InferenceRuntime: InferenceEngine {
         }
         self.backends = registry
         self.configuration = configuration
+        self.decideLowMemory = decideLowMemory
     }
 
     public func submit(_ request: InferenceRequest, backendID: String) throws -> InferenceRun {
@@ -62,12 +66,13 @@ public actor InferenceRuntime: InferenceEngine {
         startNextIfIdle()
         return InferenceRun(id: id, nextEvent: { try await events.next() },
                             cancel: { [weak self] in await self?.cancel(id, token: token) },
-                            outcome: { await completion.wait() })
+                            outcome: { await completion.wait() },
+                            executionRecord: { await completion.record() })
     }
 
     public func snapshot() -> RuntimeSnapshot {
         RuntimeSnapshot(activeRunID: activeRunID, phase: phase,
-                        queuedRunIDs: queue, reservedBytes: reservedBytes)
+                        queuedRunIDs: queue, reservedBytes: reservedBytes, lowMemoryMethod: lowMemoryMethod)
     }
 
     /// Requests cancellation. The active slot remains occupied until the backend actually drains.
@@ -138,22 +143,98 @@ public actor InferenceRuntime: InferenceEngine {
     private func perform(_ id: UUID) async {
         guard let entry = entries[id] else { return }
         var outcome: RunOutcome
+        var record: InferenceExecutionRecord?
         do {
             try checkCancellation(id)
+            let budget = try configuration.budget(for: entry.request)
+            var assessment = InferenceExecutionRecord(request: entry.request, backend: entry.backend.descriptor, budget: budget, submissionID: entry.token)
+            record = assessment
             let estimate = try await entry.backend.estimate(entry.request)
             try checkCancellation(id)
             guard estimate.peakBytes > 0 else { throw InferenceFailure.invalidResourceEstimate }
-            let budget = try configuration.budget(for: entry.request)
-            guard estimate.peakBytes <= budget else {
-                throw InferenceFailure.memoryBudgetExceeded(
-                    required: estimate.peakBytes, limit: budget)
+            assessment.preferredEstimate = estimate
+            record = assessment
+            var chosenPlan: InferenceExecutionPlan?
+            var selectedEstimate = estimate
+            if estimate.peakBytes > budget {
+                guard entry.request.loadingSelection == .automatic,
+                      entry.request.explicitLowMemoryMethod == nil,
+                      let planner = entry.backend as? any InferenceExecutionPlanning else {
+                    assessment.reason = entry.request.loadingSelection == .automatic && entry.request.explicitLowMemoryMethod == nil
+                        ? "noSupportedPlan" : "fixedOverBudget"
+                    record = assessment
+                    throw InferenceFailure.memoryBudgetExceeded(required: estimate.peakBytes, limit: budget)
+                }
+                let plans = try await planner.lowMemoryPlans(for: entry.request)
+                try checkCancellation(id)
+                // Current backends expose one strategy; this is a bounded list, not a planner search.
+                guard plans.count <= 4 else { throw InferenceFailure.invalidResourceEstimate }
+                for plan in plans {
+                    try checkCancellation(id)
+                    try plan.validateSemantics(original: entry.request)
+                    try await planner.validate(plan, for: entry.request)
+                    try checkCancellation(id)
+                    let candidate = try await entry.backend.estimate(plan.request)
+                    try checkCancellation(id)
+                    guard candidate.peakBytes > 0 else { throw InferenceFailure.invalidResourceEstimate }
+                    assessment.candidates.append(.init(plan: plan, estimate: candidate, budget: budget))
+                    record = assessment
+                    if candidate.peakBytes <= budget {
+                        chosenPlan = plan; selectedEstimate = candidate; break
+                    }
+                }
+                guard let plan = chosenPlan else {
+                    assessment.reason = plans.isEmpty ? "noSupportedPlan" : "noSupportedPlanWithinBudget"; record = assessment
+                    throw InferenceFailure.memoryBudgetExceeded(required: estimate.peakBytes, limit: budget)
+                }
+                assessment.method = plan.method
+                assessment.lowMemoryEstimate = selectedEstimate
+                assessment.strategyVersion = plan.strategyVersion
+                assessment.modelIdentityToken = plan.modelIdentityToken
+                assessment.state = .awaitingDecision; record = assessment
+                await entry.completion.record(assessment)
+                try checkCancellation(id)
+                phase = .awaitingLowMemoryDecision
+                guard let decideLowMemory else { throw InferenceFailure.lowMemoryDecisionRequired }
+                let proposal = LowMemoryProposal(entryToken: entry.token, original: entry.request,
+                    backend: entry.backend.descriptor, plan: plan, preferredEstimate: estimate,
+                    estimate: selectedEstimate, budget: budget)
+                let decision = try await decideLowMemory(proposal)
+                try checkCancellation(id)
+                guard entries[id]?.token == entry.token else { throw CancellationError() }
+                assessment.decision = decision; record = assessment
+                guard decision.permitsExecution else {
+                    assessment.state = .stopped; record = assessment
+                    throw CancellationError()
+                }
+                // The displayed plan cannot be replaced after consent, including a same-sized file change.
+                try plan.validateSemantics(original: entry.request)
+                try await planner.validate(plan, for: entry.request)
+                try checkCancellation(id)
+                let rechecked = try await entry.backend.estimate(plan.request)
+                try checkCancellation(id)
+                guard try configuration.budget(for: entry.request) == budget,
+                      rechecked == selectedEstimate else {
+                    throw InferenceFailure.invalidRequest("The approved execution plan changed before loading.")
+                }
             }
-            reservedBytes = estimate.peakBytes
+            assessment.state = .selected; record = assessment
+            await entry.completion.record(assessment)
+            try checkCancellation(id)
+            reservedBytes = selectedEstimate.peakBytes
+            lowMemoryMethod = assessment.method
             phase = .running
-            let result = try await entry.backend.execute(entry.request) { output in
+            let emit: @Sendable (InferenceOutput) async throws -> Void = { output in
                 try await self.emit(output, for: id, token: entry.token)
             }
+            let result: InferenceResult
+            record?.executionStarted = true
+            if let chosenPlan, let planner = entry.backend as? any InferenceExecutionPlanning {
+                result = try await planner.execute(chosenPlan, for: entry.request, emit: emit)
+            } else { result = try await entry.backend.execute(entry.request, emit: emit) }
             try checkCancellation(id)
+            let measured = result.metadata.filter { ["mlxPeakBytes", "promptTokens", "generationTokens"].contains($0.key) }
+            if !measured.isEmpty { record?.measurements = measured }
             let events = await entry.events.snapshot()
             try checkCancellation(id)
             let diagnostics = ["runtime.events.accepted": String(events.accepted),
@@ -183,6 +264,14 @@ public actor InferenceRuntime: InferenceEngine {
             default: outcome = .cancelled
             }
         }
+        if var value = record {
+            switch outcome {
+            case .completed: value.state = .completed
+            case .cancelled: if value.state != .stopped { value.state = .cancelled }
+            case .failed(let failure): value.state = .failed; value.failureDiagnostic = failure.localizedDescription
+            }
+            record = value
+        }
         // An unknown process-group lifetime is not a successful cancellation.
         // Close this runtime before any await; the affected backend separately
         // retains the process-wide compute lease. No queued operation may start.
@@ -200,7 +289,9 @@ public actor InferenceRuntime: InferenceEngine {
         reservedBytes = 0
         activeRunID = nil
         phase = nil
+        lowMemoryMethod = nil
         worker = nil
+        if let record { await entry.completion.record(record) }
         // release has finished. A reentrant submission may start the FIFO head during
         // this await; after resuming, never clear or replace that newer run's state.
         switch outcome {

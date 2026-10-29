@@ -19,6 +19,7 @@ public struct WorkbenchSettingsView: View {
     @State private var selected: Section = .appearance
     @State private var visited: Set<Section> = [.appearance]
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.lowMemoryDecisions) private var lowMemoryDecisions
     @WorkbenchDismiss private var dismiss
 
     public init(model: WorkbenchModel, library: ModelLibraryModel, language: UILanguageStore,
@@ -79,7 +80,12 @@ public struct WorkbenchSettingsView: View {
                             if let error = library.errorMessage { Text(error).foregroundStyle(.red) }
                         }.formStyle(.grouped)
                     case .models:
-                        ScrollView { ModelStorageDownloadSettings(model: library).padding(20) }
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 20) {
+                                if let lowMemoryDecisions { LowMemoryPreferenceControl(owner: lowMemoryDecisions) }
+                                ModelStorageDownloadSettings(model: library)
+                            }.padding(20)
+                        }
                     case .network:
                         ScrollView {
                             VStack(alignment: .leading, spacing: 16) {

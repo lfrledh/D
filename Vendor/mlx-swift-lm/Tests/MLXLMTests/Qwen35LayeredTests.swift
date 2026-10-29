@@ -30,20 +30,39 @@ private struct TinyQwenFixture {
         return try Qwen35LayeredFileValidation.configuration(Data(json.utf8))
     }
 
-    static func make(originalLayout: Bool = false) throws -> Self {
+    static func make(originalLayout: Bool = false, bits: Int? = nil, mixed: Bool = false) throws -> Self {
         let config = try configuration()
         let resident = withRandomState(MLXRandom.RandomState(seed: 17)) { Qwen35(config) }
-        let weights = Dictionary(uniqueKeysWithValues: resident.parameters().flattened().map {
+        let floatWeights = Dictionary(uniqueKeysWithValues: resident.parameters().flattened().map {
             ($0.0, $0.1.asType($0.0.hasSuffix(".linear_attn.A_log") || $0.0.hasSuffix(".linear_attn.norm.weight") ? .float32 : .bfloat16))
         })
-        try resident.update(parameters: ModuleParameters.unflattened(weights), verify: [.all])
+        try resident.update(parameters: ModuleParameters.unflattened(floatWeights), verify: [.all])
+        var configurationData: Data?
+        if let bits {
+            quantize(model: resident, filter: { path, child -> (groupSize: Int, bits: Int, mode: QuantizationMode)? in
+                guard child is Linear || child is Embedding else { return nil }
+                if mixed && path == "language_model.lm_head" { return nil }
+                return (64, mixed && path == "language_model.model.embed_tokens" ? 8 : bits, .affine)
+            })
+            var quantization: [String: Any] = ["group_size": 64, "bits": bits]
+            if mixed {
+                quantization["language_model.lm_head"] = false
+                quantization["language_model.model.embed_tokens"] = ["group_size": 64, "bits": 8]
+            }
+            configurationData = try JSONSerialization.data(withJSONObject: [
+                "model_type": "qwen3_5", "quantization": quantization])
+        }
         try checkedEval(resident)
+        let weights = Dictionary(uniqueKeysWithValues: resident.parameters().flattened())
         resident.evaluateResidentLayersForComparison = true
         guard let root = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] else {
             throw Qwen35LayeredWeights.Failure.invalid("D_TEST_TEMP_DIR is required for this test")
         }
         let directory = URL(fileURLWithPath: root).appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if let configurationData {
+            try configurationData.write(to: directory.appendingPathComponent("config.json"))
+        }
         var shards = [[String: MLXArray](), [String: MLXArray]()]
         var map: [String: String] = [:]
         for (index, key) in weights.keys.sorted().enumerated() {
@@ -81,7 +100,7 @@ private struct TinyQwenFixture {
         try JSONSerialization.data(withJSONObject: index).write(to:
             directory.appendingPathComponent("model.safetensors.index.json"))
         let layered = Qwen35(config, layered: true)
-        try layered.loadLayeredWeights(from: directory)
+        try layered.loadLayeredWeights(from: directory, expectedConfiguration: configurationData)
         return Self(resident: resident, layered: layered, directory: directory)
     }
 }
@@ -137,9 +156,9 @@ private func expectSameSteps(_ original: [PrefillStep], _ streamed: [PrefillStep
 }
 
 @Suite(.serialized) struct QwenLayeredTests {
-@Test("Three linear and one attention block match BF16 resident prefill and decode")
-func qwenLayeredMatchesResident() throws {
-    let fixture = try TinyQwenFixture.make()
+@Test("Same BF16/Q4/Q8 checkpoint matches resident prefill and decode", arguments: [0, 4, 8, 48])
+func qwenLayeredMatchesResident(mode: Int) throws {
+    let fixture = try TinyQwenFixture.make(bits: mode == 0 ? nil : (mode == 48 ? 4 : mode), mixed: mode == 48)
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     #expect(fixture.layered.loraLayers.isEmpty)
     #expect(!fixture.layered.layeredVisionIsResident)
@@ -173,6 +192,26 @@ func qwenLayeredMatchesResident() throws {
     #expect((layeredCache[0] as? MambaCache)?[0] != nil)
     #expect((layeredCache[0] as? MambaCache)?[1] != nil)
     #expect(!fixture.layered.layeredVisionIsResident)
+}
+
+@Test("Packed headers require matching quantization and approved shard identities")
+func qwenPackedMetadataAndSealAreRequired() throws {
+    let fixture = try TinyQwenFixture.make(bits: 4)
+    defer { try? FileManager.default.removeItem(at: fixture.directory) }
+    let config = try Data(contentsOf: fixture.directory.appendingPathComponent("config.json"))
+    let quantization = try JSONDecoder().decode(BaseConfiguration.self, from: config).perLayerQuantization
+    #expect(throws: (any Error).self) { _ = try Qwen35LayeredWeights(directory: fixture.directory) }
+    let invalid = BaseConfiguration.PerLayerQuantization(quantization: .init(groupSize: 7, bits: 4), perLayerQuantization: [:])
+    #expect(throws: (any Error).self) { _ = try Qwen35LayeredWeights(directory: fixture.directory, quantization: invalid) }
+    let names = try FileManager.default.contentsOfDirectory(atPath: fixture.directory.path)
+    let seal = try Dictionary(uniqueKeysWithValues: names.map { ($0, try Qwen35LayeredFileValidation.identity(fixture.directory.appendingPathComponent($0))) })
+    _ = try Qwen35LayeredWeights(directory: fixture.directory, quantization: quantization, expectedFileIdentities: seal)
+    let shard = fixture.directory.appendingPathComponent("model-00001-of-00002.safetensors")
+    let replacement = fixture.directory.appendingPathComponent("replacement")
+    try Data(contentsOf: shard).write(to: replacement)
+    try FileManager.default.removeItem(at: shard)
+    try FileManager.default.moveItem(at: replacement, to: shard)
+    #expect(throws: (any Error).self) { _ = try Qwen35LayeredWeights(directory: fixture.directory, quantization: quantization, expectedFileIdentities: seal) }
 }
 
 @Test("Missing or changed layer shard throws before a decode completes")

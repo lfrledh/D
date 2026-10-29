@@ -52,6 +52,10 @@ public enum InferenceInput: Sendable, Codable, Equatable {
 /// Admission order only; an active job is never preempted.
 public enum InferenceAdmissionPriority: String, Sendable, Codable { case interactive, background }
 
+/// Permission to evaluate another execution organization, never permission to run it.
+/// Missing in old records means the recorded loading strategy remains fixed.
+public enum InferenceLoadingSelection: String, Sendable, Codable { case automatic }
+
 public struct InferenceRequest: Sendable, Codable, Equatable, Identifiable {
     public let id: UUID
     public let model: ModelReference
@@ -62,18 +66,24 @@ public struct InferenceRequest: Sendable, Codable, Equatable, Identifiable {
     public let memoryBudgetBytes: UInt64?
     /// Nil preserves old records and schedules as interactive.
     public let priority: InferenceAdmissionPriority?
+    public let loadingSelection: InferenceLoadingSelection?
 
     public init(id: UUID = UUID(), model: ModelReference, input: InferenceInput,
-                memoryBudgetBytes: UInt64? = nil, priority: InferenceAdmissionPriority? = nil) {
+                memoryBudgetBytes: UInt64? = nil, priority: InferenceAdmissionPriority? = nil,
+                loadingSelection: InferenceLoadingSelection? = nil) {
         self.id = id
         self.model = model
         self.input = input
         self.memoryBudgetBytes = memoryBudgetBytes
         self.priority = priority
+        self.loadingSelection = loadingSelection
     }
 
     /// Common validation only. Backends must also validate architecture and capabilities.
     public func validate() throws {
+        guard loadingSelection != .automatic || explicitLowMemoryMethod == nil else {
+            throw InferenceFailure.invalidRequest("Automatic evaluation cannot also specify a fixed low-memory strategy.")
+        }
         if let memoryBudgetBytes {
             guard memoryBudgetBytes > 0, memoryBudgetBytes <= Int64.max else {
                 throw InferenceFailure.invalidRequest("The explicit memory budget must be positive and representable.")

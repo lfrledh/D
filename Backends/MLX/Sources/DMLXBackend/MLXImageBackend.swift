@@ -29,7 +29,7 @@ public struct MLXImageBackendConfiguration: Sendable {
 
 /// Fixed local FLUX.2 Klein 4B q8 or original BF16 pipeline. One instance belongs to one runtime.
 /// Encoder, transformer and decoder have separate lifetimes; only evaluated arrays bridge stages.
-public actor MLXImageBackend: InferenceBackend {
+public actor MLXImageBackend: InferenceExecutionPlanning {
     public nonisolated let descriptor = BackendDescriptor(
         id: "mlx.image.flux2-klein", version: "0.2.0+flux2-959a4af.d1.ir1", capabilities: [.imageGeneration])
     public nonisolated let executionCapability: ImageExecutionCapability
@@ -74,7 +74,33 @@ public actor MLXImageBackend: InferenceBackend {
         return ResourceEstimate(peakBytes: inventory.estimatedPeakBytes)
     }
 
+    private func planSeal(_ request: InferenceRequest) throws -> ModelExecutionSeal {
+        let inventory = try LocalImageModelInventory.inspect(request, profile: configuration.profile)
+        return try ModelExecutionSeal.capture(request.model, backend: descriptor, names: inventory.admittedPaths)
+    }
+    public func lowMemoryPlans(for request: InferenceRequest) async throws -> [InferenceExecutionPlan] {
+        guard request.model.revision == LocalImageModelInventory.fullRevision else { return [] }
+        let seal = try planSeal(request)
+        return [.init(request: try request.lowMemoryRequest(method: .layered), method: .layered,
+            strategyVersion: 1, modelIdentityToken: seal.token)]
+    }
+    public func validate(_ plan: InferenceExecutionPlan, for original: InferenceRequest) async throws {
+        try plan.validateSemantics(original: original)
+        guard plan.method == .layered, plan.strategyVersion == 1,
+              try planSeal(original).token == plan.modelIdentityToken else {
+            throw InferenceFailure.inputIntegrityChanged("Approved model or execution plan changed.")
+        }
+    }
+    public func execute(_ plan: InferenceExecutionPlan, for original: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await validate(plan, for: original)
+        return try await execute(plan.request, expectedPlan: plan, emit: emit)
+    }
     public func execute(_ request: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await execute(request, expectedPlan: nil, emit: emit)
+    }
+    private func execute(_ request: InferenceRequest, expectedPlan: InferenceExecutionPlan?,
                         emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         guard !executing, !releasing, lease == nil else {
             throw InferenceFailure.backendFailed("Image execution requires release of the preceding run.")
@@ -83,6 +109,12 @@ public actor MLXImageBackend: InferenceBackend {
         defer { executing = false }
         try Task.checkCancellation()
         let inventory = try LocalImageModelInventory.inspect(request, profile: configuration.profile)
+        if let expectedPlan {
+            guard try ModelExecutionSeal.capture(request.model, backend: descriptor,
+                names: inventory.admittedPaths).token == expectedPlan.modelIdentityToken else {
+                throw InferenceFailure.inputIntegrityChanged("Approved model files changed before loading.")
+            }
+        }
         try ImageArtifactTransaction.validateRoot(configuration.artifactDirectory, model: inventory.directory)
         guard case .image(let input) = request.input else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
@@ -92,6 +124,12 @@ public actor MLXImageBackend: InferenceBackend {
         let token = UUID()
         try await MLXExecutionLease.shared.acquire(token)
         lease = token
+        if let expectedPlan {
+            guard try ModelExecutionSeal.capture(request.model, backend: descriptor,
+                names: inventory.admittedPaths).token == expectedPlan.modelIdentityToken else {
+                throw InferenceFailure.inputIntegrityChanged("Approved model files changed while waiting for compute.")
+            }
+        }
         runID = request.id
         previousCacheLimit = Memory.cacheLimit
         previousMemoryLimit = Memory.memoryLimit
@@ -109,6 +147,7 @@ public actor MLXImageBackend: InferenceBackend {
             // eval is synchronous; no unstructured generation work survives this boundary.
             Self.synchronize()
             await observer(MLXLifecycleEvent(runID: request.id, phase: .drained))
+            try await Task.detached { try inventory.assertUnchanged() }.value
             throw error
         }
         Self.synchronize()
@@ -165,6 +204,7 @@ public actor MLXImageBackend: InferenceBackend {
         let rgb = try await decodeRGB(inventory: inventory, denoised: denoised,
                                       width: input.width, height: input.height, state: state)
         try await checkpoint(.publishing)
+        try inventory.assertUnchanged()
         let data = try ImagePNG.encode(rgb: rgb, width: input.width, height: input.height)
         let transaction = try ImageArtifactTransaction(root: configuration.artifactDirectory, requestID: request.id)
         unpublished.append(transaction)
@@ -231,9 +271,10 @@ public actor MLXImageBackend: InferenceBackend {
             throw InferenceFailure.invalidRequest("Prompt uses \(count) tokens including the model template; maximum is \(maximum). Shorten the prompt.")
         }
         try await checkpoint(.loadingTextEncoder)
+        try inventory.assertUnchanged()
         let layered = input.loadingStrategy == .ssdLayered
         let model = try withRandomState(state) {
-            try layered ? Flux2Qwen3TextEncoder.loadLayered(from: inventory.directory, dtype: .bfloat16, fileSet: inventory.fileSet)
+            try layered ? Flux2Qwen3TextEncoder.loadLayered(from: inventory.directory, dtype: .bfloat16, fileSet: inventory.fileSet, admissionValidator: { try inventory.assertUnchanged() })
                         : Flux2Qwen3TextEncoder.load(from: inventory.directory, dtype: .bfloat16, fileSet: inventory.fileSet)
         }
         if !layered { MLX.eval(model) }
@@ -305,6 +346,7 @@ public actor MLXImageBackend: InferenceBackend {
             frozen.append(try ImageReferenceInput.load(reference))
         }
         try await checkpoint(.loadingVAE)
+        try inventory.assertUnchanged()
         let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: inventory.directory, dtype: .bfloat16, fileSet: inventory.fileSet) }
         try Flux2ImageMath.validateVAEEncoderWeightCoverage(
             vae: vae, snapshot: inventory.directory, expectedDType: .bfloat16, fileSet: inventory.fileSet)
@@ -331,9 +373,10 @@ public actor MLXImageBackend: InferenceBackend {
                          state: MLXRandom.RandomState,
                          emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> Denoised {
         try await checkpoint(.loadingTransformer)
+        try inventory.assertUnchanged()
         let layered = input.loadingStrategy == .ssdLayered
         let transformer = try withRandomState(state) {
-            try layered ? Flux2Transformer2DModel.loadLayered(from: inventory.directory, dtype: .bfloat16, fileSet: inventory.fileSet)
+            try layered ? Flux2Transformer2DModel.loadLayered(from: inventory.directory, dtype: .bfloat16, fileSet: inventory.fileSet, admissionValidator: { try inventory.assertUnchanged() })
                         : Flux2Transformer2DModel.load(from: inventory.directory, dtype: .bfloat16, fileSet: inventory.fileSet)
         }
         if !layered { MLX.eval(transformer) }
@@ -367,6 +410,7 @@ public actor MLXImageBackend: InferenceBackend {
     private func decodeRGB(inventory: LocalImageModelInventory, denoised: Denoised, width: Int, height: Int,
                            state: MLXRandom.RandomState) async throws -> [UInt8] {
         try await checkpoint(.loadingVAE)
+        try inventory.assertUnchanged()
         let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: inventory.directory, dtype: .bfloat16, fileSet: inventory.fileSet) }
         MLX.eval(vae)
         try await checkpoint(.vaeLoaded)

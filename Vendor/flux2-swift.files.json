@@ -206,8 +206,8 @@
       "upstreamGitBlob": "b956f7e5a29932c8e6c624b9b3692db52cfc345b",
       "upstreamSize": 10148,
       "upstreamSHA256": "56942a7d37c32a44565fee71b697a1f5e6b15f58fc0263258fb41cdb7374c3be",
-      "size": 13444,
-      "sha256": "155b522030d610342b8d58a3ef10db40c623cc30db5c9fbce3fcc633c3f1b327"
+      "size": 13774,
+      "sha256": "8b109f2de0d007f15f1410c6ea0626cd147c877363b7e2c8f7018ed010bc0c84"
     },
     {
       "path": "Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift",

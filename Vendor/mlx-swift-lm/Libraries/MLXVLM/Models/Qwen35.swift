@@ -1023,11 +1023,16 @@ public class Qwen35: Module, VLMModel {
     public func loadLayeredWeights(from directory: URL,
                                    expectedConfiguration: Data? = nil,
                                    expectedConfigurationIdentity: String? = nil,
-                                   fileSelection: ModelFileSelection? = nil) throws {
+                                   fileSelection: ModelFileSelection? = nil,
+                                   expectedFileIdentities: [String: String]? = nil) throws {
         guard languageModel.model.layered else {
             throw Qwen35LayeredWeights.Failure.invalid("model was constructed for resident loading")
         }
-        let weights = try Qwen35LayeredWeights(directory: directory, fileSelection: fileSelection)
+        let quantization = try expectedConfiguration.map {
+            try JSONDecoder().decode(BaseConfiguration.self, from: $0).perLayerQuantization
+        } ?? nil
+        let weights = try Qwen35LayeredWeights(directory: directory, fileSelection: fileSelection,
+                                             quantization: quantization, expectedFileIdentities: expectedFileIdentities)
         if let expectedConfiguration {
             let file = directory.appendingPathComponent("config.json")
             let current = try Qwen35LayeredWeights.readBounded(file, maximum: 4 * 1024 * 1024)

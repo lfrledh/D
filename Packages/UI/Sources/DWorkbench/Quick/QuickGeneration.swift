@@ -1,4 +1,5 @@
 import Foundation
+import DInference
 import Observation
 
 /// Quick creation is a single existing operation, not a hidden workflow graph.
@@ -13,6 +14,7 @@ public struct QuickDraft: Codable, Sendable, Equatable, Identifiable {
     }
 }
 public struct QuickRunRecord: Codable, Sendable, Equatable, Identifiable {
+    public var executionRecords: [InferenceExecutionRecord]? = nil
     public enum Status: String, Codable, Sendable { case running, completed, partial, cancelled, failed, interrupted }
     public let id: UUID
     public let draft: QuickDraft
@@ -79,7 +81,8 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
 
 @MainActor @Observable public final class QuickGenerationController {
     public private(set) var state = QuickCreationState()
-    public private(set) var error: String?
+    public private(set) var error: String? { didSet { errorCode = nil } }
+    public private(set) var errorCode: String?
     public private(set) var isLoaded = false
     public private(set) var isRunning = false
     public var isImporting: Bool { !inputActivities.isEmpty }
@@ -106,6 +109,8 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         }
     }
     public private(set) var phase = ""
+    public private(set) var progressPresentation: WorkflowProgressMessage?
+    public var executionPhase: String? { isRunning ? services?.activity.current?.phase : nil }
     public private(set) var streamingText = ""
     public private(set) var saveIssue: String?
     public private(set) var pendingSaveRunID: UUID?
@@ -460,7 +465,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     private func launch(_ attempts: [QuickDraft], retryOf: UUID? = nil) {
         guard !attempts.isEmpty else { return }
         if let issue = attempts.compactMap(Self.validationIssue).first { error = issue.localizedDescription; return }
-        isRunning = true; cancelRequested = false; error = nil; streamingText = ""; phase = "正在保存输入…"
+        isRunning = true; cancelRequested = false; error = nil; streamingText = ""; progressPresentation = nil; phase = "正在保存输入…"
         let batch = UUID()
         runTask = Task { [self] in
             defer { isRunning = false; activeRunID = nil; streamingText = ""; if pendingSaveRunID == nil { services = nil }; runTask = nil }
@@ -474,18 +479,28 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
                 try await flush()
                 if cancelRequested { throw CancellationError() }
                 let service = try makeServices(); services = service
-                service.progress = { [weak self] in self?.phase = $0 }
+                service.progress = { [weak self] text in
+                    guard let self, self.isRunning, self.activeRunID == id else { return }
+                    self.phase = text; self.progressPresentation = nil
+                }
+                service.progressEvent = { [weak self] message in
+                    guard let self, self.isRunning, self.activeRunID == id else { return }
+                    self.progressPresentation = message
+                }
                 service.languagePreviewChanged = { [weak self] stepID, text in
                     guard let self, self.isRunning, self.activeRunID == id, stepID == id else { return }
                     self.streamingText = text
                 }
-                service.candidatesChanged = { [weak self] _, candidates in
-                    guard let self, let index = self.state.runs.firstIndex(where: { $0.id == id }) else { return }
+                service.candidatesChanged = { [weak self, weak service] _, candidates in
+                    guard let self, let service, let index = self.state.runs.firstIndex(where: { $0.id == id }) else { return }
+                    self.state.runs[index].executionRecords = (self.state.runs[index].executionRecords ?? [])
+                        .mergingExecutionRecords(service.executionRecords(for: id))
                     self.state.runs[index].candidates = candidates; try await self.flush()
                 }
                 try service.beginPlan()
                 let result = try await service.executeCall(.init(node: captured.node, stepID: id, inputs: captured.inputs))
                 guard let index = state.runs.firstIndex(where: { $0.id == id }) else { throw WorkflowIssue("运行记录丢失。") }
+                state.runs[index].executionRecords = service.executionRecords(for: id)
                 switch result {
                 case .outputs(let values): state.runs[index].outputs = values
                 default: throw WorkflowIssue("此模型操作需要工作流中的人工任务，请在画布运行。")
@@ -495,6 +510,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
             } catch {
                 if services?.hasPendingSaves == true { pendingSaveRunID = id }
                 if let index = state.runs.firstIndex(where: { $0.id == id }) {
+                    state.runs[index].executionRecords = services?.executionRecords(for: id)
                     if let candidates = services?.retainedCandidates(stepID: id) { state.runs[index].candidates = candidates }
                     let published = (try? await store.workflowAssets(forStepID: id)) ?? []
                     for reference in published where !state.runs[index].outputs.values.contains(where: { $0.asset == reference }) {
@@ -503,7 +519,9 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
                     state.runs[index].status = (error is CancellationError) ? .cancelled : .failed
                     state.runs[index].issue = error.localizedDescription
                 }
-                self.error = error.localizedDescription; phase = "运行已结束"
+                self.error = error.localizedDescription
+                errorCode = LowMemoryExecutionPresentation.nonExecutionCode(services?.executionRecords(for: id))
+                phase = "运行已结束"
                 do { try await flush() } catch { self.error = "结果或状态尚未保存：" + error.localizedDescription }
             }
                 if pendingSaveRunID != nil || saveIssue != nil { break }

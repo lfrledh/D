@@ -16,7 +16,7 @@ public final class Flux2Qwen3TextEncoder: Module {
 
   @ModuleInfo(key: "model") private var model: Flux2Qwen3Model
   @ModuleInfo(key: "lm_head") private var lmHead: Linear?
-  private var layeredSource: (snapshot: URL, dtype: DType, fileSet: Flux2FileSet?)? = nil
+  private var layeredSource: (snapshot: URL, dtype: DType, fileSet: Flux2FileSet?, admissionValidator: @Sendable () throws -> Void)? = nil
 
   public init(configuration: Flux2Qwen3Configuration) {
     self.configuration = configuration
@@ -55,7 +55,9 @@ public final class Flux2Qwen3TextEncoder: Module {
 
   /// Retain only weights outside the decoder blocks. Each original decoder block
   /// is read for its turn, evaluated, then released before the next block is loaded.
-  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil) throws -> Flux2Qwen3TextEncoder {
+  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil,
+      admissionValidator: @escaping @Sendable () throws -> Void = {}) throws -> Flux2Qwen3TextEncoder {
+    try admissionValidator()
     if let _ = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
       throw Flux2Qwen3TextEncoderError.unsupportedLayeredQuantization
     }
@@ -82,7 +84,8 @@ public final class Flux2Qwen3TextEncoder: Module {
     }
     try encoder.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
     MLX.eval(Array(weights.values))
-    encoder.layeredSource = (snapshot, dtype, fileSet)
+    try admissionValidator()
+    encoder.layeredSource = (snapshot, dtype, fileSet, admissionValidator)
     return encoder
   }
 
@@ -171,7 +174,7 @@ private final class Flux2Qwen3Model: Module {
     attentionMask: MLXArray,
     outputLayerIndices: [Int],
     evaluationPolicy: Flux2EvaluationPolicy,
-    layeredSource: (snapshot: URL, dtype: DType, fileSet: Flux2FileSet?)? = nil
+    layeredSource: (snapshot: URL, dtype: DType, fileSet: Flux2FileSet?, admissionValidator: @Sendable () throws -> Void)? = nil
   ) throws -> [Int: MLXArray] {
     let wanted = Set(outputLayerIndices)
     var results: [Int: MLXArray] = [:]
@@ -193,6 +196,7 @@ private final class Flux2Qwen3Model: Module {
       if layeredSource != nil { try Task.checkCancellation(); Memory.clearCache() }
       let layer: Flux2Qwen3TransformerBlock
       if let layeredSource {
+        try layeredSource.admissionValidator()
         let prefix = "model.layers.\(index)."
         let loaded = try Flux2WeightsLoader(snapshot: layeredSource.snapshot, fileSet: layeredSource.fileSet).load(
           component: .textEncoder, dtype: layeredSource.dtype) { $0.hasPrefix(prefix) }
@@ -207,7 +211,7 @@ private final class Flux2Qwen3Model: Module {
         layer = layers[index]
       }
       hidden = layer(hidden, attentionMask: mask)
-      if layeredSource != nil { MLX.eval(hidden) }
+      if let layeredSource { MLX.eval(hidden); try layeredSource.admissionValidator() }
       else { evaluationPolicy.evalIfNeeded(hidden) }
       let hiddenIndex = index + 1
       if wanted.contains(hiddenIndex) {

@@ -514,6 +514,8 @@ private actor WorkflowFixtureEngine: InferenceEngine {
     let directory: URL
     var requests: [InferenceRequest] = []
     var failSecondImage = false
+    var recordsEnabled = false
+    func enableExecutionRecords() { recordsEnabled = true }
     var gate: WorkflowSubmitGate?
     var submitAction: (@MainActor @Sendable () async throws -> Void)?
     var terminalFailure: InferenceFailure?
@@ -546,8 +548,12 @@ private actor WorkflowFixtureEngine: InferenceEngine {
             outputs = [.artifact(artifact)]; result = .init(artifacts: [artifact], metadata: ["fixture":"CPU"])
         default: throw WorkflowIssue("fixture unsupported")
         }
+        var record = InferenceExecutionRecord(request: request,
+            backend: .init(id: backendID, version: "fixture", capabilities: [request.input.capability]), budget: 50)
+        record.decision = .allowOnce; record.method = .layered; record.state = .completed; record.executionStarted = true
+        let capturedRecord = recordsEnabled ? record : nil // Controlled history fixture, not inference/permission evidence.
         return InferenceRun(id: request.id, events: AsyncThrowingStream { c in outputs.forEach { c.yield($0) }; c.finish() },
-                            cancel: {}, outcome: { .completed(result) })
+                            cancel: {}, outcome: { .completed(result) }, executionRecord: { capturedRecord })
     }
 }
 private func workflowFixturePNG(width: Int = 16, height: Int = 12) throws -> Data {
@@ -2586,6 +2592,43 @@ extension WorkflowLifecycleTests {
         #expect(allocations == 1 && c.runs.map { $0.planCheckpoint?.batchSeeds } == seeds)
         #expect(recovered.seed == String(UInt64.max))
         try await c.close(); try await f.destination.close(); try await f.source.close()
+    }
+
+    @Test func candidateAndExecutionRecordPersistTogetherBeforeNextCandidateAndColdResume() async throws {
+        let f = try await imageRepairFixture(count: 2), c = f.controller
+        await f.engine.enableExecutionRecords()
+        let history = c.services.candidatesChanged
+        var inspectedIntermediate = false
+        c.services.candidatesChanged = { stepID, items in
+            try await history(stepID, items)
+            if !inspectedIntermediate, items.first?.asset != nil {
+                inspectedIntermediate = true
+                let saved = try #require(try await f.destination.workflowState().archive?.runs.last?.planCheckpoint?.records.first { $0.step.id == stepID })
+                #expect(saved.step.outputs["output"]?.candidates.first?.asset == items.first?.asset)
+                let record = try #require(saved.step.executionRecords?.first)
+                #expect(record.requestID == items.first?.attemptID && record.decision == .allowOnce)
+                #expect(await f.engine.requests.count == 1)
+                throw CancellationError()
+            }
+        }
+        await c.run(target: f.nodeID, only: false)
+        let run = try #require(c.runs.last), first = try #require(run.steps.last?.executionRecords?.first)
+        let candidate = try #require(run.steps.last?.outputs["output"]?.candidates.first)
+        #expect(inspectedIntermediate && candidate.asset != nil)
+        try await c.close(); try await f.destination.close()
+        let coldStore = try await ProjectStore.open(at: f.destination.rootURL)
+        let session = WorkbenchSession(engine: f.engine, backendID: "fixture.image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in }, imageCapability: .scalableKlein4B).borrowed(artifactStore: f.source)
+        let services = WorkflowServices(store: coldStore, session: session) { _, identity in
+            .init(identity: identity, reference: .init(directory: f.root, revision: "fixture"), backendID: "fixture.image", imageRecipe: .klein(capability: .scalableKlein4B))
+        }
+        let cold = WorkflowController(services: services); await cold.load()
+        await cold.resume(runID: run.id)
+        #expect(cold.runs.last?.status == .completed)
+        #expect(await f.engine.requests.count == 2)
+        let final = try #require(cold.runs.last?.steps.last)
+        #expect(final.outputs["output"]?.candidates.first == candidate)
+        #expect(final.executionRecords?.count == 2 && final.executionRecords?.first == first)
+        try await cold.close(); try await coldStore.close(); try await f.source.close()
     }
 
     @Test func imageControllerResumePublishesRetainedPNGWithoutModelAndColdReadsExactBytes() async throws {

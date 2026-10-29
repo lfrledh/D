@@ -4,7 +4,7 @@ import Foundation
 
 /// One ACE request per process. The existing process bridge drains stdout, stderr and
 /// the child process before control returns; the MLX process lease remains held to release().
-public actor ExternalACEBackend: InferenceBackend {
+public actor ExternalACEBackend: InferenceExecutionPlanning {
     public nonisolated let descriptor = BackendDescriptor(
         id: "mlx.audio.ace15xl", version: "1", capabilities: [.audioGeneration])
     public nonisolated let executionCapability = AudioExecutionCapability(
@@ -52,7 +52,32 @@ public actor ExternalACEBackend: InferenceBackend {
         return ResourceEstimate(peakBytes: inventory.estimatedPeakBytes, confidence: .estimated)
     }
 
+    private func planSeal(_ request: InferenceRequest) throws -> ModelExecutionSeal {
+        let inventory = try ACEModelInventory.inspect(request, configuration: configuration)
+        return try ModelExecutionSeal.capture(request.model, backend: descriptor, names: inventory.files.map { $0.file.path })
+    }
+    public func lowMemoryPlans(for request: InferenceRequest) async throws -> [InferenceExecutionPlan] {
+        let seal = try planSeal(request)
+        return [.init(request: try request.lowMemoryRequest(method: .layered), method: .layered,
+            strategyVersion: 1, modelIdentityToken: seal.token)]
+    }
+    public func validate(_ plan: InferenceExecutionPlan, for original: InferenceRequest) async throws {
+        try plan.validateSemantics(original: original)
+        guard plan.method == .layered, plan.strategyVersion == 1,
+              try planSeal(original).token == plan.modelIdentityToken else {
+            throw InferenceFailure.inputIntegrityChanged("Approved model or execution plan changed.")
+        }
+    }
+    public func execute(_ plan: InferenceExecutionPlan, for original: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await validate(plan, for: original)
+        return try await execute(plan.request, expectedPlan: plan, emit: emit)
+    }
     public func execute(_ request: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await execute(request, expectedPlan: nil, emit: emit)
+    }
+    private func execute(_ request: InferenceRequest, expectedPlan: InferenceExecutionPlan?,
                         emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         guard !executing, !releasing, lease == nil else {
             throw InferenceFailure.backendFailed("ACE requires release of the preceding run.")
@@ -62,6 +87,12 @@ public actor ExternalACEBackend: InferenceBackend {
         try Task.checkCancellation()
         try configuration.confirmDeployment?()
         let inventory = try ACEModelInventory.inspect(request, configuration: configuration)
+        if let expectedPlan {
+            guard try ModelExecutionSeal.capture(request.model, backend: descriptor,
+                names: inventory.files.map { $0.file.path }).token == expectedPlan.modelIdentityToken else {
+                throw InferenceFailure.inputIntegrityChanged("Approved model files changed before loading.")
+            }
+        }
         guard case .audio(let audio) = request.input, let ace = audio.ace else {
             throw InferenceFailure.invalidRequest("ACE typed request is absent.")
         }
@@ -70,6 +101,12 @@ public actor ExternalACEBackend: InferenceBackend {
         let token = UUID()
         try await MLXExecutionLease.shared.acquire(token)
         lease = token
+        if let expectedPlan {
+            guard try ModelExecutionSeal.capture(request.model, backend: descriptor,
+                names: inventory.files.map { $0.file.path }).token == expectedPlan.modelIdentityToken else {
+                throw InferenceFailure.inputIntegrityChanged("Approved model files changed while waiting for compute.")
+            }
+        }
         let run = try Self.makeRunDirectory(root: configuration.artifactDirectory, requestID: request.id)
         let job = run.appendingPathComponent("job", isDirectory: true)
         let jobIdentity = try MRT2ReportCommit.captureJobIdentity(job)

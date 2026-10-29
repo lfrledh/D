@@ -28,9 +28,10 @@ public struct RuntimeConfiguration: Sendable {
 }
 
 public struct RuntimeSnapshot: Sendable, Equatable {
-    public enum Phase: String, Sendable { case preparing, running, cancelling, releasing }
+    public enum Phase: String, Sendable { case preparing, awaitingLowMemoryDecision, running, cancelling, releasing }
     public let activeRunID: UUID?
     public let phase: Phase?
     public let queuedRunIDs: [UUID]
     public let reservedBytes: UInt64
+    public let lowMemoryMethod: LowMemoryMethod?
 }

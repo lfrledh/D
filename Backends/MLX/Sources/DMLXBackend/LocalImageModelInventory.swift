@@ -21,6 +21,7 @@ struct LocalImageModelInventory: Sendable {
     let weightBytes: UInt64
     let executionProfile: ExecutionProfileReference
     var fileSet: Flux2FileSet { get throws { try Flux2FileSet(paths: Set(manifest.files.map(\.path))) } }
+    var admittedPaths: [String] { manifest.files.map(\.path) }
     private let manifest: Manifest
     private let identities: [String: FileIdentity]
 
@@ -335,6 +336,14 @@ struct LocalImageModelInventory: Sendable {
     private static func requireKleinProfile(_ profile: ImageExecutionProfile) throws {
         guard profile != .flux2Dev else {
             throw InferenceFailure.invalidRequest("The FLUX.2 Dev profile is incompatible with the Klein image inventory.")
+        }
+    }
+
+    func assertUnchanged() throws {
+        try Self.withRoot(directory) { root in
+            guard Self.sameSnapshot(try Self.snapshot(root: root, manifest: manifest), identities) else {
+                throw InferenceFailure.inputIntegrityChanged("Klein installation changed after admission.")
+            }
         }
     }
 

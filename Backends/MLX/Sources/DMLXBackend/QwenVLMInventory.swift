@@ -33,9 +33,6 @@ public struct QwenVLMModelInventory: Sendable {
         }
         let fileSet = try LocalModelFileSet.resolve(request.model.revision)
         let inventory = try validateModel(at: request.model.directory, fileSet: fileSet)
-        if text.loadingStrategy == .ssdLayered && inventory.quantized {
-            throw InferenceFailure.invalidRequest("SSD layered loading requires original BF16 Qwen3.5 weights.")
-        }
         _ = try QwenMessageMapping.context(for: text.thinking, modelSize: inventory.size)
         let prompt = try capability.resolvedPromptTokens(for: text)
         guard prompt <= inventory.contextLimit,

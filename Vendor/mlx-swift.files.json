@@ -18479,8 +18479,8 @@
       "upstreamGitBlob": "076e91ca0cfb6633f3f243cf674f545e3e44efc4",
       "upstreamSHA256": "1973b7dbe3fda05a32cfe218d82b3b139229b0b74d0325665b0166092a8ac303",
       "upstreamSize": 13458,
-      "sha256": "1973b7dbe3fda05a32cfe218d82b3b139229b0b74d0325665b0166092a8ac303",
-      "size": 13458
+      "sha256": "60e4880c44afe44ae8d23bd42ecd22a7676fb2b7747143c72890e5364be608ff",
+      "size": 13960
     },
     {
       "path": "Source/MLXNN/Recurrent.swift",

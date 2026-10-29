@@ -14,9 +14,9 @@
   "snapshot": {
     "fileCount": 206,
     "upstreamBytes": 41852259,
-    "patchedBytes": 41922513,
+    "patchedBytes": 41922843,
     "manifest": "flux2-swift.files.json",
-    "manifestSHA256": "724cca92736fd5280d3a0cb7a7119164628e82996906236d901a155ea2e606be",
+    "manifestSHA256": "f4c52d9e14da1ab720ce1578c580e54630a847273bfaf50857adebef9c646a08",
     "selection": "All 206 tracked upstream blobs; no trimming or expanded gitlinks."
   },
   "patches": [
@@ -99,8 +99,8 @@
     },
     {
       "file": "patches/flux2-klein-ssd-layered.patch",
-      "sha256": "4d6dd6a0b0bc00c6305665e0d6ca5f8e2bfdd414dc1249a73b9bb0335ac4a5fa",
-      "description": "Original Klein and Dev block streaming, same numerical kernels; strict identity and parity controls",
+      "sha256": "5f86e4b6ce11c5215530ebd3c1b078c5006c9a4bde0a8ddd71efe2670564913f",
+      "description": "Original Klein and Dev block streaming, same numerical kernels; strict identity and parity controls; B5 validates the same admission snapshot before each layered encoder read.",
       "modifiedFiles": [
         {
           "path": "Sources/Flux2/IO/SafeTensorsReader.swift",
@@ -112,9 +112,9 @@
         {
           "path": "Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift",
           "upstreamSHA256": "56942a7d37c32a44565fee71b697a1f5e6b15f58fc0263258fb41cdb7374c3be",
-          "sha256": "155b522030d610342b8d58a3ef10db40c623cc30db5c9fbce3fcc633c3f1b327",
+          "sha256": "8b109f2de0d007f15f1410c6ea0626cd147c877363b7e2c8f7018ed010bc0c84",
           "upstreamSize": 10148,
-          "size": 13444
+          "size": 13774
         },
         {
           "path": "Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift",

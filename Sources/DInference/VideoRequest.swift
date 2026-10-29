@@ -39,7 +39,7 @@ public struct VideoRequest: Sendable, Codable, Equatable {
     public let scheduleShift: Float
     public let seed: UInt64
     public let executionProfile: ExecutionProfileReference
-    public let adapterOptions: VideoAdapterOptions?
+    public internal(set) var adapterOptions: VideoAdapterOptions?
     public let firstFrame: VideoFrameReference?
     public let lastFrame: VideoFrameReference?
 

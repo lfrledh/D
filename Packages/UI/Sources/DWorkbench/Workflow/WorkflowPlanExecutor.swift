@@ -1,4 +1,5 @@
 import Foundation
+import DInference
 
 @MainActor public final class WorkflowPlanExecutor {
     public private(set) var checkpoint: WorkflowPlanCheckpoint?
@@ -9,6 +10,7 @@ import Foundation
     private let registry: WorkflowRegistry
     private let executeCall: @MainActor (WorkflowExecutionContext) async throws -> WorkflowOperationResult
     private let save: @MainActor (WorkflowPlanCheckpoint) async throws -> Void
+    private let executionRecords: @MainActor (UUID) -> [InferenceExecutionRecord]
     private var pauseRequested = false
     private var stopRequested = false
     private var executing = false
@@ -17,11 +19,13 @@ import Foundation
     public init(
         registry: WorkflowRegistry = .standard,
         executeCall: @escaping @MainActor (WorkflowExecutionContext) async throws -> WorkflowOperationResult,
-        save: @escaping @MainActor (WorkflowPlanCheckpoint) async throws -> Void
+        save: @escaping @MainActor (WorkflowPlanCheckpoint) async throws -> Void,
+        executionRecords: @escaping @MainActor (UUID) -> [InferenceExecutionRecord] = { _ in [] }
     ) {
         self.registry = registry
         self.executeCall = executeCall
         self.save = save
+        self.executionRecords = executionRecords
     }
 
     public func requestPause() { pauseRequested = true }
@@ -186,6 +190,8 @@ import Foundation
         guard executing, let index = checkpoint?.records.firstIndex(where: { $0.step.id == stepID }),
               checkpoint.map({ WorkflowModelRoutes.isImage($0.records[index].step.node.operationID) }) == true else { throw WorkflowIssue("候选进度不属于当前图像调用。") }
         checkpoint?.records[index].step.outputs["output"] = .collection(candidates)
+        let records = (checkpoint?.records[index].step.executionRecords ?? []).mergingExecutionRecords(executionRecords(stepID))
+        if !records.isEmpty { checkpoint?.records[index].step.executionRecords = records }
         try await persist()
     }
 
@@ -402,7 +408,15 @@ import Foundation
             retryCandidates: current.step.outputs["output"]?.candidates,
             address: address, graphID: graphID
         )
-        let result = try await executeCall(context)
+        let result: WorkflowOperationResult
+        do { result = try await executeCall(context) }
+        catch {
+            let records = executionRecords(context.stepID)
+            if !records.isEmpty { try updateRecord(at: address) { $0.step.executionRecords = ($0.step.executionRecords ?? []).mergingExecutionRecords(records) } }
+            throw error
+        }
+        let records = executionRecords(context.stepID)
+        if !records.isEmpty { try updateRecord(at: address) { $0.step.executionRecords = ($0.step.executionRecords ?? []).mergingExecutionRecords(records) } }
         switch result {
         case .outputs(let outputs):
             return try await finish(planned, outputs: outputs, address: address)

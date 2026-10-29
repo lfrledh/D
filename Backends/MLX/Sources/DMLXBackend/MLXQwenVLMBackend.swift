@@ -24,7 +24,7 @@ public struct QwenVLMConfiguration: Sendable {
 }
 
 /// Local Qwen3.5 vision-language execution. Runtime serialization extends through release().
-public actor MLXQwenVLMBackend: InferenceBackend {
+public actor MLXQwenVLMBackend: InferenceExecutionPlanning {
     public nonisolated let descriptor = BackendDescriptor(
         id: "mlx.vlm.qwen35", version: "0.1.0+mlx-0.31.4.d1.lm-3.31.4", capabilities: [.textGeneration])
     public nonisolated let executionCapability: TextExecutionCapability
@@ -66,7 +66,6 @@ public actor MLXQwenVLMBackend: InferenceBackend {
         }
         let prompt = UInt64(try executionCapability.resolvedPromptTokens(for: input))
         let tokens = prompt + UInt64(input.maxTokens)
-        let kvPerToken: UInt64 = inventory.size == "27B" ? 64 * 4 * 256 * 8 : 32 * 4 * 256 * 8
         let minimumPixels = UInt64(input.visualProcessing?.minimumPixels ?? inventory.minimumPixels)
         let maximumPixels = UInt64(input.visualProcessing?.maximumPixels ?? inventory.maximumPixels)
         guard minimumPixels <= maximumPixels else {
@@ -96,16 +95,38 @@ public actor MLXQwenVLMBackend: InferenceBackend {
             peak = try QwenLayeredResourceEstimate.peak(inventory: inventory, tokens: tokens,
                 visualPixels: visualPixels, cacheLimit: configuration.cacheLimitBytes)
         } else {
-            peak = Self.saturatingAdd(
-                Self.saturatingAdd(Self.saturatingMultiply(inventory.weightBytes, 2),
-                                   Self.saturatingMultiply(tokens, kvPerToken)),
-                Self.saturatingAdd(Self.saturatingMultiply(visualPixels, 8),
-                                   UInt64(configuration.cacheLimitBytes) + 512 * 1024 * 1024))
+            peak = try QwenLayeredResourceEstimate.residentPeak(inventory: inventory, tokens: tokens,
+                promptTokens: prompt, visualPixels: visualPixels, cacheLimit: configuration.cacheLimitBytes)
         }
         return ResourceEstimate(peakBytes: peak, confidence: .estimated)
     }
 
     public func execute(_ request: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await execute(request, expectedPlan: nil, emit: emit)
+    }
+
+    public func lowMemoryPlans(for request: InferenceRequest) async throws -> [InferenceExecutionPlan] {
+        let inventory = try QwenVLMModelInventory.inspect(request, capability: executionCapability)
+        let seal = try ModelExecutionSeal.qwen(request, backend: descriptor, inventory: inventory)
+        return [.init(request: try request.lowMemoryRequest(method: .layered),
+                      method: .layered, strategyVersion: 1, modelIdentityToken: seal.token)]
+    }
+    public func validate(_ plan: InferenceExecutionPlan, for original: InferenceRequest) async throws {
+        try plan.validateSemantics(original: original)
+        let inventory = try QwenVLMModelInventory.inspect(original, capability: executionCapability)
+        guard plan.strategyVersion == 1, plan.method == .layered,
+              try ModelExecutionSeal.qwen(original, backend: descriptor, inventory: inventory).token == plan.modelIdentityToken else {
+            throw InferenceFailure.inputIntegrityChanged("The approved model files or loading plan changed.")
+        }
+    }
+    public func execute(_ plan: InferenceExecutionPlan, for original: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await validate(plan, for: original)
+        try Task.checkCancellation()
+        return try await execute(plan.request, expectedPlan: plan, emit: emit)
+    }
+    private func execute(_ request: InferenceRequest, expectedPlan: InferenceExecutionPlan?,
                         emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         guard !executing, lease == nil else {
             throw InferenceFailure.backendFailed("VLM execution requires release of the previous run.")
@@ -113,6 +134,13 @@ public actor MLXQwenVLMBackend: InferenceBackend {
         executing = true
         defer { executing = false }
         let inventory = try QwenVLMModelInventory.inspect(request, capability: executionCapability)
+        let seal = try expectedPlan.map { plan in
+            let seal = try ModelExecutionSeal.qwen(request, backend: descriptor, inventory: inventory)
+            guard seal.token == plan.modelIdentityToken else {
+                throw InferenceFailure.inputIntegrityChanged("Approved model files changed before loading.")
+            }
+            return seal
+        }
         guard case .text(let input) = request.input else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
         }
@@ -151,7 +179,8 @@ public actor MLXQwenVLMBackend: InferenceBackend {
             let factory = VLMModelFactory(typeRegistry: VLMTypeRegistry.shared,
                                           processorRegistry: registry, modelRegistry: VLMRegistry.shared,
                                           layeredQwen35: input.loadingStrategy == .ssdLayered,
-                                          fileSelection: inventory.fileSet?.selection)
+                                          fileSelection: inventory.fileSet?.selection,
+                                          expectedModelIdentities: seal?.files)
             let loaded = try await withRandomState(randomState) {
                 try await factory.loadContainer(from: inventory.directory,
                                                 using: LocalTokenizerLoader(fileSet: inventory.fileSet,
@@ -331,7 +360,9 @@ public actor MLXQwenVLMBackend: InferenceBackend {
         switch outcome {
         case .success(let result):
             try Task.checkCancellation()
-            return result
+            return InferenceResult(artifacts: result.artifacts,
+                metadata: result.metadata.merging(["mlxPeakBytes": String(Memory.peakMemory)]) { _, measured in measured },
+                textResponse: result.textResponse)
         case .failure(let error): throw error
         }
     }

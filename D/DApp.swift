@@ -73,7 +73,6 @@ struct DApp: App {
                         .modifier(DOpaqueNoticePlate())
                 }
             }
-            .environment(\.dLanguageStore, bootstrap.languageStore)
             .disabled(bootstrap.isTerminating)
             .onAppear { consumeFallbackSettings() }
             .onChange(of: settingsRequest) { _, _ in consumeFallbackSettings() }
@@ -88,6 +87,9 @@ struct DApp: App {
                     }
                 }
             }
+            .modifier(LowMemoryDecisionPresenter(owner: bootstrap.lowMemoryDecisions))
+            .environment(\.dLanguageStore, bootstrap.languageStore)
+            .environment(\.lowMemoryDecisions, bootstrap.lowMemoryDecisions)
             .task { if !deploymentProbeEnabled { await bootstrap.start() } }
             .onOpenURL { url in
                 if deploymentProbeEnabled { print("D_AUDIO_DEPLOYMENT_IGNORED_OPEN_REQUEST") }

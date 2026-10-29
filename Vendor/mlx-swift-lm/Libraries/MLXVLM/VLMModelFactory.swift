@@ -312,13 +312,14 @@ public final class VLMModelFactory: GenericModelFactory {
     public init(
         typeRegistry: ModelTypeRegistry<LanguageModel>, processorRegistry: ProcessorTypeRegistry,
         modelRegistry: AbstractModelRegistry, layeredQwen35: Bool = false,
-        fileSelection: ModelFileSelection? = nil
+        fileSelection: ModelFileSelection? = nil, expectedModelIdentities: [String: String]? = nil
     ) {
         self.typeRegistry = typeRegistry
         self.processorRegistry = processorRegistry
         self.modelRegistry = modelRegistry
         self.layeredQwen35 = layeredQwen35
         self.fileSelection = fileSelection
+        self.expectedModelIdentities = expectedModelIdentities
     }
 
     /// Shared instance with default behavior.
@@ -336,15 +337,31 @@ public final class VLMModelFactory: GenericModelFactory {
     public let modelRegistry: AbstractModelRegistry
     private let layeredQwen35: Bool
     private let fileSelection: ModelFileSelection?
+    private let expectedModelIdentities: [String: String]?
+
+    private func verifyExpectedFiles(in directory: URL) throws {
+        for (name, expected) in expectedModelIdentities ?? [:] {
+            guard try Qwen35LayeredFileValidation.identity(directory.appendingPathComponent(name)) == expected else {
+                throw Qwen35LayeredWeights.Failure.invalid("approved file changed: " + name)
+            }
+        }
+    }
 
     public func _load(
         configuration: ResolvedModelConfiguration,
         tokenizerLoader: any TokenizerLoader
     ) async throws -> sending ModelContext {
         let modelDirectory = configuration.modelDirectory
+        try verifyExpectedFiles(in: modelDirectory)
 
         // Load config.json once and decode for both base config and model-specific config
         let configurationURL = modelDirectory.appending(component: "config.json")
+        let configurationIdentity: String? = try layeredQwen35
+            ? Qwen35LayeredFileValidation.identity(configurationURL) : nil
+        if let expectedModelIdentities,
+           configurationIdentity != expectedModelIdentities["config.json"] {
+            throw Qwen35LayeredWeights.Failure.invalid("configuration does not match approved identity")
+        }
         let configData: Data
         do {
             configData = try layeredQwen35
@@ -354,11 +371,9 @@ public final class VLMModelFactory: GenericModelFactory {
             throw ModelFactoryError.configurationFileError(
                 configurationURL.lastPathComponent, configuration.name, error)
         }
-        let configurationIdentity: String?
-        if layeredQwen35 {
-            configurationIdentity = try Qwen35LayeredFileValidation.identity(configurationURL)
-        } else {
-            configurationIdentity = nil
+        if let configurationIdentity,
+           try Qwen35LayeredFileValidation.identity(configurationURL) != configurationIdentity {
+            throw Qwen35LayeredWeights.Failure.invalid("configuration changed while reading")
         }
         let baseConfig: BaseConfiguration
         do {
@@ -371,8 +386,8 @@ public final class VLMModelFactory: GenericModelFactory {
         let model: LanguageModel
         do {
             if layeredQwen35 {
-                guard baseConfig.modelType == "qwen3_5", baseConfig.perLayerQuantization == nil else {
-                    throw Qwen35LayeredWeights.Failure.invalid("only unquantized Qwen3.5 supports layered loading")
+                guard baseConfig.modelType == "qwen3_5" else {
+                    throw Qwen35LayeredWeights.Failure.invalid("only dense Qwen3.5 supports layered loading")
                 }
                 let config = try Qwen35LayeredFileValidation.configuration(configData)
                 model = Qwen35(config, layered: true)
@@ -431,7 +446,8 @@ public final class VLMModelFactory: GenericModelFactory {
             try layered.loadLayeredWeights(from: modelDirectory,
                                            expectedConfiguration: configData,
                                            expectedConfigurationIdentity: configurationIdentity,
-                                           fileSelection: fileSelection)
+                                           fileSelection: fileSelection,
+                                           expectedFileIdentities: expectedModelIdentities)
         } else {
             try loadWeights(modelDirectory: modelDirectory, model: model,
                 perLayerQuantization: baseConfig.perLayerQuantization,
@@ -480,6 +496,7 @@ public final class VLMModelFactory: GenericModelFactory {
             eosTokenIds: mutableConfiguration.eosTokenIds,
             toolCallFormat: mutableConfiguration.toolCallFormat)
 
+        try verifyExpectedFiles(in: modelDirectory)
         return .init(
             configuration: modelConfig, model: model, processor: processor,
             tokenizer: tokenizer)

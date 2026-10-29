@@ -21,10 +21,13 @@ public struct WorkflowVideoRecipe: Sendable {
         guard let width = p["width"]?.integer, let height = p["height"]?.integer,
               let frames = p["frameCount"]?.integer, let steps = p["steps"]?.integer,
               let fps = p["frameRate"]?.integer, let numerator = Int32(exactly: fps),
-              let stream = p["streamWeights"]?.flag,
+              let fixedStream = p["streamWeights"]?.flag,
               let guidance = p["guidance"]?.decimal else {
             throw WorkflowIssue("视频节点缺少此模型的明确参数；不会改用另一配方。")
         }
+        let selection = p["memoryStrategySelection"]?.string ?? "fixed"
+        guard ["fixed", "automatic"].contains(selection) else { throw WorkflowIssue("Unknown video memory strategy selection.") }
+        let stream = selection == "automatic" ? false : fixedStream
         let options: VideoAdapterOptions
         if profile == .h3BF16Full {
             options = .h3(streamWeights: stream)

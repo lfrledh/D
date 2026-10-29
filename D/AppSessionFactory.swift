@@ -13,7 +13,8 @@ enum AppSessionFactory {
         audioAccessRoot: URL? = nil,
         bundledVideoEngine: BundledAudioEngine? = nil, videoAccessRoot: URL? = nil,
         bundledPitchEngine: BundledAudioEngine? = nil,
-        bundledExternalVideoEngine: BundledAudioEngine? = nil, bundledACEEngine: BundledAudioEngine? = nil, modelLibrary: ModelLibrary? = nil) async throws -> WorkbenchSession {
+        bundledExternalVideoEngine: BundledAudioEngine? = nil, bundledACEEngine: BundledAudioEngine? = nil,
+        modelLibrary: ModelLibrary? = nil, lowMemoryDecisions: LowMemoryDecisionStore? = nil) async throws -> WorkbenchSession {
         let stages = BackendStageMonitor()
         let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory, profile: .scalableKlein4B),
                                          observer: { await stages.record($0) })
@@ -122,7 +123,8 @@ enum AppSessionFactory {
         let runtime = try InferenceRuntime(
             backends: backends,
             configuration: try RuntimeConfiguration(memoryBudgetBytes: memoryBudgetBytes,
-                                                    maximumQueuedRuns: 8, allowsRequestBudgetIncrease: true))
+                                                    maximumQueuedRuns: 8, allowsRequestBudgetIncrease: true),
+            decideLowMemory: lowMemoryDecisions.map { owner in { proposal in try await owner.decide(proposal) } })
         let validateAudioModel: (@Sendable (URL) async throws -> ModelReference)?
         if let audioBackend {
             validateAudioModel = { directory in
@@ -165,7 +167,8 @@ enum AppSessionFactory {
                 return WorkbenchRuntimeStatus(activeRunID: snapshot.activeRunID,
                                               phase: phaseTitle(snapshot.phase, stage: stage),
                                               queuedRunIDs: snapshot.queuedRunIDs,
-                                              state: state, phaseCode: phaseCode(snapshot.phase, stage: stage))
+                                              state: state, phaseCode: phaseCode(snapshot.phase, stage: stage),
+                                              lowMemoryMethod: snapshot.lowMemoryMethod)
             },
             shutdown: { await runtime.shutdown() },
             cleanup: {
@@ -192,7 +195,7 @@ enum AppSessionFactory {
             audioCapability: audioBackend?.executionCapability, musicCapability: musicBackend?.executionCapability,
             videoBackendID: videoBackend?.descriptor.id, validateVideoModel: validateVideoModel,
             videoCapability: videoBackend?.executionCapability, videoAdapters: videoAdapters, modelAdapters: modelAdapters, defaultMemoryBudgetBytes: memoryBudgetBytes,
-            pitchBackendID: pitchBackend?.descriptor.id, pitchModel: pitchReference)
+            pitchBackendID: pitchBackend?.descriptor.id, pitchModel: pitchReference, lowMemoryDecisions: lowMemoryDecisions)
     }
 
     /// Only an explicitly isolated development session can supply an existing local engine.
@@ -230,7 +233,7 @@ enum AppSessionFactory {
     nonisolated private static func jobState(_ phase: RuntimeSnapshot.Phase?,
                                              stage: MLXLifecycleEvent.Phase?) -> JobState? {
         switch phase {
-        case .preparing: .preparing
+        case .preparing, .awaitingLowMemoryDecision: .preparing
         case .running:
             switch stage {
             case .verifying, .tokenizing, .loading, .loadingTextEncoder, .textEncoderLoaded: .preparing
@@ -246,6 +249,7 @@ enum AppSessionFactory {
     nonisolated private static func phaseCode(_ phase: RuntimeSnapshot.Phase?, stage: MLXLifecycleEvent.Phase?) -> String? {
         switch phase {
         case .preparing: "preparing"
+        case .awaitingLowMemoryDecision: "awaitingLowMemoryDecision"
         case .running:
             switch stage {
             case .verifying: "verifyingModel"
@@ -273,6 +277,7 @@ enum AppSessionFactory {
                                                stage: MLXLifecycleEvent.Phase?) -> String? {
         switch phase {
         case .preparing: "正在准备"
+        case .awaitingLowMemoryDecision: "Awaiting approval for low-memory execution"
         case .running:
             switch stage {
             case .verifying: "正在校验模型完整性"

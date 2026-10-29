@@ -5,7 +5,7 @@ import MLX
 import MLXNN
 
 /// Fixed official BF16 Dev installation. Each model stage has a separate lifetime.
-public actor MLXFluxDevBackend: InferenceBackend {
+public actor MLXFluxDevBackend: InferenceExecutionPlanning {
     public nonisolated let descriptor = BackendDescriptor(
         id: "mlx.image.flux2-dev", version: "0.1.0+flux2-959a4af.dev-bf16", capabilities: [.imageGeneration])
     public nonisolated let executionCapability: ImageExecutionCapability = .flux2Dev
@@ -50,7 +50,32 @@ public actor MLXFluxDevBackend: InferenceBackend {
         return ResourceEstimate(peakBytes: inventory.estimatedPeakBytes)
     }
 
+    private func planSeal(_ request: InferenceRequest) throws -> ModelExecutionSeal {
+        let inventory = try LocalFluxDevInventory.inspect(request)
+        return try ModelExecutionSeal.capture(request.model, backend: descriptor, names: inventory.admittedPaths)
+    }
+    public func lowMemoryPlans(for request: InferenceRequest) async throws -> [InferenceExecutionPlan] {
+        let seal = try planSeal(request)
+        return [.init(request: try request.lowMemoryRequest(method: .layered), method: .layered,
+            strategyVersion: 1, modelIdentityToken: seal.token)]
+    }
+    public func validate(_ plan: InferenceExecutionPlan, for original: InferenceRequest) async throws {
+        try plan.validateSemantics(original: original)
+        guard plan.method == .layered, plan.strategyVersion == 1,
+              try planSeal(original).token == plan.modelIdentityToken else {
+            throw InferenceFailure.inputIntegrityChanged("Approved model or execution plan changed.")
+        }
+    }
+    public func execute(_ plan: InferenceExecutionPlan, for original: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await validate(plan, for: original)
+        return try await execute(plan.request, expectedPlan: plan, emit: emit)
+    }
     public func execute(_ request: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await execute(request, expectedPlan: nil, emit: emit)
+    }
+    private func execute(_ request: InferenceRequest, expectedPlan: InferenceExecutionPlan?,
                         emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         guard !executing, !releasing, lease == nil else {
             throw InferenceFailure.backendFailed("Dev image execution requires release of the preceding run.")
@@ -59,6 +84,12 @@ public actor MLXFluxDevBackend: InferenceBackend {
         defer { executing = false }
         try Task.checkCancellation()
         let inventory = try LocalFluxDevInventory.inspect(request)
+        if let expectedPlan {
+            guard try ModelExecutionSeal.capture(request.model, backend: descriptor,
+                names: inventory.admittedPaths).token == expectedPlan.modelIdentityToken else {
+                throw InferenceFailure.inputIntegrityChanged("Approved model files changed before loading.")
+            }
+        }
         try ImageArtifactTransaction.validateRoot(configuration.artifactDirectory, model: inventory.directory)
         guard case .image(let input) = request.input else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
@@ -67,6 +98,12 @@ public actor MLXFluxDevBackend: InferenceBackend {
         let token = UUID()
         try await MLXExecutionLease.shared.acquire(token)
         lease = token
+        if let expectedPlan {
+            guard try ModelExecutionSeal.capture(request.model, backend: descriptor,
+                names: inventory.admittedPaths).token == expectedPlan.modelIdentityToken else {
+                throw InferenceFailure.inputIntegrityChanged("Approved model files changed while waiting for compute.")
+            }
+        }
         runID = request.id
         previousCacheLimit = Memory.cacheLimit
         previousMemoryLimit = Memory.memoryLimit

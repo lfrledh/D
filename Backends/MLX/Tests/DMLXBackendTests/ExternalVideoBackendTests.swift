@@ -7,6 +7,35 @@ import Testing
 
 @Suite("External video publication and terminal ownership (CPU fixtures)", .serialized)
 struct ExternalVideoBackendTests {
+    @Test func planRejectsEmptyComponentsAndChangedWeightsBeforeExecution() async throws {
+        let fixture = try Fixture(), backend = try fixture.backend(mode: "success")
+        let request = fixture.request()
+        await #expect(throws: (any Error).self) { _ = try await backend.lowMemoryPlans(for: request) }
+        for component in ["model", "text_encoder"] {
+            try Data("fixed fixture weights".utf8).write(to: fixture.model.appendingPathComponent(component + "/weights.safetensors"))
+        }
+        let plan = try #require(try await backend.lowMemoryPlans(for: request).first)
+        try await backend.validate(plan, for: request)
+        guard case .video(let original) = request.input, case .video(let selected) = plan.request.input else { Issue.record("Expected video"); return }
+        #expect(original == selected) // Fixture already explicitly selects streaming; guidance/seed remain intact.
+        let file = fixture.model.appendingPathComponent("model/weights.safetensors")
+        let held = fixture.root.appendingPathComponent("held.safetensors")
+        try FileManager.default.moveItem(at: file, to: held)
+        try Data(contentsOf: held).write(to: file)
+        await #expect(throws: (any Error).self) { try await backend.validate(plan, for: request) }
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createSymbolicLink(at: file, withDestinationURL: held)
+        await #expect(throws: (any Error).self) { _ = try await backend.lowMemoryPlans(for: request) }
+    }
+
+    @Test func ltx23StreamingStillAccountsForItsResidentTextTower() async throws {
+        for profile in [ExternalVideoExecutionProfile.ltx23BF16Full, .ltx23Q8GemmaQ4] {
+            let fixture = try Fixture(profile: profile), backend = try fixture.backend(mode: "success")
+            let estimate = try await backend.estimate(fixture.request())
+            let weights: UInt64 = profile == .ltx23BF16Full ? 26_388_550_536 : 8_028_675_248
+            #expect(estimate.peakBytes >= weights + 2 * 1_073_741_824)
+        }
+    }
     @Test func independentPublicationAndFrozenDigest() throws {
         let fixture = try Fixture()
         let source = fixture.root.appendingPathComponent("candidate.mp4")

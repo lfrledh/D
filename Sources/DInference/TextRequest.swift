@@ -18,7 +18,7 @@ public struct TextRequest: Sendable, Codable, Equatable {
     public let tools: [TextToolDefinition]?
     public let thinking: TextThinkingOptions?
     public let seed: UInt64?
-    public let loadingStrategy: TextLoadingStrategy?
+    public internal(set) var loadingStrategy: TextLoadingStrategy?
     /// Literal Jinja template for this request only. Nil selects the installed model default.
     public let chatTemplateOverride: String?
 

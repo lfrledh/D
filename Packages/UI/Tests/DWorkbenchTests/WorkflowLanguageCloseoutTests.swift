@@ -5,13 +5,13 @@ import Testing
 
 @Suite("VLM shared form and response closeout")
 struct WorkflowLanguageCloseoutTests {
-    @Test func knownLoadingRestrictionUsesExactProfileAndPreservesSavedChoice() throws {
+    @Test func layeredSupportUsesExactProfileAndPreservesSavedChoice() throws {
         let profiles = try TextModelProfiles.registeredVLM()
         #expect(profiles.contains { $0.quantizationBits == 4 })
         #expect(profiles.contains { $0.quantizationBits == 0 })
         for profile in profiles {
             let identity = "text:" + profile.revision
-            #expect(WorkflowModelRoutes.rejectsTextLoading(modelIdentity: identity, strategy: "ssdLayered") == (profile.quantizationBits > 0))
+            #expect(!WorkflowModelRoutes.rejectsTextLoading(modelIdentity: identity, strategy: "ssdLayered"))
             #expect(!WorkflowModelRoutes.rejectsTextLoading(modelIdentity: identity, strategy: "resident"))
         }
         #expect(!WorkflowModelRoutes.rejectsTextLoading(modelIdentity: "Qwen3.5-9B-4bit", strategy: "ssdLayered"))
@@ -20,9 +20,9 @@ struct WorkflowLanguageCloseoutTests {
         node.parameters["modelID"] = .text("text:" + (try #require(profiles.first { $0.quantizationBits == 4 })).revision)
         node.parameters["loadingStrategy"] = .text("ssdLayered")
         let before = node
-        #expect(WorkflowModelRoutes.rejectsTextLoading(modelIdentity: node.parameters["modelID"]?.string, strategy: node.parameters["loadingStrategy"]?.string ?? ""))
+        #expect(!WorkflowModelRoutes.rejectsTextLoading(modelIdentity: node.parameters["modelID"]?.string, strategy: node.parameters["loadingStrategy"]?.string ?? ""))
         #expect(node == before)
-        // Rendering must preserve old selections. Execution retains backend inventory rejection.
+        // Rendering preserves old selections. The backend still validates exact packed files.
         #expect(try WorkflowLanguageMessageForm.loadingStrategy(node.parameters) == .ssdLayered)
     }
 
@@ -286,7 +286,7 @@ private actor CloseoutResponseEngine: InferenceEngine {
         node.parameters["memoryBudgetGiB"] = nil
         for route in [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38] {
             var invalidNode = try #require(registry.operation(route)?.definition.makeNode())
-            for invalid: WorkflowScalar in [.text("automatic"), .integer(1), .decimal(0)] {
+            for invalid: WorkflowScalar in [.text("unsupported"), .integer(1), .decimal(0)] {
                 invalidNode.parameters["loadingStrategy"] = invalid
                 #expect(throws: (any Error).self) { try registry.validate(invalidNode) }
                 #expect(throws: (any Error).self) { try WorkflowLanguageMessageForm.loadingStrategy(invalidNode.parameters) }

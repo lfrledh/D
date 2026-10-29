@@ -18,7 +18,7 @@ public struct ImageRequest: Sendable, Codable, Equatable {
     /// Ordered frozen inputs. Nil retains the legacy single-reference encoding.
     public let referenceImages: [ImageReference]?
     /// Nil preserves historical stage-by-stage residency.
-    public let loadingStrategy: ImageLoadingStrategy?
+    public internal(set) var loadingStrategy: ImageLoadingStrategy?
 
     public init(prompt: String, width: Int, height: Int, steps: Int,
                 guidanceScale: Float, seed: UInt64, executionProfile: ExecutionProfileReference? = nil,

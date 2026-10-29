@@ -21,7 +21,8 @@ public struct ModelLibraryInferenceEngine: InferenceEngine {
                 return result
             }
             return .init(id: run.id, nextEvent: { try await cursor.next() },
-                cancel: { await run.cancel() }, outcome: { await completion.value })
+                cancel: { await run.cancel() }, outcome: { await completion.value },
+                executionRecord: { await run.executionRecord() })
         } catch { await library.release(lease); throw error }
     }
 }

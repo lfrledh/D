@@ -1963,7 +1963,7 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
         }, save: { [unowned self] value in
             self.capture(value, runIndex: ri)
             try await self.persist()
-        })
+        }, executionRecords: { [unowned self] in self.services.executionRecords(for: $0) })
         activeExecutor = executor
         executor.pauseAvailabilityChanged = { [weak self, weak executor] ready in
             guard let self, self.activeExecutor === executor else { return }

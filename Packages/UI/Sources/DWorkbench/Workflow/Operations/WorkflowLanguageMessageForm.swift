@@ -7,7 +7,7 @@ enum WorkflowLanguageMessageForm {
     static let optionalFields: Set<String> = ["messagesJSON", "toolsJSON", "thinking", "reasoningEffort", "preserveThinking", "seed", "memoryBudgetGiB", "loadingStrategy", "chatTemplateOverride"]
     static let fields: [WorkflowFieldDefinition] = [
         .init("memoryBudgetGiB", "显式内存预算 GiB（0使用运行时策略）", .integer, .integer(0)),
-        .init("loadingStrategy", "加载方式（精度不变）", .choice(["resident", "ssdLayered"]), .text("resident")),
+        .init("loadingStrategy", "加载方式（精度不变）", .choice(["automatic", "resident", "ssdLayered"]), .text("automatic")),
         .init("messagesJSON", "有序消息 JSON（留空使用任务；媒体 index 从0开始）", .text(multiline: true), .text("")),
         .init("toolsJSON", "工具声明 JSON（仅声明，不自动执行）", .text(multiline: true), .text("")),
         .init("thinking", "思考", .choice(["model", "on", "off"]), .text("model")),
@@ -17,6 +17,7 @@ enum WorkflowLanguageMessageForm {
     ]
     static func loadingStrategy(_ parameters: [String: WorkflowScalar]) throws -> TextLoadingStrategy? {
         guard let value = parameters["loadingStrategy"] else { return nil }
+        if value == .text("automatic") { return .resident }
         guard case .text(let raw) = value, let strategy = TextLoadingStrategy(rawValue: raw) else {
             throw WorkflowIssue("文字加载方式无效；不会静默切换模型或精度。")
         }

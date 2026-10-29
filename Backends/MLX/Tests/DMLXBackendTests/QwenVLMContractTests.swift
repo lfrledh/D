@@ -10,6 +10,43 @@ import Testing
 
 @Suite("Qwen3.5 VLM metadata contract")
 struct QwenVLMContractTests {
+    @Test func executionSealRejectsSymbolicAncestorsAndSameSizeReplacement() throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("weights"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("weights/model.safetensors")
+        try Data("test weights".utf8).write(to: file)
+        let model = ModelReference(directory: root, revision: "fixture"), backend = BackendDescriptor(id: "fixture", version: "1", capabilities: [.textGeneration])
+        let before = try ModelExecutionSeal.capture(model, backend: backend, names: ["weights/model.safetensors"])
+        try FileManager.default.moveItem(at: file, to: root.appendingPathComponent("old"))
+        try Data("test weights".utf8).write(to: file)
+        #expect(try ModelExecutionSeal.capture(model, backend: backend, names: ["weights/model.safetensors"]).token != before.token)
+        try FileManager.default.moveItem(at: root.appendingPathComponent("weights"), to: root.appendingPathComponent("held"))
+        try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("weights"), withDestinationURL: root.appendingPathComponent("held"))
+        #expect(throws: (any Error).self) { _ = try ModelExecutionSeal.capture(model, backend: backend, names: ["weights/model.safetensors"]) }
+    }
+
+    @Test func hybridStateBudgetUsesCapacityAndKeepsResidentProjection() throws {
+        for (size, layers, full) in [("9B", 32, 8), ("27B", 64, 16)] {
+            var config: [String: Any] = ["num_hidden_layers": layers, "full_attention_interval": 4, "vocab_size": 248320]
+            config["layer_types"] = (0..<layers).map { ($0 + 1) % 4 == 0 ? "full_attention" : "linear_attention" }
+            let make: (UInt64, UInt64) throws -> QwenLayeredResourceEstimate.StateBudget = { tokens, rows in
+                try QwenLayeredResourceEstimate.stateBudget(text: config, size: size, tokens: tokens, projectionRows: rows, cacheLimit: 64 * 1024 * 1024)
+            }
+            for (tokens, capacity): (UInt64, UInt64) in [(255,256),(256,256),(257,512)] {
+                let value = try make(tokens, 512)
+                #expect(value.fullAttentionLayers == full && value.kvCapacity == capacity)
+                #expect(value.kvGrowthPeak == UInt64(full) * 2 * 4 * 256 * capacity * 4 * 2)
+                #expect(value.recurrent > 0 && value.convolution > 0 && value.stateReplacementReserve == value.recurrent + value.convolution)
+            }
+            let resident = try make(2304, 2048), layered = try make(2304, 512)
+            #expect(resident.projection == layered.projection * 4)
+            #expect(resident.kvGrowthPeak == layered.kvGrowthPeak)
+            #expect(try make(.max, 512).total == .max)
+            config["layer_types"] = Array(repeating: "full_attention", count: layers)
+            #expect(throws: (any Error).self) { try QwenLayeredResourceEstimate.stateBudget(text: config, size: size, tokens: 2304, projectionRows: 512, cacheLimit: 0) }
+        }
+    }
     @Test func loadingStrategyIsExplicitAndLegacyJSONRemainsResident() throws {
         let legacy = TextRequest(prompt: "hello")
         let data = try JSONEncoder().encode(legacy)

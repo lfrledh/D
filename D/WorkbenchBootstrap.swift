@@ -31,6 +31,7 @@ final class WorkbenchBootstrap {
     private(set) var quickModel: WorkbenchModel?
     private(set) var quick: QuickGenerationController?
     private var sharedSession: WorkbenchSession?
+    private(set) var lowMemoryDecisions: LowMemoryDecisionStore?
     private(set) var model: WorkbenchModel?
     private(set) var libraryModel: ModelLibraryModel?
     private(set) var nodeTags: ModelNodeTagStore?
@@ -126,6 +127,7 @@ final class WorkbenchBootstrap {
             languageStore = UILanguageStore(settings: settings, directory: libraryDirectory.deletingLastPathComponent()
                 .appendingPathComponent("LanguagePacks", isDirectory: true))
             nodeTags = ModelNodeTagStore(settings: settings)
+            lowMemoryDecisions = LowMemoryDecisionStore(settings: settings)
             do { sharedLibrary = try SharedLibraryStore(fileURL: libraryDirectory.deletingLastPathComponent().appendingPathComponent("shared-library.json")) }
             catch { sharedLibraryIssue = "资料整理记录无法读取，已保留原件：" + error.localizedDescription }
             let accessRoot = libraryDirectory.deletingLastPathComponent()
@@ -221,11 +223,12 @@ final class WorkbenchBootstrap {
                 startupError = "快速创作记录暂不可用，原件保留；仍可打开已有项目。\n" + error.localizedDescription
                 self.library = library
                 let observer = ModelLibraryModel(library: library, language: languageStore); self.libraryModel = observer
+                let decisions = lowMemoryDecisions
                 self.model = WorkbenchModel(sessionFactory: { artifactDirectory in
                     let created = try await AppSessionFactory.makeSession(artifactDirectory: artifactDirectory,
                         bundledAudioEngine: engine, bundledMusicEngine: musicEngine,
                         audioAccessRoot: accessRoot, bundledVideoEngine: videoEngine,
-                        videoAccessRoot: videoAccessRoot, bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine, bundledACEEngine: aceAvailability.engine, modelLibrary: library)
+                        videoAccessRoot: videoAccessRoot, bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine, bundledACEEngine: aceAvailability.engine, modelLibrary: library, lowMemoryDecisions: decisions)
                     await MainActor.run { observer.preparedValidator = Self.downloadPreparedValidator(created) }
                     return created
                 }, settings: settings, modelLibrary: library, audioEnabled: true, audioRecordingEnabled: true, language: languageStore)
@@ -243,7 +246,7 @@ final class WorkbenchBootstrap {
                 bundledAudioEngine: engine,
                 bundledMusicEngine: musicEngine, audioAccessRoot: accessRoot,
                 bundledVideoEngine: videoEngine, videoAccessRoot: videoAccessRoot,
-                bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine, bundledACEEngine: aceAvailability.engine, modelLibrary: library)
+                bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine, bundledACEEngine: aceAvailability.engine, modelLibrary: library, lowMemoryDecisions: lowMemoryDecisions)
             let borrowed = shared.borrowed(artifactStore: quickStore)
             let quickModel = WorkbenchModel(sessionFactory: { _ in borrowed }, settings: settings,
                 modelLibrary: library, appearanceDirectory: libraryDirectory.deletingLastPathComponent().appendingPathComponent("Appearance", isDirectory: true), audioEnabled: true, audioRecordingEnabled: true, language: languageStore)

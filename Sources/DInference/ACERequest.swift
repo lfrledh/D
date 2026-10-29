@@ -87,7 +87,7 @@ public struct ACERequest: Codable, Sendable, Equatable {
     public let guidanceScale: Float
     public let referenceAudio: AudioSourceReference?
     public let editOptions: ACEEditOptions?
-    public let loadingStrategy: ACELoadingStrategy
+    public internal(set) var loadingStrategy: ACELoadingStrategy
 
     public init(executionProfile: String = ACERequest.fixedProfile,
                 vocal: ACEVocalCondition = .instrumental, bpm: Int? = nil,

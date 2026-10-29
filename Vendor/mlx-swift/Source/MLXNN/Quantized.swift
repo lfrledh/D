@@ -201,6 +201,16 @@ open class QuantizedEmbedding: Embedding, Quantized {
         self.freeze()
     }
 
+    /// Load an already quantized checkpoint without allocating or quantizing a
+    /// floating-point embedding. Callers validate packed shapes before construction.
+    public init(weight: MLXArray, scales: MLXArray, biases: MLXArray?,
+                groupSize: Int, bits: Int, mode: QuantizationMode = .affine) {
+        self.groupSize = groupSize; self.bits = bits; self.mode = mode
+        self.scales = scales; self.biases = biases
+        super.init(weight: weight)
+        self.freeze()
+    }
+
     open override func callAsFunction(_ x: MLXArray) -> MLXArray {
         let s = x.shape
         let x = x.flattened()

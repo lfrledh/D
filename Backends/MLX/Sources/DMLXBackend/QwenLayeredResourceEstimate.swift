@@ -6,29 +6,8 @@ import MLXVLM
 enum QwenLayeredResourceEstimate {
     static func peak(inventory: QwenVLMModelInventory, tokens: UInt64,
                      visualPixels: UInt64, cacheLimit: Int) throws -> UInt64 {
-        let (configData, _) = try AudioFileSystem.readRegularFile(
-            inventory.directory.appendingPathComponent("config.json"),
-            label: "Qwen3.5 config", maximumBytes: 4 * 1024 * 1024)
-        let config = try QwenVLMModelInventory.object(configData)
-        let modelConfiguration = try Qwen35LayeredFileValidation.configuration(configData)
-        guard let text = config["text_config"] as? [String: Any] else {
-            throw InferenceFailure.invalidRequest("Missing Qwen3.5 text configuration.")
-        }
-        let layers = try QwenVLMModelInventory.integer(text, "num_hidden_layers")
-        let kvHeads = try QwenVLMModelInventory.integer(text, "num_key_value_heads")
-        let headDim = try QwenVLMModelInventory.integer(text, "head_dim")
-        let valueHeads = try QwenVLMModelInventory.integer(text, "linear_num_value_heads")
-        let keyHeads = try positive(text, "linear_num_key_heads", default: 16, maximum: 256)
-        let keyDim = try positive(text, "linear_key_head_dim", default: 192, maximum: 1024)
-        let valueDim = try positive(text, "linear_value_head_dim", default: 128, maximum: 1024)
-        let convKernel = try positive(text, "linear_conv_kernel_dim", default: 4, maximum: 64)
-        guard (inventory.size == "9B" && layers == 32 || inventory.size == "27B" && layers == 64),
-              kvHeads > 0, kvHeads <= 256, headDim > 0, headDim <= 1024,
-              valueHeads > 0, valueHeads <= 256, cacheLimit >= 0 else {
-            throw InferenceFailure.invalidRequest("Unsupported layered Qwen3.5 configuration.")
-        }
-        let fullLayers = layers / 4
-        let linearLayers = layers - fullLayers
+        let state = try stateBudget(inventory: inventory, tokens: tokens, projectionRows: 512, cacheLimit: cacheLimit)
+        let layers = state.layers
         var textResident: UInt64 = 0
         var visionBase: UInt64 = 0
         var visionMerger: UInt64 = 0
@@ -96,20 +75,8 @@ enum QwenLayeredResourceEstimate {
         guard byLayer.count == layers, let active = byLayer.values.max() else {
             throw InferenceFailure.invalidRequest("Incomplete Qwen3.5 decoder weights.")
         }
-        // Original FP32 linear controls can promote subsequent activations,
-        // including full-attention KV and convolution state. Never estimate
-        // these as BF16 merely because most stored weights are BF16.
-        let kvPerToken = product(fullLayers, 2, kvHeads, headDim, 4)
-        let recurrent = product(linearLayers, valueHeads, valueDim, keyDim, 4)
-        let conv = multiplying(product(linearLayers, convKernel - 1, 4),
-            adding(product(2, keyHeads, keyDim), product(valueHeads, valueDim)))
-        let hidden = UInt64(inventory.size == "27B" ? 5120 : 4096)
-        let promptWorkspace = adding(multiplying(tokens, hidden * 4), multiplying(512 * 32, hidden))
-        // Chunked prefill preserves the resident output projection geometry.
-        // Original mixed-precision controls can promote its result to FP32.
-        let projection = product(512, modelConfiguration.textConfiguration.vocabularySize, 4)
-        let cache = [multiplying(tokens, kvPerToken), recurrent, conv, projection,
-                     promptWorkspace, UInt64(cacheLimit), 512 * 1024 * 1024].reduce(0, adding)
+        let cache = state.total
+        let promptWorkspace = state.promptWorkspace
         // The prepared input remains captured by the generation closure until
         // completion, including its visual pixel arrays. Account for that
         // ownership during decode, not only during the vision stage.
@@ -126,6 +93,70 @@ enum QwenLayeredResourceEstimate {
         let visualStage = [textResident, visionBase, max(visionBlock, visionMerger),
                            visualWorkspace, UInt64(cacheLimit), 512 * 1024 * 1024].reduce(0, adding)
         return max(decode, visualStage)
+    }
+
+    struct StateBudget {
+        let layers: Int
+        let fullAttentionLayers: Int
+        let kvCapacity: UInt64
+        let kvGrowthPeak: UInt64
+        let recurrent: UInt64
+        let convolution: UInt64
+        let projection: UInt64
+        let promptWorkspace: UInt64
+        let allocatorCache: UInt64
+        let reserve: UInt64 = 512 * 1024 * 1024
+        var stateReplacementReserve: UInt64 { adding(recurrent, convolution) }
+        var total: UInt64 { [kvGrowthPeak, recurrent, convolution, stateReplacementReserve, projection, promptWorkspace, allocatorCache, reserve].reduce(0, adding) }
+    }
+
+    static func stateBudget(inventory: QwenVLMModelInventory, tokens: UInt64,
+                            projectionRows: UInt64, cacheLimit: Int) throws -> StateBudget {
+        let (data, _) = try AudioFileSystem.readRegularFile(inventory.directory.appendingPathComponent("config.json"), label: "Qwen memory configuration", maximumBytes: 4 * 1024 * 1024)
+        let object = try QwenVLMModelInventory.object(data)
+        guard let text = object["text_config"] as? [String: Any] else { throw InferenceFailure.invalidRequest("Missing Qwen text configuration.") }
+        return try stateBudget(text: text, size: inventory.size, tokens: tokens, projectionRows: projectionRows, cacheLimit: cacheLimit)
+    }
+
+    static func stateBudget(text: [String: Any], size: String, tokens: UInt64,
+                            projectionRows: UInt64, cacheLimit: Int) throws -> StateBudget {
+        let layers = try QwenVLMModelInventory.integer(text, "num_hidden_layers")
+        let kvHeads = try positive(text, "num_key_value_heads", default: 4, maximum: 256)
+        let headDim = try positive(text, "head_dim", default: 256, maximum: 1024)
+        let valueHeads = try positive(text, "linear_num_value_heads", default: size == "9B" ? 32 : 48, maximum: 256)
+        let keyHeads = try positive(text, "linear_num_key_heads", default: 16, maximum: 256)
+        let keyDim = try positive(text, "linear_key_head_dim", default: 192, maximum: 1024)
+        let valueDim = try positive(text, "linear_value_head_dim", default: 128, maximum: 1024)
+        let kernel = try positive(text, "linear_conv_kernel_dim", default: 4, maximum: 64)
+        let vocab = try positive(text, "vocab_size", default: 248320, maximum: 1_048_576)
+        guard (size == "9B" && layers == 32 || size == "27B" && layers == 64), cacheLimit >= 0,
+              tokens > 0, projectionRows > 0, try QwenVLMModelInventory.validAttentionLayout(text, layers: layers) else {
+            throw InferenceFailure.invalidRequest("Unsupported Qwen memory geometry.")
+        }
+        let full = layers / 4, linear = layers - full
+        // KVCacheSimple grows in 256-token units; concatenation can retain both buffers.
+        let capacity = multiplying(adding(tokens, 255) / 256, 256)
+        let kv = multiplying(multiplying(capacity, product(full, 2, kvHeads, headDim, 4)), 2)
+        // Gated delta state is explicitly FP32. FP32 convolution/KV is a conservative
+        // bound because the original mixed controls can promote later activations.
+        let recurrent = product(linear, valueHeads, valueDim, keyDim, 4)
+        let conv = multiplying(product(linear, kernel - 1, 4), adding(product(2, keyHeads, keyDim), product(valueHeads, valueDim)))
+        let hidden: UInt64 = size == "27B" ? 5120 : 4096
+        let workspace = adding(multiplying(tokens, hidden * 4), multiplying(projectionRows, hidden * 32))
+        return .init(layers: layers, fullAttentionLayers: full, kvCapacity: capacity, kvGrowthPeak: kv,
+            recurrent: recurrent, convolution: conv, projection: multiplying(projectionRows, UInt64(vocab) * 4),
+            promptWorkspace: workspace, allocatorCache: UInt64(cacheLimit))
+    }
+
+    static func residentPeak(inventory: QwenVLMModelInventory, tokens: UInt64, promptTokens: UInt64,
+                             visualPixels: UInt64, cacheLimit: Int) throws -> UInt64 {
+        let state = try stateBudget(inventory: inventory, tokens: tokens, projectionRows: promptTokens, cacheLimit: cacheLimit)
+        // 2W remains a conservative loading transient bound, not measured duplication.
+        // Loading precedes prefill; do not add its entire allowance to live inference state.
+        let load = adding(multiplying(inventory.weightBytes, 2), adding(state.allocatorCache, state.reserve))
+        // Resident prepare projects the whole prompt; layered prepare uses 512-token chunks.
+        let inference = adding(inventory.weightBytes, adding(state.total, multiplying(visualPixels, 24)))
+        return max(load, inference)
     }
 
     private static func positive(_ config: [String: Any], _ key: String,

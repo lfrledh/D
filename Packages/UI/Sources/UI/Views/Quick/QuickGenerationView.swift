@@ -68,6 +68,13 @@ struct QuickGenerationView: View {
             ?? (id.isEmpty ? refinementText("chooseModel", fallback: "选择一个模型") : refinementText("modelNotReady", fallback: "指定模型未准备"))
     }
     @Environment(\.workbenchQuickContentTop) private var quickContentTop
+    private var runningStatus: String {
+        if let phase = quick.executionPhase, ["awaitingLowMemoryDecision", "lowMemoryExecution"].contains(phase) {
+            return workflowProgressText(.init("phase." + phase), language: language)
+        }
+        return quick.progressPresentation.map { workflowProgressText($0, language: language) } ?? quick.phase
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let shown = WorkbenchSidebarLayout.visible(available: geometry.size.width, leading: sidebars.leading, trailing: sidebars.trailing)
@@ -114,7 +121,7 @@ struct QuickGenerationView: View {
                         }.frame(maxHeight: min(180, geometry.size.height * 0.28))
                     }
                     if let issue = inputIssue ?? (quick.category == .audio && quick.inputIssueCode == "quick.audio.complex" ? nil : quick.inputIssue) ?? quick.saveIssue ?? quick.error {
-                        WorkbenchIssueText(raw: issue, key: inputIssue != nil ? inputIssueCode : (quick.inputIssue == issue ? quick.inputIssueCode : nil)).font(.caption).foregroundStyle(.red).lineLimit(3).textSelection(.enabled)
+                        WorkbenchIssueText(raw: issue, key: inputIssue != nil ? inputIssueCode : (quick.inputIssue == issue ? quick.inputIssueCode : (quick.error == issue ? quick.errorCode : nil))).font(.caption).foregroundStyle(.red).lineLimit(3).textSelection(.enabled)
                     }
                     generationBar
                     }.padding(12).workbenchPanel(cornerRadius: 16)
@@ -360,7 +367,7 @@ struct QuickGenerationView: View {
                             } else {
                             DisclosureGroup(baselineText(language, "label.44455611b910"), isExpanded: $advanced) {
                                 VStack(alignment: .leading, spacing: 14) {
-                                    ForEach(definition.fields.filter { !["modelID", "task", "promptText", "count"].contains($0.id) }) { field in
+                                    ForEach(definition.fields.filter { WorkflowParameterPresentation.isVisible($0, node: draft.node) && !["modelID", "task", "promptText", "count"].contains($0.id) }) { field in
                                         QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, modelIdentity: draft.node.parameters["modelID"]?.string, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
                                             onChange: { quick.setParameter(field.id, value: $0, draftID: draft.id) }, raw: draft.fieldText[field.id], onRaw: { quick.setFieldText(field.id, text: $0, draftID: draft.id) })
                                     }
@@ -378,10 +385,10 @@ struct QuickGenerationView: View {
                             Text(baselineText(language, "label.3238f75ca285"))
                                 .font(.caption).foregroundStyle(.secondary)
                             }
-                            if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error { WorkbenchIssueText(raw: issue, key: inputIssue == nil && quick.inputIssue == issue ? quick.inputIssueCode : nil).foregroundStyle(.red).textSelection(.enabled) }
+                            if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error { WorkbenchIssueText(raw: issue, key: inputIssue == nil && quick.inputIssue == issue ? quick.inputIssueCode : (quick.error == issue ? quick.errorCode : nil)).foregroundStyle(.red).textSelection(.enabled) }
                             if let notice = displayedInputNotice { Text(notice).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                         } else {
-                            if let error = quick.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+                            if let error = quick.error { WorkbenchIssueText(raw: error, key: quick.errorCode).foregroundStyle(.red).textSelection(.enabled) }
                             ContentUnavailableView(baselineText(language, "label.48ccfc0d2104"), systemImage: "square.stack.3d.up",
                                 description: Text(baselineText(language, "label.6f33836bdd1a")))
                             Button(baselineText(language, "label.72f5f0e15b59"), action: onChooseModel)
@@ -391,7 +398,8 @@ struct QuickGenerationView: View {
     }
     private var generationBar: some View {
             HStack {
-                Text(quick.isRunning ? quick.phase : (quick.category == .audio ? displayedInputNotice : nil) ?? refinementText("saveNote", fallback: "输入与结果保存到快速创作记录")).font(.caption).foregroundStyle(.secondary)
+                Text(quick.isRunning ? runningStatus : (quick.category == .audio ? displayedInputNotice : nil) ?? refinementText("saveNote", fallback: "输入与结果保存到快速创作记录")).font(.caption).foregroundStyle(.secondary)
+                    .help(quick.executionPhase == "lowMemoryExecution" ? workflowText(language, "memory.runningHelp") : "")
                 Spacer()
                 if quick.isRunning {
                     ProgressView().controlSize(.small)
@@ -548,7 +556,8 @@ struct QuickGenerationView: View {
                                         }
                                     }
                                 }
-                                if let issue = run.issue { Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+                                LowMemoryExecutionDetails(records: run.executionRecords ?? [])
+                                if let issue = run.issue { WorkbenchIssueText(raw: issue, key: LowMemoryExecutionPresentation.nonExecutionCode(run.executionRecords)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
                                 if [.failed, .cancelled, .interrupted, .partial].contains(run.status) {
                                     Button(baselineText(language, "retry.generate", fallback: "按本次输入重新生成")) { quick.retryAttempt(run.id) }
                                         .disabled(!quick.canRetry(run))
@@ -719,6 +728,10 @@ struct QuickParameterField: View {
                             .disabled(field.id == "loadingStrategy" && WorkflowModelRoutes.rejectsTextLoading(modelIdentity: modelIdentity, strategy: option))
                     }
                 }.labelsHidden()
+                if ["loadingStrategy", "memoryStrategySelection"].contains(field.id) {
+                    Text(workflowText(language, value.string == "automatic" ? "memory.automaticHelp" : "memory.fixedHelp"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 if field.id == "loadingStrategy", WorkflowModelRoutes.rejectsTextLoading(modelIdentity: modelIdentity, strategy: "ssdLayered") {
                     Text(workflowText(language, "workflow.loading.quantizedRestriction"))
                         .font(.caption).foregroundStyle(value.string == "ssdLayered" ? .orange : .secondary)

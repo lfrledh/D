@@ -8,6 +8,7 @@ public enum InferenceFailure: Error, Sendable, Codable, Equatable, LocalizedErro
     case queueFull
     case runtimeClosed
     case invalidResourceEstimate
+    case lowMemoryDecisionRequired
     case memoryBudgetExceeded(required: UInt64, limit: UInt64)
     case consumerTooSlow
     case backendFailed(String)
@@ -28,6 +29,7 @@ public enum InferenceFailure: Error, Sendable, Codable, Equatable, LocalizedErro
         case .queueFull: "The inference queue is full."
         case .runtimeClosed: "The inference runtime has been shut down."
         case .invalidResourceEstimate: "The backend did not provide a positive memory estimate."
+        case .lowMemoryDecisionRequired: "This request needs a low-memory execution decision."
         case .memoryBudgetExceeded(let required, let limit): "Estimated memory \(required) exceeds budget \(limit)."
         case .consumerTooSlow: "Output buffer is full; inference stopped to avoid silently losing output."
         case .backendFailed(let reason): reason
@@ -53,28 +55,34 @@ public struct InferenceRun: Sendable {
     public let events: InferenceEvents
     private let cancelOperation: @Sendable () async -> Void
     private let outcomeOperation: @Sendable () async -> RunOutcome
+    private let executionRecordOperation: @Sendable () async -> InferenceExecutionRecord?
 
     public init(id: UUID, events: AsyncThrowingStream<InferenceOutput, Error>,
                 cancel: @escaping @Sendable () async -> Void,
-                outcome: @escaping @Sendable () async -> RunOutcome) {
+                outcome: @escaping @Sendable () async -> RunOutcome,
+                executionRecord: @escaping @Sendable () async -> InferenceExecutionRecord? = { nil }) {
         self.id = id
         self.events = InferenceEvents(stream: events, cancel: cancel)
         self.cancelOperation = cancel
         self.outcomeOperation = outcome
+        self.executionRecordOperation = executionRecord
     }
 
     /// Pull-based delivery lets the runtime await bounded capacity without an extra stream buffer.
     public init(id: UUID, nextEvent: @escaping @Sendable () async throws -> InferenceOutput?,
                 cancel: @escaping @Sendable () async -> Void,
-                outcome: @escaping @Sendable () async -> RunOutcome) {
+                outcome: @escaping @Sendable () async -> RunOutcome,
+                executionRecord: @escaping @Sendable () async -> InferenceExecutionRecord? = { nil }) {
         self.id = id
         self.events = InferenceEvents(pull: nextEvent, cancel: cancel)
         self.cancelOperation = cancel
         self.outcomeOperation = outcome
+        self.executionRecordOperation = executionRecord
     }
 
     public func cancel() async { await cancelOperation() }
     public func outcome() async -> RunOutcome { await outcomeOperation() }
+    public func executionRecord() async -> InferenceExecutionRecord? { await executionRecordOperation() }
 }
 
 /// The same entry point can be used by a workbench, headless caller, or future assistant harness.

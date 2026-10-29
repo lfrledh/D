@@ -39,10 +39,10 @@ public enum WorkflowModelRoutes {
     /// A restriction from the fixed adapter catalog, not a claim of runtime readiness.
     /// Unknown/local identities still require the backend's full inventory validation.
     public static func rejectsTextLoading(modelIdentity: String?, strategy: String) -> Bool {
-        strategy == "ssdLayered" && modelIdentity.map(quantizedVLMIdentities.contains) == true
+        // Dense Qwen3.5 Q4/Q8 now load their original packed modules per layer.
+        // Other text families expose no layered choice in their operation definition.
+        false
     }
-    private static let quantizedVLMIdentities = Set(((try? TextModelProfiles.registeredVLM()) ?? [])
-        .filter { $0.quantizationBits > 0 }.map { "text:" + $0.revision })
 
     private static let draftRoutes: [(operation: String, choice: WorkflowModelChoice)] = {
         let textIDs = Set((((try? TextModelProfiles.registered()) ?? [])

@@ -33,13 +33,13 @@
   "snapshot": {
     "fileCount": 1748,
     "upstreamBytes": 23089400,
-    "patchedBytes": 23091557,
+    "patchedBytes": 23092059,
     "manifest": "mlx-swift.files.json",
-    "manifestSHA256": "ebfcd00965f08c61b4bd882f6b5415b184f5c01099f8cd9c9df3d974fc2ddf2a"
+    "manifestSHA256": "1e53708c87140dfce24060f6713f8b6a3294a09510ca2c19c090e658fb273ae3"
   },
   "patch": {
     "file": "patches/mlx-array-ownership.patch",
-    "sha256": "adcd5ca948fdb4679dc6ab7152a985f6e05e283c73ee0de31619c7f7d9525d16",
+    "sha256": "458a386dd37fc2b7867d807c288385024e27be3d82812770e3f5080dd3b1d077",
     "sourceExperimentPatchSHA256": "bc754e3c530a237b0e51c7952d926ef45452b3b9c9e41bdf156ce5b03c163ac0",
     "upstreamPullRequest": "https://github.com/ml-explore/mlx/pull/4453",
     "upstreamTitle": "Break the sibling cycle when an array is released by assignment",
@@ -48,7 +48,7 @@
     "upstreamHead": "5002b5ff6adff93a9a439d012e60773c171ec206",
     "upstreamStateAtReview": "open",
     "reviewedOn": "2026-09-06",
-    "adaptation": "Unchanged ownership patch applies cleanly to MLX Swift 0.31.4 and its fixed gitlinks; preserve upstream detach_event addition.",
+    "adaptation": "Unchanged ownership patch applies cleanly to MLX Swift 0.31.4 and its fixed gitlinks; preserve upstream detach_event addition. B5 v2 adds a D-local packed QuantizedEmbedding initializer without changing the ownership portion or quantization mathematics.",
     "modifiedFiles": [
       {
         "path": "Source/Cmlx/include-framework/mlx-array.h",
@@ -70,6 +70,13 @@
         "sha256": "096d013a5c2abc5d2fda4a719ff8597085d37e992bb1a617efd51190879890b1",
         "upstreamSize": 17613,
         "size": 18568
+      },
+      {
+        "path": "Source/MLXNN/Quantized.swift",
+        "upstreamSHA256": "1973b7dbe3fda05a32cfe218d82b3b139229b0b74d0325665b0166092a8ac303",
+        "sha256": "60e4880c44afe44ae8d23bd42ecd22a7676fb2b7747143c72890e5364be608ff",
+        "upstreamSize": 13458,
+        "size": 13960
       }
     ],
     "compatibilityRecheckedOn": "2026-09-30"
