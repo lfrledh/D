@@ -192,6 +192,8 @@ struct ProjectFilesView: View {
                 if busy { ProgressView() }
                 Button(word("cancel")) { job?.cancel() }.disabled(!busy)
             }
+            ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
             if let overview {
                 Text("\(word("external")) \(overview.externalCount) · \(word("collectBytes")) \(bytes(overview.bytesToCollect))")
                     .font(.headline)
@@ -211,7 +213,7 @@ struct ProjectFilesView: View {
                     }.frame(minWidth: 220).disabled(busy)
                     ScrollView { if let selected { inspector(selected) } else { Text(word("choose")) } }
                         .frame(minWidth: 370, maxWidth: .infinity)
-                }
+                }.frame(height: 260)
                 HStack {
                     Button(word("collectAll")) { collectAll() }.help(word("collect.help")).disabled(busy || overview.externalCount == 0)
                     Button(word("findFolder")) { relocateFolder() }.help(word("findFolder.help")).disabled(busy)
@@ -249,7 +251,7 @@ struct ProjectFilesView: View {
                         Text(result.sourcePath ?? String(result.id.uuidString.prefix(8))).font(.caption).foregroundStyle(.secondary)
                     }
                     DisclosureGroup(word("technical")) {
-                        Text(result.id.uuidString + "\n" + result.message + (result.sourcePath.map { "\n" + $0 } ?? "")).font(.caption.monospaced()).textSelection(.enabled)
+                        Text(result.id.uuidString + "\n" + (ProjectFilesMessage.result(result).diagnostic ?? result.message) + (result.sourcePath.map { "\n" + $0 } ?? "")).font(.caption.monospaced()).textSelection(.enabled)
                     }
                 } }
             }
@@ -272,6 +274,8 @@ struct ProjectFilesView: View {
                     DisclosureGroup(word("technical")) { Text(diagnostic).font(.caption.monospaced()).textSelection(.enabled) }
                 }
             }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+            }.scrollBounceBehavior(.basedOnSize)
         }
         .padding(20).frame(minWidth: 760, minHeight: 520)
         .task(id: instanceID) { await refresh(); await loadModels() }

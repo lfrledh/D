@@ -13,6 +13,8 @@ private actor FilePresentationNoInferenceEngine: InferenceEngine {
 @Suite("Project file status presentation")
 struct ProjectFilesPresentationTests {
     @Test @MainActor func typedMessagesKeepOperationStageAndUserNamesAcrossLanguages() throws {
+        #expect(AssetFileOperationFailure.classify(NSError(domain: NSCocoaErrorDomain, code: NSFileNoSuchFileError)) == .missing)
+        #expect(AssetFileOperationFailure.classify(NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoSuchFileError)) == .missing)
         for locale in ["zh-Hans", "en"] {
             let language = UILanguageStore(preferredLanguages: [locale])
             let backup = ProjectFilesMessage.failure(ProjectBackupError.insufficientSpace, operation: .backup)
@@ -64,6 +66,8 @@ struct ProjectFilesPresentationTests {
         #expect(summary.libraryAvailability.reduce(0) { $0 + $1.offline + $1.needsAuthorization } == 0)
         let results = try await store.collectProjectMedia()
         #expect(!ProjectFilesPresentation.allSucceeded(results))
+        #expect(results.first?.failure?.issue == .missing)
+        #expect(results.first?.failure?.diagnostic.contains("NSCocoaErrorDomain") == true)
         try await store.close()
     }
 

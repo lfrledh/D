@@ -93,7 +93,14 @@ public struct AssetFileOperationFailure: Error, LocalizedError, Sendable {
             default: break
             }
         }
-        if e.domain == NSCocoaErrorDomain, e.code == NSFileReadNoPermissionError { return .authorization }
+        if e.domain == NSCocoaErrorDomain {
+            switch e.code {
+            case NSFileNoSuchFileError, NSFileReadNoSuchFileError: return .missing
+            case NSFileReadNoPermissionError, NSFileWriteNoPermissionError: return .authorization
+            case NSFileWriteOutOfSpaceError: return .insufficientSpace
+            default: break
+            }
+        }
         return .checkFailed
     }
 }

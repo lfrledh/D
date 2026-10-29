@@ -5006,7 +5006,7 @@ extension ProjectStore {
                 results.append(.init(id: asset.id, matched: true, message: "Relinked", outcome: .relocated, assetName: asset.name, sourcePath: source))
             } catch {
                 results.append(.init(id: asset.id, matched: false, message: error.localizedDescription, outcome: error is CancellationError ? .cancelled : .failed,
-                    assetName: asset.name, sourcePath: source, failure: .init(AssetFileOperationFailure.classify(error), diagnostic: error.localizedDescription)))
+                    assetName: asset.name, sourcePath: source, failure: .init(AssetFileOperationFailure.classify(error), diagnostic: String(reflecting: error) + "\n" + error.localizedDescription)))
             }
         }
         return results
@@ -5095,7 +5095,7 @@ extension ProjectStore {
         } catch {
             if let published {
                 throw AssetFileOperationFailure(AssetFileOperationFailure.classify(error), stage: stage,
-                    destination: published, diagnostic: error.localizedDescription)
+                    destination: published, diagnostic: String(reflecting: error) + "\n" + error.localizedDescription)
             }
             throw error
         }
@@ -5118,7 +5118,7 @@ extension ProjectStore {
             } catch {
                 results.append(.init(id: item.asset.id, matched: false, message: error.localizedDescription,
                     outcome: error is CancellationError ? .cancelled : .failed, assetName: item.asset.name, sourcePath: source,
-                    failure: error as? AssetFileOperationFailure ?? .init(AssetFileOperationFailure.classify(error), diagnostic: error.localizedDescription)))
+                    failure: error as? AssetFileOperationFailure ?? .init(AssetFileOperationFailure.classify(error), diagnostic: String(reflecting: error) + "\n" + error.localizedDescription)))
             }
             if let result = results.last { afterItem(result) }
         }
