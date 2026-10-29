@@ -2,6 +2,30 @@
 
 ## QUICK-AUDIO-SIMPLIFY-COPY-20261029（交审）
 
+### Quick音频原生补验（2026-10-29）
+
+补验起点/远端`1d7a07151ca4ff544ec5d046304bc0f1ac6f2bb0`，实际生产5d7adde1；原工作树/分支、无未提交或其他写入者，累计继承已核对。最终生产 **`6d5f293fc5353fadcf4fb82a5f6e71bf2b559e95`**。只修实际VoiceOver反例：相邻同名候选原本完全相同播报、没有位置与选中信息。QuickAudioCandidateAccessibility加入双语`quick.audio.candidatePosition`与真实selected trait；列表仍以完整资产引用为ID、原action不变，位置只作显示，非音频无改动。references和selectedReference各取一次，不新增按行重复投影。QuickGenerationView/QuickAudioViews、两语言资源及QuickAudioCompositionTests为全部产品/测试范围。
+
+正常完整Release/-O/WMO/DEBUG_DYLIB=NO/七引擎/零权重54,437文件与2,681成员、deep/strict开发签名通过；桌面“D 最新版”已指向`CurrentD/Quick-Audio-6d5f293f/D.app`。旧48666保存正常退出并消失，新58428于2026-10-29 11:03:28 JST从该入口启动；源码/包/可执行摘要一致，无签后改包。本补验未再退出/冷开6d5；5d7的冷开及真实生成/导出证据按未变链路沿用。
+
+| 本次对象 | 最终6d5亲跑与界限 |
+|---|---|
+| MRT2空态 | 独立合成项目、0run；中文1080×612，空音乐描述、中央空态、Generate禁用；V01-r7为新包真实图。不是空音符列表或假音频。 |
+| 音乐描述组字/Undo | 原系统SCIM拼音，物理键zhongwen显示带下划线`zhong wen`，落盘仍空；Space确认中文。收两栏→Workflow→Quick→编辑器获焦，单次⌘Z恢复编辑前你好，Redo恢复中文。再ceshi时只显示标记、落盘中文，Esc取消并保留中文；只保存专属测试稿，0运行。 |
+| ACE歌词组字/Undo | 专属测试稿nihao标记→Space你好→⌘Z空→Redo你好；ceshi标记时落盘仍你好，Esc恢复；未生成。当前歌词编辑器/输入身份沿用原实现。 |
+| 实际VoiceOver候选 | 真正启用系统VoiceOver，VO进入列表读第1项/共3项/已选择，右移读第2项无选中，VO Space后读第2项/已选择。D真实状态第二引用、中央2/3、Play和0秒，无自动播放/推理。系统字幕截图是实际VO输出，不是AX文本或合成播报。 |
+| VoiceOver播放器/英文 | 英文实际读100% Volume→VO减到90%；恢复后D实际AX音量1（r3图仅是Volume High图像，不单独证明100%）。实际读0% Playback position；VO Space播放变Pause，随后播放/暂停变Play，实际位置9728/249600帧、0.20秒。未以机器字幕冒称真人听清/音质验收。 |
+| 恢复与数据保护 | 原输入法未更换；中文、VoiceOver关闭、音量1、第3候选/3、停止/0秒已读回。原20run与5draft逐条相等、chat原字节相等；图正文及收录成员不变。正常保存使项目/Quick/图版本变化，legacyAssetIDs仅相同集合的序列化顺序变化，不宣称整个项目字节不变。测试项目2稿0run；本补验0推理。 |
+
+**定向/内部复核：** 5092中英资源键集合、重复键和index/count占位符一致；15 UILocalization＋1原生编辑器组件方法实际通过，另1可见AX方法skip。新增参数化AX反例初次未取得按钮、再试仅AXUnknown、最后明确visible/key-window前置失败，未到行为断言，不记通过；保留严格前置与失败日志，不为过测削弱断言。正常App实际VoiceOver路径另有上表证据，不能倒填夹具通过。非实施者只读核对真实代码、同版像素、最终包及20run/5稿/chat保护，未独立操作Mac或试听。首次构建准备缺输出父目录已补明确路径后正常构建；不是编译产品失败。
+
+**同版实图/动作：** 均在原证据区`run-20261029-quick-audio/native-followup-20261029`，已直接在会话展示。V01-r7（MRT2空态）、IME-03-r1/r2（音乐描述标记/跨模式Redo）、IME-04-r1（歌词标记）、VO-05-r1/r2/r3（候选读出和激活）、VO-05-r4（选择后全窗）、VO-06-r1/r2/r5/r6/r7（英文音量/进度/播放暂停）、V06-r2（最终恢复全窗）。D窗口1080×612pt，中/英，正常Release无诊断；VoiceOver图为系统字幕窗。紫色Computer Use提示不属于D。动作及保护绑定`native-final-6d5f293f.json`，修前5d证据仍在`native-before-repair.json`；截图不证明听感或帧率。
+
+已按`retired-followup-builds.json`清理确认未运行的旧5d7 App与本次已完成DerivedData；当前6d5、唯一资源缓存、模型、保存项目、导出和证据保留。
+
+**本次收口：** A16的两个Quick音频编辑框现场组字/Undo、候选/播放器实际VoiceOver与V01空态已补；不是全App VoiceOver/全部输入法认证。可见AX测试宿主前置仍未解决，但对应普通App实际路径已有证据。原B2/顶区/玻璃/首拖等余项保留；用户只需集中试听和视觉判断，没有新本人授权/手势请求。已恢复试听现场并停止工程扩展。以下为5d7历史交付，其“最终”和未验描述不覆盖上方6d5补验。
+
+
 接续实际工作树`D-UI-CONSOLIDATED-20261020`、分支`codex/ui-consolidated-20261020`；起点/正常fetch远端均`301e4d065fcdc3dd9c742dfbdcbdd307bd11879f`，此前生产`c464b6e41b2ef30131ccd7cfa46bb4b80dfc769c`祖先检查exit0。开工3份截图恢复文档增量已保留并备份；无其他写入者，Lead唯一产品写入、非实施者只读复核。未动个人scheme或旧工作树。
 
 **最终生产 `5d7adde16b04cd76e4e7ef57a805fda05b19f3fd`，正常完整Release已交审。** 桌面“D 最新版”指向`CurrentD/Quick-Audio-5d7adde1/D.app`；Apple Development正常签名、-O/WMO、DEBUG_DYLIB关闭、七引擎、无诊断注入，签前后零第三方权重门禁54,437文件/2,681嵌套成员通过。deep/strict签名与包内源码/资源身份已核对，未在签后修改App。构建脚本runtimeVerification仍为not-run；下面是Lead另行完成的普通App证据，二者不混称。

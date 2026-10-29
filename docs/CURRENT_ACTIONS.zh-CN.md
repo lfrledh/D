@@ -1,5 +1,13 @@
 # 当前行动与接手点
 
+当前交审补验：**QUICK-AUDIO-SIMPLIFY-COPY-20261029 · 现场组字 / Undo / VoiceOver / MRT2空态**。从实际完整交付`1d7a07151ca4ff544ec5d046304bc0f1ac6f2bb0`原树/分支接续，fetch与祖先核对、干净起点、无其他写入者。新生产 **`6d5f293fc5353fadcf4fb82a5f6e71bf2b559e95`**；只修实际VoiceOver发现的同名音频候选缺少位置/选中信息，保持完整引用身份与原选择动作，无布局/推理/存储/性能扩项。
+
+桌面 **D 最新版** → `CurrentD/Quick-Audio-6d5f293f/D.app`，正常完整Release/-O/WMO/开发签名/七引擎/零权重、无诊断注入。5d7的48666正常退出→桌面入口启动6d5的58428，精确路径和包内身份已核对。最终同版1080×612原生MRT2空态、两个实际拼音输入框的组字/确认/取消、跨工作区/收栏Undo及Redo、真实VoiceOver候选选择与播放器键盘操作均有像素和动作记录；已恢复中文、拼音、原试听第3项、音量1与停止状态，VoiceOver恢复关闭。
+
+15语言＋1编辑器组件方法实际通过；新增可见AX夹具因窗口前置失败未进入行为断言，保留失败，普通16方法运行另有1跳过，不混称17亲跑。非实施者只读复核产品及现场证据；原20run/5draft逐项相等、chat原字节不变、图内容/收录成员保持，保存版本及集合序列化顺序变化如实记录。补验0推理；5d7真实模型/导出/冷开按未受影响历史沿用，不冒称6d5重新推理。[补验回执](tasks/D-UI-CONSOLIDATED-01.md#quick音频原生补验2026-10-29)与[唯一集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#quick音频原生补验2026-10-29)区分全局余项。最终交付SHA与远端读回绑定既有CurrentD回执。无新增本人请求；停在用户试听/视觉和顾问审计，不扩功能或重启性能调查。
+
+以下5d7段落为补验前交付事实；其中VoiceOver/现场组字/空态的旧未验仅由本次明确路径补齐，不覆盖其他历史缺口。
+
 当前交审：**QUICK-AUDIO-SIMPLIFY-COPY-20261029**。实际起点`301e4d065fcdc3dd9c742dfbdcbdd307bd11879f`，原专属工作树/`codex/ui-consolidated-20261020`累计接续；最终生产 **`5d7adde16b04cd76e4e7ef57a805fda05b19f3fd`**。Quick音频仅MRT2文字、ACE generate纯音乐/含歌词；中央一个播放器、紧凑候选、精确旧稿恢复/无损转图、40双语键已实施。正常App发现的选择误插图、窄窗越界、旧稿入口与ACE遍历/缓存两次失败均同轮修正并独立只读复核。[A01–A20及V01–V06](tasks/D-UI-CONSOLIDATED-01.md#quick-audio-simplify-copy-20261029交审)。
 
 唯一入口：桌面 **D 最新版** → `CurrentD/Quick-Audio-5d7adde1/D.app`。正常完整Release/-O/WMO/开发签名/七引擎/零第三方权重、无诊断注入。最终普通App真实MRT2 4秒及ACE含歌词5.2秒均completed/发布、播放/seek、精确保存/独立导出；48438正常退出→桌面冷开48666，原9run/3旧稿/chat与全部20run/5稿及收录保持，无自动重推理。同版中英1080×612真实图已在会话展示。完整文档交付与远端读回绑定既有`CurrentD/receipt.json`，不签后改App。
