@@ -97,6 +97,11 @@ struct WorkflowBaseline02Tests {
         bounded.capture(zoom: .nan, rawVisibleCenter: .zero, selectedNodeID: nil, for: other)
         bounded.capture(zoom: 1, rawVisibleCenter: .init(x: CGFloat.infinity, y: 0), selectedNodeID: nil, for: other)
         bounded.flush(); #expect(settings.data(forKey: WorkflowCanvasViewStateStore.storageKey) == bytes)
+        let deep = WorkflowCanvasViewContext(projectID: project, rootGraphID: graph,
+            bodyPath: (0..<16).map { _ in .init(nodeID: UUID(), slot: "body") }, instanceID: instance)
+        bounded.capture(zoom: 1.25, rawVisibleCenter: .init(x: 3, y: 4), selectedNodeID: nil, for: deep)
+        bounded.flush()
+        #expect(WorkflowCanvasViewStateStore(settings: settings).state(for: deep) == bounded.state(for: deep))
         let damaged = Data("invalid record".utf8); settings.set(damaged, forKey: WorkflowCanvasViewStateStore.storageKey)
         let protected = WorkflowCanvasViewStateStore(settings: settings)
         #expect(protected.invalidStoredRecord)
@@ -104,7 +109,8 @@ struct WorkflowBaseline02Tests {
         #expect(settings.data(forKey: WorkflowCanvasViewStateStore.storageKey) == damaged)
     }
 
-    @Test(arguments: [false, true]) func coldCanvasHostRestoresZoomAndLogicalCenterWithoutEditingGraph(outsideExtent: Bool) async throws {
+    @Test(arguments: [false, true], [0, 1, 2]) func coldCanvasHostRestoresZoomAndLogicalCenterWithoutEditingGraph(outsideExtent: Bool, mountCase: Int) async throws {
+        let loadAfterMount = mountCase == 1
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("canvas-cold-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -120,16 +126,29 @@ struct WorkflowBaseline02Tests {
         let services = WorkflowServices(store: store, session: runtime,
             resolveText: { throw WorkflowIssue("No inference") }, resolveImage: { throw WorkflowIssue("No inference") })
         let original = WorkflowController(services: services); await original.load()
-        original.addBlankGraph(); original.addExample("text"); await original.save()
+        original.addBlankGraph()
+        if mountCase == 2 { original.addLanguageExample(.data) } else { original.addExample("text") }
+        await original.save()
         let graph = try #require(original.graph)
+        if mountCase == 2 {
+            let branch = try #require(graph.nodes.first { $0.operationID == "d.control.branch" })
+            original.openBody(nodeID: branch.id, slot: "then")
+        }
+        let displayGraph = try #require(original.graph), bodyPath = original.bodyPath
+        if mountCase == 2 { #expect(!bodyPath.isEmpty) }
         let context = WorkflowCanvasViewContext(projectID: original.projectID, rootGraphID: graph.id,
-            bodyPath: [], instanceID: original.projectInstanceID)
+            bodyPath: bodyPath.map(WorkflowCanvasBodyLocation.init), instanceID: original.projectInstanceID)
         let target = outsideExtent ? CGPoint(x: -100_000, y: -100_000) : CGPoint(x: 520, y: 280)
-        let saved = WorkflowCanvasViewMemory(zoom: 1.5, rawVisibleCenter: target, selectedNodeID: graph.nodes.last?.id)
+        let saved = WorkflowCanvasViewMemory(zoom: 1.5, rawVisibleCenter: target, selectedNodeID: displayGraph.nodes.last?.id)
         let before = WorkflowCanvasViewStateStore(settings: settings); before.save(saved, for: context); before.flush()
-        let controller = WorkflowController(services: services); await controller.load()
-        #expect(controller.graph?.id != graph.id) // Loading the archive defaults to its first graph.
-        let graphs = controller.graphs, runs = controller.runs, undo = controller.canUndo
+        let controller = WorkflowController(services: services)
+        if !loadAfterMount { await controller.load() }
+        #expect(controller.graph?.id != graph.id) // Unloaded or archive-first graph, never the saved last view.
+        let graphs = original.graphs, runs = original.runs
+        if mountCase == 2 {
+            controller.selectedGraphID = graph.id
+            for location in bodyPath { controller.openBody(nodeID: location.nodeID, slot: location.slot) }
+        }
         let memory = WorkflowCanvasViewStateStore(settings: settings)
         var observed: WorkflowCanvasScrollObservation?
         let view = WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
@@ -140,6 +159,11 @@ struct WorkflowBaseline02Tests {
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host
         defer { window.close() }
+        if loadAfterMount {
+            for _ in 0..<4 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) }
+            #expect(controller.projectID == nil)
+            await controller.load()
+        }
         for _ in 0..<80 {
             host.layoutSubtreeIfNeeded()
             if let observed, abs(observed.zoom - 1.5) < 0.001,
@@ -147,10 +171,11 @@ struct WorkflowBaseline02Tests {
             try await Task.sleep(for: .milliseconds(15))
         }
         let actual = try #require(observed)
-        #expect(controller.graph?.id == graph.id)
+        #expect(controller.rootGraph?.id == graph.id && controller.graph?.id == displayGraph.id)
+        #expect(controller.bodyPath == bodyPath && controller.errorMessage == nil)
         #expect(abs(actual.zoom - saved.zoom) < 0.001)
         #expect(actual.hasReachedRestoredCenter(target))
-        #expect(controller.graphs == graphs && controller.runs == runs && controller.canUndo == undo)
+        #expect(controller.graphs == graphs && controller.runs == runs && !controller.canUndo)
         #expect(await engine.calls == 0)
         #expect(memory.state(for: context)?.rawVisibleCenter == actual.visibleRawCenter)
         if !outsideExtent {

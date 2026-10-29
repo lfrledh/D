@@ -345,7 +345,10 @@ public struct WorkflowCanvasView: View {
                 self.selectedConnectionID = nil
             }
         }
-        .onChange(of: viewContext) { _, next in restoreViewContext(next) }
+        .onChange(of: viewContext) { _, next in
+            if camera.restoredOwner == ObjectIdentifier(controller) { restoreViewContext(next) }
+            else { restoreInitialViewContext() }
+        }
         .onAppear { restoreInitialViewContext() }
         .onDisappear {
             viewStates.flush()
@@ -1488,6 +1491,10 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
 
     private func restoreInitialViewContext() {
         camera.owner = ObjectIdentifier(controller)
+        // ProjectSession publishes the controller before its asynchronous load.
+        // Do not consume the one-time restoration while that host is still empty.
+        guard controller.projectID != nil, controller.projectInstanceID != nil,
+              controller.rootGraph != nil else { return }
         if camera.restoredOwner != ObjectIdentifier(controller),
            let last = viewStates.lastContext(projectID: controller.projectID, instanceID: controller.projectInstanceID),
            let root = controller.graphs.first(where: { $0.id == last.rootGraphID }) {
@@ -1495,8 +1502,14 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             let path = last.bodyPath.map { WorkflowBodyLocation(nodeID: $0.nodeID, slot: $0.slot) }
             // A removed body is not another body with the same label. Fall back
             // to this root without showing a stale navigation error or editing it.
-            if (try? WorkflowGraphEditing.body(in: root, path: path)) != nil {
-                for location in path { controller.openBody(nodeID: location.nodeID, slot: location.slot) }
+            let destination = (try? WorkflowGraphEditing.body(in: root, path: path)) != nil ? path : []
+            if controller.bodyPath != destination {
+                // A retained controller may already be inside this root when a
+                // new host mounts. Never append the saved full path to that path.
+                for _ in controller.bodyPath { controller.closeBody() }
+                if controller.bodyPath.isEmpty {
+                    for location in destination { controller.openBody(nodeID: location.nodeID, slot: location.slot) }
+                }
             }
         }
         camera.restoredOwner = ObjectIdentifier(controller)

@@ -110,7 +110,7 @@ struct WorkflowCanvasViewMemory: Codable, Equatable {
         state.zoom.isFinite && state.zoom > 0 && state.rawVisibleCenter.x.isFinite && state.rawVisibleCenter.y.isFinite
     }
     private static func persistable(_ context: WorkflowCanvasViewContext) -> Bool {
-        context.projectID != nil && context.instanceID != nil && context.rootGraphID != nil && context.bodyPath.count <= 8
+        context.projectID != nil && context.instanceID != nil && context.rootGraphID != nil && context.bodyPath.count <= 16
     }
 
     func save(_ state: WorkflowCanvasViewMemory, for context: WorkflowCanvasViewContext, makeCurrent: Bool = true) {
