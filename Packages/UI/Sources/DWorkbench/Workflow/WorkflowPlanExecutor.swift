@@ -452,6 +452,7 @@ import Foundation
                 try updateRecord(at: address) { record in
                     record.step.status = .cancelled
                     record.step.error = reason
+                    record.step.errorCode = "workflow.human.ended"
                     record.step.humanTask = task
                 }
                 try await cancelPlan(reason: reason)

@@ -1,5 +1,10 @@
 # 当前行动与接手点
 
+当前实施：**WORKFLOW-RUN-COPY-B4-20261029**。从B3完整交付 `a4607f45f87a98e840bac2eb26e493c29f960a58` 原树/原分支接续；fetch同值、祖先exit0、起点无未提交、无其他写入者。Lead唯一写入及桌面，两位只读复核者。实施B4-01—08批准文案与有限状态投影，保留B3文件事务、模型/标签/Quick音频及性能修补；当前运行和桌面仍为B3生产 `a20ea75c`，待B4定向检查及正常Release后安全更新。没有新的本人请求。
+
+以下B3为已完成交付事实：
+
+
 当前交审：**PROJECT-FILES-COPY-B3-20261029**。原工作树/分支从完整`c4df2f4206d10f66169aa2ec5919821bf437fc78`累计接续；fetch同值、祖先0、干净起点、无其他写入者。最终生产 **`a20ea75c4ce00ef72a35e025ad3ebf79ae00c1e1`**，B3-01—08和已发现原生问题完成；“移动到…”按最终决定复制/改用新副本/原件保留，不执行旧撤下提案。[A01–A18回执](tasks/D-UI-CONSOLIDATED-01.md#project-files-copy-b3-20261029)／[唯一集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#项目文件b3本轮收口2026-10-29)。
 
 桌面 **D 最新版** → `CurrentD/Project-Files-a20ea75c/D.app`。正常完整Release/-O/WMO/Apple Development签名/七引擎/零权重，无诊断注入。80784正常退出→PID消失→桌面冷开81142，source/bundle/路径读回一致。最终中英1080×612文件面板、Move说明和实际独立副本/冷开、重链反例、批量部分失败、完整与不完整备份恢复、Return/Esc取消与明确聚焦后Space继续均有本轮证据；没有把截图或构建当作文件事务证明。

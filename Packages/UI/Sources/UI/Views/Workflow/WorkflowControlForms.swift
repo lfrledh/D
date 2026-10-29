@@ -535,7 +535,7 @@ struct WorkflowControlEditor: View {
                 get: { continueOnFailure },
                 set: { replaceMapContinue($0) }
             ))
-            Button(text("workflow.language.control.openBody", "Open body")) { onOpenBody("body") }
+            Button(text("workflow.language.control.openMap", "View per-item steps")) { onOpenBody("body") }
                 .disabled(!canOpenNestedContent)
         case .loop(_, let stateSchema, let maximumIterations, let until):
             WorkflowControlSchemaSampleEditor(schema: Binding(
@@ -550,7 +550,7 @@ struct WorkflowControlEditor: View {
             )
             Text(text("workflow.language.control.until", "Stop rule")).font(.caption.weight(.semibold))
             WorkflowControlRuleEditor(rule: Binding(get: { until }, set: replaceLoopRule))
-            Button(text("workflow.language.control.openBody", "Open body")) { onOpenBody("body") }
+            Button(text("workflow.language.control.openLoop", "View loop steps")) { onOpenBody("body") }
                 .disabled(!canOpenNestedContent)
         case .invoke(let reference):
             invocationEditor(reference)
@@ -600,7 +600,8 @@ struct WorkflowControlEditor: View {
                     .font(.caption.monospaced()).textSelection(.enabled)
             }
             toolMenu
-            Button(text("workflow.language.control.openTool", "Open fixed tool")) { onOpenBody("tool") }
+            Button(text("workflow.language.control.openTool", "View internal workflow")) { onOpenBody("tool") }
+                .help(text("workflow.language.control.openTool.help", "View the internal workflow for this version. To make changes, create an editable copy first."))
                 .disabled(!canOpenNestedContent)
         }
     }

@@ -18,25 +18,40 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public let path: [WorkflowBodyLocation]
 }
 
+/// Display evidence only; execution admission continues to validate independently.
+public enum WorkflowOutputComparison: Equatable, Sendable {
+    case matching, changed, missingUpstream
+    case unavailable(String)
+    public var stale: Bool { self != .matching }
+}
+
+public struct WorkflowNodePresentationStatus: Equatable, Sendable {
+    public let status: WorkflowStepStatus
+    public let comparison: WorkflowOutputComparison
+    public var stale: Bool { comparison.stale }
+}
+
 /// Coordinates compiled structured workflows; all expensive model work is still admitted by the shared InferenceRuntime.
 @MainActor @Observable public final class WorkflowController {
     public let registry: WorkflowRegistry
     public private(set) var pendingPausedStopRunID: UUID?
     public private(set) var containerSubmissions: [WorkflowContainerSubmission] = [] { didSet { contentGeneration &+= 1 } }
     public private(set) var batchStages: [WorkflowBatchStage] = [] { didSet { contentGeneration &+= 1; invalidateContainerStages(oldValue) } }
-    @ObservationIgnored private var batchPauseRequested = false
-    @ObservationIgnored private var activeBatchID: UUID?
+    public private(set) var batchPauseRequested = false
+    public private(set) var activeBatchID: UUID?
     public private(set) var graphs: [WorkflowGraph] = [] {
         didSet { emptyInsertionRevision = UUID(); displayGraphGeneration &+= 1; contentGeneration &+= 1 }
     }
     @ObservationIgnored private var emptyInsertionRevision = UUID()
     public private(set) var runs: [WorkflowRun] = [] { didSet { displayHistoryGeneration &+= 1; contentGeneration &+= 1; invalidateContainerRuns(oldValue) } }
-    public private(set) var tools: [WorkflowToolDefinition] = [] { didSet { displayToolGeneration &+= 1; contentGeneration &+= 1 } }
+    public private(set) var tools: [WorkflowToolDefinition] = [] { didSet { if oldValue != tools { displayToolGeneration &+= 1 }; contentGeneration &+= 1 } }
     @ObservationIgnored private var activeExecutor: WorkflowPlanExecutor? {
         didSet { if activeExecutor == nil { presentationHasExecutor = false } }
     }
     private var presentationHasExecutor = false
     public var canPausePresentation: Bool {
+        guard !batchPauseRequested, !cancelled else { return false }
+        if activeBatchID != nil { return isRunning }
         guard presentationHasExecutor, !isSaving, let run = activePresentationRun else { return false }
         return run.status == .running && run.planCheckpoint?.state == .running
     }
@@ -134,8 +149,18 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     @ObservationIgnored private var savingToken = UUID()
     public var savePresentation: String {
         if isSaving { return "saving" }
-        if hasPendingSaves { return "failed" }
+        if hasSaveFailure { return "failed" }
+        if services.hasPendingSaves { return isRunning ? "saving" : "unsaved" }
         return contentGeneration == savedContentGeneration ? "saved" : "unsaved"
+    }
+    public var hasSaveFailure: Bool {
+        persistenceFailed || (services.hasPendingSaves && runs.contains { run in
+            run.status == .saving && (run.planCheckpoint?.error != nil || run.steps.contains { $0.status == .saving && $0.error != nil })
+        })
+    }
+    public var pausePendingPresentation: String? {
+        guard isRunning, batchPauseRequested, !cancelled, !hasSaveFailure else { return nil }
+        return activeBatchID == nil ? "pausePending" : "batchPausePending"
     }
     public private(set) var isSaving = false
     public private(set) var readOnlyReason: String?
@@ -1169,7 +1194,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     @ObservationIgnored var displayHistoryCount = 0
     #endif
 
-    public func presentationStatus(for nodeID: UUID) -> (status: WorkflowStepStatus, stale: Bool)? {
+    public func presentationStatus(for nodeID: UUID) -> WorkflowNodePresentationStatus? {
         let graphGeneration = displayGraphGeneration, toolGeneration = displayToolGeneration
         let historyGeneration = displayHistoryGeneration
         let cache = displaySnapshot
@@ -1185,11 +1210,18 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             guard let graph else { displaySnapshot = NodeDisplaySnapshot(); return nil }
             var key = graph
             key.name = ""; key.revision = graph.id; key.layout = []
-            for index in key.nodes.indices { key.nodes[index].title = "" }
+            for index in key.nodes.indices { key.nodes[index].title = ""; key.nodes[index].collectionRule = nil }
             let layoutIDs = Set(graph.layout.map(\.nodeID))
             let validLayout = layoutIDs.count == graph.layout.count && layoutIDs.isSubset(of: Set(graph.nodes.map(\.id)))
             if cache.scope != scope || cache.semanticGraph != key || cache.toolGeneration != toolGeneration || cache.validLayout != validLayout {
-                cache.signatures = (try? registry.signatures(in: graph, tools: tools)) ?? [:]
+                do {
+                    let evidence = try registry.signatureEvidence(in: graph, tools: tools)
+                    cache.signatures = evidence.values; cache.signatureFailures = evidence.failures
+                    cache.analysisFailure = nil
+                } catch {
+                    cache.signatures = [:]; cache.signatureFailures = [:]
+                    cache.analysisFailure = error.localizedDescription
+                }
                 cache.incoming = Dictionary(grouping: graph.connections, by: \.targetNode)
                 cache.semanticGraph = key; cache.validLayout = validLayout
                 cache.historyGeneration = nil
@@ -1218,31 +1250,101 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
                     }
                 }
             }
-            var upstreamMemo: [UUID: Bool] = [:]
-            func upstreamChanged(_ value: WorkflowStepRun, visiting: Set<UUID>) -> Bool {
-                guard !visiting.contains(value.node.id) else { return true }
-                let seen = visiting.union([value.node.id])
-                for edge in cache.incoming[value.node.id] ?? [] {
-                    guard let index = reusable[edge.sourceNode] else { return true }
-                    let upstream = runs[index.run].steps[index.step]
-                    guard value.inputs[edge.targetPort] == upstream.outputs[edge.sourcePort] else { return true }
-                    let stale: Bool
-                    if let known = upstreamMemo[upstream.id] { stale = known }
-                    else { stale = upstreamChanged(upstream, visiting: seen); upstreamMemo[upstream.id] = stale }
-                    if stale { return true }
-                }
-                return false
-            }
+            cache.reusable = reusable
+            cache.comparisons = [:]; cache.buildingStatuses = true
             for (id, index) in latest {
                 let step = runs[index.run].steps[index.step]
-                cache.statuses[id] = (step.status, cache.signatures[id] != step.signature || upstreamChanged(step, visiting: []))
+                cache.statuses[id] = .init(status: step.status,
+                    comparison: compareOutput(step, in: runs[index.run], cache: cache, visiting: []))
             }
+            cache.buildingStatuses = false; cache.statusMemoCount = cache.comparisons.count
             cache.historyGeneration = historyGeneration
             #if DEBUG
             displayHistoryCount += 1
             #endif
         }
         return cache.statuses[nodeID]
+    }
+
+    /// Selected historical output shares the same epoch-bound analysis. The memo is
+    /// limited to 128 additional records and is cleared on graph/history/tool changes.
+    public func outputComparison(_ step: WorkflowStepRun, runID: UUID) -> WorkflowOutputComparison {
+        _ = presentationStatus(for: step.node.id)
+        guard let run = runs.first(where: { $0.id == runID }),
+              run.steps.contains(where: { $0.id == step.id && $0 == step }) ||
+                run.planCheckpoint?.records.contains(where: { $0.id == step.id && $0.step == step }) == true else {
+            return .unavailable("The recorded output is unavailable.")
+        }
+        return compareOutput(step, in: run, cache: displaySnapshot, visiting: [])
+    }
+
+    private func compareOutput(_ value: WorkflowStepRun, in run: WorkflowRun,
+                               cache: NodeDisplaySnapshot, visiting: Set<UUID>) -> WorkflowOutputComparison {
+        let memoKey = NodeDisplaySnapshot.OutputKey(run: run.id, step: value.id)
+        if let known = cache.comparisons[memoKey] { return known }
+        func evaluate() -> WorkflowOutputComparison {
+            if let failure = cache.analysisFailure ?? cache.signatureFailures[value.node.id] { return .unavailable(failure) }
+            guard let current = cache.semanticGraph,
+                  let signature = cache.signatures[value.node.id] else { return .unavailable("Missing current node signature.") }
+            guard !visiting.contains(value.node.id) else { return .unavailable("Cycle in current workflow.") }
+            let seen = visiting.union([value.node.id])
+            let pins = run.scope?.historicalInputs ?? []
+            if !pins.isEmpty, let cp = run.planCheckpoint {
+                // Exact pinned boundaries are intentionally independent of newer upstream
+                // runs. Compare the selected scope and its boundary edges, not those ancestors.
+                let scopeIDs = Set(cp.plan.steps.map(\.id))
+                var ids: Set<UUID> = [], pending = [value.node.id]
+                while let id = pending.popLast(), ids.insert(id).inserted {
+                    pending += run.graph.connections.filter { $0.targetNode == id && scopeIDs.contains($0.sourceNode) }.map(\.sourceNode)
+                }
+                func normalized(_ node: WorkflowNode) -> WorkflowNode {
+                    var copy = node; copy.title = ""; copy.collectionRule = nil
+                    if let kind = registry.definition(for: node, tools: tools)?.modelKind,
+                       copy.parameters["modelID"] == nil,
+                       let model = cp.modelDefaults?[kind.rawValue] { copy.parameters["modelID"] = .text(model) }
+                    return copy
+                }
+                for id in ids {
+                    guard let now = current.nodes.first(where: { $0.id == id }),
+                          let then = run.graph.nodes.first(where: { $0.id == id }) else { return .changed }
+                    if normalized(now) != normalized(then) { return .changed }
+                }
+                let oldEdges = run.graph.connections.filter { ids.contains($0.targetNode) }
+                let newEdges = current.connections.filter { ids.contains($0.targetNode) }
+                guard oldEdges.count == newEdges.count, oldEdges.allSatisfy({ old in
+                    newEdges.contains { $0.sourceNode == old.sourceNode && $0.sourcePort == old.sourcePort && $0.targetNode == old.targetNode && $0.targetPort == old.targetPort }
+                }) else { return .changed }
+            }
+            for edge in cache.incoming[value.node.id] ?? [] {
+                if let pin = pins.first(where: { $0.destinationNodeID == value.node.id && $0.destinationPort == edge.targetPort }) {
+                    guard pin.sourcePort == edge.sourcePort,
+                          let owner = runs.first(where: { $0.id == pin.sourceCall.address.runID }),
+                          let call = owner.planCheckpoint?.records.first(where: { $0.address == pin.sourceCall.address && $0.id == pin.sourceCall.stepID }),
+                          call.step.node.id == edge.sourceNode,
+                          let output = call.step.outputs[pin.sourcePort],
+                          output == run.planCheckpoint?.externalInputs[value.node.id]?[edge.targetPort],
+                          output == value.inputs[edge.targetPort] else { return .unavailable("The selected historical input no longer matches its exact call.") }
+                    continue
+                }
+                let upstreamRun: WorkflowRun, upstream: WorkflowStepRun
+                if !pins.isEmpty, let record = run.planCheckpoint?.records.first(where: {
+                    $0.address.path == [.node(edge.sourceNode)] && [.completed, .partial].contains($0.step.status)
+                }) {
+                    upstreamRun = run; upstream = record.step
+                } else {
+                    guard let index = cache.reusable[edge.sourceNode] else { return .missingUpstream }
+                    upstreamRun = runs[index.run]; upstream = upstreamRun.steps[index.step]
+                }
+                guard let output = upstream.outputs[edge.sourcePort] else { return .missingUpstream }
+                guard value.inputs[edge.targetPort] == output else { return .changed }
+                let reason = compareOutput(upstream, in: upstreamRun, cache: cache, visiting: seen)
+                if reason != .matching { return reason }
+            }
+            return !pins.isEmpty || signature == value.signature ? .matching : .changed
+        }
+        let result = evaluate()
+        if cache.buildingStatuses || cache.comparisons.count < cache.statusMemoCount + 128 { cache.comparisons[memoKey] = result }
+        return result
     }
 
     private final class NodeDisplaySnapshot {
@@ -1259,8 +1361,15 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         var semanticGraph: WorkflowGraph?
         var validLayout = true
         var signatures: [UUID: String] = [:]
+        var signatureFailures: [UUID: String] = [:]
+        var analysisFailure: String?
         var incoming: [UUID: [WorkflowConnection]] = [:]
-        var statuses: [UUID: (status: WorkflowStepStatus, stale: Bool)] = [:]
+        var statuses: [UUID: WorkflowNodePresentationStatus] = [:]
+        var reusable: [UUID: (run: Int, step: Int)] = [:]
+        var buildingStatuses = false
+        var statusMemoCount = 0
+        struct OutputKey: Hashable { let run: UUID; let step: UUID }
+        var comparisons: [OutputKey: WorkflowOutputComparison] = [:]
     }
 
     public func latestStep(for nodeID: UUID) -> WorkflowStepRun? {
@@ -1378,11 +1487,11 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public func containerSubmission(forParent runID: UUID) -> WorkflowContainerSubmission? {
         containerSubmissions.first { $0.choices.contains { $0.call.address.runID == runID && !$0.selectedIDs.isEmpty } }
     }
-    public func batchContinuationIssue(_ runID: UUID) -> String? {
-        if containerSubmission(forParent: runID) != nil { return "Continue this container’s saved stage; its parent cannot be dispatched twice." }
-        guard let run = runs.first(where: { $0.id == runID }) else { return "原尝试已不可访问。" }
+    public func batchContinuationIssue(_ runID: UUID) -> WorkflowIssue? {
+        if containerSubmission(forParent: runID) != nil { return WorkflowIssue("Continue this container’s saved stage; its parent cannot be dispatched twice.", code: "workflow.batch.issue.continuationExists") }
+        guard let run = runs.first(where: { $0.id == runID }) else { return WorkflowIssue("Original attempt is unavailable.", code: "workflow.batch.issue.unavailableRun") }
         do { _ = try WorkflowBatchValidation.acceptedPrefix(run); return nil }
-        catch { return error.localizedDescription }
+        catch { return error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription) }
     }
 
     @discardableResult public func createNextBatchStage(parentRunIDs: [UUID], repetitions: Int,
@@ -1397,7 +1506,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         let known = Set(batchStages.flatMap(\.attempts).map(\.runID))
         var additions: [WorkflowRun] = []
         for id in parentRunIDs {
-            guard containerSubmission(forParent: id) == nil else { throw WorkflowIssue("Use the container’s saved continuation instead of creating another stage.") }
+            guard containerSubmission(forParent: id) == nil else { throw WorkflowIssue("Use the container’s saved continuation instead of creating another stage.", code: "workflow.batch.issue.continuationExists") }
             guard known.contains(id), let parent = runs.first(where: { $0.id == id }) else { throw WorkflowIssue("父尝试不属于已保存批次。") }
             try WorkflowArchiveInspection.validateRun(parent, tools: tools, registry: registry)
             let cp = try WorkflowBatchValidation.acceptedPrefix(parent)
@@ -1409,13 +1518,13 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
                 additions.append(child)
             }
         }
-        return try await registerBatchStage(name: "继续所选", repetitions: repetitions, parents: parentRunIDs, additions: additions, seedStrategy: seedStrategy)
+        return try await registerBatchStage(name: "Continuation batch", repetitions: repetitions, parents: parentRunIDs, additions: additions, seedStrategy: seedStrategy, systemTitle: .continuation)
     }
 
     private func registerBatchStage(name: String, repetitions: Int, parents: [UUID], additions: [WorkflowRun],
-                                    seedStrategy: WorkflowBatchSeedStrategy = .fixed) async throws -> UUID {
+                                    seedStrategy: WorkflowBatchSeedStrategy = .fixed, systemTitle: WorkflowBatchStage.SystemTitle? = nil) async throws -> UUID {
         let stage = WorkflowBatchStage(name: name, repetitions: repetitions, parentRunIDs: parents,
-            attempts: additions.enumerated().map { .init(ordinal: $0.offset + 1, runID: $0.element.id) }, seedStrategy: seedStrategy)
+            attempts: additions.enumerated().map { .init(ordinal: $0.offset + 1, runID: $0.element.id) }, seedStrategy: seedStrategy, systemTitle: systemTitle)
         try WorkflowArchiveInspection.validateScopeHistory(runs + additions, tools: tools, registry: registry)
         try WorkflowBatchValidation.validate(batchStages + [stage], runs: runs + additions, registry: registry)
         runs.append(contentsOf: additions); batchStages.append(stage)
@@ -1620,7 +1729,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         }
         replacement.planCheckpoint?.batchSeeds = try WorkflowBatchSeedSchedule.allocate(plan: cp.plan, parent: parentCheckpoint,
             strategy: strategy, count: 1, registry: registry, nextSeed: batchSeedSource)[0]
-        return try await registerBatchStage(name: "明确重试计算", repetitions: 1, parents: parents, additions: [replacement], seedStrategy: strategy)
+        return try await registerBatchStage(name: "Retry batch", repetitions: 1, parents: parents, additions: [replacement], seedStrategy: strategy, systemTitle: .retry)
     }
 
     public func run(target: UUID, only: Bool) async {
@@ -1629,7 +1738,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         guard !closed, !closing, !isRunning, !toolPublicationBusy, readOnlyReason == nil, let original = graph else { return }
         guard !hasPendingSaves else { errorMessage = "请先恢复保存，避免重复计算。"; return }
         editingOriginalID = original.id; editingCopies = [:]
-        isRunning = true; cancelled = false; errorMessage = nil
+        isRunning = true; cancelled = false; batchPauseRequested = false; errorMessage = nil
         defer { editingOriginalID = nil; editingCopies = [:]; isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
@@ -1736,7 +1845,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             errorMessage = "运行范围或原图已改变，或当前有未完成操作；请重新确认。"; return
         }
         editingOriginalID = original.id; editingCopies = [:]
-        isRunning = true; cancelled = false; errorMessage = nil
+        isRunning = true; cancelled = false; batchPauseRequested = false; errorMessage = nil
         defer { editingOriginalID = nil; editingCopies = [:]; isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
@@ -1773,7 +1882,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public func rerunCall(_ reference: WorkflowCallReference) async {
         guard !externalOperationBusy(), !closed, !closing, !isRunning, !toolPublicationBusy, readOnlyReason == nil, !hasPendingSaves else { return }
         editingOriginalID = runs.first(where: { $0.id == reference.address.runID }).flatMap { editingRootID(for: $0) }; editingCopies = [:]
-        isRunning = true; cancelled = false; errorMessage = nil
+        isRunning = true; cancelled = false; batchPauseRequested = false; errorMessage = nil
         defer { editingOriginalID = nil; editingCopies = [:]; isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
@@ -1882,6 +1991,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         return try WorkflowPlanExecutor.preparingRetry(checkpoint)
     }
     public func pause() {
+        guard canPausePresentation else { return }
         batchPauseRequested = true
         if activeBatchID == nil { activeExecutor?.requestPause() }
         setProgress(.init(activeBatchID == nil ? "pausePending" : "batchPausePending"))
@@ -1899,16 +2009,14 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
                 errorMessage = [errorMessage, failure.localizedDescription].compactMap { $0 }.joined(separator: "\n")
             }
             errorCode = failedRun.steps.last(where: { $0.status == .failed })?.errorCode ?? (failure as? WorkflowIssue)?.code
-            progressMessage = failedRun.status == .saving || hasPendingSaves
-                ? "计算已失败，失败记录尚未保存；请重试保存记录。"
-                : "失败记录已保存；流程仍失败。需要重新计算时，请明确重试计算。"
+            setProgress(.init(failedRun.status == .saving || hasPendingSaves ? "failureRecordPending" : "failureRecordSaved"))
         } else if let failure, !(failure is CancellationError) {
             reportIssue(failure as? WorkflowIssue ?? WorkflowIssue(failure.localizedDescription))
             setProgress(.init("failed"))
         }
         if hasPendingSaves, failedRun == nil {
             setProgress(.init("savePending"))
-            if errorMessage == nil { errorMessage = "运行记录或结果尚未保存，请恢复保存。" }
+            if errorMessage == nil { reportIssue(WorkflowIssue("运行记录或结果尚未保存，请恢复保存。", code: "workflow.status.pendingSave")) }
         } else if failedRun == nil && (failure is CancellationError || (failure == nil && runs.first(where: { $0.id == activeRunID })?.status == .cancelled)) {
             errorMessage = nil
             setProgress(.init("cancelled"))
@@ -2056,7 +2164,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             }
         }
         let stage = WorkflowBatchStage(name: "Container continuation", repetitions: repetitions, parentRunIDs: parentIDs,
-            attempts: children.enumerated().map { .init(ordinal: $0.offset + 1, runID: $0.element.id) }, seedStrategy: seedStrategy)
+            attempts: children.enumerated().map { .init(ordinal: $0.offset + 1, runID: $0.element.id) }, seedStrategy: seedStrategy, systemTitle: .continuation)
         nextRuns.append(contentsOf: children); nextBatches.append(stage)
         return stage
     }
@@ -2126,7 +2234,11 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             })
             do { let settled = try await executor.settleWaiting(cp, stepID: stepID); capture(settled, runIndex: ri) }
             catch { if let latest = executor.checkpoint { capture(latest, runIndex: ri) }; throw error }
-            setProgress(.init(reject ? "rejected" : "resultSaved"))
+            if reject { setProgress(.init("rejected")) }
+            else if human.kind == .approve {
+                let waiting = runs[ri].planCheckpoint?.records.contains { $0.step.status == .waiting } == true
+                setProgress(.init(waiting ? "judgmentSavedWaiting" : "judgmentSaved"))
+            } else { setProgress(.init("resultSaved")) }
         } catch { errorMessage = error.localizedDescription }
     }
     public func callRecords(runID: UUID) -> [WorkflowPlanCallRecord] {
@@ -2258,7 +2370,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             }
             if cp.state == .failed {
                 errorMessage = cp.error
-                progressMessage = "失败记录已保存；流程仍失败。需要重新计算时，请明确重试计算。"
+                setProgress(.init("failureRecordSaved"))
             } else { errorMessage = nil; setProgress(.init("workflowSaved")) }
             await onChange()
         } catch {
@@ -2284,7 +2396,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     }
 
     public func resume(runID: UUID) async {
-        guard !runs.contains(where: { $0.batchParent?.runID == runID }) else { errorMessage = "This run is an adopted prefix. Continue its saved child stage instead."; return }
+        guard !runs.contains(where: { $0.batchParent?.runID == runID }) else { reportIssue(WorkflowIssue("This run is an adopted prefix. Continue its saved child stage instead.", code: "workflow.batch.issue.continuationExists")); return }
         guard pendingPausedStopRunID == nil else { errorMessage = "请先恢复停止状态的保存；没有重新计算。"; return }
         guard !batchStages.contains(where: { $0.attempts.contains(where: { $0.runID == runID }) }) else { errorMessage = "批次尝试保留固定结果；请使用继续所选，明确下一阶段次数。"; return }
         guard !externalOperationBusy() else { errorMessage = "请先结束录音或恢复保存，再恢复流程。"; return }
@@ -2299,7 +2411,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         }
         guard runs[i].status != .rejected && runs[i].status != .completed else { return }
         editingOriginalID = editingRootID(for: runs[i]); editingCopies = [:]
-        isRunning = true; cancelled = false; errorMessage = nil
+        isRunning = true; cancelled = false; batchPauseRequested = false; errorMessage = nil
         defer { editingOriginalID = nil; editingCopies = [:]; isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
@@ -2328,7 +2440,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         guard !hasPendingSaves else { errorMessage = "请先恢复保存记录或结果，再明确重试计算。"; return }
         guard !isStale(old), old.outputs["output"]?.candidates.contains(where: { $0.asset == nil }) == true else { return }
         editingOriginalID = editingRootID(for: runs[ri]); editingCopies = [:]
-        isRunning = true; cancelled = false; errorMessage = nil
+        isRunning = true; cancelled = false; batchPauseRequested = false; errorMessage = nil
         defer { editingOriginalID = nil; editingCopies = [:]; isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {

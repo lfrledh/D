@@ -1,6 +1,16 @@
 import DWorkbench
 import SwiftUI
 
+enum WorkflowHumanSubmission {
+    static func key(_ kind: WorkflowHumanTaskKind) -> String {
+        switch kind {
+        case .approve: "workflow.language.form.submitDecision"
+        case .editText, .editMusic: "workflow.language.form.submitContent"
+        case .singleChoice, .multipleChoice: "workflow.language.form.submitSelection"
+        }
+    }
+}
+
 enum WorkflowHumanTaskFormError: Equatable {
     case incompatibleMaterials
     case incompatibleResultSchema
@@ -238,11 +248,15 @@ struct WorkflowHumanTaskForm: View {
                         .accessibilityIdentifier("workflow-human-task-error")
                 }
                 taskEditor.id(task.id)
+                if task.kind == .approve {
+                    Text(workflowText(languageStore, "workflow.language.form.approvalHelp")).font(.caption).foregroundStyle(.secondary)
+                }
                 HStack {
-                    Button(humanTaskText("workflow.language.form.submit", fallback: "Submit")) { submit() }
+                    Button(workflowText(languageStore, WorkflowHumanSubmission.key(task.kind))) { submit() }
                         .modifier(WorkflowDecisionPrimaryStyle(flat: flatControls))
                         .disabled(!state.canSubmit)
                         .accessibilityIdentifier("workflow-human-task-submit")
+                        .help(workflowText(languageStore, WorkflowHumanSubmission.key(task.kind) + ".help"))
                     Button(humanTaskText("workflow.language.form.reject", fallback: "Reject"), role: .destructive) {
                         guard state.displayedTaskID == task.id else { return }
                         onReject()
@@ -366,7 +380,7 @@ struct WorkflowHumanTaskForm: View {
         case .optional: key = "workflow.language.form.type.optional"; fallback = "Optional"
         case .result: key = "workflow.language.form.type.result"; fallback = "Result"
         case .asset(let kind):
-            key = "workflow.language.form.type.asset"; fallback = "Asset ({kind})"; arguments["kind"] = kind.rawValue
+            key = "workflow.language.form.type.asset"; fallback = "Asset ({kind})"; arguments["kind"] = WorkflowCanvasPresentation.kind(kind, language: languageStore)
         }
         return humanTaskText(key, fallback: fallback, arguments: arguments)
     }

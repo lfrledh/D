@@ -44,9 +44,10 @@ import SwiftUI
                             Text(text("frontier")+" \(index+1)").font(.caption.weight(.semibold))
                             ForEach(layers[index]) { step in
                                 HStack {
-                                    let mark=draft.marks[step.id]!
+                                    let mark=draft.marks(batch: options.batch)[step.id]!
                                     Label(WorkflowHumanPresentation.name(step.node,in:draft.graph.nodes,language:language),systemImage:mark.icon)
                                     Text(mark.title(language)).font(.caption).foregroundStyle(.secondary)
+                                        .help(mark.kind == .mayReuse ? text("mayReuse.help") : mark.title(language))
                                 }
                                 if let definition=controller.registry.definition(for:step.node,tools:draft.tools),let kind=definition.modelKind {
                                     let modelID=step.node.parameters["modelID"]?.string ?? draft.defaults[kind.rawValue]
@@ -77,7 +78,7 @@ import SwiftUI
                                 let id = try await controller.createBatchStage(selection: draft.selection, pins: inputs,
                                     repetitions: count, expectedGraphID: draft.graph.id, expectedRevision: draft.graph.revision, seedStrategy: selectedSeed)
                                 await controller.runBatchStage(id)
-                            } catch { controller.errorMessage = error.localizedDescription }
+                            } catch { controller.reportIssue(error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription)) }
                         } else if draft.mode == 0 { await controller.run(target:draft.target,only:false) }
                         else { await controller.runScoped(draft.selection,pins:inputs,expectedGraphID:draft.graph.id,expectedRevision:draft.graph.revision) }
                     }
@@ -100,7 +101,7 @@ import SwiftUI
     private func boundaryPicker(_ boundary:WorkflowScopeBoundary)->some View {
         let records=controller.historicalCalls(for:boundary)
         return VStack(alignment:.leading,spacing:6) {
-            Text(name(boundary.sourceNodeID)+" · "+boundary.sourcePort+" → "+name(boundary.destinationNodeID)+" · "+boundary.destinationPort).font(.subheadline)
+            Text(name(boundary.sourceNodeID)+" · "+WorkflowHumanPresentation.port(boundary.sourcePort, nodeID: boundary.sourceNodeID, graph: draft.graph, controller: controller, input: false, language: language)+" → "+name(boundary.destinationNodeID)+" · "+WorkflowHumanPresentation.port(boundary.destinationPort, nodeID: boundary.destinationNodeID, graph: draft.graph, controller: controller, input: true, language: language)).font(.subheadline)
             WorkbenchPicker(text("chooseInput"),selection:Binding<UUID?>(get:{options.choices[key(boundary)]?.stepID},set:{ id in
                 options.choices[key(boundary)]=records.first { $0.id == id }.map { .init(address:$0.address,stepID:$0.id) }
             })) {
@@ -108,7 +109,7 @@ import SwiftUI
                 WorkbenchChoiceForEach(records) { call in
                     WorkbenchChoice((controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0,in:controller.runs,stages:controller.batchStages,language:language) } ?? text("missing"))+" · "+WorkflowHumanPresentation.call(call,in:records,language:language),value:Optional(call.id))
                 }
-            }.disabled(!current)
+            }.disabled(!current).help(text("historicalInput.help"))
             if let choice=options.choices[key(boundary)],let call=records.first(where:{$0.address == choice.address && $0.id == choice.stepID}),let value=call.step.outputs[boundary.sourcePort] {
                 Button(text("previewInput"),systemImage:"arrow.up.right.square") { preview(value,choice,name(boundary.sourceNodeID),boundary.sourcePort) }
             }

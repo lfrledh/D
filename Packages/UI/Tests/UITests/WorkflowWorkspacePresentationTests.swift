@@ -702,6 +702,10 @@ extension WorkflowWorkspacePresentationTests {
         #expect(Set(draft.slice.plan.steps.map(\.id)) == expected)
         #expect(draft.slice.boundaries.count == [0,2,2,1][mode])
         #expect(expected.isSubset(of:Set(draft.marks.keys)))
+        for id in expected {
+            #expect(draft.marks(batch: true)[id]?.kind == .recompute)
+            #expect(draft.marks(batch: false)[id]?.kind == (mode == 0 ? .mayReuse : .recompute))
+        }
         for boundary in draft.slice.boundaries {
             #expect(draft.marks[boundary.sourceNodeID]?.kind == .historicalInput)
         }

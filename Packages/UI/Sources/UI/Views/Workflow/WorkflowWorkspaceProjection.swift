@@ -175,8 +175,9 @@ struct WorkflowWorkspaceRunDraft: Identifiable {
         }
         return result
     }
-    var marks: [UUID:WorkflowPlanMark] {
-        var values=Dictionary(uniqueKeysWithValues:slice.plan.steps.map { ($0.id, WorkflowPlanMark(kind:mode == 0 ? .mayReuse : .recompute,human:$0.effect == .human)) })
+    var marks: [UUID:WorkflowPlanMark] { marks(batch: false) }
+    func marks(batch: Bool) -> [UUID:WorkflowPlanMark] {
+        var values=Dictionary(uniqueKeysWithValues:slice.plan.steps.map { ($0.id, WorkflowPlanMark(kind:mode == 0 && !batch ? .mayReuse : .recompute,human:$0.effect == .human)) })
         for boundary in slice.boundaries where values[boundary.sourceNodeID] == nil { values[boundary.sourceNodeID] = .init(kind:.historicalInput,human:false) }
         return values
     }

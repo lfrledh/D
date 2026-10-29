@@ -226,16 +226,23 @@ public struct WorkflowRegistry: Sendable {
     /// A display snapshot validates once. The canonical bytes and per-target UUID ordering
     /// are identical to signature(_:in:tools:); execution admission still validates independently.
     func signatures(in graph: WorkflowGraph, tools: [WorkflowToolDefinition]) throws -> [UUID: String] {
+        try signatureEvidence(in: graph, tools: tools).values
+    }
+
+    /// Preserve per-branch encoding failures for display without a second analysis.
+    func signatureEvidence(in graph: WorkflowGraph, tools: [WorkflowToolDefinition]) throws -> (values: [UUID: String], failures: [UUID: String]) {
         try validate(graph, tools: tools)
         let nodes = Dictionary(uniqueKeysWithValues: graph.nodes.map { ($0.id, $0) })
         let incoming = Dictionary(grouping: graph.connections, by: \.targetNode)
         var result: [UUID: String] = [:]
+        var failures: [UUID: String] = [:]
         for node in graph.nodes {
             let order = try plannedOrder(graph, target: node.id, only: false, incoming: incoming)
             // Encoding one branch may fail without invalidating independent branches.
-            result[node.id] = try? signature(nodeOrder: order, nodes: nodes, connections: graph.connections)
+            do { result[node.id] = try signature(nodeOrder: order, nodes: nodes, connections: graph.connections) }
+            catch { failures[node.id] = error.localizedDescription }
         }
-        return result
+        return (result, failures)
     }
 
     private func signature(nodeOrder: [UUID], nodes: [UUID: WorkflowNode],

@@ -50,10 +50,11 @@ enum WorkflowDockLayout {
         Group {
             if snapshot.soleTarget != nil {
                 HStack(spacing: 0) {
-                    Button(workflowText(language, "workflow.dock.resume")) {
+                    Button(workflowText(language, snapshot.soleTarget.map { if case .stage = $0 { return "metadata.panel.workspace.resumeQueue" }; return "workflow.dock.resume" } ?? "workflow.dock.resume")) {
                         WorkflowDockRecovery.perform(snapshot, stopping: false, controller: controller, showRecords: showRecords)
                     }.accessibilityIdentifier("workflow-batch-resume")
-                    Button(workflowText(language, "workflow.dock.stop")) {
+                    .help(snapshot.soleTarget.map { if case .stage = $0 { return workflowText(language, "metadata.panel.workspace.resumeQueue.help") }; return workflowText(language, "workflow.action.resume") } ?? "")
+                    Button(workflowText(language, snapshot.soleTarget.map { if case .stage = $0 { return "workflow.dock.stopRemaining" }; return "workflow.dock.stop" } ?? "workflow.dock.stop")) {
                         WorkflowDockRecovery.perform(snapshot, stopping: true, controller: controller, showRecords: showRecords)
                     }.accessibilityIdentifier("workflow-batch-stop")
                 }

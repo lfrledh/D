@@ -443,6 +443,13 @@ extension WorkflowLifecycleTests {
         #expect(result.steps[0].outputs["output"] == .data(.text("原始 👩🏽‍🎨 e\u{301}")))
         #expect(c.runs.first == old)
         #expect(c.graph == edited)
+        #expect(c.presentationStatus(for: end.id)?.comparison == .matching)
+        c.setDataConfiguration(nodeID: input.id, value: .init(value: .text("new upstream after pin")))
+        #expect(c.presentationStatus(for: end.id)?.comparison == .matching)
+        c.setDataConfiguration(nodeID: end.id, value: .init(value: .text("changed target")))
+        #expect(c.presentationStatus(for: end.id)?.comparison == .changed)
+        c.undo(); c.undo()
+        #expect(c.graph == edited && c.presentationStatus(for: end.id)?.comparison == .matching)
         #expect(await engine.requests.isEmpty)
         await c.runScoped(.only(end.id), pins: [pin], expectedGraphID: graph.id, expectedRevision: graph.revision)
         #expect(c.errorMessage != nil && c.runs.count == 2)
@@ -3078,7 +3085,7 @@ extension WorkflowLifecycleTests {
         #expect(saved.planCheckpoint?.runID == checkpoint.runID && saved.planCheckpoint?.records == checkpoint.records)
         #expect(saved.planCheckpoint?.error?.hasPrefix(failure.localizedDescription) == true)
         #expect(saved.planCheckpoint?.error?.contains("DHA repeated history write") == true)
-        #expect(c.errorMessage == saved.planCheckpoint?.error && c.progressMessage.contains("失败记录已保存"))
+        #expect(c.errorMessage == saved.planCheckpoint?.error && c.progressPresentation?.code == "failureRecordSaved")
         #expect(!c.hasPendingSaves && !c.isRunning)
         #expect(await f.engine.requests == [request] && f.probe.resolutions == 1 && f.probe.releases == 1)
         #expect(await f.destination.snapshot().assets.isEmpty)
@@ -3790,5 +3797,100 @@ extension WorkflowLifecycleTests {
         #expect(try await cold.workflowState().archive?.runs.last == run)
         #expect(await engine.requests.isEmpty)
         try await cold.close()
+    }
+}
+
+extension WorkflowLifecycleTests {
+    @Test func b4PinnedScopeComparesOnlyRelevantExecutionSemantics() async throws {
+        let (_, store, engine, c) = try await fixture()
+        var a = try #require(c.registry.operation("d.value.input")).definition.makeNode()
+        a.dataConfiguration = .init(value: .text("old"))
+        let b = try #require(c.registry.operation("d.value.return")).definition.makeNode()
+        let z = try #require(c.registry.operation("d.value.return")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [a,b,z], connections: [.init(sourceNode: a.id, targetNode: b.id), .init(sourceNode: b.id, targetNode: z.id)])
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
+        await c.load(); await c.run(target: a.id, only: false)
+        let source = try #require(c.runs.last?.planCheckpoint?.records.first)
+        let pin = WorkflowHistoricalInput(destinationNodeID: b.id, destinationPort: "input", sourceCall: .init(address: source.address, stepID: source.id), sourcePort: "output")
+        await c.runScoped(.downstream(a.id, includingAnchor: false), pins: [pin], expectedGraphID: graph.id, expectedRevision: graph.revision)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        c.setDataConfiguration(nodeID: a.id, value: .init(value: .text("new outside scope")))
+        #expect(c.presentationStatus(for: b.id)?.comparison == .matching)
+        #expect(c.presentationStatus(for: z.id)?.comparison == .matching)
+        c.setDataConfiguration(nodeID: z.id, value: .init(value: .text("changed downstream")))
+        #expect(c.presentationStatus(for: b.id)?.comparison == .matching)
+        #expect(c.presentationStatus(for: z.id)?.comparison == .changed)
+        c.undo()
+        c.setDataConfiguration(nodeID: b.id, value: .init(value: .text("changed own input")))
+        #expect(c.presentationStatus(for: b.id)?.comparison == .changed)
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+
+    @Test func b4PauseIntentSurvivesProgressAndStopsNextDispatch() async throws {
+        let gate = WorkflowSubmitGate()
+        let (_, store, engine, c) = try await fixture()
+        await engine.suspend(using: gate)
+        c.addExample("text"); let graph = try #require(c.graph)
+        let stage = try await c.createBatchStage(selection: .through(graph.nodes[1].id), pins: [], repetitions: 2, expectedGraphID: graph.id, expectedRevision: graph.revision)
+        let work = Task { await c.runBatchStage(stage) }
+        for _ in 0..<2000 { if await !engine.requests.isEmpty { break }; try await Task.sleep(for: .milliseconds(1)) }
+        try #require(await engine.requests.count == 1)
+        c.pause(); c.services.progressEvent(.init("savingResult"))
+        #expect(c.pausePendingPresentation == "batchPausePending")
+        #expect(!c.canPausePresentation && c.batchStages[0].state == .running)
+        await gate.open(); await work.value
+        #expect(c.pausePendingPresentation == nil && c.batchStages[0].state == .paused)
+        #expect(c.batchStages[0].attempts[1].state == .queued)
+        #expect(await engine.requests.count == 1)
+        try await c.close(); try await store.close()
+    }
+}
+
+extension WorkflowLifecycleTests {
+    @Test func b4ComparisonDistinguishesKnownMissingAndFailedWithoutReanalysisOnLayout() async throws {
+        let (_, store, _, c) = try await fixture(); c.addExample("template")
+        let g = try #require(c.graph)
+        await c.run(target: g.nodes[3].id, only: false)
+        c.setParameter(nodeID: g.nodes[0].id, key: "text", value: .text("different"))
+        #expect(c.presentationStatus(for: g.nodes[0].id)?.comparison == .changed)
+        #expect(c.presentationStatus(for: g.nodes[2].id)?.comparison == .missingUpstream)
+        c.undo()
+        var bad = g.nodes[0]; bad.dataConfiguration = .init(value: .number(.infinity, unit: nil))
+        c.updateNode(bad, in: g.id)
+        guard case .unavailable = c.presentationStatus(for: bad.id)?.comparison else { Issue.record("Encoding failure must remain comparison failure, not user change"); return }
+        c.undo(); #expect(c.presentationStatus(for: bad.id)?.comparison == .matching)
+        try await c.close(); try await store.close()
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_B4_NATIVE_FIXTURE"] != nil))
+    func b4PrepareNativeProgramProject() async throws {
+        let (_, store, engine, c) = try await fixture()
+        var graphs: [WorkflowGraph] = []
+        for (kind, title) in [(WorkflowHumanTaskKind.approve, "B4 判断 Decision"), (.editText, "B4 内容 Content"), (.singleChoice, "B4 单选 Choice"), (.multipleChoice, "B4 多选 Choices")] {
+            var input = try #require(c.registry.operation("d.value.input")).definition.makeNode(); input.title = "材料 / Materials"
+            var human = try #require(c.registry.operation("d.control.human")).definition.makeNode(); human.title = title
+            human.parameters["kind"] = .text(kind.rawValue); human.parameters["instruction"] = .text("B4 专属测试 · Review the sample")
+            let list = WorkflowDatum.list(element: .text, items: [.init(id: "A", value: .text("First sample")), .init(id: "B", value: .text("Second sample"))])
+            input.dataConfiguration = .init(value: [.singleChoice, .multipleChoice].contains(kind) ? list : .text("B4 sample text"))
+            switch kind {
+            case .approve: human.dataConfiguration = .init(schema: .boolean)
+            case .singleChoice: human.dataConfiguration = .init(schema: .record([.init("id", .text), .init("value", .text)]))
+            case .multipleChoice: human.dataConfiguration = .init(schema: .list(.text))
+            default: human.dataConfiguration = .init(schema: .text)
+            }
+            var end = try #require(c.registry.operation("d.value.return")).definition.makeNode(); end.title = "输出 / Output"
+            graphs.append(.init(name: title, nodes: [input,human,end], connections: [.init(sourceNode: input.id, targetNode: human.id), .init(sourceNode: human.id, targetNode: end.id)], layout: [.init(nodeID: input.id,x:40,y:140),.init(nodeID:human.id,x:350,y:140),.init(nodeID:end.id,x:660,y:140)]))
+        }
+        let controls = try WorkflowLanguageExamples.make(.data)
+        graphs.append(controls.graph)
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: graphs, runs: [], expectedRevision: initial.revision, tools: controls.tools)
+        await c.load(); #expect(c.graphs.count == 5)
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+        let destination = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_B4_NATIVE_FIXTURE"]))
+        try FileManager.default.copyItem(at: store.rootURL, to: destination)
     }
 }

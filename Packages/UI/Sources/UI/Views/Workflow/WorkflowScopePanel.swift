@@ -73,7 +73,7 @@ struct WorkflowScopePresentation: Identifiable {
                         ForEach(Array(boundaries.enumerated()), id: \.offset) { _, boundary in
                             let records = controller.historicalCalls(for: boundary)
                             VStack(alignment: .leading) {
-                                Text((controller.rootGraph?.nodes.first { $0.id == boundary.destinationNodeID }?.title ?? "") + " · " + boundary.destinationPort)
+                                Text((controller.rootGraph?.nodes.first { $0.id == boundary.destinationNodeID }?.title ?? "") + " · " + WorkflowHumanPresentation.port(boundary.destinationPort, nodeID: boundary.destinationNodeID, graph: graph, controller: controller, input: true, language: language))
                                 WorkbenchPicker(text("version", "历史输出版本"), selection: Binding<UUID?>(
                                     get: { choices[key(boundary)] }, set: { choices[key(boundary)] = $0 })) {
                                     WorkbenchChoice(text("choose", "请选择一个结果"), value:Optional<UUID>.none)

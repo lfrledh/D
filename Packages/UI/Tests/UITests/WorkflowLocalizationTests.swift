@@ -23,10 +23,10 @@ struct WorkflowLocalizationTests {
         let pending = "计算已失败，失败记录尚未保存；请重试保存记录。"
         let saved = "失败记录已保存；流程仍失败。需要重新计算时，请明确重试计算。"
         #expect(workflowRecoveryProgressText(pending, language: language) == (locale == "en"
-            ? "Computation failed. The failure record has not been saved; retry saving the record." : pending))
+            ? "The run failed, and its record has not been saved. Retry saving first." : "运行失败，记录尚未保存。请先重试保存。"))
         #expect(workflowRecoveryProgressText(saved, language: language) == (locale == "en"
-            ? "The failure record is saved. The workflow is still failed. Retry computation explicitly when needed."
-            : "失败记录已保存；工作流仍失败。需要重新计算时，请明确重试计算。"))
+            ? "The failure record has been saved. Run again if you need to retry the computation."
+            : "失败记录已保存。需要重新计算时，请重新运行。"))
         let primary = "DHA integrity / 私有路径/a%20b {runID}\n原始严重诊断"
         let secondary = "write failed: /原样/🙂 {stepID}\nsecondary details"
         let raw = primary + "\n失败记录保存错误：" + secondary
@@ -35,7 +35,7 @@ struct WorkflowLocalizationTests {
             + (locale == "en" ? "Failure record save error: " : "失败记录保存错误：") + secondary)
         #expect(workflowRecoveryErrorText(primary, runs: [run], language: language) == primary)
         #expect(workflowRecoveryProgressText(primary, language: language) == primary)
-        #expect(workflowRecoveryProgressText(pending, language: nil) == pending)
+        #expect(workflowRecoveryProgressText(pending, language: nil) == "运行失败，记录尚未保存。请先重试保存。")
         #expect(workflowRecoveryErrorText(raw, runs: [run], language: nil) == raw)
         #expect(raw == primary + "\n失败记录保存错误：" + secondary)
     }
@@ -170,7 +170,7 @@ struct WorkflowLocalizationTests {
         let port = WorkflowPortDefinition("reference", "参考", kinds: [.text, .image], required: false)
         #expect(WorkflowCanvasPresentation.portDetail(port, language: store) == "Text/Image · Optional")
         #expect(WorkflowCanvasPresentation.kind(.images, language: store) == "Image Collection")
-        #expect(WorkflowCanvasPresentation.statusTitle(.cancelling, language: store) == "Cancelling")
+        #expect(WorkflowCanvasPresentation.statusTitle(.cancelling, language: store) == "Stopping")
         #expect(port.id == "reference")
         #expect(port.kinds == [.text, .image])
         #expect(!port.required)
@@ -400,5 +400,40 @@ struct WorkflowLocalizationTests {
 
         try await controller.close()
         try await projectStore.close()
+    }
+}
+
+@Suite(.serialized) @MainActor struct WorkflowRunCopyB4Tests {
+    @Test func preciseSubmissionKeysAndSystemTitlesDoNotRewriteHistory() throws {
+        let zh = UILanguageStore(preferredLanguages: ["zh-Hans"]), en = UILanguageStore(preferredLanguages: ["en"])
+        try zh.select("zh-Hans"); try en.select("en")
+        for (kind, expected) in [(WorkflowHumanTaskKind.approve, "提交判断"), (.editText, "提交内容"), (.editMusic, "提交内容"), (.singleChoice, "提交选择"), (.multipleChoice, "提交选择")] {
+            #expect(workflowText(zh, WorkflowHumanSubmission.key(kind)) == expected)
+            #expect(workflowText(en, WorkflowHumanSubmission.key(kind) + ".help").contains("separately"))
+        }
+        let legacy = WorkflowBatchStage(name: "继续所选", repetitions: 1, attempts: [])
+        var system = legacy; system.systemTitle = .continuation
+        let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
+        let before = try encoder.encode(system)
+        #expect(WorkflowHumanPresentation.stage(legacy, language: en) == "继续所选")
+        #expect(WorkflowHumanPresentation.stage(system, language: zh) == "后续批次")
+        #expect(WorkflowHumanPresentation.stage(system, language: en) == "Continuation batch")
+        #expect(try encoder.encode(system) == before)
+        let decoded = try JSONDecoder().decode(WorkflowBatchStage.self, from: JSONEncoder().encode(legacy))
+        #expect(decoded.systemTitle == nil && decoded.name == legacy.name)
+    }
+
+    @Test func waitingPausedAndSavedHumanDecisionAreDifferent() throws {
+        let en = UILanguageStore(preferredLanguages: ["en"]); try en.select("en")
+        let graph = WorkflowGraph(), plan = WorkflowPlan(graphID: graph.id, graphRevision: graph.revision, steps: [])
+        var run = WorkflowRun(graph: graph, targetNodeID: UUID(), status: .waiting)
+        #expect(WorkflowHumanPresentation.runStatus(run, language: en) == "Waiting")
+        run.planCheckpoint = .init(plan: plan); run.planCheckpoint?.state = .paused
+        #expect(WorkflowHumanPresentation.runStatus(run, language: en) == "Paused")
+        run.planCheckpoint?.state = .waiting
+        #expect(WorkflowHumanPresentation.runStatus(run, language: en) == "Ready to continue")
+        #expect(WorkflowOutputComparisonText.title(.changed, language: en) == "Settings or inputs have changed")
+        #expect(WorkflowOutputComparisonText.title(.missingUpstream, language: en) == "No matching upstream output yet")
+        #expect(WorkflowOutputComparisonText.title(.unavailable("raw diagnostic"), language: en).contains("Unable to compare"))
     }
 }

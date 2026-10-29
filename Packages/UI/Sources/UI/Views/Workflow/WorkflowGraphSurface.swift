@@ -1162,7 +1162,7 @@ private struct WorkflowNodeCard: View {
                     .help(node.title).allowsHitTesting(false)
                 Spacer(minLength: 0)
                 if let status = controller.presentationStatus(for: node.id) {
-                    WorkflowStatusBadge(status: status.status, stale: status.stale, scale: scale)
+                    WorkflowStatusBadge(status: status.status, comparison: status.comparison, scale: scale)
                         .allowsHitTesting(false)
                 }
                 if !collapsed {

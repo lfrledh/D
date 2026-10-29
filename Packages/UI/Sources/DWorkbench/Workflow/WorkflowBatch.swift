@@ -4,17 +4,21 @@ import Foundation
 /// A durable authorization, not a live task or a second project owner.
 public struct WorkflowBatchStage: Codable, Sendable, Equatable, Identifiable {
     public enum State: String, Codable, Sendable { case queued, running, paused, finished, cancelled, savingBlocked }
+    /// Optional for old archives. Never infer this provenance from a user's title.
+    public enum SystemTitle: String, Codable, Sendable { case continuation, retry }
     public var id: UUID
     public var createdAt: Date
     public var name: String
+    public var systemTitle: SystemTitle?
     public var repetitions: Int
     public var parentRunIDs: [UUID]
     public var attempts: [WorkflowBatchAttempt]
     public var state: State
     public var seedStrategy: WorkflowBatchSeedStrategy?
     public init(name: String, repetitions: Int, parentRunIDs: [UUID] = [], attempts: [WorkflowBatchAttempt],
-                seedStrategy: WorkflowBatchSeedStrategy = .fixed) {
+                seedStrategy: WorkflowBatchSeedStrategy = .fixed, systemTitle: SystemTitle? = nil) {
         id = UUID(); createdAt = Date(); self.name = name; self.repetitions = repetitions
+        self.systemTitle = systemTitle
         self.parentRunIDs = parentRunIDs; self.attempts = attempts; state = .queued; self.seedStrategy = seedStrategy
     }
 }
@@ -56,12 +60,12 @@ enum WorkflowBatchValidation {
         guard let original = parent.planCheckpoint, original.state == .waiting || original.state == .paused,
               !original.records.isEmpty,
               original.records.contains(where: { $0.step.humanTask?.decision != nil || $0.step.decision?.accepted == true }) else {
-            throw WorkflowIssue("请先保存本次尝试的全部人工决定；未采用、拒绝或失败的分支不能作为下一阶段输入。")
+            throw WorkflowIssue("请先保存本次尝试的全部人工决定；未采用、拒绝或失败的分支不能作为下一阶段输入。", code: "workflow.batch.issue.saveDecisions")
         }
         for record in original.records where ![.completed, .partial].contains(record.step.status) {
             if isWithinSettledControl(record, in: original) { continue }
             guard [.running, .queued].contains(record.step.status), record.step.node.control != nil else {
-                throw WorkflowIssue("本次尝试仍有未采用或未成功的关卡；不能继续其下游。")
+                throw WorkflowIssue("本次尝试仍有未采用或未成功的关卡；不能继续其下游。", code: "workflow.batch.issue.unsettled")
             }
         }
         return original

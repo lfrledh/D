@@ -811,7 +811,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                         Button(workspaceText(languageStore, "locateResults", "", ""), systemImage: "tray.full") {
                             revealLibrary(.init(controller: controller, source: .call(.init(address: record.address, stepID: record.id)), name: record.step.node.title + " · " + WorkflowHumanPresentation.call(record, in: selectedResultRun.map(WorkflowWorkspacePanels.records) ?? [], language: languageStore)))
                         }.accessibilityIdentifier("call-locate-results")
-                        HStack { Text(record.step.node.title).font(.headline);Spacer();WorkflowStatusBadge(status:record.step.status,stale:false) }
+                        HStack { Text(record.step.node.title).font(.headline);Spacer();WorkflowStatusBadge(status:record.step.status,comparison:.matching) }
                         if let error=record.step.error { WorkbenchIssueText(raw: error, key: record.step.errorCode).foregroundStyle(.red).textSelection(.enabled) }
                         if record.step.status == .waiting,let run=selectedResultRun {
                             Button(workspaceText(languageStore, "viewReadonly"),systemImage:"arrow.up.right.square") { openCall(run,record:record) }
@@ -871,9 +871,12 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                         revealLibrary(.init(controller: controller, source: .run(run.id), name: WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: languageStore)))
                     }.accessibilityIdentifier("run-locate-results")
                     Text(run.graph.name).font(.headline)
-                    Text(WorkflowCanvasPresentation.statusTitle(run.status, language: languageStore)).font(.title3)
+                    Text(WorkflowHumanPresentation.runStatus(run, language: languageStore)).font(.title3)
                     Text(run.graph.nodes.first(where: { $0.id == run.targetNodeID })?.title ?? text("workspace.unavailableTarget", "目标已不可访问")).font(.callout)
-                    if let issue = run.planCheckpoint?.error { Label(issue, systemImage: "exclamationmark.triangle").foregroundStyle(.red) }
+                    if let issue = run.planCheckpoint?.error {
+                        let ended = [.cancelled, .rejected].contains(run.status) && run.planCheckpoint?.state == .cancelled && run.planCheckpoint?.records.contains { $0.step.humanTask?.rejected == true } == true
+                        WorkbenchIssueText(raw: issue, key: ended ? "workflow.human.ended" : nil).foregroundStyle(.red)
+                    }
                     if WorkflowCanvasPresentation.canResume(run.status) {
                         recoveryActions(run)
                     }
@@ -895,7 +898,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                             HStack {
                                 VStack(alignment: .leading) { Text(WorkflowHumanPresentation.name(record.step.node, in: WorkflowHumanPresentation.nodes(in: run), language: languageStore)); Text(WorkflowHumanPresentation.call(record, in: WorkflowWorkspacePanels.records(in: run), language: languageStore)).font(.caption2) }
                                 Spacer()
-                                WorkflowStatusBadge(status: record.step.status, stale: false)
+                                WorkflowStatusBadge(status: record.step.status, comparison: .matching)
                             }.frame(maxWidth: .infinity, alignment: .leading)
                         }.buttonStyle(.plain).padding(8)
                             .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
@@ -1067,12 +1070,13 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         }
         commands.settings = action("systemMenu.runSettings", enabled: !controller.isRunning && !controller.hasPendingSaves) { toggleRunSettings() }
         let activeRun = controller.activePresentationRun?.id
-        commands.pause = action("systemMenu.pause", enabled: controller.isRunning && controller.canPausePresentation && controller.activePresentationRun?.status != .cancelling) { if let activeRun, controller.activePresentationRun?.id == activeRun, controller.isRunning && controller.canPausePresentation && controller.activePresentationRun?.status != .cancelling { controller.pause() } }
+        commands.pause = action(controller.activeBatchID != nil ? "metadata.panel.workspace.batchPauseReview" : "systemMenu.pause", enabled: controller.isRunning && controller.canPausePresentation && controller.activePresentationRun?.status != .cancelling) { if let activeRun, controller.activePresentationRun?.id == activeRun, controller.isRunning && controller.canPausePresentation && controller.activePresentationRun?.status != .cancelling { controller.pause() } }
         let recovery = WorkflowDockRecovery.capture(controller)
-        commands.resume = action("systemMenu.resume", enabled: !isReadOnly && !controller.isRunning && !controller.hasPendingSaves && !recovery.targets.isEmpty) {
+        let batchRecovery = recovery.soleTarget.map { if case .stage = $0 { return true }; return false } ?? false
+        commands.resume = action(batchRecovery ? "metadata.panel.workspace.resumeQueue" : "systemMenu.resume", enabled: !isReadOnly && !controller.isRunning && !controller.hasPendingSaves && !recovery.targets.isEmpty) {
             WorkflowDockRecovery.perform(recovery, stopping: false, controller: controller, showRecords: showRecoveryRecords)
         }
-        commands.stop = action("systemMenu.stop", enabled: !controller.isSaving && controller.activePresentationRun?.status != .cancelling && (controller.isRunning || (!isReadOnly && !recovery.targets.isEmpty))) {
+        commands.stop = action(controller.activeBatchID != nil ? "metadata.panel.workspace.batchCancel" : batchRecovery ? "workflow.dock.stopRemaining" : "systemMenu.stop", enabled: !controller.isSaving && controller.activePresentationRun?.status != .cancelling && (controller.isRunning || (!isReadOnly && !recovery.targets.isEmpty))) {
             if let activeRun {
                 Task { if controller.isRunning && controller.activePresentationRun?.id == activeRun && context == runContext { await controller.cancel() } }
             } else { WorkflowDockRecovery.perform(recovery, stopping: true, controller: controller, showRecords: showRecoveryRecords) }
@@ -1143,14 +1147,17 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
     private var dockSummary: String {
         if controller.activePresentationRun?.status == .cancelling { return dockText("cancelling") }
+        if let pending = controller.pausePendingPresentation {
+            return workflowProgressText(.init(pending), language: languageStore)
+        }
         if controller.isRunning {
             return controller.progressPresentation.map { workflowProgressText($0, language: languageStore) }
                 ?? (controller.progressMessage.isEmpty ? dockText("running") : workflowRecoveryProgressText(controller.progressMessage, language: languageStore))
         }
-        if controller.hasPendingSaves { return dockText("savePending") }
+        if controller.hasPendingSaves { return controller.hasSaveFailure ? workflowText(languageStore, "workflow.save.failed") : dockText("savePending") }
         let pausedQueues = WorkflowDockRecovery.pausedQueues(controller)
         if let stage = pausedQueues.first {
-            return dockText("paused") + " · " + (pausedQueues.count == 1 ? stage.name : String(pausedQueues.count))
+            return dockText("paused") + " · " + (pausedQueues.count == 1 ? WorkflowHumanPresentation.stage(stage, language: languageStore) : String(pausedQueues.count))
         }
         if !pendingCalls.isEmpty { return dockText("waiting") + " · \(pendingCalls.count)" }
         if let run = recoveryRun, run.planCheckpoint?.state == .paused { return dockText("paused") + " · " + run.graph.name }
@@ -1185,15 +1192,18 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         if controller.isRunning {
             let stopping = controller.activePresentationRun?.status == .cancelling
             HStack(spacing: 0) {
-                Button(dockText("pause")) { controller.pause() }
+                Button(controller.activeBatchID != nil ? workspaceText(languageStore, "batchPauseReview") : dockText("pause")) { controller.pause() }
+                    .help(controller.activeBatchID != nil ? workspaceText(languageStore, "batchPauseReview.help") : workflowText(languageStore, "workflow.run.pauseHelp"))
                     .disabled(stopping || !controller.canPausePresentation)
-                Button(dockText("stop")) { Task { await controller.cancel() } }
+                Button(controller.activeBatchID != nil ? workspaceText(languageStore, "batchCancel") : dockText("stop")) { Task { await controller.cancel() } }
+                    .help(controller.activeBatchID != nil ? workspaceText(languageStore, "batchCancel.help") : dockText("stop"))
                     .disabled(stopping || controller.isSaving)
                     .accessibilityIdentifier("workflow-cancel")
             }.frame(maxWidth: .infinity).buttonStyle(WorkflowDockButtonStyle(expand: true))
         } else if controller.hasPendingSaves {
             let pending = pendingSavingTargets, context = runContext
             Button(dockText("retrySave")) { retryPendingSaving(pending, context: context) }.buttonStyle(WorkflowDockButtonStyle(expand: true))
+                .help(workspaceText(languageStore, "saveOnly.help"))
         } else if !WorkflowDockRecovery.capture(controller).targets.isEmpty {
             WorkflowPausedBatchControls(controller: controller) {
                 activityVisible = true; recordsDetail = false; workspaceDraft = nil; runSettingsVisible = false
@@ -1293,7 +1303,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                                 Button { inspectRun(run) } label: {
                                     VStack(alignment: .leading, spacing: 3) {
                                         Text(WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: languageStore)).font(.subheadline)
-                                        Text(WorkflowCanvasPresentation.statusTitle(run.status, language: languageStore) + " · " + run.createdAt.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+                                        Text(WorkflowHumanPresentation.runStatus(run, language: languageStore) + " · " + run.createdAt.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
                                         if let seconds = controller.batchStages.lazy.flatMap(\.attempts).first(where: { $0.runID == run.id })?.activeSeconds {
                                             Text(workspaceText(languageStore, "activeTime") + String(format: " %.2f s", seconds)).font(.caption)
                                         }
@@ -1307,6 +1317,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                                         Button(workspaceText(languageStore, "batches")) { panelsState.selectRun(run.id); panelsState.output = .batches; recordsDetail = true }
                                     } else if run.id == controller.pendingPausedStopRunID {
                                         Button(dockText("retrySave")) { Task { await controller.retryRunSaving(runID: run.id) } }
+                                            .help(workspaceText(languageStore, "saveOnly.help"))
                                     } else if WorkflowCanvasPresentation.canResume(run.status) { recoveryActions(run) }
                                 }
                             }.padding(8).background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
@@ -1379,9 +1390,9 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 Text(workflowText(languageStore, "workflow.status.savingNow"))
             } else if controller.isRunning {
                 ProgressView().controlSize(.small)
-                Text(controller.progressMessage.isEmpty && controller.progressPresentation == nil
+                Text(controller.pausePendingPresentation.map { workflowProgressText(.init($0), language: languageStore) } ?? (controller.progressMessage.isEmpty && controller.progressPresentation == nil
                      ? workflowText(languageStore, "workflow.status.runningNow")
-                     : controller.progressPresentation.map { workflowProgressText($0, language: languageStore) } ?? workflowRecoveryProgressText(controller.progressMessage, language: languageStore))
+                     : controller.progressPresentation.map { workflowProgressText($0, language: languageStore) } ?? workflowRecoveryProgressText(controller.progressMessage, language: languageStore)))
             } else if !controller.progressMessage.isEmpty || controller.progressPresentation != nil {
                 Text(controller.progressPresentation.map { workflowProgressText($0, language: languageStore) } ?? workflowRecoveryProgressText(controller.progressMessage, language: languageStore)).foregroundStyle(.secondary)
             }
@@ -1492,7 +1503,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     }
     private var currentPlanMarks:[UUID:WorkflowPlanMark] {
         guard let draft=workspaceDraft,draft.isCurrent(in:controller) else { return [:] }
-        return draft.marks.mapValues { $0 }.reduce(into:[:]) { result,item in
+        return draft.marks(batch: runOptions.batch).mapValues { $0 }.reduce(into:[:]) { result,item in
             var mark=item.value;mark.historicalLabel=planInputLabels[item.key];result[item.key]=mark
         }
     }
@@ -1621,7 +1632,7 @@ private struct WorkflowNodeInspector: View {
         }
         .workbenchConfirmation(workflowText(languageStore, "workflow.scope.rerunCall"),
                isPresented: Binding(get: { pendingCall != nil }, set: { if !$0 { pendingCall = nil } })) {
-            Button(workflowText(languageStore, "workflow.scope.run")) {
+            Button(workspaceText(languageStore, "retryFrozen")) {
                 if let reference = pendingCall { Task { await controller.rerunCall(reference) } }
                 pendingCall = nil
             }.keyboardShortcut(.defaultAction)
@@ -1943,11 +1954,13 @@ private struct WorkflowNodeInspector: View {
         WorkflowInspectorSection(workflowText(languageStore, "workflow.section.execution")) {
 
             if let step = exactResult ? resultRecord?.step : controller.presentationStep(nodeID: node.id, runID: resultRunID) {
+                let comparison = resultRunID.map { controller.outputComparison(step, runID: $0) } ?? controller.presentationStatus(for: node.id)?.comparison ?? .matching
                 HStack {
-                    WorkflowStatusBadge(status: step.status, stale: resultRunID == nil ? (controller.presentationStatus(for: node.id)?.stale ?? true) : controller.isStale(step))
+                    WorkflowStatusBadge(status: step.status, comparison: comparison)
                     Spacer()
                     Text(step.node.title).font(.caption).foregroundStyle(.secondary)
                 }
+                if case .unavailable(let diagnostic) = comparison { WorkflowTechnicalDetails(value: diagnostic) }
                 if let error = step.error {
                     WorkbenchIssueText(raw: error, key: step.errorCode)
                         .foregroundStyle(.red)
@@ -2008,7 +2021,7 @@ private struct WorkflowNodeInspector: View {
                     HStack {
                         Text(run.createdAt, format: .dateTime.month().day().hour().minute())
                         Spacer()
-                        Text(WorkflowCanvasPresentation.statusTitle(run.status, language: languageStore))
+                        Text(WorkflowHumanPresentation.runStatus(run, language: languageStore))
                             .foregroundStyle(.secondary)
                     }
                     WorkflowTechnicalDetails(value: run.id.uuidString)
@@ -2395,9 +2408,10 @@ private struct WorkflowCanvasConnectionInspector: View {
                     }
                     if let step = controller.latestStep(for: source.id),
                        let value = step.outputs[connection.sourcePort] {
-                        Text(controller.presentationStatus(for: source.id)?.stale ?? true
-                             ? workflowText(language, "canvas.connection.stale", fallback: "运行记录输出（来源版本已变化）")
-                             : workflowText(language, "canvas.connection.saved", fallback: "运行记录输出"))
+                        Text(controller.presentationStatus(for: source.id).map {
+                            $0.comparison == .matching ? workflowText(language, "canvas.connection.saved")
+                                : WorkflowOutputComparisonText.title($0.comparison, language: language)
+                        } ?? workflowText(language, "canvas.connection.saved"))
                             .font(.caption).foregroundStyle(.secondary)
                         WorkflowStepValues(title: connection.sourcePort,
                             values: [connection.sourcePort: value], operationID: source.operationID,
@@ -2584,6 +2598,7 @@ struct WorkflowRunRecoveryButton: View {
         }
         .disabled(readOnly)
         .accessibilityIdentifier("workflow-run-recovery-" + run.id.uuidString)
+        .help(run.status == .saving ? workspaceText(languageStore, "saveOnly.help") : "")
         .workbenchHelp(savingFailure ? "RECOVERY-SAVE-FAILURE" : run.status == .failed ? "RECOVERY-RECOMPUTE" : run.status == .saving ? nil : "DECISION-CONTINUE", unavailableReason: readOnly ? canvasHelpReason(controller, readOnly: readOnly, language: languageStore) : nil, target: "run:\(run.id):\(run.graph.id):\(run.status)")
     }
 }
@@ -2956,16 +2971,17 @@ private struct WorkflowAssetIdentity: View {
 
 struct WorkflowStatusBadge: View {
     let status: WorkflowStepStatus
-    let stale: Bool
+    let comparison: WorkflowOutputComparison
     var scale: CGFloat = 1
     @Environment(\.dLanguageStore) private var languageStore
     var body: some View {
         HStack(spacing: 4 * scale) {
             Circle().fill(WorkflowCanvasPresentation.statusColor(status)).frame(width: 7 * scale, height: 7 * scale)
             Text(WorkflowCanvasPresentation.statusTitle(status, language: languageStore))
-            if stale {
-                Text(workflowText(languageStore, "workflow.status.staleInput"))
+            if comparison != .matching {
+                Text(WorkflowOutputComparisonText.title(comparison, language: languageStore))
                     .foregroundStyle(.orange)
+                    .help(WorkflowOutputComparisonText.help(comparison, language: languageStore))
             }
         }
         .font(.system(size: 11 * scale, weight: .medium))

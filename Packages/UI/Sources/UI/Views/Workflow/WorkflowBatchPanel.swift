@@ -16,9 +16,9 @@ import SwiftUI
             HStack {
                 Text(text("batchReview")).font(.caption)
                 Spacer()
-                if controller.isRunning {
-                    Button(text("batchPauseReview")) { controller.pause() }
-                    Button(text("batchCancel")) { Task { await controller.cancel() } }
+                if controller.isRunning, controller.activeBatchID != nil {
+                    Button(text("batchPauseReview")) { controller.pause() }.disabled(!controller.canPausePresentation).help(text("batchPauseReview.help"))
+                    Button(text("batchCancel")) { Task { await controller.cancel() } }.disabled(controller.activePresentationRun?.status == .cancelling).help(text("batchCancel.help"))
                 }
                 Button(text("continueSelected")) { showPlan = true }
                     .disabled(selected.isEmpty || controller.isRunning || controller.hasPendingSaves)
@@ -28,7 +28,8 @@ import SwiftUI
                     ForEach(controller.batchStages.reversed()) { stage in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Text(stage.name).font(.headline)
+                                Text(WorkflowHumanPresentation.stage(stage, language: language)).font(.headline)
+                                Text(workflowText(language, "workflow.batch.state." + stage.state.rawValue)).font(.caption)
                                 Text(stage.createdAt, style: .time).font(.caption)
                                 Spacer()
                                 let waiting = stage.attempts.filter { $0.state == .waiting }.count
@@ -38,7 +39,7 @@ import SwiftUI
                                 if stage.state == .savingBlocked || stage.attempts.contains(where: { $0.state == .savingBlocked }) || (stage.state == .cancelled && controller.hasPendingSaves) {
                                     Button(text("saveOnly")) { Task { await controller.retryBatchSaving(stage.id) } }.disabled(controller.isRunning).help(text("saveOnly.help"))
                                 } else if stage.attempts.contains(where: { $0.state == .queued }), stage.state != .cancelled {
-                                    Button(text("resumeQueue")) { Task { await controller.runBatchStage(stage.id) } }
+                                    Button(text("resumeQueue")) { Task { await controller.runBatchStage(stage.id) } }.help(text("resumeQueue.help"))
                                         .disabled(controller.isRunning || controller.hasPendingSaves)
                                     Button(workflowText(language, "workflow.dock.stopRemaining")) { Task { await controller.stopBatchQueue(stage.id) } }
                                         .disabled(controller.isRunning || controller.hasPendingSaves)
@@ -77,7 +78,7 @@ import SwiftUI
                                     let stage = try await controller.createNextBatchStage(parentRunIDs: ids, repetitions: count, seedStrategy: seedStrategy)
                                     showPlan = false; selected = []
                                     await controller.runBatchStage(stage)
-                                } catch { controller.errorMessage = error.localizedDescription }
+                                } catch { controller.reportIssue(error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription)) }
                             }
                         }.buttonStyle(WorkbenchPrimaryButtonStyle())
                             .disabled(selected.isEmpty || selected.count > 256 / repetitions || controller.isRunning || controller.hasPendingSaves)
@@ -98,9 +99,9 @@ import SwiftUI
             let reason = controller.batchContinuationIssue(run.id)
             Toggle(isOn: Binding(get: { selected.contains(run.id) }, set: { if $0 { selected.insert(run.id) } else { selected.remove(run.id) } })) {
                 Text("#\(attempt.ordinal)").monospacedDigit()
-            }.disabled(reason != nil || controller.isRunning).help(reason ?? "")
+            }.disabled(reason != nil || controller.isRunning).help(reason.map { workflowText(language, $0.code ?? "workflow.batch.issue.unsettled", fallback: $0.reason) } ?? "")
             VStack(alignment: .leading) {
-                Text(WorkflowCanvasPresentation.statusTitle(run.status, language: language))
+                Text(WorkflowHumanPresentation.runStatus(run, language: language))
                 if let parent = run.batchParent, let parentRun = controller.runs.first(where: { $0.id == parent.runID }) {
                     Text(text("fixedParent") + " " + WorkflowHumanPresentation.run(parentRun, in: controller.runs, stages: controller.batchStages, language: language)).font(.caption)
                 }
@@ -131,7 +132,7 @@ import SwiftUI
                         do {
                             if controller.hasPendingSaves { _ = try await controller.retryContainerSaving(intent.scope); return }
                             if let next = try await controller.continueContainerSubmission(intent) { await controller.runBatchStage(next) }
-                        } catch { controller.errorMessage = error.localizedDescription }
+                        } catch { controller.reportIssue(error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription)) }
                     }
                 }.disabled(controller.isRunning || (!controller.hasPendingSaves && WorkflowContainerPresentation.continuationEnded(intent, stages: controller.batchStages)))
                     .help(workflowText(language, controller.hasPendingSaves ? "metadata.panel.workspace.saveOnly.help" : "container.continueSaved.help"))
@@ -140,9 +141,9 @@ import SwiftUI
                 Button(text("newAttempt")) {
                     Task {
                         do { let id = try await controller.retryBatchAttempt(run.id); await controller.runBatchStage(id) }
-                        catch { controller.errorMessage = error.localizedDescription }
+                        catch { controller.reportIssue(error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription)) }
                     }
-                }.disabled(controller.isRunning || controller.hasPendingSaves)
+                }.disabled(controller.isRunning || controller.hasPendingSaves).help(text("newAttempt.help"))
             }
         }.font(.callout).padding(.vertical, 3)
     }

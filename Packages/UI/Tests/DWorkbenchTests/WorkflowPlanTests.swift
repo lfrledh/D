@@ -680,7 +680,7 @@ struct WorkflowPlanTests {
         #expect(stopped.records[0].step.outputs.isEmpty)
     }
 
-    @Test func typedHumanDecisionResumesWithValidatedData() async throws {
+    @Test(arguments: [true, false]) func typedHumanDecisionResumesWithValidatedData(approved: Bool) async throws {
         let registry = try makeRegistry()
         let human = try makeNode("d.control.human", registry: registry)
         let plan = WorkflowPlan(
@@ -700,12 +700,12 @@ struct WorkflowPlanTests {
         initial.externalInputs[human.id] = ["input": .data(.text("draft"))]
         var waiting = try await executor.execute(initial)
         var task = try #require(waiting.records[0].step.humanTask)
-        task.decision = .boolean(true)
+        task.decision = .boolean(approved)
         waiting.records[0].step.humanTask = task
 
         let completed = try await executor.execute(waiting)
         #expect(completed.state == .completed)
-        #expect(completed.outputs["output"] == .data(.boolean(true)))
+        #expect(completed.outputs["output"] == .data(.boolean(approved)))
     }
 
     private func humanPipeline(

@@ -91,6 +91,9 @@ struct SystematicPerformanceTests {
         try registry.validate(graph)
         let signatures = try registry.signatures(in: graph, tools: [])
         #expect(signatures[bad.id] == nil)
+        let evidence = try registry.signatureEvidence(in: graph, tools: [])
+        #expect(evidence.failures[bad.id] != nil && evidence.failures[good.id] == nil)
+        #expect(evidence.values == signatures)
         #expect(signatures[good.id] == (try registry.signature(good.id, in: graph)))
     }
 

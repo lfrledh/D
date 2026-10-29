@@ -16,6 +16,32 @@ enum WorkflowHumanPresentation {
         guard peers.count > 1, let index = peers.firstIndex(where: { $0.id == node.id }) else { return title }
         return title + " · \(index + 1)"
     }
+    @MainActor static func stage(_ stage: WorkflowBatchStage, language: UILanguageStore?) -> String {
+        guard let kind = stage.systemTitle else { return stage.name }
+        return workspaceText(language, "batchTitle." + kind.rawValue)
+    }
+    @MainActor static func runStatus(_ run: WorkflowRun, language: UILanguageStore?) -> String {
+        if run.status == .waiting, run.planCheckpoint?.state == .paused {
+            return workflowText(language, "workflow.dock.paused")
+        }
+        if run.status == .waiting {
+            let records = WorkflowWorkspacePanels.records(in: run)
+            if records.contains(where: { $0.step.status == .waiting }) {
+                return workflowText(language, "workflow.dock.waiting")
+            }
+            return workflowText(language, run.planCheckpoint == nil ? "workflow.status.waitingUnknown" : "workflow.status.readyToContinue")
+        }
+        return WorkflowCanvasPresentation.statusTitle(run.status, language: language)
+    }
+    @MainActor static func port(_ id: String, nodeID: UUID, graph: WorkflowGraph, controller: WorkflowController,
+                               input: Bool, language: UILanguageStore?) -> String {
+        guard let node = graph.nodes.first(where: { $0.id == nodeID }),
+              let definition = controller.registry.definition(for: node, tools: controller.tools),
+              let port = (input ? definition.inputs : definition.outputs).first(where: { $0.id == id }) else {
+            return workflowText(language, "workflow.port.unknownID", arguments: ["id": id])
+        }
+        return WorkflowCanvasPresentation.portTitle(operationID: node.operationID, port: port, input: input, language: language)
+    }
     static func nodes(in run: WorkflowRun) -> [WorkflowNode] {
         var seen = Set<UUID>()
         return (run.graph.nodes + WorkflowWorkspacePanels.records(in: run).map(\.step.node)).filter { seen.insert($0.id).inserted }
@@ -25,19 +51,19 @@ enum WorkflowHumanPresentation {
         if let attempt = stages.lazy.flatMap({ $0.attempts }).first(where: { $0.runID == run.id }) {
             return title + " · " + metadataText(language, "attemptNumber")
                 .replacingOccurrences(of: "{number}", with: String(attempt.ordinal))
-                + " · " + WorkflowCanvasPresentation.statusTitle(run.status, language: language)
+                + " · " + WorkflowHumanPresentation.runStatus(run, language: language)
         }
         let peers = runs.filter { $0.graph.name == run.graph.name && $0.createdAt.formatted(date: .abbreviated, time: .standard) == run.createdAt.formatted(date: .abbreviated, time: .standard) }
             .sorted { $0.id.uuidString < $1.id.uuidString }
         let alias = peers.count > 1 ? " · " + metadataText(language, "runNumber").replacingOccurrences(of: "{number}", with: String((peers.firstIndex { $0.id == run.id } ?? 0) + 1)) : ""
-        return title + alias + " · " + WorkflowCanvasPresentation.statusTitle(run.status, language: language)
+        return title + alias + " · " + WorkflowHumanPresentation.runStatus(run, language: language)
     }
     @MainActor static func call(_ call: WorkflowPlanCallRecord, in records: [WorkflowPlanCallRecord], language: UILanguageStore?) -> String {
         var parts: [String] = []
         for (offset, component) in call.address.path.enumerated() {
             switch component {
             case .iteration(let number): parts.append(metadataText(language, "iteration") + " \(number)")
-            case .branch(let selected): parts.append(metadataText(language, "branch") + " · " + (selected ? "true" : "false"))
+            case .branch(let selected): parts.append(metadataText(language, "branch") + " · " + workflowText(language, selected ? "workflow.language.control.conditionMet" : "workflow.language.control.conditionNotMet"))
             case .item(let id):
                 let parentPath = Array(call.address.path.prefix(offset))
                 let parent = records.first { $0.address.runID == call.address.runID && $0.address.path == parentPath }
@@ -89,5 +115,27 @@ struct WorkflowTechnicalDetails: View {
                 NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string)
             }.buttonStyle(WorkbenchGlassButtonStyle(compact: true))
         }.font(.caption)
+    }
+}
+
+/// Display-only reasons from the existing controller snapshot; never an admission rule.
+enum WorkflowOutputComparisonText {
+    @MainActor static func title(_ reason: WorkflowOutputComparison, language: UILanguageStore?) -> String {
+        switch reason {
+        case .matching: ""
+        case .changed: workflowText(language, "workflow.status.staleInput")
+        case .missingUpstream: workflowText(language, "workflow.status.missingUpstream")
+        case .unavailable(let diagnostic):
+            WorkbenchOwnedIssue.summary(diagnostic, language: language)
+                ?? workflowText(language, "workflow.status.comparisonFailed")
+        }
+    }
+    @MainActor static func help(_ reason: WorkflowOutputComparison, language: UILanguageStore?) -> String {
+        switch reason {
+        case .matching: ""
+        case .changed: workflowText(language, "workflow.status.staleInput.help")
+        case .missingUpstream: workflowText(language, "workflow.status.missingUpstream.help")
+        case .unavailable(let diagnostic): diagnostic
+        }
     }
 }

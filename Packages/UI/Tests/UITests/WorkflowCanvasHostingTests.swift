@@ -499,7 +499,7 @@ extension WorkflowCanvasHostingTests {
         #expect(c.runs.last?.id == run.id && c.runs.last?.status == .failed && !c.hasPendingSaves)
         #expect(await engine.calls == 1)
         #expect(c.errorMessage?.contains("DHA UI serious") == true && c.errorMessage?.contains("DHA UI history write") == true)
-        #expect(c.progressMessage.contains("失败记录已保存") && !c.progressMessage.contains("计算结果仍保留"))
+        #expect(c.progressPresentation?.code == "failureRecordSaved" && c.progressMessage.isEmpty)
         // This is the same production button after recovery, with an explicit
         // computation action. Test-process events do not certify foreground UI.
         host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30))
