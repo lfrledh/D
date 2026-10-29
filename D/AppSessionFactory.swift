@@ -120,11 +120,17 @@ enum AppSessionFactory {
         if let musicBackend { backends.append(musicBackend) }
         if let aceBackend { backends.append(aceBackend) }
         if let audioBackend { backends.append(audioBackend) }
+        let decideLowMemory: (@Sendable (LowMemoryProposal) async throws -> LowMemoryDecision)?
+        if let owner = lowMemoryDecisions {
+            decideLowMemory = { proposal in try await owner.decide(proposal) }
+        } else {
+            decideLowMemory = nil
+        }
         let runtime = try InferenceRuntime(
             backends: backends,
             configuration: try RuntimeConfiguration(memoryBudgetBytes: memoryBudgetBytes,
                                                     maximumQueuedRuns: 8, allowsRequestBudgetIncrease: true),
-            decideLowMemory: lowMemoryDecisions.map { owner in { proposal in try await owner.decide(proposal) } })
+            decideLowMemory: decideLowMemory)
         let validateAudioModel: (@Sendable (URL) async throws -> ModelReference)?
         if let audioBackend {
             validateAudioModel = { directory in
