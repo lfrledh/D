@@ -28,6 +28,7 @@ struct WorkflowHumanTaskFormState: Equatable {
     let contractError: WorkflowHumanTaskFormError?
     var draftIsInvalid: Bool
     var hasExplicitInput: Bool
+    var hasInvalidEditorDraft = false
 
     var error: WorkflowHumanTaskFormError? {
         contractError ?? (draftIsInvalid ? .invalidDraft : nil)
@@ -104,7 +105,7 @@ struct WorkflowHumanTaskFormState: Equatable {
     }
 
     var canSubmit: Bool {
-        guard let candidate else { return false }
+        guard !hasInvalidEditorDraft, let candidate else { return false }
         return (try? candidate.validate(as: resultSchema)) != nil
     }
 
@@ -150,8 +151,13 @@ struct WorkflowHumanTaskFormState: Equatable {
         return validatedCandidate(taskID: taskID)
     }
 
+    mutating func updateEditorValidity(isInvalid: Bool, taskID: UUID) {
+        guard displayedTaskID == taskID else { return }
+        hasInvalidEditorDraft = isInvalid
+    }
+
     mutating func validatedCandidate(taskID: UUID) -> WorkflowDatum? {
-        guard displayedTaskID == taskID, contractError == nil else { return nil }
+        guard displayedTaskID == taskID, contractError == nil, !hasInvalidEditorDraft else { return nil }
         guard let candidate else { return nil }
         do {
             try candidate.validate(as: resultSchema)
@@ -248,6 +254,9 @@ struct WorkflowHumanTaskForm: View {
                         .accessibilityIdentifier("workflow-human-task-error")
                 }
                 taskEditor.id(task.id)
+                    .onPreferenceChange(WorkflowDatumInvalidEditKey.self) { invalid in
+                        state.updateEditorValidity(isInvalid: invalid, taskID: task.id)
+                    }
                 if task.kind == .approve {
                     Text(workflowText(languageStore, "workflow.language.form.approvalHelp")).font(.caption).foregroundStyle(.secondary)
                 }

@@ -67,6 +67,16 @@ enum WorkflowDatumSeedKind: String, CaseIterable, Identifiable {
     }
 }
 
+/// Uncommitted field text is distinct from the last valid typed datum.
+/// Descendant editors report invalid text without writing it into the run.
+struct WorkflowDatumInvalidEditKey: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        let next = nextValue()
+        value = value || next
+    }
+}
+
 struct WorkflowDatumFormState: Equatable {
     var numberDraft: String
     var error: String?
@@ -547,7 +557,10 @@ private struct WorkflowNumberDatumEditor: View {
         VStack(alignment: .leading, spacing: 5) {
             TextField(workflowFormText(languageStore, "workflow.language.form.number", fallback: "Number"), text: Binding(
                 get: { state.numberDraft },
-                set: { value = state.updateNumber($0, unit: normalizedUnit, current: value) }
+                set: {
+                    let next = state.updateNumber($0, unit: normalizedUnit, current: value)
+                    if state.error == nil { value = next }
+                }
             ))
             if allowsUnitEditing {
                 TextField(workflowFormText(languageStore, "workflow.language.form.unit", fallback: "Unit (optional)"), text: Binding(
@@ -565,6 +578,7 @@ private struct WorkflowNumberDatumEditor: View {
                     .font(.caption).foregroundStyle(.red)
             }
         }
+        .preference(key: WorkflowDatumInvalidEditKey.self, value: state.error != nil)
     }
 
     private var normalizedUnit: String? { unitDraft.isEmpty ? nil : unitDraft }

@@ -467,4 +467,41 @@ struct WorkflowDataFormsTests {
         #expect(state.error == .invalidDraft)
         #expect(!state.canSubmit)
     }
+    @Test func invalidNumberTextCannotSubmitPreviousValidMusicValue() {
+        let task = WorkflowHumanTask(
+            id: UUID(), kind: .editMusic, title: "Music",
+            materials: .number(62, unit: nil), resultSchema: .number(unit: nil)
+        )
+        var form = WorkflowHumanTaskFormState(task: task)
+        var field = WorkflowDatumFormState(numberDraft: "62")
+        #expect(form.canSubmit)
+        // This is the native counterexample: the typed datum remains valid while
+        // the visible text is invalid. Submission must not reuse the old datum.
+        #expect(field.updateNumber("invalid", unit: nil, current: form.draft) == .number(62, unit: nil))
+        form.updateEditorValidity(isInvalid: field.error != nil, taskID: task.id)
+        #expect(form.draft == .number(62, unit: nil))
+        #expect(!form.canSubmit)
+        #expect(form.validatedCandidate(taskID: task.id) == nil)
+        // A delayed validity report from another task cannot unblock this task.
+        form.updateEditorValidity(isInvalid: false, taskID: UUID())
+        #expect(!form.canSubmit)
+        let corrected = field.updateNumber("64", unit: nil, current: form.draft)
+        #expect(form.updateDraft(corrected, taskID: task.id) == .number(64, unit: nil))
+        form.updateEditorValidity(isInvalid: field.error != nil, taskID: task.id)
+        #expect(form.canSubmit)
+        #expect(form.validatedCandidate(taskID: task.id) == .number(64, unit: nil))
+        #expect(task.materials == .number(62, unit: nil))
+    }
+
+    @Test func nestedInvalidEditorsCombineWithoutLastValidSiblingUnblocking() {
+        var invalid = WorkflowDatumInvalidEditKey.defaultValue
+        WorkflowDatumInvalidEditKey.reduce(value: &invalid) { true }
+        WorkflowDatumInvalidEditKey.reduce(value: &invalid) { false }
+        #expect(invalid)
+        invalid = WorkflowDatumInvalidEditKey.defaultValue
+        WorkflowDatumInvalidEditKey.reduce(value: &invalid) { false }
+        WorkflowDatumInvalidEditKey.reduce(value: &invalid) { false }
+        #expect(!invalid)
+    }
+
 }
