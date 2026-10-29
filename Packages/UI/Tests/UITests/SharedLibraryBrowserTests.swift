@@ -879,3 +879,22 @@ extension SharedLibraryBrowserTests {
         }
     }
 }
+
+@Suite("Resize header projection boundary") @MainActor
+struct LibraryHeaderProjectionTests {
+    @Test func closedHeaderDoesNotReadRuntimeEntriesOrClearSharedSelection() throws {
+        let store = try SharedLibraryStore()
+        let state = SharedLibraryBrowserState(selectedKeys: ["captured"], focusedKey: "captured")
+        var reads = 0
+        let header = SharedLibraryBrowser(entries: [], store: store, compact: true, state: state,
+            onUse: { _ in }, onAdd: { _ in }, onPreview: { _ in }, onPrepare: { _ in }, onImport: {}, onClose: {})
+            .headerActionsOnly(true, entries: { reads += 1; return [] })
+        let host = NSHostingView(rootView: header)
+        for width in [320.0, 360, 400, 320] {
+            host.frame = CGRect(x: 0, y: 0, width: width, height: 44)
+            host.layoutSubtreeIfNeeded()
+        }
+        #expect(reads == 0)
+        #expect(state.selectedKeys == ["captured"] && state.focusedKey == "captured")
+    }
+}

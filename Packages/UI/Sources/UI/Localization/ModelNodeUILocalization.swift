@@ -17,6 +17,17 @@ import Foundation
         guard let key = precisionKeys[source] ?? ModelNodeOwnedCopy.keys[source] else { return source }
         return workflowText(language, key, fallback: source)
     }
+    /// Cards need one summary, not a reconstruction of every port and parameter.
+    /// Keep the same canonical/registry rules as the full detail projection.
+    static func summary(_ source: ModelNodeDescriptor, language: UILanguageStore?) -> String {
+        guard isCanonical(source) else { return source.summary }
+        let definitions = registryBackedIDs.contains(source.id) ? source.operations.compactMap {
+            WorkflowRegistry.standard.operation($0.id)?.definition
+        } : []
+        return definitions.count == 1
+            ? WorkflowCanvasPresentation.operationDetail(definitions[0], language: language)
+            : owned(source.summary, language: language)
+    }
     static func display(_ source: ModelNodeDescriptor, language: UILanguageStore?) -> ModelNodeDescriptor {
         guard isCanonical(source) else { return source }
         func t(_ value: String) -> String { owned(value, language: language) }

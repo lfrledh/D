@@ -230,3 +230,27 @@ struct ModelNodeViewsTests {
         return rectangle.width > 0 && rectangle.minX >= viewport.minX && rectangle.maxX <= viewport.maxX
     }
 }
+
+@Suite("Resize model summary boundaries") @MainActor
+struct ModelSummaryProjectionTests {
+    @Test func sameIDWithChangedContentRemainsUserOwned() throws {
+        let original = try #require(ModelNodeCatalog.entries.first)
+        for summary in ["用户第一次说明", "Updated user explanation"] {
+            let changed = ModelNodeDescriptor(id: original.id, modality: original.modality, title: original.title,
+                summary: summary, modelIdentity: original.modelIdentity, revision: original.revision,
+                engine: original.engine, device: original.device, precision: original.precision,
+                availability: original.availability, deploymentNote: original.deploymentNote,
+                operations: original.operations, notes: original.notes, evidencePaths: original.evidencePaths)
+            #expect(ModelNodeUILocalization.summary(changed, language: UILanguageStore(preferredLanguages: ["en"])) == summary)
+        }
+    }
+    @Test func summaryMatchesFullDetailsInBothLanguages() {
+        for locale in ["zh-Hans", "en"] {
+            let language = UILanguageStore(preferredLanguages: [locale])
+            for descriptor in ModelNodeCatalog.entries {
+                #expect(ModelNodeUILocalization.summary(descriptor, language: language)
+                    == ModelNodeUILocalization.display(descriptor, language: language).summary)
+            }
+        }
+    }
+}

@@ -399,7 +399,16 @@ struct SharedLibraryBrowserRenameDrafts {
 
 @MainActor
 public struct SharedLibraryBrowser: View {
-    private let entries: [SharedLibraryBrowserEntry]
+    private let initialEntries: [SharedLibraryBrowserEntry]
+    private var headerEntryProvider: (() -> [SharedLibraryBrowserEntry])?
+    // A toolbar shares selection and commands with the actual browser. It does
+    // not project every frozen runtime value during window layout. Editors still
+    // resolve the current complete entries, retaining their exact validation.
+    private var entries: [SharedLibraryBrowserEntry] {
+        guard headerOnly else { return initialEntries }
+        guard showFilters || showOrganizer || showTags || tagRequest != nil || compactDetailKey != nil else { return [] }
+        return headerEntryProvider?() ?? initialEntries
+    }
     private let store: SharedLibraryStore
     private let compact: Bool
     private let onCollect: (([SharedLibraryBrowserEntry], Bool) -> Void)?
@@ -485,7 +494,7 @@ public struct SharedLibraryBrowser: View {
         queryContext: SharedLibraryQueryContext = .init(), annotationSave: @escaping (SharedLibraryBrowserEntry) -> SharedLibraryAnnotationSave? = { _ in nil }
     ) {
         self._state = State(initialValue: state ?? SharedLibraryBrowserState())
-        self.importTargetDescription = importTargetDescription; self.scopeDescription = scopeDescription; self.canvasMode = canvasMode; self.entries = entries; self.store = store; self.compact = compact; self.allowsImport = allowsImport
+        self.importTargetDescription = importTargetDescription; self.scopeDescription = scopeDescription; self.canvasMode = canvasMode; self.initialEntries = entries; self.store = store; self.compact = compact; self.allowsImport = allowsImport
         self.onCollect = onCollect; self.onUse = onUse; self.onAdd = onAdd; self.onPreview = onPreview; self.onLocation = onLocation
         self.onExport = onExport
         self.onExternalCopy = onExternalCopy; self.readPreview = readPreview
@@ -496,7 +505,9 @@ public struct SharedLibraryBrowser: View {
     func importingFiles(_ capture: @escaping () -> WorkbenchAssetImportCommand?) -> Self {
         var copy = self; copy.captureFileImport = capture; return copy
     }
-    func headerActionsOnly(_ value: Bool) -> Self { var copy = self; copy.headerOnly = value; return copy }
+    func headerActionsOnly(_ value: Bool, entries: (() -> [SharedLibraryBrowserEntry])? = nil) -> Self {
+        var copy = self; copy.headerOnly = value; copy.headerEntryProvider = entries; return copy
+    }
 
     private var query: SharedLibraryQuery {
         get { state.effectiveQuery(using: store) }
@@ -711,13 +722,15 @@ public struct SharedLibraryBrowser: View {
         }
         .onChange(of: collectionFeedback?.status(in: insertionController)) { _, _ in refreshCollectionFeedback() }
         .onChange(of: store.metadata) { _, _ in state.reconcile(using: store) }
-        .onChange(of: entries) { _, current in
+        .onChange(of: headerOnly ? [] : entries) { _, current in
+            guard !headerOnly else { return }
             if compactDetailKey != nil,
                SharedLibraryBrowserLogic.detailEntry(key: compactDetailKey, entries: current) == nil {
                 self.compactDetailKey = nil
             }
         }
         .onChange(of: selectedKeys) { _, value in
+            guard !headerOnly else { return }
             if let focusedKey, value.contains(focusedKey) { return }
             focusedKey = entries.first { value.contains($0.id) }?.id
         }

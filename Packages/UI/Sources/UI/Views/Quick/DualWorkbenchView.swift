@@ -880,7 +880,7 @@ public struct DualWorkbenchView: View {
 
     @ViewBuilder private func libraryBrowser(compact: Bool, at point: @escaping () -> CGPoint?, onBack: (() -> Void)? = nil, canvasMode: WorkflowCanvasLibraryMode? = nil, forCanvas: Bool = false, headerOnly: Bool = false) -> some View {
         if let metadata {
-            let sourceEntries: [SharedLibraryBrowserEntry] = {
+            let sourceEntries: () -> [SharedLibraryBrowserEntry] = {
                 if forCanvas, let category = canvasMode?.resourceCategory {
                     return workspaceAssetEntries.filter { $0.item.kind == .asset && category.contains($0.item.contentKind) }
                 }
@@ -892,9 +892,9 @@ public struct DualWorkbenchView: View {
                     return selectionModel.projectSession.supportsQuick(operationID: operation, identity: identity,
                         category: family, conversation: family == .text && quick.textPresentation == .chat)
                 }
-            }()
+            }
             let collectAction: (([SharedLibraryBrowserEntry], Bool) -> Void)? = !forCanvas || canvasMode?.resourceCategory == nil ? nil : { values, collect in collectLibraryEntries(values, collect) }
-            SharedLibraryBrowser(entries: sourceEntries, store: metadata, compact: compact, allowsImport: canvasMode?.resourceCategory != nil, canvasMode:canvasMode,
+            SharedLibraryBrowser(entries: headerOnly ? [] : sourceEntries(), store: metadata, compact: compact, allowsImport: canvasMode?.resourceCategory != nil, canvasMode:canvasMode,
                 scopeDescription: ([!forCanvas ? modelPickerCategory.map { workflowText(language, "quick.requiredTask." + $0.rawValue) } : nil, model.manifest?.name, automaticQuickModel.manifest == nil ? nil : layoutText(language, "independent")].compactMap { $0 }).joined(separator: " · "),
                 importTargetDescription: forCanvas ? canvasModel.manifest?.name ?? "—" : quickImportTitle,
                 state: canvasMode.flatMap { canvasLibraryStates[$0] } ?? (compact ? compactLibraryState : fullLibraryState),
@@ -913,7 +913,7 @@ public struct DualWorkbenchView: View {
                 annotationSave: libraryAnnotationSave)
                 .importingFiles { canvasMode?.resourceCategory != nil ? captureLibraryImport(forCanvas: forCanvas) : nil }
                 .quickModelSelection(!forCanvas && modelPickerCategory != nil)
-                .headerActionsOnly(headerOnly)
+                .headerActionsOnly(headerOnly, entries: sourceEntries)
                 .environment(\.workflowLibraryInsertionController, canvasModel.projectSession.workflow)
         } else {
             VStack(alignment: .leading) {

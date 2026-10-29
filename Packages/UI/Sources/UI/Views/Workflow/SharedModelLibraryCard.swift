@@ -85,7 +85,7 @@ struct SharedModelVariantCard: View {
             }
             ModelSpecificationFields(descriptor: SharedModelLibraryCard.descriptor(entry), font: .caption)
             if let descriptor = SharedModelLibraryCard.descriptor(entry) {
-                Text(ModelNodeUILocalization.display(descriptor, language: language).summary).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                Text(ModelNodeUILocalization.summary(descriptor, language: language)).font(.caption).foregroundStyle(.secondary).lineLimit(3)
             }
             Text(readiness).font(.caption).foregroundStyle(.secondary)
             ForEach(shown, id: \.id) { function in
