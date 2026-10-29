@@ -439,12 +439,18 @@ struct WorkflowLocalizationTests {
         runs[14].status = .cancelled // Even stale waiting records cannot reopen a terminal run.
         runs[15].steps[0].status = .completed // Decision saved; explicit continuation is separate.
         #expect(count() == 14)
-        #expect(WorkflowBatchPanel.pendingReviews(in: runs[14]).isEmpty)
-        #expect(WorkflowBatchPanel.pendingReviews(in: runs[15]).isEmpty)
+        #expect(WorkflowBatchPanel.pendingReviews(in: runs[14], attempt: attempts[14]).isEmpty)
+        #expect(WorkflowBatchPanel.pendingReviews(in: runs[15], attempt: attempts[15]).isEmpty)
         runs[0].status = .saving
         #expect(count() == 13)
         runs.remove(at: 1)
         #expect(count() == 12) // No fallback to another run with the same node/name.
+        let waitingRun = try #require(runs.first { $0.id == attempts[2].runID })
+        var blockedStage = stage; blockedStage.attempts[2].state = .savingBlocked
+        #expect(waitingRun.status == .waiting)
+        #expect(WorkflowBatchPanel.pendingReviews(in: waitingRun, attempt: blockedStage.attempts[2]).isEmpty)
+        #expect(WorkflowBatchPanel.pendingReviewCount(blockedStage, runsByID: Dictionary(uniqueKeysWithValues: runs.map { ($0.id, $0) })) == 11)
+        #expect(WorkflowBatchPanel.pendingReviews(in: waitingRun, attempt: attempts[3]).isEmpty)
         #expect(try encoder.encode(stage) == frozenStage)
     }
 

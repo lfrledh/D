@@ -90,14 +90,14 @@ import SwiftUI
 
     // The dispatch ledger records where an attempt first stopped. Human decisions
     // can settle that run later; current work must use its exact live run record.
-    static func pendingReviews(in run: WorkflowRun) -> [WorkflowPlanCallRecord] {
-        guard run.status == .waiting, run.planCheckpoint?.state != .paused else { return [] }
+    static func pendingReviews(in run: WorkflowRun, attempt: WorkflowBatchAttempt) -> [WorkflowPlanCallRecord] {
+        guard attempt.runID == run.id, attempt.state != .savingBlocked, run.status == .waiting, run.planCheckpoint?.state != .paused else { return [] }
         return WorkflowWorkspacePanels.records(in: run).filter { $0.step.status == .waiting }
     }
     static func pendingReviewCount(_ stage: WorkflowBatchStage, runsByID: [UUID: WorkflowRun]) -> Int {
         stage.attempts.filter { attempt in
-            guard attempt.state != .savingBlocked, let run = runsByID[attempt.runID] else { return false }
-            return !pendingReviews(in: run).isEmpty
+            guard let run = runsByID[attempt.runID] else { return false }
+            return !pendingReviews(in: run, attempt: attempt).isEmpty
         }.count
     }
 
@@ -137,7 +137,7 @@ import SwiftUI
                     revealLibrary(.init(controller: controller, source: .attempt(stage: stageID, attempt: attempt.id, run: run.id), name: WorkflowHumanPresentation.run(run, in: controller.runs, stages: controller.batchStages, language: language)))
                 }.accessibilityIdentifier("attempt-locate-results")
             }
-            ForEach(Self.pendingReviews(in: run)) { record in
+            ForEach(Self.pendingReviews(in: run, attempt: attempt)) { record in
                 Button(text(Self.reviewActionKey(for: record.step, registry: controller.registry))) { inspect(run, record) }
             }
             if let intent = controller.containerSubmission(forParent: run.id), intent.choices.first(where: { !$0.selectedIDs.isEmpty })?.call.address.runID == run.id {
