@@ -219,6 +219,9 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     var interactionScope: WorkflowCanvasScope? = nil
     var wheelZoom: WorkflowCanvasWheelZoom? = nil
     var navigationID: UUID? = nil
+    var navigationCenter: CGPoint? = nil
+    var onNavigationReached: (UUID, CGPoint, CGSize) -> Void = { _, _, _ in }
+    var onNavigationTakeover: () -> Void = {}
     var wheelLayout: (CGSize) -> WorkflowCanvasViewportGeometry? = { _ in nil }
     var pointerTarget: (CGPoint, CGPoint, CGSize) -> WorkflowCanvasPointerTarget = { _, _, _ in .control }
     var onPointer: (WorkflowCanvasPointerUpdate) -> Void = { _ in }
@@ -238,6 +241,9 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         if view.interactionScope != interactionScope { view.cancelPointer() }
         if view.navigationID != navigationID { view.layoutAnchor.cancel() }
         view.navigationID = navigationID
+        view.navigationCenter = navigationCenter
+        view.onNavigationReached = onNavigationReached
+        view.onNavigationTakeover = onNavigationTakeover
         view.interactionScope = interactionScope
         view.wheelZoom = wheelZoom
         view.wheelLayout = wheelLayout
@@ -258,6 +264,42 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         var interactionScope: WorkflowCanvasScope? { didSet { if oldValue != interactionScope { wheelOwner = nil; wheelScrollOwner = nil } } }
         var wheelZoom: WorkflowCanvasWheelZoom?
         var navigationID: UUID?
+        var navigationCenter: CGPoint?
+        var onNavigationReached: (UUID, CGPoint, CGSize) -> Void = { _, _, _ in }
+        var onNavigationTakeover: () -> Void = {}
+        private var completedNavigationID: UUID?
+        private var navigationQueued = false
+
+        private func queueNavigation() {
+            guard let id = navigationID, id != completedNavigationID, navigationCenter != nil,
+                  !navigationQueued else { return }
+            navigationQueued = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.navigationQueued = false
+                // Read the latest request: a newer graph may replace the queued
+                // one before this turn. Never strand it behind a stale captured ID.
+                guard let id = self.navigationID, self.completedNavigationID != id,
+                      !self.isHiddenOrHasHiddenAncestor, let center = self.navigationCenter,
+                      let scroll = self.enclosingScrollView, let document = scroll.documentView,
+                      let layout = self.wheelLayout(scroll.contentView.bounds.size),
+                      layout.viewportSize.width > 0, layout.viewportSize.height > 0,
+                      abs(document.frame.width - layout.contentSize.width) < 1,
+                      abs(document.frame.height - layout.contentSize.height) < 1 else { return }
+                let clip = scroll.contentView
+                var bounds = clip.bounds; bounds.origin = layout.centeredOffset(on: center)
+                self.completedNavigationID = id // Own only this explicit request, never later gestures.
+                clip.scroll(to: clip.constrainBoundsRect(bounds).origin)
+                scroll.reflectScrolledClipView(clip)
+                self.onNavigationReached(id, clip.bounds.origin, clip.bounds.size)
+            }
+        }
+
+        private func takeOverNavigation() {
+            guard let id = navigationID, completedNavigationID != id else { return }
+            completedNavigationID = id
+            onNavigationTakeover()
+        }
         let layoutAnchor = WorkflowCanvasLayoutAnchor()
         var wheelLayout: (CGSize) -> WorkflowCanvasViewportGeometry? = { _ in nil }
         var pointerTarget: (CGPoint, CGPoint, CGSize) -> WorkflowCanvasPointerTarget = { _, _, _ in .control }
@@ -319,6 +361,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
         override func viewDidHide() { super.viewDidHide(); cancelPointer(); layoutAnchor.cancel(); setHandPressed(false) }
+        override func viewDidUnhide() { super.viewDidUnhide(); reportViewportSize() }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
@@ -364,6 +407,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                     y: clip.isFlipped ? location.y - clip.bounds.minY : clip.bounds.maxY - location.y)
                 let target = pointerTarget(point, clip.bounds.origin, clip.bounds.size)
                 guard target != .control else { return false }
+                takeOverNavigation()
                 // This monitor consumes owned mouseDown before SwiftUI sees it.
                 // Focus the existing workspace boundary once, never the probe or
                 // a control/text/port surface, and never on each drag/scroll tick.
@@ -432,6 +476,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                            _ viewport: CGSize) -> Bool {
             guard navigationAllowed() else { return false }
             layoutAnchor.cancel()
+            takeOverNavigation()
             onWheel(delta, point, offset, viewport)
             return true
         }
@@ -462,6 +507,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             if let reportedSize, reportedSize.clip != measured.clip { wheelZoom?.cancel(); layoutAnchor.cancel() }
             applyLayoutAnchor()
             applyWheelOffset()
+            queueNavigation()
             guard measured.clip.width > 0, measured.clip.height > 0,
                   reportedSize != measured else { return }
             reportedSize = measured
@@ -603,7 +649,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                 // Preserve the existing precise trackpad horizontal route only.
                 // Discrete mouse wheels are consumed even at a zoom limit or zero Y.
                 if WorkflowCanvasWheelResponse.isHorizontalNavigation(event) {
-                    wheelZoom?.cancel(); layoutAnchor.cancel()
+                    wheelZoom?.cancel(); layoutAnchor.cancel(); takeOverNavigation()
                     scroll.scrollWheel(with: event) // Keep the initial canvas owner across regions.
                     return true
                 }

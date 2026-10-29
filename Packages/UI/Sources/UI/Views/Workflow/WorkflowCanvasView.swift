@@ -450,7 +450,7 @@ public struct WorkflowCanvasView: View {
             ZStack(alignment: .topLeading) {
                 VStack(spacing: 0) {
                 WorkflowCanvasCameraScope(camera: camera, controller: controller,
-                    context: viewContext, changed: rememberViewContext) { zoom in
+                    context: viewContext, changed: userChangedZoom) { zoom in
                 let measuredContext = viewContext
                 WorkflowGraphSurface(controller: controller, graph: controller.graph, zoom: zoom,
                     tool: $canvasTool,
@@ -496,6 +496,11 @@ public struct WorkflowCanvasView: View {
                         camera.insertionPoint = observation.visibleRawCenter
                         rememberViewContext()
                         scrollObserver?(context, observation)
+                    },
+                    onNavigationTakeover: {
+                        guard camera.owner == ObjectIdentifier(controller),
+                              camera.context == measuredContext, viewContext == measuredContext else { return }
+                        camera.restoringCenter = nil; navigationRequest = nil
                     },
                     onDropItem: dropItem,
                     onDropCanvasFile: onDropCanvasFile,
@@ -1127,9 +1132,13 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             }
         return commands
     }
+    private func userChangedZoom() {
+        camera.restoringCenter = nil; navigationRequest = nil
+        rememberViewContext()
+    }
     private func changeMenuZoom(multiplier: CGFloat = 1, actual: Bool = false) {
         guard camera.owner == ObjectIdentifier(controller), camera.context == viewContext else { return }
-        camera.restoringCenter = nil
+        camera.restoringCenter = nil; navigationRequest = nil
         camera.zoom = actual ? 1 : WorkflowCanvasLayoutPolicy.restoredZoom(camera.zoom * multiplier)
         rememberViewContext()
     }
@@ -1362,7 +1371,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 .disabled(viewportInteractionLocked).accessibilityLabel(text("refinement.workflow.hand", "手形"))
                 .accessibilityAddTraits(canvasTool == .hand ? .isSelected : [])
                 .accessibilityIdentifier("workflow-canvas-hand")
-            WorkflowCanvasCameraScope(camera: camera, controller: controller, context: viewContext, changed: rememberViewContext) { zoom in
+            WorkflowCanvasCameraScope(camera: camera, controller: controller, context: viewContext, changed: userChangedZoom) { zoom in
                 WorkflowCanvasCornerZoom(zoom: zoom, locked: viewportInteractionLocked, canFit: fitReady) {
                     fitAllNodes(targetWidth: targetWidth)
                 }

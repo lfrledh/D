@@ -109,8 +109,8 @@ struct WorkflowBaseline02Tests {
         #expect(settings.data(forKey: WorkflowCanvasViewStateStore.storageKey) == damaged)
     }
 
-    @Test(arguments: [false, true], [0, 1, 2]) func coldCanvasHostRestoresZoomAndLogicalCenterWithoutEditingGraph(outsideExtent: Bool, mountCase: Int) async throws {
-        let loadAfterMount = mountCase == 1
+    @Test(arguments: [false, true], [0, 1, 2, 3]) func coldCanvasHostRestoresZoomAndLogicalCenterWithoutEditingGraph(outsideExtent: Bool, mountCase: Int) async throws {
+        let loadAfterMount = mountCase == 1 || mountCase == 3
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("canvas-cold-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -154,7 +154,7 @@ struct WorkflowBaseline02Tests {
         let view = WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
             onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in })
             .rememberingCanvas(in: memory).observingScroll { _, observation in observed = observation }
-        let host = NSHostingView(rootView: view)
+        let host = NSHostingView(rootView: RetainedContentHost(content: view, visible: mountCase != 3, identifier: "cold-retained-canvas"))
         host.frame = .init(x: 0, y: 0, width: 1080, height: 612)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host
@@ -163,6 +163,10 @@ struct WorkflowBaseline02Tests {
             for _ in 0..<4 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) }
             #expect(controller.projectID == nil)
             await controller.load()
+        }
+        if mountCase == 3 {
+            for _ in 0..<4 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) }
+            host.rootView = RetainedContentHost(content: view, visible: true, identifier: "cold-retained-canvas")
         }
         for _ in 0..<80 {
             host.layoutSubtreeIfNeeded()
@@ -187,6 +191,14 @@ struct WorkflowBaseline02Tests {
         func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
         let probe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
         let scroll = try #require(probe.enclosingScrollView)
+        let nativeGeometry = WorkflowGraphGeometry(graph: try #require(controller.graph), tools: controller.tools, registry: controller.registry)
+        let nativeLayout = WorkflowCanvasViewportGeometry(graphSize: nativeGeometry.size,
+            viewportSize: scroll.contentView.bounds.size, zoom: saved.zoom, translation: nativeGeometry.translation)
+        var wanted = scroll.contentView.bounds
+        wanted.origin = nativeLayout.centeredOffset(on: target)
+        let reachable = scroll.contentView.constrainBoundsRect(wanted).origin
+        #expect(abs(scroll.contentView.bounds.minX - reachable.x) < 1)
+        #expect(abs(scroll.contentView.bounds.minY - reachable.y) < 1)
         let moved = CGPoint(x: scroll.contentView.bounds.minX + 80, y: scroll.contentView.bounds.minY + 50)
         probe.onPan(true, scroll.contentView.bounds.origin, scroll.contentView.bounds.size)
         scroll.contentView.scroll(to: moved); scroll.reflectScrolledClipView(scroll.contentView)
@@ -445,6 +457,7 @@ struct WorkflowBaseline02Tests {
         #expect(libraryBuilds > 0 && libraryGraph == controller.graph?.id)
         let replacementInsertion = try #require(insertionPoint)
         let oldWheel = probe.onWheel
+        let oldTakeover = probe.onNavigationTakeover
         let oldPan = probe.onPan
         #expect(replacementInsertion() != nil && capturedInsertion() == nil)
 
@@ -457,8 +470,9 @@ struct WorkflowBaseline02Tests {
         replacement.selectedGraphID = controller.selectedGraphID
         try #require(replacement.graph?.id == controller.graph?.id)
         host.rootView = makeView(replacement)
-        for _ in 0..<30 {
+        for tick in 0..<30 {
             host.layoutSubtreeIfNeeded()
+            if tick == 1 { oldTakeover() } // A late old host must not cancel the new owner's restoration.
             try await Task.sleep(for: .milliseconds(10))
         }
         #expect(replacementInsertion() == nil)

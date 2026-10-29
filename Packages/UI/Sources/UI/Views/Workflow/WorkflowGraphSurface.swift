@@ -48,6 +48,7 @@ struct WorkflowGraphSurface: View {
     var viewportSizeObserver: ((WorkflowCanvasViewportMeasurement) -> Void)?
     var portCenterObserver: (([WorkflowPortIdentity: CGPoint]) -> Void)?
     var onScrollObservation: (WorkflowCanvasViewContext, WorkflowCanvasScrollObservation) -> Void = { _, _ in }
+    var onNavigationTakeover: () -> Void = {}
     var onDropItem: (WorkflowCanvasTransfer, CGPoint) -> Bool = { _, _ in false }
     var onDropCanvasFile: (URL, CGPoint) -> Bool = { _, _ in false }
     var onBindAsset: (UUID, UUID?, UUID, UUID) -> Bool = { _, _, _, _ in false }
@@ -337,32 +338,20 @@ struct WorkflowGraphSurface: View {
                         contentSize: scroll.contentSize)
                 } action: { _, observation in
                     scrollTracking.offset = observation.contentOffset
-                    if !scrollTracking.isPanning { onScrollObservation(viewContext, observation) }
+                    if navigationRequest == nil, scope.isCurrent(in: controller), !scrollTracking.isPanning {
+                        onScrollObservation(viewContext, observation)
+                    }
                 }
 
                 .onAppear {
                     retainedExtent = .init(identity: scope.identity, translation: geometry.translation, size: geometry.size)
-                    if let navigationRequest {
-                        scrollPosition.scrollTo(point: layout.centeredOffset(
-                            on: navigationRequest.rawCenter ?? naturalCenter(of: geometry.graph)))
-                    } else {
-                        scrollPosition.scrollTo(point: layout.centeredOffset(on: naturalCenter(of: geometry.graph)))
-                    }
                 }
                 .onChange(of: navigationRequest) { _, request in
-                    guard let request else { return }
-                    scrollTracking.wheelZoom.cancel()
-                    Task { @MainActor in
-                        guard navigationRequest == request else { return }
-                        let current = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
-                            viewportSize: clipViewportSize ?? viewport.size,
-                            zoom: zoom, translation: geometry.translation)
-                        scrollPosition.scrollTo(point: current.centeredOffset(
-                            on: request.rawCenter ?? naturalCenter(of: geometry.graph)))
-                    }
+                    if request != nil { scrollTracking.wheelZoom.cancel() }
                 }
                 .onChange(of: clipViewportSize) { old, new in
                     guard let new, new.width > 0, new.height > 0 else { return }
+                    guard navigationRequest == nil else { resizeAnchorRaw = nil; return }
                     scrollTracking.wheelZoom.cancel()
                     let previous = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                         viewportSize: old ?? viewport.size,
@@ -376,7 +365,7 @@ struct WorkflowGraphSurface: View {
                     scrollPosition.scrollTo(point: next.centeredOffset(on: raw))
                 }
                 .onChange(of: zoom) { old, new in
-                    guard old != new, new == zoom, !viewportInteractionLocked else { return }
+                    guard old != new, new == zoom, !viewportInteractionLocked, navigationRequest == nil else { return }
                     if scrollTracking.wheelZoom.consumeScaleChange(to: new) { return }
                     let previous = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                         viewportSize: viewportSize, zoom: old, translation: geometry.translation)
@@ -389,7 +378,7 @@ struct WorkflowGraphSurface: View {
                 .simultaneousGesture(
                     MagnificationGesture()
                         .updating($gestureScale) { value, state, _ in state = value }
-                        .onChanged { _ in scrollTracking.wheelZoom.cancel() }
+                        .onChanged { _ in scrollTracking.wheelZoom.cancel(); onNavigationTakeover() }
                         .onEnded { value in
                             if !viewportInteractionLocked {
                                 zoom = WorkflowCanvasLayoutPolicy.clampedInteractiveZoom(zoom * value,
@@ -567,6 +556,24 @@ struct WorkflowGraphSurface: View {
             interactionScope: scope,
             wheelZoom: scrollTracking.wheelZoom,
             navigationID: navigationRequest?.id,
+            navigationCenter: navigationRequest.map { $0.rawCenter ?? naturalCenter(of: geometry.graph) },
+            onNavigationReached: { id, offset, size in
+                guard navigationRequest?.id == id, scope.isCurrent(in: controller) else { return }
+                let current = WorkflowCanvasViewportGeometry(graphSize: geometry.size, viewportSize: size,
+                    zoom: zoom, translation: geometry.translation)
+                scrollTracking.offset = offset
+                if clipViewportSize != size {
+                    // Publish the dimensions and restored anchor together. A queued
+                    // first measurement must not later replace this with graph center.
+                    resizeAnchorRaw = current.visibleRawCenter(offset: offset)
+                    clipViewportSize = size
+                }
+                onScrollObservation(viewContext, WorkflowCanvasScrollObservation(contentOffset: offset,
+                    containerSize: size, zoom: zoom, visibleRawCenter: current.visibleRawCenter(offset: offset),
+                    contentSize: current.contentSize))
+                navigationRequest = nil
+            },
+            onNavigationTakeover: onNavigationTakeover,
             wheelLayout: { size in
                 WorkflowCanvasViewportGeometry(graphSize: geometry.size, viewportSize: size,
                     zoom: effectiveZoom, translation: geometry.translation)
@@ -694,9 +701,11 @@ struct WorkflowGraphSurface: View {
                         viewportSize: oldSize, zoom: zoom,
                         translation: geometry.translation).visibleRawCenter(offset: scrollTracking.offset)
                 }
+                let capturedNavigationID = navigationRequest?.id
                 Task { @MainActor in
+                    guard scope.isCurrent(in: controller) else { return }
                     if clipViewportSize != size {
-                        resizeAnchorRaw = raw
+                        resizeAnchorRaw = navigationRequest?.id == capturedNavigationID ? raw : nil
                         clipViewportSize = size
                     }
                     viewportSizeObserver?(measured)
