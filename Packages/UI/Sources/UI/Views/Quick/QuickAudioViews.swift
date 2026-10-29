@@ -88,6 +88,22 @@ struct QuickAudioInput: View {
     }
 }
 
+/// The ordinal is presentation only; the parent retains the exact asset reference as identity.
+struct QuickAudioCandidateAccessibility: ViewModifier {
+    let enabled: Bool
+    let index: Int
+    let count: Int
+    let selected: Bool
+    @Environment(\.dLanguageStore) private var language
+    func body(content: Content) -> some View {
+        if enabled {
+            content.accessibilityValue(workflowText(language, "quick.audio.candidatePosition",
+                arguments: ["index": String(index + 1), "count": String(count)]))
+                .accessibilityAddTraits(selected ? .isSelected : [])
+        } else { content }
+    }
+}
+
 /// Metadata only. No playback resource or waveform is prepared in a candidate row.
 struct QuickAudioCandidate: View {
     let store: ProjectStore

@@ -3,6 +3,7 @@
   "locale": "zh-Hans",
   "displayName": "简体中文",
   "strings": {
+    "quick.audio.candidatePosition": "第{index}项，共{count}项",
     "quick.audio.seedBatch": "最后一次尝试的种子超出此模型范围，请减少生成数量或调小种子。",
     "quick.audio.descriptionInvalid": "请输入音乐描述，最长4096个UTF-8字节，且不能含空字符。",
     "quick.audio.chooseModel": "选择音频生成模型",

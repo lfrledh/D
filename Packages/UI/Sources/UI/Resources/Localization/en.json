@@ -3,6 +3,7 @@
   "locale": "en",
   "displayName": "English",
   "strings": {
+    "quick.audio.candidatePosition": "Item {index} of {count}",
     "quick.audio.seedBatch": "The final attempt exceeds this model’s seed range. Reduce the number to generate or the seed.",
     "quick.audio.descriptionInvalid": "Enter a music description of up to 4096 UTF-8 bytes without null characters.",
     "quick.audio.chooseModel": "Choose an audio generation model",

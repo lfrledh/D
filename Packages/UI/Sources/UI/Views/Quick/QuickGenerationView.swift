@@ -171,10 +171,12 @@ struct QuickGenerationView: View {
                                 (.results, quick.category == .audio ? audioText("assets") : consistencyText(language, "tabs.results")), (.history, quick.category == .audio ? audioText("history") : consistencyText(language, "tabs.history"))], helpPrefix: "TAB-QUICK-RIGHT-")
                             WorkbenchSidebarPages(selection: rightTab, choices: RightTab.allCases, identifier: "quick-right") { tab in
                                 if tab == .results {
+                        let references = mediaReferences
+                        let selectedReference = selectedMedia(in: references)
                         WorkbenchScrollView {
                             LazyVStack(alignment: .leading, spacing: 10) {
                                 if quick.category != .audio { Text(refinementText("resultsAndCandidates", fallback: "结果与候选")).font(.caption.bold()) }
-                                ForEach(mediaReferences, id: \.self) { reference in
+                                ForEach(Array(references.enumerated()), id: \.element) { index, reference in
                                     Button { selectedResults[quick.category] = reference } label: {
                                         VStack(alignment: .leading, spacing: 4) {
                                             if reference.kind == .image { QuickAssetPreview(store: quick.store, reference: reference, compact: true).frame(height: 100) }
@@ -182,11 +184,13 @@ struct QuickGenerationView: View {
                                             else { QuickInputAssetName(store: quick.store, reference: reference)
                                             Text(WorkflowCanvasPresentation.kind(reference.kind, language: language)).font(.caption).foregroundStyle(.secondary) }
                                         }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
-                                            .background(selectedMedia == reference ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 10))
+                                            .background(selectedReference == reference ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 10))
                                             .contentShape(.interaction, RoundedRectangle(cornerRadius: 10))
                                     }.buttonStyle(.plain)
+                                        .modifier(QuickAudioCandidateAccessibility(enabled: quick.category == .audio,
+                                            index: index, count: references.count, selected: selectedReference == reference))
                                 }
-                                if mediaReferences.isEmpty {
+                                if references.isEmpty {
                                     if quick.category != .audio { ForEach(quick.visibleRuns) { run in runCard(run) } }
                                     if quick.visibleRuns.isEmpty || quick.category == .audio { Text(refinementText("noResults", fallback: "尚无结果")).foregroundStyle(.secondary).padding() }
                                 }
@@ -415,9 +419,10 @@ struct QuickGenerationView: View {
         }
         return quick.category == .audio ? result.filter { $0.kind == .audio } : result
     }
-    private var selectedMedia: WorkflowAssetReference? {
-        if let selected = selectedResults[quick.category], mediaReferences.contains(selected) { return selected }
-        return mediaReferences.first
+    private var selectedMedia: WorkflowAssetReference? { selectedMedia(in: mediaReferences) }
+    private func selectedMedia(in references: [WorkflowAssetReference]) -> WorkflowAssetReference? {
+        if let selected = selectedResults[quick.category], references.contains(selected) { return selected }
+        return references.first
     }
     private func run(containing reference: WorkflowAssetReference) -> QuickRunRecord? {
         quick.visibleRuns.first { references($0).contains(reference) }
