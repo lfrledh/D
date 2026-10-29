@@ -1162,7 +1162,9 @@ private struct WorkflowNodeCard: View {
                     .help(node.title).allowsHitTesting(false)
                 Spacer(minLength: 0)
                 if let status = controller.presentationStatus(for: node.id) {
-                    WorkflowStatusBadge(status: status.status, comparison: status.comparison, scale: scale)
+                    WorkflowStatusBadge(status: status.status, comparison: .matching, scale: scale)
+                        .frame(maxWidth: 92 * scale)
+                        .help(WorkflowCanvasPresentation.statusTitle(status.status, language: languageStore))
                         .allowsHitTesting(false)
                 }
                 if !collapsed {
@@ -1170,7 +1172,7 @@ private struct WorkflowNodeCard: View {
                         WorkflowAssetContainerView(controller: controller, node: node, scale: scale, presentation: containerPresentation, headerActions: actions)
                     } else {
                         WorkbenchMenu { actions } label: {
-                            Text(consistencyText(languageStore, "tabs.properties")).font(.system(size: 11 * scale)).padding(4 * scale)
+                            Text(consistencyText(languageStore, "tabs.properties")).font(.system(size: 11 * scale)).fixedSize().padding(4 * scale)
                         }.buttonStyle(.plain).workflowNodeControl(node.id)
                             .accessibilityIdentifier("workflow-node-menu-" + node.id.uuidString)
                     }
@@ -1191,6 +1193,15 @@ private struct WorkflowNodeCard: View {
             }
             if let definition {
                 if isContainer { portGrid(definition).workflowNodeControl(node.id) } else { portGrid(definition) }
+            }
+            if let status = controller.presentationStatus(for: node.id), status.comparison != .matching {
+                Text(WorkflowOutputComparisonText.title(status.comparison, language: languageStore))
+                    .font(.system(size: 11 * scale)).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12 * scale).padding(.bottom, 6 * scale)
+                    .help(WorkflowOutputComparisonText.help(status.comparison, language: languageStore))
+                    .allowsHitTesting(false)
             }
             if isContainer && collapsed {
                 Text(containerCollapsedSummary).font(.system(size: 10 * scale)).foregroundStyle(.secondary)

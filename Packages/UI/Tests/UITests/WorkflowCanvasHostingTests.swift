@@ -225,6 +225,54 @@ struct WorkflowCanvasHostingTests {
         try await c.close(); try await store.close()
     }
 
+    @Test func b4ComparisonReasonGrowsCardWithoutMovingPorts() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("b4-reason-layout-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Reason.dproject"), name: "Reason")
+        let engine = CanvasNoInferenceEngine()
+        let runtime = WorkbenchSession(engine: engine, backendID: "never",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let controller = WorkflowController(services: .init(store: store, session: runtime,
+            resolveText: { throw WorkflowIssue("No model in layout test") },
+            resolveImage: { throw WorkflowIssue("No model in layout test") }))
+        await controller.load()
+        var input = try #require(controller.registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("before"))
+        let output = try #require(controller.registry.operation("d.value.return")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [input, output], connections: [.init(sourceNode: input.id, targetNode: output.id)],
+            layout: [.init(nodeID: input.id, x: 160, y: 150), .init(nodeID: output.id, x: 520, y: 150)])
+        let revision = try #require(try await store.workflowState().archive?.revision)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: revision)
+        await controller.load(); await controller.run(target: output.id, only: false)
+        try #require(controller.runs.last?.status == .completed)
+        let runs = controller.runs
+        for locale in ["zh-Hans", "en"] {
+            var sizes: [UUID: CGSize] = [:], ports: [WorkflowPortIdentity: CGPoint] = [:]
+            let host = NSHostingView(rootView: WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
+                onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in })
+                .observingNodeSizes { sizes[$0] = $1 }.observingPortCenters { ports = $0 }
+                .environment(\.dLanguageStore, UILanguageStore(preferredLanguages: [locale])))
+            host.frame = CGRect(x: 0, y: 0, width: 1080, height: 700)
+            for _ in 0..<25 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+            let beforeSize = try #require(sizes[input.id]); let beforePorts = ports
+            try #require(!beforePorts.isEmpty)
+            controller.setDataConfiguration(nodeID: input.id, value: .init(value: .text("after")))
+            for _ in 0..<25 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
+            #expect(controller.presentationStatus(for: input.id)?.comparison == .changed)
+            #expect(controller.presentationStatus(for: output.id)?.comparison == .missingUpstream)
+            #expect(try #require(sizes[input.id]).height > beforeSize.height)
+            #expect(sizes[input.id]?.width == beforeSize.width)
+            #expect(ports == beforePorts)
+            #expect(controller.runs == runs)
+            #expect(await engine.calls == 0)
+            controller.undo()
+            #expect(controller.presentationStatus(for: input.id)?.comparison == .matching)
+        }
+        try await controller.close(); try await store.close()
+    }
+
     @Test func mountsWideAndNarrowWithoutExecutingOrChangingGraph() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("canvas-host-" + UUID().uuidString)

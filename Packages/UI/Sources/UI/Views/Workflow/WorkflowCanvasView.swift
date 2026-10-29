@@ -2975,9 +2975,11 @@ struct WorkflowStatusBadge: View {
     var scale: CGFloat = 1
     @Environment(\.dLanguageStore) private var languageStore
     var body: some View {
-        HStack(spacing: 4 * scale) {
-            Circle().fill(WorkflowCanvasPresentation.statusColor(status)).frame(width: 7 * scale, height: 7 * scale)
-            Text(WorkflowCanvasPresentation.statusTitle(status, language: languageStore))
+        VStack(alignment: .leading, spacing: 4 * scale) {
+            HStack(spacing: 4 * scale) {
+                Circle().fill(WorkflowCanvasPresentation.statusColor(status)).frame(width: 7 * scale, height: 7 * scale)
+                Text(WorkflowCanvasPresentation.statusTitle(status, language: languageStore)).lineLimit(1)
+            }
             if comparison != .matching {
                 Text(WorkflowOutputComparisonText.title(comparison, language: languageStore))
                     .foregroundStyle(.orange)
@@ -2986,7 +2988,7 @@ struct WorkflowStatusBadge: View {
         }
         .font(.system(size: 11 * scale, weight: .medium))
         .padding(.horizontal, 7 * scale).padding(.vertical, 4 * scale)
-        .background(.quaternary, in: Capsule())
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10 * scale, style: .continuous))
     }
 }
 
