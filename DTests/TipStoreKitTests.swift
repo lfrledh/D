@@ -238,6 +238,17 @@ private final class TipStoreKitBundle: NSObject { }
         #expect(store.status == .thanked, Comment(rawValue: store.diagnostic ?? "no diagnostic"))
         let transaction = try #require(session.allTransactions().first)
         try session.refundTransaction(identifier: transaction.identifier)
+        var platformHasRevocation = false
+        for index in 0..<5 {
+            for await result in Transaction.all {
+                if case .verified(let value) = result, value.id == UInt64(transaction.identifier), value.revocationDate != nil {
+                    platformHasRevocation = true
+                }
+            }
+            if platformHasRevocation { break }
+            if index < 4 { try await Task.sleep(for: .milliseconds(200)) }
+        }
+        try #require(platformHasRevocation, "The verified platform history must expose revocation before testing D's explicit reload")
         await store.loadProducts()
         #expect(store.recoveryStatus == .ready)
         let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("tips.json"))) as? [String: [String: Any]])

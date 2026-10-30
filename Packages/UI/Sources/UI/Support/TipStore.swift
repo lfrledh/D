@@ -97,7 +97,7 @@ import Security
         }
     }
     public var selectedProduct: Product? { products.first { $0.id == selectedID } }
-    public var canPurchase: Bool { selectedProduct != nil && !purchasing && !loading && journalIssue == nil && ![.uncertain, .recorded, .pending].contains(status) && (!expectsLocalTest || localTest) }
+    public var canPurchase: Bool { selectedProduct != nil && !purchasing && !loading && recoveryStatus == .ready && journalIssue == nil && ![.uncertain, .recorded, .pending].contains(status) && (!expectsLocalTest || localTest) }
     public func purchase(confirmIn window: NSWindow) async {
         guard canPurchase, let product = selectedProduct else { return }
         let attempt = beginPurchase()
