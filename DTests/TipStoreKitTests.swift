@@ -95,4 +95,82 @@ private final class TipStoreKitBundle: NSObject { }
             print("TIP_LOCAL_REFUND latestRevoked=\(latest.revocationDate != nil) environment=\(latest.environment.rawValue)")
         } else { print("TIP_LOCAL_REFUND no verified latest transaction") }
     }
+
+    // Run each isolated test in a fresh test host. These observers never acknowledge
+    // transactions; they distinguish StoreKit delivery from D's journal handling.
+    @Test func isolatedFirstUnfinishedRecovery() async throws {
+        let session = try testSession(); defer { session.clearTransactions() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-Tip-first-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = owner(root); await store.loadProducts()
+        #expect(store.localTest)
+        let product = try #require(store.products.first)
+        var observed: [UInt64] = []
+        let observer = Task { @MainActor in
+            for await result in Transaction.updates {
+                if Task.isCancelled { return }
+                if case .verified(let t) = result { observed.append(t.id) }
+            }
+        }
+        defer { observer.cancel() }
+        await Task.yield()
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; defer { window.close() }
+        guard case .success(.verified(let first)) = try await product.purchase(confirmIn: window) else {
+            Issue.record("Expected the first verified local purchase"); return
+        }
+        var unfinishedIDs: [UInt64] = []
+        for await result in Transaction.unfinished {
+            if case .verified(let t) = result { unfinishedIDs.append(t.id) }
+        }
+        print("TIP_ISOLATED_FIRST id=\(first.id) unfinished=\(unfinishedIDs) rawUpdates=\(observed)")
+        #expect(unfinishedIDs.contains(first.id))
+        store.start()
+        try await wait("isolated first recovery", store: store) { store.status == .thanked }
+        let file = root.appendingPathComponent("tips.json")
+        #expect(FileManager.default.fileExists(atPath: file.path))
+        if FileManager.default.fileExists(atPath: file.path) {
+            let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+            #expect(records.count == 1 && records[String(first.id)] != nil)
+        }
+        #expect(session.allTransactions().count == 1, "Recovery never purchases again")
+    }
+
+    @Test func isolatedRefundRecorded() async throws {
+        let session = try testSession(); defer { session.clearTransactions() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-Tip-refund-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = owner(root); store.start(); await store.loadProducts()
+        #expect(store.localTest)
+        store.selectedID = try #require(store.products.first?.id)
+        var revokedIDs: [UInt64] = []
+        let observer = Task { @MainActor in
+            for await result in Transaction.updates {
+                if Task.isCancelled { return }
+                if case .verified(let t) = result, t.revocationDate != nil { revokedIDs.append(t.id) }
+            }
+        }
+        defer { observer.cancel() }
+        await Task.yield()
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; defer { window.close() }
+        await store.purchase(confirmIn: window)
+        #expect(store.status == .thanked)
+        let file = root.appendingPathComponent("tips.json")
+        let initial = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        let id = try #require(initial.keys.first.flatMap(UInt64.init))
+        let transaction = try #require(session.allTransactions().first { UInt64($0.identifier) == id })
+        try session.refundTransaction(identifier: transaction.identifier)
+        for _ in 0..<100 {
+            if revokedIDs.contains(id), store.status == .idle { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: [String: Any]])
+        let journalRevoked = records[String(id)]?["revoked"] as? Bool
+        let systemRevoked = session.allTransactions().first { UInt64($0.identifier) == id }?.cancelDate != nil
+        print("TIP_ISOLATED_REFUND id=\(id) rawRevoked=\(revokedIDs) journalRevoked=\(String(describing: journalRevoked)) systemRevoked=\(systemRevoked)")
+        #expect(revokedIDs.contains(id))
+        #expect(records[String(id)]?["revoked"] as? Bool == true)
+        #expect(store.status == .idle)
+    }
 }
