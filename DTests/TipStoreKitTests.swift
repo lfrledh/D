@@ -203,6 +203,19 @@ private final class TipStoreKitBundle: NSObject { }
         #expect(initial.count == 2)
         #expect(initial.values.allSatisfy { $0["purchaseDate"] != nil && $0["accountID"] != nil })
         let transactionCount = session.allTransactions().count
+        let expectedIDs = Set(initial.values.compactMap { $0["transactionID"] as? String })
+        var platformIDs: Set<String> = []
+        // Establish the platform recovery source before removing local data. Xcode's first
+        // immediate all-sequence has previously omitted the just-finished second purchase.
+        for index in 0..<5 {
+            platformIDs = []
+            for await result in Transaction.all {
+                if case .verified(let transaction) = result { platformIDs.insert(String(transaction.id)) }
+            }
+            if expectedIDs.isSubset(of: platformIDs) { break }
+            if index < 4 { try await Task.sleep(for: .milliseconds(200)) }
+        }
+        try #require(expectedIDs.isSubset(of: platformIDs), "Verified platform history must contain the two finished transactions before testing local-data loss")
         try FileManager.default.removeItem(at: file)
         let cold = owner(root); await cold.loadProducts()
         #expect(cold.recoveryStatus == .ready)

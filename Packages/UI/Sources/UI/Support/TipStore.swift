@@ -31,6 +31,7 @@ import Security
     private var journalIssue: String?
     @ObservationIgnored private var listener: Task<Void, Never>?
     @ObservationIgnored private var recovery: Task<Void, Never>?
+    @ObservationIgnored private var historyTask: Task<Void, Never>?
     @ObservationIgnored private var loading = false
     @ObservationIgnored private var purchasing = false
     @ObservationIgnored private var purchaseID: UUID?
@@ -58,7 +59,7 @@ import Security
             }
         } catch { journalIssue = String(describing: error); diagnostic = journalIssue; status = .uncertain }
     }
-    deinit { listener?.cancel(); recovery?.cancel() }
+    deinit { listener?.cancel(); recovery?.cancel(); historyTask?.cancel() }
     public func start() {
         guard listener == nil, !allowedIDs.isEmpty else { return }
         listener = Task { [weak self] in
@@ -137,9 +138,23 @@ import Security
         recoveryFailure = succeeded ? nil : failure ?? .platform
         if !succeeded { verifiedScope = nil; verifiedHistory.removeAll() }
     }
-    public func recoverHistory() async {
+    public func recoverHistory(recheckAccount: Bool = false) async {
         guard !allowedIDs.isEmpty else { recoveryStatus = .unavailable; return }
-        let generation = beginRecovery()
+        if historyTask == nil || recheckAccount {
+            historyTask?.cancel()
+            let generation = beginRecovery()
+            historyTask = Task { [weak self] in await self?.readVerifiedHistory(generation: generation) }
+        }
+        // Startup and panel opening share the same finite read. If reactivation replaces
+        // it, callers await the replacement rather than inspecting half-initialized state.
+        while let task = historyTask {
+            let generation = recoveryGeneration
+            await task.value
+            if generation == recoveryGeneration { historyTask = nil; return }
+            if Task.isCancelled { return }
+        }
+    }
+    private func readVerifiedHistory(generation: UInt64) async {
         do {
             // shared updates through StoreKit. Do not invoke refresh/sync (account authentication)
             // automatically; this finite read runs at launch, panel opening and app reactivation.

@@ -68,7 +68,7 @@ struct TipPanel: View {
             WorkbenchRequestCloseButton(title: text("close"), fallback: { owner.presented = false })
         }.padding(20).background(TipWindowReader { window = $0 }).task { await owner.loadProducts() }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                Task { await owner.recoverHistory() }
+                Task { await owner.recoverHistory(recheckAccount: true) }
             }
     }
 }
