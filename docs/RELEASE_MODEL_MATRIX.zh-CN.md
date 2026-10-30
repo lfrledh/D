@@ -4,6 +4,19 @@
 
 模型能力、D已实现的profile、资源是否就绪、本机实测、Quick/Canvas原生验收分开。下表不是九模型均已交付的声明。16GiB开发机不限制其他Mac的合法请求；预算不足明确报告，不自动换模型、降精度或丢条件。
 
+## 2026-10-31接续时的原生增量证据
+
+下表补充已有矩阵，不把历史成功改成当前包重跑；后文r2/r3/r4的“本包”指各自固定版本。当前候选及未验仍由[唯一入口](CURRENT_ACTIONS.zh-CN.md)和D-I020负责。
+
+| 精确范围 | 已有可复用证据 | 本轮边界 |
+|---|---|---|
+| Qwen3.5-9B Q4，revision `8b2b98c00a6b4d291155e4890773ca8f769aee53` | 5f0b28b4普通App同权重automatic→本次同意layered；真实停止/长度前缀、步骤保存失败→只保存恢复；ff83/8101冷开 | 原始BF16/27B不由Q4替代；本轮未改推理，沿用[部分输出记录](history/UI-TASK-THROUGH-20261030.md#部分输出统一外框resize与打赏2026-10-30收口中) |
+| MRT2 small/export-v1，Quick文字生成 | 5d7adde1普通App：4秒/100条件帧、seed45、notes/chords缺席，192000帧/48kHz/双声道float32输出，播放/保存/导出/冷开 | 不把文件格式称计算dtype，不重下模型或重跑此未改链路 |
+| ACE-Step1.5 XL SFT F32/no-LM，Quick generate歌词 | 5d7adde1普通App：5.2秒/2步/seed42/en、同F32分层，无source/reference；249600帧/48kHz双声道FP32，保存/导出/冷开 | 2步只验证链路，不是质量；3ff正常App已补automatic询问→拒绝不推理→允许一次同F32/layered生成→显式入库/播放/冷开，默认仍ask；两run一asset/摘要不变。未重复50步历史矩阵 |
+| Quick音频输入与候选 | 6d5f293f真实SCIM、跨模式Undo/Redo、候选及播放器VoiceOver；精确资产引用及选中状态保持 | 沿用[原生补验](history/UI-TASK-THROUGH-20261030.md#quick-audio-simplify-copy-20261029交审)，不称全App辅助功能认证 |
+
+MRT2/ACE实际运行ID与产物、导出、冷开对应关系均见上述Quick音频记录。其余旗舰原始精度及正常产品入口缺口继续保留，不能因本轮补两项服务就整体标首发冻结。
+
 ## 九个冻结目标
 
 | 模型／精确实现范围 | 输入 → 输出与关键控制 | 实现及资源 | 本轮验证／缺口 |
