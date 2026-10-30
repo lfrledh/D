@@ -374,6 +374,8 @@ private actor PreviewCloseoutEngine: InferenceEngine {
             }
             #expect(received.last?.0 == id && received.last?.1 == (end == "empty" ? "" : "你好🌍"))
             #expect(service.retainedLanguageContent(stepID: id)?.rawText == (end == "empty" ? nil : "你好🌍"))
+            #expect(service.activity.current?.phase == (end == "success" ? "completed" : end == "cancel" ? "cancelled" : "failed"))
+            #expect(service.activity.current?.finished == true)
             try await store.close()
         }
     }

@@ -294,7 +294,12 @@ struct WorkflowImageHistoryFailure: LocalizedError {
             // A published result survives cancellation during lease release. The interpreter
             // persists it before honoring stop, so a later resume cannot generate it twice.
             return result
-        } catch { await finish(); activity.end(phase: error is CancellationError ? "cancelled" : "failed"); throw error }
+        } catch {
+            await finish()
+            let stopped = error is CancellationError || (error as? WorkflowOutputValidationFailure)?.stopped == true
+            activity.end(phase: stopped ? "cancelled" : "failed")
+            throw error
+        }
     }
     public func transformAudio(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }
