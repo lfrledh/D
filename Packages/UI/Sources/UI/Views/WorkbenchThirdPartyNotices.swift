@@ -17,6 +17,10 @@ enum WorkbenchNoticeReader {
         struct File: Decodable { let path: String; let sizeBytes: Int; let sha256: String }
         let files: [File]
     }
+    static func bundledChatNotice() throws -> String {
+        guard let root = Bundle.module.resourceURL else { throw CocoaError(.fileNoSuchFile) }
+        return try text(.init(group: "D UI", relativePath: "Chat-Third-Party-Notices.txt", root: root, byteCount: nil, sha256: nil))
+    }
     static func location(root: URL, relative: String) throws -> URL {
         let parts = relative.split(separator: "/", omittingEmptySubsequences: false)
         guard !relative.hasPrefix("/"), !parts.isEmpty,

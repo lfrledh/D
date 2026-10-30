@@ -4,6 +4,16 @@ import Testing
 @testable import UI
 
 struct WorkbenchNoticeTests {
+    @Test func linkedModelAndJSONCopyrightNoticesShipInActualUIResource() throws {
+        let notice = try WorkbenchNoticeReader.bundledChatNotice()
+        for original in ["Copyright (c) 2023 ml-explore", "Copyright (c) 2024 ml-explore", "Copyright (c) 2013-2022 Niels Lohmann"] {
+            #expect(notice.contains(original))
+        }
+        #expect(notice.contains("Vendor/mlx-swift/LICENSE"))
+        #expect(notice.contains("Vendor/mlx-swift-lm/LICENSE"))
+        #expect(notice.contains("Vendor/mlx-swift/Source/Cmlx/json/LICENSE.MIT"))
+    }
+
     @Test func noticeTextValidatesDeclaredBytesAndRejectsTraversalAndLinks() throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]!).appendingPathComponent("notices-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
