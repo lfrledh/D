@@ -432,15 +432,12 @@ private actor LayoutNoInference: InferenceEngine {
         }
     }
 
-    @Test func dockFitsMinimumWindowWithoutMovingCornerTools() {
-        for width: CGFloat in [760, 900, 1200, 1920] {
-            let dock = WorkflowDockLayout.width(available: width)
-            #expect(dock == min(440, width - 224))
-            let dockRight = (width + dock) / 2
-            let toolsLeft = width - 16 - 88
-            #expect(toolsLeft - dockRight >= 8)
+    @Test func dockFitsItsCentralArea() {
+        for width: CGFloat in [360, 384, 600, 1200] {
+            #expect(WorkflowDockLayout.width(available: width) == min(440, width))
         }
     }
+
 }
 
 // Component event qualification only; this is not OS input or native-frame evidence.

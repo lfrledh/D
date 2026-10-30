@@ -79,10 +79,13 @@ struct WorkflowEventCollectorTests {
             Issue.record("Missing published answer"); return
         }
         #expect(lastNonempty == deltas.joined())
-        #expect(latest.isEmpty) // Published result replaces the transient preview.
+        #expect(latest == deltas.joined()) // Terminal owner takes over without a blank publication.
         #expect(try await store.workflowText(reference) == deltas.joined())
         #expect(publications < deltas.count / 4)
         #expect(await backend.released)
+        let savedRecord = try #require(try await store.workflowState().archive?.assets.first { $0.reference == reference })
+        #expect(savedRecord.metadata["application.stream.deltas"] == String(deltas.count))
+        #expect(Double(savedRecord.metadata["application.stream.seconds"] ?? "") != nil)
         #expect(await runtime.snapshot().activeRunID == nil)
         print("S00 collector: deltas=\(deltas.count), display=\(publications), bytes=\(lastNonempty.utf8.count)")
         try await store.close()
@@ -112,8 +115,8 @@ struct WorkflowEventCollectorTests {
         try service.beginPlan()
         _ = try await service.executeCall(.init(node: node, stepID: UUID(), inputs: [:]))
         #expect(seen.contains("Loading fixture"))
-        #expect(seen.contains { $0.contains("Loading fixture") && $0.contains("1/30") })
-        #expect(seen.contains { $0.contains("Loading fixture") && $0.contains("2/30") })
+        #expect(seen.contains { $0.contains("Loading fixture") } && seen.contains("1/30"))
+        #expect(seen.contains("2/30"))
         #expect(await backend.released)
         #expect(await runtime.snapshot().activeRunID == nil)
         try await store.close()
@@ -128,5 +131,59 @@ struct WorkflowEventCollectorTests {
         #expect(await collector.consume(run) != nil)
         #expect(await collector.snapshot().text == "abc")
         #expect(await collector.snapshot().byteCount == 3)
+    }
+}
+
+private actor StopPrefixBackend: InferenceBackend {
+    nonisolated let descriptor = BackendDescriptor(id: "stop-prefix", version: "fixture", capabilities: [.textGeneration])
+    var releaseEntered = false
+    var mayRelease = false
+    var sent = false
+    func permitRelease() { mayRelease = true }
+    func estimate(_ request: InferenceRequest) async throws -> ResourceEstimate { .init(peakBytes: 1) }
+    func execute(_ request: InferenceRequest, emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        for value in ["中", "e\u{301}", "👩🏽‍💻"] { try await emit(.textDelta(value)) }
+        sent = true
+        while true { try await Task.sleep(for: .milliseconds(5)) }
+    }
+    func release() async {
+        releaseEntered = true
+        while !mayRelease { try? await Task.sleep(for: .milliseconds(5)) }
+    }
+}
+@MainActor extension WorkflowEventCollectorTests {
+    @Test func realRuntimeStopDrainsAcceptedPrefixBeforeTerminalAndRelease() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("StopPrefix-" + UUID().uuidString + ".dproject")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try await ProjectStore.create(at: root, name: "stop")
+        let backend = StopPrefixBackend()
+        let runtime = try InferenceRuntime(backends: [backend], configuration: .init(memoryBudgetBytes: 1024, eventBufferCapacity: 2))
+        let session = WorkbenchSession(engine: runtime, backendID: "stop-prefix", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: { await runtime.shutdown() }, cleanup: {}, validateModel: { _ in })
+        let service = WorkflowServices(store: store, session: session) { _, identity in
+            .init(identity: identity, reference: .init(directory: root), backendID: "stop-prefix", operationID: WorkflowModelRoutes.qwen35,
+                textCapability: .init(maximumPromptTokens: 8192, maximumOutputTokens: 4096, profile: TextExecutionCapability.qwen35VLMProfile))
+        }
+        var node = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
+        node.parameters["modelID"] = .text("fixture")
+        let id = UUID(); var terminal: WorkflowLanguageContent?
+        service.languageContentChanged = { step, value in #expect(step == id); terminal = value }
+        try service.beginPlan()
+        let operation = Task { try await service.executeCall(.init(node: node, stepID: id, inputs: [:])) }
+        for _ in 0..<400 { if await backend.sent { break }; try await Task.sleep(for: .milliseconds(5)) }
+        #expect(await backend.sent)
+        let stopping = Task { await service.cancel() }
+        for _ in 0..<400 { if await backend.releaseEntered { break }; try await Task.sleep(for: .milliseconds(5)) }
+        #expect(await backend.releaseEntered)
+        #expect(terminal == nil)
+        #expect(await runtime.snapshot().activeRunID != nil)
+        await backend.permitRelease(); await stopping.value
+        do { _ = try await operation.value; Issue.record("Stopped prefix cannot complete a Call") }
+        catch let failure as WorkflowOutputValidationFailure { #expect(failure.stopped) }
+        #expect(terminal?.end?.cause == .stopped && terminal?.rawText == "中e\u{301}👩🏽‍💻")
+        let reference = try #require(try await store.workflowAssets(forStepID: id).first)
+        #expect(try await store.workflowText(reference) == terminal?.rawText)
+        #expect(await runtime.snapshot().activeRunID == nil)
+        await runtime.shutdown(); try await store.close()
     }
 }

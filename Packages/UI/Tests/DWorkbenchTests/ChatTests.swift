@@ -1417,7 +1417,7 @@ struct ChatTests {
         try JSONEncoder().encode(external).write(to: file, options: .atomic)
         await gate.release(); await chat.waitForCompletion()
         let attempt = try #require(chat.selectedSession?.attempts.first)
-        #expect(attempt.output != nil && chat.pendingSaveAttemptID == nil)
+        #expect(attempt.output != nil && chat.pendingSaveAttemptID == nil && attempt.status == .completed)
         #expect(chat.saveIssue != nil && chat.hasUnsavedResult(attempt.id))
         #expect(!chat.hasUnsavedResult(UUID()))
         #expect(await engine.requests.count == 1)
@@ -1427,12 +1427,13 @@ struct ChatTests {
         #expect(chat.saveIssue == nil && !chat.hasUnsavedResult(attempt.id))
         #expect(await engine.requests.count == 1)
         #expect(chat.selectedSession?.attempts.first?.rawText == attempt.rawText)
+        #expect(chat.selectedSession?.attempts.first?.status == .completed)
         let restored = try await store.chatState()
         #expect(restored.sessions.first?.attempts.first?.rawText == attempt.rawText)
         try await store.close()
     }
 
-    @Test func terminalRetryFailureClearsPendingAndKeepsEvidence() async throws {
+    @Test func terminalRetryConflictRetainsPendingAndProtectsExternalBytes() async throws {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)
         // A real owned directory produces retryable mkdir EACCES. A regular file
@@ -1451,22 +1452,28 @@ struct ChatTests {
         #expect(!preview.isEmpty)
         try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: obstruction.path)
         let manifest = store.rootURL.appendingPathComponent(ProjectStore.manifestFilename)
-        var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as? [String: Any])
+        let originalManifest = try Data(contentsOf: manifest)
+        var object = try #require(JSONSerialization.jsonObject(with: originalManifest) as? [String: Any])
         object["name"] = "external project edit"
         let externalBytes = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         try externalBytes.write(to: manifest, options: .atomic)
         await chat.retrySave()
-        #expect(chat.pendingSaveAttemptID == nil)
-        #expect(!chat.hasUnsavedResult(try #require(chat.state.sessions.first?.attempts.first?.id)))
-        #expect(chat.saveIssue == nil)
-        #expect(chat.state.sessions.first?.attempts.first?.status == .failed)
+        #expect(chat.pendingSaveAttemptID != nil)
+        #expect(chat.hasUnsavedResult(try #require(chat.state.sessions.first?.attempts.first?.id)))
+        #expect(chat.saveIssue != nil)
+        #expect(chat.state.sessions.first?.attempts.first?.status == .partial)
         #expect(chat.state.sessions.first?.attempts.first?.rawText == preview)
-        #expect(chat.state.sessions.first?.attempts.first?.issue == ProjectStoreError.externalModification.localizedDescription)
-        #expect(chat.error == ProjectStoreError.externalModification.localizedDescription)
+        #expect(chat.error?.contains(ProjectStoreError.externalModification.localizedDescription) == true)
         await chat.retrySave()
-        #expect(chat.error == ProjectStoreError.externalModification.localizedDescription)
+        #expect(chat.error?.contains(ProjectStoreError.externalModification.localizedDescription) == true)
         #expect(await engine.requests.count == 1)
         #expect(try Data(contentsOf: manifest) == externalBytes)
+        await #expect(throws: WorkflowIssue.self) { try await chat.prepareForTermination() }
+        try originalManifest.write(to: manifest, options: .atomic)
+        await chat.retrySave()
+        #expect(chat.pendingSaveAttemptID == nil && chat.saveIssue == nil)
+        #expect(chat.state.sessions.first?.attempts.first?.status == .completed)
+        #expect(await engine.requests.count == 1)
         try await chat.prepareForTermination()
         try await store.close(preserveExternalChanges: true)
     }
@@ -1499,7 +1506,7 @@ struct ChatTests {
         try await chat.flush(); try await store.close()
     }
 
-    @Test func unsafeAssetDirectoryIsTerminalAndPreservesObstructionAndPreview() async throws {
+    @Test func unsafeAssetDirectoryRetainsPendingAndPreservesObstructionAndPreview() async throws {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)
         let obstruction = store.rootURL.appendingPathComponent("WorkflowAssets")
@@ -1507,14 +1514,19 @@ struct ChatTests {
         try original.write(to: obstruction)
         try chat.updateDraft("retain unsafe path evidence", sessionID: id)
         try await chat.send(sessionID: id); await chat.waitForCompletion()
-        #expect(chat.pendingSaveAttemptID == nil)
-        #expect(chat.error == ProjectStoreError.unsafePath("WorkflowAssets").localizedDescription)
+        #expect(chat.pendingSaveAttemptID != nil)
+        #expect(chat.error?.contains(ProjectStoreError.unsafePath("WorkflowAssets").localizedDescription) == true)
         #expect(chat.state.sessions.first?.attempts.first?.status == .partial)
         #expect(chat.state.sessions.first?.attempts.first?.rawText.isEmpty == false)
         await chat.retrySave()
-        #expect(chat.pendingSaveAttemptID == nil)
+        #expect(chat.pendingSaveAttemptID != nil)
         #expect(await engine.requests.count == 1)
         #expect(try Data(contentsOf: obstruction) == original)
+        await #expect(throws: WorkflowIssue.self) { try await chat.prepareForTermination() }
+        try FileManager.default.removeItem(at: obstruction)
+        await chat.retrySave()
+        #expect(chat.pendingSaveAttemptID == nil && chat.saveIssue == nil)
+        #expect(await engine.requests.count == 1)
         try await chat.flush(); try await store.close()
     }
 

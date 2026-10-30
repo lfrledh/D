@@ -15,7 +15,7 @@ struct ChatChannelPresentation {
 
     init(_ attempt: ChatAttempt, checksFormat: Bool = true) {
         let runtimeActive = attempt.status == .running
-        let unseparated = runtimeActive || attempt.response == nil
+        let unseparated = (runtimeActive && attempt.languageEnd == nil) || attempt.response == nil
         let selectedText = unseparated ? attempt.rawText : (attempt.response?.finalText ?? "")
         isStreaming = runtimeActive
         isUnseparatedRaw = unseparated
@@ -100,6 +100,10 @@ struct ChatMessageContent: View {
                 sourceContent
             }
             if let reasoning = recordedReasoning {
+                if attempt?.response?.finalText?.isEmpty != false {
+                    Text(workflowText(language, "partial.reasoning")).font(.caption).foregroundStyle(.secondary)
+                    Text(reasoning).font(.system(size: CGFloat(displayPreferences.textPointSize))).textSelection(.enabled)
+                } else {
                 DisclosureGroup(label("reasoning", "思考过程"), isExpanded: $reasoningExpanded) {
                     Text(reasoning).font(.system(size: CGFloat(displayPreferences.textPointSize))).textSelection(.enabled)
                     Button {
@@ -110,6 +114,7 @@ struct ChatMessageContent: View {
                     .accessibilityLabel(label("copyReasoning", "复制思考内容"))
                 }
             }
+        }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("chat-message-content-\(message.id.uuidString)")

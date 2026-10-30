@@ -902,7 +902,7 @@ public enum ChatGenerationPhase: String, Sendable {
               attempt.status != .running, attempt.status != .saving,
               attempt.response?.toolCalls.isEmpty != false,
               attempt.response?.finishReason != .toolCalls,
-              attempt.response?.finishReason != .incomplete else {
+              attempt.response?.finishReason != .incomplete, attempt.languageEnd?.inspectionOnly != true else {
             throw WorkflowIssue("运行中或待处理工具的回答不能作为人工正文采用。")
         }
         var choices = session.contextChoices ?? .init()
@@ -1562,6 +1562,16 @@ public enum ChatGenerationPhase: String, Sendable {
                     self.state.sessions[si].attempts[ai].rawText = text
                     self.changed(checkpoint: true)
                 }
+                service.languageContentChanged = { [weak self] stepID, content in
+                    guard let self, stepID == attemptID,
+                          let si = self.state.sessions.firstIndex(where: { $0.id == sessionID }),
+                          let ai = self.state.sessions[si].attempts.firstIndex(where: { $0.id == attemptID }) else { return }
+                    self.state.sessions[si].attempts[ai].rawText = content.rawText
+                    self.state.sessions[si].attempts[ai].response = content.response
+                    self.state.sessions[si].attempts[ai].languageEnd = content.end
+                    self.state.sessions[si].attempts[ai].status = .saving
+                    self.changed()
+                }
                 if isCancelling { throw CancellationError() }
                 try service.beginPlan()
                 let result = try await service.executeCall(.init(node: prepared.0, stepID: attemptID, inputs: prepared.2))
@@ -1578,20 +1588,20 @@ public enum ChatGenerationPhase: String, Sendable {
                    let ai = state.sessions[si].attempts.firstIndex(where: { $0.id == attemptID }) {
                     state.sessions[si].attempts[ai].executionRecords = services?.executionRecords(for: attemptID)
                     let refs = (try? await store.workflowAssets(forStepID: attemptID)) ?? []
-                    if let raw = refs.first, let response = try? await services?.readLanguageResponse(raw) {
+                    if let raw = refs.first, let content = try? await store.workflowLanguageContent(raw) {
                         state.sessions[si].attempts[ai].output = raw
-                        state.sessions[si].attempts[ai].response = response
-                        state.sessions[si].attempts[ai].rawText = response.rawText
-                        state.sessions[si].attempts[ai].status = response.finishReason == .stop && response.toolCalls.isEmpty ? .completed : .partial
-                    } else {
-                        state.sessions[si].attempts[ai].status = !state.sessions[si].attempts[ai].rawText.isEmpty ? .partial : (error is CancellationError ? .cancelled : .failed)
+                        state.sessions[si].attempts[ai].response = content.response
+                        state.sessions[si].attempts[ai].rawText = content.rawText
+                        state.sessions[si].attempts[ai].languageEnd = (error as? WorkflowOutputValidationFailure)?.end ?? content.end
                     }
-                    state.sessions[si].attempts[ai].issue = error is CancellationError ? "已停止；已接收的文字已保留。" : error.localizedDescription
+                    state.sessions[si].attempts[ai].status = state.sessions[si].attempts[ai].rawText.isEmpty && error is CancellationError ? .cancelled : state.sessions[si].attempts[ai].settledContentStatus
+                    state.sessions[si].attempts[ai].issue = error.localizedDescription
                     changed()
                 }
                 self.error = error is CancellationError ? nil : error.localizedDescription
-                phase = error is CancellationError ? "已停止" : "生成失败"
-                displayPhase = error is CancellationError ? .stopped : .failed
+                let terminalEnd = services?.retainedLanguageContent(stepID: attemptID)?.end
+                phase = terminalEnd?.cause == .length ? "Length limit · partial answer kept / 长度上限 · 部分回答已保留" : error is CancellationError || terminalEnd?.cause == .stopped ? "已停止" : "生成失败"
+                displayPhase = terminalEnd?.cause == .stopped || error is CancellationError ? .stopped : .failed
                 do { try await flush() } catch { saveIssue = error.localizedDescription }
             }
         }
@@ -1605,6 +1615,7 @@ public enum ChatGenerationPhase: String, Sendable {
         state.sessions[si].attempts[ai].output = reference
         state.sessions[si].attempts[ai].response = response ?? TextResponse(rawText: raw, finalText: raw, finishReason: .stop)
         state.sessions[si].attempts[ai].rawText = raw
+        state.sessions[si].attempts[ai].languageEnd = try await store.workflowLanguageContent(reference).end
         if let response = state.sessions[si].attempts[ai].response {
             state.sessions[si].attempts[ai].status = response.finishReason == .stop && response.toolCalls.isEmpty ? .completed : .partial
         }
@@ -1718,13 +1729,14 @@ public enum ChatGenerationPhase: String, Sendable {
                 if let si = state.sessions.firstIndex(where: { $0.attempts.contains(where: { $0.id == id }) }),
                    let ai = state.sessions[si].attempts.firstIndex(where: { $0.id == id }) {
                     let refs = (try? await store.workflowAssets(forStepID: id)) ?? []
-                    if let raw = refs.first, let response = try? await services?.readLanguageResponse(raw) {
+                    if let raw = refs.first, let content = try? await store.workflowLanguageContent(raw) {
                         state.sessions[si].attempts[ai].output = raw
-                        state.sessions[si].attempts[ai].response = response
-                        state.sessions[si].attempts[ai].rawText = response.rawText
+                        state.sessions[si].attempts[ai].response = content.response
+                        state.sessions[si].attempts[ai].rawText = content.rawText
+                        state.sessions[si].attempts[ai].languageEnd = (error as? WorkflowOutputValidationFailure)?.end ?? content.end
                     }
-                    state.sessions[si].attempts[ai].status = .failed
-                    state.sessions[si].attempts[ai].issue = error is CancellationError ? "已停止；已接收的文字已保留。" : error.localizedDescription
+                    state.sessions[si].attempts[ai].status = state.sessions[si].attempts[ai].settledContentStatus
+                    state.sessions[si].attempts[ai].issue = error.localizedDescription
                     changed()
                 }
                 pendingSaveAttemptID = nil; services = nil

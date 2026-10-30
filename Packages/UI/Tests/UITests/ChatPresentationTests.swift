@@ -80,7 +80,8 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     override func removeObject(forKey key: String) { lock.withLock { _ = values.removeValue(forKey: key) } }
 }
 
-@Suite("Chat presentation boundaries")
+// Native focus and update probes are process-wide, so these host tests cannot overlap.
+@Suite("Chat presentation boundaries", .serialized)
 @MainActor struct ChatPresentationTests {
     @Test func repeatedTextAndMarkdownConfigurationBaseline() {
         let clock = ContinuousClock(), text = String(repeating: "中文 input 👩🏽‍🎨 paragraph ", count: 500)
@@ -296,19 +297,18 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         #expect(window.firstResponder !== editor)
     }
 
-    @Test func quickPitchHasNoEmptyPromptPlateAndAvoidsFloatingModeControl() async throws {
+    @Test func quickPitchHasNoEmptyPromptPlateAndUsesSharedCenter() async throws {
         let (_, model, store, root) = try await fixture(ChatState())
         let quick = QuickGenerationController(store: store) { throw WorkflowIssue("Layout must not infer") }
         await quick.load()
         quick.select(operationID: "d.music.pitch", modelID: "fixture:exact-pitch")
         let draftID = quick.draft?.id
         let sidebars = WorkbenchSidebarState()
-        let mode = CGSize(width: 264, height: 52)
         var sizes: [String: CGSize] = [:]
         let host = NSHostingView(rootView: QuickGenerationView(quick: quick, model: model,
             selectedResults: .constant([:]), onChooseModel: {}, onSettingsToCanvas: { _ in },
             onResultToCanvas: { _ in }, onValueToCanvas: { _ in })
-            .environment(\.workbenchSidebars, sidebars).environment(\.workbenchModeSize, mode)
+            .environment(\.workbenchSidebars, sidebars)
             .environment(\.workbenchLayoutObservation, { sizes[$0] = $1 }))
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 1280, height: 820),
             styleMask: [.titled], backing: .buffered, defer: false)
@@ -320,9 +320,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
                 for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30)) }
                 let input = try #require(sizes["quick-input"]), center = try #require(sizes["quick-center"])
                 #expect(input.height < 130, "Pitch has no prompt editor; its plate must not reserve an empty 180pt field")
-                let occupied = WorkbenchSidebarLayout.occupiedWidth(right, leading: false, available: width)
-                #expect(abs(input.width - (center.width - WorkbenchFloatingLayout.composerTrailingInset(
-                    visibleRightPanel: occupied, mode: mode))) < 1, "Real Quick plate must clear the actual floating mode control")
+                #expect(abs(input.width - center.width) < 1, "The input plate fills the central area; no old bottom mode reservation remains")
             }
         }
         #expect(quick.draft?.id == draftID && quick.state.runs.isEmpty)
@@ -352,8 +350,8 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             let right = try #require(descendants(host).first { $0.accessibilityIdentifier() == "quick-assets-host" })
             #expect(!left.isHiddenOrHasHiddenAncestor && !right.isHiddenOrHasHiddenAncestor)
             let leftFrame = left.convert(left.bounds, to: host), rightFrame = right.convert(right.bounds, to: host)
-            #expect(leftFrame.width == 256 && rightFrame.width == 272)
-            #expect(rightFrame.minX - leftFrame.maxX >= 432)
+            #expect(leftFrame.width == 320 && rightFrame.width == 320)
+            #expect(rightFrame.minX - leftFrame.maxX >= 408)
             if let previousLeft, let previousRight { #expect(left === previousLeft && right === previousRight) }
             previousLeft = left; previousRight = right
         }
@@ -386,9 +384,9 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         for width: CGFloat in [1440, 1080, 900, 1280, 1080] {
             host.frame.size = .init(width: width, height: 820)
             for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30)) }
-            let shown = WorkbenchSidebarLayout.visible(available: width, leading: true, trailing: true)
-            let expected = kind == "workflow" ? width - 32 : width - 32 - WorkbenchSidebarLayout.occupiedWidth(shown.leading, leading: true, available: width)
-                - WorkbenchSidebarLayout.occupiedWidth(shown.trailing, leading: false, available: width)
+            let shell = WorkbenchShellLayout(viewport:.init(width:width,height:820),navigationTop:48,
+                requested:sidebars.requestedWidths,leading:true,trailing:true)
+            let expected = kind == "workflow" ? width - 32 : shell.center.width
             let measured = try #require(sizes[kind + "-center"])
             #expect(abs(measured.width - expected) < 1, "\(kind) width \(width): \(measured.width) vs \(expected)")
             print("D_HOST_LAYOUT", kind, width, measured.width, expected)
@@ -997,9 +995,12 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     @Test func emptyConversationRealViewFixture() async throws {
         let (chat, model, store, root) = try await fixture(ChatState())
         #expect(chat.selectedSession == nil)
-        let layout = renderFixture(chat, model: model, width: 560)
-        #expect(horizontallyInside(layout["empty-conversation"], width: 560))
-        #expect(layout["composer"] == nil)
+        let layout = renderFixture(chat, model: model, width: 1080)
+        #expect(horizontallyInside(layout["empty-conversation"], width: 1080))
+        // The retained empty draft is editable before the first real message;
+        // rendering it must not create a conversation or send anything.
+        #expect(horizontallyInside(layout["composer"], width: 1080))
+        #expect(chat.selectedSession == nil && chat.state.sessions.isEmpty)
         try await close(store, root: root)
     }
 
@@ -1081,12 +1082,12 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let (chat, model, store, root) = try await fixture(state)
         #expect(chat.selectedSession?.attempts.first?.issue == "保存失败；回答仍保留")
         #expect(chat.selectedSession?.messages.count == 3)
-        let layout = renderFixture(chat, model: model, width: 320) { host in
+        let layout = renderFixture(chat, model: model, width: 1080) { host in
             let pane = descendants(host).first { $0.accessibilityIdentifier() == "chat-sessions-host" }
-            #expect(pane != nil && pane?.isHiddenOrHasHiddenAncestor == true)
+            #expect(pane != nil && pane?.isHiddenOrHasHiddenAncestor == false)
         }
-        #expect(horizontallyInside(layout["transcript"], width: 320))
-        #expect(horizontallyInside(layout["composer"], width: 320))
+        #expect(horizontallyInside(layout["transcript"], width: 1080))
+        #expect(horizontallyInside(layout["composer"], width: 1080))
         #expect(layout["attempt-status-\(session.attempts[0].id.uuidString)"] != nil)
         #expect(layout["message-menu-\(session.messages[0].id.uuidString)"] != nil)
         #expect(ChatPresentationText.branchSummary(sibling, you: "你", assistant: "助手") == "修改后的提问")
@@ -1896,9 +1897,19 @@ extension ChatPresentationTests {
             #expect(original.string.isEmpty)
             undo.redo(); try await settle(); #expect(original.string == "Draft A")
             original.setSelectedRange(.init(location: 2, length: 3))
+            func pane(_ id: String) throws -> CGRect {
+                let view = try #require(descendants(host).first { $0.accessibilityIdentifier() == id })
+                return view.convert(view.bounds, to: host)
+            }
+            let quickPane = try pane("chat-sessions-host")
+            let modeFrame = modes.convert(modes.bounds, to: host)
             for _ in 0..<3 {
                 modes.onCommit(1); try await settle()
                 #expect(original.window === window && original.isHiddenOrHasHiddenAncestor)
+                let workflowPane = try pane("canvas-inspector-host")
+                #expect(abs(workflowPane.minX - quickPane.minX) <= 1 && abs(workflowPane.minY - quickPane.minY) <= 1)
+                #expect(abs(workflowPane.width - quickPane.width) <= 1 && abs(workflowPane.height - quickPane.height) <= 1)
+                #expect(modes.convert(modes.bounds, to:host) == modeFrame)
                 #expect(window.firstResponder !== original)
                 modes.onCommit(0); try await settle()
                 #expect(try editor() === original && original.undoManager === undo)

@@ -5,7 +5,7 @@ import SwiftUI
 /// Application preferences have one owner; project actions use the captured
 /// destination shown here and are dispatched only after this sheet dismisses.
 public struct WorkbenchSettingsView: View {
-    private enum Section: String, CaseIterable { case appearance, language, assistance, defaults, voice, files, models, network }
+    private enum Section: String, CaseIterable { case appearance, language, assistance, defaults, voice, files, models, network, about }
     let model: WorkbenchModel
     let library: ModelLibraryModel
     let language: UILanguageStore
@@ -20,6 +20,7 @@ public struct WorkbenchSettingsView: View {
     @State private var visited: Set<Section> = [.appearance]
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.lowMemoryDecisions) private var lowMemoryDecisions
+    @Environment(\.workbenchTips) private var tips
     @WorkbenchDismiss private var dismiss
 
     public init(model: WorkbenchModel, library: ModelLibraryModel, language: UILanguageStore,
@@ -40,6 +41,7 @@ public struct WorkbenchSettingsView: View {
     }
     private func title(_ section: Section) -> String {
         switch section {
+        case .about: workflowText(language, "tips.about")
         case .appearance: text("appearance", "Appearance", "外观")
         case .files: text("files", "Files", "文件")
         case .models: workflowText(language, "modelManagement.storageTitle")
@@ -55,6 +57,12 @@ public struct WorkbenchSettingsView: View {
     }
     @ViewBuilder private func settingsPage(_ section: Section) -> some View {
         switch section {
+                    case .about:
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("D").font(.title)
+                            Button(workflowText(language, "tips.settings")) { tips?.presented = true }
+                                .disabled(tips == nil).accessibilityIdentifier("settings-tips")
+                        }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     case .appearance:
                         ChatDisplayPreferencesPanel(state: model.chatDisplaySettings)
                             .accessibilityIdentifier("settings-appearance-scroll")

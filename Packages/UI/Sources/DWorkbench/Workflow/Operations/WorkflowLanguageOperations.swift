@@ -62,6 +62,10 @@ enum WorkflowLanguageOperations {
     @MainActor static func outputs(raw: WorkflowAssetReference, node: WorkflowNode,
                                    services: any WorkflowOperationServices) async throws -> [String: WorkflowValue] {
         do {
+            let end = try await services.readLanguageEnd(raw)
+            if let end, end.interrupted {
+                throw WorkflowOutputValidationFailure(raw: raw, reason: end.diagnostic ?? end.cause.rawValue, end: end)
+            }
             let response = try await services.readLanguageResponse(raw)
             let output: WorkflowDatum
             if node.parameters["outputMode"]?.string == "response" {
@@ -88,7 +92,8 @@ enum WorkflowLanguageOperations {
             }
             try output.validate()
             return ["output": .data(output), "raw": .asset(raw)]
-        } catch { throw WorkflowOutputValidationFailure(raw: raw, reason: error.localizedDescription) }
+        } catch let failure as WorkflowOutputValidationFailure { throw failure }
+        catch { throw WorkflowOutputValidationFailure(raw: raw, reason: error.localizedDescription, end: .init(.invalidOutput, diagnostic: error.localizedDescription)) }
     }
     private static func responseValue(_ response: TextResponse, raw: WorkflowAssetReference) throws -> WorkflowDatum {
         let callFields: [WorkflowRecordField] = [.init("id", .text), .init("name", .text),
@@ -138,5 +143,8 @@ private extension Optional where Wrapped == WorkflowValue {
 struct WorkflowOutputValidationFailure: LocalizedError {
     let raw: WorkflowAssetReference
     let reason: String
-    var errorDescription: String? { "模型原始输出已保留（\(raw.assetID)），结构检查失败：\(reason)" }
+    var end: WorkflowLanguageEnd = .init(.invalidOutput)
+    var stopped: Bool { end.cause == .stopped }
+    var errorDescription: String? { end.diagnostic ?? reason }
+
 }

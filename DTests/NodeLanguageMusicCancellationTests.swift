@@ -84,7 +84,6 @@ struct NodeLanguageMusicCancellationTests {
             let session = try await AppSessionFactory.makeSession(
                 artifactDirectory: store.artifactDirectory,
                 bundledMusicEngine: musicEngine,
-                musicConsent: consent,
                 audioAccessRoot: accessRoot
             )
             runtime = session

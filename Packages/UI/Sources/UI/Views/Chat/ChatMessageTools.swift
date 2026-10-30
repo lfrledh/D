@@ -200,7 +200,12 @@ struct ChatMessageNoticeView: View {
         if !keys.isEmpty || attempt?.issue != nil {
             VStack(alignment: .leading, spacing: 2) {
                 let summary = keys.map { workflowText(language, ($0.hasPrefix("phase.") ? "chat." : "chat.clarity.") + $0) }.joined(separator: " · ")
-                if let code = LowMemoryExecutionPresentation.nonExecutionCode(attempt?.executionRecords) {
+                if let attempt, let end = attempt.languageEnd, end.interrupted {
+                    Text(workflowText(language, PartialOutputPresentation.key(end,
+                        reasoningOnly: attempt.response?.finalText?.isEmpty != false && attempt.response?.reasoningText?.isEmpty == false)))
+                        .foregroundStyle(.secondary)
+                    if keys.contains("notSaved") { Text(workflowText(language, "partial.notSaved")).foregroundStyle(.red) }
+                } else if let code = LowMemoryExecutionPresentation.nonExecutionCode(attempt?.executionRecords) {
                     Text(workflowText(language, code)).foregroundStyle(.secondary)
                     if keys.contains("notSaved") { Text(workflowText(language, "chat.clarity.notSaved")).foregroundStyle(.red) }
                 } else if let issue = attempt?.issue {

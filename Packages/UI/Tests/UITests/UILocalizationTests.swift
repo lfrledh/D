@@ -7,6 +7,15 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct UILocalizationTests {
+    @Test func partialOutputAndTipKeysLoadThroughTheActualLanguageStore() throws {
+        let store = UILanguageStore(preferredLanguages: ["en"])
+        #expect(store.text("partial.length", fallback: "missing") == "The output limit was reached. The generated content is kept.")
+        #expect(store.text("tips.purchase", fallback: "missing", arguments: ["price": "TEST 0.99"]) == "Tip TEST 0.99")
+        try store.select("zh-Hans")
+        #expect(store.text("partial.length", fallback: "missing") == "已达到输出长度上限，已生成的内容保留。")
+        #expect(store.text("tips.purchase", fallback: "missing", arguments: ["price": "TEST 0.99"]) == "打赏 TEST 0.99")
+        #expect(store.diagnostics.isEmpty)
+    }
     @Test
     func warmSystemResolutionObservesImportedFamilyThenExactLanguage() throws {
         let store = UILanguageStore(preferredLanguages: ["fr-FR"])

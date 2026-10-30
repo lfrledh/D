@@ -24,7 +24,7 @@ public struct ProjectReadOnlyContent: Sendable {
     public var text: String? {
         guard token.kind == .text else { return nil }
         if token.mediaType == WorkflowTextResponseFile.mediaType {
-            return (try? WorkflowTextResponseFile.decode(data))?.rawText
+            return (try? WorkflowTextResponseFile.decodeContent(data))?.rawText
         }
         return String(data: data, encoding: .utf8)
     }

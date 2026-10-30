@@ -62,6 +62,7 @@ public struct ChatMessage: Codable, Sendable, Equatable, Identifiable {
 }
 
 public struct ChatAttempt: Codable, Sendable, Equatable, Identifiable {
+    public var languageEnd: WorkflowLanguageEnd? = nil
     public var executionRecords: [InferenceExecutionRecord]?
     public enum Status: String, Codable, Sendable { case running, completed, partial, cancelled, failed, interrupted, saving }
     public let id: UUID
@@ -84,6 +85,11 @@ public struct ChatAttempt: Codable, Sendable, Equatable, Identifiable {
     public var response: TextResponse?
     public var output: WorkflowAssetReference?
     public var issue: String?
+    var settledContentStatus: Status {
+        if output != nil, languageEnd?.interrupted != true, let response, response.finishReason == .stop, response.toolCalls.isEmpty { return .completed }
+        if !rawText.isEmpty { return .partial }
+        return languageEnd?.cause == .stopped ? .cancelled : .failed
+    }
     public init(id: UUID = UUID(), sessionID: UUID, userMessageID: UUID, assistantMessageID: UUID,
                 node: WorkflowNode, messagesJSON: String, inputs: [String: WorkflowValue],
                 systemPrompt: String, createdAt: Date = Date(), status: Status = .running) {

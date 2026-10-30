@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor @Observable final class WorkbenchSidebarState {
     var leading = true
     var trailing = false
+    var requestedWidths = WorkbenchPanelWidths(leading: 320, trailing: 320)
     init(leading: Bool = true, trailing: Bool = false) { self.leading = leading; self.trailing = trailing }
 }
 
@@ -159,7 +160,7 @@ struct WorkbenchSidebar<Content: View>: View {
     @Environment(\.dLanguageStore) private var language
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.workbenchModeSize) private var modeSize
+    @Environment(\.workbenchSidebars) private var sharedSidebars
     @Environment(\.workbenchWindowControlSize) private var windowControlSize
     @Environment(\.workbenchPanelWidths) private var widths
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -239,8 +240,13 @@ struct WorkbenchSidebar<Content: View>: View {
             .frame(width: width, height: geometry.size.height, alignment: alignment)
         }
         .frame(width: leading ? widths.leading : widths.trailing)
-        .padding(.top, max(0, windowControlSize.height - 32))
-        .padding(.bottom, leading ? 0 : modeSize.height + 28)
+        .overlay(alignment: leading ? .trailing : .leading) {
+            if expanded, let sharedSidebars {
+                WorkflowPanelResizeHandle(width: Binding(
+                    get: { leading ? sharedSidebars.requestedWidths.leading : sharedSidebars.requestedWidths.trailing },
+                    set: { if leading { sharedSidebars.requestedWidths.leading = $0 } else { sharedSidebars.requestedWidths.trailing = $0 } }), leading: leading)
+            }
+        }
         .onChange(of: expanded) { _, open in if !open { revealed = false } }
         .environment(\.workbenchSurfaceGroup, "sidebar:" + surfaceGroup)
         .task(id: "\(identifier):\(expanded):\(isEnabled):\(revealDuration ?? 0)") {

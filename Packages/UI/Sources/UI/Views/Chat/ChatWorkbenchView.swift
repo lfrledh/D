@@ -535,7 +535,6 @@ struct ChatWorkbenchView: View {
     @Environment(\.workbenchContentVisible) private var workspaceVisible
     @State private var enteringMessages: Set<UUID> = []
     @State private var emptyDraftSession = ChatSession()
-    @Environment(\.workbenchModeSize) private var modeSize
     @State private var composerEditorHeight: CGFloat = 0
     @State private var composerFocusRequest: UUID?
     @Environment(\.workbenchSidebars) private var sharedSidebars
@@ -653,12 +652,13 @@ struct ChatWorkbenchView: View {
             .flatMap { $0.contextChoices?.tags ?? [] })).sorted()
     }
 
-    @Environment(\.workbenchQuickContentTop) private var quickContentTop
+    @Environment(\.workbenchNavigationTop) private var navigationTop
     var body: some View {
         GeometryReader { geometry in
-            let shown = WorkbenchSidebarLayout.visible(available: geometry.size.width + 32, leading: showSidebar, trailing: showInspector)
-            let sidebarShown = shown.leading
-            let inspectorShown = shown.trailing
+            let sidebarShown = showSidebar
+            let inspectorShown = showInspector
+            let shell = WorkbenchShellLayout(viewport: geometry.size, navigationTop: navigationTop,
+                requested: sidebars.requestedWidths, leading: sidebarShown, trailing: inspectorShown)
             ZStack(alignment: .topLeading) {
                 VStack(spacing: 0) {
                 Group {
@@ -679,25 +679,15 @@ struct ChatWorkbenchView: View {
                         closedComposer(session).chatMeasured("composer-readonly", probe: layoutProbe)
                     } else {
                         composer(session ?? emptyDraftSession, availableHeight: geometry.size.height)
-                            .padding(.trailing, WorkbenchFloatingLayout.composerTrailingInset(
-                                visibleRightPanel: WorkbenchSidebarLayout.occupiedWidth(inspectorShown, leading: false, available: geometry.size.width + 32), mode: modeSize))
                             .chatMeasured("composer", probe: layoutProbe)
                     }
                 }
                 }
-                .frame(width: max(0, geometry.size.width
-                    - WorkbenchSidebarLayout.occupiedWidth(sidebarShown, leading: true, available: geometry.size.width + 32)
-                    - WorkbenchSidebarLayout.occupiedWidth(inspectorShown, leading: false, available: geometry.size.width + 32)))
-                .padding(.top, quickContentTop)
+                .frame(width: shell.center.width, height: shell.center.height)
                 .workbenchMeasureLayout("chat-center")
                 .transaction { $0.animation = nil }
-                // This is a transparent layout region, not a drawing surface.
-                // The transcript and editor own their viewport clips; clipping
-                // their shared parent cuts the floating components' shadows.
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.leading, WorkbenchSidebarLayout.occupiedWidth(sidebarShown, leading: true, available: geometry.size.width + 32))
-                .padding(.trailing, WorkbenchSidebarLayout.occupiedWidth(inspectorShown, leading: false, available: geometry.size.width + 32))
                 .chatMeasured("conversation", probe: layoutProbe)
+                .position(x: shell.center.midX, y: shell.center.midY)
                 .workbenchMorph(value: sidebarShown).workbenchMorph(value: inspectorShown)
 
                 WorkbenchSidebar(leading: true, expanded: sidebarShown,
@@ -705,24 +695,26 @@ struct ChatWorkbenchView: View {
                     identifier: "chat-sessions-toggle", hostIdentifier: "chat-sessions-host",
                     toggle: { showSidebar.toggle(); sidebarWasPresented = showSidebar }) {
                         configurationPane
-                    }.chatMeasured("sessions-pane", probe: layoutProbe)
+                    }.frame(width: shell.widths.leading, height: shell.panelHeight)
+                    .chatMeasured("sessions-pane", probe: layoutProbe)
+                    .position(x: shell.panel(leading: true).midX, y: shell.panel(leading: true).midY)
                 WorkbenchSidebar(leading: false, expanded: inspectorShown,
                     title: consistencyText(language, inspectorTab == .artifacts ? "tabs.results" : "tabs.sources"),
                     identifier: "chat-inspector-toggle", hostIdentifier: "chat-inspector-host",
                     toggle: { showInspector.toggle() }) {
                         if let session { inspector(session) }
                         else { Text(label("noConversation", "尚未选择对话")).foregroundStyle(.secondary).padding() }
-                    }.chatMeasured("inspector-pane", probe: layoutProbe)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    }.frame(width: shell.widths.trailing, height: shell.panelHeight)
+                    .chatMeasured("inspector-pane", probe: layoutProbe)
+                    .position(x: shell.panel(leading: false).midX, y: shell.panel(leading: false).midY)
             }
             // Pane content owns its clipping. The layout container must leave
             // room for each floating plate's outer shadow.
-            .environment(\.workbenchPanelWidths, WorkbenchSidebarLayout.widths(available: geometry.size.width + 32))
+            .environment(\.workbenchPanelWidths, shell.widths)
             .onAppear { sidebarWasPresented = sidebarShown; lastBodyWidth = geometry.size.width }
             .onChange(of: geometry.size.width) { _, width in lastBodyWidth = width }
 
         }
-        .padding(.horizontal, 16).padding(.bottom, 16)
         .background(WorkbenchCommandWindow(scope: commandScope))
         .focusedSceneValue(\.workbenchChat, workspaceVisible ? chatCommands : nil)
         .coordinateSpace(name: ChatLayoutSpace.name)

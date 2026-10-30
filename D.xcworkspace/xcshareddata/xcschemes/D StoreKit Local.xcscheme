@@ -1,0 +1,37 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<Scheme LastUpgradeVersion="2660" version="1.3">
+   <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES">
+      <BuildActionEntries>
+         <BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="ED43658D2F52D7D300430841" BuildableName="D.app" BlueprintName="D" ReferencedContainer="container:D.xcodeproj" />
+         </BuildActionEntry>
+         <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="ED43659C2F52D7D400430841" BuildableName="DTests.xctest" BlueprintName="DTests" ReferencedContainer="container:D.xcodeproj" />
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" allowLocationSimulation="NO">
+      <BuildableProductRunnable runnableDebuggingMode="0">
+         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="ED43658D2F52D7D300430841" BuildableName="D.app" BlueprintName="D" ReferencedContainer="container:D.xcodeproj" />
+      </BuildableProductRunnable>
+      <StoreKitConfigurationFileReference identifier="../../DTests/StoreKit/Tips.storekit" />
+      <EnvironmentVariables>
+         <EnvironmentVariable key="D_UI_TEST_SESSION" value="6CB9E4D6-644E-46B6-B609-204559E93A90" isEnabled="YES" />
+         <EnvironmentVariable key="D_STOREKIT_LOCAL_TEST" value="1" isEnabled="YES" />
+      </EnvironmentVariables>
+   </LaunchAction>
+   <AnalyzeAction buildConfiguration="Debug" />
+   <TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="NO">
+      <Testables>
+         <TestableReference skipped="NO" parallelizable="NO">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="ED43659C2F52D7D400430841" BuildableName="DTests.xctest" BlueprintName="DTests" ReferencedContainer="container:D.xcodeproj" />
+         </TestableReference>
+      </Testables>
+      <EnvironmentVariables>
+         <EnvironmentVariable key="D_UI_TEST_SESSION" value="6CB9E4D6-644E-46B6-B609-204559E93A90" isEnabled="YES" />
+         <EnvironmentVariable key="D_STOREKIT_LOCAL_TEST" value="0" isEnabled="YES" />
+         <EnvironmentVariable key="D_STOREKIT_TESTS" value="1" isEnabled="YES" />
+      </EnvironmentVariables>
+   </TestAction>
+   <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES" />
+</Scheme>

@@ -4,6 +4,7 @@ import ImageIO
 
 struct WorkflowSaveFailure: LocalizedError {
     let reason: String
+    var languageEnd: WorkflowLanguageEnd? = nil
     var errorDescription: String? { "计算结果仍保留，保存未完成：\(reason)。恢复磁盘后重试保存，不必重新推理。" }
 }
 
@@ -87,14 +88,23 @@ struct WorkflowImageHistoryFailure: LocalizedError {
             }
         }
     }
+    /// Only the latest call is retained; pending bytes remain owned by Publication.
+    private var lastLanguageContent: (id: UUID, content: WorkflowLanguageContent)?
+    public func retainedLanguageContent(stepID: UUID) -> WorkflowLanguageContent? {
+        lastLanguageContent?.id == stepID ? lastLanguageContent?.content : nil
+    }
+    public var languageContentChanged: @MainActor (UUID, WorkflowLanguageContent) -> Void = { _, _ in }
     public var languagePreviewChanged: @MainActor (UUID, String) -> Void = { _, _ in }
     public var candidatesChanged: @MainActor (UUID, [WorkflowCandidate]) async throws -> Void = { _, _ in }
     public var destination: URL?
     private struct Publication {
-        let id: UUID; let data: Data; let mediaType: String; let metadata: MediaMetadata
+        let id: UUID; var data: Data; let mediaType: String; let metadata: MediaMetadata
         let parents: [WorkflowAssetReference]; let request: InferenceRequest?; let details: [String: String]
+        var languageContent: WorkflowLanguageContent? = nil
     }
     private var pending: [UUID: Publication] = [:]
+    // Bounded transaction fault injection for tests; ordinary callers leave it nil.
+    var publicationCheckpoint: (@Sendable (WorkflowStoreCheckpoint) throws -> Void)?
     private var publicationContexts: [UUID: WorkflowExecutionContext] = [:]
     public func retainedPublicationContext(stepID: UUID) -> WorkflowExecutionContext? { publicationContexts[stepID] }
     public func hasPendingPublication(stepID: UUID) -> Bool {
@@ -259,6 +269,10 @@ struct WorkflowImageHistoryFailure: LocalizedError {
             if !hasPendingPublication(stepID: context.stepID) { publicationContexts.removeValue(forKey: context.stepID) }
         }
         do {
+            // Execution admission checks exact captured inputs, including direct
+            // assets that do not pass through an asset-reference node.
+            let textInputs = Set(context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] }.filter { $0.kind == .text })
+            for reference in textInputs { try await verifyAsset(reference) }
             // Image publications use candidate attempt IDs. Their service restores all
             // retained bytes before lazily acquiring a model for any missing candidate.
             if !WorkflowModelRoutes.isImage(context.node.operationID), pending[context.stepID] == nil, let kind = operation.definition.modelKind {
@@ -319,7 +333,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
             throw WorkflowIssue("模型身份与此节点的能力契约不匹配；不会静默改用其他实现。")
         }
     }
-    private func infer(_ request: InferenceRequest, binding: WorkflowModelBinding) async throws -> (InferenceResult, String) {
+    private func infer(_ request: InferenceRequest, binding: WorkflowModelBinding, terminal: ((InferenceResult?, String, RunOutcome, (any Error)?) -> Void)? = nil) async throws -> (InferenceResult, String) {
         try request.validate(); try checkCancellation()
         let run = try await session.engine.submit(request, backendID: binding.backendID)
         activeRun = run
@@ -367,6 +381,15 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         languagePreviewChanged(request.id, text)
         let outcome = await run.outcome(); activeRun = nil
         await retainExecutionRecord(run)
+        let original: InferenceResult? = if case .completed(let value) = outcome { value } else { nil }
+        let duration = collectionStarted.duration(to: .now).components
+        let metrics = ["application.stream.deltas": String(final.deltaCount),
+            "application.stream.bytes": String(final.byteCount),
+            "application.stream.displayPublications": String(displayPublications + 1),
+            "application.stream.seconds": String(Double(duration.seconds) + Double(duration.attoseconds) / 1e18)]
+        let measured = InferenceResult(artifacts: original?.artifacts ?? [],
+            metadata: (original?.metadata ?? [:]).merging(metrics) { _, measured in measured }, textResponse: original?.textResponse)
+        terminal?(measured, text, outcome, failure)
         if case .failed(let authoritativeFailure) = outcome {
             switch authoritativeFailure {
             case .inputIntegrityChanged, .resourceCleanupUnconfirmed: throw authoritativeFailure
@@ -376,14 +399,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         try checkCancellation()
         if let failure { throw failure }
         switch outcome {
-        case .completed(let result):
-            let duration = collectionStarted.duration(to: .now).components
-            let metrics = ["application.stream.deltas": String(final.deltaCount),
-                "application.stream.bytes": String(final.byteCount),
-                "application.stream.displayPublications": String(displayPublications + 1),
-                "application.stream.seconds": String(Double(duration.seconds) + Double(duration.attoseconds) / 1e18)]
-            return (InferenceResult(artifacts: result.artifacts,
-                metadata: result.metadata.merging(metrics) { _, measured in measured }, textResponse: result.textResponse), text)
+        case .completed: return (measured, text)
         case .cancelled: throw CancellationError()
         case .failed(let error): throw error
         }
@@ -393,20 +409,45 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         let binding = try model(for: context)
         reportProgress(.init("preparingContext"))
         let request = try await languageRequest(task: task, content: content, context: context, binding: binding)
-        languagePreview = ""
+        languagePreview = ""; lastLanguageContent = nil
         languagePreviewChanged(context.stepID, "")
-        defer { languagePreviewChanged(context.stepID, "") }
-        let (result, text) = try await infer(request, binding: binding)
-        let raw = result.textResponse?.rawText ?? text
-        guard !raw.isEmpty else { throw WorkflowIssue("语言模型未交付文字。") }
-        let details = result.metadata.merging(["backend": binding.backendID, "modelIdentity": binding.identity,
+        var terminalContent: WorkflowLanguageContent?
+        var terminalMetadata: [String: String] = [:]
+        var failure: (any Error)?
+        do {
+            _ = try await infer(request, binding: binding) { result, prefix, outcome, collectorError in
+                let raw = result?.textResponse?.rawText ?? prefix
+                let end: WorkflowLanguageEnd
+                switch outcome {
+                case .cancelled: end = .init(collectorError == nil || collectorError is CancellationError ? .stopped : .executionError, diagnostic: collectorError?.localizedDescription)
+                case .failed(let error):
+                    let cause: WorkflowLanguageEnd.Cause
+                    switch error { case .inputIntegrityChanged: cause = .inputIntegrity; case .resourceCleanupUnconfirmed: cause = .cleanupUnconfirmed; default: cause = .executionError }
+                    end = .init(cause, diagnostic: error.localizedDescription)
+                case .completed:
+                    if let collectorError { end = .init(.executionError, diagnostic: collectorError.localizedDescription) }
+                    else if result?.metadata["stopReason"] == "length" || result?.textResponse?.finishReason == .length { end = .init(.length) }
+                    else if result?.textResponse?.finishReason == .incomplete { end = .init(.unknown) }
+                    else { end = .init(.completed) }
+                }
+                terminalMetadata = result?.metadata ?? [:]
+                terminalContent = .init(rawText: raw, response: result?.textResponse, end: end)
+            }
+        } catch { failure = error }
+        guard let terminalContent, !terminalContent.rawText.isEmpty else {
+            if let failure { throw failure }
+            throw WorkflowIssue("未生成内容。", code: "partial.empty")
+        }
+        // The exact caller takes over display before persistence or transient clearing.
+        lastLanguageContent = (context.stepID, terminalContent)
+        languageContentChanged(context.stepID, terminalContent)
+        let details = terminalMetadata.merging(["backend": binding.backendID, "modelIdentity": binding.identity,
             "outputValidation": "raw model response retained; final-only parsing is separate"]) { _, new in new }
-        let bytes = try result.textResponse.map(WorkflowTextResponseFile.encode) ?? Data(raw.utf8)
-        let mediaType = result.textResponse == nil ? "text/plain" : WorkflowTextResponseFile.mediaType
-        pending[context.stepID] = Publication(id: UUID(), data: bytes, mediaType: mediaType, metadata: .init(),
-            parents: context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] }, request: request,
-            details: details)
-        return try await publish(context)
+        pending[context.stepID] = Publication(id: UUID(), data: Data(),
+            mediaType: WorkflowTextResponseFile.mediaType, metadata: .init(),
+            parents: context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] }, request: request, details: details, languageContent: terminalContent)
+        do { return try await publish(context) }
+        catch var error as WorkflowSaveFailure { error.languageEnd = terminalContent.end; throw error }
     }
     private func languageRequest(task: String, content: String?, context: WorkflowExecutionContext,
                                  binding: WorkflowModelBinding) async throws -> InferenceRequest {
@@ -491,6 +532,9 @@ struct WorkflowImageHistoryFailure: LocalizedError {
             await binding.release()
             return result
         } catch { await binding.release(); throw error }
+    }
+    public func readLanguageEnd(_ reference: WorkflowAssetReference) async throws -> WorkflowLanguageEnd? {
+        try await store.workflowLanguageContent(reference).end
     }
     public func readLanguageResponse(_ reference: WorkflowAssetReference) async throws -> TextResponse? {
         if let response = try await store.workflowTextResponse(reference) { return response }
@@ -601,30 +645,44 @@ struct WorkflowImageHistoryFailure: LocalizedError {
     }
 
     public func readText(_ reference: WorkflowAssetReference) async throws -> String {
-        try await store.workflowText(reference)
+        let content = try await store.workflowLanguageContent(reference)
+        guard content.end?.inspectionOnly != true else { throw WorkflowIssue("已有内容仅供检查，不能用作运行输入。", code: "partial.inspectionOnly") }
+        return content.rawText
     }
-    public func verifyAsset(_ reference: WorkflowAssetReference) async throws { _ = try await store.workflowData(reference) }
+    public func verifyAsset(_ reference: WorkflowAssetReference) async throws {
+        _ = try await store.workflowData(reference)
+        if reference.kind == .text, try await store.workflowLanguageContent(reference).end?.inspectionOnly == true {
+            throw WorkflowIssue("已有内容仅供检查，不能用作运行输入。", code: "partial.inspectionOnly")
+        }
+    }
 
     private func publish(_ context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         guard let content = pending[context.stepID] else { throw WorkflowIssue("没有待保存结果。") }
         reportProgress(.init("savingResult"))
         do {
+            // Freeze the first successfully encoded bytes before the first disk write.
+            // A manifest failure must retry exactly the same asset ID and digest.
+            let bytes: Data
+            if content.data.isEmpty, let language = content.languageContent {
+                bytes = try WorkflowTextResponseFile.encode(language)
+                pending[context.stepID]?.data = bytes
+            } else { bytes = content.data }
             let result: WorkflowPublishedAsset
             if let request = content.request, case .video(let expected) = request.input {
-                result = try await store.publishWorkflowVideo(data: content.data, expected: expected, name: context.node.title,
+                result = try await store.publishWorkflowVideo(data: bytes, expected: expected, name: context.node.title,
                     parents: content.parents, operationID: context.node.operationID, stepID: context.stepID,
                     request: request, details: content.details, assetID: content.id)
             } else {
-                result = try await store.publishWorkflowAsset(data: content.data, mediaType: content.mediaType,
+                result = try await store.publishWorkflowAsset(data: bytes, mediaType: content.mediaType,
                     metadata: content.metadata, name: context.node.title, parents: content.parents,
                     operationID: context.node.operationID, stepID: context.stepID, request: content.request,
-                    details: content.details, assetID: content.id)
+                    details: content.details, assetID: content.id, checkpoint: publicationCheckpoint)
             }
             pending.removeValue(forKey: context.stepID)
             imageCandidateParents.removeValue(forKey: context.stepID)
             return result.record.reference
         } catch {
-            if ["audio/wav", "video/mp4", PitchAnalysisResult.mediaType, WorkflowTextResponseFile.mediaType].contains(content.mediaType) {
+            if ["audio/wav", "video/mp4", PitchAnalysisResult.mediaType].contains(content.mediaType) {
                 // A corrupt artifact or cancelled decode will not become valid by retrying the disk.
                 let retryable: Bool
                 switch error {
@@ -633,7 +691,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
                 }
                 if !retryable { pending.removeValue(forKey: context.stepID); throw error }
             }
-            throw WorkflowSaveFailure(reason: error.localizedDescription)
+            throw WorkflowSaveFailure(reason: error.localizedDescription, languageEnd: content.languageContent?.end)
         }
     }
     public func publishText(_ text: String, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {

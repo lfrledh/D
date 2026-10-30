@@ -35,23 +35,35 @@ import Testing
             #expect(general.width <= size.width - 48 && general.height <= size.height - 48)
         }
     }
-    @Test func toolsAvoidSidebarModeAndRunDock() {
-        for w: CGFloat in [1080, 1280, 1920] {
-            for right: CGFloat? in [nil, 260, 360] {
-                for expanded: CGFloat in [0, 420] {
-                    let size = CGSize(width: w, height: 800), mode = CGSize(width: 300, height: 52)
-                    let tools = WorkbenchFloatingLayout.canvasTools(viewport: size, rightPanelWidth: right, mode: mode, runPanelHeight: expanded)
-                    #expect(tools.width == 88 && tools.height == 40 && tools.minY >= 16)
-                    let modeRect = CGRect(x: w-316,y: 732,width:300,height:52)
-                    #expect(!tools.intersects(modeRect))
-                    if let right { #expect(tools.maxX <= w-16-right-12) }
-                    let h = 48 + (expanded > 0 ? expanded + 8 : 0)
-                    let dock = CGRect(x: (w-440)/2,y:800-16-h,width:440,height:h)
+    @Test func toolsStayInSharedCenterAndAvoidRunDock() {
+        for width: CGFloat in [1080, 1280, 1920] {
+            for right in [false, true] {
+                for expanded in [false, true] {
+                    let shell = WorkbenchShellLayout(viewport: .init(width: width, height: 800), navigationTop: 48,
+                        requested: .init(leading: 320, trailing: 360), leading: true, trailing: right)
+                    let panel = expanded ? WorkbenchFloatingLayout.runPanelHeight(available: shell.center.height) : 0
+                    let tools = WorkbenchFloatingLayout.canvasTools(center: shell.center, runPanelHeight: panel)
+                    #expect(tools.width == 88 && tools.height == 40 && shell.center.contains(tools))
+                    let h = 48 + (expanded ? panel + 8 : 0), dockWidth = WorkflowDockLayout.width(available: shell.center.width)
+                    let dock = CGRect(x: shell.center.midX - dockWidth/2, y: shell.center.maxY-h, width: dockWidth, height: h)
                     #expect(!tools.intersects(dock))
+                    #expect(shell.panel(leading: true).minY == 100 && shell.panel(leading: false).maxY == 784)
                 }
             }
         }
     }
+    @Test func requestedWidthsSurviveNarrowWindowAndShellHasOneGeometry() {
+        let state = WorkbenchSidebarState(); state.requestedWidths = .init(leading: 370, trailing: 350)
+        for width: CGFloat in [1440, 1080, 1440] {
+            let shell = WorkbenchShellLayout(viewport: .init(width:width,height:740),navigationTop:48,
+                requested:state.requestedWidths,leading:true,trailing:true)
+            #expect(shell.panel(leading:true).minY == shell.panel(leading:false).minY)
+            #expect(shell.panel(leading:true).maxY == shell.panel(leading:false).maxY)
+            #expect(shell.center.width >= 360)
+        }
+        #expect(state.requestedWidths.leading == 370 && state.requestedWidths.trailing == 350)
+    }
+
 }
 
 extension WorkbenchChildPanelTests {
@@ -93,9 +105,11 @@ extension WorkbenchChildPanelTests {
         gate.invalidate(); #expect(!gate.hasCloseWaiter)
     }
     @Test func smallWindowRunPanelLeavesToolClearance() {
-        let size = CGSize(width:1080,height:500), h = WorkbenchFloatingLayout.runPanelHeight(available:500)
-        let tools = WorkbenchFloatingLayout.canvasTools(viewport:size,rightPanelWidth:320,mode:.init(width:232,height:52),runPanelHeight:h)
-        let dock = CGRect(x:320,y:500-16-48-h-8,width:440,height:48+h+8)
+        let shell = WorkbenchShellLayout(viewport:.init(width:1080,height:500),navigationTop:48,
+            requested:.init(leading:320,trailing:320),leading:true,trailing:true)
+        let h = WorkbenchFloatingLayout.runPanelHeight(available:shell.center.height)
+        let tools = WorkbenchFloatingLayout.canvasTools(center:shell.center,runPanelHeight:h)
+        let dock = CGRect(x:shell.center.minX,y:shell.center.maxY-48-h-8,width:shell.center.width,height:48+h+8)
         #expect(!tools.intersects(dock))
     }
     @Test func rateHasOneIdentityAndDoesNotInventProgress() {

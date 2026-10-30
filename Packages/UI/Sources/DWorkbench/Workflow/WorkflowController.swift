@@ -171,6 +171,10 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
     /// The existing project recording owner may temporarily reserve interactive work.
     @ObservationIgnored public var externalOperationBusy: () -> Bool = { false }
     public private(set) var streamingText = ""
+    public private(set) var presentedLanguageResult: WorkflowLanguageContent?
+    public private(set) var presentedLanguageRunID: UUID?
+    public private(set) var presentedLanguageStepID: UUID?
+
     public private(set) var streamingStepID: UUID?
     public var activePresentationRun: WorkflowRun? {
         guard isRunning, let activeRunID else { return nil }
@@ -227,8 +231,13 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
         services.progressEvent = { [weak self] in self?.setProgress($0) }
         services.languagePreviewChanged = { [weak self] stepID, text in
             guard let self, self.isRunning, self.activeRunID != nil, !self.closed, !self.closing else { return }
+            if text.isEmpty { self.presentedLanguageResult = nil; self.presentedLanguageRunID = self.activeRunID; self.presentedLanguageStepID = stepID }
             self.streamingStepID = text.isEmpty ? nil : stepID
             self.streamingText = text
+        }
+        services.languageContentChanged = { [weak self] stepID, content in
+            guard let self, self.isRunning, let runID = self.activeRunID else { return }
+            self.presentedLanguageResult = content; self.presentedLanguageRunID = runID; self.presentedLanguageStepID = stepID
         }
         services.candidatesChanged = { [weak self] stepID, items in
             guard let self, let executor = self.activeExecutor else { throw WorkflowIssue("图像进度没有当前执行所有者。") }
@@ -2410,6 +2419,14 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
             }
         }
         guard runs[i].status != .rejected && runs[i].status != .completed else { return }
+        if runs[i].status != .saving, let checkpoint = runs[i].planCheckpoint,
+           checkpoint.records.contains(where: { $0.step.outputs["raw"] != nil && $0.step.languageEnd?.interrupted == true }) {
+            // A calculation retry is a new frozen attempt. Save-only recovery still uses
+            // the original run/call and never enters this branch.
+            guard !hasPendingSaves else { return }
+            await repeatPartialRun(runs[i], checkpoint: checkpoint)
+            return
+        }
         editingOriginalID = editingRootID(for: runs[i]); editingCopies = [:]
         isRunning = true; cancelled = false; batchPauseRequested = false; errorMessage = nil
         defer { editingOriginalID = nil; editingCopies = [:]; isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
@@ -2430,6 +2447,25 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
         } catch { failure = error }
         await finishExecution(failure)
     }
+    private func repeatPartialRun(_ original: WorkflowRun, checkpoint originalCheckpoint: WorkflowPlanCheckpoint) async {
+        editingOriginalID = editingRootID(for: original); editingCopies = [:]
+        isRunning = true; cancelled = false; batchPauseRequested = false; errorMessage = nil
+        defer { editingOriginalID = nil; editingCopies = [:]; isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
+        var failure: (any Error)?
+        do {
+            try WorkflowArchiveInspection.validateScopeHistory(runs, tools: tools, registry: registry)
+            var checkpoint = WorkflowPlanCheckpoint(plan: originalCheckpoint.plan, arguments: originalCheckpoint.arguments)
+            checkpoint.modelDefaults = originalCheckpoint.modelDefaults
+            checkpoint.externalInputs = originalCheckpoint.externalInputs
+            var next = WorkflowRun(id: checkpoint.runID, graph: original.graph, targetNodeID: original.targetNodeID, status: .running)
+            next.scope = original.scope; next.planCheckpoint = checkpoint
+            try WorkflowArchiveInspection.validateScopeHistory(runs + [next], tools: tools, registry: registry)
+            runs.append(next); activeRunID = next.id
+            try await persist(); try await executePlan(runID: next.id)
+        } catch { failure = error }
+        await finishExecution(failure)
+    }
+
     public func retryFailedCandidates(stepID: UUID) async {
         guard !externalOperationBusy() else { errorMessage = "请先结束录音或恢复保存，再重试候选。"; return }
         guard !closed, !closing, !isRunning, !toolPublicationBusy, readOnlyReason == nil,

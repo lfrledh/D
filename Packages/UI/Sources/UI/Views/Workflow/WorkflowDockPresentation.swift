@@ -3,7 +3,7 @@ import DWorkbench
 
 /// Fixed geometry of the approved dock; no camera or execution ownership.
 enum WorkflowDockLayout {
-    static func width(available: CGFloat) -> CGFloat { min(440, max(1, available - 224)) }
+    static func width(available: CGFloat) -> CGFloat { min(440, max(1, available)) }
 }
 
 /// A batch can pause between attempts without leaving any paused run. Keep the

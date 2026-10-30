@@ -88,6 +88,7 @@ struct DApp: App {
                 }
             }
             .modifier(LowMemoryDecisionPresenter(owner: bootstrap.lowMemoryDecisions))
+            .modifier(TipPresenter(owner: bootstrap.tips))
             .environment(\.dLanguageStore, bootstrap.languageStore)
             .environment(\.lowMemoryDecisions, bootstrap.lowMemoryDecisions)
             .task { if !deploymentProbeEnabled { await bootstrap.start() } }
@@ -249,6 +250,10 @@ private struct WorkbenchCommands: Commands {
                 .keyboardShortcut("m", modifiers: [.command, .shift]).disabled(navigationBlocked || bootstrap.libraryModel == nil)
         }
         CommandGroup(replacing: .help) {
+            Button(label("tips.menu")) {
+                WorkbenchChildPanels.navigate(on: NSApp.keyWindow) { openWindow(id: "workbench"); bootstrap.tips?.presented = true }
+            }.disabled(navigationBlocked || bootstrap.tips == nil)
+            Divider()
             button(current ? workspace?.help : nil, title: text("guide"))
             button(current ? workspace?.thirdPartyNotices : nil, title: label("notices.title"))
             if let command = canvas?.legend { button(command, title: "") }

@@ -1,0 +1,40 @@
+{
+  "identifier": "a6769158-f059-4c47-959e-9ab42ce9a599",
+  "nonRenewingSubscriptions": [],
+  "products": [
+    {
+      "displayPrice": "0.99",
+      "familyShareable": false,
+      "internalID": "D_LOCAL_TEST_TIP_01",
+      "localizations": [
+        {
+          "description": "Local test only. No real charge.",
+          "displayName": "Test tip — no charge",
+          "locale": "en_US"
+        },
+        {
+          "description": "仅本地测试，不会实际扣款。",
+          "displayName": "测试打赏 — 不扣款",
+          "locale": "zh_Hans"
+        }
+      ],
+      "productID": "d.localtest.tip.small",
+      "referenceName": "D local StoreKit test tip",
+      "type": "Consumable"
+    }
+  ],
+  "settings": {
+    "_applicationInternalID": "",
+    "_developerTeamID": "",
+    "_failTransactionsEnabled": false,
+    "_lastSynchronizedDate": 0,
+    "_locale": "en_US",
+    "_storefront": "USA",
+    "_storeKitErrors": []
+  },
+  "subscriptionGroups": [],
+  "version": {
+    "major": 3,
+    "minor": 0
+  }
+}

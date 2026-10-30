@@ -93,7 +93,7 @@ struct LowMemoryExecutionDetails: View {
                 ForEach(records, id: \.submissionID) { record in
                     VStack(alignment: .leading, spacing: 6) {
                         let used = record.method?.rawValue ?? record.preferredMode
-                        LabeledContent(text(record.state == .completed ? "actualMethod" : "proposedMethod"), value: text(used == "ssdLayered" ? "layered" : used))
+                        LabeledContent(text(record.executionStarted == true ? "actualMethod" : record.executionStarted == false ? "proposedMethod" : "unrecordedMethod"), value: text(used == "ssdLayered" ? "layered" : used))
                         if record.explicitlySelected { Text(text("explicit")) }
                         else if let decision = record.decision {
                             Text(text(decision == .userStopped ? "stopped" : decision == .denyByPreference ? "denied" : decision.rawValue))

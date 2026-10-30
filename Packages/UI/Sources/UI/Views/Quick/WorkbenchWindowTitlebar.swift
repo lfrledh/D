@@ -329,10 +329,3 @@ struct WorkbenchTopNavigationMeasure: NSViewRepresentable {
         }
     }
 }
-private struct WorkbenchQuickContentTopKey: EnvironmentKey { static let defaultValue: CGFloat = 0 }
-extension EnvironmentValues {
-    var workbenchQuickContentTop: CGFloat {
-        get { self[WorkbenchQuickContentTopKey.self] }
-        set { self[WorkbenchQuickContentTopKey.self] = newValue }
-    }
-}

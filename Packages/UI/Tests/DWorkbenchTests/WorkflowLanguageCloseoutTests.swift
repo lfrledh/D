@@ -66,11 +66,12 @@ struct WorkflowLanguageCloseoutTests {
 }
 
 private actor CloseoutResponseEngine: InferenceEngine {
-    let response: TextResponse
+    var response: TextResponse
     var calls = 0
     var requests: [InferenceRequest] = []
     var action: (@Sendable () async throws -> Void)?
     init(_ response: TextResponse) { self.response = response }
+    func replaceResponse(_ value: TextResponse) { response = value }
     func beforeReturn(_ value: @escaping @Sendable () async throws -> Void) { action = value }
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
         calls += 1; requests.append(request); try await action?()
@@ -314,12 +315,12 @@ private actor PreviewCloseoutEngine: InferenceEngine {
 }
 
 @MainActor extension WorkflowLanguageCloseoutTests {
-    @Test func transientPreviewArrivesBeforeCompletionAndNeverPublishesFailedPartial() async throws {
+    @Test func transientPreviewHandsOffAcceptedContentBeforeSavingEveryTerminalOutcome() async throws {
         let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
             .appendingPathComponent("preview-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        for end in ["success", "failure", "cancel"] {
+        for end in ["success", "failure", "cancel", "empty", "integrity", "cleanup"] {
             let store = try await ProjectStore.create(at: root.appendingPathComponent(end + ".dproject"), name: end)
             let engine = PreviewCloseoutEngine()
             let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
@@ -335,25 +336,159 @@ private actor PreviewCloseoutEngine: InferenceEngine {
             let task = Task { try await service.executeCall(.init(node: node, stepID: id, inputs: [:])) }
             for _ in 0..<500 { if await engine.ready { break }; try await Task.sleep(for: .milliseconds(5)) }
             guard await engine.ready else { task.cancel(); Issue.record("No submitted run"); continue }
-            await engine.send("你好🌍")
-            for _ in 0..<500 { if received.last?.1 == "你好🌍" { break }; try await Task.sleep(for: .milliseconds(5)) }
-            #expect(received.last?.0 == id && received.last?.1 == "你好🌍")
+            if end != "empty" { await engine.send("你好🌍") }
+            if end != "empty" { for _ in 0..<500 { if received.last?.1 == "你好🌍" { break }; try await Task.sleep(for: .milliseconds(5)) } }
+            #expect(received.last?.0 == id && received.last?.1 == (end == "empty" ? "" : "你好🌍"))
             #expect((try await store.workflowState().archive?.assets ?? []).isEmpty)
             switch end {
             case "success": await engine.end(.completed(.init(textResponse: .init(rawText: "你好🌍", finalText: "你好🌍", finishReason: .stop))))
-            case "failure": await engine.end(.failed(.backendFailed("controlled failure")))
+            case "failure", "empty": await engine.end(.failed(.backendFailed("controlled failure")))
+            case "integrity": await engine.end(.failed(.inputIntegrityChanged("controlled file change")))
+            case "cleanup": await engine.end(.failed(.resourceCleanupUnconfirmed("controlled cleanup")))
             default: await service.cancel()
             }
             let result = await task.result
             if end == "success" {
                 if case .failure(let error) = result { Issue.record("Unexpected failure: \(error)") }
                 #expect((try await store.workflowState().archive?.assets ?? []).count == 1)
+            } else if end == "empty" {
+                if case .success = result { Issue.record("Empty must not succeed") }
+                #expect((try await store.workflowState().archive?.assets ?? []).isEmpty)
             } else {
                 if case .success = result { Issue.record("Partial must not succeed") }
-                #expect((try await store.workflowState().archive?.assets ?? []).isEmpty)
+                let assets = try await store.workflowState().archive?.assets ?? []
+                #expect(assets.count == 1)
+                let raw = try #require(assets.first?.reference)
+                let content = try await store.workflowLanguageContent(raw)
+                #expect(content.rawText == "你好🌍" && content.response == nil)
+                let expected: WorkflowLanguageEnd.Cause = end == "cancel" ? .stopped : end == "integrity" ? .inputIntegrity : end == "cleanup" ? .cleanupUnconfirmed : .executionError
+                #expect(content.end?.cause == expected)
+                if content.end?.inspectionOnly == true {
+                    await #expect(throws: WorkflowIssue.self) { try await service.readText(raw) }
+                    #expect(try await store.workflowText(raw) == "你好🌍")
+                }
+                if case .failure(let error) = result {
+                    let failure = try #require(error as? WorkflowOutputValidationFailure)
+                    #expect(failure.raw == raw)
+                }
             }
-            #expect(received.last?.0 == id && received.last?.1 == "")
+            #expect(received.last?.0 == id && received.last?.1 == (end == "empty" ? "" : "你好🌍"))
+            #expect(service.retainedLanguageContent(stepID: id)?.rawText == (end == "empty" ? nil : "你好🌍"))
             try await store.close()
         }
+    }
+}
+
+@MainActor extension WorkflowLanguageCloseoutTests {
+    @Test func terminalEnvelopeDoesNotDuplicateRawAndPreservesLegacyAndRawOnly() throws {
+        let raw = String(repeating: "中e\u{301}👩🏽‍💻", count: 100_000)
+        let response = TextResponse(rawText: raw, reasoningText: raw, finishReason: .incomplete)
+        let old = try WorkflowTextResponseFile.encode(response)
+        let current = WorkflowLanguageContent(rawText: raw, response: response, end: .init(.length))
+        let bytes = try WorkflowTextResponseFile.encode(current)
+        #expect(bytes.count < old.count + 128)
+        #expect(try WorkflowTextResponseFile.decodeContent(bytes) == current)
+        #expect(try WorkflowTextResponseFile.decode(old) == response)
+        let unparsed = WorkflowLanguageContent(rawText: raw, end: .init(.stopped))
+        #expect(try WorkflowTextResponseFile.decodeContent(WorkflowTextResponseFile.encode(unparsed)) == unparsed)
+        #expect(throws: WorkflowIssue.self) { try WorkflowTextResponseFile.decode(WorkflowTextResponseFile.encode(unparsed)) }
+    }
+
+    @Test func interruptedPublicationObstructionRetainsOwnerAndSaveRetryCannotRunAgain() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("partial-obstruction-" + UUID().uuidString + ".dproject")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try await ProjectStore.create(at: root, name: "partial")
+        let obstruction = root.appendingPathComponent("WorkflowAssets")
+        try Data("protected fixture".utf8).write(to: obstruction)
+        let response = TextResponse(rawText: "partial answer", finalText: "partial answer", finishReason: .length)
+        let engine = CloseoutResponseEngine(response)
+        let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let service = WorkflowServices(store: store, session: session) { _, identity in
+            .init(identity: identity, reference: .init(directory: root), backendID: "fixture", operationID: WorkflowModelRoutes.qwen35,
+                textCapability: .init(maximumPromptTokens: 2048, maximumOutputTokens: 256, profile: TextExecutionCapability.qwen35VLMProfile))
+        }
+        var node = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
+        node.parameters["modelID"] = .text("fixture"); node.parameters["outputMode"] = .text("text")
+        let context = WorkflowExecutionContext(node: node, stepID: UUID(), inputs: [:])
+        try service.beginPlan()
+        do { _ = try await service.executeCall(context); Issue.record("Expected obstruction") }
+        catch let failure as WorkflowSaveFailure { #expect(failure.languageEnd?.cause == .length) }
+        #expect(service.hasPendingPublication(stepID: context.stepID))
+        #expect(service.retainedPublicationContext(stepID: context.stepID)?.node == node)
+        #expect(service.retainedLanguageContent(stepID: context.stepID)?.rawText == response.rawText)
+        #expect(try String(contentsOf: obstruction, encoding: .utf8) == "protected fixture")
+        #expect(await engine.calls == 1)
+        // Remove only the test-created obstruction; the original app path is never touched.
+        try FileManager.default.removeItem(at: obstruction)
+        var reference: WorkflowAssetReference?
+        do { _ = try await service.retryQuickPublications(context); Issue.record("Saved partial must not become a completed output") }
+        catch let failure as WorkflowOutputValidationFailure { reference = failure.raw; #expect(failure.end.cause == .length) }
+        #expect(!service.hasPendingSaves)
+        #expect(await engine.calls == 1)
+        let ref = try #require(reference)
+        #expect(try await store.workflowLanguageContent(ref).response == response)
+        #expect((try await store.workflowState().archive?.assets ?? []).count == 1)
+        try await store.close()
+        let reopened = try await ProjectStore.open(at: root)
+        #expect(try await reopened.workflowLanguageContent(ref).end?.cause == .length)
+        #expect(try await reopened.workflowText(ref) == response.rawText)
+        try await reopened.close()
+    }
+}
+
+@MainActor extension WorkflowLanguageCloseoutTests {
+    private func partialFixture() async throws -> (ProjectStore, CloseoutResponseEngine, WorkflowServices) {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("partial-owner-" + UUID().uuidString + ".dproject")
+        let store = try await ProjectStore.create(at: root, name: "Partial owners")
+        let engine = CloseoutResponseEngine(.init(rawText: "保留 partial", finalText: "保留 partial", finishReason: .length))
+        let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let services = WorkflowServices(store: store, session: session) { _, identity in
+            .init(identity: identity, reference: .init(directory: root), backendID: "fixture", operationID: WorkflowModelRoutes.qwen35,
+                textCapability: .init(maximumPromptTokens: 2048, maximumOutputTokens: 256, profile: TextExecutionCapability.qwen35VLMProfile))
+        }
+        return (store, engine, services)
+    }
+    @Test func workflowRecomputeKeepsOriginalPartialRunAndCreatesFreshCall() async throws {
+        let (store, engine, services) = try await partialFixture()
+        let controller = WorkflowController(services: services); await controller.load()
+        controller.addNode(operationID: WorkflowModelRoutes.qwen35)
+        let node = try #require(controller.graph?.nodes.last)
+        controller.setParameter(nodeID: node.id, key: "modelID", value: .text("text:fixture"))
+        await controller.run(target: node.id, only: true)
+        let original = try #require(controller.runs.last)
+        #expect(original.status == .failed && original.steps.first?.languageEnd?.cause == .length)
+        await engine.replaceResponse(.init(rawText: "完整 complete", finalText: "完整 complete", finishReason: .stop))
+        await controller.resume(runID: original.id)
+        #expect(controller.runs.count == 2 && controller.runs.first == original)
+        let next = try #require(controller.runs.last)
+        #expect(next.id != original.id && next.steps.first?.id != original.steps.first?.id)
+        #expect(next.status == .completed && next.steps.first?.languageEnd?.interrupted != true)
+        #expect(await engine.calls == 2)
+        try await controller.close(); try await store.close()
+    }
+    @Test func quickSaveRecoveryRetainsValidationCauseWithoutGeneratingAgain() async throws {
+        let (store, engine, services) = try await partialFixture()
+        await engine.replaceResponse(.init(rawText: "{ broken", finalText: "{ broken", finishReason: .stop))
+        let quick = QuickGenerationController(store: store) { services }; await quick.load()
+        quick.select(operationID: WorkflowModelRoutes.qwen35, modelID: "text:fixture")
+        let draft = try #require(quick.draft)
+        quick.setParameter("outputMode", value: .text("json"), draftID: draft.id)
+        quick.setDataConfiguration(.init(schema: .record([.init("required", .text)])), draftID: draft.id)
+        #expect(quick.canStart, "Fixture must satisfy the production input contract: \(quick.inputIssue ?? "none")")
+        services.publicationCheckpoint = { stage in if case .assetDurable = stage { throw ProjectStoreError.io("controlled asset durable failure") } }
+        quick.start(); await quick.waitForCompletion()
+        #expect(quick.pendingSaveRunID != nil && services.hasPendingSaves)
+        let oldID = try #require(quick.state.runs.last?.id)
+        services.publicationCheckpoint = nil
+        await quick.retrySave()
+        #expect(quick.state.runs.last?.id == oldID && quick.state.runs.last?.languageEnd?.cause == .invalidOutput)
+        #expect(quick.state.runs.last?.status == .failed && !services.hasPendingSaves)
+        #expect(await engine.calls == 1)
+        let cold = QuickGenerationController(store: store) { throw WorkflowIssue("Cold read cannot infer") }; await cold.load()
+        #expect(cold.state.runs.last?.languageEnd?.cause == .invalidOutput)
+        #expect((try await store.workflowAssets(forStepID: oldID)).count == 1)
+        try await quick.prepareForTermination(); try await store.close()
     }
 }

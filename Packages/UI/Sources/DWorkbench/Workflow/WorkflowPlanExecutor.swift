@@ -172,15 +172,15 @@ import DInference
         }
         checkpoint = supplied; try validateCheckpoint()
         try updateRecord(at: record.address) {
-            $0.step.status = .failed; $0.step.error = failure.localizedDescription
+            $0.step.status = failure.stopped ? .cancelled : .failed; $0.step.error = failure.localizedDescription; $0.step.languageEnd = failure.end; $0.step.errorCode = failure.end.noticeKey()
             $0.step.outputs["raw"] = .asset(failure.raw)
         }
         // Preserve the leaf's exact raw asset; enclosing unfinished controls settle as failed.
         for ancestor in supplied.records where ancestor.step.node.control != nil &&
             ancestor.address.path.count < record.address.path.count && record.address.path.starts(with: ancestor.address.path) {
-            try updateRecord(at: ancestor.address) { $0.step.status = .failed; $0.step.error = failure.localizedDescription }
+            try updateRecord(at: ancestor.address) { $0.step.status = failure.stopped ? .cancelled : .failed; $0.step.error = failure.localizedDescription; $0.step.languageEnd = failure.end; $0.step.errorCode = failure.end.noticeKey() }
         }
-        checkpoint?.state = .failed; checkpoint?.error = failure.localizedDescription
+        checkpoint?.state = failure.stopped ? .cancelled : .failed; checkpoint?.error = failure.localizedDescription
         try await persist()
         return try currentCheckpoint()
     }
@@ -359,7 +359,7 @@ import DInference
             if checkpoint?.state == .saving { throw error }
             // The service retains computed bytes; retry this same call only to publish them.
             try updateRecord(at: address) { record in
-                record.step.status = .saving; record.step.error = error.localizedDescription; record.step.errorCode = (error as? WorkflowIssue)?.code
+                record.step.status = .saving; record.step.languageEnd = error.languageEnd; record.step.error = error.localizedDescription; record.step.errorCode = (error as? WorkflowIssue)?.code
             }
             if var value = checkpoint { value.state = .saving; value.error = error.localizedDescription; checkpoint = value }
             try await persist()
@@ -370,7 +370,10 @@ import DInference
             try updateRecord(at: address) { record in
                 record.step.status = .failed
                 record.step.error = error.localizedDescription; record.step.errorCode = (error as? WorkflowIssue)?.code
-                if let failure = error as? WorkflowOutputValidationFailure { record.step.outputs["raw"] = .asset(failure.raw) }
+                if let failure = error as? WorkflowOutputValidationFailure {
+                    record.step.outputs["raw"] = .asset(failure.raw); record.step.languageEnd = failure.end; record.step.errorCode = failure.end.noticeKey()
+                    if failure.stopped { record.step.status = .cancelled }
+                }
             }
             do { try await persist() }
             catch let saveError {
@@ -380,6 +383,7 @@ import DInference
                 }
                 throw saveError
             }
+            if let failure = error as? WorkflowOutputValidationFailure, failure.stopped { throw CancellationError() }
             throw error
         }
     }

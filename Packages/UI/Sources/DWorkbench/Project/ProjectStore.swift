@@ -3642,7 +3642,7 @@ extension ProjectStore {
         if mediaType == "text/plain" || mediaType == "text/markdown" {
             guard data.count <= 1_048_576, String(data: data, encoding: .utf8) != nil else { throw WorkflowIssue("文字必须为不超过 1 MiB 的 UTF-8。") }
         } else if mediaType == WorkflowTextResponseFile.mediaType {
-            _ = try WorkflowTextResponseFile.decode(data)
+            _ = try WorkflowTextResponseFile.decodeContent(data)
         } else if format.kind == .document {
             try DocumentTextExtractor.validateOriginal(data, mediaType: mediaType)
         } else if format.kind == .image {
@@ -3818,7 +3818,7 @@ extension ProjectStore {
         guard reference.kind == .text else { throw WorkflowIssue("需要文字资产。") }
         let bytes = try workflowData(reference)
         if manifest.assets.first(where: { $0.id == reference.assetID })?.mediaType == WorkflowTextResponseFile.mediaType {
-            return try WorkflowTextResponseFile.decode(bytes).rawText
+            return try WorkflowTextResponseFile.decodeContent(bytes).rawText
         }
         guard let text = String(data: bytes, encoding: .utf8) else { throw WorkflowIssue("文字不是完整 UTF-8。") }
         return text
@@ -3827,7 +3827,15 @@ extension ProjectStore {
     func workflowTextResponse(_ reference: WorkflowAssetReference) throws -> TextResponse? {
         let bytes = try workflowData(reference)
         guard manifest.assets.first(where: { $0.id == reference.assetID })?.mediaType == WorkflowTextResponseFile.mediaType else { return nil }
-        return try WorkflowTextResponseFile.decode(bytes)
+        return try WorkflowTextResponseFile.decodeContent(bytes).response
+    }
+
+    public func workflowLanguageContent(_ reference: WorkflowAssetReference) throws -> WorkflowLanguageContent {
+        let bytes = try workflowData(reference)
+        if manifest.assets.first(where: { $0.id == reference.assetID })?.mediaType == WorkflowTextResponseFile.mediaType {
+            return try WorkflowTextResponseFile.decodeContent(bytes)
+        }
+        return .init(rawText: try workflowText(reference))
     }
 
     public func workflowMedia(_ reference: WorkflowAssetReference) throws -> (URL, ProjectAsset) {

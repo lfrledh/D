@@ -28,7 +28,6 @@ struct QuickGenerationView: View {
     var onResolveSharedAsset: QuickInputImport.SharedAssetResolver? = nil
     var textWorkspaceActions: AnyView = AnyView(EmptyView())
     @Environment(\.workbenchSidebars) private var sharedSidebars
-    @Environment(\.workbenchModeSize) private var modeSize
     @State private var localSidebars = WorkbenchSidebarState()
     private var sidebars: WorkbenchSidebarState { sharedSidebars ?? localSidebars }
     private enum LeftTab: String, CaseIterable { case settings, assets }
@@ -67,7 +66,7 @@ struct QuickGenerationView: View {
             ?? ModelNodeCatalog.entries.first { descriptor in WorkflowModelKind.allCases.contains { id == $0.rawValue + ":" + descriptor.revision } }?.title
             ?? (id.isEmpty ? refinementText("chooseModel", fallback: "选择一个模型") : refinementText("modelNotReady", fallback: "指定模型未准备"))
     }
-    @Environment(\.workbenchQuickContentTop) private var quickContentTop
+    @Environment(\.workbenchNavigationTop) private var navigationTop
     private var runningStatus: String {
         if let phase = quick.executionPhase, ["awaitingLowMemoryDecision", "lowMemoryExecution"].contains(phase) {
             return workflowProgressText(.init("phase." + phase), language: language)
@@ -77,9 +76,10 @@ struct QuickGenerationView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let shown = WorkbenchSidebarLayout.visible(available: geometry.size.width, leading: sidebars.leading, trailing: sidebars.trailing)
-            let leftShown = shown.leading
-            let rightShown = shown.trailing
+            let leftShown = sidebars.leading
+            let rightShown = sidebars.trailing
+            let shell = WorkbenchShellLayout(viewport: geometry.size, navigationTop: navigationTop,
+                requested: sidebars.requestedWidths, leading: leftShown, trailing: rightShown)
             ZStack(alignment: .topLeading) {
                 VStack(spacing: 10) {
                     HStack {
@@ -97,7 +97,6 @@ struct QuickGenerationView: View {
                     } else {
                         WorkbenchScrollView {
                             LazyVStack(alignment: .leading, spacing: 16) {
-                                if !quick.visibleStreamingText.isEmpty { Text(quick.visibleStreamingText).textSelection(.enabled) }
                                 ForEach(currentRuns) { run in runCard(run) }
                                 if !pastRuns.isEmpty { DisclosureGroup(refinementText("pastCreations", fallback: "以前的创作"), isExpanded: $history) { ForEach(pastRuns) { run in runCard(run) } } }
                                 if quick.visibleRuns.isEmpty { ContentUnavailableView(refinementText("startCreation", fallback: "开始一份创作"), systemImage: "sparkles", description: Text(refinementText("startCreationHelp", fallback: "输入任务后生成；结果会自动保存。"))) }
@@ -126,18 +125,10 @@ struct QuickGenerationView: View {
                     generationBar
                     }.padding(12).workbenchPanel(cornerRadius: 16)
                         .workbenchMeasureLayout("quick-input")
-                        .padding(.trailing, WorkbenchFloatingLayout.composerTrailingInset(
-                            visibleRightPanel: WorkbenchSidebarLayout.occupiedWidth(rightShown, leading: false, available: geometry.size.width),
-                            mode: modeSize))
-                }.frame(width: max(0, geometry.size.width - 32
-                    - WorkbenchSidebarLayout.occupiedWidth(leftShown, leading: true, available: geometry.size.width)
-                    - WorkbenchSidebarLayout.occupiedWidth(rightShown, leading: false, available: geometry.size.width)))
+                }.frame(width: shell.center.width, height: shell.center.height)
                     .workbenchMeasureLayout("quick-center")
-                .transaction { $0.animation = nil }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
-                    .padding(.top, quickContentTop)
-                    .padding(.leading, WorkbenchSidebarLayout.occupiedWidth(leftShown, leading: true, available: geometry.size.width))
-                    .padding(.trailing, WorkbenchSidebarLayout.occupiedWidth(rightShown, leading: false, available: geometry.size.width))
+                    .transaction { $0.animation = nil }
+                    .position(x: shell.center.midX, y: shell.center.midY)
                     .workbenchMorph(value: leftShown).workbenchMorph(value: rightShown)
                 WorkbenchSidebar(leading: true, expanded: leftShown,
                     title: quick.category == .audio ? audioText("settings") : consistencyText(language, "tabs." + leftTab.rawValue),
@@ -168,7 +159,8 @@ struct QuickGenerationView: View {
                             }
                         }
                     }
-                }
+                }.frame(width: shell.widths.leading, height: shell.panelHeight)
+                    .position(x: shell.panel(leading: true).midX, y: shell.panel(leading: true).midY)
                 WorkbenchSidebar(leading: false, expanded: rightShown,
                     title: quick.category == .audio ? audioText(rightTab == .results ? "assets" : "history") : consistencyText(language, "tabs." + rightTab.rawValue),
                     identifier: "quick-assets-toggle", hostIdentifier: "quick-assets-host",
@@ -212,9 +204,10 @@ struct QuickGenerationView: View {
                                 }
                             }
                         }
-                    }.frame(maxWidth: .infinity, alignment: .trailing)
-            }.padding(.horizontal, 16).padding(.bottom, 16)
-                .environment(\.workbenchPanelWidths, WorkbenchSidebarLayout.widths(available: geometry.size.width))
+                    }.frame(width: shell.widths.trailing, height: shell.panelHeight)
+                    .position(x: shell.panel(leading: false).midX, y: shell.panel(leading: false).midY)
+            }.frame(width: geometry.size.width, height: geometry.size.height)
+                .environment(\.workbenchPanelWidths, shell.widths)
         }
         .background(WorkbenchCommandWindow(scope: commandScope))
         .focusedSceneValue(\.workbenchAssetExport, exportMenuCommand)
@@ -534,10 +527,17 @@ struct QuickGenerationView: View {
                             VStack(alignment: .leading, spacing: 10) {
                                 HStack { Text(run.createdAt, style: .time); Spacer(); Text(statusTitle(run.status)).font(.caption) }
                                 if let index = run.attemptIndex { Text(workflowText(language, "refinement.quick.attempt", arguments: ["index": String(index)])).font(.caption).foregroundStyle(.secondary) }
+                                if WorkflowModelRoutes.isLanguage(run.draft.node.operationID) {
+                                    WorkflowLanguageResultView(store: quick.store, reference: references(run).first { $0.kind == .text },
+                                        transient: quick.presentedLanguageRunID == run.id ? quick.presentedLanguageResult : nil,
+                                        streaming: quick.activeRunID == run.id ? quick.visibleStreamingText : "",
+                                        end: run.languageEnd, pendingSave: quick.pendingSaveRunID == run.id || quick.saveIssue != nil)
+                                }
                                 ForEach(Array(run.outputs.keys.sorted()), id: \.self) { key in
-                                    if let text = run.outputs[key]?.datum?.text {
+                                    if let text = run.outputs[key]?.datum?.text, !WorkflowModelRoutes.isLanguage(run.draft.node.operationID) {
                                         Text(text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                                    } else if let value = run.outputs[key]?.datum, run.outputs[key]?.asset == nil {
+                                    } else if let value = run.outputs[key]?.datum, run.outputs[key]?.asset == nil,
+                                        !(WorkflowModelRoutes.isLanguage(run.draft.node.operationID) && value.text != nil) {
                                         WorkflowDatumSnapshotView(value: value)
                                         Button(baselineText(language, "result.toCanvas", fallback: "带结果到工作流")) { onValueToCanvas(value) }
                                     }
@@ -545,7 +545,7 @@ struct QuickGenerationView: View {
                                 ForEach(references(run), id: \.assetID) { reference in
                                     VStack(alignment: .leading) {
                                         if quick.category == .audio { QuickAudioCandidate(store: quick.store, reference: reference, attempt: run.attemptIndex) }
-                                        else { QuickAssetPreview(store: quick.store, reference: reference, compact: true) }
+                                        else if !WorkflowModelRoutes.isLanguage(run.draft.node.operationID) { QuickAssetPreview(store: quick.store, reference: reference, compact: true) }
                                         HStack {
                                             Button(baselineText(language, "label.db8db0530432")) {
                                                 if detailRun != nil { pendingPreview = reference; detailRun = nil }
@@ -557,7 +557,7 @@ struct QuickGenerationView: View {
                                     }
                                 }
                                 LowMemoryExecutionDetails(records: run.executionRecords ?? [])
-                                if let issue = run.issue { WorkbenchIssueText(raw: issue, key: LowMemoryExecutionPresentation.nonExecutionCode(run.executionRecords)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+                                if let issue = run.issue, run.languageEnd == nil { WorkbenchIssueText(raw: issue, key: LowMemoryExecutionPresentation.nonExecutionCode(run.executionRecords)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
                                 if [.failed, .cancelled, .interrupted, .partial].contains(run.status) {
                                     Button(baselineText(language, "retry.generate", fallback: "按本次输入重新生成")) { quick.retryAttempt(run.id) }
                                         .disabled(!quick.canRetry(run))

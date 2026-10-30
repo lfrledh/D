@@ -26,6 +26,7 @@ public struct WorkflowExecutionContext: Sendable {
     func transformAudio(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func readData(_ reference: WorkflowAssetReference) async throws -> Data
     func generateLanguage(task: String, content: String?, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
+    func readLanguageEnd(_ reference: WorkflowAssetReference) async throws -> WorkflowLanguageEnd?
     func readLanguageResponse(_ reference: WorkflowAssetReference) async throws -> TextResponse?
     func generateMusic(_ request: AudioRequest, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func generateACE(context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
@@ -60,6 +61,7 @@ extension WorkflowOperationServices {
     public func resolveLibrarySources(_ sources: [WorkflowLibrarySource]) async throws -> [WorkflowValue] {
         throw WorkflowIssue("This host cannot resolve saved workflow values.")
     }
+    public func readLanguageEnd(_ reference: WorkflowAssetReference) async throws -> WorkflowLanguageEnd? { nil }
     public func readLanguageResponse(_ reference: WorkflowAssetReference) async throws -> TextResponse? { nil }
     public func transformAudio(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { throw WorkflowIssue("此入口尚未提供音频转换。") }
     public func readData(_ reference: WorkflowAssetReference) async throws -> Data { throw WorkflowIssue("此入口尚未提供媒体读取。") }

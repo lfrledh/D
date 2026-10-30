@@ -31,6 +31,7 @@ final class WorkbenchBootstrap {
     private(set) var quickModel: WorkbenchModel?
     private(set) var quick: QuickGenerationController?
     private var sharedSession: WorkbenchSession?
+    private(set) var tips: TipStore?
     private(set) var lowMemoryDecisions: LowMemoryDecisionStore?
     private(set) var model: WorkbenchModel?
     private(set) var libraryModel: ModelLibraryModel?
@@ -128,6 +129,16 @@ final class WorkbenchBootstrap {
                 .appendingPathComponent("LanguagePacks", isDirectory: true))
             nodeTags = ModelNodeTagStore(settings: settings)
             lowMemoryDecisions = LowMemoryDecisionStore(settings: settings)
+            if tips == nil {
+                var test = false
+                #if DEBUG
+                test = ProcessInfo.processInfo.environment["D_STOREKIT_LOCAL_TEST"] == "1"
+                #endif
+                tips = TipStore(productIDs: test ? ["d.localtest.tip.small"] : [],
+                    bundleID: Bundle.main.bundleIdentifier ?? "", journalURL: libraryDirectory.deletingLastPathComponent()
+                        .appendingPathComponent(test ? "tip-test-journal.json" : "tip-journal.json"), localTest: test)
+                tips?.start()
+            }
             do { sharedLibrary = try SharedLibraryStore(fileURL: libraryDirectory.deletingLastPathComponent().appendingPathComponent("shared-library.json")) }
             catch { sharedLibraryIssue = "资料整理记录无法读取，已保留原件：" + error.localizedDescription }
             let accessRoot = libraryDirectory.deletingLastPathComponent()

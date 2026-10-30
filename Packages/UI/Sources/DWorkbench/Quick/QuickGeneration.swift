@@ -14,6 +14,7 @@ public struct QuickDraft: Codable, Sendable, Equatable, Identifiable {
     }
 }
 public struct QuickRunRecord: Codable, Sendable, Equatable, Identifiable {
+    public var languageEnd: WorkflowLanguageEnd? = nil
     public var executionRecords: [InferenceExecutionRecord]? = nil
     public enum Status: String, Codable, Sendable { case running, completed, partial, cancelled, failed, interrupted }
     public let id: UUID
@@ -112,6 +113,9 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     public private(set) var progressPresentation: WorkflowProgressMessage?
     public var executionPhase: String? { isRunning ? services?.activity.current?.phase : nil }
     public private(set) var streamingText = ""
+    public private(set) var presentedLanguageResult: WorkflowLanguageContent?
+    public private(set) var presentedLanguageRunID: UUID?
+
     public private(set) var saveIssue: String?
     public private(set) var pendingSaveRunID: UUID?
     @ObservationIgnored private var cancelRequested = false
@@ -472,7 +476,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
             for (offset, captured) in attempts.enumerated() {
                 // Preserve an explicit cancelled first attempt even if cancelled before admission.
                 if offset > 0 && cancelRequested { break }
-                let id = UUID(); activeRunID = id
+                let id = UUID(); activeRunID = id; presentedLanguageResult = nil; presentedLanguageRunID = id
                 state.runs.append(.init(id: id, draft: captured, createdAt: Date(), batchID: batch,
                     attemptIndex: offset + 1, retryOf: retryOf, status: .running, outputs: [:], candidates: [], issue: nil))
             do {
@@ -490,6 +494,12 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
                 service.languagePreviewChanged = { [weak self] stepID, text in
                     guard let self, self.isRunning, self.activeRunID == id, stepID == id else { return }
                     self.streamingText = text
+                }
+                service.languageContentChanged = { [weak self] stepID, content in
+                    guard let self, self.activeRunID == id, stepID == id,
+                          let index = self.state.runs.firstIndex(where: { $0.id == id }) else { return }
+                    self.presentedLanguageRunID = id; self.presentedLanguageResult = content
+                    self.state.runs[index].languageEnd = content.end
                 }
                 service.candidatesChanged = { [weak self, weak service] _, candidates in
                     guard let self, let service, let index = self.state.runs.firstIndex(where: { $0.id == id }) else { return }
@@ -516,11 +526,12 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
                     for reference in published where !state.runs[index].outputs.values.contains(where: { $0.asset == reference }) {
                         state.runs[index].outputs["preserved-" + reference.assetID.uuidString] = .asset(reference)
                     }
-                    state.runs[index].status = (error is CancellationError) ? .cancelled : .failed
+                    state.runs[index].languageEnd = (error as? WorkflowOutputValidationFailure)?.end ?? services?.retainedLanguageContent(stepID: id)?.end
+                    state.runs[index].status = (error is CancellationError || state.runs[index].languageEnd?.cause == .stopped) ? .cancelled : .failed
                     state.runs[index].issue = error.localizedDescription
                 }
                 self.error = error.localizedDescription
-                errorCode = LowMemoryExecutionPresentation.nonExecutionCode(services?.executionRecords(for: id))
+                errorCode = LowMemoryExecutionPresentation.nonExecutionCode(services?.executionRecords(for: id)) ?? (error as? WorkflowOutputValidationFailure)?.end.noticeKey(reasoningOnly: services?.retainedLanguageContent(stepID: id)?.reasoningOnly == true)
                 phase = "运行已结束"
                 do { try await flush() } catch { self.error = "结果或状态尚未保存：" + error.localizedDescription }
             }
@@ -559,7 +570,8 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         } catch {
             if let id = pendingSaveRunID, let index = state.runs.firstIndex(where: { $0.id == id }), services?.hasPendingSaves == false {
                 for ref in (try? await store.workflowAssets(forStepID: id)) ?? [] { state.runs[index].outputs["preserved-" + ref.assetID.uuidString] = .asset(ref) }
-                state.runs[index].status = .failed; state.runs[index].issue = error.localizedDescription
+                if let failure = error as? WorkflowOutputValidationFailure { state.runs[index].languageEnd = failure.end }
+                state.runs[index].status = state.runs[index].languageEnd?.cause == .stopped ? .cancelled : .failed; state.runs[index].issue = error.localizedDescription
                 pendingSaveRunID = nil; services = nil
                 do { try await flush() } catch { saveIssue = error.localizedDescription }
             }

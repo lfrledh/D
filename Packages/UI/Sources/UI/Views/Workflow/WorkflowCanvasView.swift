@@ -180,14 +180,15 @@ public struct WorkflowCanvasView: View {
     @Environment(\.chatDisplayPreferences) private var displayPreferences
     @State private var commandScope = WorkbenchCommandScope()
     @State private var narrowLibrary = false
-    @State private var requestedPanelWidths = WorkbenchPanelWidths(leading: 320, trailing: 320)
+    @Environment(\.workbenchSidebars) private var sharedSidebars
+    private var sidebars: WorkbenchSidebarState { sharedSidebars ?? overlayState }
     @State private var runSettingsVisible = false
     @State private var runOptions = WorkflowWorkspaceRunOptions()
     @State private var recordsDetail = false
     @State private var visitedRecords = false
     @State private var visitedRecordsDetail = false
     @State private var overlayState = WorkbenchSidebarState(leading: true, trailing: true)
-    private var showLibrary: Bool { get { overlayState.trailing } nonmutating set { overlayState.trailing = newValue } }
+    private var showLibrary: Bool { get { sidebars.trailing } nonmutating set { sidebars.trailing = newValue } }
     @Environment(\.workflowViewerModel) private var viewerModel
     @State private var resourceCategory:WorkflowResourceCategory = .all
     @State private var planInputLabels:[UUID:String]=[:]
@@ -200,7 +201,7 @@ public struct WorkflowCanvasView: View {
     @State private var panelsState = WorkflowWorkspacePanels()
     @State private var visitedPreparation: Set<WorkflowWorkspacePanels.Preparation> = [.models]
     @State private var visitedOutput: Set<WorkflowWorkspacePanels.Output> = [.overview]
-    private var showInspector: Bool { get { overlayState.leading } nonmutating set { overlayState.leading = newValue } }
+    private var showInspector: Bool { get { sidebars.leading } nonmutating set { sidebars.leading = newValue } }
     @State private var camera = WorkflowCanvasCameraPresentation()
     @State private var canvasTool: WorkflowCanvasTool = .pointer
     @State private var canvasViewport: WorkflowCanvasViewportMeasurement?
@@ -369,15 +370,12 @@ public struct WorkflowCanvasView: View {
 
     private var canvasContent: some View {
         GeometryReader { viewport in
-        VStack(spacing: 0) {
-            toolbar(width: viewport.size.width).frame(width: viewport.size.width)
-            GeometryReader { proxy in
-                panels(height: proxy.size.height, width: proxy.size.width)
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .accessibilityIdentifier("workflow-canvas-workspace")
-            }
-        }
-        .frame(width: viewport.size.width, height: viewport.size.height)
+            panels(height: viewport.size.height, width: viewport.size.width)
+                .frame(width: viewport.size.width, height: viewport.size.height)
+                .accessibilityIdentifier("workflow-canvas-workspace")
+                .overlay(alignment: .top) {
+                    toolbar(width: viewport.size.width).padding(.top, navigationTop)
+                }
         }
         .frame(minWidth: WorkflowCanvasLayoutPolicy.minimumVisibleWidth,
                minHeight: WorkflowCanvasLayoutPolicy.minimumVisibleHeight)
@@ -435,13 +433,14 @@ public struct WorkflowCanvasView: View {
         panelsState.selectPreparation(.configuration)
     }
 
-    @Environment(\.workbenchModeSize) private var modeSize
+    @Environment(\.workbenchNavigationTop) private var navigationTop
+    @Environment(\.workbenchNavigationModeWidth) private var navigationModeWidth
     @Environment(\.workbenchWindowControlSize) private var windowControlSize
     private func panels(height: CGFloat, width: CGFloat) -> some View {
-        let shown = WorkflowCanvasLayoutPolicy.visiblePanels(width: width, library: showLibrary,
-            inspector: showInspector, preferLibrary: narrowLibrary)
-        let panelWidths = WorkbenchPanelWidths(leading: min(requestedPanelWidths.leading, max(260, width - 64)),
-            trailing: min(requestedPanelWidths.trailing, max(260, width - 64)))
+        let shown = (inspector: showInspector, library: showLibrary)
+        let shell = WorkbenchShellLayout(viewport: .init(width: width, height: height), navigationTop: navigationTop,
+            modeWidth: navigationModeWidth, requested: sidebars.requestedWidths, leading: showInspector, trailing: showLibrary)
+        let panelWidths = shell.widths
         let targetCanvasWidth = max(1, width - 32) // Sidebars cover this fixed workspace; they never reserve canvas space.
         let fitReady = canvasViewport?.permitsFit(targetWidth: targetCanvasWidth) == true
         let inspectedNodeID = shown.inspector && panelsState.preparation == .configuration
@@ -535,35 +534,34 @@ public struct WorkflowCanvasView: View {
                     hostIdentifier: "canvas-inspector-host", toggle: {
                         showInspector = !shown.inspector; narrowLibrary = false
                     }, actions: { AnyView(preparationActions) }) { preparationPanel }
-                    .overlay(alignment: .trailing) { if shown.inspector { panelResizeHandle(leading: true) } }
                     .frame(width: shown.inspector ? panelWidths.leading : 48, alignment: .leading)
                     // The sidebar clips its own content; this layout slot must
                     // neither crop the glass shadow nor animate across the button.
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(.bottom, 72)
+                    .padding(.top, shell.panelTop).padding(.bottom, 16)
                 WorkbenchSidebar(leading: false, expanded: shown.library,
                     title: layoutText(languageStore, "assetLibrary"), identifier: "canvas-library-toggle",
                     hostIdentifier: "canvas-library-host", toggle: {
                         showLibrary = !shown.library; narrowLibrary = true
                     }, actions: { AnyView(resourceActions) }) { resourcePanel }
-                    .overlay(alignment: .leading) { if shown.library { panelResizeHandle(leading: false) } }
                     .frame(width: shown.library ? panelWidths.trailing : 48, alignment: .trailing)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.top, shell.panelTop).padding(.bottom, 16)
             }
             .padding(.horizontal, 16)
             VStack(spacing: 0) {
-                secondaryRunSurface(width: width, height: height)
+                secondaryRunSurface(width: shell.center.width, height: shell.center.height)
                     .padding(.bottom, workspaceDraft != nil || runSettingsVisible || activityVisible ? 8 : 0)
-                runDock(width: width)
-            }.padding(.bottom, 16)
-            let toolFrame = WorkbenchFloatingLayout.canvasTools(viewport: .init(width: width, height: height),
-                rightPanelWidth: shown.library ? panelWidths.trailing : nil, mode: modeSize,
-                runPanelHeight: workspaceDraft != nil || runSettingsVisible || activityVisible ? WorkbenchFloatingLayout.runPanelHeight(available: height) : 0)
+                runDock(width: shell.center.width)
+            }.padding(.bottom, 16).offset(x: shell.center.midX - width / 2)
+            let toolFrame = WorkbenchFloatingLayout.canvasTools(center: shell.center,
+                runPanelHeight: workspaceDraft != nil || runSettingsVisible || activityVisible ? WorkbenchFloatingLayout.runPanelHeight(available: shell.center.height) : 0)
             cornerTools(fitReady: fitReady, targetWidth: targetCanvasWidth)
                 .frame(width: 88, height: 40).position(x: toolFrame.midX, y: toolFrame.midY)
                 .workbenchMorph(value: toolFrame)
-        }.overlay(alignment: .top) { captureControls.padding(.top, 8) }
-        .padding(.top, 8).environment(\.workbenchPanelWidths, panelWidths)
+        }.overlay(alignment: .top) { captureControls.frame(maxWidth: shell.center.width).padding(.top, shell.panelTop + 8).offset(x: shell.center.midX - width / 2) }
+        .environment(\.workbenchPanelWidths, panelWidths)
+        .environment(\.workbenchSidebars, sidebars)
     }
 
     private func secondaryRunSurface(width: CGFloat, height: CGFloat) -> some View {
@@ -587,12 +585,6 @@ public struct WorkflowCanvasView: View {
             }
         }.frame(height: opened ? panelHeight : 0, alignment: .bottom)
             .onChange(of: activityVisible, initial: true) { _, visible in if visible { visitedRecords = true } }
-    }
-
-    private func panelResizeHandle(leading: Bool) -> some View {
-        WorkflowPanelResizeHandle(width: Binding(
-            get: { leading ? requestedPanelWidths.leading : requestedPanelWidths.trailing },
-            set: { if leading { requestedPanelWidths.leading = $0 } else { requestedPanelWidths.trailing = $0 } }), leading: leading)
     }
 
     private func text(_ key: String, _ fallback: String) -> String {
@@ -900,14 +892,22 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     Text(run.graph.nodes.first(where: { $0.id == run.targetNodeID })?.title ?? text("workspace.unavailableTarget", "目标已不可访问")).font(.callout)
                     if let issue = run.planCheckpoint?.error {
                         let ended = [.cancelled, .rejected].contains(run.status) && run.planCheckpoint?.state == .cancelled && run.planCheckpoint?.records.contains { $0.step.humanTask?.rejected == true } == true
-                        WorkbenchIssueText(raw: issue, key: ended ? "workflow.human.ended" : nil).foregroundStyle(.red)
+                        WorkbenchIssueText(raw: issue, key: ended ? "workflow.human.ended" : (run.status == .saving ? nil : run.planCheckpoint?.records.last(where: { $0.step.languageEnd?.interrupted == true })?.step.errorCode)).foregroundStyle(.red)
                     }
                     if WorkflowCanvasPresentation.canResume(run.status) {
                         recoveryActions(run)
                     }
-                    if controller.isRunning && controller.activePresentationRun?.id == run.id && !controller.visibleStreamingText.isEmpty {
-                        Text(workspaceText(languageStore, "streaming")).font(.caption)
-                        Text(controller.visibleStreamingText).lineLimit(4).textSelection(.enabled)
+                    let terminalStep = controller.presentedLanguageRunID == run.id ? controller.presentedLanguageStepID : nil
+                    let languageRecord = WorkflowWorkspacePanels.records(in: run).last { record in
+                        terminalStep.map { $0 == record.id } ?? WorkflowModelRoutes.isLanguage(record.step.node.operationID)
+                    }
+                    if languageRecord != nil || terminalStep != nil {
+                        WorkflowLanguageResultView(store: controller.services.store,
+                            reference: languageRecord?.step.outputs["raw"]?.asset,
+                            transient: controller.presentedLanguageRunID == run.id ? controller.presentedLanguageResult : nil,
+                            streaming: controller.activePresentationRun?.id == run.id ? controller.visibleStreamingText : "",
+                            end: languageRecord?.step.languageEnd,
+                            pendingSave: languageRecord?.step.status == .saving || controller.hasPendingSaves)
                     }
                     DisclosureGroup(text("workspace.runAssets", "此运行的已保存结果")) {
                         ForEach(WorkflowHumanPresentation.outputs(run)) { output in
@@ -1015,15 +1015,17 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 }
             }.frame(height: 32).accessibilityIdentifier("workflow-management-menu")
                 .help(controller.rootGraph?.name ?? text("workflow.toolbar.noGraph", "选择工作流"))
-            if !controller.bodyPath.isEmpty { Text(bodyBreadcrumb).foregroundStyle(.secondary).lineLimit(1) }
+            if !controller.bodyPath.isEmpty { Text(bodyBreadcrumb).foregroundStyle(.secondary).lineLimit(1).help(bodyBreadcrumb) }
             Text(text("workflow.management." + controller.savePresentation, "")).font(.caption).foregroundStyle(.secondary)
+                .lineLimit(1).help(text("workflow.management." + controller.savePresentation, ""))
                 .accessibilityIdentifier("workflow-save-status")
             if let retry = commands.retrySave { Button(retry.title, action: retry.action).disabled(!retry.isEnabled) }
             if controller.presentationEditingOriginalID == controller.rootGraph?.id {
                 Label(consistencyText(languageStore, "copy.runningWorkflow"), systemImage: "lock").help(consistencyText(languageStore, "copy.copyOnEdit")).font(.caption).foregroundStyle(.secondary)
             } else if controller.presentationCopySourceID != nil { Text(text("workspace.editingCopy", "编辑副本")).font(.caption).foregroundStyle(.secondary) }
-            Spacer(minLength: 8)
-        }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.leading, max(128, 16 + windowControlSize.width + 12)).padding(.trailing, 18).padding(.vertical, 10).padding(.top, 6)
+        }.buttonStyle(WorkbenchGlassButtonStyle()).lineLimit(1)
+            .frame(width: max(264, min(600, width - 2 * (16 + navigationModeWidth + 12))), height: 40)
+
     }
 
     private var bodyBreadcrumb: String {

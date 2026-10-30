@@ -454,16 +454,16 @@ public struct DualWorkbenchView: View {
             stop: entry == .quick && (quick.category != .text || quick.textPresentation == .single) ? action(systemMenuText(language, "stop"), enabled: originalQuick.isRunning) { Task { await originalQuick.cancel() } } : nil,
             retrySave: entry == .quick && (originalQuick.pendingSaveRunID != nil || originalQuick.saveIssue != nil) ? action(systemMenuText(language, "retrySave"), enabled: !originalQuick.isRunning) { Task { await originalQuick.retrySave() } } : nil)
     }
-    @State private var modeSize = CGSize(width: 232, height: 52)
+    @State private var navigationModeWidth: CGFloat = 232
     @State private var navigationTop: CGFloat = 48
     @State private var windowControlSize = CGSize(width: 80, height: 32)
     private var modeSwitcher: some View {
         WorkbenchGlassSegments(title: t("workspaceMode"), selection: Binding(get: { entry }, set: { navigate(to: $0) }),
             choices: [(Entry.quick, layoutText(language, "quick")), (.workflow, layoutText(language, "workflow"))],
             owner: AnyHashable("\(displayedOwner.manifest?.effectiveInstanceID.uuidString ?? "none"):\(displayedOwner.projectSession.navigationEpoch)"),
-            standard: true, minimumItemLength: 108)
-            .fixedSize(horizontal: true, vertical: false).frame(height: 52)
-            .onGeometryChange(for: CGSize.self, of: { $0.size }) { modeSize = $0 }
+            standard: true, trackThickness: 32, minimumItemLength: 108)
+            .fixedSize(horizontal: true, vertical: false).frame(height: 40)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { navigationModeWidth = $0 }
             .accessibilityIdentifier("workbench-entry").workbenchHelp("APP-MODE")
     }
 
@@ -472,18 +472,6 @@ public struct DualWorkbenchView: View {
         let _ = WorkbenchCategoryUpdateProbe.workbenchBody?()
         #endif
         VStack(spacing: 0) {
-            if entry == .quick {
-                Color.clear.frame(height: 52).allowsHitTesting(false)
-            }
-            if entry == .quick, let identity = quickModelIdentity,
-               quickModel.projectSession.explicitModelChecking.contains(identity) {
-                Text(t("checkingModel"))
-                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.vertical, 4)
-            } else if entry == .workflow,
-                      !canvasModel.projectSession.explicitModelChecking.isDisjoint(with: graphModelIdentities) {
-                Text(t("checkingWorkflow"))
-                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.vertical, 4)
-            }
             ZStack {
                 RetainedContentHost(content: Group {
                         if quick.category == .text, let chat {
@@ -570,7 +558,8 @@ public struct DualWorkbenchView: View {
         }
         .frame(minWidth: WorkbenchSidebarLayout.minimumWindowWidth, minHeight: 580)
         .background(WorkbenchTopNavigationMeasure { navigationTop = $0 })
-        .environment(\.workbenchQuickContentTop, max(0, navigationTop + 40 + 8 - 52))
+        .environment(\.workbenchNavigationTop, navigationTop)
+        .environment(\.workbenchNavigationModeWidth, navigationModeWidth)
         .overlay(alignment: .top) {
             if entry == .quick {
                 let dragOwner = quick
@@ -582,7 +571,6 @@ public struct DualWorkbenchView: View {
                     .frame(width: 264, height: 40).padding(.top, navigationTop)
             }
         }
-        .environment(\.workbenchModeSize, modeSize)
         .environment(\.workbenchWindowControlSize, windowFullScreen ? CGSize(width: 80, height: 32) : windowControlSize)
         .overlay(alignment: .topLeading) {
             WorkbenchNativeWindowControls(fullScreen: $windowFullScreen, size: $windowControlSize).padding(.leading, 16).padding(.top, 8)
@@ -590,7 +578,14 @@ public struct DualWorkbenchView: View {
         .overlay(alignment: .topTrailing) {
             WorkbenchWindowDragRegion().frame(width: 120, height: 28).padding(.trailing, 16).padding(.top, 8)
         }
-        .overlay(alignment: .bottomTrailing) { modeSwitcher.padding(.trailing, 16).padding(.bottom, 16) }
+        .overlay(alignment: .topLeading) { modeSwitcher.padding(.leading, 16).padding(.top, navigationTop) }
+        .overlay(alignment: .topTrailing) {
+            if entry == .quick, let identity = quickModelIdentity, quickModel.projectSession.explicitModelChecking.contains(identity) {
+                ProgressView().controlSize(.small).help(t("checkingModel")).padding(.top, navigationTop + 10).padding(.trailing, 24)
+            } else if entry == .workflow, !canvasModel.projectSession.explicitModelChecking.isDisjoint(with: graphModelIdentities) {
+                ProgressView().controlSize(.small).help(t("checkingWorkflow")).padding(.top, navigationTop + 10).padding(.trailing, 24)
+            }
+        }
     }
     private var menuContext: String {
         let instance = canvasModel.manifest?.effectiveInstanceID.uuidString ?? "none"
