@@ -55,3 +55,16 @@ UI-REFINEMENT-01 原位归档，展示被用户拒收，部分实现/证据保�
 | AUDIO/HUM授权续办，2026-09-10 | [唯一共同原文](https://github.com/lfrledh/D/blob/bb821f1fe31a263d33b1feeb33ee3cf3e7294d74/docs/tasks/D-AUDIO-BACKEND-01.md#L54-L66) | [HUM摘要](../tasks/D-HUM-ENTRY-01.md)；AUDIO后继失败/预算及HUM后续录音故障保持。 |
 
 原文→当前的双向定位由本表、当前行动和导航链接构成；旧提交内容不可更改，不在固定历史中伪造新链接。本轮完整前后位置/字节变化/链接核验记录由[非 UI 交付](../tasks/D-NON-UI-REPAIR-20261011.md)关联。没有新复制一套完整历史、删除许可或清理旧候选。
+
+<a id="ui-closeout-20261030"></a>
+## 2026-10-30 UI串行收口归档
+
+迁移基线完整 `a9978ed68e8501a1048b9fa17f46204bd734b1e9`。本次只归并入口与状态，不更改历史失败、预算、已验版本或承诺。
+
+| 原文件 | 归档全文 | 当前责任 |
+|---|---|---|
+| CURRENT_ACTIONS | [UI-CURRENT](UI-CURRENT-THROUGH-20261030.md) | [唯一当前入口](../CURRENT_ACTIONS.zh-CN.md) |
+| D-UI-CONSOLIDATED-01 | [UI-TASK](UI-TASK-THROUGH-20261030.md) | [活跃接续与交付索引](../tasks/D-UI-CONSOLIDATED-01.md) |
+| FAILURE_AND_PERMISSION_AUDIT | [UI-AUDIT](UI-AUDIT-THROUGH-20261030.md) | [原D-I001–031唯一状态](../FAILURE_AND_PERMISSION_AUDIT.zh-CN.md) |
+
+原文可离线 `git show a9978ed6:docs/…` 对照。归档仅补历史声明、相对链接和D-I锚点；原始trace/图片不搬迁。旧任务锚点保留短跳转，仓库内跨文件旧锚点改指归档。现行永久决定仍在原则/协作规程，旧语句不从归档重新生效。

@@ -111,3 +111,18 @@ Qwen视频由当前后端按2fps取帧，超过maximumVideoFrames预算报错，
 - **低动效/高对比度/窄窗**：目前没有v0.2玻璃与动画实现，无法将旧截图作为新效果通过；后续使用合成状态核可达性/布局和系统设置。只列准备缺口，本轮不新增外观测试平台。
 
 当前实际状态、精确外盘R目录、唯一推荐包及下次桌面动作仍只见[当前行动](CURRENT_ACTIONS.zh-CN.md)、[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)、[试用入口](RELEASE_FREEZE_TRY.zh-CN.md)。本页准备完毕不表示F17/F19已验，也不自动开始视觉改版。
+
+## 已批准文案覆盖索引
+
+本表只定位正式资源和代码，不复制译文；正文唯一来源为 `Packages/UI/Sources/UI/Resources/Localization/{zh-Hans,en}.json`。动态键按实际调用核对，未审文案归D-I013。下方“验证”仅适用对应回执路径。
+
+| 模块 | 键范围／代码入口 | 状态与版本 | 例外／证据 |
+|---|---|---|---|
+| 公共外壳/子窗/菜单 | workbench.*、childPanel.*、systemMenu.*；WorkbenchAppearance/WorkbenchChildPanel/DualWorkbenchView | 已批准/实施；8101代表中英原生 | 全层级瞬态未穷举；P/L/R/T归档 |
+| 模型取得/准备/规格 | model.*、modelManagement.*、modelAcquisition.*、modelNode.*、workflow.preparation.*；ModelLibrary/WorkflowModelPreparation | B2已批准实施；c464原位/副本普通App | 无固定副本配方兼容例外留原任务 |
+| 资产名称/标签/容器 | metadata.*、container.*；SharedLibraryBrowser/WorkflowContainer | 第一批02由B2最终批准实施 | 搜索与编辑作用域分开；全VoiceOver未验 |
+| Quick音频 | quick.audio.*；QuickGenerationView/QuickCreationController | 5d7批准实施；6d5原生组字/VoiceOver补验 | 真实MRT2/ACE与夹具证据分开 |
+| 项目文件 | files.*；ProjectFilesPanel/ProjectStore | B3批准实施/a20正常双语和文件事务 | 不完整备份、介质满/断盘边界保留 |
+| 工作流运行 | workflow.*、metadata.panel.workspace.*；WorkflowCanvasView/WorkflowServices | B4批准实施/d714、ecda补验 | 历史完成与当前输入不混同 |
+| 低内存/Chat编辑搜索预设 | memory.*、chat.*；LowMemoryDecisionStore/ChatWorkbenchView | B5 v2批准实施/9c原生；5f低内存Chat | exact权重/默认询问；全模型许可未实跑 |
+| 部分输出/支持开发者 | partial.*、tips.*；WorkflowLanguageResultView/ChatMessageNotices/TipStore | P/L/R/T实施/8101冷读；A2支持记录接续中 | 正常包无商品；本地StoreKit不算正式售价/恢复通过 |

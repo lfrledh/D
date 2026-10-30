@@ -4,7 +4,7 @@
 
 历史状态（2026-10-18）：调查完成，待用户审计与外部独立复核；尚不足以宣布唯一根因或选择正式修补。2026-10-18 用户追加授权将去敏调查文档提交到 GitHub。本次归档只含文档及静态证据摘要，没有生产源码或诊断代码变更，没有构建、合并、部署或替换普通 D。
 
-审阅材料：[数据 CSV](interaction-summary.csv) · [证据与复算口径](EVIDENCE.zh-CN.md) · [只读复核](consultant-review.md) · [当前集中待办](../../FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#d-performance-attribution-01-当前队列)。原始资料保留在受控本地，Git 版不包含用户正文、书签、索引、私有绝对路径或完整系统进程资料。
+审阅材料：[数据 CSV](interaction-summary.csv) · [证据与复算口径](EVIDENCE.zh-CN.md) · [只读复核](consultant-review.md) · [当前集中待办](../../history/UI-AUDIT-THROUGH-20261030.md#d-performance-attribution-01-当前队列)。原始资料保留在受控本地，Git 版不包含用户正文、书签、索引、私有绝对路径或完整系统进程资料。
 
 ## 结论及强度
 
