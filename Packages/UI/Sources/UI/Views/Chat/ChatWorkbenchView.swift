@@ -1642,9 +1642,9 @@ ScrollViewReader { proxy in
             }
             switch result {
             case .success(let plan):
-                Text(label("inputEstimateHelp", "")).font(.caption).foregroundStyle(.secondary)
                 Text(workflowText(language, "chat.estimatedInput", arguments: ["count": String(plan.estimatedTokens)]))
                     .font(.caption)
+                    .help(label("inputEstimateHelp", ""))
                 if let limit = session.configuration?.parameters["maximumPromptTokens"]?.integer {
                     Text(workflowText(language, "chat.inputLimit", arguments: ["count": String(limit)]))
                         .font(.caption)
@@ -1652,6 +1652,7 @@ ScrollViewReader { proxy in
                         Text(newLabel("overEstimate", english: "Estimate exceeds the configured limit.",
                             chinese: "估计值超过所选上限。"))
                             .font(.caption).foregroundStyle(.red)
+                        Text(label("inputEstimateHelp", "")).font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 Text(newLabel("contextMedia", english: "Images: ", chinese: "图像：") + String(plan.images.count) +
