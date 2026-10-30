@@ -13,6 +13,21 @@
 | 右浮动面板 | 原资料/成果/工具/请求检查，右边圆钮恢复 |
 
 以上为代码接线，视觉与行为实际结果只见任务回执。
+## 2026-10-30 B5 v2：准确权重的执行方式与许可
+
+本增量覆盖下方历史表中的新请求默认方式；旧字段缺省、明确固定方式及冻结历史不迁移。`automatic` 只评估，应用偏好缺省为每次询问。预算足够执行原高速方式；同一权重低内存方案可行时，准确请求/派发token/文件封印/策略须一致，明确同意才加载。关闭/停止不记住允许；主动记住或设置allow才影响后续请求。固定resident不被全局allow覆盖；主动固定layered本身是该请求的选择。无交互owner不能默许。
+
+| 当前接入能力 | 高速 / 同权重低内存 | 自动评估与许可范围 | 本轮证据边界 |
+|---|---|---|---|
+| Qwen3.5-9B及当前27B VLM适配，原始BF16/affine Q4/Q8 | resident / SSD逐层；原packed权重、scales/biases直接加载 | 新字段默认automatic；精确配置/层布局/文件元数据准入，UI/Runtime/实际loader共用plan | Q4/Q8/mixed/BF16小型数值/缓存反例、估算分项、原文件替换反例亲跑；正常685同一9B Q4真实resident/受控4GiB许可后layered、Stop/再运行/保存原始输出已验；原text请求长度守卫保留，response跟随请求完成。27B/全图像视频组合未作本轮实模 |
+| FLUX.2 Klein BF16；Q8 | staged / BF16已有SSD逐层；Q8无此计划 | 默认automatic；Q8超预算准确拒绝，不改成BF16或再量化 | 完整性/元数据/许可组件；历史BF16实模按未改数值路径沿用，新增自动许可普通App组合未验 |
+| FLUX.2 Dev BF16 | staged / 已有SSD逐层 | 同请求语义与固定清单封印；新默认automatic | 元数据与调用接线；历史SSD实模不冒充本轮自动许可实模 |
+| ACE-Step 1.5 XL SFT F32/no-LM | resident / 已有逐层 | 精确manifest及同F32；新默认automatic | CPU后端契约/许可/清理反例，未重跑音频模型 |
+| h3.c、LTX 2.3 BF16及Q8/Gemma Q4、LTX 2.5 | resident / 各适配器既有streamWeights | 新自动评估只改变streamWeights；保留STG/文本组件/时序。旧bool和缺省fixed保持；auto隐藏固定stream开关但不删旧值 | 枚举/组件边界/替换/预算CPU反例。LTX2.3文本pack+明确余量取阶段max；2.5/H3仍属原规划估算，未实测全流程RSS，不承诺任意预算可行 |
+| MRT2、SwiftF0、Wan、旧Qwen2等其他已装配路径 | 保留原执行方式 | 未适配的自动低内存不伪造计划、不换模型 | 沿用其原支持范围；不宣称本轮全模型自动覆盖 |
+
+Qwen估算用config实际混合层型，FP32 KV按256 token扩容并计增长重叠，Mamba状态/卷积和替换余量分列；resident整段prompt输出投影与layered 512分块区别计算。`max(2W加载余量+cache+reserve, W+推理工作集)`是保守阶段预算，不是实测RSS或两份权重必然驻留。全视觉输入所有权、提示词及输出上限保持。文件封印为有界元数据身份，不能替代ModelLibrary全内容校验。记录有准确submission与可选执行证据，图像增量候选和执行记录在既有同一保存点写入；旧无字段记录保持未知。
+
 ## 1. 真相来源与使用方法
 
 1. 输入/字段/操作版本：[WorkflowTypes.swift](../Packages/UI/Sources/DWorkbench/Workflow/WorkflowTypes.swift) 的 `WorkflowOperationDefinition / WorkflowPortDefinition / WorkflowFieldDefinition`；下列模型操作现均为definition version 1。操作ID不是模型revision、安装实例、后端版本或未来节点实例ID。

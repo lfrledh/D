@@ -1,5 +1,111 @@
 # D-UI-CONSOLIDATED-01
 
+## B5 v2窗口resize、同权重许可与聊天文案（2026-10-30）
+
+v2完整替代v1，没有默认授权自动回退。实际起点完整`0a1a2eda724e6bc0eda9b40032d6c08de2a0bc70`，原工作树`D-Worktrees/D-UI-CONSOLIDATED-20261020`及`codex/ui-consolidated-20261020`；fetch同值、ancestor exit0、初始无未提交或其他写入者。Lead唯一写入/桌面，三位非实施者只读审查真实差分/数值/生命周期/原生档案。普通D与主树个人scheme保持。R/M/C分别提交813e57fe/a52c95d1/f88e83fc，d94运行提示、685完整App闭包类型修正，fae7节点重复阶段修正。685与fae7正常包已完成下列实模/动作；最终生产9c18e138c40d74ad5737437c954a92095379af1e仅修复普通输入未超限却常驻缩减建议，正常完整Release已构建、独立验签并完成最终冷开/组字/提示/搜索/预设复验。未把中间图冒充最终包。
+
+### 实现与独立修正
+
+- R：headerOnly未打开过滤/详情时不构造完整资产投影；单模型摘要不构造整份显示定义。原精确写入校验、选择/编辑器/失效边界保持，无新无界缓存。原生同条件窗口边缘横纵基本未改善，角向变化不足以判稳定收益，**R部分完成**。详细前后数值及反证只见既有[性能记录](../investigations/D-PERFORMANCE-ATTRIBUTION-01/regression-20261022/README.zh-CN.md#b5窗口尺寸调整增量2026-10-30部分改善)，不称FPS。
+- M：Runtime有界评估→App唯一ask/allow/deny owner→proposal/entry token/准确文件封印→允许后复核再预留执行；无owner不能默许。关闭/拒绝/取消0加载，不记住；记住须勾选且affirmative Run。取消票据防迟到确认，固定方式不受全局allow覆盖。许可/实际方式/估算/可选实测与submissionID进入原保存账本；同logical ID不串派发。新增字段可选，旧无记录保持未知，重试保存0推理。
+- Q4：原packed U32/scales/bias直接按层安装，共享embedding/head，不重新量化、不将整模型解量化。config真实8 full/24 linear层、KV增长及重叠、Mamba状态/卷积、输入/视觉/分块投影分项估算；seal沿loader与每层检查，不用重新捕获的基线掩盖文件替换。现有Flux/ACE/video方式有限接线，适配及未验矩阵在[原支持入口](../UI_CAPABILITY_WIRING.zh-CN.md#2026-10-30-b5-v2准确权重的执行方式与许可)。
+- C：正式5281键双语资源，当前采用/原文搜索精确版本、分支不自动发送、人工编辑与部分采用来源区分、预设未勾选保留配置、类型化进度及输入预览。没有新增文案镜像，用户文字/名称/模型身份不改。正常App发现节点phase和progress同时显示同阶段，fae7仅按稳定code+空arguments去重；独立进度与原文fallback保持，11定向方法通过并经非实施者复核。
+
+### 原失败、真实Q4和知情许可
+
+既有run463A9748仍保留：原resident、预算12GiB，旧估算13,108,401,696 > 12,884,901,888，差223,499,808字节，execute前拒绝0输出，不是OOM或Stop。真实权重是既有Qwen3.5-9B Q4 affine/group64、revision `8b2b98c00a6b4d291155e4890773ca8f769aee53`，权重5,950,221,072字节；没有下载、替换、改变精度或增大全局预算。原prompt/输入2048/输出256/temperature.7/topP.95/thinking默认保持。
+
+| 685普通Release实验 | 实际结果与边界 |
+|---|---|
+| 原语义resident，12GiB | 新估算12,504,421,920；run7185340C实际生成29prompt/256generation tokens，MLX peak6,087,753,207字节，原始asset41BA0E72保存/Viewer可读。因256token内只有未完成thinking内容，原完整正文守卫正确令workflow failed；不能说100句话或完整工作流成功。 |
+| 默认ask，受控4GiB automatic | 展示同一模型/revision/精度、分层估算2,891,948,480及速度代价。停止、勾记住后Esc、勾记住后×、勾记住后B区外点四次均cancelled、executionStarted false、0输出、偏好仍unset:ask。外点后原左栏未收起。 |
+| 允许一次，受控4GiB | run01D61021真实layered生成同29/256tokens，MLX peak1,351,979,083字节，asset4D19B8FD可读；同样长度守卫failed而raw保存。下一请求仍询问，无默认allow泄漏。 |
+| 真正生成中Stop | runBE2E2906；停止前有限sample明确TokenIterator→Qwen35.callLayered→loadLayer。Stop后run/step/record cancelled、0输出；进程footprint约1.691GiB峰值→0.310GiB，下一请求成功。1秒采样不推算精确停止时延或资源归零。 |
+| 停止后再次运行并记住 | run08B7685E，保持同一推理语义，仅明确将输出改为已有response结构模式；完整结构/原始输出两端口成功，workflow completed。勾记住且Run后才写allow。不是把原text输出失败改写成成功。 |
+| 全局allow＋明确resident4GiB | runF2630466 fixedOverBudget，executionStarted false/0输出；不自动改层加载。后恢复automatic，保存测试项目。 |
+
+1Hz proc_pid_rusage的整进程footprint峰值resident6.043GiB、layered1.679GiB；MLX指标在全局执行许可内重置、drain后读取，两者口径不同。物理读量10.392GB/1.378GB包含其他进程内工作及不同缓存状态，不能称分层I/O更少；逐层加载由真实栈和实际backend证实。资源脚本Python monotonic是该进程起点，跨进程只用UTC，不强对齐Swift uptime。无需额外模型矩阵。fae7正常冷开78779后，设置确为allow；强制只重跑此节点的BC03022B实际allowedByPreference/layered完成response两输出（raw仍incomplete/256 tokens，不称100句话完成）。中途改deny不追溯取消已准入请求，下一A1B08A0B为denyByPreference/未执行；恢复ask后79FB60F9重新询问，Esc取消未执行。节点恢复budget0/resident/text，偏好恢复ask；未改变原失败。E3E4527仅按需复用，不算再次推理。
+
+### 定向验证与证据等级
+
+- Runtime：12方法/3suite通过，默认无owner/取消/迟到token/固定策略/拒绝/清理等；不是普通App像素。
+- backend最终r7：60报告含1跳过，59执行；Qwen/LocalImage/Flux/ACE/external-video五suite。Qwen小型layered r5另12报告含1跳过，Q4/Q8/BF16/mixed逐prefill/decode/cache数值反例；不累加重复子集，不据文字看似相同声称数值等价。
+- Workbench最终r7：34方法/8suite；UI r8的10方法/3suite＋7搜索接线；最终help7与phase去重11方法另有重叠，不制造总和。图像增量候选与execution record同保存点、冷恢复/只保存重试/失败反例通过。
+- 正常685：真实resize、可见节点拖动/节点Undo、手形PAN、真实滚轮、双栏收放，实模/确认/Stop/设置入口。fixture、源码、正常App各自分开。fae7补实际冷开allow、设置deny/ask、三种聊天再生成及编辑/搜索/预设；最终9c仅变提示呈现，未受影响M执行和R测量明确沿用。
+- 失败保留：首f88缺输出父目录；补前置后f88因真实复核发现而准确SIGINT停止，无App。d94完整App闭包推断编译失败，685修显式类型后正常Release完成；旧kernel/signature组件失败、host key-window前置未验不倒填。无强退，无签后修改包。
+
+证据仍在同任务外盘`run-20261030-resize-memory-b5`：原始轨迹/sample/私有路径不进Git；亲跑摘要、正式代码/资源/测试提交。当前没有需本人处理的新系统授权或未知保存决定，不鸣响。旧集中清单不清零；下面逐项区分证据等级，最终包冷开/读回以交付段为准。
+
+### 聊天原生补验与最后修正
+
+fae7专属新会话1476DCB5…使用既有准确Q4，显式输入512/输出128/thinking off，仅为B5短链；不是原29/256实验的替代。真实完成四条：初始EEBC3D9F（2 tokens/stop）、普通67F920E7（当前B5规则、新seed）、原请求6CE66083（原system/输入/seed一致）、比较98D7F609（直接来源6CE66083，冻结比较输入/规则、当前模型参数、新seed；本次其他配置恰好相同，不证明跨模型比较）。原记录未覆盖，完整回复均保存；保存和冷重开不得新增调用。
+
+- 回答编辑真实⌘Z/⌘⇧Z在Blue lantern与B5 adopted lantern间往返，保存产生A5F67434独立edited版本；原attempt/raw保持。搜索两种文本各打开准确“当前采用的文本版本／原始模型输出”，不改采用身份。
+- 修改原用户消息保存为94DBBA5B新分支，原2消息/attempt全值相等、0新推理；之后明确点普通再生成才新增记录，不能把后来的四条算作编辑副作用。
+- 常用预设4341B5D2新建勾选保存当前配置；再次编辑不勾选，仅prompt改变，configuration逐字段保持、所有会话不变。还原本次修改把未保存名称/正文还原到上次保存；明确Apply后才改专属会话规则，0隐式生成。
+- 实际Exclude/Include改变下次输入预览，不删除消息/修改原记录。已访问页面即时中英更新，数值和用户文本保持。复核指出102<512仍常驻“减少输入”建议，9c18e138把已批准完整句移至普通估算的help，只在超限直接显示，检查/估算不变。不是另开文案批次。
+- 四个原会话与补验前逐字段相等，原草稿2/21字符保留；新会话0草稿。fae7的78779正常Quit→PID消失，未强退。CGEvent和AXPress按实际分别记录；被clip的控件坐标预检失败不算点击通过，滚动到按钮后真实点击保存。
+
+### A01–A36分级回执
+
+| 条件 | 实际证据与剩余边界 |
+|---|---|
+| A01 | 原树/原分支累计起点0a1a2eda，祖先0；fetch无后继，个人scheme不写。 |
+| A02 | 原ecda完整Release真实边缘横/纵/角拖动，1080×612起点、1×60Hz、77%/三节点双栏；轨迹/sample分开。 |
+| A03 | 同图重启/两栏关闭有限对照；一次1.993s首变更未复现，不能归因系统。未扩全图矩阵。 |
+| A04 | 685同条件横纵基本无改善，角向少量差值不足稳定收益；R部分完成，无FPS。 |
+| A05 | 685 resize后真实节点+40/+40、相机不变、节点Undo恢复；冷开视野沿用B4 ecda有效证据；最终9c冷开亲跑对象为Quick聊天，未另宣称B5工作流项目视野冷开已重验。 |
+| A06 | 685手形PAN及回退、双栏、滚轮终态；没有同版连续呈现FPS。旧局部拖动/字号/失效边界保留，源码＋定向沿用。 |
+| A07 | 463A9748原预算差223,499,808字节，execute前拒绝；原记录完整保留，不算Stop。 |
+| A08 | 真实Q4文件/32层混合注意力账目；Runtime/backend反例、同checkpoint的embedding/head与mixed/分块数值测试；tie_word_embeddings路径仅源码复核。 |
+| A09 | 685同原请求12GiB真实resident生成；无低内存询问，未强迫分层。 |
+| A10 | 685明确允许一次与记住后实际layered；fae7冷开allow实际运行；proposal/record/文件身份一致。 |
+| A11 | 原同语义29/256真实生成、raw保存/Viewer可读；text完整性守卫仍failed（未完成thinking），**完整正文工作流未达成**。response成功另列，不混算。 |
+| A12 | 受控4GiB明确许可真实分层；MLX与1Hz footprint各记口径，恢复0预算/resident/text及ask。 |
+| A13 | Q4/Q8/BF16/mixed小型数值/损坏/embedding及head测试，未设tie=true；tied路径仅源码。文件12项身份前后保持，非完整大模型logits全量对照。 |
+| A14 | 原UI_CAPABILITY_WIRING矩阵逐后端记支持/未验；没有全模型实跑或下载。 |
+| A15 | 预算/无支持策略/文件封印/无owner等定向拒绝；普通App固定resident4GiB0执行。未制造真实撤权/磁盘耗尽。 |
+| A16 | frozen/request/effective/token与旧nil定向回归；普通原请求重生成实际同输入/seed，历史不写回。 |
+| A17 | 等待四种取消0执行；真实BE2层推理Stop后资源降、08B新执行成功；不称资源归零或精确取消时延。 |
+| A18 | 保存失败/只保存重试/取消/完整性由Runtime及Workbench定向；B4真实保存故障未受影响沿用，无普通包真实断盘。 |
+| A19 | fae7实际采用/原文搜索、准确全文且adopted不变；Unicode/上限/归档删除由7项搜索接线覆盖。 |
+| A20 | fae7实际用户编辑新分支0推理；从这里新建的复制范围/默认后缀由定向/源码，未另改原会话。 |
+| A21 | fae7四条真实短回答：普通/原请求/比较的system、seed、输入记录可核；原draft/record保持。 |
+| A22 | fae7edited独立版本与raw保留；partialAccepted/legacy/保存失败反例为组件，不冒称普通App故障注入。 |
+| A23 | fae7实际Exclude/Include预览及明确估算/上限；9c原生102/512无常驻建议，临时102/16明确警告和完整建议；未运行超限请求，随后恢复512。 |
+| A24 | 685/fae7等待/低内存/Stop及普通Chat Preparing→Completed；11phase方法、语言资源5281键对应；节点重复已修。 |
+| A25 | fae7真实新建带配置、编辑unchecked保留、还原未保存、保存≠Apply，四快照由非实施者核对。 |
+| A26 | 5281键/占位符/重复键，fae7中英1080×612与原生文本Undo/Redo；9c真实SCIM组字/确认/取消、⌘Z/⌘⇧Z与Quick/节点往返后Undo亲跑；不声称全输入法/纯Tab。 |
+| A27 | 9c正常完整Release打包成功、Apple Development deep/strict签名及7引擎/零权重门禁通过；三位只读复核实际差分/数值/现场记录，非只读总结。 |
+| A28 | 正常Quit与冷开、原会话保护、桌面入口与工作分支读回见最终段；旧失败原样保留。 |
+| A29 | 685unset:ask等待；四个取消record false/0输出，预算足resident实际起算；加载0由Runtime测试和record互证。 |
+| A30 | 01D真实allowOnce完成推理，下一次仍ask；无allow泄漏，参数和文件封印一致。 |
+| A31 | Stop/Esc/×/B区外点均cancelled/false，记住勾选不写偏好；B区不穿透左栏。 |
+| A32 | 08B勾选且Run写allow；fae7冷开保留→deny阻止新请求→ask重新询问；9c再验ask→allow→正常Quit/冷开保持allow→deny→ask→正常Quit/冷开保持ask，未新增推理。 |
+| A33 | 全局allow不覆盖resident4GiB；显式layered+deny的语义由Runtime测试，未额外重复普通App全部组合。 |
+| A34 | workflow真实等待/自动允许layered持续标记与Stop已见；Chat正常生成亲跑，Chat低内存标记仅接线/组件，未冒称全Quick实模。 |
+| A35 | 同一安装/修订/Q4/group64及原12文件身份；无模型替代/重新量化/KV量化/削减原请求。 |
+| A36 | 迟到/取消/不同提交token/无owner有反例；普通App未人为替换执行中文件，当前偏好不追溯撤销已准入。 |
+
+### 最终候选、图号与交付
+
+最终生产 **9c18e138c40d74ad5737437c954a92095379af1e**；仅提示呈现改动，M执行/C数据层/R未变。完整文档交付与远端读回绑定既有CurrentD/receipt.json，工作分支不合并、不发布。正常签名候选位于`D-Development/CurrentD/B5-9c18e138/D.app`，桌面“D 最新版”别名已解析并实际启动此路径；无诊断宏。打包器`runtimeVerification: not-run`原事实保持，后续普通App验证在下方独立记录；不将fae7图当9c图。
+
+V01为ecda/685同条件resize轨迹/采样；V02为685节点/PAN/双栏与旧B4冷开保护。V03-r6/r7/r8是fae7冷开allow、实际自动允许运行、恢复ask；V04为685真实Stop与下次成功，不能拿执行前失败替代。V05-r1/r2为fae7采用/原文搜索，r3为英文三生成菜单；V06-r1/r2为fae7预设还原/英文。fae7早期M画面1194×807、2×120Hz，C画面经现场读回1080×612、1×60Hz；Agent未改系统显示，此差异不用于性能比较。原始截图/trace留外盘，仅去敏摘要入库。
+
+
+最终9c亲跑：83531设置allow→正常Quit/PID消失→桌面冷开83695（10:54:43 JST）实际allow；改deny再ask→保存测试内容→正常Quit/PID消失→桌面冷开84128（11:05:23 JST）实际菜单勾选ask。最后主窗口7794、1080×612pt/1×60Hz、中文、专属1476聊天；无新推理、无待发送草稿。最终原生SCIM真实键输入产生marked `zhong wen`，Space提交中文，Undo/Redo及Quick→节点→Quick后撤销仍正确；新marked `zhong` 的Esc取消为空。输入源未变。
+
+同版图已直接展示：V03-r9/r10/r11/r12对应冷开ask、冷开allow、撤销deny、最终冷开ask；V05-r5/r8对应102/512普通预览和102/16超限警告，r9为冷开后精确采用版本搜索；V06-r3/r4为真实组字及跨工作区Undo；V07-r5/r6为冷开预设列表和保存内容/unchecked；V08-r1为最终聊天全景。均9c正常App、1080×612pt，不称截图证明性能。V05-r4与r6/r7因内容未完全进入可见区，不作为输入提示通过证据。
+
+保护复核`native-final-9c18-protection.json`：原4会话逐字段相等；新会话、4attempt、采用修订和预设与fae7保存前全值相等，0自动新调用；原Quick20run/5draft逐项相等；原20资产及documents不变，仅4真实聊天输出新增；Q4准确12文件size/inode/mtime/ctime保持；主树个人scheme SHA256仍`ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`。最终包源码/资源/可执行摘要与构建报告吻合，非实施者重新deep/strict验证exit0。
+
+实例与工具事实：最终切包时另发现旧685进程78970（10:09:33启动）只显示“模型库由另一个应用实例使用”的启动失败页、无项目/草稿；准确正常terminate并确认消失。它不等于早已退出的69560，不能说此前全程只有一个D。最后进程清单只有84128；未强退、未操作普通D。一次预设菜单CUA返回AXError.failure，但随后的实际AX/像素已进入正确编辑器；精确替代查找返回0目标未发事件，不将工具错误归因产品或权限。
+
+已按精确路径清理停止的685/fae7/ecda App及本轮5份DerivedData；当前9c App、保存项目、模型、原始证据、构建回执与测试日志保留，清单为`cleanup-final-b5.json`。
+
+本轮交审边界：R resize仍部分完成；原29/256 text请求的完整正文未达成，保留长度守卫失败与raw，未擅改原请求。其他后端/Chat低内存真实画面、全输入法/纯Tab和旧系统菜单/玻璃/商店缺口保留在唯一清单。没有需要本人立即处理的新步骤，停在用户视觉与顾问审计，不开始B6。
+
 ## B4原生补验与冷开视野（2026-10-29）
 
 用户视觉审阅期间按明确授权接续：实际起点 `9a583fdec0a7432c0a99f28c347a70c7dd4377de`／原生产d71497c2，原专属树和分支，fetch同值、祖先exit0、无其他写入者。Lead唯一写入/桌面，复核者只读；不扩下一批布局、文案或性能调查。最终生产 **`ecda08c81c5ba9ec26693fc804abc7f2e518bd92`**，正常完整Release、Apple Development签名、七引擎/零权重、无诊断注入；桌面“D 最新版”指向`CurrentD/Workflow-View-ecda08c8/D.app`。完整文档交付与远端读回由既有CurrentD回执绑定；0191是失败中间候选。
