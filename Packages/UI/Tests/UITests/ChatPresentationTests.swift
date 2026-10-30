@@ -1871,7 +1871,7 @@ extension ChatPresentationTests {
             let host = NSHostingView(rootView: DualWorkbenchView(model: model, quickModel: model,
                 quick: quick, library: library, nodeTags: ModelNodeTagStore(), metadata: nil))
             let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 1200, height: 800),
-                styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+                styleMask: [.titled, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false; window.contentView = host
             defer { window.contentView = nil; window.close() }
             func descendants(_ v: NSView) -> [NSView] { v.subviews.flatMap { [$0] + descendants($0) } }
@@ -1903,6 +1903,10 @@ extension ChatPresentationTests {
             }
             let quickPane = try pane("chat-sessions-host")
             let modeFrame = modes.convert(modes.bounds, to: host)
+            let paneTop = host.isFlipped ? quickPane.minY : host.bounds.maxY - quickPane.maxY
+            let modeTop = host.isFlipped ? modeFrame.minY : host.bounds.maxY - modeFrame.maxY
+            // The retained body starts below the 52pt shell gap and its 52pt header.
+            #expect(abs(paneTop - modeTop - 104) <= 1)
             for _ in 0..<3 {
                 modes.onCommit(1); try await settle()
                 #expect(original.window === window && original.isHiddenOrHasHiddenAncestor)

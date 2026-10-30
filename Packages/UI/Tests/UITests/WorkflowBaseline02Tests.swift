@@ -139,7 +139,7 @@ struct WorkflowBaseline02Tests {
         let context = WorkflowCanvasViewContext(projectID: original.projectID, rootGraphID: graph.id,
             bodyPath: bodyPath.map(WorkflowCanvasBodyLocation.init), instanceID: original.projectInstanceID)
         let target = outsideExtent ? CGPoint(x: -100_000, y: -100_000) : CGPoint(x: 520, y: 280)
-        let saved = WorkflowCanvasViewMemory(zoom: 1.5, rawVisibleCenter: target, selectedNodeID: displayGraph.nodes.last?.id)
+        let saved = WorkflowCanvasViewMemory(zoom: mountCase == 3 ? 1 : 1.5, rawVisibleCenter: target, selectedNodeID: displayGraph.nodes.last?.id)
         let before = WorkflowCanvasViewStateStore(settings: settings); before.save(saved, for: context); before.flush()
         let controller = WorkflowController(services: services)
         if !loadAfterMount { await controller.load() }
@@ -154,11 +154,13 @@ struct WorkflowBaseline02Tests {
         let view = WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
             onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in })
             .rememberingCanvas(in: memory).observingScroll { _, observation in observed = observation }
-        let host = NSHostingView(rootView: RetainedContentHost(content: view, visible: mountCase != 3, identifier: "cold-retained-canvas"))
+        let host = NSHostingView(rootView: RetainedContentHost(content: view, visible: mountCase != 3, identifier: "cold-retained-canvas", inheritsWindowSafeArea: mountCase != 3)
+            .ignoresSafeArea(.container, edges: mountCase == 3 ? .top : []))
         host.frame = .init(x: 0, y: 0, width: 1080, height: 612)
-        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: host.frame, styleMask: mountCase == 3 ? [.titled, .fullSizeContentView] : [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host
         defer { window.close() }
+        if mountCase == 3 { window.orderFront(nil) }
         if loadAfterMount {
             for _ in 0..<4 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) }
             #expect(controller.projectID == nil)
@@ -166,11 +168,12 @@ struct WorkflowBaseline02Tests {
         }
         if mountCase == 3 {
             for _ in 0..<4 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) }
-            host.rootView = RetainedContentHost(content: view, visible: true, identifier: "cold-retained-canvas")
+            host.rootView = RetainedContentHost(content: view, visible: true, identifier: "cold-retained-canvas", inheritsWindowSafeArea: false)
+                .ignoresSafeArea(.container, edges: .top)
         }
         for _ in 0..<80 {
-            host.layoutSubtreeIfNeeded()
-            if let observed, abs(observed.zoom - 1.5) < 0.001,
+            if mountCase != 3 { host.layoutSubtreeIfNeeded() }
+            if let observed, abs(observed.zoom - saved.zoom) < 0.001,
                observed.hasReachedRestoredCenter(target) { break }
             try await Task.sleep(for: .milliseconds(15))
         }
@@ -182,6 +185,18 @@ struct WorkflowBaseline02Tests {
         #expect(controller.graphs == graphs && controller.runs == runs && !controller.canUndo)
         #expect(await engine.calls == 0)
         #expect(memory.state(for: context)?.rawVisibleCenter == actual.visibleRawCenter)
+        // Check the first cold presentation before resize can repair native geometry.
+        func firstProbe(_ view: NSView) -> WorkflowCanvasViewportInput.ProbeView? {
+            if let probe = view as? WorkflowCanvasViewportInput.ProbeView { return probe }
+            return view.subviews.lazy.compactMap(firstProbe).first
+        }
+        let initialProbe = try #require(firstProbe(host))
+        let initialScroll = try #require(initialProbe.enclosingScrollView)
+        let initialLayout = try #require(initialProbe.wheelLayout(initialScroll.contentView.bounds.size))
+        let initialDocument = try #require(initialScroll.documentView)
+        #expect(abs(initialDocument.frame.width - initialLayout.contentSize.width) < 1)
+        #expect(abs(initialDocument.frame.height - initialLayout.contentSize.height) < 1)
+        #expect(initialProbe.navigationID == nil)
         if !outsideExtent {
             host.frame.size = .init(width: 1240, height: 760)
             for _ in 0..<30 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) }

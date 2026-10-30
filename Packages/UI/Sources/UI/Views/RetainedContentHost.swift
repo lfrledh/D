@@ -9,10 +9,14 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
     let visible: Bool
     let identifier: String
     var fallbackSize = CGSize(width: 240, height: 640)
+    // Full-window pages share the parent's measured safe navigation inset.
+    // Native child hosts otherwise apply the title area's inset a second time.
+    var inheritsWindowSafeArea = true
 
     func makeNSView(context: Context) -> RetainedNativeHostingView<RetainedContentRoot<Content>> {
         let host = RetainedNativeHostingView(rootView: RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, preparation: context.environment.workflowModelPreparation, installations: context.environment.workflowModelInstallations, featureHelp: context.environment.workbenchHelpStore, contentVisible: visible && context.environment.workbenchContentVisible, childClose: context.environment.workbenchChildClose, tips: context.environment.workbenchTips, sidebars: context.environment.workbenchSidebars, navigationTop: context.environment.workbenchNavigationTop, navigationModeWidth: context.environment.workbenchNavigationModeWidth, windowControlSize: context.environment.workbenchWindowControlSize, visualContext: WorkbenchVisualContext(context.environment)))
         host.sizingOptions = []
+        if !inheritsWindowSafeArea { host.safeAreaRegions = [] }
         host.setAccessibilityIdentifier(identifier)
         host.setInitialVisibility(visible)
         return host

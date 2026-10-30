@@ -2457,8 +2457,21 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
             var checkpoint = WorkflowPlanCheckpoint(plan: originalCheckpoint.plan, arguments: originalCheckpoint.arguments)
             checkpoint.modelDefaults = originalCheckpoint.modelDefaults
             checkpoint.externalInputs = originalCheckpoint.externalInputs
+            // Persist explicit recomputation before dispatch. A prior successful
+            // call with the same inputs must not replace the partial call being retried.
+            let repeatedRoots = Set(originalCheckpoint.records.compactMap { record -> UUID? in
+                guard record.step.repeatRequested == true || record.step.languageEnd?.interrupted == true,
+                      case .node(let id) = record.address.path.first else { return nil }
+                return id
+            })
+            checkpoint.records = checkpoint.plan.steps.filter { repeatedRoots.contains($0.node.id) }.map { planned in
+                var step = WorkflowStepRun(node: planned.node, signature: planned.sourceSignature ?? "")
+                step.repeatRequested = true
+                return .init(address: .init(runID: checkpoint.runID, path: [.node(planned.node.id)]), step: step)
+            }
             var next = WorkflowRun(id: checkpoint.runID, graph: original.graph, targetNodeID: original.targetNodeID, status: .running)
             next.scope = original.scope; next.planCheckpoint = checkpoint
+            next.steps = checkpoint.records.map(\.step)
             try WorkflowArchiveInspection.validateScopeHistory(runs + [next], tools: tools, registry: registry)
             runs.append(next); activeRunID = next.id
             try await persist(); try await executePlan(runID: next.id)
