@@ -42,6 +42,14 @@ struct TipPanel: View {
                 }
             }
             if owner.status != .idle { Text(text(owner.status.rawValue)).font(.callout).accessibilityIdentifier("tip-status") }
+            if owner.recoveryStatus == .loading {
+                Text(text("records.loading")).font(.caption).accessibilityIdentifier("tip-record-sync")
+            } else if owner.recoveryStatus == .failed {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(text("records.failed"))
+                    if let failure = owner.recoveryFailure { Text(text("records." + failure.rawValue)) }
+                }.font(.caption).accessibilityIdentifier("tip-record-sync")
+            }
             if let diagnostic = owner.diagnostic {
                 DisclosureGroup(text("details")) { Text(diagnostic).font(.caption).textSelection(.enabled) }
             }
@@ -59,6 +67,9 @@ struct TipPanel: View {
             }.buttonStyle(WorkbenchGlassButtonStyle())
             WorkbenchRequestCloseButton(title: text("close"), fallback: { owner.presented = false })
         }.padding(20).background(TipWindowReader { window = $0 }).task { await owner.loadProducts() }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                Task { await owner.recoverHistory() }
+            }
     }
 }
 private struct TipWindowReader: NSViewRepresentable {

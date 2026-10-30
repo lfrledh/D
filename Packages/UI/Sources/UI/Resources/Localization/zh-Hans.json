@@ -5309,7 +5309,7 @@
     "tips.settings": "打赏支持",
     "tips.about": "关于D",
     "tips.title": "支持D的开发",
-    "tips.body": "打赏用于支持D的开发，不解锁功能，也不影响现有功能的使用。",
+    "tips.body": "支持早期开发。不解锁功能，也不影响现有功能的使用。",
     "tips.choose": "选择打赏金额",
     "tips.loading": "正在获取打赏选项…",
     "tips.unavailable": "打赏暂不可用，请稍后再试。",
@@ -5317,12 +5317,20 @@
     "tips.purchasing": "正在处理购买…",
     "tips.pending": "购买正在等待确认。完成后会更新状态，请勿重复提交。",
     "tips.cancelled": "已取消购买。",
+    "tips.recorded": "付款已完成。这笔交易尚未归入当前已验证的支持记录。请重新载入，不要重复付款。",
     "tips.thanked": "感谢你的支持。",
     "tips.failed": "购买未完成，请查看详情后重试。",
     "tips.uncertain": "暂时无法确认购买结果，请稍后查看状态，勿重复提交。",
     "tips.reload": "重新加载",
     "tips.details": "查看详情",
     "tips.close": "关闭",
-    "tips.localTest": "StoreKit本地测试，不会实际扣款。"
+    "tips.localTest": "StoreKit本地测试，不会实际扣款。",
+    "tips.records.loading": "正在同步支持记录…",
+    "tips.records.failed": "支持记录尚未同步。可重新载入重试，无需再次付款。",
+    "tips.records.platform": "暂时无法取得 StoreKit 历史，已有记录保留。",
+    "tips.records.verification": "无法验证账户或交易，未将已有记录归入其他账户。",
+    "tips.records.storage": "无法保存或读取支持记录，原文件保留。",
+    "tips.records.credentials": "无法安全保存已验证的凭据，已有记录保留。",
+    "tips.records.capacity": "本机支持记录已达容量上限，已有记录保留。"
   }
 }

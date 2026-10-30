@@ -5309,7 +5309,7 @@
     "tips.settings": "Leave a Tip",
     "tips.about": "About D",
     "tips.title": "Support D’s Development",
-    "tips.body": "Tips support D’s development. They do not unlock features or affect the use of existing features.",
+    "tips.body": "Support early development. Tips do not unlock features or affect the use of existing features.",
     "tips.choose": "Choose a tip amount",
     "tips.loading": "Loading tip options…",
     "tips.unavailable": "Tipping is currently unavailable. Please try again later.",
@@ -5317,12 +5317,20 @@
     "tips.purchasing": "Processing purchase…",
     "tips.pending": "The purchase is awaiting approval. Its status will update when it completes. Please do not submit it again.",
     "tips.cancelled": "Purchase cancelled.",
+    "tips.recorded": "Payment completed. This transaction is not yet part of the currently verified support records. Reload and do not pay again.",
     "tips.thanked": "Thank you for your support.",
     "tips.failed": "The purchase did not complete. Check the details before trying again.",
     "tips.uncertain": "The purchase result could not be confirmed yet. Check its status later and avoid submitting it again.",
     "tips.reload": "Reload",
     "tips.details": "View details",
     "tips.close": "Close",
-    "tips.localTest": "Local StoreKit test. No real charge will be made."
+    "tips.localTest": "Local StoreKit test. No real charge will be made.",
+    "tips.records.loading": "Syncing support records…",
+    "tips.records.failed": "Support records have not synced. Reload to retry without making another purchase.",
+    "tips.records.platform": "StoreKit history is unavailable. Your existing records are kept.",
+    "tips.records.verification": "The account or transaction could not be verified. Existing records have not been assigned to another account.",
+    "tips.records.storage": "Support records could not be saved or read. The existing file is kept.",
+    "tips.records.credentials": "The verified receipt could not be saved securely. Existing records are kept.",
+    "tips.records.capacity": "The local support record limit was reached. Existing records are kept."
   }
 }
