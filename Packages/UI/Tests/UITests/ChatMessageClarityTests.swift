@@ -86,6 +86,40 @@ struct ChatMessageClarityTests {
         }
     }
 
+    @Test func detailsPreferPersistedTerminalFactWithoutChangingContent() throws {
+        var (_, _, attempt) = fixture()
+        attempt.response = nil
+        attempt.rawText = "accepted prefix"
+        attempt.status = .partial
+        attempt.issue = "original diagnostic"
+        attempt.languageEnd = .init(.stopped)
+        let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
+        let before = try encoder.encode(attempt)
+        let language = UILanguageStore(preferredLanguages: ["en"])
+        #expect(ChatMessageNotices.finishKey(attempt) == "partial.stopped")
+        #expect(workflowText(language, ChatMessageNotices.finishKey(attempt)) == "Generation stopped. The generated content is kept.")
+        try language.select("zh-Hans")
+        #expect(workflowText(language, ChatMessageNotices.finishKey(attempt)) == "已停止生成，已生成的内容保留。")
+        #expect(try encoder.encode(attempt) == before)
+
+        attempt.response = .init(rawText: "answer", finalText: "answer", finishReason: .stop)
+        for (cause, key) in [(WorkflowLanguageEnd.Cause.inputIntegrity, "partial.integrity"),
+                             (.cleanupUnconfirmed, "partial.cleanup"), (.executionError, "partial.interrupted"),
+                             (.invalidOutput, "partial.validation"), (.length, "partial.length"), (.unknown, "partial.unknown")] {
+            attempt.languageEnd = .init(cause)
+            #expect(ChatMessageNotices.finishKey(attempt) == key)
+        }
+        attempt.languageEnd = .init(.completed)
+        #expect(ChatMessageNotices.finishKey(attempt) == "chat.finish.stop")
+        attempt.languageEnd = nil
+        attempt.response = .init(rawText: "answer", finalText: "answer", finishReason: .length)
+        #expect(ChatMessageNotices.finishKey(attempt) == "chat.finish.length")
+        attempt.response = .init(rawText: "answer", finalText: "answer", finishReason: .toolCalls)
+        #expect(ChatMessageNotices.finishKey(attempt) == "chat.finish.toolCalls")
+        attempt.response = nil
+        #expect(ChatMessageNotices.finishKey(attempt) == "chat.clarity.notRecorded")
+    }
+
     @Test func menuKeepsCommandsAndFixedPrimaryOrder() {
         let ids = ["copy", "favorite", "quote", "fork", "context", "generate", "new-candidate", "compare", "adopt", "adopt-partial", "candidates", "versions", "reproduce", "save", "workflow", "artifact", "fields", "speak", "pause-reading", "resume-reading", "stop-reading", "sources", "raw", "details"]
         var executed: [String] = []

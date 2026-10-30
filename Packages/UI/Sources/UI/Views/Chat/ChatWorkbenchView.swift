@@ -2009,7 +2009,7 @@ ScrollViewReader { proxy in
                 ChatRunFeedbackView(chat: chat, attempt: attempt)
                 Divider()
                 LabeledContent(clarity("state"), value: status(attempt))
-                LabeledContent(label("finish", "结束原因"), value: attempt.response.map { finish($0.finishReason) } ?? clarity("notRecorded"))
+                LabeledContent(label("finish", "结束原因"), value: workflowText(language, ChatMessageNotices.finishKey(attempt)))
                 if chat.hasUnsavedResult(attempt.id) || attempt.status == .saving { Text(clarity("notSaved")) }
                 if let issue = attempt.issue { WorkbenchIssueText(raw: issue, key: LowMemoryExecutionPresentation.nonExecutionCode(attempt.executionRecords)).foregroundStyle(.red).textSelection(.enabled) }
                 if chat.hasUnsavedResult(attempt.id), let issue = chat.saveIssue { WorkbenchIssueText(raw: issue).textSelection(.enabled) }
@@ -2423,13 +2423,6 @@ ScrollViewReader { proxy in
         case .saving: "保存中"
         }
         return label("status." + attempt.status.rawValue, fallback)
-    }
-    private func finish(_ reason: TextFinishReason) -> String {
-        let fallback: String = switch reason {
-        case .stop: "正常结束"; case .length: "达到长度上限"
-        case .toolCalls: "工具调用待处理"; case .incomplete: "未完整结束"
-        }
-        return label("finish." + reason.rawValue, fallback)
     }
     private func attachmentKind(_ kind: WorkflowDataKind) -> String {
         switch kind {

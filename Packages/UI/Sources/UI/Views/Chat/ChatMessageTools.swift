@@ -163,6 +163,14 @@ struct ChatMessageTools: View {
 /// Main failure and incomplete output are independent of publication failure.
 /// Normal completion deliberately contributes no status row.
 enum ChatMessageNotices {
+    /// Application termination facts also exist for accepted, unparsed prefixes.
+    /// A model's normal stop marker must not override a later execution failure.
+    static func finishKey(_ attempt: ChatAttempt) -> String {
+        if let end = attempt.languageEnd, end.interrupted { return end.noticeKey() }
+        if let reason = attempt.response?.finishReason { return "chat.finish." + reason.rawValue }
+        return "chat.clarity.notRecorded"
+    }
+
     static func revisionKey(_ origin: ChatTextRevision.Origin?) -> String {
         switch origin { case .edited: "edited"; case .partialAccepted: "partialSelected"; case nil: "versionSelected" }
     }
