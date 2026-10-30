@@ -9,6 +9,15 @@ import SwiftUI
 @MainActor @Observable
 private final class WorkflowCanvasCameraPresentation {
     var zoom: CGFloat = 1
+    // One latest native measurement per canvas. Only the Fit leaf observes its
+    // changing dimensions; the workspace needs the initial availability transition.
+    var viewport: WorkflowCanvasViewportMeasurement?
+    var hasViewport = false
+    func recordViewport(_ value: WorkflowCanvasViewportMeasurement) {
+        guard viewport != value else { return }
+        viewport = value
+        if !hasViewport { hasViewport = true }
+    }
     @ObservationIgnored var visibleCenter = CGPoint(x: 550, y: 426)
     @ObservationIgnored var insertionPoint = CGPoint(x: 170, y: 130)
     @ObservationIgnored var context: WorkflowCanvasViewContext?
@@ -41,6 +50,19 @@ private struct WorkflowCanvasCameraScope<Content: View>: View {
             camera.zoom = value
             changed()
         }))
+    }
+}
+
+private struct WorkflowCanvasFitScope<Content: View>: View {
+    let camera: WorkflowCanvasCameraPresentation
+    let targetWidth: CGFloat
+    @ViewBuilder let content: (Bool) -> Content
+    var body: some View {
+        let ready = camera.viewport?.permitsFit(targetWidth: targetWidth) == true
+        #if DEBUG
+        let _ = WorkflowCanvasUpdateProbe.fitReady?(ready)
+        #endif
+        return content(ready)
     }
 }
 
@@ -204,7 +226,6 @@ public struct WorkflowCanvasView: View {
     private var showInspector: Bool { get { sidebars.leading } nonmutating set { sidebars.leading = newValue } }
     @State private var camera = WorkflowCanvasCameraPresentation()
     @State private var canvasTool: WorkflowCanvasTool = .pointer
-    @State private var canvasViewport: WorkflowCanvasViewportMeasurement?
     @State private var measuredCardSizes: [UUID: CGSize] = [:]
     @State private var navigationRequest: WorkflowCanvasNavigationRequest?
     @State private var viewportInteractionLocked = false
@@ -417,7 +438,7 @@ public struct WorkflowCanvasView: View {
         case .undo: guard controller.canEditCanvas, controller.canUndo else { return false }; controller.undo()
         case .redo: guard controller.canEditCanvas, controller.canRedo else { return false }; controller.redo()
         case .showAll:
-            guard let canvasViewport, !viewportInteractionLocked else { return false }
+            guard let canvasViewport = camera.viewport, !viewportInteractionLocked else { return false }
             fitAllNodes(targetWidth: canvasViewport.clip.width)
         case .runCheck:
             guard controller.canEditCanvas, let target = validRunTarget else { return false }
@@ -442,7 +463,6 @@ public struct WorkflowCanvasView: View {
             modeWidth: navigationModeWidth, requested: sidebars.requestedWidths, leading: showInspector, trailing: showLibrary)
         let panelWidths = shell.widths
         let targetCanvasWidth = max(1, width - 32) // Sidebars cover this fixed workspace; they never reserve canvas space.
-        let fitReady = canvasViewport?.permitsFit(targetWidth: targetCanvasWidth) == true
         let inspectedNodeID = shown.inspector && panelsState.preparation == .configuration
             && selectedNodes.count == 1 ? selectedNodes.first?.id : nil
         return ZStack(alignment: .bottom) {
@@ -473,7 +493,10 @@ public struct WorkflowCanvasView: View {
                         measuredCardSizes[id] = size
                         nodeSizeObserver?(id, size)
                     },
-                    viewportSizeObserver: { canvasViewport = $0 },
+                    viewportSizeObserver: { measurement in
+                        guard viewContext == measuredContext else { return }
+                        camera.recordViewport(measurement)
+                    },
                     portCenterObserver: portCenterObserver,
                     onScrollObservation: { context, observation in
                         guard camera.owner == ObjectIdentifier(controller),
@@ -556,7 +579,7 @@ public struct WorkflowCanvasView: View {
             }.padding(.bottom, 16).offset(x: shell.center.midX - width / 2)
             let toolFrame = WorkbenchFloatingLayout.canvasTools(center: shell.center,
                 runPanelHeight: workspaceDraft != nil || runSettingsVisible || activityVisible ? WorkbenchFloatingLayout.runPanelHeight(available: shell.center.height) : 0)
-            cornerTools(fitReady: fitReady, targetWidth: targetCanvasWidth)
+            cornerTools(targetWidth: targetCanvasWidth)
                 .frame(width: 88, height: 40).position(x: toolFrame.midX, y: toolFrame.midY)
                 .workbenchMorph(value: toolFrame)
         }.overlay(alignment: .top) { captureControls.frame(maxWidth: shell.center.width).padding(.top, shell.panelTop + 8).offset(x: shell.center.midX - width / 2) }
@@ -1091,7 +1114,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
         commands.zoom = [action("systemMenu.zoomIn", enabled: !viewportInteractionLocked) { changeMenuZoom(multiplier: 1.2) },
                          action("systemMenu.zoomOut", enabled: !viewportInteractionLocked) { changeMenuZoom(multiplier: 1 / 1.2) },
                          action("systemMenu.actualSize", enabled: !viewportInteractionLocked) { changeMenuZoom(actual: true) },
-                         action("systemMenu.fit", enabled: !viewportInteractionLocked && canvasViewport != nil) { if let canvasViewport { fitAllNodes(targetWidth: canvasViewport.clip.width) } }]
+                         action("systemMenu.fit", enabled: !viewportInteractionLocked && camera.hasViewport) { if let canvasViewport = camera.viewport { fitAllNodes(targetWidth: canvasViewport.clip.width) } }]
         commands.run = action("workflow.dock.run", enabled: !controller.isRunning && !controller.hasPendingSaves && validRunTarget != nil && controller.canEditCanvas && controller.bodyPath.isEmpty) {
             if let target = validRunTarget { presentWorkspacePlan(target.id, mode: runRange) }
         }
@@ -1364,7 +1387,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
             .onChange(of: recordsDetail, initial: true) { _, visible in if visible { visitedRecordsDetail = true } }
     }
 
-    private func cornerTools(fitReady: Bool, targetWidth: CGFloat) -> some View {
+    private func cornerTools(targetWidth: CGFloat) -> some View {
         HStack(spacing: 8) {
             Button {
                 canvasTool = canvasTool == .hand ? .pointer : .hand
@@ -1375,9 +1398,11 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 .disabled(viewportInteractionLocked).accessibilityLabel(text("refinement.workflow.hand", "手形"))
                 .accessibilityAddTraits(canvasTool == .hand ? .isSelected : [])
                 .accessibilityIdentifier("workflow-canvas-hand")
-            WorkflowCanvasCameraScope(camera: camera, controller: controller, context: viewContext, changed: userChangedZoom) { zoom in
-                WorkflowCanvasCornerZoom(zoom: zoom, locked: viewportInteractionLocked, canFit: fitReady) {
-                    fitAllNodes(targetWidth: targetWidth)
+            WorkflowCanvasFitScope(camera: camera, targetWidth: targetWidth) { fitReady in
+                WorkflowCanvasCameraScope(camera: camera, controller: controller, context: viewContext, changed: userChangedZoom) { zoom in
+                    WorkflowCanvasCornerZoom(zoom: zoom, locked: viewportInteractionLocked, canFit: fitReady) {
+                        fitAllNodes(targetWidth: targetWidth)
+                    }
                 }
             }
         }
@@ -1482,7 +1507,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     private func fitAllNodes(targetWidth: CGFloat) {
         guard camera.owner == ObjectIdentifier(controller),
               !viewportInteractionLocked, camera.context == viewContext,
-              let canvasViewport, canvasViewport.permitsFit(targetWidth: targetWidth), let graph = controller.graph,
+              let canvasViewport = camera.viewport, canvasViewport.permitsFit(targetWidth: targetWidth), let graph = controller.graph,
               !graph.nodes.isEmpty else { return }
         let geometry = WorkflowGraphGeometry(graph: graph, tools: controller.tools,
                                              registry: controller.registry)

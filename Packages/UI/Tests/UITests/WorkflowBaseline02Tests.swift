@@ -694,6 +694,58 @@ struct WorkflowBaseline02Tests {
         try await store.close()
     }
 
+    @Test func viewportMeasurementsDoNotRebuildUnrelatedWorkspaceContent() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("viewport-scope-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Viewport.dproject"), name: "Viewport")
+        let engine = Baseline02NoInferenceEngine()
+        let runtime = WorkbenchSession(engine: engine, backendID: "never",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let services = WorkflowServices(store: store, session: runtime,
+            resolveText: { throw WorkflowIssue("No inference") }, resolveImage: { throw WorkflowIssue("No inference") })
+        let controller = WorkflowController(services: services); await controller.load(); controller.addExample("text")
+        let graph = controller.graph, undo = controller.canUndo
+        var fitStates: [Bool] = []
+        WorkflowCanvasUpdateProbe.fitReady = { fitStates.append($0) }
+        defer { WorkflowCanvasUpdateProbe.fitReady = nil }
+        let host = NSHostingView(rootView: WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
+            onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in }))
+        host.frame = .init(x: 0, y: 0, width: 1080, height: 612)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        func descendants(_ v: NSView) -> [NSView] { v.subviews.flatMap { [$0] + descendants($0) } }
+        for _ in 0..<12 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) }
+        let probe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+        let scroll = try #require(probe.enclosingScrollView)
+        let measured = WorkflowCanvasViewportMeasurement(clip: scroll.contentView.bounds.size, surfaceWidth: scroll.frame.width)
+        #expect(fitStates.last == true, "The first native measurement must enable Fit")
+        fitStates.removeAll()
+        var canvas = 0, retained = 0
+        WorkflowCanvasUpdateProbe.canvasBody = { canvas += 1 }
+        WorkbenchCategoryUpdateProbe.retainedUpdate = { retained += 1 }
+        defer { WorkflowCanvasUpdateProbe.canvasBody = nil; WorkbenchCategoryUpdateProbe.retainedUpdate = nil }
+        // Exercise the production measurement callback while the outer host stays
+        // fixed. This tests observation ownership, not desktop input or frame rate.
+        for i in 1...16 {
+            probe.onViewportSize(.init(clip: .init(width: measured.clip.width - CGFloat(i), height: measured.clip.height),
+                surfaceWidth: measured.surfaceWidth - CGFloat(i)))
+            try await Task.sleep(for: .milliseconds(15))
+            host.layoutSubtreeIfNeeded()
+        }
+        probe.onViewportSize(measured)
+        try await Task.sleep(for: .milliseconds(30)); host.layoutSubtreeIfNeeded()
+        #expect(canvas == 0 && retained == 0)
+        #expect(fitStates.contains(false) && fitStates.last == true,
+            "Mismatched surface widths disable Fit; the final current measurement enables it again")
+        #expect(controller.graph == graph && controller.canUndo == undo && controller.runs.isEmpty)
+        #expect(await engine.calls == 0)
+        print("VIEWPORT_MEASUREMENT callbacks=17 canvas=\(canvas) retained=\(retained)")
+    }
+
     @Test func visibleInsertionPointUsesCurrentZoomAndScroll() {
         let offset = CGPoint(x: 120, y: 80)
         let container = CGSize(width: 500, height: 400)

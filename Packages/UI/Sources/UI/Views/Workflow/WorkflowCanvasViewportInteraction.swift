@@ -795,6 +795,7 @@ enum WorkflowCanvasUpdateProbe {
     }
     static var workspace:((Workspace)->Void)?
     static var canvasBody: (() -> Void)?
+    static var fitReady: ((Bool) -> Void)?
     static var surfaceBody: (() -> Void)?
     static var handPointerStyle: ((WorkflowCanvasTool, Bool) -> Void)?
     static var containerProjection: ((UUID, TimeInterval) -> Void)?
