@@ -368,7 +368,9 @@ public struct DualWorkbenchView: View {
                     try target.newSession()
                     owner.selectTextPresentation(.chat)
                 } catch { issue = error.localizedDescription }
-            }.disabled(target == nil || target?.saveIssue != nil || target?.isLoaded != true || target?.isDiscarding == true || destination.projectSession.isChangingProject || temporaryChatChanging || quickOwnerIsChanging)
+            }.labelStyle(.iconOnly)
+                .buttonStyle(WorkbenchIconButtonStyle())
+                .disabled(target == nil || target?.saveIssue != nil || target?.isLoaded != true || target?.isDiscarding == true || destination.projectSession.isChangingProject || temporaryChatChanging || quickOwnerIsChanging)
                 .help(target?.saveIssue ?? (target?.isLoaded != true ? (target?.error.map { ChatErrorText.display($0, language: language) } ?? workflowText(language, "chat.loading")) : (quickOwnerIsChanging || temporaryChatChanging || destination.projectSession.isChangingProject || target?.isDiscarding == true) ? workflowText(language, "quick.textWorkspace.unavailable") : workflowText(language, "quick.textWorkspace.newConversation")))
                 .accessibilityIdentifier("single-text-new-conversation")
             textWorkspaceMenu

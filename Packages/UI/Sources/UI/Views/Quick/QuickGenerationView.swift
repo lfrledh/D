@@ -88,6 +88,9 @@ struct QuickGenerationView: View {
                         if quick.category == .text { textWorkspaceActions }
                         if let result = selectedMedia, let run = run(containing: result) {
                             Button(refinementText("resultDetails", fallback: "结果详情"), systemImage: "info.circle") { detailRun = run }
+                                .labelStyle(.iconOnly)
+                                .buttonStyle(WorkbenchIconButtonStyle())
+                                .help(refinementText("resultDetails", fallback: "结果详情"))
                         }
                     }
                     if quick.category == .audio {
