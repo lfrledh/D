@@ -127,9 +127,9 @@ import Security
               validEnvironment(scope.environment) else { throw TipIssue.invalidTransaction }
         verifiedScope = scope
     }
-    func mergeHistory(_ fact: TipReceipt, credential: String?, generation: UInt64) throws {
+    func mergeHistory(_ fact: TipReceipt, credential: String?, generation: UInt64) async throws {
         guard generation == recoveryGeneration, verifiedScope?.contains(fact) == true else { throw TipIssue.invalidTransaction }
-        _ = try recordVerified(fact, credential: credential)
+        _ = try await persistVerified(fact, credential: credential, generation: generation)
     }
     func endRecovery(generation: UInt64, succeeded: Bool, failure: RecoveryFailure? = nil) {
         guard generation == recoveryGeneration else { return }
@@ -157,7 +157,7 @@ import Security
                 let fact = Self.fact(transaction)
                 // Transactions retain their own verified owner, never the currently selected account.
                 guard scope.contains(fact) else { continue }
-                try mergeHistory(fact, credential: result.jwsRepresentation, generation: generation)
+                try await mergeHistory(fact, credential: result.jwsRepresentation, generation: generation)
             }
             endRecovery(generation: generation, succeeded: true)
         } catch {
@@ -193,7 +193,8 @@ import Security
     }
     func acceptVerified(_ fact: TipReceipt, credential: String? = nil, purchase: UUID? = nil, finish: () async -> Void) async {
         do {
-            let fresh = try recordVerified(fact, credential: credential), revision = eventRevision, scopeGeneration = recoveryGeneration
+            let revision = eventRevision, scopeGeneration = recoveryGeneration
+            let fresh = try await persistVerified(fact, credential: credential)
             if fresh { pendingAcknowledgments.insert(fact.key) }
             defer { if fresh { pendingAcknowledgments.remove(fact.key) } }
             // No acknowledgment before persistence; callbacks can reenter while finishing.
@@ -220,7 +221,17 @@ import Security
     }
     func markUnverified(_ reason: String) { eventRevision &+= 1; diagnostic = reason; status = .uncertain }
     /// Called only after StoreKit verification; fact injection is restricted to @testable tests.
-    func recordVerified(_ fact: TipReceipt, credential: String? = nil) throws -> Bool {
+    func persistVerified(_ fact: TipReceipt, credential: String?, generation: UInt64? = nil) async throws -> Bool {
+        // Validate before writing sensitive material, then revalidate after the actor hop.
+        // Keychain access can involve system services; it must not block the UI executor.
+        _ = try preparedRecord(fact)
+        if let credential { try await credentials.store(credential, for: fact.key + (fact.revoked ? ":revoked" : ":purchase")) }
+        if let generation {
+            guard generation == recoveryGeneration, verifiedScope?.contains(fact) == true else { throw TipIssue.invalidTransaction }
+        }
+        return try recordVerified(fact)
+    }
+    private func preparedRecord(_ fact: TipReceipt) throws -> ([String: TipReceipt], Data) {
         guard journalIssue == nil else { throw TipIssue.invalidJournal }
         guard allowedIDs.contains(fact.productID), fact.bundleID == bundleID,
               !fact.transactionID.isEmpty, validEnvironment(fact.environment),
@@ -230,9 +241,10 @@ import Security
         var next = journal; next[fact.key] = merged
         let data = try JSONEncoder().encode(next)
         guard data.count <= 2_097_152, next.count <= 4096 else { throw TipIssue.journalTooLarge }
-        // Signed credentials stay in a bounded, app-local Keychain item, never in the JSON,
-        // project, log or screenshot. A credential/write failure leaves StoreKit unacknowledged.
-        if let credential { try credentials.store(credential, for: fact.key + (fact.revoked ? ":revoked" : ":purchase")) }
+        return (next, data)
+    }
+    func recordVerified(_ fact: TipReceipt) throws -> Bool {
+        let old = journal[fact.key], (next, data) = try preparedRecord(fact)
         if next != journal {
             try FileManager.default.createDirectory(at: journalURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: journalURL, options: .atomic)
@@ -295,10 +307,10 @@ struct TipReceipt: Codable, Equatable {
 private extension String { var nilIfEmpty: String? { isEmpty ? nil : self } }
 private enum TipIssue: Error { case invalidTransaction, invalidJournal, journalTooLarge, credentialUnavailable, credentialStatus(Int32) }
 
-@MainActor protocol TipCredentialVault { func store(_ credential: String, for key: String) throws }
+protocol TipCredentialVault: Sendable { func store(_ credential: String, for key: String) async throws }
 /// One bounded item per app/journal, protected by the login Keychain and excluded from cloud sync.
 /// The path digest isolates local-test sessions; StoreKit is the cross-device recovery source.
-@MainActor private final class TipKeychainVault: TipCredentialVault {
+private actor TipKeychainVault: TipCredentialVault {
     private let query: [String: Any]
     init(bundleID: String, journalURL: URL) {
         let scope = SHA256.hash(data: Data(journalURL.standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined()

@@ -212,4 +212,25 @@ private final class TipStoreKitBundle: NSObject { }
         #expect(session.allTransactions().count == transactionCount, "Recovery never starts another purchase")
     }
 
+    @Test func verifiedRefundIsRecoveredByExplicitHistoryReload() async throws {
+        let session = try testSession(); defer { session.clearTransactions() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-Tip-refund-history-" + UUID().uuidString)
+        defer { removeTestRecords(root) }
+        let store = owner(root); store.start(); await store.loadProducts()
+        #expect(store.localTest)
+        store.selectedID = try #require(store.products.first?.id)
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; defer { window.close() }
+        await store.purchase(confirmIn: window)
+        #expect(store.status == .thanked, Comment(rawValue: store.diagnostic ?? "no diagnostic"))
+        let transaction = try #require(session.allTransactions().first)
+        try session.refundTransaction(identifier: transaction.identifier)
+        await store.loadProducts()
+        #expect(store.recoveryStatus == .ready)
+        let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("tips.json"))) as? [String: [String: Any]])
+        #expect(records.count == 1 && records.values.first?["revoked"] as? Bool == true)
+        #expect(records.values.first?["revocationDate"] != nil)
+        #expect(session.allTransactions().count == 1, "Refund recovery never purchases again")
+    }
+
 }
