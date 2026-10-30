@@ -52,6 +52,7 @@ private final class TipStoreKitBundle: NSObject { }
             Issue.record("Expected a verified local transaction before simulated interruption"); return
         }
         #expect(records[String(unfinished.id)] == nil, "The interruption must concern a new transaction, not a previously finished ID")
+        print("TIP_LOCAL_THIRD id=\(unfinished.id) recorded=\(records.keys.sorted()) testTransactions=\(session.allTransactions().map { "\($0.identifier):\($0.state.rawValue)" })")
         var unfinishedCount = 0, unfinishedContainsCurrent = false
         for await item in Transaction.unfinished {
             unfinishedCount += 1
@@ -84,8 +85,11 @@ private final class TipStoreKitBundle: NSObject { }
         let pending = try #require(session.allTransactions().last)
         try session.approveAskToBuyTransaction(identifier:pending.identifier)
         try await wait("pending approval", store: store) { store.status == .thanked }
-        let transaction = try #require(session.allTransactions().last)
+        let accepted = try #require(try JSONSerialization.jsonObject(with:Data(contentsOf:root.appendingPathComponent("tips.json"))) as? [String:Any])
+        let acceptedID = try #require(accepted.keys.first.flatMap(UInt64.init))
+        let transaction = try #require(session.allTransactions().first { UInt64($0.identifier) == acceptedID })
         try session.refundTransaction(identifier:transaction.identifier)
+        print("TIP_LOCAL_REFUND requested=\(acceptedID) facts=\(session.allTransactions().map { "\($0.identifier):\($0.state.rawValue):\($0.cancelDate != nil)" })")
         try await wait("refund", store: store) { store.status == .idle }
         if case .verified(let latest)? = await Transaction.latest(for: "d.localtest.tip.small") {
             print("TIP_LOCAL_REFUND latestRevoked=\(latest.revocationDate != nil) environment=\(latest.environment.rawValue)")
