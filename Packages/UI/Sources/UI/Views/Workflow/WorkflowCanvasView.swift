@@ -852,6 +852,9 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                         }.accessibilityIdentifier("call-locate-results")
                         HStack { Text(record.step.node.title).font(.headline);Spacer();WorkflowStatusBadge(status:record.step.status,comparison:.matching) }
                         if let error=record.step.error { WorkbenchIssueText(raw: error, key: record.step.errorCode).foregroundStyle(.red).textSelection(.enabled) }
+                        if WorkflowModelRoutes.isLanguage(record.step.node.operationID) {
+                            WorkflowCallLanguageResultView(controller: controller, record: record)
+                        }
                         if record.step.status == .waiting,let run=selectedResultRun {
                             Button(workspaceText(languageStore, "viewReadonly"),systemImage:"arrow.up.right.square") { openCall(run,record:record) }
                                 .disabled(viewerModel == nil)
@@ -924,13 +927,8 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                     let languageRecord = WorkflowWorkspacePanels.records(in: run).last { record in
                         terminalStep.map { $0 == record.id } ?? WorkflowModelRoutes.isLanguage(record.step.node.operationID)
                     }
-                    if languageRecord != nil || terminalStep != nil {
-                        WorkflowLanguageResultView(store: controller.services.store,
-                            reference: languageRecord?.step.outputs["raw"]?.asset,
-                            transient: controller.presentedLanguageRunID == run.id ? controller.presentedLanguageResult : nil,
-                            streaming: controller.activePresentationRun?.id == run.id ? controller.visibleStreamingText : "",
-                            end: languageRecord?.step.languageEnd,
-                            pendingSave: languageRecord?.step.status == .saving || controller.hasPendingSaves)
+                    if let languageRecord {
+                        WorkflowCallLanguageResultView(controller: controller, record: languageRecord)
                     }
                     DisclosureGroup(text("workspace.runAssets", "此运行的已保存结果")) {
                         ForEach(WorkflowHumanPresentation.outputs(run)) { output in

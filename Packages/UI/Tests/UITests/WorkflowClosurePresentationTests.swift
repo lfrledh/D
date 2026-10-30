@@ -6,6 +6,34 @@ import Testing
 @testable import UI
 
 @Suite @MainActor struct WorkflowClosurePresentationTests {
+    @Test func partialContentBelongsToExactRunAndCallIncludingRepeatedNode() throws {
+        let runID = UUID(), node = WorkflowNode(operationID: WorkflowModelRoutes.qwen35, title: "same node")
+        var first = WorkflowStepRun(node: node, signature: "first")
+        first.status = .completed
+        let reference = WorkflowAssetReference(projectID: UUID(), assetID: UUID(), version: UUID(),
+            kind: .text, sha256: String(repeating: "a", count: 64))
+        first.outputs = ["raw": .asset(reference)]
+        var second = WorkflowStepRun(node: node, signature: "second")
+        second.status = .saving
+        let saved = WorkflowPlanCallRecord(address: .init(runID: runID, path: [.item("first"), .node(node.id)]), step: first)
+        let pending = WorkflowPlanCallRecord(address: .init(runID: runID, path: [.item("second"), .node(node.id)]), step: second)
+        let content = WorkflowLanguageContent(rawText: "Only the second call\n未保存", end: .init(.stopped))
+        func display(_ record: WorkflowPlanCallRecord, run: UUID = runID, step: UUID = second.id) -> WorkflowCallLanguagePresentation {
+            .init(record: record, presentedRunID: run, presentedStepID: step, presented: content,
+                  activeRunID: run, streamingStepID: step, streaming: "Only the second")
+        }
+        let original = saved
+        #expect(display(saved).transient == nil && display(saved).streaming.isEmpty)
+        #expect(!display(saved).pendingSave && saved == original && saved.step.outputs["raw"]?.asset == reference)
+        #expect(display(pending).transient == content && display(pending).streaming == "Only the second")
+        #expect(display(pending).pendingSave && pending.step.outputs.isEmpty)
+        // Same call UUID in another run must not acquire the current transient.
+        #expect(display(pending, run: UUID()).transient == nil)
+        #expect(display(pending, run: UUID()).streaming.isEmpty)
+        #expect(display(pending, step: first.id).transient == nil)
+        #expect(display(pending, step: first.id).streaming.isEmpty)
+    }
+
     @Test func preparationUsesExactCopyAndTruthfulStages() throws {
         var record = ModelRecord(id: .init(), catalogID: "fixture", revision: "fixed", storage: .external,
             state: .installed, availability: .available, downloadedBytes: 100, totalBytes: 100,
