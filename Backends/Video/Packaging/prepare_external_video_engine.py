@@ -189,6 +189,12 @@ def install_native_notices(staging, libraries):
     source = Path(__file__).resolve().parent / 'Licenses/native'
     records = json.loads((source / 'SOURCES.json').read_text())
     observed = {row['name']: row['sourceSHA256'] for row in libraries}
+    if len(observed) != len(libraries):
+        raise core.PackagingError('duplicate native library identity')
+    registered = {row['name'] for record in records for row in record['binaries']}
+    missing = sorted(set(observed) - registered)
+    if missing:
+        raise core.PackagingError('native notice is not registered: ' + ', '.join(missing))
     for record in records:
         relevant = [row for row in record['binaries'] if row['name'] in observed]
         if not relevant: continue

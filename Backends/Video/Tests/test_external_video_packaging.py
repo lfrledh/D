@@ -83,6 +83,23 @@ class ExternalPackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(packaging.core.PackagingError, "baseline differs"):
             packaging.verify_ltx_source(archive, site, video)
 
+    def test_native_notice_covers_every_observed_dependency_and_exact_source(self):
+        source = packaging.Path(packaging.__file__).resolve().parent / 'Licenses/native'
+        records = json.loads((source / 'SOURCES.json').read_text())
+        complete = [row for record in records for row in record['binaries']]
+        unique = {row['name']: row for row in complete}
+        staging = self.root / 'native-notice-complete'
+        packaging.install_native_notices(staging, list(unique.values()))
+        self.assertTrue((staging / 'Licenses/native/SOURCES.json').is_file())
+        with self.assertRaisesRegex(packaging.core.PackagingError, 'not registered'):
+            packaging.install_native_notices(self.root / 'unknown', list(unique.values()) + [
+                {'name': 'unlisted-dependency.dylib', 'sourceSHA256': '0' * 64}])
+        first = dict(next(iter(unique.values()))); first['sourceSHA256'] = '0' * 64
+        with self.assertRaisesRegex(packaging.core.PackagingError, 'source identity differs'):
+            packaging.install_native_notices(self.root / 'wrong-source', [first])
+        with self.assertRaisesRegex(packaging.core.PackagingError, 'duplicate'):
+            packaging.install_native_notices(self.root / 'duplicate', [first, first])
+
     def test_ffmpeg_source_materials_require_exact_source_recipe_and_tools(self):
         folder = packaging.Path(packaging.__file__).resolve().parent / 'Licenses'
         record = json.loads((folder / 'ffmpeg-9.0.1-SOURCE.json').read_text())
