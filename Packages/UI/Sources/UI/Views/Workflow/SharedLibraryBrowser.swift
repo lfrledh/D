@@ -343,15 +343,6 @@ struct SharedLibraryBrowserRenameDrafts {
         return entries.first { $0.id == key }
     }
 
-    /// Dismissal only depends on presence. Do not compare complete value snapshots
-    /// on every layout, or obtain the collection when no detail is open.
-    static func detailIsMissing(
-        key: String?, entries: @autoclosure () -> [SharedLibraryBrowserEntry]
-    ) -> Bool {
-        guard let key else { return false }
-        return !entries().contains { $0.id == key }
-    }
-
     static func canvasTransfer(for entry: SharedLibraryBrowserEntry) -> WorkflowCanvasTransfer? {
         if let source = entry.collectionSource, let facts = entry.item.assetFacts {
             return .library(owner: .init(projectID: facts.projectID, instanceID: facts.instanceID), sources: [source])
@@ -731,8 +722,12 @@ public struct SharedLibraryBrowser: View {
         }
         .onChange(of: collectionFeedback?.status(in: insertionController)) { _, _ in refreshCollectionFeedback() }
         .onChange(of: store.metadata) { _, _ in state.reconcile(using: store) }
-        .onChange(of: !headerOnly && SharedLibraryBrowserLogic.detailIsMissing(key: compactDetailKey, entries: entries)) { _, missing in
-            if missing { compactDetailKey = nil }
+        .onChange(of: headerOnly ? [] : entries) { _, current in
+            guard !headerOnly else { return }
+            if compactDetailKey != nil,
+               SharedLibraryBrowserLogic.detailEntry(key: compactDetailKey, entries: current) == nil {
+                self.compactDetailKey = nil
+            }
         }
         .onChange(of: selectedKeys) { _, value in
             guard !headerOnly else { return }
