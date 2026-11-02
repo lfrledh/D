@@ -21,6 +21,99 @@ private final class TipStoreKitBundle: NSObject { }
     private func owner(_ root: URL) -> TipStore {
         TipStore(productIDs:["d.localtest.tip.small"],bundleID:Bundle.main.bundleIdentifier ?? "",journalURL:root.appendingPathComponent("tips.json"),localTest:true)
     }
+    private func coldCheckpoint() throws -> URL {
+        let raw = ProcessInfo.processInfo.environment["D_UI_TEST_SESSION"] ?? ""
+        let id = try #require(UUID(uuidString: raw))
+        return FileManager.default.temporaryDirectory.appendingPathComponent("D-Tip-cold-" + id.uuidString + ".json")
+    }
+
+    // Explicitly run these two stages in different test hosts. Ordinary suite
+    // runs do not create or consume a cross-process test transaction.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_STOREKIT_COLD_STAGE"] == "prepare"))
+    func coldUnfinishedPrepare() async throws {
+        let file = try coldCheckpoint()
+        try #require(!FileManager.default.fileExists(atPath: file.path))
+        let session = try testSession()
+        var prepared = false
+        defer { if !prepared { session.clearTransactions() } }
+        guard case .verified(let app) = try await AppTransaction.shared else {
+            Issue.record("A verified local StoreKit app is required"); return
+        }
+        try #require(app.environment == .xcode && app.bundleID == Bundle.main.bundleIdentifier)
+        let product = try #require(try await Product.products(for: ["d.localtest.tip.small"]).first)
+        try #require(product.id == "d.localtest.tip.small" && product.type == .consumable)
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; defer { window.close() }
+        guard case .success(.verified(let transaction)) = try await product.purchase(confirmIn: window) else {
+            Issue.record("Expected a verified local purchase"); return
+        }
+        try #require(transaction.environment == .xcode && transaction.appBundleID == app.bundleID && transaction.productID == product.id)
+        try #require(session.allTransactions().contains { UInt64($0.identifier) == transaction.id })
+        let checkpoint: [String: Any] = ["transactionID": String(transaction.id), "pid": ProcessInfo.processInfo.processIdentifier,
+            "bundleID": app.bundleID, "created": Date().timeIntervalSince1970,
+            "originalID": String(transaction.originalID), "purchaseDate": transaction.purchaseDate.timeIntervalSince1970,
+            "productID": transaction.productID, "environment": transaction.environment.rawValue,
+            "appTransactionID": transaction.appTransactionID]
+        try JSONSerialization.data(withJSONObject: checkpoint).write(to: file, options: .atomic)
+        prepared = true
+        print("TIP_COLD_PREPARE pid=\(ProcessInfo.processInfo.processIdentifier) verifiedLocal=true acknowledged=false")
+        // Intentionally neither finish nor clear. The next host must prove the
+        // platform retained this transaction before testing D's recovery.
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_STOREKIT_COLD_STAGE"] == "recover"))
+    func coldUnfinishedRecover() async throws {
+        let file = try coldCheckpoint()
+        let checkpoint = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        defer { try? FileManager.default.removeItem(at: file) }
+        let previousPID = try #require(checkpoint["pid"] as? Int)
+        try #require(previousPID != Int(ProcessInfo.processInfo.processIdentifier))
+        try #require(checkpoint["bundleID"] as? String == Bundle.main.bundleIdentifier)
+        let created = try #require(checkpoint["created"] as? Double)
+        try #require((0...1_800).contains(Date().timeIntervalSince1970 - created))
+        let id = try #require((checkpoint["transactionID"] as? String).flatMap(UInt64.init))
+        func matches(_ t: Transaction) -> Bool {
+            t.id == id && t.environment == .xcode && t.appBundleID == Bundle.main.bundleIdentifier
+                && t.productID == "d.localtest.tip.small"
+                && String(t.originalID) == checkpoint["originalID"] as? String
+                && t.purchaseDate.timeIntervalSince1970 == checkpoint["purchaseDate"] as? Double
+                && t.productID == checkpoint["productID"] as? String
+                && t.environment.rawValue == checkpoint["environment"] as? String
+                && t.appTransactionID == checkpoint["appTransactionID"] as? String
+        }
+        let config = try #require(Bundle(for: TipStoreKitBundle.self).url(forResource: "Tips", withExtension: "storekit"))
+        let session = try SKTestSession(contentsOf: config)
+        defer { session.clearTransactions() }
+        // No reset, clear or new purchase before checking persistence.
+        let retained = session.allTransactions().contains { UInt64($0.identifier) == id }
+        var unfinishedMatch = false, unfinishedCount = 0
+        for await result in Transaction.unfinished {
+            unfinishedCount += 1
+            if case .verified(let t) = result {
+                unfinishedMatch = unfinishedMatch || matches(t)
+            }
+        }
+        print("TIP_COLD_RECOVER oldPID=\(previousPID) pid=\(ProcessInfo.processInfo.processIdentifier) platformRetained=\(retained) unfinishedTotal=\(unfinishedCount) exactUnfinished=\(unfinishedMatch)")
+        try #require(retained && unfinishedMatch, "Cross-host platform precondition failed; do not substitute or repurchase a transaction")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-Tip-cold-owner-" + UUID().uuidString)
+        defer { removeTestRecords(root) }
+        let store = owner(root); store.start()
+        let journal = root.appendingPathComponent("tips.json")
+        try await wait("cross-host recovery", store: store) { FileManager.default.fileExists(atPath: journal.path) }
+        let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: journal)) as? [String: [String: Any]])
+        #expect(records.count == 1 && records.values.first?["transactionID"] as? String == String(id))
+        var remainsUnfinished = true
+        for index in 0..<10 {
+            remainsUnfinished = false
+            for await result in Transaction.unfinished {
+                if case .verified(let t) = result, matches(t) { remainsUnfinished = true }
+            }
+            if !remainsUnfinished { break }
+            if index < 9 { try await Task.sleep(for: .milliseconds(100)) }
+        }
+        #expect(!remainsUnfinished, "Journal recovery alone does not prove acknowledgement")
+        #expect(session.allTransactions().count == 1, "Recovery must not purchase again")
+    }
     private func removeTestRecords(_ root: URL) {
         let url = root.appendingPathComponent("tips.json")
         let scope = SHA256.hash(data: Data(url.standardizedFileURL.path.utf8)).map { String(format: "%02x", $0) }.joined()
@@ -209,6 +302,61 @@ private final class TipStoreKitBundle: NSObject { }
         #expect(records.values.first { $0["transactionID"] as? String == String(id) }?["revoked"] as? Bool == true)
         #expect(automaticStatus == .idle)
     }
+    /// A single platform observer, without a TipStore owner, bounds the local
+    /// refund-delivery failure independently of D's merge and persistence path.
+    @Test func isolatedRawRefundWithoutOwner() async throws {
+        let session = try testSession(); defer { session.clearTransactions() }
+        guard case .verified(let app) = try await AppTransaction.shared else {
+            Issue.record("A verified local StoreKit app is required before purchasing"); return
+        }
+        try #require(app.environment == .xcode && app.bundleID == Bundle.main.bundleIdentifier)
+        let product = try #require(try await Product.products(for: ["d.localtest.tip.small"]).first)
+        try #require(product.id == "d.localtest.tip.small" && product.type == .consumable)
+        var revokedIDs: [UInt64] = [], updateTotal = 0, updateUnverified = 0
+        let observer = Task { @MainActor in
+            for await result in Transaction.updates {
+                if Task.isCancelled { return }
+                updateTotal += 1
+                switch result {
+                case .verified(let t): if t.revocationDate != nil { revokedIDs.append(t.id) }
+                case .unverified: updateUnverified += 1
+                }
+            }
+        }
+        defer { observer.cancel() }
+        await Task.yield()
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; defer { window.close() }
+        guard case .success(.verified(let purchase)) = try await product.purchase(confirmIn: window) else {
+            Issue.record("Expected a verified local purchase without a D owner"); return
+        }
+        try #require(purchase.environment == .xcode && purchase.productID == product.id && purchase.appBundleID == app.bundleID)
+        await purchase.finish()
+        let transaction = try #require(session.allTransactions().first { UInt64($0.identifier) == purchase.id })
+        let beforeRefundTotal = updateTotal, beforeRefundUnverified = updateUnverified
+        try session.refundTransaction(identifier: transaction.identifier)
+        for _ in 0..<100 {
+            if revokedIDs.contains(purchase.id) { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let automaticIDs = revokedIDs
+        let automaticDelta = updateTotal - beforeRefundTotal
+        let automaticUnverifiedDelta = updateUnverified - beforeRefundUnverified
+        let systemRevoked = session.allTransactions().first { UInt64($0.identifier) == purchase.id }?.cancelDate != nil
+        // History reads happen only after the automatic observation is frozen.
+        var historyTargetRevoked = false
+        for await result in Transaction.all {
+            if case .verified(let t) = result, t.id == purchase.id { historyTargetRevoked = t.revocationDate != nil }
+        }
+        var latestTargetRevoked = false
+        if case .verified(let t)? = await Transaction.latest(for: product.id) {
+            latestTargetRevoked = t.id == purchase.id && t.revocationDate != nil
+        }
+        print("TIP_RAW_REFUND id=\(purchase.id) preTotal=\(beforeRefundTotal) updateDelta=\(automaticDelta) unverifiedDelta=\(automaticUnverifiedDelta) automaticRevoked=\(automaticIDs) systemRevoked=\(systemRevoked) historyRevoked=\(historyTargetRevoked) latestRevoked=\(latestTargetRevoked)")
+        #expect(systemRevoked && historyTargetRevoked && latestTargetRevoked)
+        #expect(automaticIDs.contains(purchase.id), "The raw automatic path must deliver the refund without explicit history reads")
+    }
+
     @Test func verifiedFinishedConsumablesRestoreFromStoreKitAfterLocalJournalLoss() async throws {
         let session = try testSession(); defer { session.clearTransactions() }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-Tip-finished-history-" + UUID().uuidString)
