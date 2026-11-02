@@ -87,6 +87,8 @@ Qwen视频由当前后端按2fps取帧，超过maximumVideoFrames预算报错，
 
 后续UI负责展示全部已适配能力；本表不是把缺口改名profile便算完成。原有发布责任、AP1/CORE/I2V边界仍由[支持与发布差距](MODEL_SUPPORT_AND_RELEASE.zh-CN.md)维护，不在此重开或偷偷取消。
 
+> 历史定位：第4—6节保留UI整理前的源码盘点与当时缺口，所称“未来／待原型／玻璃未实施”不是2026-11-02当前产品状态。后继外壳、玻璃、子窗口及布局已累计实施；当前实施与未验项见下方覆盖索引和 CURRENT_ACTIONS。旧原生失败不因本注记关闭。
+
 ## 5. 新UI区域到现有组件/对象
 
 以下路径除明确标注外从`Packages/UI/Sources/`起。源码符号优于易漂移行号。v0.2尺寸/断点/动画/会话列表位置仍待原型，不在本轮写死。
@@ -125,4 +127,7 @@ Qwen视频由当前后端按2fps取帧，超过maximumVideoFrames预算报错，
 | 项目文件 | files.*；ProjectFilesPanel/ProjectStore | B3批准实施/a20正常双语和文件事务 | 不完整备份、介质满/断盘边界保留 |
 | 工作流运行 | workflow.*、metadata.panel.workspace.*；WorkflowCanvasView/WorkflowServices | B4批准实施/d714、ecda补验 | 历史完成与当前输入不混同 |
 | 低内存/Chat编辑搜索预设 | memory.*、chat.*；LowMemoryDecisionStore/ChatWorkbenchView | B5 v2批准实施/9c原生；5f低内存Chat | exact权重/默认询问；全模型许可未实跑 |
-| 部分输出/支持开发者 | partial.*、tips.*；WorkflowLanguageResultView/ChatMessageNotices/TipStore | P/L/R/T实施/8101冷读；A2支持记录接续中 | 正常包无商品；本地StoreKit不算正式售价/恢复通过 |
+| 部分输出/支持开发者 | partial.*、tips.*；WorkflowLanguageResultView/ChatMessageNotices/TipStore | P/L/R/T实施/8101冷读；A2客户端3ff交付；退款快照3ed已实现/组件验证 | 365本地历史2方法、328d跨宿主恢复/finish两阶段通过；原同进程失败与自动退款0事件保留，非正式交易 |
+| 搜索／工具／MCP | B6-01 `chat.organization.credentials.*`→ChatSearchCredentialsPanel；02 `chat.automaticSearch.*`→ChatAutomaticSearch/ChatMessageNotices/ChatWorkbenchView；03–04 `chat.toolsPanel.*`→ChatToolsPanel结果／记录、ChatController.attachToolResult；05–06 `chat.mCPPanel.*`/`chat.connection.*`/`chat.toolIssue.*`→ChatMCPPanel/chatConnectionText；07–08 `chat.toolsPanel.unit.*`及toolInput的python/units/time分支 | 八组be151a55实施，失败继续与精确取消定向测试；328d双语搜索失败保留、普通App loopback完成/失败/停止未知及冷开未重连 | provider实调、受控loopback MCP和普通App分别记录；具体原生余项见任务回执 |
+| 资料／摘要／记忆／整理 | B7-01–03 `chat.knowledgePanel.*`/`chat.ordering.status.*`→ChatKnowledgePanel.search/copy/移除/reorder；04 `chat.memoryPanel.*`→摘要区＋ChatAssistancePanel.summary；05–06→scopeBinding/条目许可/pendingDeactivation；07→ChatAssistancePanel.organization；08→memory/ChatMemoryPanel.provenanceDetails/ChatProvenancePresentation；动态`chat.assistancePanel.phase.*`/`chat.assistancePanel.status.*` | 八组be151a55实施，来源/保存恢复/许可反例及只读复核；c7d记忆保存停用沿用，328d资料检索/移除、有效摘要默认停用/编辑许可/冷开亲跑 | 原件与历史不删除，语言不参与业务身份；模型排序未新跑，摘要只覆盖本轮准确来源 |
+| 语音／附件／格式／资产编辑 | B8-01–02 `chat.speechPanel.*`/`chat.recognition.*`→ChatSpeechPanel准入／采用；03 `chat.organization.voice.*`→ChatSpeechSettingsPanel；04 `chat.projectAttachmentSheet.*`→ChatProjectAttachmentSheet/ChatLibraryAttachmentButton；05 `chat.outputFormatPanel.*`→ChatOutputFormatPanel；06 `chat.answerFieldSheet.*`/`chat.clarity.fields`/`chat.message.responseAssetName`→ChatAnswerFieldSheet/ChatAnswerField；07–08 `chat.artifactEditor.*`→ChatArtifactEditor保存／预览许可 | 八组be151a55实施，定向数据/语言验证及只读复核；328d中英附件选择关闭、字段交接、资产v1/v2及冷开JS默认关闭亲跑 | 真实ASR受系统本人步骤限制；真实组字/跨模式Undo与字段准确源见任务回执；最终接纳待用户 |
