@@ -188,6 +188,10 @@ private final class TipStoreKitBundle: NSObject { }
         let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: [String: Any]])
         let journalRevoked = records.values.first { $0["transactionID"] as? String == String(id) }?["revoked"] as? Bool
         let systemRevoked = session.allTransactions().first { UInt64($0.identifier) == id }?.cancelDate != nil
+        // Freeze the automatic-listener result before explicit history reads,
+        // which may themselves cause the local StoreKit service to synchronize.
+        let automaticRevokedIDs = revokedIDs, automaticStatus = store.status
+        let automaticUpdateTotal = updateTotal, automaticUpdateUnverified = updateUnverified
         var historyTotal = 0, historyUnverified = 0, historyTargetRevoked = false
         for await item in Transaction.all {
             historyTotal += 1
@@ -200,10 +204,10 @@ private final class TipStoreKitBundle: NSObject { }
         if case .verified(let t)? = await Transaction.latest(for: "d.localtest.tip.small") {
             latestVerified = true; latestTargetRevoked = t.id == id && t.revocationDate != nil
         }
-        print("TIP_ISOLATED_REFUND id=\(id) rawRevoked=\(revokedIDs) updateTotal=\(updateTotal) updateUnverified=\(updateUnverified) journalRevoked=\(String(describing: journalRevoked)) systemRevoked=\(systemRevoked) historyTotal=\(historyTotal) historyUnverified=\(historyUnverified) historyTargetRevoked=\(historyTargetRevoked) latestVerified=\(latestVerified) latestTargetRevoked=\(latestTargetRevoked)")
-        #expect(revokedIDs.contains(id))
+        print("TIP_ISOLATED_REFUND id=\(id) rawRevoked=\(automaticRevokedIDs) updateTotal=\(automaticUpdateTotal) updateUnverified=\(automaticUpdateUnverified) journalRevoked=\(String(describing: journalRevoked)) systemRevoked=\(systemRevoked) historyTotal=\(historyTotal) historyUnverified=\(historyUnverified) historyTargetRevoked=\(historyTargetRevoked) latestVerified=\(latestVerified) latestTargetRevoked=\(latestTargetRevoked)")
+        #expect(automaticRevokedIDs.contains(id))
         #expect(records.values.first { $0["transactionID"] as? String == String(id) }?["revoked"] as? Bool == true)
-        #expect(store.status == .idle)
+        #expect(automaticStatus == .idle)
     }
     @Test func verifiedFinishedConsumablesRestoreFromStoreKitAfterLocalJournalLoss() async throws {
         let session = try testSession(); defer { session.clearTransactions() }
