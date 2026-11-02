@@ -704,6 +704,28 @@ struct SharedLibraryBrowserTests {
     }
 
     @Test
+    func detailDismissalObservesPresenceWithoutReadingClosedCollection() {
+        var reads = 0
+        var current = [entry("asset:same", title: "Original", kind: .asset)]
+        func snapshot() -> [SharedLibraryBrowserEntry] { reads += 1; return current }
+        // Keep the lazy call outside #expect's argument capture: the macro may
+        // evaluate captured arguments to render diagnostics.
+        let closedMissing = SharedLibraryBrowserLogic.detailIsMissing(key: nil, entries: snapshot())
+        #expect(!closedMissing)
+        #expect(reads == 0)
+        let originalMissing = SharedLibraryBrowserLogic.detailIsMissing(key: "asset:same", entries: snapshot())
+        #expect(!originalMissing)
+        current = [entry("asset:same", title: "Updated", kind: .asset, readiness: .unavailable)]
+        let updatedMissing = SharedLibraryBrowserLogic.detailIsMissing(key: "asset:same", entries: snapshot())
+        #expect(!updatedMissing)
+        #expect(SharedLibraryBrowserLogic.detailEntry(key: "asset:same", entries: current) == current.first)
+        current = [entry("asset:other", title: "Updated", kind: .asset)]
+        let removedMissing = SharedLibraryBrowserLogic.detailIsMissing(key: "asset:same", entries: snapshot())
+        #expect(removedMissing)
+        #expect(reads == 3)
+    }
+
+    @Test
     func compactDetailAndCallbacksResolveCurrentEntryByKey() {
         let old = entry("model:same", title: "旧名称", kind: .model)
         let current = entry(
