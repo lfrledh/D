@@ -21,6 +21,7 @@ import Security
     private(set) var verifiedScope: TipAccountScope?
     private(set) var recoveryGeneration: UInt64 = 0
     private var verifiedHistory: [String: TipReceipt] = [:]
+    private var verifiedJournalKeys: Set<String> = []
     private let credentials: any TipCredentialVault
     private let expectsLocalTest: Bool
     private var eventRevision: UInt64 = 0
@@ -193,7 +194,10 @@ import Security
             bundleID: transaction.appBundleID, environment: transaction.environment.rawValue,
             revoked: transaction.revocationDate != nil, accountID: transaction.appTransactionID.nilIfEmpty,
             purchaseDate: transaction.purchaseDate, amount: transaction.price,
-            currency: transaction.currency?.identifier, revocationDate: transaction.revocationDate)
+            currency: transaction.currency?.identifier, revocationDate: transaction.revocationDate,
+            signedDate: transaction.signedDate, revocationType: transaction.revocationTypeStringRepresentation,
+            revocationPercentage: transaction.revocationPercentage,
+            revocationReason: transaction.revocationReason?.rawValue)
     }
     func beginPurchase() -> UUID {
         let id = UUID(); purchaseID = id; purchasing = true; status = .purchasing; diagnostic = nil; return id
@@ -240,7 +244,7 @@ import Security
         // Validate before writing sensitive material, then revalidate after the actor hop.
         // Keychain access can involve system services; it must not block the UI executor.
         _ = try preparedRecord(fact)
-        if let credential { try await credentials.store(credential, for: fact.key + (fact.revoked ? ":revoked" : ":purchase")) }
+        if let credential { try await credentials.store(credential, for: fact) }
         if let generation {
             guard generation == recoveryGeneration, verifiedScope?.contains(fact) == true else { throw TipIssue.invalidTransaction }
         }
@@ -251,8 +255,9 @@ import Security
         guard allowedIDs.contains(fact.productID), fact.bundleID == bundleID,
               !fact.transactionID.isEmpty, validEnvironment(fact.environment),
               fact.amount.map({ !$0.isNaN && $0 >= 0 }) ?? true else { throw TipIssue.invalidTransaction }
+        try fact.validateRefundSnapshot()
         let old = journal[fact.key]
-        let merged = try old?.merging(fact) ?? fact
+        let merged = try old?.merging(fact, currentSnapshotVerified: verifiedJournalKeys.contains(fact.key)) ?? fact
         var next = journal; next[fact.key] = merged
         let data = try JSONEncoder().encode(next)
         guard data.count <= 2_097_152, next.count <= 4096 else { throw TipIssue.journalTooLarge }
@@ -266,6 +271,7 @@ import Security
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: journalURL.path)
             journal = next
         }
+        verifiedJournalKeys.insert(fact.key)
         if verifiedScope?.contains(fact) == true {
             // Display facts come from this process's verified platform results, never a copied
             // local JSON field (even when this platform result has an unknown price).
@@ -297,32 +303,83 @@ struct TipReceipt: Codable, Equatable {
     let amount: Decimal?
     let currency: String?
     let revocationDate: Date?
+    let signedDate: Date?
+    let revocationType: String?
+    let revocationPercentage: Decimal?
+    let revocationReason: Int?
     init(transactionID: String, productID: String, bundleID: String, environment: String, revoked: Bool,
          accountID: String? = nil, purchaseDate: Date? = nil, amount: Decimal? = nil,
-         currency: String? = nil, revocationDate: Date? = nil) {
+         currency: String? = nil, revocationDate: Date? = nil, signedDate: Date? = nil,
+         revocationType: String? = nil, revocationPercentage: Decimal? = nil, revocationReason: Int? = nil) {
         self.transactionID = transactionID; self.productID = productID; self.bundleID = bundleID
         self.environment = environment; self.revoked = revoked; self.accountID = accountID?.nilIfEmpty
         self.purchaseDate = purchaseDate; self.amount = amount; self.currency = currency?.nilIfEmpty
-        self.revocationDate = revocationDate
+        self.revocationDate = revocationDate; self.signedDate = signedDate
+        self.revocationType = revocationType; self.revocationPercentage = revocationPercentage
+        self.revocationReason = revocationReason
+    }
+    func validateRefundSnapshot() throws {
+        guard revocationPercentage.map({ !$0.isNaN && $0 >= 0 && $0 <= 100 }) ?? true,
+              signedDate.map({ $0.timeIntervalSince1970.isFinite }) ?? true,
+              (revocationType?.utf8.count ?? 0) <= 256,
+              revoked || (revocationDate == nil && revocationPercentage == nil && revocationType == nil && revocationReason == nil) else { throw TipIssue.invalidTransaction }
+    }
+    private func hasSameRefundSnapshot(as other: Self) -> Bool {
+        revoked == other.revoked && revocationDate == other.revocationDate && revocationType == other.revocationType &&
+        revocationPercentage == other.revocationPercentage && revocationReason == other.revocationReason
     }
     // Unambiguous composite encoding, including application and StoreKit environment.
     var key: String { [bundleID, environment, transactionID].map { "\($0.utf8.count):\($0)" }.joined() }
-    func merging(_ newer: Self) throws -> Self {
-        guard key == newer.key, productID == newer.productID,
+    func merging(_ newer: Self, currentSnapshotVerified: Bool = true) throws -> Self {
+        try newer.validateRefundSnapshot()
+        guard key == newer.key else { throw TipIssue.invalidTransaction }
+        // A decoded cache is not evidence of any platform fact, not even immutable
+        // price/account fields. Only compare facts verified in this process.
+        guard currentSnapshotVerified else { return newer }
+        guard productID == newer.productID,
               accountID == nil || newer.accountID == nil || accountID == newer.accountID,
               amount == nil || newer.amount == nil || amount == newer.amount,
               currency == nil || newer.currency == nil || currency == newer.currency,
               purchaseDate == nil || newer.purchaseDate == nil || purchaseDate == newer.purchaseDate else { throw TipIssue.invalidTransaction }
+        let snapshot: Self
+        if let oldDate = signedDate, let newDate = newer.signedDate {
+            guard oldDate != newDate || hasSameRefundSnapshot(as: newer) else { throw TipIssue.invalidTransaction }
+            snapshot = newDate > oldDate ? newer : self
+        } else if newer.signedDate != nil {
+            snapshot = newer
+        } else if signedDate != nil {
+            snapshot = self
+        } else {
+            // Legacy records carry no ordering proof. Retain their conservative refund rule.
+            snapshot = revoked ? self : newer
+        }
         return .init(transactionID: transactionID, productID: productID, bundleID: bundleID, environment: environment,
-            revoked: revoked || newer.revoked, accountID: accountID ?? newer.accountID,
+            revoked: snapshot.revoked, accountID: accountID ?? newer.accountID,
             purchaseDate: purchaseDate ?? newer.purchaseDate, amount: amount ?? newer.amount,
-            currency: currency ?? newer.currency, revocationDate: revocationDate ?? newer.revocationDate)
+            currency: currency ?? newer.currency, revocationDate: snapshot.revocationDate,
+            signedDate: snapshot.signedDate, revocationType: snapshot.revocationType,
+            revocationPercentage: snapshot.revocationPercentage, revocationReason: snapshot.revocationReason)
     }
 }
 private extension String { var nilIfEmpty: String? { isEmpty ? nil : self } }
 private enum TipIssue: Error { case invalidTransaction, invalidJournal, journalTooLarge, credentialUnavailable, credentialStatus(Int32) }
 
-protocol TipCredentialVault: Sendable { func store(_ credential: String, for key: String) async throws }
+protocol TipCredentialVault: Sendable { func store(_ credential: String, for fact: TipReceipt) async throws }
+/// Opaque signed evidence is append-only and deduplicated within the existing
+/// bounded Keychain item. A late callback, including after a cold start, cannot
+/// replace another signed snapshot. These bytes never authorize UI history;
+/// that still requires current StoreKit verification and the matching account.
+enum TipCredentialEvidence {
+    static func adding(_ credential: String, for fact: TipReceipt, to values: [String: String]) throws -> [String: String] {
+        guard credential.utf8.count <= 65_536 else { throw TipIssue.credentialUnavailable }
+        if [":purchase", ":revoked"].contains(where: { values[fact.key + $0] == credential }) { return values }
+        let digest = SHA256.hash(data: Data(credential.utf8)).map { String(format: "%02x", $0) }.joined()
+        let key = fact.key + ":jws:" + digest
+        var next = values; next[key] = credential
+        guard next.count <= 4096, try JSONEncoder().encode(next).count <= 2_097_152 else { throw TipIssue.credentialUnavailable }
+        return next
+    }
+}
 /// One bounded item per app/journal, protected by the login Keychain and excluded from cloud sync.
 /// The path digest isolates local-test sessions; StoreKit is the cross-device recovery source.
 private actor TipKeychainVault: TipCredentialVault {
@@ -337,8 +394,7 @@ private actor TipKeychainVault: TipCredentialVault {
         // protection store requires provisioned app-identifier entitlements absent from the
         // current normal development candidate; do not broaden signing privileges here.
     }
-    func store(_ credential: String, for key: String) throws {
-        guard credential.utf8.count <= 65_536 else { throw TipIssue.credentialUnavailable }
+    func store(_ credential: String, for fact: TipReceipt) throws {
         var lookup = query; lookup[kSecReturnData as String] = true
         var raw: CFTypeRef?
         let status = SecItemCopyMatching(lookup as CFDictionary, &raw)
@@ -348,10 +404,11 @@ private actor TipKeychainVault: TipCredentialVault {
             guard data.count <= 2_097_152 else { throw TipIssue.credentialUnavailable }
             values = try JSONDecoder().decode([String: String].self, from: data)
         }
-        if values[key] == credential { return }
-        values[key] = credential
-        let data = try JSONEncoder().encode(values)
-        guard data.count <= 2_097_152, values.count <= 4096 else { throw TipIssue.credentialUnavailable }
+        let next = try TipCredentialEvidence.adding(credential, for: fact, to: values)
+        // Comparison and write occur in this actor without suspension. Old
+        // purchase/refund slots remain readable; no signed evidence is removed.
+        if next == values { return }
+        let data = try JSONEncoder().encode(next)
         if status == errSecItemNotFound {
             var insert = query; insert[kSecValueData as String] = data
             insert[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly

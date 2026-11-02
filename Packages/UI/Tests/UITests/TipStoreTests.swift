@@ -205,9 +205,73 @@ import Testing
         _ = try await value.persistVerified(detailed("one"), credential: "original signed fixture")
         _ = try await value.persistVerified(detailed("one", revoked: true), credential: "revoked signed fixture")
         _ = try await value.persistVerified(detailed("one"), credential: "original signed fixture")
-        #expect(vault.values[detailed("one").key + ":revoked"] == "revoked signed fixture")
-        #expect(vault.values[detailed("one").key + ":purchase"] == "original signed fixture")
+        #expect(Set(vault.values.values) == ["original signed fixture", "revoked signed fixture"])
     }
+    private func versioned(_ time: Double, revoked: Bool = false, percentage: Decimal? = nil) -> TipReceipt {
+        .init(transactionID: "versioned", productID: "d.localtest.tip.small", bundleID: "D.fixture",
+              environment: AppStore.Environment.xcode.rawValue, revoked: revoked, accountID: "A",
+              purchaseDate: Date(timeIntervalSince1970: 100), amount: Decimal(string: "2.99"), currency: "USD",
+              revocationDate: revoked ? Date(timeIntervalSince1970: 200) : nil,
+              signedDate: Date(timeIntervalSince1970: time), revocationType: revoked ? "REFUND" : nil,
+              revocationPercentage: percentage)
+    }
+    @Test func verifiedRefundSnapshotsOrderPartialRefundAndReversalWithoutNewPurchase() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-refund-snapshots-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let vault = FixtureTipVault(), url = root.appendingPathComponent("journal.json")
+        let value = TipStore(productIDs: ["d.localtest.tip.small"], bundleID: "D.fixture", journalURL: url, localTest: true, credentials: vault)
+        let gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
+        let bought = versioned(101), refund = versioned(201, revoked: true, percentage: Decimal(string: "33.333")), reversed = versioned(301)
+        try await value.mergeHistory(bought, credential: "bought", generation: gen)
+        try await value.mergeHistory(refund, credential: "partial", generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
+        #expect(value.currentSupportRecords.first?.revocationPercentage == Decimal(string: "33.333"))
+        try await value.mergeHistory(reversed, credential: "reversed", generation: gen)
+        try await value.mergeHistory(refund, credential: "late partial", generation: gen)
+        try await value.mergeHistory(bought, credential: "late bought", generation: gen)
+        let current = try #require(value.currentSupportRecords.first)
+        #expect(value.currentSupportRecords.count == 1 && !current.revoked)
+        #expect(current.signedDate == reversed.signedDate && current.revocationPercentage == nil && current.revocationDate == nil)
+        #expect(current.amount == bought.amount && current.purchaseDate == bought.purchaseDate)
+        #expect(Set(vault.values.values) == ["bought", "partial", "reversed", "late partial", "late bought"])
+        #expect(value.status != .thanked)
+        await #expect(throws: (any Error).self) {
+            try await value.mergeHistory(versioned(301, revoked: true), credential: "conflicting same version", generation: gen)
+        }
+        for bad in [Decimal(-1), Decimal(101), Decimal.nan] {
+            await #expect(throws: (any Error).self) { try await value.mergeHistory(versioned(401, revoked: true, percentage: bad), credential: nil, generation: gen) }
+        }
+        #expect(try versioned(201, revoked: true).merging(versioned(202, revoked: true)).revocationPercentage == nil)
+        #expect(try versioned(201, revoked: true).merging(versioned(202, revoked: true, percentage: 0)).revocationPercentage == 0)
+        let cold = owner(url)
+        #expect(cold.currentSupportRecords.isEmpty)
+        let recovery = cold.beginRecovery(); try cold.acceptScope(scope("A"), generation: recovery)
+        try await cold.mergeHistory(reversed, credential: nil, generation: recovery)
+        cold.endRecovery(generation: recovery, succeeded: true)
+        #expect(cold.currentSupportRecords.first == reversed)
+    }
+    @Test func newerVerifiedSnapshotWinsVaultSuspensionAndUnverifiedLocalFutureDate() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-version-race-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let vault = FixtureTipVault(), url = root.appendingPathComponent("journal.json")
+        let value = TipStore(productIDs: ["d.localtest.tip.small"], bundleID: "D.fixture", journalURL: url, localTest: true, credentials: vault)
+        var held: CheckedContinuation<Void, Never>?
+        vault.pause = { await withCheckedContinuation { held = $0 } }
+        let old = Task { try await value.persistVerified(versioned(201, revoked: true, percentage: 50), credential: "old") }
+        for _ in 0..<100 { if held != nil { break }; await Task.yield() }
+        try #require(held != nil); vault.pause = nil
+        _ = try await value.persistVerified(versioned(301), credential: "new")
+        held?.resume(); _ = try await old.value
+        #expect(Set(vault.values.values) == ["old", "new"])
+        let data = try JSONDecoder().decode([String: TipReceipt].self, from: Data(contentsOf: url))
+        #expect(data.values.first?.revoked == false)
+        try JSONEncoder().encode([versioned(999999).key: versioned(999999, revoked: true)]).write(to: url)
+        let cold = owner(url)
+        _ = try cold.recordVerified(versioned(301))
+        let restored = try JSONDecoder().decode([String: TipReceipt].self, from: Data(contentsOf: url))
+        #expect(restored.values.first?.signedDate == versioned(301).signedDate && restored.values.first?.revoked == false)
+    }
+
     @Test func unknownPlatformPriceCannotInheritAnUnverifiedLocalAmount() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-cache-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -218,6 +282,32 @@ import Testing
         try await cold.mergeHistory(detailed("one", amount: nil, currency: nil), credential: nil, generation: gen)
         cold.endRecovery(generation: gen, succeeded: true)
         #expect(cold.currentSupportRecords.count == 1 && cold.currentSupportRecords[0].amount == nil)
+        let saved = try JSONDecoder().decode([String: TipReceipt].self, from: Data(contentsOf: url))
+        #expect(saved[detailed("one").key]?.amount == nil)
+        try await cold.mergeHistory(detailed("one", amount: Decimal(string: "2.99")), credential: nil, generation: gen)
+        #expect(cold.currentSupportRecords[0].amount == Decimal(string: "2.99"))
+        // A fresh platform result also replaces conflicting unverified cache facts directly.
+        _ = try owner(url).recordVerified(detailed("one", account: "wrong", amount: 999, currency: "BAD"))
+        let fresh = owner(url), freshGen = fresh.beginRecovery()
+        try fresh.acceptScope(scope("A"), generation: freshGen)
+        try await fresh.mergeHistory(detailed("one", amount: Decimal(string: "2.99")), credential: nil, generation: freshGen)
+        fresh.endRecovery(generation: freshGen, succeeded: true)
+        #expect(fresh.currentSupportRecords[0].accountID == "A" && fresh.currentSupportRecords[0].amount == Decimal(string: "2.99"))
+    }
+    @Test func coldCredentialEvidencePreservesNewerProofAndBoundedLegacySlots() throws {
+        let latest = versioned(301), old = versioned(101)
+        let saved = try TipCredentialEvidence.adding("reversal", for: latest, to: [latest.key + ":revoked": "legacy refund"])
+        let cold = try JSONDecoder().decode([String: String].self, from: JSONEncoder().encode(saved))
+        let late = try TipCredentialEvidence.adding("purchase", for: old, to: cold)
+        #expect(Set(late.values) == ["reversal", "legacy refund", "purchase"])
+        #expect(try TipCredentialEvidence.adding("purchase", for: old, to: late) == late)
+        let full = Dictionary(uniqueKeysWithValues: (0..<4096).map { (String($0), "existing") })
+        #expect(throws: (any Error).self) { try TipCredentialEvidence.adding("new", for: old, to: full) }
+        #expect(full.count == 4096)
+        var legacyFull = full; legacyFull.removeValue(forKey: "0")
+        legacyFull[old.key + ":purchase"] = "already signed"
+        #expect(try TipCredentialEvidence.adding("already signed", for: old, to: legacyFull) == legacyFull)
+        #expect(throws: (any Error).self) { try TipCredentialEvidence.adding("new signature", for: old, to: legacyFull) }
     }
     @Test func staleHistoryCannotCommitAfterCredentialPersistenceSuspends() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-hop-" + UUID().uuidString)
@@ -250,9 +340,9 @@ import Testing
     var values: [String: String] = [:]
     var fail = false
     var pause: (() async -> Void)?
-    func store(_ credential: String, for key: String) async throws {
+    func store(_ credential: String, for fact: TipReceipt) async throws {
         if fail { throw CocoaError(.fileWriteNoPermission) }
         await pause?()
-        values[key] = credential
+        values = try TipCredentialEvidence.adding(credential, for: fact, to: values)
     }
 }
