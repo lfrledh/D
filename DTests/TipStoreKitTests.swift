@@ -102,16 +102,21 @@ private final class TipStoreKitBundle: NSObject { }
         try await wait("cross-host recovery", store: store) { FileManager.default.fileExists(atPath: journal.path) }
         let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: journal)) as? [String: [String: Any]])
         #expect(records.count == 1 && records.values.first?["transactionID"] as? String == String(id))
-        var remainsUnfinished = true
+        var remainsUnfinished = true, remainingTotal = 0, remainingUnverified = 0
         for index in 0..<10 {
-            remainsUnfinished = false
+            remainsUnfinished = false; remainingTotal = 0; remainingUnverified = 0
             for await result in Transaction.unfinished {
-                if case .verified(let t) = result, matches(t) { remainsUnfinished = true }
+                remainingTotal += 1
+                switch result {
+                case .verified(let t): if matches(t) { remainsUnfinished = true }
+                case .unverified: remainingUnverified += 1
+                }
             }
-            if !remainsUnfinished { break }
+            if remainingTotal == 0 { break }
             if index < 9 { try await Task.sleep(for: .milliseconds(100)) }
         }
-        #expect(!remainsUnfinished, "Journal recovery alone does not prove acknowledgement")
+        print("TIP_COLD_ACK remainingTotal=\(remainingTotal) remainingUnverified=\(remainingUnverified) exactRemaining=\(remainsUnfinished)")
+        #expect(!remainsUnfinished && remainingTotal == 0 && remainingUnverified == 0, "Journal recovery alone does not prove acknowledgement")
         #expect(session.allTransactions().count == 1, "Recovery must not purchase again")
     }
     private func removeTestRecords(_ root: URL) {
