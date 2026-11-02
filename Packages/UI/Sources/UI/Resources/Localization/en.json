@@ -2244,7 +2244,7 @@
     "chat.systemPromptMeaning": "System prompt: rules sent with this conversation. This is separate from the model input template.",
     "chat.defaultRulesSettings": "New conversation defaults…",
     "chat.contextMemory": "Context and memory",
-    "chat.contextScopeHint": "Message More → Do not send to model; materials and source excerpts are managed on the right.",
+    "chat.contextScopeHint": "Message More → Do not send to model; materials and source excerpts are managed in Assets on the left.",
     "chat.advancedModelSettings": "Advanced model settings",
     "chat.templatePurpose": "Encodes the conversation for this model; it does not define writing style.",
     "chat.customTools": "Custom tool declarations (advanced)",

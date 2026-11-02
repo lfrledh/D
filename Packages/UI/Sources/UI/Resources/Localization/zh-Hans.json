@@ -2244,7 +2244,7 @@
     "chat.systemPromptMeaning": "系统提示词：随本会话发送的回答规则，与模型输入模板不同。",
     "chat.defaultRulesSettings": "新会话默认规则设置…",
     "chat.contextMemory": "上下文与记忆",
-    "chat.contextScopeHint": "消息「更多」可设为不供模型参考；资料范围与采用片段在右侧「资料」管理。",
+    "chat.contextScopeHint": "消息「更多」可设为不供模型参考；资料范围与采用片段在左侧「素材」管理。",
     "chat.advancedModelSettings": "高级模型设置",
     "chat.templatePurpose": "将对话编码为模型输入；不用于定义文风。",
     "chat.customTools": "自定义工具声明（高级）",

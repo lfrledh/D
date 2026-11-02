@@ -2067,7 +2067,7 @@ ScrollViewReader { proxy in
             Button(newLabel("contextPreview", english: "What will be sent next", chinese: "下次将发送的内容")) { showContextPreview.toggle() }
                 .accessibilityIdentifier("chat-context-preview-toggle")
             if showContextPreview { contextPreviewPanel(session) }
-            Text(newLabel("contextScopeHint", english: "Message More → Do not send to model; materials and source excerpts are managed on the right.", chinese: "消息「更多」可设为不供模型参考；资料范围与采用片段在右侧「资料」管理。")).font(.caption).foregroundStyle(.secondary)
+            Text(newLabel("contextScopeHint", english: "Message More → Do not send to model; materials and source excerpts are managed in Assets on the left.", chinese: "消息「更多」可设为不供模型参考；资料范围与采用片段在左侧「素材」管理。")).font(.caption).foregroundStyle(.secondary)
             ChatMemoryPanel(chat: chat, session: session, wording: { en, zh in newLabel(en, english: en, chinese: zh) })
                 .id(session.id.uuidString + ":memory")
             ChatAssistancePanel(chat: chat, session: session, section: .organization, expanded: $organizationExpanded,
