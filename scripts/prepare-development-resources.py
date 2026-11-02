@@ -7,6 +7,7 @@ import argparse
 import ctypes
 import errno
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -447,7 +448,32 @@ def inspect_engine(root: Path, name: str) -> dict[str, Any]:
     manifest_record = next((item for item in inventory["files"] if item["path"] == "engine.json"), None)
     if manifest_record is None:
         raise ResourceError(f"{name} engine manifest disappeared during validation")
+    if name == "ExternalVideoEngine.dengine":
+        validate_external_native_notices(root, actual)
     return inventory
+
+
+def validate_external_native_notices(root: Path, actual: dict[str, dict[str, Any]]) -> None:
+    # Reuse the inventory already hashed by inspect_engine; never walk/hash it again.
+    helper = Path(__file__).resolve().parents[1] / "Backends/Video/Packaging/native_notice_contract.py"
+    spec = importlib.util.spec_from_file_location("d_native_notice_contract", helper)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    def record(path):
+        if path not in actual:
+            raise ResourceError("native provenance file missing: " + path)
+        return _read_json(root / path, path, 1024 * 1024)
+    try:
+        origin = record("runtime-origin.json")
+        records = record("Licenses/native/SOURCES.json")
+        ffmpeg = record("Licenses/ffmpeg-9.0.1-SOURCE.json")
+        libraries = origin["nativeLibraries"]
+        replaced = any(row.get("sourceBuild") is not None or row.get("replacedSourceSHA256") is not None for row in libraries)
+        replacement = record("Licenses/libvmaf-no-models.json") if replaced else None
+        module.validate_native_libraries(libraries, records, ffmpeg,
+            files={path: entry["sha256"] for path, entry in actual.items()}, replacement=replacement, origin=origin)
+    except (ValueError, KeyError, TypeError) as error:
+        raise ResourceError("native provenance differs: " + str(error)) from error
 
 
 def _load_config(path: Path) -> tuple[dict[str, Path], str]:

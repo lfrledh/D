@@ -121,6 +121,28 @@ def write_engine(parent: Path, name: str) -> Path:
         path.write_bytes((name + ":" + relative + "\n").encode("utf-8"))
     (root / vendor).mkdir(parents=True, exist_ok=True)
     (root / "python/bin/python3").chmod(0o755)
+    if name == "ExternalVideoEngine.dengine":
+        # This tiny static fixture has no shared libraries; the full 19-library
+        # and VMAF-origin cases are exercised by the shared contract tests.
+        licenses = root / "Licenses/native"; licenses.mkdir(parents=True)
+        (licenses / "SOURCES.json").write_text("[]")
+        source = REPOSITORY / "Backends/Video/Packaging/Licenses/ffmpeg-9.0.1-SOURCE.json"
+        (root / "Licenses/ffmpeg-9.0.1-SOURCE.json").write_bytes(source.read_bytes())
+        ffmpeg = json.loads(source.read_text())
+        cache_licenses = source.parent
+        for item in [ffmpeg['buildRecipe'], ffmpeg['buildRecipe']['license']] + ffmpeg['notices']:
+            # FFmpeg license bodies live alongside source records in the checkout.
+            supplied = cache_licenses / item['path']
+            if supplied.is_file():
+                (root / 'Licenses' / item['path']).write_bytes(supplied.read_bytes())
+            else:
+                data = ('fixture:' + item['path']).encode()
+                (root / 'Licenses' / item['path']).write_bytes(data)
+                item['sha256'] = hashlib.sha256(data).hexdigest()
+        (root / "Licenses/ffmpeg-9.0.1-SOURCE.json").write_text(json.dumps(ffmpeg))
+        (root / "runtime-origin.json").write_text(json.dumps({"nativeLibraries": [],
+            "ffmpegSource": "Licenses/ffmpeg-9.0.1-SOURCE.json",
+            "ffmpegSourceArchiveSHA256": ffmpeg['sourceSHA256']}))
     rewrite_engine_manifest(root, name)
     return root
 
@@ -306,6 +328,20 @@ class DevelopmentResourceTests(unittest.TestCase):
         rejected = self.run_cli(EMBED, "--prepared", prepared, "--destination", self.root / "must not exist")
         self.assert_failure(rejected)
         self.assertFalse((self.root / "must not exist").exists())
+
+    def test_prepared_external_dependency_cannot_bypass_notice_gate_with_a_valid_manifest(self) -> None:
+        name = "ExternalVideoEngine.dengine"
+        external = write_engine(self.inputs, name)
+        unknown = external / "native/libs/libav-unknown.dylib"
+        unknown.parent.mkdir(); unknown.write_bytes(b"controlled native dependency fixture")
+        origin = external / "runtime-origin.json"
+        origin.write_text(json.dumps({"nativeLibraries": [{"name": unknown.name, "sourceSHA256": digest(unknown)}]}))
+        rewrite_engine_manifest(external, name)
+        self.write_config({**{key: str(value) for key, value in self.engines.items()}, name: str(external)})
+        output, result = self.prepare()
+        self.assert_failure(result)
+        self.assertIn("not registered", result.stderr)
+        self.assertFalse(output.exists())
 
     def test_reuse_rejects_changed_input_even_when_config_is_unchanged(self) -> None:
         output, first = self.prepare()

@@ -297,6 +297,7 @@
 				"$(SRCROOT)/Backends/Audio/Packaging/package_audio_app.py",
 				"$(SRCROOT)/Backends/Audio/Packaging/prepare_engine.py",
 				"$(SRCROOT)/Backends/Audio/Packaging/prepare_mrt2_engine.py",
+				"$(SRCROOT)/Backends/Video/Packaging/native_notice_contract.py",
 				"$(D_DEVELOPMENT_RESOURCES)/",
 			);
 			name = "Verify development engines";

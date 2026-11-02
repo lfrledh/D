@@ -40,5 +40,57 @@
     "ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers",
     "built with Apple clang version 21.0.0 (clang-2100.1.1.101)",
     "configuration: --prefix=/opt/homebrew/Cellar/ffmpeg/9.0.1 --enable-shared --enable-pthreads --enable-version3 --cc=clang --host-cflags= --host-ldflags= --enable-ffplay --enable-gpl --enable-libsvtav1 --enable-libopus --enable-libx264 --enable-libmp3lame --enable-libdav1d --enable-libvmaf --enable-libvpx --enable-libx265 --enable-openssl --enable-videotoolbox --enable-audiotoolbox --enable-neon"
+  ],
+  "inputLibraries": [
+    {
+      "name": "libavcodec.63.1.101.dylib",
+      "sourceSHA256": "f6feb99f7abf0a926dd0de610339c8ae5907c25c17cabf9358b9df314b6a3b5f"
+    },
+    {
+      "name": "libavdevice.63.1.101.dylib",
+      "sourceSHA256": "1ae3f33f2408e47da005f30c5ed0686da2a9fd1cdcf11bbf7187f91cf142a502"
+    },
+    {
+      "name": "libavfilter.12.1.101.dylib",
+      "sourceSHA256": "7ef467c8a40e74097f848ec8e3be6f3fb88eab437b4f2b29a5e3950d89d71364"
+    },
+    {
+      "name": "libavformat.63.1.101.dylib",
+      "sourceSHA256": "3fd2e9e6aa3d0a13d8b6b347cf232e3d2179796057773e7ed6a0724b0c2bb233"
+    },
+    {
+      "name": "libavutil.61.1.101.dylib",
+      "sourceSHA256": "81ca80ca9f5cc15c0768735af7d787953faabee41bb46c3b80306627782cb516"
+    },
+    {
+      "name": "libswresample.7.1.101.dylib",
+      "sourceSHA256": "8316692dab20ccdb40a8a60e81cc4758a92343d5d4c65e848b14eb50d4535a8f"
+    },
+    {
+      "name": "libswscale.10.1.101.dylib",
+      "sourceSHA256": "20a56abf43c37691af6c5d6495f1c3a8de805113abd6634f1a4d1d431aa6f753"
+    }
+  ],
+  "notices": [
+    {
+      "path": "ffmpeg-LICENSE.md",
+      "sha256": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"
+    },
+    {
+      "path": "ffmpeg-COPYING.GPLv2",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+    },
+    {
+      "path": "ffmpeg-COPYING.GPLv3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    {
+      "path": "ffmpeg-COPYING.LGPLv2.1",
+      "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
+    },
+    {
+      "path": "ffmpeg-COPYING.LGPLv3",
+      "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+    }
   ]
 }

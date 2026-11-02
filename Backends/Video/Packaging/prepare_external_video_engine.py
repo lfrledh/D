@@ -12,12 +12,17 @@ import subprocess
 import sys
 import tempfile
 import tarfile
+import importlib.util
 
 sys.dont_write_bytecode = True
 AUDIO = Path(__file__).resolve().parents[2] / "Audio/Packaging"
 sys.path.insert(0, str(AUDIO))
 import prepare_engine as core
 import package_audio_app as signing
+
+_native_spec = importlib.util.spec_from_file_location("native_notice_contract", Path(__file__).with_name("native_notice_contract.py"))
+_native_contract = importlib.util.module_from_spec(_native_spec)
+_native_spec.loader.exec_module(_native_contract)
 
 
 def command(argv):
@@ -188,13 +193,12 @@ def install_weight_free_vmaf(staging, supplied):
 def install_native_notices(staging, libraries):
     source = Path(__file__).resolve().parent / 'Licenses/native'
     records = json.loads((source / 'SOURCES.json').read_text())
+    ffmpeg = json.loads((source.parent / 'ffmpeg-9.0.1-SOURCE.json').read_text())
+    try:
+        _native_contract.validate_native_libraries(libraries, records, ffmpeg)
+    except (ValueError, KeyError, TypeError) as error:
+        raise core.PackagingError(str(error)) from error
     observed = {row['name']: row['sourceSHA256'] for row in libraries}
-    if len(observed) != len(libraries):
-        raise core.PackagingError('duplicate native library identity')
-    registered = {row['name'] for record in records for row in record['binaries']}
-    missing = sorted(set(observed) - registered)
-    if missing:
-        raise core.PackagingError('native notice is not registered: ' + ', '.join(missing))
     for record in records:
         relevant = [row for row in record['binaries'] if row['name'] in observed]
         if not relevant: continue
@@ -360,6 +364,15 @@ def prepare(args):
         # newly prepared copy with the already approved development identity.
         # Xcode later copies the verified engine and signs the enclosing App normally.
         signing._sign_engine(staging, args.identity, args.team)
+        if vmaf is not None:
+            # Bind the independent source-build record to the final signed bytes.
+            origin_path = staging / "runtime-origin.json"
+            origin = json.loads(origin_path.read_text())
+            origin["vmafNoModels"] = {**vmaf,
+                "signedSHA256": core._sha256(staging / "native/libs/libvmaf.3.dylib")}
+            origin_path.write_text(json.dumps(origin, indent=2) + "\n")
+            manifest["files"] = core._manifest(staging)["files"]
+            (staging / "engine.json").write_text(json.dumps(manifest, indent=2) + "\n")
         core._publish_exclusive(staging, output)
     finally:
         if staging.exists():

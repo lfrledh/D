@@ -1,5 +1,6 @@
 """CPU fixtures for the copied-source and native dependency boundaries."""
 import hashlib
+import copy
 import importlib.util
 import io
 import json
@@ -87,6 +88,7 @@ class ExternalPackagingTests(unittest.TestCase):
         source = packaging.Path(packaging.__file__).resolve().parent / 'Licenses/native'
         records = json.loads((source / 'SOURCES.json').read_text())
         complete = [row for record in records for row in record['binaries']]
+        complete += json.loads((source.parent / 'ffmpeg-9.0.1-SOURCE.json').read_text())['inputLibraries']
         unique = {row['name']: row for row in complete}
         staging = self.root / 'native-notice-complete'
         packaging.install_native_notices(staging, list(unique.values()))
@@ -99,6 +101,65 @@ class ExternalPackagingTests(unittest.TestCase):
             packaging.install_native_notices(self.root / 'wrong-source', [first])
         with self.assertRaisesRegex(packaging.core.PackagingError, 'duplicate'):
             packaging.install_native_notices(self.root / 'duplicate', [first, first])
+
+    def test_prepared_native_contract_covers_ffmpeg_and_explicit_vmaf_replacement(self):
+        folder = packaging.Path(packaging.__file__).resolve().parent / 'Licenses'
+        records = json.loads((folder / 'native/SOURCES.json').read_text())
+        ffmpeg = json.loads((folder / 'ffmpeg-9.0.1-SOURCE.json').read_text())
+        libraries = copy.deepcopy(ffmpeg['inputLibraries'] + [row for record in records for row in record['binaries']])
+        self.assertEqual(len(libraries), 19)
+        files = {'native/libs/' + row['name']: 'f' * 64 for row in libraries}
+        for record in records:
+            files.update({'Licenses/native/' + notice['path']: notice['sha256'] for notice in record['notices']})
+        origin = {'ffmpegSource': 'Licenses/ffmpeg-9.0.1-SOURCE.json',
+                  'ffmpegSourceArchiveSHA256': ffmpeg['sourceSHA256']}
+        for item in [ffmpeg['buildRecipe'], ffmpeg['buildRecipe']['license']] + ffmpeg['notices']:
+            files['Licenses/' + item['path']] = item['sha256']
+        def validate(*args, **kwargs):
+            return packaging._native_contract.validate_native_libraries(*args, origin=origin, **kwargs)
+        validate(libraries, records, ffmpeg, files=files)
+        # Prefix resemblance never grants a registration.
+        with self.assertRaisesRegex(ValueError, 'not registered'):
+            validate(libraries + [{'name': 'libav-unregistered.dylib', 'sourceSHA256': '0' * 64}], records, ffmpeg)
+        with self.assertRaisesRegex(ValueError, 'inventory differs'):
+            validate(libraries, records, ffmpeg, files={**files, 'native/libs/hidden.dylib': '0' * 64})
+        with self.assertRaisesRegex(ValueError, 'inventory differs'):
+            validate(libraries, records, ffmpeg, files={k: v for k, v in files.items() if k != 'native/libs/libssl.3.dylib'})
+        source = next(r for r in records if r['component'] == 'libvmaf/3.2.0')
+        vmaf = next(r for r in libraries if r['name'] == 'libvmaf.3.dylib')
+        replacement = {'version': '3.2.0', 'sourceURL': source['upstreamRecipe'][0],
+            'sourceSHA256': source['upstreamRecipe'][1], 'builtInModels': False,
+            'flags': ['-Dbuilt_in_models=false'], 'librarySHA256': 'a' * 64,
+            'licenseSHA256': source['notices'][0]['sha256']}
+        vmaf.update(replacedSourceSHA256=vmaf['sourceSHA256'], sourceSHA256='a' * 64,
+                    sourceBuild='Licenses/libvmaf-no-models.json')
+        origin['vmafNoModels'] = {**replacement, 'signedSHA256': 'f' * 64}
+        validate(libraries, records, ffmpeg, files=files, replacement=replacement)
+        for key, bad in [('replacedSourceSHA256', '0' * 64), ('sourceSHA256', 'b' * 64),
+                         ('sourceBuild', 'Licenses/unverified.json')]:
+            original = vmaf[key]; vmaf[key] = bad
+            with self.assertRaisesRegex(ValueError, 'replacement'):
+                validate(libraries, records, ffmpeg, files=files, replacement=replacement)
+            vmaf[key] = original
+        for key, bad in [('sourceSHA256', '0' * 64), ('builtInModels', True)]:
+            with self.assertRaises(ValueError):
+                validate(libraries, records, ffmpeg, files=files, replacement={**replacement, key: bad})
+        with self.assertRaisesRegex(ValueError, 'notice file identity'):
+            validate(libraries, records, ffmpeg, files={**files, 'Licenses/native/' + source['notices'][0]['path']: '0' * 64}, replacement=replacement)
+
+        for key in ['signedSHA256', 'librarySHA256']:
+            old = origin['vmafNoModels'][key]; origin['vmafNoModels'][key] = '0' * 64
+            with self.assertRaisesRegex(ValueError, 'VMAF'):
+                validate(libraries, records, ffmpeg, files=files, replacement=replacement)
+            origin['vmafNoModels'][key] = old
+        for key in ['ffmpegSource', 'ffmpegSourceArchiveSHA256']:
+            old = origin[key]; origin[key] = 'wrong'
+            with self.assertRaisesRegex(ValueError, 'FFmpeg recorded'):
+                validate(libraries, records, ffmpeg, files=files, replacement=replacement)
+            origin[key] = old
+        for item in [ffmpeg['buildRecipe'], ffmpeg['buildRecipe']['license']] + ffmpeg['notices']:
+            with self.assertRaisesRegex(ValueError, 'FFmpeg source notice'):
+                validate(libraries, records, ffmpeg, files={**files, 'Licenses/' + item['path']: '0' * 64}, replacement=replacement)
 
     def test_ffmpeg_source_materials_require_exact_source_recipe_and_tools(self):
         folder = packaging.Path(packaging.__file__).resolve().parent / 'Licenses'
