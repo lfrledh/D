@@ -223,6 +223,9 @@ struct ChatSearchWiringTests {
             try await chat.send(sessionID: id); await chat.waitForCompletion()
             #expect(await engine.requests.count == 1)
             let session = try #require(chat.selectedSession), attempt = try #require(session.attempts.last)
+            let failedTool = try #require(session.toolActivities?.last)
+            #expect(failedTool.status == .failed)
+            #expect(failedTool.remoteRequestSent == nil && failedTool.remoteOutcomeUnconfirmed == nil)
             #expect(attempt.status == .completed)
             #expect(session.messages.filter { $0.role == .user }.map(\.text) == ["original question"])
             #expect(session.systemPrompt == "Keep the user's system instructions")
@@ -240,6 +243,7 @@ struct ChatSearchWiringTests {
             let reopened = ChatController(store: reopenedStore) { throw WorkflowIssue("Reopen must not infer") }
             await reopened.load()
             #expect(reopened.selectedSession?.attempts.last?.automaticSearch == attempt.automaticSearch)
+            #expect(reopened.selectedSession?.toolActivities?.first { $0.id == failedTool.id } == failedTool)
             #expect(await engine.requests.count == 1)
             try await reopenedStore.close()
         }

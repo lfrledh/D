@@ -143,8 +143,13 @@ struct ChatToolControllerTests {
         options.allowed = false; try chat.setWebOptions(options, sessionID: id)
         await #expect(throws: (any Error).self) { try await operation.value }
         #expect(!chat.isToolRunning && chat.selectedSession?.toolActivities?.last?.status == .cancelled)
+        let cancelled = try #require(chat.selectedSession?.toolActivities?.last)
+        #expect(cancelled.remoteRequestSent == nil && cancelled.remoteOutcomeUnconfirmed == nil)
         #expect(chat.selectedSession?.attachments.isEmpty == true)
-        try await chat.prepareForTermination(); try await store.close()
+        try await chat.prepareForTermination()
+        let saved = try await store.chatState()
+        #expect(saved.sessions.first { $0.id == id }?.toolActivities?.first { $0.id == cancelled.id } == cancelled)
+        try await store.close()
     }
 
     @Test func automaticSourceValidationIncludesPostAdoptionDraftSettingsAndAttachments() throws {

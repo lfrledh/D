@@ -2051,8 +2051,10 @@ public enum ChatGenerationPhase: String, Sendable {
                     state.sessions[si].toolActivities?[ai].status = (error is CancellationError || Task.isCancelled || (error as? ChatMCPError) == .cancelled) ? .cancelled : .failed
                     state.sessions[si].toolActivities?[ai].issue = String(error.localizedDescription.prefix(2048))
                     state.sessions[si].toolActivities?[ai].issueCode = ChatToolIssue.code(error)
-                    state.sessions[si].toolActivities?[ai].remoteRequestSent = sent
-                    state.sessions[si].toolActivities?[ai].remoteOutcomeUnconfirmed = sent != false ? true : nil
+                    if case .mcp = request {
+                        state.sessions[si].toolActivities?[ai].remoteRequestSent = sent
+                        state.sessions[si].toolActivities?[ai].remoteOutcomeUnconfirmed = sent != false ? true : nil
+                    }
                     state.sessions[si].toolActivities?[ai].endedAt = Date(); changed()
                     try? await flush()
                 }
