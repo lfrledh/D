@@ -54,6 +54,10 @@ public struct ChatToolActivity: Codable, Sendable, Equatable, Identifiable {
     public var resultJSON: String?
     public var output: WorkflowAssetReference?
     public var issue: String?
+    public var issueCode: String?
+    /// nil for older receipts or when no reliable sent-request evidence exists.
+    public var remoteOutcomeUnconfirmed: Bool?
+    public var remoteRequestSent: Bool?
     public init(id: UUID = UUID(), request: ChatToolRequest) {
         self.id = id; self.request = request; startedAt = Date(); status = .running
     }
@@ -72,7 +76,7 @@ public struct ChatToolActivity: Codable, Sendable, Equatable, Identifiable {
         }
         let requestBytes = try JSONEncoder().encode(request)
         guard requestBytes.count <= 65_536, (resultJSON?.utf8.count ?? 0) <= 2_097_152,
-              (issue?.utf8.count ?? 0) <= 16_384, output == nil || output?.kind == .text,
+              (issue?.utf8.count ?? 0) <= 16_384, (issueCode?.utf8.count ?? 0) <= 256, output == nil || output?.kind == .text,
               status != .completed || resultJSON != nil || request.hasTransientResult,
               !request.hasTransientResult || (resultJSON == nil && output == nil) else { throw WorkflowIssue("工具记录大小或结果无效。") }
     }

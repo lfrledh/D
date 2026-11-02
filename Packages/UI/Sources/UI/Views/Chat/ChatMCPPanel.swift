@@ -13,24 +13,28 @@ struct ChatMCPPanel: View {
     @State private var arguments = "{}"
     @State private var permission = false
     @State private var issue: String?
+    @State private var issueCode: String?
     private var ownsConnection: Bool { chat.mcpSessionID == session.id }
     var body: some View {
         Group {
             VStack(alignment: .leading, spacing: 8) {
                 Text(workflowText(copyLanguage, "chat.mCPPanel.externalToolsMCP")).font(.headline)
-                TextField("https://…/mcp", text: $endpoint).textFieldStyle(WorkbenchGlassTextFieldStyle())
+                TextField(workflowText(copyLanguage, "chat.mCPPanel.address"), text: $endpoint).textFieldStyle(WorkbenchGlassTextFieldStyle())
                     .disabled(chat.mcpSessionID != nil)
-                Text(workflowText(copyLanguage, "chat.mCPPanel.streamableHTTPHTTPSOrLocalLoopbackOnlyNoLoginCredential"))
-                    .font(.caption).foregroundStyle(.secondary)
+                DisclosureGroup(workflowText(copyLanguage, "chat.mCPPanel.technical")) {
+                    Text(workflowText(copyLanguage, "chat.mCPPanel.streamableHTTPHTTPSOrLocalLoopbackOnlyNoLoginCredential")).font(.caption).foregroundStyle(.secondary)
+                }
                 Toggle(workflowText(copyLanguage, "chat.mCPPanel.allowThisConnectionAndSendTheExplicitlyEnteredArguments"), isOn: $permission)
                     .onChange(of: permission) { _, value in if !value && ownsConnection { Task { await chat.disconnectMCP() } } }
                 HStack {
                     Button(workflowText(copyLanguage, "chat.mCPPanel.connectAndListTools")) {
                         let captured = endpoint
-                        Task { do { try await chat.connectMCP(endpoint: captured, sessionID: session.id, permitted: permission); issue = nil } catch { issue = error.localizedDescription } }
+                        Task { do { try await chat.connectMCP(endpoint: captured, sessionID: session.id, permitted: permission); issue = nil; issueCode = nil } catch { issue = error.localizedDescription; issueCode = ChatToolIssue.code(error) } }
                     }.disabled(!permission || chat.mcpSessionID != nil || chat.isToolRunning)
+                        .help(workflowText(copyLanguage, "chat.mCPPanel.connectHelp"))
                     if ownsConnection {
                         Button(workflowText(copyLanguage, "chat.mCPPanel.stopDisconnect")) { Task { await chat.disconnectMCP() } }
+                            .help(workflowText(copyLanguage, "chat.mCPPanel.disconnectHelp"))
                     }
                 }
                 if let owner = chat.mcpSessionID, owner != session.id {
@@ -38,7 +42,7 @@ struct ChatMCPPanel: View {
                 }
                 if ownsConnection {
                     Text(chatConnectionText(chat.mcpStatus, language: language)).font(.caption).textSelection(.enabled)
-                    WorkbenchPicker(workflowText(copyLanguage, "baseline02.library.kind.tool"), selection: $tool) {
+                    WorkbenchPicker(workflowText(copyLanguage, "chat.mCPPanel.selectATool"), selection: $tool) {
                         WorkbenchChoice(workflowText(copyLanguage, "chat.mCPPanel.selectATool"), value:"")
                         WorkbenchChoiceForEach(chat.mcpTools, id: \.name) { WorkbenchChoice($0.title ?? $0.name, value:$0.name) }
                     }
@@ -52,11 +56,12 @@ struct ChatMCPPanel: View {
                         Button(workflowText(copyLanguage, "chat.mCPPanel.sendTheseArgumentsAndCallTool")) {
                             guard case .connected(let address) = chat.mcpStatus else { return }
                             let request = ChatToolRequest.mcp(endpoint: address, tool: selected.name, argumentsJSON: arguments)
-                            Task { do { try await chat.executeTool(request, sessionID: session.id, mcpPermission: permission); issue = nil } catch { issue = error.localizedDescription } }
+                            Task { do { try await chat.executeTool(request, sessionID: session.id, mcpPermission: permission); issue = nil; issueCode = nil } catch { issue = error.localizedDescription; issueCode = ChatToolIssue.code(error) } }
                         }.disabled(!permission || chat.isToolRunning || chat.isMCPConnecting)
+                            .help(workflowText(copyLanguage, "chat.mCPPanel.runHelp"))
                     }
                 }
-                if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+                if let issue { WorkbenchIssueText(raw: issue, key: issueCode).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
                 Text(workflowText(copyLanguage, "chat.MCPPanel.Resultsappearintaskresultsbelowtheyenter")).font(.caption)
             }.padding(.top, 6)
         }.onAppear { endpoint = session.mcpEndpoint ?? "" }

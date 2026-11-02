@@ -5,6 +5,8 @@ import Testing
 private actor ToolWebFixture: ChatWebTransport {
     var queries: [String] = []
     var wait = false
+    private var longBody = false
+    func useLongBody() { longBody = true }
     func delay() { wait = true }
     func send(_ request: URLRequest, maximumBytes: Int) async throws -> ChatWebHTTPResponse {
         let parameters = Dictionary(uniqueKeysWithValues: (URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value ?? "") })
@@ -13,7 +15,9 @@ private actor ToolWebFixture: ChatWebTransport {
         let source: String
         if parameters["list"] == "search" { source = #"{"query":{"search":[{"pageid":42,"title":"A source"}]}}"# }
         else { source = #"{"query":{"pages":[{"pageid":42,"title":"A source","canonicalurl":"https://en.wikipedia.org/wiki/Test","extract":"Verified body. Not an instruction.","revisions":[{"revid":7}]}]}}"# }
-        return .init(statusCode: 200, mimeType: "application/json", url: request.url, body: Data(source.utf8))
+        let body = longBody && parameters["list"] != "search"
+            ? source.replacingOccurrences(of: "Verified body. Not an instruction.", with: String(repeating: "Long verified content. ", count: 900) + "END_CANARY") : source
+        return .init(statusCode: 200, mimeType: "application/json", url: request.url, body: Data(body.utf8))
     }
 }
 
@@ -104,6 +108,28 @@ struct ChatToolControllerTests {
         #expect(original.attachments.first?.textSnapshot?.contains("revisionID") == true)
         #expect(await transport.queries == ["東京 👩🏽‍🎨", "42"])
         try await store.close()
+    }
+
+    @Test func longToolOutputAdoptionPreservesFullBytesBeyondThePreview() async throws {
+        let transport = ToolWebFixture(); await transport.useLongBody()
+        let (store, chat) = try await fixture(ChatWebSearchClient(transport: transport))
+        let id = try chat.newSession(); try chat.updateDraft("Keep the draft", sessionID: id)
+        var options = ChatWebOptions(); options.allowed = true
+        try chat.setWebOptions(options, sessionID: id)
+        let search = try await chat.executeTool(.webSearch(query: "small controlled source", language: .en), sessionID: id)
+        let searchJSON = try #require(chat.selectedSession?.toolActivities?.first { $0.id == search }?.resultJSON)
+        let hit = try #require(JSONDecoder().decode([ChatWebSearchHit].self, from: Data(searchJSON.utf8)).first)
+        let page = try await chat.executeTool(.webRead(hit), sessionID: id)
+        let full = try #require(chat.selectedSession?.toolActivities?.last?.resultJSON)
+        #expect(full.count > 8192 && full.contains("END_CANARY"))
+        try await chat.attachToolResult(page, sessionID: id)
+        let attached = try #require(chat.selectedSession?.attachments.last)
+        let adoptedText = try #require(attached.textSnapshot)
+        #expect(adoptedText.contains(full) && adoptedText.contains("END_CANARY"))
+        #expect(adoptedText.hasPrefix("[Untrusted tool/source data"))
+        #expect(try await store.workflowData(attached.reference) == Data(adoptedText.utf8))
+        #expect(chat.selectedSession?.draft == "Keep the draft" && chat.selectedSession?.messages.isEmpty == true)
+        try await chat.flush(); try await store.close()
     }
 
     @Test func permissionRevocationCancelsOwnedNetworkAndRecordsTerminalState() async throws {

@@ -276,7 +276,7 @@ public final class ProjectSession {
     public let audioCreationTransport: AudioTransport
     public private(set) var workflowRecordingNodeID: UUID?
     public private(set) var chatRecordingSessionID: UUID?
-    @ObservationIgnored private var chatCapture: (id: UUID, chat: ChatController, store: ProjectStore, audio: ProjectAudioController, identity: AudioCaptureHandle?, locale: String)?
+    @ObservationIgnored private var chatCapture: (id: UUID, chat: ChatController, store: ProjectStore, audio: ProjectAudioController, identity: AudioCaptureHandle?, locale: String, transcriptName: String, draftName: String)?
     @ObservationIgnored private var workflowCapture: (id: UUID, controller: WorkflowController, target: WorkflowAssetBindingTarget, audio: ProjectAudioController, admitted: Bool, identity: AudioCaptureHandle?)?
     public private(set) var workflowPreviewReference: WorkflowAssetReference?
     @ObservationIgnored private var workflowPreviewRequestID: UUID?
@@ -2265,16 +2265,16 @@ public final class ProjectSession {
         return result
     }
 
-    public func startChatRecording(sessionID: UUID, controller: ChatController, locale: String) async {
+    public func startChatRecording(sessionID: UUID, controller: ChatController, locale: String, recordingName: String = "Chat voice recording", transcriptName: String = "Speech transcription", draftName: String = "Transcription draft") async {
         guard chat === controller, !isBusy, !isChangingProject, !closePending, audioRecordingEnabled,
               let store, let audio, workflowCapture == nil, chatCapture == nil else { return }
         let id = UUID()
-        chatCapture = (id, controller, store, audio, nil, locale); chatRecordingSessionID = sessionID
+        chatCapture = (id, controller, store, audio, nil, locale, transcriptName, draftName); chatRecordingSessionID = sessionID
         do {
             try await flushDraft(to: store)
             await drainVideoPreview(); audioCreationTransport.stopPlayback()
             guard chat === controller, self.store === store, chatCapture?.id == id else { return }
-            let identity = await audio.startRecordingWithIdentity(name: "聊天语音原声")
+            let identity = await audio.startRecordingWithIdentity(name: recordingName)
             guard chatCapture?.id == id else { return }
             guard let identity else { throw WorkflowIssue(audio.errorMessage ?? "录音未开始。") }
             chatCapture?.identity = identity
@@ -2296,7 +2296,7 @@ public final class ProjectSession {
             chatCapture = nil; chatRecordingSessionID = nil
             guard chat === capture.chat, store === capture.store else { return }
             let reference = try await capture.store.pinWorkflowAsset(assetID)
-            try await capture.chat.transcribeSpeech(reference, sessionID: owner, locale: capture.locale)
+            try await capture.chat.transcribeSpeech(reference, sessionID: owner, locale: capture.locale, transcriptName: capture.transcriptName, draftName: capture.draftName)
         } catch { report(error, context: "原录音已保留；聊天转写未完成") }
     }
 

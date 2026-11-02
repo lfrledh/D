@@ -60,11 +60,18 @@ public struct ChatKnowledgeExcerpt: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+public struct ChatKnowledgeSourceIssue: Sendable, Equatable, Hashable {
+    public let sourceID: UUID
+    public let name: String
+    public let diagnostic: String
+    public let code: String?
+}
+
 public struct ChatKnowledgeSearchResult: Sendable {
     public let excerpts: [ChatKnowledgeExcerpt]
     /// Failed current sources were excluded from this query, not served from cache.
-    public let issues: [String]
-    public init(excerpts: [ChatKnowledgeExcerpt], issues: [String]) { self.excerpts = excerpts; self.issues = issues }
+    public let issues: [ChatKnowledgeSourceIssue]
+    public init(excerpts: [ChatKnowledgeExcerpt], issues: [ChatKnowledgeSourceIssue]) { self.excerpts = excerpts; self.issues = issues }
 }
 
 /// A model may only order the exact retrieved excerpts. Its raw response remains

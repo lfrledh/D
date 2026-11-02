@@ -9,7 +9,10 @@ private actor SearchWiringTransport: ChatWebTransport {
     private var calls: [URLRequest] = []
     private let searchBody: String?
     private let waits: Bool
-    init(waits: Bool = false, searchBody: String? = nil) {
+    private let failure: Failure?
+    enum Failure: Sendable { case searchHTTP, pageHTTP, timeout }
+    init(waits: Bool = false, searchBody: String? = nil, failure: Failure? = nil) {
+        self.failure = failure
         self.searchBody = searchBody
         (entered, signal) = AsyncStream.makeStream()
         self.waits = waits
@@ -19,6 +22,10 @@ private actor SearchWiringTransport: ChatWebTransport {
         calls.append(request); signal.yield(request)
         if waits { try await Task.sleep(for: .seconds(30)) }
         let search = request.url?.host == "api.search.brave.com"
+        if failure == .timeout { throw URLError(.timedOut) }
+        if (search && failure == .searchHTTP) || (!search && failure == .pageHTTP) {
+            return .init(statusCode: 503, mimeType: "text/plain", url: request.url, body: Data("not source text".utf8))
+        }
         let body = search
             ? (searchBody ?? #"{"web":{"results":[{"title":"Search title","url":"https://example.com/source","description":"TRANSIENT_SNIPPET_CANARY"}]}}"#)
             : "PAGE_BODY_CANARY: actual independently read text."
@@ -28,10 +35,12 @@ private actor SearchWiringTransport: ChatWebTransport {
 
 private actor SearchAnswerEngine: InferenceEngine {
     private(set) var requests: [InferenceRequest] = []
+    private let emitsDelta: Bool
+    init(emitsDelta: Bool = true) { self.emitsDelta = emitsDelta }
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
         requests.append(request)
         return .init(id: request.id, events: AsyncThrowingStream { c in
-            c.yield(.textDelta("Local model answer")); c.finish()
+            if emitsDelta { c.yield(.textDelta("Local model answer")) }; c.finish()
         }, cancel: {}, outcome: {
             .completed(.init(textResponse: .init(rawText: "Local model answer", finalText: "Local model answer", finishReason: .stop)))
         })
@@ -125,23 +134,7 @@ struct ChatSearchWiringTests {
 
     @Test func automaticSearchReadsActualPageBeforeLocalModelWithoutSendingHistory() async throws {
         let transport = SearchWiringTransport(searchBody: #"{"web":{"results":[{"title":"Bad","url":"file:///private","description":"REJECTED_CANARY"},{"title":"Good","url":"https://example.com/source","description":"TRANSIENT_SNIPPET_CANARY"}]}}"#), engine = SearchAnswerEngine()
-        let parent = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent("AutomaticSearch-" + UUID().uuidString)
-        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
-        let store = try await ProjectStore.create(at: parent.appendingPathComponent("Search.dproject"), name: "Automatic search")
-        let runtime = WorkbenchSession(engine: engine, backendID: "fixture", status: {
-            .init(activeRunID: nil, phase: nil, queuedRunIDs: [])
-        }, shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text")
-        let chat = ChatController(store: store, searchClient: .init(transport: transport), pageClient: .init(transport: transport), searchCredential: { _ in "fixture-secret-canary" }) {
-            WorkflowServices(store: store, session: runtime) { _, identity in
-                .init(identity: identity, reference: .init(directory: parent, revision: identity),
-                      backendID: "fixture.text", operationID: WorkflowModelRoutes.qwen35,
-                      textCapability: .init(maximumPromptTokens: 8192, maximumOutputTokens: 1024, profile: TextExecutionCapability.qwen35VLMProfile))
-            }
-        }
-        await chat.load(); let id = try chat.newSession()
-        var node = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
-        node.parameters["modelID"] = .text("text:fixture"); node.parameters["maximumPromptTokens"] = .integer(8192)
-        try chat.updateConfiguration(node, sessionID: id)
+        let (store, chat, id) = try await generationFixture(transport, engine: engine)
         try chat.setSystemPrompt("PRIVATE_SYSTEM_CANARY", sessionID: id)
         try chat.updateDraft("visible question", sessionID: id)
         var options = ChatWebOptions(); options.allowed = true; options.automaticSearch = true; options.provider = .brave
@@ -171,22 +164,26 @@ struct ChatSearchWiringTests {
         try await store.close()
     }
 
-    @Test func allRejectedIsNotZeroResultsAndCannotTriggerPageOrModel() async throws {
+    @Test func allRejectedAndZeroResultsKeepFilteringFactsAndContinueOneModelCall() async throws {
         for body in [#"{"web":{"results":[{},null]}}"#, #"{"web":{"results":[]}}"#] {
             let transport = SearchWiringTransport(searchBody: body)
-            let (store, chat) = try await fixture(transport)
-            let id = try chat.newSession()
+            let engine = SearchAnswerEngine()
+            let (store, chat, id) = try await generationFixture(transport, engine: engine)
             try chat.updateDraft("original question", sessionID: id)
             var options = ChatWebOptions(); options.allowed = true; options.automaticSearch = true; options.provider = .brave
             try chat.setWebOptions(options, sessionID: id)
-            await #expect(throws: (any Error).self) { try await chat.send(sessionID: id) }
+            try await chat.send(sessionID: id); await chat.waitForCompletion()
             let activity = try #require(chat.selectedSession?.toolActivities?.last)
             let preview = try #require(chat.searchResponse(activityID: activity.id, sessionID: id))
             #expect(preview.rejectedCount == (body.contains("null") ? 2 : 0))
             #expect(preview.allRejected == body.contains("null"))
             #expect(await transport.requests().count == 1)
-            #expect(chat.selectedSession?.attempts.isEmpty == true)
-            #expect(chat.selectedSession?.draft == "original question")
+            #expect(await engine.requests.count == 1)
+            let attempt = try #require(chat.selectedSession?.attempts.last)
+            #expect(attempt.automaticSearch?.outcome == .noResults)
+            #expect(attempt.automaticSearch?.generationStarted == true)
+            #expect(attempt.messagesJSON.contains("Do not claim this request was verified by web search"))
+            #expect(chat.selectedSession?.messages.first?.text == "original question")
             #expect(activity.status == .completed && activity.resultJSON == nil)
             try await store.close()
         }
@@ -215,6 +212,104 @@ struct ChatSearchWiringTests {
         }
     }
 
+    @Test func failedAutomaticSearchContinuesOnceAndNoticeSurvivesReopen() async throws {
+        for (failure, emitsDelta) in [(SearchWiringTransport.Failure.searchHTTP, true), (.pageHTTP, true), (.timeout, true), (.searchHTTP, false)] {
+            let transport = SearchWiringTransport(failure: failure), engine = SearchAnswerEngine(emitsDelta: emitsDelta)
+            let (store, chat, id) = try await generationFixture(transport, engine: engine)
+            try chat.setSystemPrompt("Keep the user's system instructions", sessionID: id)
+            try chat.updateDraft("original question", sessionID: id)
+            var options = ChatWebOptions(); options.allowed = true; options.automaticSearch = true; options.provider = .brave
+            try chat.setWebOptions(options, sessionID: id)
+            try await chat.send(sessionID: id); await chat.waitForCompletion()
+            #expect(await engine.requests.count == 1)
+            let session = try #require(chat.selectedSession), attempt = try #require(session.attempts.last)
+            #expect(attempt.status == .completed)
+            #expect(session.messages.filter { $0.role == .user }.map(\.text) == ["original question"])
+            #expect(session.systemPrompt == "Keep the user's system instructions")
+            #expect(attempt.automaticSearch?.outcome == .failed)
+            #expect(attempt.automaticSearch?.generationStarted == true)
+            #expect(attempt.automaticSearch?.issueCode != nil)
+            #expect(attempt.messagesJSON.contains("D request source status"))
+            #expect(!attempt.messagesJSON.contains("not source text"))
+            #expect(!attempt.messagesJSON.contains("TRANSIENT_SNIPPET_CANARY"))
+            #expect(session.attachments.isEmpty)
+            try await chat.flush()
+            let root = store.rootURL
+            try await store.close()
+            let reopenedStore = try await ProjectStore.open(at: root)
+            let reopened = ChatController(store: reopenedStore) { throw WorkflowIssue("Reopen must not infer") }
+            await reopened.load()
+            #expect(reopened.selectedSession?.attempts.last?.automaticSearch == attempt.automaticSearch)
+            #expect(await engine.requests.count == 1)
+            try await reopenedStore.close()
+        }
+    }
+
+    @Test func failedSearchPreservesManualReferenceAndSaveRetryNeverQueriesOrInfersAgain() async throws {
+        let transport = SearchWiringTransport(failure: .searchHTTP), engine = SearchAnswerEngine()
+        let (store, chat, id) = try await generationFixture(transport, engine: engine)
+        let reference = try await store.publishWorkflowAsset(data: Data("MANUAL_REFERENCE_CANARY".utf8),
+            mediaType: "text/plain", name: "User-owned reference", operationID: "d.asset.import").record.reference
+        _ = try await chat.addAttachment(reference, name: "User-owned reference", sessionID: id)
+        try chat.updateDraft("original question", sessionID: id)
+        var options = ChatWebOptions(); options.allowed = true; options.automaticSearch = true; options.provider = .brave
+        try chat.setWebOptions(options, sessionID: id)
+        let obstruction = store.rootURL.appendingPathComponent("WorkflowAssets")
+        let permissions = try #require(FileManager.default.attributesOfItem(atPath: obstruction.path)[.posixPermissions])
+        defer { try? FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: obstruction.path) }
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: obstruction.path)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        let attempt = try #require(chat.selectedSession?.attempts.last)
+        try #require(chat.pendingSaveAttemptID == attempt.id)
+        #expect(attempt.automaticSearch?.outcome == .failed && attempt.messagesJSON.contains("MANUAL_REFERENCE_CANARY"))
+        #expect(chat.selectedSession?.messages.filter { $0.role == .user }.count == 1)
+        #expect(chat.selectedSession?.messages.first { $0.role == .user }?.attachments.first?.reference == reference)
+        #expect(await engine.requests.count == 1)
+        #expect(await transport.requests().count == 1)
+        try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: obstruction.path)
+        await chat.retrySave(); await chat.retrySave()
+        #expect(chat.pendingSaveAttemptID == nil && chat.selectedSession?.attempts.last?.status == .completed)
+        #expect(chat.selectedSession?.attempts.last?.automaticSearch == attempt.automaticSearch)
+        #expect(await engine.requests.count == 1)
+        #expect(await transport.requests().count == 1)
+        try await chat.flush(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await reopened.chatState().sessions.first?.attempts.last?.automaticSearch == attempt.automaticSearch)
+        #expect(try await reopened.workflowData(reference) == Data("MANUAL_REFERENCE_CANARY".utf8))
+        try await reopened.close()
+    }
+
+    @Test func cancelledOrChangedPreparationNeverContinuesEvenIfSelectionReturns() async throws {
+        for action in 0..<6 {
+            let transport = SearchWiringTransport(), engine = SearchAnswerEngine(), gate = SearchCredentialGate()
+            let (store, chat, id) = try await generationFixture(transport, engine: engine, credential: { _ in await gate.credential() })
+            let other = try chat.newSession(); try chat.selectSession(id)
+            try chat.updateDraft("original question", sessionID: id)
+            var options = ChatWebOptions(); options.allowed = true; options.automaticSearch = true; options.provider = .brave
+            try chat.setWebOptions(options, sessionID: id)
+            let operation = Task { try await chat.send(sessionID: id) }
+            var events = gate.entered.makeAsyncIterator(); _ = try #require(await events.next())
+            #expect(chat.canStopGeneration && chat.isBusy)
+            var cancellation: Task<Void, Never>?
+            switch action {
+            case 0: cancellation = Task { await chat.cancel() }; await Task.yield()
+            case 1: try chat.selectSession(other); try chat.selectSession(id)
+            case 2: try chat.updateDraft("changed", sessionID: id)
+            case 3: options.allowed = false; options.automaticSearch = false; try chat.setWebOptions(options, sessionID: id)
+            case 4: try chat.archive(id)
+            default: try chat.setDeleted(true, sessionID: id)
+            }
+            await gate.release()
+            await #expect(throws: (any Error).self) { try await operation.value }
+            await cancellation?.value
+            #expect(await engine.requests.isEmpty)
+            let target = try #require(chat.state.sessions.first { $0.id == id })
+            #expect(target.messages.isEmpty && target.attempts.isEmpty)
+            #expect(!chat.canStopGeneration && !chat.isCancelling)
+            try await store.close()
+        }
+    }
+
     @Test func transientResultsCannotBeSmuggledIntoPersistentActivity() throws {
         var record = ChatToolActivity(request: .providerSearch(query: "q", provider: .brave))
         record.status = .completed
@@ -226,6 +321,28 @@ struct ChatSearchWiringTests {
         #expect(try JSONDecoder().decode(ChatWebOptions.self, from: encoded).provider == nil)
         let old = Data(#"{"allowed":true,"automaticSearch":true,"language":"zh"}"#.utf8)
         #expect(try JSONDecoder().decode(ChatWebOptions.self, from: old).provider == nil)
+    }
+
+    private func generationFixture(_ transport: SearchWiringTransport, engine: SearchAnswerEngine,
+                                   credential: @escaping @Sendable (ChatSearchProvider) async throws -> String = { _ in "fixture-secret-canary" }) async throws -> (ProjectStore, ChatController, UUID) {
+        let parent = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent("AutomaticSearch-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: parent.appendingPathComponent("Search.dproject"), name: "Automatic search")
+        let runtime = WorkbenchSession(engine: engine, backendID: "fixture", status: {
+            .init(activeRunID: nil, phase: nil, queuedRunIDs: [])
+        }, shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text")
+        let chat = ChatController(store: store, searchClient: .init(transport: transport), pageClient: .init(transport: transport), searchCredential: credential) {
+            WorkflowServices(store: store, session: runtime) { _, identity in
+                .init(identity: identity, reference: .init(directory: parent, revision: identity),
+                      backendID: "fixture.text", operationID: WorkflowModelRoutes.qwen35,
+                      textCapability: .init(maximumPromptTokens: 8192, maximumOutputTokens: 1024, profile: TextExecutionCapability.qwen35VLMProfile))
+            }
+        }
+        await chat.load(); let id = try chat.newSession()
+        var node = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
+        node.parameters["modelID"] = .text("text:fixture"); node.parameters["maximumPromptTokens"] = .integer(8192)
+        try chat.updateConfiguration(node, sessionID: id)
+        return (store, chat, id)
     }
 
     private func fixture(_ transport: SearchWiringTransport, credential: @escaping @Sendable (ChatSearchProvider) async throws -> String = { _ in "fixture-secret-canary" }) async throws -> (ProjectStore, ChatController) {

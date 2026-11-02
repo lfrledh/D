@@ -793,7 +793,7 @@ struct ChatWorkbenchView: View {
                 ChatAnswerFieldSheet(choices: choices, wording: { en, zh in newLabel(en, english: en, chinese: zh) },
                     onSave: { field, publication, useInWorkflow in
                         let activity = try chat.beginExternalActivity(); defer { chat.endExternalActivity(activity) }
-                        let envelope = try await chat.saveAnswerField(field, assetID: publication)
+                        let envelope = try await chat.saveAnswerField(field, assetID: publication, name: workflowText(language, "chat.answerFieldSheet.assetName"), sourceName: workflowText(language, "chat.message.responseAssetName"))
                         try Task.checkCancellation()
                         if chat.isTemporary {
                             guard let source = envelope.fields?["source"]?.assetReferences.first, let onRetainTemporary else { throw WorkflowIssue("长期保存入口不可用。") }
@@ -1872,7 +1872,7 @@ ScrollViewReader { proxy in
                     Task { @MainActor in
                         guard stillCurrent(true) else { return }
                         do {
-                            let content = try await chat.artifactFromAnswer(message.id, sessionID: session.id)
+                            let content = try await chat.artifactFromAnswer(message.id, sessionID: session.id, name: workflowText(language, "chat.message.responseAssetName"))
                             onAssetsChanged()
                             guard chat.state.selectedSessionID == session.id else { return }
                             present(.artifact(content))
@@ -1977,7 +1977,7 @@ ScrollViewReader { proxy in
                     disabledReasons: messageDisabledReasons(message, session: session),
                     layoutProbe: layoutProbe, messageID: message.id)
             } footer: {
-                if !noticeKeys.isEmpty || attempt?.issue != nil {
+                if !noticeKeys.isEmpty || attempt?.issue != nil || attempt?.automaticSearch?.noticeKey != nil {
                     ChatMessageNoticeView(attempt: attempt, keys: noticeKeys,
                         openDetails: { commands.first { $0.id == "details" }?.action?() })
                         .chatMeasured("attempt-status-\(attempt?.id.uuidString ?? "none")", probe: layoutProbe)
@@ -2007,6 +2007,11 @@ ScrollViewReader { proxy in
                 }
                 LowMemoryExecutionDetails(records: attempt.executionRecords ?? [])
                 ChatRunFeedbackView(chat: chat, attempt: attempt)
+                if let search = attempt.automaticSearch {
+                    Text(workflowText(language, "chat.automaticSearch.title")).font(.headline)
+                    Text(workflowText(language, search.noticeKey ?? "chat.automaticSearch.included"))
+                    if let issue = search.issue { WorkbenchIssueText(raw: issue, key: search.issueCode) }
+                }
                 Divider()
                 LabeledContent(clarity("state"), value: status(attempt))
                 LabeledContent(label("finish", "结束原因"), value: workflowText(language, ChatMessageNotices.finishKey(attempt)))
@@ -2528,7 +2533,7 @@ ScrollViewReader { proxy in
             let activity = try owner.beginExternalActivity(); defer { owner.endExternalActivity(activity) }
             let asset = try await store.importWorkflowMediaFile(at: url)
             onAssetsChanged(); try Task.checkCancellation()
-            try await owner.transcribeSpeech(asset.record.reference, sessionID: sessionID, locale: locale)
+            try await owner.transcribeSpeech(asset.record.reference, sessionID: sessionID, locale: locale, transcriptName: workflowText(language, "chat.speechPanel.transcriptName"), draftName: workflowText(language, "chat.speechPanel.transcriptDraftName"))
             report(nil, for: sessionID)
         } catch { report(error.localizedDescription, for: sessionID, code: (error as? WorkflowIssue)?.code) }
     }
@@ -2747,7 +2752,7 @@ ScrollViewReader { proxy in
         let owner = chat
         do {
             let activity = try owner.beginExternalActivity(); defer { owner.endExternalActivity(activity) }
-            let asset = try await owner.saveAssistantFinal(messageID, sessionID: sessionID)
+            let asset = try await owner.saveAssistantFinal(messageID, sessionID: sessionID, name: workflowText(language, "chat.message.responseAssetName"))
             guard owner === chat else { return }
             if owner.isTemporary {
                 guard let onRetainTemporary else { throw WorkflowIssue("长期保存入口不可用；成果仍在临时会话。") }

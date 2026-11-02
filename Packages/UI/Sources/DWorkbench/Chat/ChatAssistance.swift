@@ -233,6 +233,11 @@ public enum ChatAssistanceResult: Codable, Sendable, Equatable {
     }
 }
 
+/// Presentation identity; raw service diagnostics remain separately available.
+public enum ChatAssistancePhase: Sendable, Equatable {
+    case idle, running(ChatAssistanceKind), saved, savePending, cancelled, failed, retained
+}
+
 public enum ChatAssistanceStatus: String, Codable, Sendable, Equatable {
     case pending, running, completed, cancelled, failed, stale
 }

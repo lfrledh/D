@@ -135,10 +135,10 @@ public enum ChatGenerationPhase: String, Sendable {
         speechService = service
         return service
     }
-    public var isBusy: Bool { !externalActivities.isEmpty || !knowledgeCopies.isEmpty || !artifactSaves.isEmpty || isRerankingKnowledge || isAssisting || isRunning || isToolRunning || isMCPConnecting || isMCPStopping || isTranscribing || speechPlaybackState != .idle }
+    public var isBusy: Bool { preparingSendSessionID != nil || !externalActivities.isEmpty || !knowledgeCopies.isEmpty || !artifactSaves.isEmpty || isRerankingKnowledge || isAssisting || isRunning || isToolRunning || isMCPConnecting || isMCPStopping || isTranscribing || speechPlaybackState != .idle }
     public private(set) var isCancelling = false
     /// Publication retries are busy but are not a cancellable model run.
-    public var canStopGeneration: Bool { isRunning && activeAttemptID != nil }
+    public var canStopGeneration: Bool { (isRunning && activeAttemptID != nil) || preparingSendSessionID != nil }
     @ObservationIgnored private var debounceGeneration: UInt64 = 0
     @ObservationIgnored private var toolTask: Task<UUID, Error>?
     @ObservationIgnored private var activeToolIsMCP = false
@@ -168,6 +168,8 @@ public enum ChatGenerationPhase: String, Sendable {
     public private(set) var activeAssistanceSessionID: UUID?
     public private(set) var pendingAssistanceSaveID: UUID?
     public private(set) var assistancePhase = ""
+    public private(set) var assistanceDisplayPhase: ChatAssistancePhase = .idle
+    public private(set) var assistancePhaseSessionID: UUID?
     public var isAssisting: Bool { activeAssistanceSessionID != nil }
     @ObservationIgnored private var assistanceTask: Task<Void, Never>?
     @ObservationIgnored private var assistanceRetryTask: Task<Void, Error>?
@@ -251,7 +253,8 @@ public enum ChatGenerationPhase: String, Sendable {
             let pending = state.sessions.flatMap { $0.assistanceExecutions ?? [] }.filter { $0.pendingMemoryEntries != nil }
             guard pending.count <= 1 else { throw WorkflowIssue("发现多个待恢复的辅助保存，请保留原件检查。") }
             pendingAssistanceSaveID = pending.first?.id
-            if pendingAssistanceSaveID != nil { assistancePhase = "个人记忆的保存尚待核对，请显式重试；不会重推理。" }
+            assistancePhaseSessionID = pending.first?.record.source.sessionID
+            if pendingAssistanceSaveID != nil { assistancePhase = "个人记忆的保存尚待核对，请显式重试；不会重推理。"; assistanceDisplayPhase = .savePending }
             if mutation != savedMutation { try await flush() }
         } catch { self.error = error.localizedDescription }
     }
@@ -338,10 +341,20 @@ public enum ChatGenerationPhase: String, Sendable {
         guard initialDraft.utf8.count <= 1_048_576 else { throw WorkflowIssue("草稿超过1MiB。") }
         var session = ChatSession(id: id, title: title)
         session.systemPrompt = defaultSystemPrompt; session.draft = initialDraft
+        invalidatePreparingSendForSelection(id)
         var next = state; next.sessions.append(session); next.selectedSessionID = id
         state = next; changed(); return id
     }
-    public func selectSession(_ id: UUID) throws { try requireLoaded(); _ = try index(id); state.selectedSessionID = id; changed() }
+    public func selectSession(_ id: UUID) throws {
+        try requireLoaded(); _ = try index(id)
+        invalidatePreparingSendForSelection(id)
+        state.selectedSessionID = id; changed()
+    }
+    private func invalidatePreparingSendForSelection(_ id: UUID) {
+        guard preparingSendSessionID != nil, state.selectedSessionID != id else { return }
+        preparingSendCancelled = true
+        toolTask?.cancel()
+    }
     public func rename(_ id: UUID, title: String) throws {
         try requireLoaded(); guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, title.utf8.count <= 512 else { throw WorkflowIssue("会话标题无效。") }
         let i = try index(id)
@@ -773,7 +786,7 @@ public enum ChatGenerationPhase: String, Sendable {
         let projectID = await store.snapshot().id
         var index = try knowledgeIndex ?? ChatKnowledgeIndex(projectID: projectID)
         var indexed = indexedKnowledge
-        var issues: [String] = []
+        var issues: [ChatKnowledgeSourceIssue] = []
         var valid: [ChatKnowledgeDocument] = []
         for document in documents where scope.contains(document.id) {
             do {
@@ -783,7 +796,7 @@ public enum ChatGenerationPhase: String, Sendable {
             } catch is CancellationError { throw CancellationError() }
             catch {
                 if let old = indexed.removeValue(forKey: document.id) { index.remove(source: old.material.reference) }
-                issues.append(document.material.name + ": " + error.localizedDescription)
+                issues.append(.init(sourceID: document.id, name: document.material.name, diagnostic: error.localizedDescription, code: (error as? WorkflowIssue)?.code))
             }
         }
         let search = Task.detached(priority: .userInitiated) { [index, indexed, valid] in
@@ -867,6 +880,7 @@ public enum ChatGenerationPhase: String, Sendable {
             fork.contextChoices = choices
         }
         fork.originSessionID = id; fork.originLeafID = leaf
+        invalidatePreparingSendForSelection(fork.id)
         state.sessions.append(fork); state.selectedSessionID = fork.id; changed(); return fork.id
     }
 
@@ -936,7 +950,7 @@ public enum ChatGenerationPhase: String, Sendable {
         }
         return try contextPlan(session, path: session.path(to: session.selectedLeafID), prompt: session.draft, attachments: session.attachments, excerpts: session.knowledgeExcerpts ?? [])
     }
-    private func contextPlan(_ session: ChatSession, path: [ChatMessage], prompt: String, attachments: [ChatAttachment], excerpts: [ChatKnowledgeExcerpt]) throws -> ChatContextPlan {
+    private func contextPlan(_ session: ChatSession, path: [ChatMessage], prompt: String, attachments: [ChatAttachment], excerpts: [ChatKnowledgeExcerpt], automaticSearch: ChatAutomaticSearch? = nil) throws -> ChatContextPlan {
         let ids = Set(path.map(\.id)), choices = session.contextChoices
         var excluded = Set(choices?.excludedMessageIDs ?? []).intersection(ids)
         var extras: [String] = []
@@ -962,7 +976,7 @@ public enum ChatGenerationPhase: String, Sendable {
         let adopted = (choices?.adopted ?? [:]).filter { ids.contains($0.key) && !excluded.contains($0.key) }
         let system = ([session.systemPrompt].filter { !$0.isEmpty } + extras).joined(separator: "\n\n")
         var plan = try ChatContextPlan.build(path: path, attempts: session.attempts, prompt: prompt,
-            attachments: attachments, system: system, adopted: adopted, excluded: excluded, knowledgeExcerpts: excerpts)
+            attachments: attachments, system: system, adopted: adopted, excluded: excluded, knowledgeExcerpts: excerpts, automaticSearch: automaticSearch)
         plan.memoryUses = uses
         plan.summaryUses = latest.filter(\.enabled)
         return plan
@@ -983,6 +997,12 @@ public enum ChatGenerationPhase: String, Sendable {
         guard Set(scopes).count == scopes.count, scopes.count <= 2,
               scopes.allSatisfy({ $0 == .personal || $0 == projectIdentity.map(ChatMemoryScope.project) }) else { throw WorkflowIssue("记忆范围不属于当前项目。") }
         state.sessions[i].memoryScopes = scopes; changed()
+    }
+    /// Resolve only already loaded owners, using the frozen source identity.
+    public func memorySourceConversationName(_ id: UUID) -> String? {
+        if let session = state.sessions.first(where: { $0.id == id }) { return session.title }
+        guard !isTemporary, let owner = personalMemoryProvider(), owner !== self, owner.isLoaded else { return nil }
+        return owner.state.sessions.first(where: { $0.id == id })?.title
     }
     public func writeMemory(_ entry: ChatMemoryEntry) async throws {
         try requireLoaded(); try entry.validate()
@@ -1059,11 +1079,12 @@ public enum ChatGenerationPhase: String, Sendable {
         guard allowsSubmission(), assistanceTask == nil, assistanceRetryTask == nil, !isAssisting, pendingAssistanceSaveID == nil,
               state.sessions.first(where: { $0.id == sessionID })?.assistanceOptions != nil else { return }
         assistanceCancelled = false; activeAssistanceSessionID = sessionID
+        assistancePhaseSessionID = sessionID; assistanceDisplayPhase = .idle; assistancePhase = ""
         assistanceTask = Task { [self] in
             defer { assistanceTask = nil; activeAssistanceSessionID = nil
                     if pendingAssistanceSaveID == nil { assistanceServices = nil } }
             do { try await performAssistance(sessionID: sessionID) }
-            catch { assistancePhase = error.localizedDescription }
+            catch { assistancePhase = error.localizedDescription; assistanceDisplayPhase = assistanceCancelled ? .cancelled : .failed }
         }
     }
     public func runAssistance(sessionID: UUID) throws {
@@ -1075,10 +1096,12 @@ public enum ChatGenerationPhase: String, Sendable {
     }
     public func waitForAssistance() async { await assistanceTask?.value }
     public func cancelAssistance() async {
+        guard isAssisting || assistanceRetryTask != nil || pendingAssistanceSaveID != nil else { return }
         assistanceCancelled = true
         await assistanceServices?.cancel()
         await assistanceTask?.value
         _ = try? await assistanceRetryTask?.value
+        assistanceDisplayPhase = pendingAssistanceSaveID == nil ? .cancelled : .savePending
     }
     private func assistanceSource(_ session: ChatSession) throws -> ChatContextSource {
         let excluded = Set(session.contextChoices?.excludedMessageIDs ?? [])
@@ -1141,7 +1164,7 @@ public enum ChatGenerationPhase: String, Sendable {
                 _ = try assistanceIsCurrent(execution, sessionID: sessionID)
                 let service = try makeServices(); assistanceServices = service
                 try service.useBackgroundLanguageAdmission(); try service.beginPlan()
-                assistancePhase = "辅助任务：" + kind.rawValue
+                assistancePhase = "辅助任务：" + kind.rawValue; assistanceDisplayPhase = .running(kind)
                 let result = try await service.executeCall(.init(node: execution.node, stepID: execution.id, inputs: execution.inputs))
                 guard case .outputs(let values) = result, let raw = values["raw"]?.asset ?? values["output"]?.asset else {
                     throw WorkflowIssue("辅助任务没有发布完整原文。")
@@ -1154,7 +1177,7 @@ public enum ChatGenerationPhase: String, Sendable {
                     // Application already occurred before a sidecar flush failed. Keep that truth
                     // and retain a save-only continuation, never re-apply generated content.
                     pendingAssistanceSaveID = execution.id
-                    assistancePhase = "辅助结果处理记录尚未保存：" + error.localizedDescription
+                    assistancePhase = "辅助结果处理记录尚未保存：" + error.localizedDescription; assistanceDisplayPhase = .savePending
                     return
                 }
                 if assistanceServices?.hasPendingSaves == true { pendingAssistanceSaveID = execution.id }
@@ -1164,7 +1187,7 @@ public enum ChatGenerationPhase: String, Sendable {
                 try setAssistanceRecord(Self.endingAssistance(record, status: status, output: raw,
                     issue: error.localizedDescription), sessionID: sessionID)
                 try? await flush()
-                assistancePhase = error.localizedDescription
+                assistancePhase = error.localizedDescription; assistanceDisplayPhase = pendingAssistanceSaveID != nil ? .savePending : (status == .cancelled ? .cancelled : status == .stale ? .retained : .failed)
                 if pendingAssistanceSaveID != nil || assistanceCancelled || status == .stale { return }
             }
         }
@@ -1240,7 +1263,7 @@ public enum ChatGenerationPhase: String, Sendable {
             try await persistAssistanceMemory(executionID: execution.id, sessionID: execution.record.source.sessionID)
         }
         try await flush()
-        assistancePhase = "辅助结果已保存"
+        assistancePhase = "辅助结果已保存"; assistanceDisplayPhase = .saved
     }
     private func persistAssistanceMemory(executionID: UUID, sessionID: UUID) async throws {
         let i = try index(sessionID)
@@ -1293,6 +1316,7 @@ public enum ChatGenerationPhase: String, Sendable {
         guard !isAssisting, let id = pendingAssistanceSaveID,
               let execution = state.sessions.flatMap({ $0.assistanceExecutions ?? [] }).first(where: { $0.id == id }) else { return }
         activeAssistanceSessionID = execution.record.source.sessionID
+        assistancePhaseSessionID = execution.record.source.sessionID; assistanceDisplayPhase = .savePending
         let task = Task { @MainActor [self] in
             if execution.record.status == .completed || (execution.record.status == .stale && execution.record.output != nil) {
                 try await persistAssistanceMemory(executionID: id, sessionID: execution.record.source.sessionID)
@@ -1322,6 +1346,7 @@ public enum ChatGenerationPhase: String, Sendable {
             pendingAssistanceSaveID = nil; assistanceServices = nil
             let saved = state.sessions.flatMap { $0.assistanceExecutions ?? [] }.first { $0.id == id }?.record
             assistancePhase = saved?.status == .stale ? (saved?.issue ?? "辅助结果已保留，未采用。") : "辅助结果已保存"
+            assistanceDisplayPhase = saved?.status == .stale ? .retained : .saved
         }
         assistanceRetryTask = task
         defer { assistanceRetryTask = nil; activeAssistanceSessionID = nil }
@@ -1329,8 +1354,8 @@ public enum ChatGenerationPhase: String, Sendable {
     }
 
     private func prepared(_ path: [ChatMessage], session: ChatSession, prompt: String, attachments: [ChatAttachment],
-                          node source: WorkflowNode, excerpts: [ChatKnowledgeExcerpt]) async throws -> (WorkflowNode, String, [String: WorkflowValue], [ChatMemoryUse], [ChatContextSummary]) {
-        let plan = try contextPlan(session, path: path, prompt: prompt, attachments: attachments, excerpts: excerpts)
+                          node source: WorkflowNode, excerpts: [ChatKnowledgeExcerpt], automaticSearch: ChatAutomaticSearch? = nil) async throws -> (WorkflowNode, String, [String: WorkflowValue], [ChatMemoryUse], [ChatContextSummary]) {
+        let plan = try contextPlan(session, path: path, prompt: prompt, attachments: attachments, excerpts: excerpts, automaticSearch: automaticSearch)
         let excluded = Set(session.contextChoices?.excludedMessageIDs ?? [])
         for item in path.filter({ !excluded.contains($0.id) }).flatMap(\.attachments) + attachments {
             _ = try await store.workflowData(item.reference)
@@ -1389,7 +1414,9 @@ public enum ChatGenerationPhase: String, Sendable {
         return result
     }
 
-    private var preparingSendSessionID: UUID?
+    public private(set) var preparingSendSessionID: UUID?
+    private var preparingSendCancelled = false
+    @ObservationIgnored private var preparationWaiters: [CheckedContinuation<Void, Never>] = []
     private var automaticSearchIncluded = false
     public func hasPendingAutomaticSearch(for session: ChatSession) -> Bool {
         session.webOptions?.allowed == true && session.webOptions?.automaticSearch == true &&
@@ -1405,23 +1432,33 @@ public enum ChatGenerationPhase: String, Sendable {
         }
         guard allowsSubmission(), !isRunning, pendingSaveAttemptID == nil else { throw WorkflowIssue("已有聊天推理或待保存结果；请等待或重试保存。其他会话可以继续编辑。") }
         guard preparingSendSessionID == nil else { throw WorkflowIssue("正在准备本次请求。", code: "chat.phase.preparing") }
-        preparingSendSessionID = sessionID; automaticSearchIncluded = false
-        defer { preparingSendSessionID = nil; automaticSearchIncluded = false }
-        try await prepareAutomaticWeb(sessionID: sessionID)
-        let i = try index(sessionID), session = state.sessions[i]
-        if session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           let user = try session.path(to: session.selectedLeafID).last, user.role == .user {
+        let initial = state.sessions[try index(sessionID)]
+        if initial.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let user = try initial.path(to: initial.selectedLeafID).last, user.role == .user {
             try await regenerate(user.id, sessionID: sessionID)
             return
         }
+        preparingSendSessionID = sessionID; preparingSendCancelled = false; automaticSearchIncluded = false
+        defer {
+            preparingSendSessionID = nil; automaticSearchIncluded = false
+            if !isRunning { isCancelling = false }
+            let waiters = preparationWaiters; preparationWaiters = []
+            for waiter in waiters { waiter.resume() }
+        }
+        let selectedAtStart = state.selectedSessionID
+        let search = try await prepareAutomaticWeb(sessionID: sessionID, selectedAtStart: selectedAtStart)
+        try validatePreparingSend(sessionID, selectedAtStart: selectedAtStart)
+        let i = try index(sessionID), session = state.sessions[i]
         guard !session.archived, session.contextChoices?.deletedAt == nil, let node = session.configuration,
               !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw WorkflowIssue("请填写消息并选择模型。") }
         let path = try session.path(to: session.selectedLeafID)
         guard path.last?.role != .user else { throw WorkflowIssue("所选路径已有待回复用户消息，请重试该消息或选择已完成路径。") }
-        let prepared = try await prepared(path, session: session, prompt: session.draft, attachments: session.attachments, node: node, excerpts: session.knowledgeExcerpts ?? [])
+        let prepared = try await prepared(path, session: session, prompt: session.draft, attachments: session.attachments, node: node, excerpts: session.knowledgeExcerpts ?? [], automaticSearch: search)
+        try validatePreparingSend(sessionID, selectedAtStart: selectedAtStart)
+        try ChatAutomaticWebInput(session).validate(state.sessions[try index(sessionID)])
         let user = ChatMessage(parentID: session.selectedLeafID, role: .user, text: session.draft, attachments: session.attachments, knowledgeExcerpts: session.knowledgeExcerpts)
         try await launch(sessionID: sessionID, user: user, prepared: prepared,
-                         systemPrompt: session.systemPrompt, outputFormat: session.outputFormat, expectedLeafID: session.selectedLeafID, clearDraft: true)
+                         systemPrompt: session.systemPrompt, outputFormat: session.outputFormat, expectedLeafID: session.selectedLeafID, clearDraft: true, automaticSearch: search, preparedSend: true)
     }
     public func regenerate(_ userMessageID: UUID, sessionID: UUID) async throws {
         try requireLoaded()
@@ -1499,7 +1536,10 @@ public enum ChatGenerationPhase: String, Sendable {
     private func launch(sessionID: UUID, user: ChatMessage,
                         prepared: (WorkflowNode, String, [String: WorkflowValue], [ChatMemoryUse], [ChatContextSummary]),
                         systemPrompt: String, outputFormat: ChatOutputFormat?, expectedLeafID: UUID?, clearDraft: Bool,
-                        replayedAttemptID: UUID? = nil, comparisonSourceAttemptID: UUID? = nil) async throws {
+                        replayedAttemptID: UUID? = nil, comparisonSourceAttemptID: UUID? = nil, automaticSearch: ChatAutomaticSearch? = nil, preparedSend: Bool = false) async throws {
+        guard preparingSendSessionID == nil || (preparedSend && preparingSendSessionID == sessionID && !preparingSendCancelled) else {
+            throw WorkflowIssue("正在准备本次请求。", code: "chat.phase.preparing")
+        }
         // A replay uses the immutable attempt, never the currently edited fields.
         guard replayedAttemptID != nil || !hasInvalidParameterText(sessionID: sessionID) else {
             throw WorkflowIssue("回答参数仍有未完成或无效输入，请先修正。")
@@ -1522,6 +1562,7 @@ public enum ChatGenerationPhase: String, Sendable {
                                   inputs: prepared.2, systemPrompt: systemPrompt)
         attempt.memoryUses = prepared.3.isEmpty ? nil : prepared.3
         attempt.outputFormat = outputFormat
+        attempt.automaticSearch = automaticSearch
         attempt.replayedAttemptID = replayedAttemptID
         attempt.comparisonSourceAttemptID = comparisonSourceAttemptID
         if !state.sessions[i].messages.contains(where: { $0.id == user.id }) { state.sessions[i].messages.append(user) }
@@ -1552,6 +1593,9 @@ public enum ChatGenerationPhase: String, Sendable {
                 service.progressEvent = { [weak self] message in
                     guard let self, self.activeAttemptID == attemptID, !self.isCancelling else { return }
                     self.displayPhase = .updated(by: message.code, previous: self.displayPhase, cancelling: self.isCancelling)
+                    if ["phase.running", "phase.generatingRaw"].contains(message.code) {
+                        self.markSearchGenerationStarted(sessionID: sessionID, attemptID: attemptID)
+                    }
                 }
                 service.languagePreviewChanged = { [weak self] stepID, text in
                     guard let self, self.isRunning, self.activeAttemptID == stepID, !text.isEmpty,
@@ -1559,6 +1603,7 @@ public enum ChatGenerationPhase: String, Sendable {
                           let ai = self.state.sessions[si].attempts.firstIndex(where: { $0.id == attemptID }),
                           self.state.sessions[si].attempts[ai].status == .running,
                           self.state.sessions[si].attempts[ai].rawText != text else { return }
+                    self.markSearchGenerationStarted(sessionID: sessionID, attemptID: attemptID)
                     self.state.sessions[si].attempts[ai].rawText = text
                     self.changed(checkpoint: true)
                 }
@@ -1566,6 +1611,7 @@ public enum ChatGenerationPhase: String, Sendable {
                     guard let self, stepID == attemptID,
                           let si = self.state.sessions.firstIndex(where: { $0.id == sessionID }),
                           let ai = self.state.sessions[si].attempts.firstIndex(where: { $0.id == attemptID }) else { return }
+                    if !content.rawText.isEmpty { self.markSearchGenerationStarted(sessionID: sessionID, attemptID: attemptID) }
                     self.state.sessions[si].attempts[ai].rawText = content.rawText
                     self.state.sessions[si].attempts[ai].response = content.response
                     self.state.sessions[si].attempts[ai].languageEnd = content.end
@@ -1623,7 +1669,7 @@ public enum ChatGenerationPhase: String, Sendable {
     }
     /// The SDK receives only a verified local original. No cloud fallback or automatic send.
     public func transcribeSpeech(_ reference: WorkflowAssetReference, sessionID: UUID,
-                                 locale: String) async throws {
+                                 locale: String, transcriptName: String = "Speech transcription", draftName: String = "Transcription draft") async throws {
         try requireLoaded(); let captured = state.sessions[try index(sessionID)]
         guard allowsSubmission(), !isRunning, !isTranscribing, !captured.archived,
               captured.contextChoices?.deletedAt == nil, reference.kind == .audio else { throw WorkflowIssue("当前不能开始本地转写。") }
@@ -1640,14 +1686,14 @@ public enum ChatGenerationPhase: String, Sendable {
                 throw WorkflowIssue("会话已关闭；转写没有写入其他会话。")
             }
             let asset = try await store.publishWorkflowAsset(data: Data(result.text.utf8), mediaType: "text/plain",
-                name: "语音转写", parents: [reference], operationID: "d.chat.local-transcription",
+                name: transcriptName, parents: [reference], operationID: "d.chat.local-transcription",
                 details: ["recognition.route": result.route, "recognition.locale": result.localeIdentifier])
             try Task.checkCancellation()
             let current = try index(sessionID)
             guard allowsSubmission(), !state.sessions[current].archived, state.sessions[current].contextChoices?.deletedAt == nil else {
                 throw WorkflowIssue("会话已关闭，原件与转写资产仍保留。")
             }
-            state.sessions[current].pendingSpeechDraft = .init(name: "语音转写原稿", reference: asset.record.reference,
+            state.sessions[current].pendingSpeechDraft = .init(name: draftName, reference: asset.record.reference,
                 textSnapshot: result.text, sourceOnly: true)
             changed(); try await flush()
         }
@@ -1693,6 +1739,12 @@ public enum ChatGenerationPhase: String, Sendable {
     }
 
     public func cancel() async {
+        if preparingSendSessionID != nil {
+            preparingSendCancelled = true; isCancelling = true
+            toolTask?.cancel()
+            _ = try? await toolTask?.value
+            if preparingSendSessionID != nil { await withCheckedContinuation { preparationWaiters.append($0) } }
+        }
         guard let task = runTask else { return }
         if !isCancelling {
             isCancelling = true
@@ -1802,26 +1854,63 @@ public enum ChatGenerationPhase: String, Sendable {
         await task.value
     }
 
-    private func prepareAutomaticWeb(sessionID: UUID) async throws {
+    private func markSearchGenerationStarted(sessionID: UUID, attemptID: UUID) {
+        guard let si = state.sessions.firstIndex(where: { $0.id == sessionID }),
+              let ai = state.sessions[si].attempts.firstIndex(where: { $0.id == attemptID }),
+              state.sessions[si].attempts[ai].automaticSearch != nil,
+              state.sessions[si].attempts[ai].automaticSearch?.generationStarted != true else { return }
+        state.sessions[si].attempts[ai].automaticSearch?.generationStarted = true
+        changed(checkpoint: true)
+    }
+
+    private func validatePreparingSend(_ sessionID: UUID, selectedAtStart: UUID?) throws {
+        try Task.checkCancellation()
+        guard preparingSendSessionID == sessionID, !preparingSendCancelled,
+              allowsSubmission(), state.selectedSessionID == selectedAtStart else { throw CancellationError() }
+        let session = state.sessions[try index(sessionID)]
+        guard !session.archived, session.contextChoices?.deletedAt == nil else { throw CancellationError() }
+    }
+
+    private func prepareAutomaticWeb(sessionID: UUID, selectedAtStart: UUID?) async throws -> ChatAutomaticSearch? {
         let captured = state.sessions[try index(sessionID)]
         guard let options = captured.webOptions, options.allowed, options.automaticSearch,
-              !captured.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+              !captured.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let expectedInput = ChatAutomaticWebInput(captured)
         guard let provider = options.provider else { throw WorkflowIssue("Choose a search provider and configure its API key before automatic search.") }
-        // This explicit mode sends only the visible question, never prior history or attachments.
-        let searchID = try await executeTool(.providerSearch(query: captured.draft, provider: provider), sessionID: sessionID)
-        let current = state.sessions[try index(sessionID)]
-        try expectedInput.validate(current)
-        guard let preview = searchResponse(activityID: searchID, sessionID: sessionID) else { throw WorkflowIssue("Search results expired; explicitly search again. No request was repeated.") }
-        guard let hit = preview.results.first else {
-            throw WorkflowIssue(preview.allRejected
-                ? "搜索返回的 \(preview.rejectedCount) 条结果均不符合安全或格式要求；没有读取网页或调用模型。"
-                : "搜索没有结果；未凭空添加引用。可以关闭自动搜索后发送。")
+        let previousIDs = Set((captured.toolActivities ?? []).map(\.id))
+        func receipt(_ outcome: ChatAutomaticSearch.Outcome, error: Error? = nil) throws -> ChatAutomaticSearch {
+            try validatePreparingSend(sessionID, selectedAtStart: selectedAtStart)
+            let current = state.sessions[try index(sessionID)]
+            try expectedInput.validate(current)
+            // A failed durable write must be recovered without repeating search or inference.
+            try requireLoaded()
+            return .init(outcome: outcome,
+                activityIDs: (current.toolActivities ?? []).filter { !previousIDs.contains($0.id) }.map(\.id),
+                issue: error.map { String($0.localizedDescription.prefix(2048)) },
+                issueCode: error.flatMap(ChatToolIssue.code))
         }
-        let pageID = try await executeTool(.pageRead(hit.url), sessionID: sessionID)
-        let final = state.sessions[try index(sessionID)]
-        try expectedInput.validate(final)
+        let pageID: UUID
+        do {
+            // Only this captured question is sent. No previous search preview is reused.
+            let searchID = try await executeTool(.providerSearch(query: captured.draft, provider: provider), sessionID: sessionID)
+            try validatePreparingSend(sessionID, selectedAtStart: selectedAtStart)
+            try expectedInput.validate(state.sessions[try index(sessionID)])
+            guard let preview = searchResponse(activityID: searchID, sessionID: sessionID) else {
+                throw WorkflowIssue("Search results expired; explicitly search again. No request was repeated.")
+            }
+            guard let hit = preview.results.first else { return try receipt(.noResults) }
+            pageID = try await executeTool(.pageRead(hit.url), sessionID: sessionID)
+        } catch {
+            try validatePreparingSend(sessionID, selectedAtStart: selectedAtStart)
+            try expectedInput.validate(state.sessions[try index(sessionID)])
+            guard ChatAutomaticSearch.permitsFallback(error) else { throw error }
+            return try receipt(.failed, error: error)
+        }
+        let result = try receipt(.included)
+        // Adoption is outside the fallback catch: failed publication/ownership never launches a model.
         try await attachToolResult(pageID, sessionID: sessionID, expectedInput: expectedInput)
+        try validatePreparingSend(sessionID, selectedAtStart: selectedAtStart)
+        return result
     }
 
     public func setWebOptions(_ options: ChatWebOptions, sessionID: UUID) throws {
@@ -1899,6 +1988,7 @@ public enum ChatGenerationPhase: String, Sendable {
         if case .mcp = request { activeToolIsMCP = true } else { activeToolIsMCP = false }
         let task = Task { @MainActor [self] () throws -> UUID in
             defer { activeToolSessionID = nil; toolTask = nil; activeToolIsMCP = false }
+            var enteredMCPCall = false
             do {
                 try await flush(); try requireToolOwner(sessionID)
                 let credential: String?
@@ -1907,8 +1997,19 @@ public enum ChatGenerationPhase: String, Sendable {
                     else { credential = try searchCredentials.token(provider) }
                 } else { credential = nil }
                 try requireToolOwner(sessionID)
-                let result = try await request.execute(store: store, authorized: allowed, web: webClient, mcp: mcpService,
+                let result: String
+                if case .mcp(let endpoint, let tool, let arguments) = request {
+                    guard await mcpService.status() == .connected(endpoint: endpoint) else { throw ChatMCPError.notConnected }
+                    try requireToolOwner(sessionID)
+                    // The sole active tool owns this call until its receipt is captured.
+                    // A failure before entry must never inherit a preceding call's delivery.
+                    enteredMCPCall = true
+                    result = try await mcpService.callTool(name: tool, argumentsJSON: arguments,
+                                                          permitted: allowed, timeoutSeconds: 30).resultJSON
+                } else {
+                    result = try await request.execute(store: store, authorized: allowed, web: webClient, mcp: mcpService,
                                                        search: searchClient, credential: credential, page: pageClient, python: pythonClient)
+                }
                 try requireToolOwner(sessionID)
                 if case .mcp = request { mcpStatus = await mcpService.status() }
                 let si = try index(sessionID)
@@ -1927,17 +2028,31 @@ public enum ChatGenerationPhase: String, Sendable {
                     serverError = (try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any])?["isError"] as? Bool == true
                 } else { serverError = false }
                 updated.sessions[si].toolActivities?[ai].status = serverError ? .failed : .completed
-                if serverError { updated.sessions[si].toolActivities?[ai].issue = "The MCP server reported a tool error; its returned details are preserved." }
+                if case .mcp = request {
+                    updated.sessions[si].toolActivities?[ai].remoteRequestSent = true // A response proves delivery.
+                    updated.sessions[si].toolActivities?[ai].remoteOutcomeUnconfirmed = false
+                }
+                if serverError {
+                    updated.sessions[si].toolActivities?[ai].issue = "The MCP server reported a tool error; its returned details are preserved."
+                    updated.sessions[si].toolActivities?[ai].issueCode = "chat.toolIssue.mcp.serverError"
+                }
                 updated.sessions[si].toolActivities?[ai].endedAt = Date()
                 try updated.validate(); state = updated; changed(); try await flush()
                 return id
             } catch {
-                if case .mcp = request { mcpStatus = await mcpService.status() }
+                let sent: Bool?
+                if case .mcp = request {
+                    mcpStatus = await mcpService.status()
+                    sent = enteredMCPCall ? await mcpService.lastCallWasSent() : false
+                } else { sent = nil }
                 if let si = state.sessions.firstIndex(where: { $0.id == sessionID }),
                    let ai = state.sessions[si].toolActivities?.firstIndex(where: { $0.id == id }),
                    state.sessions[si].toolActivities?[ai].status == .running {
                     state.sessions[si].toolActivities?[ai].status = (error is CancellationError || Task.isCancelled || (error as? ChatMCPError) == .cancelled) ? .cancelled : .failed
                     state.sessions[si].toolActivities?[ai].issue = String(error.localizedDescription.prefix(2048))
+                    state.sessions[si].toolActivities?[ai].issueCode = ChatToolIssue.code(error)
+                    state.sessions[si].toolActivities?[ai].remoteRequestSent = sent
+                    state.sessions[si].toolActivities?[ai].remoteOutcomeUnconfirmed = sent != false ? true : nil
                     state.sessions[si].toolActivities?[ai].endedAt = Date(); changed()
                     try? await flush()
                 }
@@ -1969,6 +2084,9 @@ public enum ChatGenerationPhase: String, Sendable {
             try Task.checkCancellation(); try requireLoaded()
             let si = try index(sessionID)
             guard allowsSubmission(), !state.sessions[si].archived, state.sessions[si].contextChoices?.deletedAt == nil else { throw WorkflowIssue("会话已关闭；已保存工具结果未自动加入草稿。") }
+            if expectedInput != nil {
+                guard preparingSendSessionID == sessionID, !preparingSendCancelled else { throw CancellationError() }
+            }
             try expectedInput?.validate(state.sessions[si])
             if !state.sessions[si].attachments.contains(where: { $0.reference == reference }) {
                 guard state.sessions[si].attachments.count < 32 else { throw WorkflowIssue("附件数量已达上限。") }
@@ -2011,6 +2129,7 @@ public enum ChatGenerationPhase: String, Sendable {
             session.messages.append(message); parent = message.id
         }
         session.selectedLeafID = parent
+        invalidatePreparingSendForSelection(session.id)
         var candidate = state; candidate.sessions.append(session); candidate.selectedSessionID = session.id
         try candidate.validate(); state = candidate; changed(); try await flush()
         return session.id
@@ -2029,11 +2148,11 @@ public enum ChatGenerationPhase: String, Sendable {
         }.joined(separator: "\n\n")
     }
     /// A copied, editable artifact; the original answer and its adopted version stay immutable.
-    public func artifactFromAnswer(_ messageID: UUID, sessionID: UUID) async throws -> ChatArtifactContent {
+    public func artifactFromAnswer(_ messageID: UUID, sessionID: UUID, name: String = "Chat response") async throws -> ChatArtifactContent {
         let snapshot = state.sessions[try index(sessionID)].selectedAnswer(messageID: messageID)
         guard let answer = snapshot else { throw WorkflowIssue("请先选择或采用回答。") }
-        let source = try await saveAssistantFinal(messageID, sessionID: sessionID)
-        return .init(sessionID: sessionID, title: "Answer / 回答", kind: .markdown, text: answer.text, source: source)
+        let source = try await saveAssistantFinal(messageID, sessionID: sessionID, name: name)
+        return .init(sessionID: sessionID, title: name, kind: .markdown, text: answer.text, source: source)
     }
 
     /// Opens one explicit Python output in the existing artifact editor; never sends a message.
@@ -2149,14 +2268,14 @@ public enum ChatGenerationPhase: String, Sendable {
         return saved
     }
 
-    public func saveAssistantFinal(_ messageID: UUID, sessionID: UUID) async throws -> WorkflowAssetReference {
+    public func saveAssistantFinal(_ messageID: UUID, sessionID: UUID, name: String = "Chat response") async throws -> WorkflowAssetReference {
         try requireLoaded(); let session = state.sessions[try index(sessionID)]
         guard let answer = session.selectedAnswer(messageID: messageID) else {
             throw WorkflowIssue("请先采用部分回答，或选择已完成的回答后保存。")
         }
-        return try await publishAnswer(answer, messageID: messageID, sessionID: sessionID)
+        return try await publishAnswer(answer, messageID: messageID, sessionID: sessionID, name: name)
     }
-    public func saveAnswerField(_ field: ChatAnswerField, assetID: UUID = UUID()) async throws -> WorkflowDatum {
+    public func saveAnswerField(_ field: ChatAnswerField, assetID: UUID = UUID(), name: String = "Chat response field", sourceName: String = "Chat response") async throws -> WorkflowDatum {
         try requireLoaded(); let session = state.sessions[try index(field.sessionID)]
         guard allowsSubmission(), !session.archived, session.contextChoices?.deletedAt == nil else { throw WorkflowIssue("请在可用会话中保存字段。") }
         try field.validateCurrent(session)
@@ -2173,16 +2292,16 @@ public enum ChatGenerationPhase: String, Sendable {
             kind: .text, sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
         _ = try field.envelope(source: prospective)
         try Task.checkCancellation()
-        let source = try await publishAnswer(field.answer, messageID: field.messageID, sessionID: field.sessionID)
+        let source = try await publishAnswer(field.answer, messageID: field.messageID, sessionID: field.sessionID, name: sourceName)
         try Task.checkCancellation()
-        let output = try await store.publishWorkflowAsset(data: bytes, mediaType: "text/plain", name: "聊天结构字段",
+        let output = try await store.publishWorkflowAsset(data: bytes, mediaType: "text/plain", name: name,
             parents: [source], operationID: "d.chat.save-field", stepID: assetID,
             details: ["chatSessionID": field.sessionID.uuidString, "chatMessageID": field.messageID.uuidString,
                       "answerAssetID": field.answer.assetID.uuidString, "fieldPathJSON": path,
                       "encoding": "D.WorkflowDatum.Codable.v1", "valueKind": field.value.kind.rawValue], assetID: assetID).record.reference
         return try field.envelope(source: output)
     }
-    private func publishAnswer(_ answer: ChatSelectedAnswer, messageID: UUID, sessionID: UUID) async throws -> WorkflowAssetReference {
+    private func publishAnswer(_ answer: ChatSelectedAnswer, messageID: UUID, sessionID: UUID, name: String) async throws -> WorkflowAssetReference {
         var details = ["chatSessionID": sessionID.uuidString, "chatMessageID": messageID.uuidString]
         if let attempt = answer.attempt { details["chatAttemptID"] = attempt.id.uuidString }
         if let revision = answer.revisionID { details["chatRevisionID"] = revision.uuidString }
@@ -2191,7 +2310,7 @@ public enum ChatGenerationPhase: String, Sendable {
             details["importSourceIndex"] = String(source.sourceIndex)
             if let index = source.conversationIndex { details["importConversationIndex"] = String(index) }
         }
-        return try await store.publishWorkflowAsset(data: Data(answer.text.utf8), mediaType: "text/plain", name: "聊天回答",
+        return try await store.publishWorkflowAsset(data: Data(answer.text.utf8), mediaType: "text/plain", name: name,
             parents: answer.attempt?.output.map { [$0] } ?? [], operationID: "d.chat.save-final",
             stepID: answer.revisionID ?? answer.attempt?.id ?? messageID, details: details,
             assetID: answer.assetID).record.reference

@@ -197,6 +197,7 @@ struct ChatAssistanceControllerTests {
         let fresh = ChatController(store: freshProjectStore, personalMemoryProvider: { freshOwner }) { throw WorkflowIssue("No execution during recovery") }
         await fresh.load()
         #expect(fresh.pendingAssistanceSaveID != nil)
+        #expect(fresh.assistancePhaseSessionID == id && fresh.assistanceDisplayPhase == .savePending)
         try await fresh.retryAssistanceSave()
         #expect(fresh.pendingAssistanceSaveID == nil)
         #expect(try await freshPersonalStore.chatState().memoryEntries?.count == 1)
@@ -226,6 +227,7 @@ struct ChatAssistanceControllerTests {
         await po.load()
         let recovered = ChatController(store: cs, personalMemoryProvider: { po }) { throw WorkflowIssue("No recovery inference") }
         await recovered.load()
+        #expect(recovered.assistancePhaseSessionID == id && recovered.assistanceDisplayPhase == .savePending)
         if action == "forget" { try await po.writeMemory(old.forgotten()) }
         if action == "revoke" { try recovered.setAssistanceOptions(.init(), sessionID: id) }
         if action == "cancel" { await recovered.cancelAssistance() }

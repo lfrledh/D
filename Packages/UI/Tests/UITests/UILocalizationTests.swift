@@ -4,9 +4,47 @@ import Observation
 import Synchronization
 import Testing
 @testable import UI
+@testable import DWorkbench
 
 @Suite(.serialized) @MainActor
 struct UILocalizationTests {
+    @Test func speechStatusUsesTheServicesLocaleAdmissionAndLiveLanguage() throws {
+        let store = UILanguageStore(preferredLanguages: ["en"])
+        for locale in ["en-US", "en_US", "zh_CN", "zh_Hans_CN"] {
+            let unavailable = ChatSpeechCapability(localeIdentifier: locale, authorization: .authorized,
+                recognizerAvailable: false, supportsOnDeviceRecognition: true)
+            #expect(!unavailable.canTranscribeLocally)
+            #expect(ChatSpeechCapabilityPresentation.statusKey(unavailable) == "chat.speechPanel.recognizerCurrentlyUnavailable")
+            let ready = ChatSpeechCapability(localeIdentifier: locale, authorization: .authorized,
+                recognizerAvailable: true, supportsOnDeviceRecognition: true)
+            #expect(ready.canTranscribeLocally && ChatSpeechCapabilityPresentation.statusKey(ready) == "chat.speechPanel.readyToTranscribe")
+        }
+        let unsupported = ChatSpeechCapability(localeIdentifier: "fr_FR", authorization: .authorized,
+            recognizerAvailable: true, supportsOnDeviceRecognition: true)
+        #expect(ChatSpeechCapabilityPresentation.statusKey(unsupported) == "chat.speechPanel.offlineResourcesUnavailableForThisLanguage")
+        #expect(store.text("chat.speechPanel.dismissTranscript", fallback: "missing") == "Do not use this transcription")
+        try store.select("zh-Hans")
+        #expect(store.text("chat.speechPanel.dismissTranscript", fallback: "missing") == "不采用本次转写结果")
+    }
+
+    @Test func invalidLanguagePackIssueFollowsLanguageWithoutInstallingOrChangingIdentity() throws {
+        let store = UILanguageStore(preferredLanguages: ["en"]), before = store.availableLanguages
+        var failure: LanguageSettingsIssue?
+        do { _ = try store.importPack(data: Data("{broken".utf8)); Issue.record("Invalid JSON was installed") }
+        catch { failure = LanguageSettingsIssue(error) }
+        let issue = try #require(failure)
+        #expect(issue.summary(store) == "The language pack is not valid JSON.")
+        try store.select("zh-Hans")
+        #expect(issue.summary(store) == "语言包不是有效的JSON。")
+        #expect(issue.diagnostic == "The language pack is not valid JSON.")
+        #expect(store.availableLanguages.map(\.id) == before.map(\.id))
+        #expect(store.availableLanguages.filter { $0.id != UILanguageStore.systemIdentifier } == before.filter { $0.id != UILanguageStore.systemIdentifier })
+        let argument = LanguageSettingsIssue(LanguagePackValidationError.placeholderMismatch("user.KEY.中文"))
+        #expect(argument.summary(store).contains("user.KEY.中文"))
+        try store.select("en")
+        #expect(argument.summary(store).contains("user.KEY.中文"))
+    }
+
     @Test func partialOutputAndTipKeysLoadThroughTheActualLanguageStore() throws {
         let store = UILanguageStore(preferredLanguages: ["en"])
         #expect(store.text("partial.length", fallback: "missing") == "The output limit was reached. The generated content is kept.")

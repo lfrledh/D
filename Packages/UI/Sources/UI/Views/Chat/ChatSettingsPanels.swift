@@ -129,7 +129,10 @@ struct ChatSpeechSettingsPanel: View {
                 catch { issue = error.localizedDescription }
             })) {
                 WorkbenchChoice(t("voice.systemDefault", "System default", "系统默认"), value:"")
-                WorkbenchChoiceForEach(voices) { WorkbenchChoice($0.name + " · " + $0.language, value:$0.id) }
+                WorkbenchChoiceForEach(voices) { WorkbenchChoice($0.name + " · " + (Locale(identifier: language?.effectiveLanguageIdentifier ?? "en").localizedString(forIdentifier: $0.language) ?? $0.language), value:$0.id) }
+            }
+            if let selected = voices.first(where: { $0.id == voice }) {
+                DisclosureGroup(workflowText(language, "chat.assistancePanel.technicalDetails")) { Text(selected.language).textSelection(.enabled) }
             }
             Text(t("voice.rate", "Reading speed", "朗读速度"))
             Slider(value: Binding(get: { rate }, set: { value in
@@ -161,6 +164,7 @@ struct ChatSearchCredentialsPanel: View {
                         Button(t("credentials.choose", "Choose key file…", "选择密钥文件…")) { Task { await choose(provider) } }
                         if chat.configuredSearchProviders.contains(provider) {
                             Button(t("credentials.remove", "Remove connection", "移除关联")) { chat.removeSearchCredential(provider) }
+                                .help(workflowText(language, "chat.organization.credentials.removeHelp"))
                         }
                     }.disabled(busy || chat.isToolRunning)
                 }

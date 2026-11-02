@@ -55,10 +55,14 @@ struct ChatAssistancePanel: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(workflowText(copyLanguage, "chat.assistancePanel.offByDefaultEnabledTasksRunAfterCompleteAnswersWith"))
                     .font(.caption).foregroundStyle(.secondary)
-                if section == .summary { Toggle(workflowText(copyLanguage, "chat.assistancePanel.createSummariesAutomatically"), isOn: $summary) }
+                if section == .summary {
+                    Toggle(workflowText(copyLanguage, "chat.assistancePanel.createSummariesAutomatically"), isOn: $summary)
+                    Text(workflowText(copyLanguage, "chat.assistancePanel.summaryHelp")).font(.caption).foregroundStyle(.secondary)
+                }
                 if section == .organization {
                 Toggle(workflowText(copyLanguage, "chat.assistancePanel.automaticTitle"), isOn: $title)
                 Toggle(workflowText(copyLanguage, "chat.assistancePanel.suggestedTags"), isOn: $tags)
+                    .help(workflowText(copyLanguage, "chat.assistancePanel.tagsHelp"))
                 Toggle(workflowText(copyLanguage, "chat.assistancePanel.followUpSuggestions"), isOn: $followUps)
                 }
                 if section == .memory {
@@ -68,7 +72,10 @@ struct ChatAssistancePanel: View {
                     WorkbenchChoice(workflowText(copyLanguage, "chat.assistancePanel.recordAutomatically"), value:ChatAssistanceMemoryMode.automatic)
                 }
                 if memoryMode != .off {
-                    Toggle(workflowText(copyLanguage, "chat.assistancePanel.personalMemoryOtherwiseThisProject"), isOn: $personal)
+                    WorkbenchPicker(workflowText(copyLanguage, "chat.memoryPanel.saveScope"), selection: $personal) {
+                        WorkbenchChoice(workflowText(copyLanguage, "chat.memoryPanel.scopeProjectChoice"), value: false)
+                        WorkbenchChoice(workflowText(copyLanguage, "chat.memoryPanel.scopePersonalChoice"), value: true)
+                    }
                     Text(workflowText(copyLanguage, "chat.assistancePanel.recordingAndReadingAreSeparateNewEntriesAreNotInjected"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -103,10 +110,15 @@ struct ChatAssistancePanel: View {
                         Task { do { try await chat.retryAssistanceSave() } catch { self.error = error.localizedDescription } }
                     }
                 }
-                if !chat.assistancePhase.isEmpty { Text(chat.assistancePhase).font(.caption).textSelection(.enabled) }
+                if let phase = phaseText {
+                    Text(phase).font(.caption)
+                    if [.failed, .savePending, .retained].contains(chat.assistanceDisplayPhase), !chat.assistancePhase.isEmpty {
+                        DisclosureGroup(workflowText(copyLanguage, "chat.assistancePanel.technicalDetails")) { Text(chat.assistancePhase).textSelection(.enabled) }
+                    }
+                }
                 if let error { WorkbenchIssueText(raw: error).foregroundStyle(.red).textSelection(.enabled) }
                 ForEach((session.assistanceExecutions ?? []).filter { section.kinds.contains($0.record.kind) }.reversed()) { execution in
-                    DisclosureGroup(label(execution.record.kind) + " · " + execution.record.status.rawValue) {
+                    DisclosureGroup(label(execution.record.kind) + " · " + workflowText(copyLanguage, "chat.assistancePanel.status." + execution.record.status.rawValue)) {
                         Text(workflowText(copyLanguage, "chat.assistancePanel.outputBudget") + String(execution.record.maximumOutputTokens))
                         if let issue = execution.record.issue { WorkbenchIssueText(raw: issue).foregroundStyle(.red) }
                         if let result = execution.record.result {
@@ -131,10 +143,22 @@ struct ChatAssistancePanel: View {
             }.padding(.vertical, 6)
         }.onAppear { if !loaded { load(); loaded = true } }.accessibilityIdentifier("chat-assistance-panel")
     }
+    private var phaseText: String? {
+        guard chat.assistancePhaseSessionID == session.id else { return nil }
+        return switch chat.assistanceDisplayPhase {
+        case .idle: nil
+        case .running(let kind): workflowText(copyLanguage, "chat.assistancePanel.phase.running", arguments: ["task": label(kind)])
+        case .saved: workflowText(copyLanguage, "chat.assistancePanel.phase.saved")
+        case .savePending: workflowText(copyLanguage, "chat.assistancePanel.phase.savePending")
+        case .cancelled: workflowText(copyLanguage, "chat.assistancePanel.phase.cancelled")
+        case .failed: workflowText(copyLanguage, "chat.assistancePanel.phase.failed")
+        case .retained: workflowText(copyLanguage, "chat.assistancePanel.phase.retained")
+        }
+    }
     private func label(_ kind: ChatAssistanceKind) -> String {
         switch kind {
         case .summary: workflowText(copyLanguage, "chat.assistancePanel.summary")
-        case .title: workflowText(copyLanguage, "chat.artifactEditor.title")
+        case .title: workflowText(copyLanguage, "chat.assistancePanel.automaticTitle")
         case .tags: workflowText(copyLanguage, "consistency.LIB-TAGS")
         case .followUps: workflowText(copyLanguage, "chat.assistancePanel.followUps")
         case .memory: workflowText(copyLanguage, "chat.assistancePanel.memory")

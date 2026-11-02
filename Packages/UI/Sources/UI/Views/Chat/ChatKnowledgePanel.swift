@@ -59,9 +59,9 @@ struct ChatKnowledgePanel: View {
                             if !chat.ownsPersonalMemory && !chat.isTemporary {
                                 WorkbenchMenuAction(workflowText(copyLanguage, "chat.knowledgePanel.copyToPersonalCollection")) { copy(document.id, toPersonal: true) }
                             }
-                            WorkbenchMenuAction(workflowText(copyLanguage, "chat.knowledgePanel.removeFromSearchCollection")) {
+                            WorkbenchMenuAction(workflowText(copyLanguage, chat.ownsPersonalMemory ? "chat.knowledgePanel.removePersonal" : "chat.knowledgePanel.removeFromSearchCollection")) {
                                 change { try chat.removeKnowledgeDocument(document.id) }
-                            }
+                            }.help(workflowText(copyLanguage, "chat.knowledgePanel.removeHelp"))
                         } label: { Image(systemName: "ellipsis") }
                             .accessibilityLabel(workflowText(copyLanguage, "chat.knowledgePanel.sourceActions") + " · " + document.material.name)
                     }
@@ -81,7 +81,7 @@ struct ChatKnowledgePanel: View {
                     if result.excerpts.count > 1 {
                         VStack(alignment: .leading) {
                             HStack {
-                                TextField(workflowText(copyLanguage, "chat.knowledgePanel.outputTokenBudget"), text: $rerankBudget).frame(maxWidth: 130)
+                                TextField(workflowText(copyLanguage, "chat.knowledgePanel.rankingOutputLimit"), text: $rerankBudget).frame(maxWidth: 130)
                                 Button(workflowText(copyLanguage, "chat.knowledgePanel.reorderWithSelectedModel")) { reorder(result) }
                                     .disabled(task != nil || chat.isRerankingKnowledge || Int(rerankBudget) == nil || session.configuration == nil)
                             }
@@ -89,7 +89,12 @@ struct ChatKnowledgePanel: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    ForEach(result.issues, id: \.self) { Text($0).font(.caption).foregroundStyle(.red) }
+                    ForEach(result.issues, id: \.sourceID) { failure in
+                        VStack(alignment: .leading) {
+                            Text(failure.name).fontWeight(.semibold)
+                            WorkbenchIssueText(raw: failure.diagnostic, key: failure.code ?? "chat.knowledgePanel.sourceReadFailed")
+                        }.font(.caption).foregroundStyle(.red)
+                    }
                     if result.excerpts.isEmpty { Text(workflowText(copyLanguage, "chat.knowledgePanel.noMatchingExcerpt")).font(.caption) }
                     ForEach(result.excerpts) { excerpt in
                         VStack(alignment: .leading, spacing: 5) {
@@ -112,6 +117,7 @@ struct ChatKnowledgePanel: View {
                     Button(workflowText(copyLanguage, "chat.knowledgePanel.retrySavingRawOrderingNoInference")) {
                         Task { do { try await chat.retryKnowledgeRerankSave() } catch { issue = error.localizedDescription } }
                     }.disabled(chat.isRerankingKnowledge)
+                        .help(workflowText(copyLanguage, "chat.knowledgePanel.retrySaveHelp"))
                 }
                 if let last = session.knowledgeReranks?.last {
                     DisclosureGroup(workflowText(copyLanguage, "chat.knowledgePanel.lastModelOrdering")) {

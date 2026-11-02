@@ -89,7 +89,7 @@ public struct ChatSpeechCapability: Sendable, Equatable {
         admissionError == nil
     }
 
-    var admissionError: ChatSpeechError? {
+    public var admissionError: ChatSpeechError? {
         guard ChatSpeechRecognitionLanguage.includesRecognizerLocale(localeIdentifier) else {
             return .localeUnsupported
         }

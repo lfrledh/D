@@ -47,8 +47,10 @@ public enum WorkflowToolEditing {
                                tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard,
                                registration: WorkflowToolRegistration? = nil) throws -> WorkflowToolExtraction {
         let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty, title.utf8.count <= 256,
-              !selected.isEmpty, selected.isSubset(of: Set(graph.nodes.map(\.id))),
+        guard !title.isEmpty, title.utf8.count <= 256 else {
+            throw WorkflowIssue("名称不能为空或过长。", code: "workflow.language.tools.invalidName")
+        }
+        guard !selected.isEmpty, selected.isSubset(of: Set(graph.nodes.map(\.id))),
               Set(inputs.map(\.name)).count == inputs.count, Set(outputs.map(\.name)).count == outputs.count,
               !outputs.isEmpty else { throw WorkflowIssue("封装需要不重复的工具名、选区与公开接口。") }
         try registry.validate(graph, tools: tools)

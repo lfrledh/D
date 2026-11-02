@@ -700,7 +700,7 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
               current.id == expectedGraphID, current.revision == expectedRevision,
               let interface = current.interface, !interface.outputs.isEmpty else { throw WorkflowIssue("流程或公开接口已改变；草稿保留。") }
         let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty, title.utf8.count <= 256 else { throw WorkflowIssue("名称不能为空或过长。") }
+        guard !title.isEmpty, title.utf8.count <= 256 else { throw WorkflowIssue("名称不能为空或过长。", code: "workflow.language.tools.invalidName") }
         try registration.validate(interface: interface)
         var body = current; body.toolSource = nil
         var tool = WorkflowToolDefinition(name: title, graph: body, registration: registration)

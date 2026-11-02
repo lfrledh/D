@@ -28,8 +28,13 @@ struct ChatAnswerFieldSheet: View {
             }.onChange(of: selected) { _, _ in publication = UUID(); issue = nil }
             if choices.indices.contains(selected) {
                 ScrollView {
-                    Text(preview(choices[selected].value)).font(.system(.body, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                    Text(WorkflowDatumSnapshotText.render(choices[selected].value, language: language)).font(.system(.body, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                 }.frame(minHeight: 160)
+                DisclosureGroup(workflowText(copyLanguage, "chat.answerFieldSheet.workflowData")) {
+                    Text(workflowText(copyLanguage, "chat.answerFieldSheet.workflowDataHelp"))
+                    Text(technicalPath(choices[selected].path)).font(.caption.monospaced()).textSelection(.enabled)
+                    Text(preview(choices[selected].value)).font(.caption.monospaced()).textSelection(.enabled)
+                }
             }
             if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
@@ -41,7 +46,8 @@ struct ChatAnswerFieldSheet: View {
             .workbenchCloseProtection(isDirty: issue != nil, isSaving: task != nil)
             .onDisappear { task?.cancel() }
     }
-    private func pathLabel(_ path: [String]) -> String {
+    private func pathLabel(_ path: [String]) -> String { path.joined(separator: " › ") }
+    private func technicalPath(_ path: [String]) -> String {
         (try? String(decoding: JSONEncoder().encode(path), as: UTF8.self)) ?? ""
     }
     private func preview(_ value: WorkflowDatum) -> String {

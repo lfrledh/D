@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 public struct LanguageSettingsView: View {
     private let store: UILanguageStore
     @State private var isImporting = false
-    @State private var errorMessage: String?
+    @State private var importIssue: LanguageSettingsIssue?
 
     public init(store: UILanguageStore) {
         self.store = store
@@ -41,11 +41,14 @@ public struct LanguageSettingsView: View {
                 }
                 .accessibilityIdentifier("language-import")
 
-                if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                if let importIssue {
+                    Label(importIssue.summary(store), systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                         .accessibilityIdentifier("language-error")
+                    DisclosureGroup(store.text("error.original", fallback: "Original diagnostic")) {
+                        Text(importIssue.diagnostic).textSelection(.enabled)
+                    }
                 }
                 ForEach(Array(store.diagnostics.enumerated()), id: \.offset) { _, diagnostic in
                     Label(diagnostic, systemImage: "info.circle")
@@ -70,9 +73,9 @@ public struct LanguageSettingsView: View {
                 let data = try LanguagePackFileReader.read(from: url)
                 let locale = try store.importPack(data: data)
                 try store.select(locale)
-                errorMessage = nil
+                importIssue = nil
             } catch {
-                errorMessage = error.localizedDescription
+                importIssue = LanguageSettingsIssue(error)
             }
         }
         .accessibilityIdentifier("language-settings")
@@ -84,9 +87,8 @@ public struct LanguageSettingsView: View {
             set: { identifier in
                 do {
                     try store.select(identifier)
-                    errorMessage = nil
                 } catch {
-                    errorMessage = error.localizedDescription
+                    importIssue = LanguageSettingsIssue(error)
                 }
             }
         )
@@ -96,4 +98,47 @@ public struct LanguageSettingsView: View {
         store.availableLanguages.first { $0.id == store.effectiveLanguageIdentifier }?.displayName
             ?? store.effectiveLanguageIdentifier
     }
+}
+
+/// Keeps the typed cause and arguments across display-language changes.
+struct LanguageSettingsIssue {
+    let diagnostic: String
+    let key: String
+    let arguments: [String: String]
+    init(_ error: any Error) {
+        diagnostic = error.localizedDescription
+        var argument: String?
+        let suffix: String
+        switch error {
+        case let value as LanguagePackValidationError:
+            switch value {
+            case .tooLarge: suffix = "tooLarge"
+            case .invalidUTF8: suffix = "invalidUTF8"
+            case .invalidJSON: suffix = "invalidJSON"
+            case .unsupportedVersion(let value): suffix = "unsupportedVersion"; argument = String(value)
+            case .invalidLocale: suffix = "invalidLocale"
+            case .invalidDisplayName: suffix = "invalidDisplayName"
+            case .tooManyEntries: suffix = "tooManyEntries"
+            case .invalidKey(let value): suffix = "invalidKey"; argument = value
+            case .valueTooLong(let value): suffix = "valueTooLong"; argument = value
+            case .invalidPlaceholder(let value): suffix = "invalidPlaceholder"; argument = value
+            case .placeholderMismatch(let value): suffix = "placeholderMismatch"; argument = value
+            case .invalidLocalFile: suffix = "invalidLocalFile"
+            case .nonLocalFile: suffix = "nonLocalFile"
+            case .changedWhileReading: suffix = "changedWhileReading"
+            }
+        case let value as UILanguageError:
+            switch value {
+            case .unavailableLanguage(let value): suffix = "unavailableLanguage"; argument = value
+            case .builtInLocale(let value): suffix = "builtInLocale"; argument = value
+            case .reservedLocale(let value): suffix = "reservedLocale"; argument = value
+            case .duplicateLocale(let value): suffix = "duplicateLocale"; argument = value
+            case .persistenceFailed: suffix = "persistenceFailed"
+            }
+        default: suffix = "fileReadFailed"
+        }
+        key = "language.error." + suffix
+        arguments = argument.map { ["value": $0] } ?? [:]
+    }
+    @MainActor func summary(_ store: UILanguageStore) -> String { store.text(key, fallback: diagnostic, arguments: arguments) }
 }

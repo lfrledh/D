@@ -13,6 +13,7 @@ struct WorkflowToolPanel: View {
     @State private var outputLabels: [String: String] = [:]
     @State private var publishing = false
     @State private var publicationError: String?
+    @State private var publicationErrorCode: String?
     @State private var boundary: ToolBoundaryDraft?
     @WorkbenchDismiss private var dismiss
     @Environment(\.workbenchChildClose) private var closeGate
@@ -39,14 +40,14 @@ struct WorkflowToolPanel: View {
                 TextField(t("detail", "详细说明（可选）"), text: $detail, axis: .vertical).lineLimit(2...5)
                 if let graph = controller.graph {
                     Button(t(graph.toolSource == nil ? "publishGraph" : "publishVersion", graph.toolSource == nil ? "保存自定义节点" : "发布新定义版本（旧实例不变）")) {
-                        publishing = true; publicationError = nil
+                        publishing = true; publicationError = nil; publicationErrorCode = nil
                         let registration = WorkflowToolRegistration(purpose: purpose, detail: detail.isEmpty ? nil : detail,
                             inputLabels: inputLabels.filter { label in graph.interface?.inputs.contains(where: { $0.name == label.key }) == true },
                             outputLabels: outputLabels.filter { label in graph.interface?.outputs.contains(where: { $0.name == label.key }) == true })
                         Task {
                             defer { publishing = false }
                             do { try await controller.publishGraphTool(name: name, registration: registration, expectedGraphID: graph.id, expectedRevision: graph.revision); $dismiss() }
-                            catch { publicationError = error.localizedDescription }
+                            catch { publicationError = error.localizedDescription; publicationErrorCode = (error as? WorkflowIssue)?.code }
                         }
                     }.disabled(!controller.canEditCanvas || purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     DisclosureGroup(t("dependencies", "内部流程与依赖")) { WorkflowDependencySummary(graph: graph, controller: controller) }
@@ -67,13 +68,13 @@ struct WorkflowToolPanel: View {
                 }
                 .disabled(controller.selectedNodeIDs.isEmpty)
                 }
-                if let error = controller.errorMessage { Text(error).foregroundStyle(.red) }
+                if let error = controller.errorMessage { WorkbenchIssueText(raw: error, key: controller.errorCode).foregroundStyle(.red) }
                 if selectionOnly { TextField(t("name", "新工具名称"), text: $name) }
                 if selectionOnly && boundary != nil {
                     TextField(t("purpose", "一句话说明用途（必填）"), text: $purpose)
                     TextField(t("detail", "详细说明（可选）"), text: $detail, axis: .vertical).lineLimit(2...5)
                 }
-                if let publicationError { Text(publicationError).foregroundStyle(.red) }
+                if let publicationError { WorkbenchIssueText(raw: publicationError, key: publicationErrorCode).foregroundStyle(.red) }
                 if boundary != nil { boundaryEditor }
                 Button(selectionOnly ? t("cancel", "取消") : workflowText(language, "childPanel.close")) { dismiss() }.disabled(publishing)
             }.padding(20).disabled(publishing)
@@ -136,14 +137,14 @@ struct WorkflowToolPanel: View {
                 let registration = WorkflowToolRegistration(purpose: purpose, detail: detail.isEmpty ? nil : detail,
                     inputLabels: inputLabels.filter { key, _ in draft.inputs.contains { $0.name == key } },
                     outputLabels: outputLabels.filter { key, _ in outputs.contains { $0.name == key } })
-                publishing = true; publicationError = nil
+                publishing = true; publicationError = nil; publicationErrorCode = nil
                 Task { @MainActor in
                     defer { publishing = false }
                     do {
                         try await controller.publishSelection(name: name, registration: registration,
                             inputs: draft.inputs, outputs: outputs, expectedGraphID: draft.graphID, expectedRevision: draft.revision)
                         boundary = nil; $dismiss()
-                    } catch { publicationError = error.localizedDescription }
+                    } catch { publicationError = error.localizedDescription; publicationErrorCode = (error as? WorkflowIssue)?.code }
                 }
             }.buttonStyle(WorkbenchPrimaryButtonStyle())
                 .disabled(!controller.canEditCanvas || purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !value.activeUnconfirmed.isEmpty)

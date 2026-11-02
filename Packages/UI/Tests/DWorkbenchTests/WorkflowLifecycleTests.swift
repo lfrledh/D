@@ -185,6 +185,15 @@ extension WorkflowLifecycleTests {
         _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
         await c.load()
         let registration = WorkflowToolRegistration(purpose: "fixed text", outputLabels: ["output": "Result"])
+        let archiveBeforeName = try await store.workflowState().archive
+        for invalidName in ["", "  ", String(repeating: "x", count: 257), String(repeating: "字", count: 86)] {
+            do {
+                try await c.publishGraphTool(name: invalidName, registration: registration, expectedGraphID: graph.id, expectedRevision: graph.revision)
+                Issue.record("Invalid name was published")
+            } catch { #expect((error as? WorkflowIssue)?.code == "workflow.language.tools.invalidName") }
+            #expect(c.graph == graph && c.tools.isEmpty)
+            #expect(try await store.workflowState().archive == archiveBeforeName)
+        }
         try await c.publishGraphTool(name: "Named tool", registration: registration, expectedGraphID: graph.id, expectedRevision: graph.revision)
         let first = try #require(c.tools.first)
         c.addTool(first); let instance = try #require(c.graph?.nodes.last)
@@ -620,6 +629,15 @@ struct WorkflowLifecycleTests {
         let registration = WorkflowToolRegistration(purpose: "Return the exact input", inputLabels: ["input": "Content"], outputLabels: ["answer": "Result"])
         let inputs: [WorkflowToolInputBinding] = [.init(name: "input", schema: .text, sourceNode: input, sourcePort: "output")]
         let outputs: [WorkflowNamedOutput] = [.init(name: "answer", nodeID: output, schema: .text)]
+        let archiveBeforeName = try await store.workflowState().archive
+        for invalidName in ["", "  ", String(repeating: "x", count: 257), String(repeating: "字", count: 86)] {
+            do {
+                try await c.publishSelection(name: invalidName, registration: registration, inputs: inputs, outputs: outputs, expectedGraphID: before.id, expectedRevision: before.revision)
+                Issue.record("Invalid selection name was published")
+            } catch { #expect((error as? WorkflowIssue)?.code == "workflow.language.tools.invalidName") }
+            #expect(c.graph == before && c.tools.isEmpty && c.selectedNodeIDs == [output])
+            #expect(try await store.workflowState().archive == archiveBeforeName)
+        }
         c.beforeHistorySave = { throw WorkflowIssue("controlled publication failure") }
         do { try await c.publishSelection(name: "Tool", registration: registration, inputs: inputs, outputs: outputs, expectedGraphID: before.id, expectedRevision: before.revision); Issue.record("Expected save failure") }
         catch { #expect(error.localizedDescription.contains("controlled publication failure")) }
@@ -716,7 +734,7 @@ struct WorkflowLifecycleTests {
         for (index, strategy) in [ImageLoadingStrategy.staged, .ssdLayered].enumerated() {
             quick.setParameter("loadingStrategy", value: .text(strategy.rawValue), draftID: draftID)
             canvas.setParameter(nodeID: nodeID, key: "loadingStrategy", value: .text(strategy.rawValue))
-            #expect(quick.definition?.fields.first { $0.id == "loadingStrategy" }?.kind == .choice(["staged", "ssdLayered"]))
+            #expect(quick.definition?.fields.first { $0.id == "loadingStrategy" }?.kind == .choice(["automatic", "staged", "ssdLayered"]))
             #expect(quick.canStart)
             quick.start(); await quick.waitForCompletion()
             await canvas.run(target: nodeID, only: false)
@@ -1064,7 +1082,11 @@ struct WorkflowLifecycleTests {
         await gate.open(); await run.value; await switchProject.value
         #expect(subject.manifest?.id == bID)
         #expect(subject.manifest?.assets.isEmpty == true)
-        #expect(subject.manifest?.workflowSnapshot == nil)
+        // B2 creates the empty asset-library metadata on activation. A snapshot
+        // pointer is valid; no graph, run or output from A may leak into B.
+        let bStore = try #require(subject.currentStore)
+        let bArchive = try #require(try await bStore.workflowState().archive)
+        #expect(bArchive.graphs.isEmpty && bArchive.runs.isEmpty && bArchive.assets.isEmpty)
         let old = try await ProjectStore.open(at: aURL)
         let history = try #require(try await old.workflowState().archive)
         #expect(history.runs.last?.status == .completed)
@@ -2373,8 +2395,13 @@ extension WorkflowLifecycleTests {
             #expect(c.errorMessage?.contains("当前任务正在运行或保存") == true, "Refusing a completed directory selection must provide visible feedback")
             #expect(await validationProbe.count == before)
             #expect(c.graphs == graphs && owner.explicitModelChoices == choices)
-            // Already registered identity remains a normal edit, creating a copy rather than altering the run.
+            // B2 fixes a model node's identity; rejected replacement is not an edit.
             c.bindModel("text:already-registered", to: currentTarget)
+            #expect(c.rootGraph?.id == target.graphID && c.errorCode == "workflow.model.fixedIdentity")
+            #expect(c.graphs == graphs)
+            // An admitted input edit still invokes A2 and leaves the frozen run alone.
+            let inputID = try #require(c.rootGraph?.nodes.first?.id)
+            c.setParameter(nodeID: inputID, key: "text", value: .text("A2 allowed input edit"))
             #expect(c.rootGraph?.id != target.graphID)
             #expect(c.graphs.first { $0.id == target.graphID } == graphs.first { $0.id == target.graphID })
             await gate.open(); await execution.value
@@ -2452,7 +2479,10 @@ extension WorkflowLifecycleTests {
             execution = Task { await c.run(target: target.nodeID, only: false) }
             try await waitForRepairGate(executionGate)
             #expect(c.isCurrent(target))
-        } else { c.setParameter(nodeID: target.nodeID, key: "modelID", value: .text("text:new-selection")) }
+        } else {
+            c.selectedNodeIDs = [target.nodeID]
+            c.deleteSelected() // A real target invalidation, not a rejected cross-model edit.
+        }
         #expect(throws: WorkflowIssue.self) { try owner.checkWorkflowModelRegistration(target: target, controller: c) }
         let graphBefore = c.graph
         await probe.gate.open(); await registration.value

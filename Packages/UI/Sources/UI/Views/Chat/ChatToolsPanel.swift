@@ -63,7 +63,7 @@ struct ChatToolsPanel: View {
                     Text(workflowText(copyLanguage, "chat.toolsPanel.noRecordsForThisTask")).font(.caption).foregroundStyle(.secondary)
                 }
                 if chat.isToolRunning {
-                    Button(workflowText(copyLanguage, "chat.toolsPanel.stopTool")) { Task { await chat.cancelTool() } }
+                    Button(workflowText(copyLanguage, tool == "mcp" ? "chat.mCPPanel.stopCall" : "chat.toolsPanel.stopTool")) { Task { await chat.cancelTool() } }
                 }
                 if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
                 ForEach((session.toolActivities ?? []).filter { showAllHistory || family($0.request) == tool }.reversed()) { activity in
@@ -106,7 +106,7 @@ struct ChatToolsPanel: View {
                             if case .python = activity.request, activity.status == .completed,
                                let result = try? JSONDecoder().decode(ChatPythonResult.self, from: Data(json.utf8)) {
                                 ForEach(Array(result.outputs.enumerated()), id: \.offset) { index, output in
-                                    Button(workflowText(copyLanguage, "chat.toolsPanel.openArtifact") + output.name) {
+                                    Button(workflowText(copyLanguage, "chat.toolsPanel.openArtifact", arguments: ["name": output.name])) {
                                         Task { @MainActor in
                                             do {
                                                 let content = try await chat.artifactFromPython(activity.id, outputIndex: index, sessionID: session.id)
@@ -114,7 +114,7 @@ struct ChatToolsPanel: View {
                                                 openArtifact(content); issue = nil
                                             } catch { issue = error.localizedDescription }
                                         }
-                                    }
+                                    }.help(workflowText(copyLanguage, "chat.toolsPanel.openArtifactHelp"))
                                 }
                             }
                             if case .webSearch = activity.request, let hits = try? JSONDecoder().decode([ChatWebSearchHit].self, from: Data(json.utf8)) {
@@ -138,10 +138,13 @@ struct ChatToolsPanel: View {
                                 }
                                 Button(workflowText(copyLanguage, "chat.toolsPanel.addFullResultToNextMessage")) {
                                     Task { do { try await chat.attachToolResult(activity.id, sessionID: session.id); issue = nil } catch { issue = error.localizedDescription } }
-                                }
+                                }.help(workflowText(copyLanguage, "chat.toolsPanel.addFullResultHelp"))
                             }
                         }
-                        if let failure = activity.issue { Text(failure).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+                        if activity.remoteOutcomeUnconfirmed == true {
+                            Label(workflowText(copyLanguage, "chat.mCPPanel.serverUnknown"), systemImage: "exclamationmark.triangle").font(.caption)
+                        }
+                        if let failure = activity.issue { WorkbenchIssueText(raw: failure, key: activity.issueCode).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
                     }
                 }
             }.padding(.top, 6)
@@ -170,8 +173,10 @@ struct ChatToolsPanel: View {
         switch tool {
         case "mcp": EmptyView()
         case "python":
-            Text(workflowText(copyLanguage, "chat.toolsPanel.runsOnlyInBundledCPythonWASINoNetworkHostFiles"))
-                .font(.caption).foregroundStyle(.secondary)
+            Text(workflowText(copyLanguage, "chat.toolsPanel.pythonHelp")).font(.caption).foregroundStyle(.secondary)
+            DisclosureGroup(workflowText(copyLanguage, "chat.toolsPanel.pythonLimits")) {
+                Text(workflowText(copyLanguage, "chat.toolsPanel.runsOnlyInBundledCPythonWASINoNetworkHostFiles")).font(.caption)
+            }
             ForEach(session.attachments.filter { $0.reference.kind == .text }) { item in
                 Toggle(item.name, isOn: Binding(get: { pythonInputs.contains(item.id) }, set: { selected in
                     if selected { pythonInputs.insert(item.id) } else { pythonInputs.remove(item.id) }
@@ -182,8 +187,9 @@ struct ChatToolsPanel: View {
             }
             TextSourcesQuestionEditor(value: pythonCode, editEpoch: 0, isEditable: !chat.isToolRunning,
                 accessibilityIdentifier: "chat-python-code", onEdit: { pythonCode = $0 }).frame(height: 180).workbenchInputSurface()
-            Text(workflowText(copyLanguage, "chat.toolsPanel.useCsvStatisticsFromPythonSStandardLibraryDResult"))
-                .font(.caption).foregroundStyle(.secondary)
+            DisclosureGroup(workflowText(copyLanguage, "chat.toolsPanel.pythonExamples")) {
+                Text(workflowText(copyLanguage, "chat.toolsPanel.useCsvStatisticsFromPythonSStandardLibraryDResult")).font(.caption)
+            }
             Button(workflowText(copyLanguage, "chat.toolsPanel.runSelectedCode")) {
                 run(.python(code: pythonCode, inputs: selectedPythonInputs.map(\.reference)))
             }.disabled(chat.isToolRunning).accessibilityIdentifier("chat-python-run")
@@ -207,12 +213,15 @@ struct ChatToolsPanel: View {
             })).disabled(session.webOptions?.provider == nil && session.webOptions?.allowed != true)
             Toggle(workflowText(copyLanguage, "chat.toolsPanel.beforeSendingSearchTheVisibleQuestionAndReadTheFirst"), isOn: Binding(get: { session.webOptions?.automaticSearch == true }, set: { value in updateWeb { $0.automaticSearch = value } }))
                 .disabled(session.webOptions?.allowed != true || session.webOptions?.provider == nil)
+            Text(workflowText(copyLanguage, "chat.toolsPanel.automaticHelp")).font(.caption).foregroundStyle(.secondary)
             Text(workflowText(copyLanguage, "chat.toolsPanel.onlyTheVisibleQueryGoesToTheSelectedSearchService"))
                 .font(.caption).foregroundStyle(.secondary)
             TextField(workflowText(copyLanguage, "chat.toolsPanel.searchQuery"), text: $query)
-            Button(workflowText(copyLanguage, "baseline02.library.searchNow")) {
+            Button(workflowText(copyLanguage, "chat.toolsPanel.manualSearch")) {
                 if let provider = session.webOptions?.provider { run(.providerSearch(query: query, provider: provider)) }
             }.disabled(chat.isToolRunning || session.webOptions?.allowed != true || query.isEmpty || session.webOptions?.provider == nil)
+                .help(workflowText(copyLanguage, "chat.toolsPanel.manualSearchHelp"))
+            Text(workflowText(copyLanguage, "chat.toolsPanel.transientHelp")).font(.caption).foregroundStyle(.secondary)
         case "calculator":
             HStack {
                 TextField(workflowText(copyLanguage, "chat.toolsPanel.leftNumber"), text: $left)
@@ -229,16 +238,17 @@ struct ChatToolsPanel: View {
         case "units":
             TextField(workflowText(copyLanguage, "chat.toolsPanel.value"), text: $left)
             HStack {
-                WorkbenchPicker(workflowText(copyLanguage, "chat.toolsPanel.from"), selection: $from) { WorkbenchChoiceForEach(units, id: \.rawValue) { WorkbenchChoice($0.rawValue, value:$0) } }
-                WorkbenchPicker(workflowText(copyLanguage, "chat.toolsPanel.to"), selection: $to) { WorkbenchChoiceForEach(units.filter { $0.family == from.family }, id: \.rawValue) { WorkbenchChoice($0.rawValue, value:$0) } }
+                WorkbenchPicker(workflowText(copyLanguage, "chat.toolsPanel.from"), selection: $from) { WorkbenchChoiceForEach(units, id: \.rawValue) { WorkbenchChoice(workflowText(copyLanguage, "chat.toolsPanel.unit." + $0.rawValue), value:$0) } }
+                WorkbenchPicker(workflowText(copyLanguage, "chat.toolsPanel.to"), selection: $to) { WorkbenchChoiceForEach(units.filter { $0.family == from.family }, id: \.rawValue) { WorkbenchChoice(workflowText(copyLanguage, "chat.toolsPanel.unit." + $0.rawValue), value:$0) } }
             }
             Button(workflowText(copyLanguage, "chat.toolsPanel.convert")) {
                 guard let number = Double(left) else { issue = workflowText(copyLanguage, "chat.toolsPanel.enterANumber"); return }
                 run(.units(.init(value: number, from: from, to: to)))
             }.disabled(chat.isToolRunning)
         case "time":
-            TextField("ISO 8601 · 2026-01-01T00:00:00Z", text: $instant)
-            TextField("IANA · Asia/Tokyo", text: $zone)
+            TextField(workflowText(copyLanguage, "chat.toolsPanel.dateTime"), text: $instant)
+            TextField(workflowText(copyLanguage, "chat.toolsPanel.timeZone"), text: $zone)
+            Text(workflowText(copyLanguage, "chat.toolsPanel.timeHelp")).font(.caption).foregroundStyle(.secondary)
             Button(workflowText(copyLanguage, "chat.toolsPanel.convertFromUTC")) { run(.time(.init(instant: instant, sourceTimeZone: "UTC", targetTimeZone: zone))) }.disabled(chat.isToolRunning)
         default:
             WorkbenchPicker(workflowText(copyLanguage, "chat.toolsPanel.selectedTextAttachmentCSV"), selection: $csvID) {

@@ -48,6 +48,7 @@ struct ChatMemoryPanel: View {
     @State private var editingSummary: UUID?
     @State private var editingMemory: ChatMemoryEntry?
     @State private var issue: String?
+    @State private var pendingDeactivation: ChatMemoryEntry?
     private var summaries: [ChatContextSummary] {
         Dictionary(grouping: session.contextSummaries ?? [], by: \.id).values.compactMap { $0.max { $0.revision < $1.revision } }.sorted { $0.createdAt < $1.createdAt }
     }
@@ -63,7 +64,7 @@ struct ChatMemoryPanel: View {
                 ChatAssistancePanel(chat: chat, session: session, section: .summary, wording: wording)
                 ForEach(summaries) { summary in
                     let provenance = ChatProvenancePresentation(summary: summary)
-                    Toggle(workflowText(copyLanguage, "chat.memoryPanel.summaryRevision") + String(provenance.revision), isOn: Binding(get: { summary.enabled }, set: { value in
+                    Toggle(workflowText(copyLanguage, "chat.memoryPanel.summaryRevision", arguments: ["revision": String(provenance.revision)]), isOn: Binding(get: { summary.enabled }, set: { value in
                         change { try chat.setSummaryEnabled(summary.id, enabled: value, sessionID: session.id) }
                     }))
                     provenanceDetails(provenance)
@@ -77,8 +78,10 @@ struct ChatMemoryPanel: View {
                 Button(editingSummary == nil ? workflowText(copyLanguage, "chat.memoryPanel.saveReviewedSummary") : workflowText(copyLanguage, "chat.memoryPanel.saveSummaryRevision")) {
                     change { try chat.writeSummary(text: summaryText, sessionID: session.id, replacingID: editingSummary); summaryText = ""; editingSummary = nil }
                 }.disabled(summaryText.isEmpty || chat.isRunning)
+                    .help(workflowText(copyLanguage, editingSummary == nil ? "chat.memoryPanel.summariesReplaceOnlyReviewedContextOriginalsRemainMemoryIsOff" : "chat.memoryPanel.editSummaryHelp"))
                 Divider()
                 if !chat.isTemporary {
+                Text(workflowText(copyLanguage, "chat.memoryPanel.permissionHelp")).font(.caption).foregroundStyle(.secondary)
                 ChatAssistancePanel(chat: chat, session: session, section: .memory, wording: wording)
                 Toggle(workflowText(copyLanguage, "chat.memoryPanel.usePersonalMemories"), isOn: scopeBinding(.personal))
                 if let id = chat.projectIdentity { Toggle(workflowText(copyLanguage, "chat.memoryPanel.useThisProjectSMemories"), isOn: scopeBinding(.project(id))) }
@@ -94,15 +97,18 @@ struct ChatMemoryPanel: View {
                                     write { try entry.settingEnabled(value) }
                                 })).disabled(entry.acceptance != .accepted)
                                 if entry.acceptance == .suggested {
-                                    Button(workflowText(copyLanguage, "consistency.legacy.TextSourcesView.145")) { write { try entry.approved() } }
+                                    Button(workflowText(copyLanguage, "chat.memoryPanel.confirmMemory")) { write { try entry.approved() } }
                                 }
                                 Button(workflowText(copyLanguage, "chat.edit")) { editingMemory = entry; memoryText = entry.text; personal = entry.scope == .personal }
-                                Button(workflowText(copyLanguage, "chat.memoryPanel.forget"), role: .destructive) { write { try entry.forgotten() } }
+                                Button(workflowText(copyLanguage, "chat.memoryPanel.forget"), role: .destructive) { pendingDeactivation = entry }
                             }
                         } else { Text(workflowText(copyLanguage, "chat.MemoryPanel.Forgottenretainedonlyashistory")).font(.caption).foregroundStyle(.secondary) }
                     }
                 }
-                Toggle(workflowText(copyLanguage, "chat.memoryPanel.newMemoryIsPersonal"), isOn: $personal).disabled(editingMemory != nil)
+                WorkbenchPicker(workflowText(copyLanguage, "chat.memoryPanel.saveScope"), selection: $personal) {
+                    WorkbenchChoice(workflowText(copyLanguage, "chat.memoryPanel.scopeProjectChoice"), value: false)
+                    WorkbenchChoice(workflowText(copyLanguage, "chat.memoryPanel.scopePersonalChoice"), value: true)
+                }.disabled(editingMemory != nil)
                 TextSourcesQuestionEditor(value: memoryText, editEpoch: 0, isEditable: true,
                     accessibilityIdentifier: "chat-memory-editor", onEdit: { memoryText = $0 },
                     transparentBackground: true, foregroundColor: NSColor(preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor))
@@ -117,37 +123,51 @@ struct ChatMemoryPanel: View {
                 } else { Text(workflowText(copyLanguage, "chat.memoryPanel.temporaryChatDoesNotReadOrWriteLongTermMemory")).font(.caption) }
                 if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
             }.padding(.top, 6)
+        }.workbenchConfirmation(workflowText(copyLanguage, "chat.memoryPanel.deactivateConfirm"), isPresented: Binding(
+            get: { pendingDeactivation != nil }, set: { if !$0 { pendingDeactivation = nil } })) {
+            Button(workflowText(copyLanguage, "chat.memoryPanel.deactivateConfirm"), role: .destructive) {
+                guard let captured = pendingDeactivation else { return }
+                pendingDeactivation = nil
+                write { try captured.forgotten() }
+            }
+            Button(workflowText(copyLanguage, "chat.memoryPanel.deactivateCancel"), role: .cancel) { pendingDeactivation = nil }
+        } message: {
+            Text(workflowText(copyLanguage, "chat.memoryPanel.deactivateHelp"))
         }
     }
     @ViewBuilder private func provenanceDetails(_ value: ChatProvenancePresentation) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(workflowText(copyLanguage, "chat.memoryPanel.revision") + " \(value.revision)")
-            if let scope = value.scope {
-                switch scope {
-                case .personal: Text(workflowText(copyLanguage, "chat.memoryPanel.scopePersonal"))
-                case .project(let id): Text(workflowText(copyLanguage, "chat.memoryPanel.scopeProject") + id.uuidString)
-                }
-            }
             switch value.origin {
             case .manual: Text(workflowText(copyLanguage, "chat.memoryPanel.originManual"))
-            case .auxiliary(let id): Text(workflowText(copyLanguage, "chat.memoryPanel.originAuxiliaryAttempt") + id.uuidString)
-            case .chat: Text(workflowText(copyLanguage, "chat.memoryPanel.originSourceChat"))
+            case .auxiliary, .chat: Text(workflowText(copyLanguage, "chat.memoryPanel.originModel"))
             }
             if let source = value.source {
-                Text(workflowText(copyLanguage, "chat.memoryPanel.sourceChat") + source.sessionID.uuidString)
-                Text(workflowText(copyLanguage, "chat.memoryPanel.sourceLeaf") + source.selectedLeafID.uuidString)
-                if let first = source.coveredMessageIDs.first,
-                   let last = source.coveredMessageIDs.last {
-                    Text(workflowText(copyLanguage, "chat.memoryPanel.coveredRange") + first.uuidString + " … " + last.uuidString)
+                if let name = chat.memorySourceConversationName(source.sessionID) {
+                    Text(workflowText(copyLanguage, "chat.memoryPanel.sourceConversation", arguments: ["name": name]))
+                } else {
+                    Text(workflowText(copyLanguage, "chat.memoryPanel.sourceUnavailable"))
                 }
-                DisclosureGroup(workflowText(copyLanguage, "chat.memoryPanel.coveredMessageIDs", arguments: ["count": String(source.coveredMessageIDs.count)])) {
-                    ForEach(source.coveredMessageIDs, id: \.self) { id in
-                        Text(id.uuidString).textSelection(.enabled)
+                Text(workflowText(copyLanguage, "chat.memoryPanel.sourceMessageCount", arguments: ["count": String(source.coveredMessageIDs.count)]))
+            }
+            DisclosureGroup(workflowText(copyLanguage, "chat.assistancePanel.technicalDetails")) {
+                Text(workflowText(copyLanguage, "chat.memoryPanel.revision") + " \(value.revision)")
+                if let scope = value.scope {
+                    switch scope {
+                    case .personal: Text(workflowText(copyLanguage, "chat.memoryPanel.scopePersonal"))
+                    case .project(let id): Text(workflowText(copyLanguage, "chat.memoryPanel.scopeProject") + id.uuidString)
                     }
                 }
+                if case .auxiliary(let id) = value.origin {
+                    Text(workflowText(copyLanguage, "chat.memoryPanel.originAuxiliaryAttempt") + id.uuidString)
+                }
+                if let source = value.source {
+                    Text(workflowText(copyLanguage, "chat.memoryPanel.sourceChat") + source.sessionID.uuidString)
+                    Text(workflowText(copyLanguage, "chat.memoryPanel.sourceLeaf") + source.selectedLeafID.uuidString)
+                    Text(source.sha256)
+                    ForEach(source.coveredMessageIDs, id: \.self) { Text($0.uuidString) }
+                }
             }
-        }
-        .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+        }.font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
     }
     private func scopeBinding(_ scope: ChatMemoryScope) -> Binding<Bool> {
         Binding(get: { session.memoryScopes?.contains(scope) == true }, set: { value in

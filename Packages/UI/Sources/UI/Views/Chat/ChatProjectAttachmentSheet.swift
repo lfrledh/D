@@ -62,7 +62,7 @@ struct ChatLibraryAttachmentButton: View {
                     } catch is CancellationError {} catch { issue = error.localizedDescription }
                 }
             }.disabled(task != nil).accessibilityIdentifier("library-asset-to-chat")
-            if let issue { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
+            if let issue { WorkbenchIssueText(raw: issue).foregroundStyle(.red).textSelection(.enabled) }
         }.onDisappear { task?.cancel() }
     }
 }
@@ -94,11 +94,14 @@ struct ChatProjectAttachmentSheet: View {
             List(choices, selection: $selected) { choice in
                 VStack(alignment: .leading) {
                     Text(choice.name)
-                    Text("\(choice.reference.kind.rawValue) · \(choice.reference.version.uuidString.prefix(8))")
+                    Text(WorkflowCanvasPresentation.kind(choice.reference.kind, language: copyLanguage))
                         .font(.caption).foregroundStyle(.secondary)
+                    DisclosureGroup(workflowText(copyLanguage, "chat.assistancePanel.technicalDetails")) {
+                        Text(choice.reference.version.uuidString).font(.caption).textSelection(.enabled)
+                    }
                 }.tag(choice.id)
             }.accessibilityIdentifier("chat-project-attachments")
-            if let issue { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
+            if let issue { WorkbenchIssueText(raw: issue).foregroundStyle(.red).textSelection(.enabled) }
             Button(workflowText(copyLanguage, "chat.projectAttachmentSheet.addToDraft")) {
                 guard task == nil, let choice = choices.first(where: { $0.id == selected }) else { return }
                 task = Task { @MainActor in
@@ -114,7 +117,7 @@ struct ChatProjectAttachmentSheet: View {
             }.disabled(task != nil || selected == nil)
                 .accessibilityIdentifier("chat-project-attachment-add")
         }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
-            .workbenchCloseProtection(isDirty: selected != nil, isSaving: task != nil)
+            .workbenchCloseProtection(isDirty: false, isSaving: task != nil)
             .task {
                 do { choices = try await ChatProjectAttachmentChoice.load(from: chat.store) }
                 catch { issue = error.localizedDescription }

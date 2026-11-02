@@ -1,5 +1,6 @@
 import Foundation
 import MCP
+import Synchronization
 
 /// Values crossing into the UI are local copies. Server text, schemas and results are untrusted.
 public struct ChatMCPTool: Sendable, Equatable {
@@ -40,7 +41,32 @@ public enum ChatMCPError: Error, Sendable, Equatable {
 }
 
 /// URLSession's delegate is the last boundary before the SDK can forward a request body.
+private final class ChatMCPDelivery: Sendable {
+    private let sentIDs = Mutex<Set<Data>>([])
+    func record(_ request: URLRequest?) {
+        guard let body = request?.httpBody,
+              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              json["method"] as? String == "tools/call", let id = json["id"],
+              let encoded = try? JSONSerialization.data(withJSONObject: id, options: [.fragmentsAllowed, .sortedKeys]) else { return }
+        sentIDs.withLock { values in
+            if values.count >= 64 { values.removeAll() }
+            values.insert(encoded)
+        }
+    }
+    func contains(_ id: Data?) -> Bool? {
+        guard let id else { return nil }
+        return sentIDs.withLock { $0.contains(id) ? true : nil }
+    }
+}
+
 private final class ChatMCPURLSessionDelegate: NSObject, URLSessionTaskDelegate, Sendable {
+    let delivery: ChatMCPDelivery
+    init(delivery: ChatMCPDelivery) { self.delivery = delivery }
+    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64,
+                    totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+        if totalBytesSent > 0 { delivery.record(task.originalRequest) }
+    }
+
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
                     completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
@@ -63,8 +89,13 @@ public protocol ChatMCPServing: Sendable {
     func connect(endpoint: String, permitted: Bool, timeoutSeconds: Int) async throws
     func listTools(timeoutSeconds: Int) async throws -> [ChatMCPTool]
     func callTool(name: String, argumentsJSON: String, permitted: Bool, timeoutSeconds: Int) async throws -> ChatMCPCallResult
+    func lastCallWasSent() async -> Bool?
     func cancel() async
     func disconnect() async
+}
+
+extension ChatMCPServing {
+    public func lastCallWasSent() async -> Bool? { nil }
 }
 
 /// One explicit MCP endpoint and one operation at a time. This service never handles reverse requests.
@@ -80,6 +111,11 @@ public actor ChatMCPService: ChatMCPServing {
     public static let maximumTools = 64
     public static let maximumPages = 10
 
+    private var delivery = ChatMCPDelivery()
+    private var lastCallRequestID: Data?
+    private var lastCallDelivery: Bool? = false
+    private var activeToolCall = false
+    public func lastCallWasSent() async -> Bool? { lastCallDelivery ?? delivery.contains(lastCallRequestID) }
     private var client: MCP.Client?
     private var session: URLSession?
     private var names: Set<String> = []
@@ -120,7 +156,8 @@ public actor ChatMCPService: ChatMCPServing {
         configuration.urlCache = nil
         configuration.timeoutIntervalForRequest = TimeInterval(Self.boundedTimeout(timeoutSeconds))
         configuration.timeoutIntervalForResource = TimeInterval(Self.boundedTimeout(timeoutSeconds))
-        let session = URLSession(configuration: configuration, delegate: ChatMCPURLSessionDelegate(), delegateQueue: nil)
+        delivery = ChatMCPDelivery(); lastCallRequestID = nil; lastCallDelivery = false
+        let session = URLSession(configuration: configuration, delegate: ChatMCPURLSessionDelegate(delivery: delivery), delegateQueue: nil)
         let transport = HTTPClientTransport(endpoint: url, session: session, streaming: true,
                                             authorizer: nil)
         let client = MCP.Client(name: "DWorkbench", version: "1", capabilities: .init(),
@@ -200,15 +237,19 @@ public actor ChatMCPService: ChatMCPServing {
     /// Call permission is separate from endpoint permission and applies to these exact arguments.
     public func callTool(name: String, argumentsJSON: String, permitted: Bool,
                          timeoutSeconds: Int = 30) async throws -> ChatMCPCallResult {
+        guard activeTask == nil, !stopping else { throw ChatMCPError.busy }
+        lastCallRequestID = nil; lastCallDelivery = false
         guard permitted else { throw ChatMCPError.permissionDenied }
         let arguments = try Self.parseArguments(argumentsJSON)
         guard let client, case .connected = currentStatus else { throw ChatMCPError.notConnected }
         guard names.contains(name) else { throw ChatMCPError.unknownTool }
-        do { return try await run(timeoutSeconds: timeoutSeconds) { token in
+        do { return try await run(timeoutSeconds: timeoutSeconds, toolCall: true) { token in
+            await self.markCallEntered(token: token)
             let context: RequestContext<CallTool.Result> = try await client.callTool(
                 name: name, arguments: arguments)
             try await self.storeContext(context, token: token, client: client)
             let result = try await context.value
+            await self.markCallResponse(token: token)
             try await self.requireCurrent(token)
             let data = try JSONEncoder().encode(result)
             guard data.count <= Self.maximumResultBytes,
@@ -269,6 +310,7 @@ public actor ChatMCPService: ChatMCPServing {
 
     private func storeContext(_ context: RequestContext<CallTool.Result>, token: Int,
                               client: MCP.Client) async throws {
+        lastCallRequestID = try? JSONEncoder().encode(context.requestID)
         guard token == generation else {
             try? await client.cancelRequest(context.requestID, reason: "Local operation stopped")
             throw ChatMCPError.cancelled
@@ -277,7 +319,10 @@ public actor ChatMCPService: ChatMCPServing {
         try Task.checkCancellation()
     }
 
-    private func run<T: Sendable>(timeoutSeconds: Int,
+    private func markCallEntered(token: Int) { if token == generation { lastCallDelivery = nil } }
+    private func markCallResponse(token: Int) { if token == generation { lastCallDelivery = true } }
+
+    private func run<T: Sendable>(timeoutSeconds: Int, toolCall: Bool = false,
                                   operation: @escaping @Sendable (Int) async throws -> T) async throws -> T {
         try Task.checkCancellation()
         guard activeTask == nil, !stopping else { throw ChatMCPError.busy }
@@ -285,7 +330,7 @@ public actor ChatMCPService: ChatMCPServing {
         operationSequence &+= 1
         let identity = OperationIdentity(generation: token, sequence: operationSequence)
         let task = Task { try await operation(token) }
-        activeOperation = identity
+        activeOperation = identity; activeToolCall = toolCall
         activeTask = Task { _ = await task.result }
         activeCancel = { task.cancel() }
         timeoutTask = Task {
@@ -308,7 +353,7 @@ public actor ChatMCPService: ChatMCPServing {
                 activeTask = nil
                 activeCancel = nil
                 activeContext = nil
-                activeOperation = nil
+                activeOperation = nil; activeToolCall = false
                 return value
             }
             if stoppingOperation == identity {
@@ -327,7 +372,7 @@ public actor ChatMCPService: ChatMCPServing {
                 activeTask = nil
                 activeCancel = nil
                 activeContext = nil
-                activeOperation = nil
+                activeOperation = nil; activeToolCall = false
             }
             if let stopped = stopReasons.removeValue(forKey: identity) { throw stopped }
             if Task.isCancelled { throw ChatMCPError.cancelled }
@@ -359,11 +404,12 @@ public actor ChatMCPService: ChatMCPServing {
         let oldTask = activeTask
         let oldCancel = activeCancel
         let oldContext = activeContext
+        let stoppedToolCall = activeToolCall
         client = nil
         session = nil
         names = []
         activeTask = nil
-        activeOperation = nil
+        activeOperation = nil; activeToolCall = false
         activeCancel = nil
         activeContext = nil
         timeoutTask?.cancel()
@@ -383,7 +429,8 @@ public actor ChatMCPService: ChatMCPServing {
             oldSession?.invalidateAndCancel()
         }
         _ = await oldTask?.value
-        currentStatus = reason == nil ? .disconnected : .localStoppedServerUnknown
+        let deliveryEvidence = lastCallDelivery ?? delivery.contains(lastCallRequestID)
+        currentStatus = reason != nil && stoppedToolCall && deliveryEvidence != false ? .localStoppedServerUnknown : .disconnected
         stopping = false
         stoppingOperation = nil
         let waiters = stopWaiters

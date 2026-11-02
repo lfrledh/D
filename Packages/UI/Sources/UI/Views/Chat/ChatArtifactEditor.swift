@@ -235,14 +235,16 @@ struct ChatArtifactEditor: View {
             TextField(workflowText(language, "chat.artifactEditor.title"), text: Binding(
                 get: { state.draft.title }, set: { state.updateTitle($0) }))
                 .accessibilityIdentifier("chat-artifact-title")
-            WorkbenchPicker(workflowText(language, "workflow.operation.d.image.convert.field.format"), selection: Binding(
+            WorkbenchPicker(workflowText(language, "chat.artifactEditor.format"), selection: Binding(
                 get: { state.draft.kind }, set: { state.updateKind($0) })) {
                 WorkbenchChoiceForEach(ChatArtifactContent.Kind.allCases, id: \.self) { kind in
                     WorkbenchChoice(kindName(kind), value:kind)
                 }
             }.accessibilityIdentifier("chat-artifact-kind")
+                .help(workflowText(language, "chat.artifactEditor.formatHelp"))
+            Text(workflowText(language, "chat.artifactEditor.editHelp")).font(.caption).foregroundStyle(.secondary)
             HStack {
-                Text(workflowText(language, "chat.artifactEditor.source"))
+                Text(workflowText(language, state.draft.kind == .csv ? "chat.artifactEditor.csvContent" : [.code, .html, .svg, .mermaid].contains(state.draft.kind) ? "chat.artifactEditor.code" : "chat.artifactEditor.source"))
                 Spacer()
                 Text("\(state.draft.text.utf8.count) / \(ChatArtifactContent.maximumSourceBytes) UTF-8")
                     .font(.caption).foregroundStyle(.secondary)
@@ -251,7 +253,7 @@ struct ChatArtifactEditor: View {
                 accessibilityIdentifier: "chat-artifact-source", onEdit: { state.updateText($0) })
                 .frame(height: 240).workbenchInputSurface()
             HStack {
-                Toggle(workflowText(language, "baseline02.library.preview"), isOn: Binding(
+                Toggle(workflowText(language, "chat.artifactEditor.showPreview"), isOn: Binding(
                     get: { state.isPreviewing },
                     set: { _ in state.togglePreview(mermaidDocument: mermaidDocument) }))
                     .toggleStyle(.checkbox)
@@ -273,9 +275,10 @@ struct ChatArtifactEditor: View {
                                      set: { state.setJavaScriptEnabled($0) }))
                     .toggleStyle(.checkbox)
                     .accessibilityIdentifier("chat-artifact-javascript")
+                    .help(workflowText(language, "chat.artifactEditor.javaScriptHelp"))
             }
             if state.isPreviewing && (state.draft.kind == .html || state.draft.kind == .svg || state.draft.kind == .mermaid) {
-                Text(workflowText(language, "chat.artifactEditor.localPreviewOnlyNetworkAndFileAccessAreNotAllowed"))
+                Text(workflowText(language, state.draft.kind == .mermaid ? "chat.artifactEditor.mermaidHelp" : "chat.artifactEditor.localPreviewOnlyNetworkAndFileAccessAreNotAllowed"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             if state.isPreviewing {
@@ -300,7 +303,7 @@ struct ChatArtifactEditor: View {
                     .keyboardShortcut(.cancelAction)
                     .disabled(state.isSaving)
                     .accessibilityIdentifier("chat-artifact-close")
-                Button(workflowText(language, "chat.artifactEditor.saveNewVersion")) {
+                Button(workflowText(language, state.baseline.output == nil ? "chat.artifactEditor.saveAsset" : "chat.artifactEditor.saveNewVersion")) {
                     Task { await state.save(using: onSave) }
                 }
                 .keyboardShortcut("s", modifiers: .command)

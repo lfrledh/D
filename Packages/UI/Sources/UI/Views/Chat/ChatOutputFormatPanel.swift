@@ -12,7 +12,7 @@ struct ChatOutputFormatPanel: View {
     @State private var loaded = false
     private func name(_ kind: ChatOutputFormat.Kind) -> String {
         switch kind {
-        case .automatic: workflowText(language, "consistency.remaining.7eb336e42cb5")
+        case .automatic: workflowText(language, "chat.outputFormatPanel.noPreference")
         case .plainText: workflowText(language, "chat.artifactEditor.plainText")
         case .markdown: "Markdown"
         case .json: "JSON"
@@ -36,7 +36,7 @@ struct ChatOutputFormatPanel: View {
     var body: some View {
         DisclosureGroup(workflowText(language, "chat.outputFormatPanel.responseFormat")) {
             VStack(alignment: .leading, spacing: 8) {
-                WorkbenchPicker(workflowText(language, "workflow.operation.d.image.convert.field.format"), selection: $kind) {
+                WorkbenchPicker(workflowText(language, "chat.outputFormatPanel.format"), selection: $kind) {
                     WorkbenchChoiceForEach([ChatOutputFormat.Kind.automatic, .plainText, .markdown, .json, .schema], id: \.self) { value in
                         WorkbenchChoice(name(value), value:value)
                     }
@@ -51,7 +51,7 @@ struct ChatOutputFormatPanel: View {
                         let schema = WorkflowDataSchema.record([.init("title", .text), .init("tags", .list(.text), required: false)])
                         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                         schemaText = (try? encoder.encode(schema)).map { String(decoding: $0, as: UTF8.self) } ?? ""
-                    }
+                    }.help(workflowText(language, "chat.outputFormatPanel.exampleHelp"))
                 }
                 Text(workflowText(language, "chat.outputFormatPanel.explicitFormatInstructionsAreAddedToFutureRequestsJSONIs"))
                     .font(.caption).foregroundStyle(.secondary)

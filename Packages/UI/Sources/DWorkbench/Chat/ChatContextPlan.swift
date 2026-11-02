@@ -26,7 +26,7 @@ public struct ChatContextPlan: Sendable, Equatable {
     public static func build(path: [ChatMessage], attempts: [ChatAttempt], prompt: String,
                              attachments: [ChatAttachment], system: String,
                              adopted: [UUID: String] = [:], excluded: Set<UUID> = [],
-                             knowledgeExcerpts: [ChatKnowledgeExcerpt] = []) throws -> Self {
+                             knowledgeExcerpts: [ChatKnowledgeExcerpt] = [], automaticSearch: ChatAutomaticSearch? = nil) throws -> Self {
         let pathIDs = Set(path.map(\.id))
         guard pathIDs.count == path.count, Set(attempts.map(\.id)).count == attempts.count,
               excluded.isSubset(of: pathIDs), Set(adopted.keys).isDisjoint(with: excluded),
@@ -89,6 +89,9 @@ public struct ChatContextPlan: Sendable, Equatable {
         var promptParts: [FormPart] = []
         try appendUserParts(attachments, text: prompt, to: &promptParts,
                             images: &images, videos: &videos, excerpts: knowledgeExcerpts)
+        if let notice = automaticSearch?.requestNotice {
+            promptParts.append(.init(type: "text", text: notice, index: nil))
+        }
         messages.append(.init(role: "user", parts: promptParts, reasoningContent: nil, toolCalls: nil))
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(messages)

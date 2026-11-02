@@ -63,6 +63,7 @@ public struct ChatMessage: Codable, Sendable, Equatable, Identifiable {
 
 public struct ChatAttempt: Codable, Sendable, Equatable, Identifiable {
     public var languageEnd: WorkflowLanguageEnd? = nil
+    public var automaticSearch: ChatAutomaticSearch?
     public var executionRecords: [InferenceExecutionRecord]?
     public enum Status: String, Codable, Sendable { case running, completed, partial, cancelled, failed, interrupted, saving }
     public let id: UUID
@@ -299,6 +300,7 @@ public struct ChatState: Codable, Sendable, Equatable {
                 reachesRoot.formUnion(chain)
             }
             for attempt in session.attempts {
+                try attempt.automaticSearch?.validate()
                 guard attempt.sessionID == session.id, byID[attempt.userMessageID]?.role == .user,
                       byID[attempt.assistantMessageID]?.role == .assistant,
                       byID[attempt.assistantMessageID]?.attemptID == attempt.id,

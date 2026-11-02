@@ -123,6 +123,11 @@ struct ChatMCPServiceTests {
             _ = try await service.listTools(timeoutSeconds: 5)
             let next = try await service.callTool(name: "add_numbers", argumentsJSON: #"{"a":1,"b":2}"#, permitted: true, timeoutSeconds: 5)
             #expect(!next.isError)
+            #expect(await service.lastCallWasSent() == true, "The actual SDK HTTP response proves dispatch")
+            await service.cancel()
+            #expect(await service.status() == .disconnected, "An idle disconnect must not inherit the previous call")
+            try await service.connect(endpoint: endpoint, permitted: true, timeoutSeconds: 5)
+            _ = try await service.listTools(timeoutSeconds: 5)
             await #expect(throws: ChatMCPError.timedOut) { try await service.callTool(name: "test_progress", argumentsJSON: #"{"duration_ms":2000}"#, permitted: true, timeoutSeconds: 1) }
             await service.disconnect()
             #expect(await service.status() == .disconnected)
@@ -166,6 +171,7 @@ struct ChatMCPServiceTests {
             try await service.callTool(name: "read", argumentsJSON: "{}", permitted: false)
         }
         #expect(await service.status() == .disconnected)
+        #expect(await service.lastCallWasSent() == false)
     }
 
     @Test func cancelledInitializationDrainsBeforeNextConnection() async throws {

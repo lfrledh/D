@@ -73,6 +73,9 @@ private actor ControlledChatMCP: ChatMCPServing {
     private var releases: [CheckedContinuation<Void, Never>] = []
     private(set) var disconnects = 0
     private(set) var callEntered = false
+    private let delivery: Bool?
+    init(delivery: Bool? = nil) { self.delivery = delivery }
+    func lastCallWasSent() async -> Bool? { delivery }
     private var callRelease: CheckedContinuation<Void, Never>?
     func releaseCall() { callRelease?.resume(); callRelease = nil }
     func status() -> ChatMCPStatus { current }
@@ -104,9 +107,10 @@ private actor UnrelatedSlowWeb: ChatWebTransport {
 }
 
 extension ChatMCPControllerTests {
-    @Test func directUIDisconnectWaitsForActiveCallAndPreservesOriginalOwner() async throws {
+    @Test(arguments: [Optional(true), Optional(false), nil])
+    func directUIDisconnectWaitsForActiveCallAndPreservesOriginalOwner(delivery: Bool?) async throws {
         let (store, unused) = try await fixture(); _ = unused
-        let service = ControlledChatMCP(); await service.resume()
+        let service = ControlledChatMCP(delivery: delivery); await service.resume()
         let chat = ChatController(store: store, mcpService: service) { throw WorkflowIssue("No generation") }
         await chat.load()
         let a = try chat.newSession(), b = try chat.newSession()
@@ -131,6 +135,12 @@ extension ChatMCPControllerTests {
             #expect(!chat.isMCPStopping && !chat.isToolRunning && chat.mcpSessionID == nil)
             #expect(chat.state.sessions.first { $0.id == a }?.toolActivities?.last?.status == .cancelled)
             #expect(chat.state.sessions.first { $0.id == a }?.toolActivities?.last?.output == nil)
+            let receipt = try #require(chat.state.sessions.first { $0.id == a }?.toolActivities?.last)
+            #expect(receipt.remoteRequestSent == delivery)
+            #expect(receipt.remoteOutcomeUnconfirmed == (delivery != false ? true : nil))
+            try await chat.flush()
+            let persisted = try await store.chatState()
+            #expect(persisted.sessions.first { $0.id == a }?.toolActivities?.last == receipt)
             #expect(chat.selectedSession?.id == b && chat.selectedSession?.toolActivities == nil)
             try await chat.connectMCP(endpoint: endpoint, sessionID: b, permitted: true)
             #expect(chat.mcpSessionID == b)

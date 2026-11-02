@@ -205,8 +205,13 @@ struct ChatMessageNoticeView: View {
     let openDetails: @MainActor () -> Void
     @Environment(\.dLanguageStore) private var language
     var body: some View {
-        if !keys.isEmpty || attempt?.issue != nil {
+        if !keys.isEmpty || attempt?.issue != nil || attempt?.automaticSearch?.noticeKey != nil {
             VStack(alignment: .leading, spacing: 2) {
+                if let key = attempt?.automaticSearch?.noticeKey {
+                    Label(workflowText(language, key), systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("chat-automatic-search-notice")
+                }
                 let summary = keys.map { workflowText(language, ($0.hasPrefix("phase.") ? "chat." : "chat.clarity.") + $0) }.joined(separator: " · ")
                 if let attempt, let end = attempt.languageEnd, end.interrupted {
                     Text(workflowText(language, PartialOutputPresentation.key(end,
