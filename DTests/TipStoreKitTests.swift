@@ -131,11 +131,15 @@ private final class TipStoreKitBundle: NSObject { }
         guard case .success(.verified(let first)) = try await product.purchase(confirmIn: window) else {
             Issue.record("Expected the first verified local purchase"); return
         }
-        var unfinishedIDs: [UInt64] = []
+        var unfinishedIDs: [UInt64] = [], unfinishedTotal = 0, unfinishedUnverified = 0
         for await result in Transaction.unfinished {
-            if case .verified(let t) = result { unfinishedIDs.append(t.id) }
+            unfinishedTotal += 1
+            switch result {
+            case .verified(let t): unfinishedIDs.append(t.id)
+            case .unverified: unfinishedUnverified += 1
+            }
         }
-        print("TIP_ISOLATED_FIRST id=\(first.id) unfinished=\(unfinishedIDs) rawUpdates=\(observed)")
+        print("TIP_ISOLATED_FIRST id=\(first.id) unfinished=\(unfinishedIDs) total=\(unfinishedTotal) unverified=\(unfinishedUnverified) rawUpdates=\(observed)")
         #expect(unfinishedIDs.contains(first.id))
         store.start()
         try await wait("isolated first recovery", store: store) { FileManager.default.fileExists(atPath: root.appendingPathComponent("tips.json").path) }
@@ -155,11 +159,15 @@ private final class TipStoreKitBundle: NSObject { }
         let store = owner(root); store.start(); await store.loadProducts()
         #expect(store.localTest)
         store.selectedID = try #require(store.products.first?.id)
-        var revokedIDs: [UInt64] = []
+        var revokedIDs: [UInt64] = [], updateTotal = 0, updateUnverified = 0
         let observer = Task { @MainActor in
             for await result in Transaction.updates {
                 if Task.isCancelled { return }
-                if case .verified(let t) = result, t.revocationDate != nil { revokedIDs.append(t.id) }
+                updateTotal += 1
+                switch result {
+                case .verified(let t): if t.revocationDate != nil { revokedIDs.append(t.id) }
+                case .unverified: updateUnverified += 1
+                }
             }
         }
         defer { observer.cancel() }
@@ -180,7 +188,19 @@ private final class TipStoreKitBundle: NSObject { }
         let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: [String: Any]])
         let journalRevoked = records.values.first { $0["transactionID"] as? String == String(id) }?["revoked"] as? Bool
         let systemRevoked = session.allTransactions().first { UInt64($0.identifier) == id }?.cancelDate != nil
-        print("TIP_ISOLATED_REFUND id=\(id) rawRevoked=\(revokedIDs) journalRevoked=\(String(describing: journalRevoked)) systemRevoked=\(systemRevoked)")
+        var historyTotal = 0, historyUnverified = 0, historyTargetRevoked = false
+        for await item in Transaction.all {
+            historyTotal += 1
+            switch item {
+            case .verified(let t): if t.id == id { historyTargetRevoked = t.revocationDate != nil }
+            case .unverified: historyUnverified += 1
+            }
+        }
+        var latestVerified = false, latestTargetRevoked = false
+        if case .verified(let t)? = await Transaction.latest(for: "d.localtest.tip.small") {
+            latestVerified = true; latestTargetRevoked = t.id == id && t.revocationDate != nil
+        }
+        print("TIP_ISOLATED_REFUND id=\(id) rawRevoked=\(revokedIDs) updateTotal=\(updateTotal) updateUnverified=\(updateUnverified) journalRevoked=\(String(describing: journalRevoked)) systemRevoked=\(systemRevoked) historyTotal=\(historyTotal) historyUnverified=\(historyUnverified) historyTargetRevoked=\(historyTargetRevoked) latestVerified=\(latestVerified) latestTargetRevoked=\(latestTargetRevoked)")
         #expect(revokedIDs.contains(id))
         #expect(records.values.first { $0["transactionID"] as? String == String(id) }?["revoked"] as? Bool == true)
         #expect(store.status == .idle)
