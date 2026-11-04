@@ -3,6 +3,11 @@
   "locale": "zh-Hans",
   "displayName": "简体中文",
   "strings": {
+    "chat.searchSource.originalInput": "沿用原请求的输入，未重新搜索。",
+    "chat.searchSource.failed": "原请求搜索失败；本次沿用原输入，未重新搜索。",
+    "chat.searchSource.noResults": "原请求未找到可用的搜索结果；本次未重新搜索。",
+    "chat.searchSource.included": "沿用原请求中的搜索资料，未重新搜索。",
+    "chat.searchSource.unavailable": "原请求的搜索来源无法确认。本次未重新搜索。",
     "workflow.language.tools.selectionHelp": "把所选节点组合为一个可复用的自定义节点，并在画布上替换这组节点。内部步骤和原有外部连接保留，不会开始运行。",
     "workflow.language.tools.insertHelp": "将这个版本的自定义节点添加到当前工作流，不开始运行。",
     "workflow.language.tools.copyHelp": "创建独立工作流副本供修改，已有节点和版本保持不变。",

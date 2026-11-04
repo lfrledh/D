@@ -3,6 +3,11 @@
   "locale": "en",
   "displayName": "English",
   "strings": {
+    "chat.searchSource.originalInput": "Uses the original request’s input. No new search was performed.",
+    "chat.searchSource.failed": "The original request’s search failed. This run uses the original input without a new search.",
+    "chat.searchSource.noResults": "The original request found no usable search results. No new search was performed for this run.",
+    "chat.searchSource.included": "Uses the search material from the original request. No new search was performed.",
+    "chat.searchSource.unavailable": "The original request’s search source could not be verified. No new search was performed for this run.",
     "workflow.language.tools.selectionHelp": "Combine the selected nodes into a reusable custom node and replace them on the canvas. Internal steps and existing external connections are preserved. This does not start execution.",
     "workflow.language.tools.insertHelp": "Add this version of the custom node to the current workflow without running it.",
     "workflow.language.tools.copyHelp": "Create a separate editable workflow copy. Existing nodes and versions remain unchanged.",

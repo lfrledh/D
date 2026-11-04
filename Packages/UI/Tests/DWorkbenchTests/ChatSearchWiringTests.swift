@@ -327,6 +327,48 @@ struct ChatSearchWiringTests {
         #expect(try JSONDecoder().decode(ChatWebOptions.self, from: old).provider == nil)
     }
 
+    @Test func replayAndComparePreserveSearchSourceWithoutNetworkEvents() async throws {
+        for outcome in [ChatReusedSearchSource.failed, .noResults, .included] {
+            let transport = SearchWiringTransport(searchBody: outcome == .noResults ? #"{"web":{"results":[]}}"# : nil,
+                                                  failure: outcome == .failed ? .searchHTTP : nil)
+            let engine = SearchAnswerEngine()
+            let (store, chat, id) = try await generationFixture(transport, engine: engine)
+            var options = ChatWebOptions()
+            options.allowed = true; options.automaticSearch = true; options.provider = .brave
+            try chat.setWebOptions(options, sessionID: id)
+            try chat.updateDraft("Frozen source fixture", sessionID: id)
+            try await chat.send(sessionID: id); await chat.waitForCompletion()
+            let firstSession = try #require(chat.selectedSession)
+            let original = try #require(firstSession.attempts.first)
+            let networkCalls = await transport.requests().count
+            try await chat.reproduce(original.id, sessionID: id); await chat.waitForCompletion()
+            let replay = try #require(chat.selectedSession?.attempts.last)
+            try await chat.compare(replay.id, configuration: original.node, sessionID: id); await chat.waitForCompletion()
+            let saved = try #require(chat.selectedSession)
+            #expect(saved.attempts.count == 3 && saved.attempts.first == original)
+            #expect(saved.toolActivities == firstSession.toolActivities)
+            #expect(await engine.requests.count == 3)
+            #expect(await transport.requests().count == networkCalls)
+            try await chat.flush()
+            let url = store.rootURL
+            try await store.close()
+            let reopened = try await ProjectStore.open(at: url)
+            let owner = ChatController(store: reopened) { throw WorkflowIssue("Cold read must not execute") }
+            await owner.load()
+            let loaded = try #require(owner.selectedSession)
+            for derived in loaded.attempts.dropFirst() {
+                #expect(derived.automaticSearch == nil && derived.messagesJSON == original.messagesJSON && derived.inputs == original.inputs)
+                #expect(owner.reusedSearchSource(derived, in: loaded) == outcome)
+            }
+            #expect(owner.reusedSearchSource(original, in: loaded) == nil)
+            var orphan = replay; orphan.replayedAttemptID = UUID()
+            #expect(owner.reusedSearchSource(orphan, in: loaded) == .unavailable)
+            orphan.replayedAttemptID = orphan.id
+            #expect(owner.reusedSearchSource(orphan, in: loaded) == .unavailable)
+            try await reopened.close()
+        }
+    }
+
     private func generationFixture(_ transport: SearchWiringTransport, engine: SearchAnswerEngine,
                                    credential: @escaping @Sendable (ChatSearchProvider) async throws -> String = { _ in "fixture-secret-canary" }) async throws -> (ProjectStore, ChatController, UUID) {
         let parent = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent("AutomaticSearch-" + UUID().uuidString)

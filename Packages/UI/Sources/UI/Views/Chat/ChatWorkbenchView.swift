@@ -1156,6 +1156,7 @@ ScrollViewReader { proxy in
                         ForEach(structure.path) { message in
                             let siblings = structure.siblings[(message.parentID?.uuidString ?? "root") + ":" + message.role.rawValue] ?? []
                             let attempt = chat.transcriptAttempt(message.attemptID, in: session)
+                            let source = chat.reusedSearchSource(attempt, in: session)
                             ChatMessageRow(projection: .init(owner: ObjectIdentifier(chat), sessionID: session.id,
                                 message: message, attempt: attempt, siblings: siblings, choices: session.contextChoices,
                                 selectedLeafID: session.selectedLeafID,
@@ -1166,10 +1167,10 @@ ScrollViewReader { proxy in
                                     isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil) } ?? false,
                                 canAdopt: session.contextChoices?.deletedAt == nil && ChatContextCommands.canAdopt(attempt, in: chat),
                                 speech: chat.speechPlaybackState, language: language?.effectiveLanguageIdentifier ?? "",
-                                latestAnswer: message.id == latestAnswerID,
+                                reusedSearch: source, latestAnswer: message.id == latestAnswerID,
                                 pendingSave: attempt.map { chat.hasUnsavedResult($0.id) } == true,
                                 saveIssue: attempt.map { chat.hasUnsavedResult($0.id) } == true ? chat.saveIssue : nil)) {
-                                    messageCard(message, session: session, siblings: siblings, attempt: attempt,
+                                    messageCard(message, session: session, siblings: siblings, attempt: attempt, reusedSearch: source,
                                         latestAnswer: message.id == latestAnswerID)
                                 }.equatable()
                                 .modifier(ChatMessageEntrance(accepted: enteringMessages.contains(message.id)))
@@ -1947,7 +1948,7 @@ ScrollViewReader { proxy in
     }
 
     private func messageCard(_ message: ChatMessage, session: ChatSession,
-                             siblings: [ChatMessage], attempt: ChatAttempt?, latestAnswer: Bool = false) -> some View {
+                             siblings: [ChatMessage], attempt: ChatAttempt?, reusedSearch: ChatReusedSearchSource?, latestAnswer: Bool = false) -> some View {
         let commands = messageMenuItems(message, session: session, attempt: attempt, siblings: siblings)
         let menu = organizedMessageMenu(commands, user: message.role == .user)
         let selectedAnswer = session.selectedAnswer(messageID: message.id)
@@ -1979,8 +1980,8 @@ ScrollViewReader { proxy in
                     disabledReasons: messageDisabledReasons(message, session: session),
                     layoutProbe: layoutProbe, messageID: message.id)
             } footer: {
-                if !noticeKeys.isEmpty || attempt?.issue != nil || attempt?.automaticSearch?.noticeKey != nil {
-                    ChatMessageNoticeView(attempt: attempt, keys: noticeKeys,
+                if !noticeKeys.isEmpty || attempt?.issue != nil || attempt?.automaticSearch?.noticeKey != nil || reusedSearch != nil {
+                    ChatMessageNoticeView(attempt: attempt, keys: noticeKeys, reusedSearch: reusedSearch,
                         openDetails: { commands.first { $0.id == "details" }?.action?() })
                         .chatMeasured("attempt-status-\(attempt?.id.uuidString ?? "none")", probe: layoutProbe)
                 }
@@ -2009,6 +2010,7 @@ ScrollViewReader { proxy in
                 }
                 LowMemoryExecutionDetails(records: attempt.executionRecords ?? [])
                 ChatRunFeedbackView(chat: chat, attempt: attempt)
+                if let reused = chat.reusedSearchSource(attempt, in: session) { Text(workflowText(language, reused.noticeKey)) }
                 if let search = attempt.automaticSearch {
                     Text(workflowText(language, "chat.automaticSearch.title")).font(.headline)
                     Text(workflowText(language, search.noticeKey ?? "chat.automaticSearch.included"))
@@ -2936,6 +2938,7 @@ struct ChatMessageRow<Content: View>: View, Equatable {
         let canAdopt: Bool
         let speech: ChatSpeechPlaybackState
         let language: String
+        var reusedSearch: ChatReusedSearchSource? = nil
         var latestAnswer = false
         var pendingSave = false
         var saveIssue: String? = nil

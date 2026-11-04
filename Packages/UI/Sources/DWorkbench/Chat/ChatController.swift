@@ -215,6 +215,11 @@ public enum ChatGenerationPhase: String, Sendable {
     public func transcriptStructure(for session: ChatSession) -> ChatTranscriptStructure {
         transcriptCache.structure(for: session)
     }
+    public func reusedSearchSource(_ attempt: ChatAttempt?, in session: ChatSession) -> ChatReusedSearchSource? {
+        guard let attempt, attempt.sessionID == session.id else { return nil }
+        return ChatReusedSearchSource.resolve(attempt) { id in transcriptCache.attempt(id, in: session) }
+    }
+
     public func transcriptAttempt(_ id: UUID?, in session: ChatSession) -> ChatAttempt? {
         transcriptCache.attempt(id, in: session)
     }
@@ -856,6 +861,7 @@ public enum ChatGenerationPhase: String, Sendable {
                                assistantMessageID: a.assistantMessageID, node: a.node,
                                messagesJSON: a.messagesJSON, inputs: a.inputs, systemPrompt: a.systemPrompt,
                                createdAt: a.createdAt, status: a.status)
+            copy.automaticSearch = a.automaticSearch
             copy.replayedAttemptID = a.replayedAttemptID
             copy.comparisonSourceAttemptID = a.comparisonSourceAttemptID
             copy.memoryUses = a.memoryUses; copy.outputFormat = a.outputFormat
@@ -2344,7 +2350,7 @@ public struct ChatTranscriptStructure: Sendable {
     func structure(for session: ChatSession) -> ChatTranscriptStructure {
         let changed = sessionID != session.id || messages != session.messages
         if changed {
-            if sessionID != session.id { attemptIndices = [:] }
+            attemptIndices = Dictionary(session.attempts.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
             sessionID = session.id; messages = session.messages
             byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             let parents = Set(messages.compactMap(\.parentID))
@@ -2369,6 +2375,7 @@ public struct ChatTranscriptStructure: Sendable {
         if let index = attemptIndices[id], session.attempts.indices.contains(index), session.attempts[index].id == id {
             return session.attempts[index]
         }
+        if attemptIndices[id] == nil && attemptIndices.count == session.attempts.count { return nil }
         attemptIndices = Dictionary(session.attempts.enumerated().map { ($0.element.id, $0.offset) },
                                     uniquingKeysWith: { first, _ in first })
         return attemptIndices[id].map { session.attempts[$0] }

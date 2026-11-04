@@ -37,3 +37,31 @@ public struct ChatAutomaticSearch: Codable, Sendable, Equatable {
         return false // Cancellation, ownership, persistence and validation are not search failures.
     }
 }
+
+/// A description of reused input, never a receipt for a network or generation event.
+public enum ChatReusedSearchSource: String, Equatable, Sendable {
+    case originalInput, failed, noResults, included, unavailable
+
+    public var noticeKey: String { "chat.searchSource." + rawValue }
+
+    static func resolve(_ attempt: ChatAttempt, lookup: (UUID) -> ChatAttempt?) -> Self? {
+        guard attempt.replayedAttemptID != nil || attempt.comparisonSourceAttemptID != nil else { return nil }
+        var cursor = attempt, visited: Set<UUID> = [attempt.id]
+        for _ in 0..<64 {
+            guard (cursor.replayedAttemptID == nil) != (cursor.comparisonSourceAttemptID == nil),
+                  let id = cursor.replayedAttemptID ?? cursor.comparisonSourceAttemptID,
+                  visited.insert(id).inserted, let source = lookup(id),
+                  source.sessionID == attempt.sessionID, source.userMessageID == attempt.userMessageID else { return .unavailable }
+            if source.replayedAttemptID == nil && source.comparisonSourceAttemptID == nil {
+                switch source.automaticSearch?.outcome {
+                case .failed: return .failed
+                case .noResults: return .noResults
+                case .included: return .included
+                case nil: return .originalInput
+                }
+            }
+            cursor = source
+        }
+        return .unavailable
+    }
+}

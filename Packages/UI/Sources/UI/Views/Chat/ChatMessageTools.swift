@@ -202,11 +202,17 @@ enum ChatMessageNotices {
 struct ChatMessageNoticeView: View {
     let attempt: ChatAttempt?
     let keys: [String]
+    var reusedSearch: ChatReusedSearchSource? = nil
     let openDetails: @MainActor () -> Void
     @Environment(\.dLanguageStore) private var language
     var body: some View {
-        if !keys.isEmpty || attempt?.issue != nil || attempt?.automaticSearch?.noticeKey != nil {
+        if !keys.isEmpty || attempt?.issue != nil || attempt?.automaticSearch?.noticeKey != nil || reusedSearch != nil {
             VStack(alignment: .leading, spacing: 2) {
+                if let source = reusedSearch {
+                    Label(workflowText(language, source.noticeKey), systemImage: "arrow.triangle.branch")
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("chat-reused-search-source")
+                }
                 if let key = attempt?.automaticSearch?.noticeKey {
                     Label(workflowText(language, key), systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
