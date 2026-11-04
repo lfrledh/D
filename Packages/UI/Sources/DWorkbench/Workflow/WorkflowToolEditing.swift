@@ -36,6 +36,9 @@ public enum WorkflowToolEditing {
                 return .asset(.text)
             }
         }
+        if [WorkflowAssetContainer.previewID, WorkflowAssetContainer.filterID, WorkflowAssetContainer.sourceID].contains(node.operationID),
+           let schema = node.dataConfiguration?.schema { return schema }
+        if node.operationID == WorkflowAssetContainer.sourceID, let schema = node.dataConfiguration?.value?.schema { return schema }
         if node.operationID == "d.value.input" { return node.dataConfiguration?.value?.schema ?? node.dataConfiguration?.schema }
         if ["d.value.field", "d.control.human"].contains(node.operationID) { return node.dataConfiguration?.schema }
         if let reference = node.assetReference { return .asset(reference.kind) }

@@ -26,6 +26,18 @@ struct WorkflowToolEditingTests {
         #expect(copy.id != extracted.tool.graph.id); #expect(copy.nodes == extracted.tool.graph.nodes)
         #expect(throws: WorkflowIssue.self) { try WorkflowToolEditing.extract(graph, selected: [middle.id], name: "bad", inputs: [], outputs: [.init(name: "answer", nodeID: middle.id, schema: .text)], tools: []) }
     }
+    @Test func containerPublicationKeepsExactConfiguredOutput() throws {
+        let registry = WorkflowRegistry.standard
+        var node = try #require(registry.operation(WorkflowAssetContainer.previewID)).definition.makeNode()
+        node.dataConfiguration = .init(schema: .asset(.text))
+        #expect(WorkflowToolEditing.outputSchemaProposal(for: node, port: "output", registry: registry, tools: []) == .asset(.text))
+        let graph = WorkflowGraph(nodes: [node])
+        #expect(throws: WorkflowIssue.self) {
+            try WorkflowToolEditing.extract(graph, selected: [node.id], name: "Container", inputs: [],
+                                            outputs: [.init(name: "item", nodeID: node.id, schema: .text)], tools: [])
+        }
+    }
+
     @Test func registrationPreservesOldEncodingAndRejectsInventedPortLabels() throws {
         var graph = WorkflowGraph(name: "old"); graph.interface = .init()
         let original = WorkflowToolDefinition(name: "old", graph: graph)

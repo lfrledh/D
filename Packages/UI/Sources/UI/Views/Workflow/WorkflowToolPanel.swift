@@ -44,7 +44,7 @@ struct WorkflowToolPanel: View {
                 if let graph = controller.graph {
                     Button(t(graph.toolSource == nil ? "publishGraph" : "publishVersion", graph.toolSource == nil ? "保存自定义节点" : "发布新定义版本（旧实例不变）")) {
                         guard graph.id == formGraphID, graph.revision == formRevision else {
-                            publicationError = t("stale", ""); return
+                            publicationErrorCode = nil; publicationError = t("stale", ""); return
                         }
                         publishing = true; publicationError = nil; publicationErrorCode = nil
                         let registration = WorkflowToolRegistration(purpose: purpose, detail: detail.isEmpty ? nil : detail,
@@ -241,7 +241,7 @@ private struct WorkflowBoundarySchemaPicker: View {
         VStack(alignment: .leading) {
             WorkbenchMenu(language?.text("workflow.language.tools.type", fallback: "类型 / 媒体引用") ?? "类型 / 媒体引用") {
                 WorkbenchMenuAction(language?.text("workflow.language.form.type.text", fallback: "文字") ?? "文字") { schema = .text; sample = .text("") }
-                WorkbenchMenuForEach([WorkflowDataKind.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch], id: \.self) { kind in
+                WorkbenchMenuForEach([WorkflowDataKind.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch, .document], id: \.self) { kind in
                     WorkbenchMenuAction(assetTitle(kind)) { schema = .asset(kind); sample = nil }
                 }
             }
