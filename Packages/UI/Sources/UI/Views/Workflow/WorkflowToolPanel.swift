@@ -6,6 +6,8 @@ struct WorkflowToolPanel: View {
     let controller: WorkflowController
     var selectionOnly = false
     @State private var baseline = ""
+    @State private var formGraphID: UUID?
+    @State private var formRevision: UUID?
     @State private var name = ""
     @State private var purpose = ""
     @State private var detail = ""
@@ -22,16 +24,17 @@ struct WorkflowToolPanel: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text(selectionOnly ? t("selectionTitle", "将选区组合为自定义节点") : t("title", "项目工具箱")).font(.title2)
+                if selectionOnly { Text(t("selectionHelp", "")).font(.callout) }
                 if !selectionOnly {
                 ForEach(controller.tools, id: \.selfReference) { tool in
                     HStack {
                         Text(tool.name + " · v\(tool.version)")
                         Spacer()
-                        Button(t("insert", "插入实例")) { afterClosing { controller.addTool(tool) } }.disabled(!controller.canEditCanvas)
+                        Button(t("insert", "插入实例")) { afterClosing { controller.addTool(tool) } }.help(t("insertHelp", "")).disabled(!controller.canEditCanvas)
                         Button(t("copy", "展开为编辑副本")) {
                             guard let digest = try? WorkflowPlanCompiler.digest(tool) else { return }
-                            afterClosing { controller.openToolCopy(.init(id: tool.id, version: tool.version, digest: digest)) }
-                        }.disabled(!controller.canEditCanvas)
+                            afterClosing { controller.openToolCopy(.init(id: tool.id, version: tool.version, digest: digest), suffix: t("copySuffix", "· 编辑副本")) }
+                        }.help(t("copyHelp", "")).disabled(!controller.canEditCanvas)
                     }
                 }
                 Divider()
@@ -40,6 +43,9 @@ struct WorkflowToolPanel: View {
                 TextField(t("detail", "详细说明（可选）"), text: $detail, axis: .vertical).lineLimit(2...5)
                 if let graph = controller.graph {
                     Button(t(graph.toolSource == nil ? "publishGraph" : "publishVersion", graph.toolSource == nil ? "保存自定义节点" : "发布新定义版本（旧实例不变）")) {
+                        guard graph.id == formGraphID, graph.revision == formRevision else {
+                            publicationError = t("stale", ""); return
+                        }
                         publishing = true; publicationError = nil; publicationErrorCode = nil
                         let registration = WorkflowToolRegistration(purpose: purpose, detail: detail.isEmpty ? nil : detail,
                             inputLabels: inputLabels.filter { label in graph.interface?.inputs.contains(where: { $0.name == label.key }) == true },
@@ -49,22 +55,22 @@ struct WorkflowToolPanel: View {
                             do { try await controller.publishGraphTool(name: name, registration: registration, expectedGraphID: graph.id, expectedRevision: graph.revision); $dismiss() }
                             catch { publicationError = error.localizedDescription; publicationErrorCode = (error as? WorkflowIssue)?.code }
                         }
-                    }.disabled(!controller.canEditCanvas || purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }.help(graph.toolSource == nil ? t("publishGraph", "") : t("versionHelp", "")).disabled(!controller.canEditCanvas || purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     DisclosureGroup(t("dependencies", "内部流程与依赖")) { WorkflowDependencySummary(graph: graph, controller: controller) }
                     if let interface = graph.interface {
                         DisclosureGroup(t("publicParameters", "公开参数与默认值")) {
                             ForEach(interface.inputs, id: \.name) { input in
-                                TextField(input.name + " · " + String(describing: input.type), text: Binding(get: { inputLabels[input.name] ?? input.name }, set: { inputLabels[input.name] = $0 }))
+                                TextField(input.name + " · " + WorkflowDatumSnapshotText.schema(input.type, language: language), text: Binding(get: { inputLabels[input.name] ?? input.name }, set: { inputLabels[input.name] = $0 })).help(t("nameHelp", ""))
                             }
                             ForEach(interface.outputs, id: \.name) { output in
-                                TextField(output.name + " · " + String(describing: output.schema), text: Binding(get: { outputLabels[output.name] ?? output.name }, set: { outputLabels[output.name] = $0 }))
+                                TextField(output.name + " · " + WorkflowDatumSnapshotText.schema(output.schema, language: language), text: Binding(get: { outputLabels[output.name] ?? output.name }, set: { outputLabels[output.name] = $0 })).help(t("nameHelp", ""))
                             }
                         }
                     }
                 }
                 Text(t("fixed", "工具实例固定版本与摘要。编辑副本、另存工具和选择新版本都不会静默改变既有实例。")).font(.caption).foregroundStyle(.secondary)
                 Button(t("inspect", "检查选区的跨界输入与输出")) {
-                    if let graph = controller.graph { boundary = ToolBoundaryDraft(graph: graph, selected: controller.selectedNodeIDs, registry: controller.registry, tools: controller.tools) }
+                    if let graph = controller.graph { boundary = ToolBoundaryDraft(graph: graph, selected: controller.selectedNodeIDs, registry: controller.registry, tools: controller.tools, language: language) }
                 }
                 .disabled(controller.selectedNodeIDs.isEmpty)
                 }
@@ -81,13 +87,14 @@ struct WorkflowToolPanel: View {
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
             .workbenchCloseProtection(isDirty: formIdentity != baseline, isSaving: publishing)
             .onAppear {
+                formGraphID = controller.graph?.id; formRevision = controller.graph?.revision
                 if name.isEmpty, let graph = controller.graph, let source = graph.toolSource,
                    let tool = controller.tools.first(where: { $0.id == source.id && $0.version == source.version }) {
                     name = tool.name; purpose = tool.registration?.purpose ?? ""; detail = tool.registration?.detail ?? ""
                     inputLabels = tool.registration?.inputLabels ?? [:]; outputLabels = tool.registration?.outputLabels ?? [:]
                 }
                 if selectionOnly, boundary == nil, let graph = controller.graph {
-                    boundary = ToolBoundaryDraft(graph: graph, selected: controller.selectedNodeIDs, registry: controller.registry, tools: controller.tools)
+                    boundary = ToolBoundaryDraft(graph: graph, selected: controller.selectedNodeIDs, registry: controller.registry, tools: controller.tools, language: language)
                 }
                 baseline = formIdentity
             }
@@ -108,20 +115,37 @@ struct WorkflowToolPanel: View {
     @ViewBuilder private var boundaryEditor: some View {
         if let value = boundary {
             Text(t("inputs", "跨界输入（请明确选择类型）")).font(.headline)
+            Text(t("inputHelp", "")).font(.caption)
             ForEach(value.inputs.indices, id: \.self) { index in
                 VStack(alignment: .leading) {
-                    Text(value.inputs[index].sourceNode.uuidString.prefix(8) + " · " + value.inputs[index].sourcePort).font(.caption)
-                    TextField(t("publicName", "公开名称"), text: Binding(get: { inputLabels[value.inputs[index].name] ?? value.inputs[index].name }, set: { inputLabels[value.inputs[index].name] = $0 }))
-                    Text(value.inputs[index].name).font(.caption.monospaced()).foregroundStyle(.secondary)
-                    WorkflowBoundarySchemaPicker(schema: Binding(get: { boundary?.inputs[index].schema ?? .text }, set: { boundary?.inputs[index].schema = $0 }))
+                    Text(value.inputTitles[value.inputs[index].name] ?? value.inputs[index].name).font(.caption)
+                    TextField(t("publicName", "公开名称"), text: Binding(get: { inputLabels[value.inputs[index].name] ?? value.inputs[index].name }, set: { inputLabels[value.inputs[index].name] = $0 })).help(t("nameHelp", ""))
+                    WorkflowTechnicalDetails(value: value.inputs[index].sourceNode.uuidString + "." + value.inputs[index].sourcePort + " → " + value.inputs[index].name)
+                    if value.editableSchemaNames.contains(value.inputs[index].name) {
+                        WorkflowBoundarySchemaPicker(schema: Binding(get: { boundary?.inputs[index].schema ?? .text }, set: { schema in
+                            boundary?.inputs[index].schema = schema
+                            boundary?.unconfirmed.insert(value.inputs[index].name)
+                        }))
+                    } else {
+                        Text(t("type", "") + " · " + WorkflowDatumSnapshotText.schema(value.inputs[index].schema, language: language)).font(.caption)
+                    }
                 }
             }
             Text(t("outputs", "公开输出（未勾选的端口不作为工具结果）")).font(.headline)
+            Text(t("outputHelp", "")).font(.caption)
             ForEach(value.outputs.indices, id: \.self) { index in
                 VStack(alignment: .leading) {
-                    Toggle(value.outputs[index].label, isOn: Binding(get: { boundary?.outputs[index].included ?? false }, set: { boundary?.outputs[index].included = $0 }))
-                    TextField(t("publicName", "公开名称"), text: Binding(get: { outputLabels[value.outputs[index].value.name] ?? value.outputs[index].value.name }, set: { outputLabels[value.outputs[index].value.name] = $0 }))
-                    WorkflowBoundarySchemaPicker(schema: Binding(get: { boundary?.outputs[index].value.schema ?? .text }, set: { boundary?.outputs[index].value.schema = $0 }))
+                    Toggle(value.outputs[index].label, isOn: Binding(get: { boundary?.outputs[index].included ?? false }, set: { boundary?.outputs[index].included = $0 })).disabled(value.outputs[index].required)
+                    WorkflowTechnicalDetails(value: value.outputs[index].value.nodeID.uuidString + "." + value.outputs[index].value.port + " → " + value.outputs[index].value.name)
+                    TextField(t("publicName", "公开名称"), text: Binding(get: { outputLabels[value.outputs[index].value.name] ?? value.outputs[index].value.name }, set: { outputLabels[value.outputs[index].value.name] = $0 })).help(t("nameHelp", ""))
+                    if value.editableSchemaNames.contains(value.outputs[index].value.name) {
+                        WorkflowBoundarySchemaPicker(schema: Binding(get: { boundary?.outputs[index].value.schema ?? .text }, set: { schema in
+                            boundary?.outputs[index].value.schema = schema
+                            boundary?.unconfirmed.insert(value.outputs[index].value.name)
+                        }))
+                    } else {
+                        Text(t("type", "") + " · " + WorkflowDatumSnapshotText.schema(value.outputs[index].value.schema, language: language)).font(.caption)
+                    }
                 }
             }
             DisclosureGroup(t("dependencies", "内部流程与依赖")) {
@@ -142,7 +166,7 @@ struct WorkflowToolPanel: View {
                     defer { publishing = false }
                     do {
                         try await controller.publishSelection(name: name, registration: registration,
-                            inputs: draft.inputs, outputs: outputs, expectedGraphID: draft.graphID, expectedRevision: draft.revision)
+                            inputs: draft.inputs, outputs: outputs, expectedSelection: draft.selected, expectedGraphID: draft.graphID, expectedRevision: draft.revision)
                         boundary = nil; $dismiss()
                     } catch { publicationError = error.localizedDescription; publicationErrorCode = (error as? WorkflowIssue)?.code }
                 }
@@ -152,7 +176,8 @@ struct WorkflowToolPanel: View {
                 Text(t("unknownType", "部分边界的类型未登记。请明确选择并确认类型，不能把文字当成默认契约。"))
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(value.activeUnconfirmed.sorted(), id: \.self) { id in
-                    Toggle(id + " · " + t("confirmType", "我已确认类型"), isOn: Binding(get: { false }, set: { if $0 { boundary?.unconfirmed.remove(id) } }))
+                    let port = value.inputTitles[id] ?? value.outputs.first { $0.value.name == id }?.label ?? id
+                    Toggle(port + " · " + t("confirmType", "我已确认类型"), isOn: Binding(get: { false }, set: { if $0 { boundary?.unconfirmed.remove(id) } }))
                 }
             }
         }
@@ -164,15 +189,17 @@ private extension WorkflowToolDefinition {
     var selfReference: String { id.uuidString + ":" + String(version) }
 }
 struct ToolBoundaryDraft {
-    struct Output { var included: Bool; var label: String; var value: WorkflowNamedOutput }
+    struct Output { let required: Bool; var included: Bool; var label: String; var value: WorkflowNamedOutput }
     let graphID: UUID
     let revision: UUID
     let selected: Set<UUID>
+    var inputTitles: [String: String] = [:]
     var inputs: [WorkflowToolInputBinding]
     var outputs: [Output]
     var unconfirmed: Set<String> = []
+    private(set) var editableSchemaNames: Set<String> = []
     var activeUnconfirmed: Set<String> { unconfirmed.intersection(Set(inputs.map(\.name) + outputs.filter(\.included).map { $0.value.name })) }
-    init(graph: WorkflowGraph, selected: Set<UUID>, registry: WorkflowRegistry, tools: [WorkflowToolDefinition]) {
+    @MainActor init(graph: WorkflowGraph, selected: Set<UUID>, registry: WorkflowRegistry, tools: [WorkflowToolDefinition], language: UILanguageStore? = nil) {
         graphID = graph.id; revision = graph.revision; self.selected = selected
         inputs = []; outputs = []
         for edge in graph.connections where !selected.contains(edge.sourceNode) && selected.contains(edge.targetNode) {
@@ -182,18 +209,22 @@ struct ToolBoundaryDraft {
             let proposed = node.flatMap { WorkflowToolEditing.outputSchemaProposal(for: $0, port: edge.sourcePort, registry: registry, tools: tools) }
             if proposed == nil { unconfirmed.insert("input\(inputs.count + 1)") }
             let schema = proposed ?? .text
+            if let node, let port = registry.definition(for: node, tools: tools)?.outputs.first(where: { $0.id == edge.sourcePort }) {
+                inputTitles["input\(inputs.count + 1)"] = WorkflowHumanPresentation.name(node, in: graph.nodes, language: language) + " · " + WorkflowCanvasPresentation.portTitle(operationID: node.operationID, port: port, input: false, language: language)
+            }
             inputs.append(.init(name: "input\(inputs.count + 1)", schema: schema, sourceNode: edge.sourceNode, sourcePort: edge.sourcePort))
         }
         for node in graph.nodes where selected.contains(node.id) {
             for port in registry.definition(for: node, tools: tools)?.outputs ?? [] {
                 let required = graph.connections.contains { $0.sourceNode == node.id && $0.sourcePort == port.id && !selected.contains($0.targetNode) } || graph.interface?.outputs.contains { $0.nodeID == node.id && $0.port == port.id } == true
-                let proposed = graph.interface?.outputs.first { $0.nodeID == node.id && $0.port == port.id }?.schema ?? WorkflowToolEditing.outputSchemaProposal(for: node, port: port.id, registry: registry, tools: tools) ?? node.dataConfiguration?.value?.schema ?? node.dataConfiguration?.schema
+                let proposed = graph.interface?.outputs.first { $0.nodeID == node.id && $0.port == port.id }?.schema ?? WorkflowToolEditing.outputSchemaProposal(for: node, port: port.id, registry: registry, tools: tools)
                 if proposed == nil { unconfirmed.insert("output\(outputs.count + 1)") }
                 let schema = proposed ?? .text
-                outputs.append(.init(included: required, label: node.title + " · " + port.title,
+                outputs.append(.init(required: required, included: required, label: WorkflowHumanPresentation.name(node, in: graph.nodes, language: language) + " · " + WorkflowCanvasPresentation.portTitle(operationID: node.operationID, port: port, input: false, language: language),
                     value: .init(name: "output\(outputs.count + 1)", nodeID: node.id, port: port.id, schema: schema)))
             }
         }
+        editableSchemaNames = unconfirmed
     }
 }
 
@@ -204,9 +235,7 @@ private struct WorkflowBoundarySchemaPicker: View {
     @Environment(\.dLanguageStore) private var language
     init(schema: Binding<WorkflowDataSchema>) { _schema = schema; _sample = State(initialValue: WorkflowControlFormSupport.sample(for: schema.wrappedValue)) }
     private func assetTitle(_ kind: WorkflowDataKind) -> String {
-        let asset = language?.text("workflow.language.form.type.asset", fallback: "资产") ?? "资产"
-        let name = language?.text("workflow.language.form.assetKind." + kind.rawValue, fallback: kind.rawValue) ?? kind.rawValue
-        return asset + " (" + name + ")"
+        WorkflowDatumSnapshotText.schema(.asset(kind), language: language)
     }
     var body: some View {
         VStack(alignment: .leading) {
@@ -216,8 +245,8 @@ private struct WorkflowBoundarySchemaPicker: View {
                     WorkbenchMenuAction(assetTitle(kind)) { schema = .asset(kind); sample = nil }
                 }
             }
-            if case .asset(let kind) = schema { Text(assetTitle(kind)).font(.caption) }
-            else {
+            Text(WorkflowDatumSnapshotText.schema(schema, language: language)).font(.caption)
+            if case .asset = schema { EmptyView() } else {
                 WorkflowDatumEditor(value: Binding(get: { sample }, set: { value in
                     sample = value; if let value { schema = value.schema }
                 }))

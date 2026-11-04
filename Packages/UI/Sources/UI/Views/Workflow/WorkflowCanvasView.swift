@@ -323,7 +323,7 @@ public struct WorkflowCanvasView: View {
             }.keyboardShortcut(.defaultAction)
             Button(workspaceText(languageStore, "cancel"),role:.cancel) { pendingHistoryRetry=nil }.keyboardShortcut(.cancelAction)
         } message: { Text(workspaceText(languageStore, "retryHistoryExplanation")) }
-        .workbenchSheet(isPresented: $toolsPresented, title: workflowText(languageStore, "childPanel.name.tools")) {
+        .workbenchSheet(isPresented: $toolsPresented, title: workflowText(languageStore, extractSelection ? "workflow.language.tools.selectionTitle" : "workflow.language.tools.title")) {
             VStack(alignment: .leading) {
                 WorkbenchRequestCloseButton(title: workflowText(languageStore, "childPanel.close"), fallback: { toolsPresented = false }).padding([.top, .leading])
                 WorkflowToolPanel(controller: controller, selectionOnly: extractSelection)
@@ -647,7 +647,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
                 },
                 onOpenTool: { reference in
                     rememberViewContext()
-                    controller.openToolCopy(reference)
+                    controller.openToolCopy(reference, suffix: workflowText(languageStore, "workflow.language.tools.copySuffix"))
                 }, revealLibrary: revealLibrary)
         } else {
             WorkbenchScrollView {
@@ -2191,14 +2191,14 @@ private struct WorkflowFixedToolSheet: View {
                                 Text(workflowText(language, "workflow.port.inputs"))
                                     .font(.subheadline.weight(.semibold))
                                 ForEach(interface.inputs) { input in
-                                    Text(input.name + " · " + WorkflowDatumSnapshotText.schema(input.type, language: language)
+                                    Text((tool.registration?.inputLabels[input.name] ?? input.name) + " · " + WorkflowDatumSnapshotText.schema(input.type, language: language)
                                         + " · " + workflowText(language, input.required ? "workflow.port.required" : "workflow.port.optional"))
                                         .font(.callout)
                                 }
                                 Text(workflowText(language, "workflow.port.outputs"))
                                     .font(.subheadline.weight(.semibold))
                                 ForEach(interface.outputs) { output in
-                                    Text(output.name + " · " + WorkflowDatumSnapshotText.schema(output.schema, language: language)).font(.callout)
+                                    Text((tool.registration?.outputLabels[output.name] ?? output.name) + " · " + WorkflowDatumSnapshotText.schema(output.schema, language: language)).font(.callout)
                                     WorkflowTechnicalDetails(value: output.nodeID.uuidString + "." + output.port)
                                 }
                             } else {
@@ -2238,7 +2238,7 @@ private struct WorkflowFixedToolSheet: View {
                 }
                 HStack {
                     Spacer()
-                    Button(workflowText(language, "canvas.tool.copy"), action: onCopy)
+                    Button(workflowText(language, "canvas.tool.copy"), action: onCopy).help(workflowText(language, "workflow.language.tools.copyHelp"))
                         .disabled(!controller.canEditCanvas)
                 }
             } else {

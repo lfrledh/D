@@ -632,19 +632,24 @@ struct WorkflowLifecycleTests {
         let archiveBeforeName = try await store.workflowState().archive
         for invalidName in ["", "  ", String(repeating: "x", count: 257), String(repeating: "字", count: 86)] {
             do {
-                try await c.publishSelection(name: invalidName, registration: registration, inputs: inputs, outputs: outputs, expectedGraphID: before.id, expectedRevision: before.revision)
+                try await c.publishSelection(name: invalidName, registration: registration, inputs: inputs, outputs: outputs, expectedSelection: [output], expectedGraphID: before.id, expectedRevision: before.revision)
                 Issue.record("Invalid selection name was published")
             } catch { #expect((error as? WorkflowIssue)?.code == "workflow.language.tools.invalidName") }
             #expect(c.graph == before && c.tools.isEmpty && c.selectedNodeIDs == [output])
             #expect(try await store.workflowState().archive == archiveBeforeName)
         }
+        await #expect(throws: WorkflowIssue.self) {
+            try await c.publishSelection(name: "Stale", registration: registration, inputs: inputs, outputs: outputs,
+                                         expectedSelection: [], expectedGraphID: before.id, expectedRevision: before.revision)
+        }
+        #expect(c.graph == before && c.tools.isEmpty)
         c.beforeHistorySave = { throw WorkflowIssue("controlled publication failure") }
-        do { try await c.publishSelection(name: "Tool", registration: registration, inputs: inputs, outputs: outputs, expectedGraphID: before.id, expectedRevision: before.revision); Issue.record("Expected save failure") }
+        do { try await c.publishSelection(name: "Tool", registration: registration, inputs: inputs, outputs: outputs, expectedSelection: [output], expectedGraphID: before.id, expectedRevision: before.revision); Issue.record("Expected save failure") }
         catch { #expect(error.localizedDescription.contains("controlled publication failure")) }
         #expect(c.graph == before && c.tools.isEmpty && !c.isSaving)
         #expect(try await store.workflowState().archive?.graphs == [before])
         c.beforeHistorySave = {}
-        try await c.publishSelection(name: "Tool", registration: registration, inputs: inputs, outputs: outputs, expectedGraphID: before.id, expectedRevision: before.revision)
+        try await c.publishSelection(name: "Tool", registration: registration, inputs: inputs, outputs: outputs, expectedSelection: [output], expectedGraphID: before.id, expectedRevision: before.revision)
         let after = c.graph, tool = try #require(c.tools.first)
         #expect(tool.registration == registration)
         #expect(tool.graph.interface?.inputs.map(\.name) == ["input"])

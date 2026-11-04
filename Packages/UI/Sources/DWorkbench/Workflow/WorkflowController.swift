@@ -662,13 +662,14 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
     }
     public func publishSelection(name: String, registration: WorkflowToolRegistration,
                                  inputs: [WorkflowToolInputBinding], outputs: [WorkflowNamedOutput],
-                                 expectedGraphID: UUID, expectedRevision: UUID) async throws {
+                                 expectedSelection: Set<UUID>, expectedGraphID: UUID, expectedRevision: UUID) async throws {
         guard canEditCanvas, !isRunning, !isSaving, !hasPendingSaves, let body = graph,
-              body.id == expectedGraphID, body.revision == expectedRevision, let root = rootGraph,
+              body.id == expectedGraphID, body.revision == expectedRevision, selectedNodeIDs == expectedSelection,
+              let root = rootGraph,
               let index = graphs.firstIndex(where: { $0.id == root.id }) else {
             throw WorkflowIssue("封装目标已改变或正在保存；草稿保留，请重新检查边界。")
         }
-        let result = try WorkflowToolEditing.extract(body, selected: selectedNodeIDs, name: name,
+        let result = try WorkflowToolEditing.extract(body, selected: expectedSelection, name: name,
             inputs: inputs, outputs: outputs, tools: tools, registry: registry, registration: registration)
         let path = bodyPath
         var next = graphs
@@ -733,12 +734,12 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
             }
         } catch { errorMessage = error.localizedDescription }
     }
-    public func openToolCopy(_ reference: WorkflowToolReference) {
+    public func openToolCopy(_ reference: WorkflowToolReference, suffix: String = "· Editable copy") {
         guard canEditCanvas, !isRunning, !toolPublicationBusy,
               let tool = tools.first(where: { $0.id == reference.id && $0.version == reference.version }) else { return }
         do {
             guard try WorkflowPlanCompiler.digest(tool) == reference.digest else { throw WorkflowIssue("工具内容与引用不一致。") }
-            var draft = WorkflowToolEditing.editableCopy(of: tool); draft.toolSource = reference
+            var draft = WorkflowToolEditing.editableCopy(of: tool, suffix: suffix); draft.toolSource = reference
             undoStack.append(editSnapshot); redoStack = []; graphs.append(draft); selectedGraphID = draft.id; selectedNodeID = draft.nodes.first?.id
         } catch { errorMessage = error.localizedDescription }
     }

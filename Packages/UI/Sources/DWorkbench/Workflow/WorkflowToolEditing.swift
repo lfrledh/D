@@ -69,6 +69,13 @@ public enum WorkflowToolEditing {
         guard !body.nodes.contains(where: { $0.operationID == "d.value.input" && !($0.parameters["publicName"]?.string ?? "").isEmpty }) else {
             throw WorkflowIssue("选区包含已有公开输入；请使用完整流程另存工具，或把该输入留在选区外。")
         }
+        for output in outputs {
+            if let node = graph.nodes.first(where: { $0.id == output.nodeID }),
+               let known = outputSchemaProposal(for: node, port: output.port, registry: registry, tools: tools),
+               known != output.schema {
+                throw WorkflowIssue("Output type differs from its source.", code: "workflow.language.tools.schemaMismatch")
+            }
+        }
         let fields = inputs.map { WorkflowRecordField($0.name, $0.schema) }
         try WorkflowDataSchema.record(fields).validateDefinition()
         for item in inputs {
@@ -76,6 +83,10 @@ public enum WorkflowToolEditing {
                   let port = registry.definition(for: source, tools: tools)?.outputs.first(where: { $0.id == item.sourcePort }),
                   !Set(port.kinds).isDisjoint(with: item.schema.portKinds),
                   let definition = registry.operation("d.value.input")?.definition else { throw WorkflowIssue("公开输入类型与边界端口不兼容。") }
+            if let known = outputSchemaProposal(for: source, port: item.sourcePort, registry: registry, tools: tools),
+               known != item.schema {
+                throw WorkflowIssue("Input type differs from its source.", code: "workflow.language.tools.schemaMismatch")
+            }
             var literal = definition.makeNode(); literal.title = item.name
             literal.parameters["publicName"] = .text(item.name); literal.dataConfiguration = .init(schema: item.schema)
             body.nodes.append(literal); body.layout.append(.init(nodeID: literal.id, x: 20, y: Double(body.nodes.count * 100)))
@@ -112,8 +123,8 @@ public enum WorkflowToolEditing {
         return .init(graph: result, tool: tool, invocationID: call.id)
     }
 
-    public static func editableCopy(of tool: WorkflowToolDefinition) -> WorkflowGraph {
-        var graph = tool.graph; graph.id = UUID(); graph.revision = UUID(); graph.name = tool.name + " · 编辑副本"
+    public static func editableCopy(of tool: WorkflowToolDefinition, suffix: String = "· Editable copy") -> WorkflowGraph {
+        var graph = tool.graph; graph.id = UUID(); graph.revision = UUID(); graph.name = tool.name + " " + suffix
         // Graph-local identities do not identify invocation instances; run addresses disambiguate them.
         return graph
     }

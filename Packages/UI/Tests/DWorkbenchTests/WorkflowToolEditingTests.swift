@@ -16,7 +16,13 @@ struct WorkflowToolEditingTests {
         #expect(body.interface.inputs.map(\.name) == ["content"])
         #expect(body.interface.outputs.map(\.name) == ["answer"])
         #expect(graph.nodes.count == 3); #expect(extracted.graph.nodes.count == 3)
-        let copy = WorkflowToolEditing.editableCopy(of: extracted.tool)
+        #expect(throws: WorkflowIssue.self) {
+            try WorkflowToolEditing.extract(graph, selected: [middle.id], name: "Wrong type",
+                inputs: [.init(name: "content", schema: .asset(.text), sourceNode: input.id, sourcePort: "output")],
+                outputs: [.init(name: "answer", nodeID: middle.id, schema: .text)], tools: [])
+        }
+        let copy = WorkflowToolEditing.editableCopy(of: extracted.tool, suffix: "· Editable copy")
+        #expect(copy.name == extracted.tool.name + " · Editable copy")
         #expect(copy.id != extracted.tool.graph.id); #expect(copy.nodes == extracted.tool.graph.nodes)
         #expect(throws: WorkflowIssue.self) { try WorkflowToolEditing.extract(graph, selected: [middle.id], name: "bad", inputs: [], outputs: [.init(name: "answer", nodeID: middle.id, schema: .text)], tools: []) }
     }
