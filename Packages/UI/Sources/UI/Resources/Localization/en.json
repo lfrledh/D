@@ -5043,6 +5043,7 @@
     "container.issue.alreadyCommitted": "This container selection has already been submitted. Review the saved decision or continue the remaining workflow.",
     "container.issue.operationUnavailable": "This operation is currently unavailable. Review the details and check the target again.",
     "container.issue.actionFailed": "This operation could not be completed. Review the details and retry while keeping the current content.",
+    "chat.issue.backupWorkflowUnavailable": "D cannot check the workflow data needed for this conversation backup. The original project is preserved.",
     "chat.issue.sessionIdentity": "This conversation already exists. Return to it before editing.",
     "notices.title": "Third-party notices",
     "notices.scope": "Licenses and source records bundled with this App. Original text is preserved; inclusion does not by itself establish Store distribution compliance.",

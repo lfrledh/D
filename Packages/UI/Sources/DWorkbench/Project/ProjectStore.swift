@@ -4631,8 +4631,12 @@ extension ProjectStore {
         guard chatWriteBaselineInitialized, captured.bytes == chatValidatedBytes,
               captured.state.revision == expectedChatRevision else { throw ProjectStoreError.externalModification }
         let chat = captured.state
-        let selection = try ChatSessionArchiveSelection.make(state: chat,
-            archive: workflowState().archive ?? WorkflowArchive(), sessionID: sessionID)
+        let stored = try workflowState()
+        guard let archive = stored.archive else {
+            throw WorkflowIssue(stored.readOnlyReason ?? "The source workflow archive could not be interpreted.",
+                                code: "chat.issue.backupWorkflowUnavailable")
+        }
+        let selection = try ChatSessionArchiveSelection.make(state: chat, archive: archive, sessionID: sessionID)
         let known = Dictionary(uniqueKeysWithValues: manifest.assets.map { ($0.id, $0) })
         var assets: [ProjectAsset] = [], files: [ProjectBackupInput] = []
         for record in selection.archive.assets {

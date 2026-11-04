@@ -1246,6 +1246,17 @@ struct WorkflowLifecycleTests {
             let reopened = try await ProjectStore.open(at: store.rootURL)
             let state = try await reopened.workflowState(); #expect(state.archive == nil); #expect(state.originalBytes == bytes)
             let second = try await reopened.workflowState(); #expect(second.archive == nil); #expect(second.originalBytes == bytes)
+            var chat = try await reopened.chatState()
+            let selected = ChatSession(title: "Simple conversation in a read-only project")
+            chat.sessions = [selected]; chat.selectedSessionID = selected.id
+            let revision = try await reopened.saveChatState(chat, expectedRevision: chat.revision)
+            do {
+                _ = try await reopened.chatSessionBackupPlan(sessionID: selected.id, expectedChatRevision: revision)
+                Issue.record("An unreadable workflow must not become an empty dependency archive")
+            } catch let issue as WorkflowIssue {
+                #expect(issue.code == "chat.issue.backupWorkflowUnavailable")
+                #expect(issue.reason == state.readOnlyReason)
+            }
             await #expect(throws: (any Error).self) { _ = try await reopened.saveWorkflow(graphs: [], runs: [], expectedRevision: UUID()) }
             let runtime = WorkbenchSession(engine: engine, backendID: "fixture",
                 status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
