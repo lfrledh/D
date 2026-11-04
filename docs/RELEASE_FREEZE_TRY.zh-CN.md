@@ -1,6 +1,6 @@
 # 本地候选与发行复现材料
 
-2026-10-30 · CLOSEOUT-SERIAL-20261030-r1。唯一实际版本和启动入口见[当前行动](CURRENT_ACTIONS.zh-CN.md)，不是下方历史R16包。当前仅Apple Development签名的完整沙盒Release；不是Mac App Store分发、提审或发行通过。
+2026-11-04 · COPY-B9-RELEASE-CLOSEOUT-20261104-r1。唯一实际版本和启动入口见[当前行动](CURRENT_ACTIONS.zh-CN.md)，不是下方历史R16包。当前仅Apple Development签名的完整沙盒Release；不是Mac App Store分发、提审或发行通过。
 
 ## 当前可复现路径与证据等级
 
@@ -21,15 +21,23 @@
 
 **最小推荐**：当前不部署外部服务，先完成正式沙盒账户下的同账户恢复验证。若未来必须由开发者集中识别/兑现回馈，再明确批准一个最小收据验证与记录服务：Apple签名校验、应用/环境/交易幂等、退款更新、加密数据库、保留/删除策略与单独认证；匿名appTransactionID及收据本身不能充当登录凭据。不先搭账号平台。托管地区、费用、域名、身份验证与隐私披露需该阶段明确，当前未采购/部署。
 
-## 有限待决材料（不是工程问题的替代）
+## 发行决定 D1—D5（2026-11-04 核对）
 
-| 用户需定 | 当前建议／理由 | 替代及具体影响 |
-|---|---|---|
-| 正式商品ID/金额、App价格 | 先维持无正式商品和0收费，确定公开价格后配商店沙盒 | 可取消打赏入口的发行配置；不影响本地创作。未定只阻塞正式购买验收 |
-| 公开主体、联系/隐私URL、地区与支持口径 | 按真实主体与可支持范围填写，使用实际模型证据 | 不能编造；阻塞正式商店材料，不阻塞本地App |
-| FFmpeg实际GPL/version3/x264/x265/OpenSSL链的分发方案 | 在选择商店方案前完成对应源码/链接义务与专业法律核查 | 有限依赖替代须用户批准后评估能力；补NOTICE不解除许可问题 |
-| D自有代码是否开源及许可证 | 本轮不改变D的现有授权状态，第三方声明单独履行 | 用户选范围/许可证后再执行，不因Vendor有MIT推导全仓MIT |
-| 发布与账号动作 | 本轮不上传、不提审、不收费 | 另行明确授权后进入Store配置/安装验收 |
+| 决定及负责人 | 推荐和验证方法 | 备选、能力及成本/数据影响 | 未决定阻塞 |
+|---|---|---|---|
+| D1 · 依赖分发、D 自有代码的许可与公开范围，由用户与许可顾问决定 | 优先保留当前编码与推理能力。按实际二进制补足可获取的完整对应源码、构建/修改说明，逐组件核对再分发及商店条件。评审演示下载数据如何由固定包内代码使用。 | 经批准替换特定编码器或取得相应第三方权利，需要重新验证格式、画质和跨机支持，可能产生许可成本。D 自有代码是否公开单独决定。 | 商店分发许可和运行方式核准（I026/027/031） |
+| D2 · 支持记录的正式保证，由用户决定，Lead 验证平台 | 先验证同一沙盒账户在两台 Mac 的购买、恢复、退款及切换账户，按已验证范围展示记录。保留本地跨进程恢复证据与自动退款零通知记录。 | 如承诺开发者侧对账，需另批最小签名验证/幂等账本，选择地区、负责人、预算、保留期限、删除与备份责任。仅传必要交易/环境/退款字段，另做身份验证。 | 跨设备或开发者侧保证及正式 IAP（I028/030） |
+| D3 · App 售价及可选打赏商品，由用户定金额和地区 | 两项分开选择。打赏推荐先一档消耗型，文案“支持早期开发 / Support early development”，价格取 StoreKit。需要正式稳定商品 ID、参考名、类型、本地化、基础地区及价格档、销售地区、审核截图和说明。 | 多档增加本地化、定价及退款验证成本。现有本地 SKU 与生产隔离。创作功能独立于交易。 | 正式核价、商品配置及购买审核（I030） |
+| D4 · 公开主体与支持承诺，由用户/顾问确认 | 按准确模型/精度和已测硬件填写能力，将尚缺的演示列入验证。提供真实支持与隐私 URL、联系主体、地区、年龄/内容及出口加密信息。审核路径采用可合法使用的合成输入、导入、保存、冷开，有权使用的准确模型再验证生成。 | 扩大支持硬件/地区需要相应设备、资源和支持成本。隐私材料分别描述本机项目、Speech、搜索词/所访网页、MCP 许可服务、模型下载和 StoreKit，外部账本会改变申报与维护。 | 公开材料、隐私披露及正式审核范围（I022/028/029） |
+| D5 · 正式发行操作，由账户持有人授权 | 用显式正式 App ID、匹配的 Mac App Store 配置与分发签名验证 Archive、安装、升级、恢复。每一步分别记录对应制品与结果。 | 可由有资格的账户管理员配置证书/描述文件或使用获准自动签名。需要相应账号角色、测试设备和审核时间。 | main 接纳、标签、上传、提审、发布各需独立授权（I024/025） |
+
+实包包含 7 个引擎。ExternalVideo 内的 FFmpeg/ffprobe 9.0.1 采用 shared、GPL、version3、x264、x265、OpenSSL 配方。19 个原生库中，FFmpeg 自有库为 avcodec、avdevice、avfilter、avformat、avutil、swresample、swscale，另外包括 SvtAv1Enc、dav1d、mp3lame、mpg123、opus、vmaf、x264、x265、lzma、crypto、ssl。来源、配方、许可文本和签后摘要已登记。完整对应源码与商店分发取舍仍属 D1。[上游许可](https://ffmpeg.org/legal.html) · [Apple 审核 2.4.5 / 2.5.2](https://developer.apple.com/app-store/review/guidelines/)
+
+模型目录的 18 项、280 条文件记录中含模板、固定计算图和 3 个 ACE 检查点 Python 文件。ACE 准备代码在私有运行视图跳过下载的 Python，执行源码取自校验过的包内 vendor。Wan/ACE 相应权重读取使用 weights_only。包内还含 Wasmtime/WASI 的 Python 分析能力和需要显式许可的远程 MCP，应分别向审核说明其执行边界。
+
+本机支付记录与开发者对账分开。普通候选的商品名单为空。平台关于消费型历史的说明、沙盒账户检验、正式商品字段及分发配置分别见 [Apple 消费型历史](https://developer.apple.com/documentation/bundleresources/information-property-list/skincludeconsumableinapppurchasehistory)、[沙盒测试](https://developer.apple.com/help/app-store-connect/test-in-app-purchases/overview-of-testing-in-sandbox/)、[商品信息](https://developer.apple.com/help/app-store-connect/reference/in-app-purchases-and-subscriptions/in-app-purchase-information)、[分发描述文件](https://developer.apple.com/help/account/provisioning-profiles/create-an-app-store-provisioning-profile)。正式隐私材料以实际收集方、目的及保留政策为准。[App 隐私披露](https://developer.apple.com/app-store/app-privacy-details/)
+
+本机最低部署目标 macOS 26.2，开发签名和主程序两架构有本地产物证据。每个引擎/硬件的可承诺范围见[精确模型矩阵](RELEASE_MODEL_MATRIX.zh-CN.md)。
 
 正式商店截图必须来自最终正常候选；现有截图用于本地审阅。新支持同步说明是实现所需最小双语草稿，随实际语言资源交用户/顾问审阅，不扩整批文案。
 

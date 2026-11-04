@@ -1,6 +1,6 @@
 # 失败、权限与唯一集中待办
 
-更新：2026-11-03，本轮起点1825b6a0／最终生产328d1aa0，正常签名，本次语音补验后45707正常退出并从桌面冷开50588。**指定报告已核收，Speech授权待办已关闭。** 用户已允许D文件访问；最终328d冷开也未复弹，不能把历史提示归因为每次构建重置权限。
+更新：2026-11-04。B9 从 c25d98b6 接续，最终生产 de6dbf40 已正常签名，桌面入口冷开并核对恢复项目。原 11637899 报告已接收，文件访问与 Speech 的本人步骤已完成。B9 的正常备份反例和修正见任务回执。
 
 本表仍是唯一D-I001–031活动清单。历史原文、失败、旧预算、请求及版本全部见[原始审计归档](history/UI-AUDIT-THROUGH-20261030.md)。未验不等于缺陷，实现不等于原生通过。新请求按[持续授权与受阻报告](MULTI_AGENT_WORKFLOW.zh-CN.md#持续开发验收授权与受阻处理)处理。
 
@@ -13,21 +13,21 @@
 | <a id="d-i003"></a>D-I003 输入兼容验证依赖中文显示名称 | 已关闭：执行验证身份 | 保持operation/port身份与改名反例。 | Lead | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i003)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
 | <a id="d-i004"></a>D-I004 保存筛选仍依赖旧显示概念 | 已关闭：旧查询兼容 | 新增概念维护稳定ID/旧别名，未知查询不扩大范围。 | Lead | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i004)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
 | <a id="d-i005"></a>D-I005 中心对象职责集中 | 保留：可维护性债 | 仅真实缺陷触发局部拆分，不按文件长度大重构。 | Lead | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i005)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
-| <a id="d-i006"></a>D-I006 候选源码、资源及包内身份易失配 | 已关闭：本地交付身份范围 | 328d普通包/桌面/冷开及源/资源/签名已核；每次最终包复查，Store见I024。 | Lead | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i006)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
+| <a id="d-i006"></a>D-I006 候选源码、资源及包内身份易失配 | 已关闭：本地交付身份范围 | B9 普通包、桌面指向与签名按本轮最终回执复查，Store见I024。 | Lead | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i006)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
 | <a id="d-i007"></a>D-I007 原生红绿灯组件与侧栏相碰 | 已关闭：已测窗口几何 | 原生76×32外壳/12pt间距；特殊状态不外推。 | Lead；受影响路径 | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i007)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
 | <a id="d-i008"></a>D-I008 子面板内部空白被误判为外点 | 已关闭：内部空白误外点核心反例 | 保留当前host边界/不穿透/草稿门禁；特殊关闭归I011。 | Lead | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i008)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
 | <a id="d-i009"></a>D-I009 圆角组件的矩形父层意外露出 | 已测矩形父层修正；余项未验 | 复用Chat父clip和搜索父板实图；补受影响表面，不全局clip。 | Lead | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i009)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
 | <a id="d-i010"></a>D-I010 跨模式Undo与真实IME/发送快捷键 | 代表IME/跨模式Undo/发送已验 | 328d真实SCIM拼音、Quick往返后Undo/Redo通过；全输入法与纯Tab未穷举。 | Lead；实际输入环境 | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i010)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
 | <a id="d-i011"></a>D-I011 子面板跨边界、系统面板及D外点击 | 三域/嵌套/跨界代表已验；组合未验 | 余下系统面板、层级组合逐实际owner验；保留确认/保存失败。 | Lead | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i011)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
-| <a id="d-i012"></a>D-I012 消息图标悬停、辅助功能及键盘可达性 | 消息实际操作/AX已验；tooltip/VoiceOver余项 | 补真实悬停泡、完整播报与键盘入口；不以AX文本替代声音。 | Lead；可用辅助功能环境 | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i012)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
-| <a id="d-i013"></a>D-I013 UI文案易读性、帮助工程化及其余语言覆盖 | B6—B8已实现、双语/定向验证及代表普通App通过 | 正文仅语言资源；328d中英、资料检索/有效摘要/MCP终态/字段交接/资产版本冷开已补；en-US本机文件转写、采用/不采用与冷开已实测。 | Lead补验；顾问/用户审阅 | 仅新的措辞决定 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i013)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
-| <a id="d-i014"></a>D-I014 已批准UI布局的最终视觉接纳 | 最终328d V1–V6中英及冷开实图已展示；视觉接纳待用户 | 按同版图集中反馈，确定缺陷由Lead修；不逐图停工。 | 用户/顾问 | 集中视觉判断 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i014)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
-| <a id="d-i015"></a>D-I015 普通App保存失败与恢复的剩余验证 | 普通App受控写失败/仅保存恢复已验 | 5f准确步骤前缀/不重推理，ff83/8101冷读；介质满/拔盘未验。 | Lead；隔离夹具 | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i015)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
-| <a id="d-i016"></a>D-I016 真实卷／授权变化及后台完成链 | 后台完成链/同卷重定位代表已验；卷变化余项 | 保留文件身份和准入；不撤真实用户权限造故障。 | Lead；隔离卷条件 | 仅系统强制批准时 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i016)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
-| <a id="d-i017"></a>D-I017 画布／聊天剩余性能与非模型库展示热点 | NODE/PAN用户明显改善、ZOOM多数满意；resize未达标 | 365/b4d各三段横向无稳定收益，观察器实验37f撤回；Binding/location仍比较完整条目，但具体创建者缺归属，下一最小判别该传播路径。原6c/ff83和旧预算保留。 | Lead；有界实测 | 最终手感判断 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i017)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
+| <a id="d-i012"></a>D-I012 消息图标悬停、辅助功能及键盘可达性 | 当前回答复制提示、旁白导航及更多菜单实测；全场景仍有余项 | de6 实际提示“复制回答”；VO 键盘导航字幕读出复制、禁用的重新生成、更多，VO Space 打开对应菜单。长代码历史消息逐项导航、编辑后焦点返回及真人语音可辨度仍待验。 | Lead；可用辅助功能环境 | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i012)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
+| <a id="d-i013"></a>D-I013 UI文案易读性、帮助工程化及其余语言覆盖 | B1—B8沿用。B9已实现，验收等级及图见本轮回执 | B9八组及搜索来源的工程结果见任务B9表。顾问按正式双语资源集中审阅，用户试用后再接纳。 | Lead补验；顾问/用户审阅 | 仅新的措辞决定 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i013)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
+| <a id="d-i014"></a>D-I014 已批准UI布局的最终视觉接纳 | 328d V1–V6 中英及冷开实图沿用；B9 V1—V5 分版本核验；视觉接纳待用户 | 按同版图集中反馈，确定缺陷由Lead修；不逐图停工。 | 用户/顾问 | 集中视觉判断 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i014)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
+| <a id="d-i015"></a>D-I015 普通App保存失败与恢复的剩余验证 | 普通App受控写失败/仅保存恢复已验 | B9正常App在独立32MiB映像实际ENOSPC，旧聊天文件逐字节保全，de6保存并关闭重试仍失败时保留；释放空间后增加1会话、2消息、0推理。5f步骤前缀/仅保存恢复沿用。物理断电未验。 | Lead；隔离夹具 | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i015)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
+| <a id="d-i016"></a>D-I016 真实卷／授权变化及后台完成链 | 后台完成链/同卷重定位代表已验；卷变化余项 | B9专属卷同一路径换目录，D拒写且替代目录为空。恢复原inode后草稿保存成功，正常退出后映像卸载/重挂字节相等。真实用户卷授权撤销及后台模型完成组合仍独立。 | Lead；隔离卷条件 | 仅系统强制批准时 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i016)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
+| <a id="d-i017"></a>D-I017 画布／聊天剩余性能与非模型库展示热点 | NODE/PAN用户明显改善、ZOOM多数满意；resize未达标 | B9核实navigationScroll复制整个库视图，收窄捕获后p95两组均18/16/18pt，eb244a19撤回。下次做准确闭包实例与比较/布局/提交关联，保留旧失败。 | Lead；有界实测 | 最终手感判断 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i017)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
 | <a id="d-i018"></a>D-I018 官方玻璃背景来源和系统菜单视觉证据 | 代表背景对照已验；外部染色暂缓非解决 | 保留用户2026-10-28暂缓决定；菜单/瞬态/分段适配证据不混同。 | Lead；用户重新开启对应范围 | 无新审美门禁 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i018)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
-| <a id="d-i019"></a>D-I019 本地Release构建与包依赖预检 | 本地Release预检已验；发行终检保留 | 328d正常7引擎/零权重/strict-deep已核，19原生库登记及prepared实际消费者校验通过；16 helper继承，不外推Intel或干净机器。 | Lead | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i019)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
-| <a id="d-i020"></a>D-I020 商店型产物的首次使用、升级与恢复 | 具体模型链/冷开已验；全承诺矩阵有缺口 | 3ff ACE automatic拒绝未推理/允许一次同F32/保存冷开已补；其余准确变体/能力缺口按矩阵保留，不推广全模型。 | Lead；就绪模型/环境 | 资源资格确需时 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i020)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
+| <a id="d-i019"></a>D-I019 本地Release构建与包依赖预检 | 本地Release预检已验；发行终检保留 | de6dbf40正常7引擎/零权重/strict-deep已核，19原生库登记及prepared实际消费者校验通过；16 helper继承，不外推Intel或干净机器。 | Lead | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i019)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
+| <a id="d-i020"></a>D-I020 商店型产物的首次使用、升级与恢复 | 具体模型链/冷开已验；全承诺矩阵有缺口 | 3ff ACE automatic拒绝未推理/允许一次同F32/保存冷开已补；本轮正常包查看9B/Q4与ACE/F32实际规格，未运行模型。27B原始BF16的正常GUI、商店型首次安装/升级的同权重授权与恢复仍按矩阵具名保留。 | Lead；就绪模型/环境 | 资源资格确需时 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i020)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
 | <a id="d-i021"></a>D-I021 零第三方模型权重随包政策及拆包 | 零权重拆包与门禁实现/本地产物通过 | 最终Store制品再跑；未知疑似阻断，模型许可不由零权重代替。 | Lead | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i021)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
 | <a id="d-i022"></a>D-I022 首版功能、硬件及支持承诺 | Mac App Store渠道已定；正式承诺待冻结 | 模型证据/硬件/支持范围分层；不因16GiB机器降格全部承诺。 | 用户/顾问；Lead提供事实 | 需定正式口径 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i022)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
 | <a id="d-i023"></a>D-I023 最小资产容器／画布人工筛选 | 容器工程/真实拖放/typed保存已验；余项未验 | 任意opaque、VoiceOver及跨状态组合仍分级；不建新调度器。 | Lead | 否 | [版本与失败原文](history/UI-AUDIT-THROUGH-20261030.md#d-i023)；[本轮](tasks/D-UI-CONSOLIDATED-01.md) |
