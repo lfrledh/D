@@ -761,10 +761,11 @@ public struct SharedLibraryBrowser: View {
 
     private var navigationScroll: Binding<ScrollPosition> {
         let key = canvasMode == .nodes ? state.modelScrollKey : query.text.isEmpty ? state.operationPath.joined(separator: "/") : "search"
-        return Binding(get: { state.navigationScrolls[key] ?? ScrollPosition() }, set: { value in
-            if state.navigationScrolls[key] == nil, state.navigationScrolls.count >= 32,
-               let oldest = state.navigationScrolls.keys.sorted().first { state.navigationScrolls.removeValue(forKey: oldest) }
-            state.navigationScrolls[key] = value
+        let owner = state
+        return Binding(get: { [owner, key] in owner.navigationScrolls[key] ?? ScrollPosition() }, set: { [owner, key] value in
+            if owner.navigationScrolls[key] == nil, owner.navigationScrolls.count >= 32,
+               let oldest = owner.navigationScrolls.keys.sorted().first { owner.navigationScrolls.removeValue(forKey: oldest) }
+            owner.navigationScrolls[key] = value
         })
     }
     private var compactBody: some View {
