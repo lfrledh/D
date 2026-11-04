@@ -842,7 +842,7 @@ struct ChatWorkbenchView: View {
                     }
                 }.padding(20).frame(minWidth: 560, minHeight: 360)
             case .conversationImport(let data, let title):
-                ChatConversationImportSheet(data: data, title: title,
+                ChatConversationImportSheet(data: data, title: title, containsImport: { id in chat.state.sessions.contains { $0.id == id } },
                     onCancel: { sheets.detail = nil }, onAccept: { index, chosenTitle, allowingLosses, importID in
                         _ = try await chat.importConversation(data, title: chosenTitle, allowingLosses: allowingLosses,
                                                               importID: importID, selectedConversationIndex: index)
@@ -1145,7 +1145,8 @@ ScrollViewReader { proxy in
                     LazyVStack(alignment: .leading, spacing: 14) {
                         if let notes = session.importLossNotes, !notes.isEmpty {
                             DisclosureGroup(newLabel("importLosses", english: "Import mapping notes", chinese: "导入映射记录")) {
-                                ForEach(notes.indices, id: \.self) { Text(notes[$0]).font(.caption).textSelection(.enabled) }
+                                if let losses = session.importLossDetails { ChatImportLossList(losses: losses) }
+                                else { ForEach(notes.indices, id: \.self) { Text(notes[$0]).font(.caption).textSelection(.enabled) } }
                             }
                         }
                         if session.originSessionID != nil {
@@ -1742,10 +1743,10 @@ ScrollViewReader { proxy in
         ]
         if item.selectedLeafID != nil {
             result += [
-                .init(id: "copy", title: label("copyPath", "复制所选路径")) { perform(sessionID: item.id) { copy(try chat.exportSelectedPath(sessionID: item.id, markdown: false)) } },
-                .init(id: "markdown", title: label("exportMarkdown", "导出 Markdown")) { Task { await export(sessionID: item.id, markdown: true) } },
-                .init(id: "text", title: label("exportPlain", "导出纯文字")) { Task { await export(sessionID: item.id, markdown: false) } },
-                .init(id: "html", title: newLabel("exportHTML", english: "Export local HTML", chinese: "导出本地 HTML")) { Task { await export(sessionID: item.id, markdown: false, html: true) } }
+                .init(id: "copy", title: label("copyPath", "复制所选路径"), help: workflowText(language, "chat.exportBranchHelp")) { perform(sessionID: item.id) { copy(try chat.exportSelectedPath(sessionID: item.id, markdown: false, labels: exportLabels)) } },
+                .init(id: "markdown", title: label("exportMarkdown", "导出 Markdown"), help: workflowText(language, "chat.exportBranchHelp")) { Task { await export(sessionID: item.id, markdown: true) } },
+                .init(id: "text", title: label("exportPlain", "导出纯文字"), help: workflowText(language, "chat.exportBranchHelp")) { Task { await export(sessionID: item.id, markdown: false) } },
+                .init(id: "html", title: newLabel("exportHTML", english: "Export local HTML", chinese: "导出本地 HTML"), help: workflowText(language, "chat.exportBranchHelp") + "\n" + workflowText(language, "chat.exportHTMLHelp")) { Task { await export(sessionID: item.id, markdown: false, html: true) } }
             ]
         }
         if !chat.isTemporary {
@@ -1923,6 +1924,7 @@ ScrollViewReader { proxy in
         case .raw: clarity("raw")
         case .searchHit: label("lexicalResults", "搜索结果")
         case .message: clarity("detailsTitle")
+        case .conversationImport: workflowText(language, "chat.conversationImportSheet.importConversation")
         default: workflowText(language, "childPanel.name.messages")
         }
     }
@@ -2083,7 +2085,8 @@ ScrollViewReader { proxy in
             }
             if let notes = session.importLossNotes, !notes.isEmpty {
                 DisclosureGroup(newLabel("importLosses", english: "Import mapping notes", chinese: "导入映射记录")) {
-                    ForEach(notes.indices, id: \.self) { Text(notes[$0]).font(.caption).textSelection(.enabled) }
+                    if let losses = session.importLossDetails { ChatImportLossList(losses: losses) }
+                                else { ForEach(notes.indices, id: \.self) { Text(notes[$0]).font(.caption).textSelection(.enabled) } }
                 }
             }
             if session.originSessionID != nil {
@@ -2657,11 +2660,10 @@ ScrollViewReader { proxy in
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
             let info = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-            guard info.isRegularFile == true, let size = info.fileSize, size <= ChatInterchange.maximumImportBytes else { throw WorkflowIssue("Conversation import must be a regular file up to 2 MiB. / 会话导入限2MiB普通文件。") }
-            let data = try Data(contentsOf: url)
-            if let choices = try? ChatOpenWebUIImport.conversations(in: data), choices.count > 1 {
-                // Selection and the selected tree's validation happen in the preview sheet.
-            } else { _ = try ChatInterchange.previewImport(data) }
+            guard info.isRegularFile == true else { throw WorkflowIssue("Choose a regular conversation file.") }
+            let file = try FileHandle(forReadingFrom: url)
+            defer { try? file.close() }
+            let data = try file.read(upToCount: ChatInterchange.maximumImportBytes + 1) ?? Data()
             present(.conversationImport(data, String(url.deletingPathExtension().lastPathComponent.prefix(100))))
         } catch { report(error.localizedDescription, for: chat.state.selectedSessionID) }
     }
@@ -2697,13 +2699,25 @@ ScrollViewReader { proxy in
         } catch { report(error.localizedDescription, for: sessionID, code: (error as? WorkflowIssue)?.code) }
     }
 
+    private var exportLabels: ChatInterchange.ExportLabels {
+        .init(languageTag: language?.effectiveLanguageIdentifier ?? "zh-Hans",
+              system: workflowText(language, "chat.role.system"), user: workflowText(language, "chat.role.user"),
+              assistant: workflowText(language, "chat.role.assistant"))
+    }
+
     private func exportSessionPackage(sessionID: UUID) async {
         guard !filePanelBusy else { return }
         filePanelBusy = true; defer { filePanelBusy = false }
         let owner = chat
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "D-chat.dbackup"
-        panel.message = newLabel("sessionPackagePrivacy", english: "Includes all branches, unsent draft, attachments and frozen inputs (which may contain private facts). Personal-memory identities without local content remain provenance only. Future memory reads start disabled. Restore as an independent project through the existing Restore Backup entry.", chinese: "包含所有分支、未发送草稿、附件及冻结输入（可能含私人信息）。未保存本地内容的个人记忆仅保留来源标识，恢复后默认不读取记忆。使用现有“恢复备份”入口恢复为独立项目。")
+        panel.title = workflowText(language, "chat.sessionPackageTitle")
+        panel.message = ["chat.sessionPackageSummary", "chat.sessionPackagePrivacy"].map { workflowText(language, $0) }.joined(separator: "\n")
+        let memoryNote = workflowText(language, "chat.sessionPackageMemory")
+        panel.accessoryView = NSHostingView(rootView:
+            DisclosureGroup(workflowText(language, "chat.conversationImportSheet.details")) {
+                Text(memoryNote).font(.caption).fixedSize(horizontal: false, vertical: true)
+            }.frame(width: 360, alignment: .leading).padding(6))
         guard await panel.begin() == .OK, let destination = panel.url, owner === chat else { return }
         let scoped = destination.startAccessingSecurityScopedResource()
         defer { if scoped { destination.stopAccessingSecurityScopedResource() } }
@@ -2720,15 +2734,18 @@ ScrollViewReader { proxy in
         filePanelBusy = true; defer { filePanelBusy = false }
         let owner = chat, store = chat.store
         let snapshot = chat.state.sessions.first(where: { $0.id == sessionID })
+        let labels = exportLabels
+        let assetName = workflowText(language, markdown ? "chat.exportAsset.markdown" : "chat.exportAsset.plain")
         let value: String
         do {
             if html {
                 guard let session = snapshot, let leaf = session.selectedLeafID else { throw WorkflowIssue("No selected conversation path. / 尚无所选会话路径。") }
-                value = try ChatInterchange.exportHTML(session: session, leafID: leaf)
-            } else { value = try chat.exportSelectedPath(sessionID: sessionID, markdown: markdown) }
+                value = try ChatInterchange.exportHTML(session: session, leafID: leaf, labels: labels)
+            } else { value = try chat.exportSelectedPath(sessionID: sessionID, markdown: markdown, labels: labels) }
         }
         catch { report(error.localizedDescription, for: sessionID); return }
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
+        panel.message = workflowText(language, "chat.exportBranchHelp") + (html ? "\n" + workflowText(language, "chat.exportHTMLHelp") : "")
         guard await panel.begin() == .OK, let directory = panel.url,
               owner === chat, store === chat.store else { return }
         let scoped = directory.startAccessingSecurityScopedResource()
@@ -2736,11 +2753,11 @@ ScrollViewReader { proxy in
         do {
             let activity = try owner.beginExternalActivity(); defer { owner.endExternalActivity(activity) }
             if html, let snapshot, let leaf = snapshot.selectedLeafID {
-                _ = try await store.exportChatHTML(snapshot, leafID: leaf, exportID: UUID(), directory: directory)
+                _ = try await store.exportChatHTML(snapshot, leafID: leaf, labels: labels, exportID: UUID(), directory: directory)
                 report(nil, for: sessionID); return
             }
             let reference = try await store.publishWorkflowAsset(data: Data(value.utf8), mediaType: html ? "text/html" : markdown ? "text/markdown" : "text/plain",
-                name: html ? "聊天路径 HTML" : markdown ? "聊天路径 Markdown" : "聊天路径纯文字", operationID: "d.chat.export-path",
+                name: assetName, operationID: "d.chat.export-path",
                 details: ["chatSessionID": sessionID.uuidString, "format": html ? "html" : markdown ? "markdown" : "plain"]).record.reference
             onAssetsChanged()
             _ = try await store.exportWorkflowAssets([reference], name: html ? "D-chat-html" : markdown ? "D-chat-markdown" : "D-chat-text",

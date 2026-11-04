@@ -126,6 +126,7 @@ public struct ChatSession: Codable, Sendable, Equatable, Identifiable {
     public var assistanceOptions: ChatAssistanceOptions?
     public var assistanceExecutions: [ChatAssistanceExecution]?
     public var importLossNotes: [String]?
+    public var importLossDetails: [ChatInterchange.Loss]?
     public var toolActivities: [ChatToolActivity]?
     public var artifacts: [ChatArtifactContent]?
     public var knowledgeReranks: [ChatKnowledgeRerank]?
@@ -230,6 +231,12 @@ public struct ChatState: Codable, Sendable, Equatable {
             for execution in assistance {
                 try execution.validate()
                 guard execution.record.source.sessionID == session.id else { throw WorkflowIssue("辅助任务来源不属于本会话。") }
+            }
+            if let details = session.importLossDetails {
+                guard details.count <= 4096, details.reduce(0, { $0 + $1.location.utf8.count + $1.reason.utf8.count + ($1.field?.utf8.count ?? 0) }) <= 1_048_576,
+                      details.allSatisfy({ ($0.count ?? 0) >= 0 && ($0.messageIndex ?? 0) >= 0 }) else {
+                    throw WorkflowIssue("Imported transcript mapping details exceed the supported limit.")
+                }
             }
             let importNotes = session.importLossNotes ?? []
             guard importNotes.count <= 4096, importNotes.reduce(0, { $0 + $1.utf8.count }) <= 524_288 else {

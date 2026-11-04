@@ -868,6 +868,7 @@ public enum ChatGenerationPhase: String, Sendable {
         fork.draft = source.draft; fork.attachments = source.attachments
         fork.memoryScopes = source.memoryScopes
         fork.importLossNotes = source.importLossNotes
+        fork.importLossDetails = source.importLossDetails
         fork.knowledgeScope = source.knowledgeScope; fork.knowledgeExcerpts = source.knowledgeExcerpts
         if var choices = source.contextChoices {
             let pathIDs = Set(path.map(\.id))
@@ -2122,6 +2123,7 @@ public enum ChatGenerationPhase: String, Sendable {
         try requireLoaded() // A new import cannot bypass an unresolved save failure.
         var session = ChatSession(id: importID, title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Imported conversation" : title)
         session.systemPrompt = imported.systemPrompt
+        session.importLossDetails = imported.acknowledgedLosses
         session.importLossNotes = imported.acknowledgedLosses.map { $0.location + ": " + $0.reason }
         var parent: UUID?
         for item in imported.messages {
@@ -2137,7 +2139,7 @@ public enum ChatGenerationPhase: String, Sendable {
         return session.id
     }
 
-    public func exportSelectedPath(sessionID: UUID, markdown: Bool = true) throws -> String {
+    public func exportSelectedPath(sessionID: UUID, markdown: Bool = true, labels: ChatInterchange.ExportLabels = .english) throws -> String {
         try requireLoaded(); let session = state.sessions[try index(sessionID)]
         let path = try session.path(to: session.selectedLeafID)
         return path.map { message in
@@ -2146,7 +2148,7 @@ public enum ChatGenerationPhase: String, Sendable {
             } else if let id = message.attemptID, let attempt = session.attempts.first(where: { $0.id == id }) {
                 body = attempt.response?.finalText ?? attempt.rawText
             } else { body = message.text }
-            return markdown ? "## \(message.role == .user ? "User" : "Assistant")\n\n\(body)" : "\(message.role == .user ? "User" : "Assistant"):\n\(body)"
+            return markdown ? "## \(message.role == .user ? labels.user : labels.assistant)\n\n\(body)" : "\(message.role == .user ? labels.user : labels.assistant):\n\(body)"
         }.joined(separator: "\n\n")
     }
     /// A copied, editable artifact; the original answer and its adopted version stay immutable.

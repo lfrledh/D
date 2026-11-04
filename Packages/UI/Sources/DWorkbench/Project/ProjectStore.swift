@@ -4075,10 +4075,10 @@ extension ProjectStore {
     }
 
     /// A reading export, not an executable asset or a replacement for the private conversation tree.
-    public func exportChatHTML(_ session: ChatSession, leafID: UUID, exportID: UUID,
+    public func exportChatHTML(_ session: ChatSession, leafID: UUID, labels: ChatInterchange.ExportLabels = .english, exportID: UUID,
                                directory: URL) throws -> WorkflowExportReceipt {
         try checkLocation()
-        let text = try ChatInterchange.exportHTML(session: session, leafID: leafID)
+        let text = try ChatInterchange.exportHTML(session: session, leafID: leafID, labels: labels)
         return try publishWorkflowExport(files: [("conversation.html", Data(text.utf8))],
             name: "D-chat-html", exportID: exportID, directory: directory)
     }

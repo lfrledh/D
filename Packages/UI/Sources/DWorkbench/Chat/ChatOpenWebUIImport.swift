@@ -82,16 +82,16 @@ public enum ChatOpenWebUIImport {
             if role == "user" || role == "assistant" {
                 guard !content.isEmpty else { throw invalid("\(location) has no representable text.") }
             } else {
-                try addLoss(location, "\(role) message omitted; it is not authorized as a system prompt or executed as a tool.", to: &losses)
+                try addLoss(location, "\(role) message omitted; it is not authorized as a system prompt or executed as a tool.", kind: role == "system" ? .systemMessage : .tool, messageIndex: ordinal, to: &losses)
             }
             if let done = raw["done"] {
                 guard let number = done as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
                     throw invalid("\(location).done must be a Boolean.")
                 }
                 guard number.boolValue else {
-                    throw invalid("\(location) is unfinished (done: false); finish or remove it before import.")
+                    throw ChatInterchangeError.input(.unfinished, "\(location) is unfinished (done: false); finish or remove it before import.")
                 }
-                try addLoss("\(location).done", "Completion flag omitted; no execution is inferred.", to: &losses)
+                try addLoss("\(location).done", "Completion flag omitted; no execution is inferred.", kind: .completion, field: "done", messageIndex: ordinal, to: &losses)
             }
             for field in raw.keys.sorted() where !["id", "parentId", "childrenIds", "role", "content", "done"].contains(field) {
                 let reason: String
@@ -101,7 +101,7 @@ public enum ChatOpenWebUIImport {
                 case "files", "images", "attachments": reason = "Attachment omitted; no file or URI is read."
                 default: reason = "Unsupported message field omitted."
                 }
-                try addLoss("\(location).\(field)", reason, to: &losses)
+                try addLoss("\(location).\(field)", reason, kind: .field(field), field: field, messageIndex: ordinal, to: &losses)
             }
             nodes[key] = .init(id: id, parent: parent, children: children, role: role,
                                content: content, sourceIndex: ordinal)
@@ -116,6 +116,8 @@ public enum ChatOpenWebUIImport {
                     throw invalid("History has a missing parent or a nonreciprocal child link.")
                 }
             }
+        }
+        for node in nodes.values {
             for child in node.children {
                 guard let descendant = nodes[child], descendant.parent == node.id else {
                     throw invalid("History has a foreign child or a nonreciprocal parent link.")
@@ -168,34 +170,29 @@ public enum ChatOpenWebUIImport {
         }
         guard !mapped.isEmpty else { throw invalid("Active path contains no representable user/assistant text.") }
         if nodes.count != path.count {
-            try addLoss("chat.history.messages", "\(nodes.count - path.count) alternate-branch message(s) omitted; only the currentId path is imported.", to: &losses)
+            try addLoss("chat.history.messages", "\(nodes.count - path.count) alternate-branch message(s) omitted; only the currentId path is imported.", kind: .branches, count: nodes.count - path.count, to: &losses)
         }
         if let outer = entry.outer {
             for field in outer.keys.sorted() where field != "chat" {
-                try addLoss(field, "Archive entry field omitted.", to: &losses)
+                try addLoss(field, "Archive entry field omitted.", kind: .archiveField, field: field, to: &losses)
             }
         }
         for field in entry.chat.keys.sorted() where field != "title" && field != "history" {
-            try addLoss("chat.\(field)", "Chat setting or metadata omitted; no model or permission is selected.", to: &losses)
+            try addLoss("chat.\(field)", "Chat setting or metadata omitted; no model or permission is selected.", kind: ["model", "models"].contains(field) ? .model : .setting, field: field, to: &losses)
         }
         for field in entry.history.keys.sorted() where field != "currentId" && field != "messages" {
-            try addLoss("chat.history.\(field)", "History field omitted.", to: &losses)
+            try addLoss("chat.history.\(field)", "History field omitted.", kind: .historyField, field: field, to: &losses)
         }
         return .init(format: format, version: formatVersion, systemPrompt: "", messages: mapped,
                      losses: losses, sourceTitle: entry.title, conversationIndex: index)
     }
 
     private static func archive(_ data: Data) throws -> [Entry] {
-        guard !data.isEmpty, data.count <= ChatInterchange.maximumImportBytes,
-              String(data: data, encoding: .utf8) != nil, !data.contains(0) else {
-            throw invalid("Import must be nonempty UTF-8 JSON of at most 2 MiB.")
-        }
-        try ChatInterchange.checkJSONDepth(data)
-        let root = try JSONSerialization.jsonObject(with: data)
+        let root = try ChatInterchange.decodedRoot(data)
         let rawEntries: [Any]
         if let array = root as? [Any] { rawEntries = array }
         else if let object = root as? [String: Any] { rawEntries = [object] }
-        else { throw invalid("Expected a standard or legacy Open WebUI conversation object or array.") }
+        else { throw ChatInterchangeError.input(.unsupported, "Expected a standard or legacy Open WebUI conversation object or array.") }
         guard !rawEntries.isEmpty, rawEntries.count <= maximumConversations else {
             throw invalid("Archive must contain 1...\(maximumConversations) conversations.")
         }
@@ -213,7 +210,7 @@ public enum ChatOpenWebUIImport {
                   let history = chat["history"] as? [String: Any],
                   let currentID = history["currentId"] as? String, !currentID.isEmpty,
                   let messages = history["messages"] as? [String: Any], !messages.isEmpty else {
-                throw invalid("Conversation \(index) needs title and history.currentId/messages.")
+                throw ChatInterchangeError.input(.unsupported, "Conversation \(index) needs title and history.currentId/messages.")
             }
             guard messages.count <= ChatInterchange.maximumMessages else {
                 throw invalid("Conversation \(index) has too many history messages (limit 1,000).")
@@ -223,9 +220,10 @@ public enum ChatOpenWebUIImport {
     }
 
     private static func addLoss(_ location: String, _ reason: String,
-                                to losses: inout [ChatInterchange.Loss]) throws {
+                                kind: ChatInterchange.Loss.Kind, count: Int? = nil, field: String? = nil,
+                                messageIndex: Int? = nil, to losses: inout [ChatInterchange.Loss]) throws {
         guard losses.count < 4_096 else { throw invalid("Import has too many unsupported fields or parts.") }
-        losses.append(.init(location: location, reason: reason))
+        losses.append(.init(location: location, reason: reason, kind: kind, count: count, field: field, messageIndex: messageIndex))
     }
 
     private static func invalid(_ reason: String) -> ChatInterchangeError { .invalid(reason) }

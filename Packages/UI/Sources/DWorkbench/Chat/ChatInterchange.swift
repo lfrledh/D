@@ -3,9 +3,18 @@ import Foundation
 
 public enum ChatInterchangeError: Error, LocalizedError, Sendable, Equatable {
     case invalid(String)
+    public enum InputProblem: String, Sendable {
+        case empty, tooLarge, invalidJSON, unsupported, unfinished, invalidEncoding
+    }
+    case input(InputProblem, String)
+
+    public var inputProblem: InputProblem? {
+        if case .input(let code, _) = self { return code }
+        return nil
+    }
 
     public var errorDescription: String? {
-        switch self { case .invalid(let reason): return reason }
+        switch self { case .invalid(let reason), .input(_, let reason): return reason }
     }
 }
 
@@ -27,7 +36,42 @@ public enum ChatInterchange {
         public let sourceIndex: Int
     }
 
-    public struct Loss: Sendable, Equatable {
+    public struct ExportLabels: Sendable {
+        public let languageTag, system, user, assistant: String
+        public init(languageTag: String, system: String, user: String, assistant: String) {
+            self.languageTag = languageTag
+            self.system = system
+            self.user = user
+            self.assistant = assistant
+        }
+        public static let english = Self(languageTag: "en", system: "System", user: "User", assistant: "Assistant")
+    }
+
+    public struct Loss: Codable, Sendable, Equatable {
+        public enum Kind: String, Codable, Sendable {
+            case attachment, tool, model, branches, systemMessage, completion, archiveField, historyField, setting, unsupported
+            static func field(_ name: String) -> Self {
+                switch name {
+                case "attachments", "files", "images": .attachment
+                case "tools", "tool", "tool_calls": .tool
+                case "model", "models": .model
+                default: .unsupported
+                }
+            }
+        }
+        public let kind: Kind
+        public let count: Int?
+        public let field: String?
+        public let messageIndex: Int?
+        init(location: String, reason: String, kind: Kind = .unsupported, count: Int? = nil,
+             field: String? = nil, messageIndex: Int? = nil) {
+            self.location = location
+            self.reason = reason
+            self.kind = kind
+            self.count = count
+            self.field = field
+            self.messageIndex = messageIndex
+        }
         public let location: String
         public let reason: String
     }
@@ -72,12 +116,7 @@ public enum ChatInterchange {
     /// Auto-preview for the exact D wrapper or a documented Open WebUI history export.
     /// An archive with multiple conversations requires an explicit selection index.
     public static func previewImport(_ data: Data, selectedConversationIndex: Int? = nil) throws -> ImportPreview {
-        guard !data.isEmpty, data.count <= maximumImportBytes,
-              String(data: data, encoding: .utf8) != nil, !data.contains(0) else {
-            throw ChatInterchangeError.invalid("Import must be nonempty UTF-8 JSON of at most 2 MiB.")
-        }
-        try checkJSONDepth(data)
-        let root = try JSONSerialization.jsonObject(with: data)
+        let root = try decodedRoot(data)
         if let object = root as? [String: Any], object.keys.contains("format") {
             guard selectedConversationIndex == nil else {
                 throw ChatInterchangeError.invalid("The D import wrapper has no conversation selection index.")
@@ -87,8 +126,21 @@ public enum ChatInterchange {
         return try ChatOpenWebUIImport.preview(data, selectedConversationIndex: selectedConversationIndex)
     }
 
+    static func decodedRoot(_ data: Data) throws -> Any {
+        guard !data.isEmpty else { throw ChatInterchangeError.input(.empty, "The file is empty.") }
+        guard data.count <= maximumImportBytes else { throw ChatInterchangeError.input(.tooLarge, "File exceeds 2 MiB.") }
+        guard String(data: data, encoding: .utf8) != nil, !data.contains(0) else {
+            throw ChatInterchangeError.input(.invalidEncoding, "Expected UTF-8 JSON without null bytes.")
+        }
+        do {
+            try checkJSONDepth(data)
+            return try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        } catch let error as ChatInterchangeError { throw error }
+        catch { throw ChatInterchangeError.input(.invalidJSON, error.localizedDescription) }
+    }
+
     /// UTF-8 HTML for one selected path. Body text is never interpreted as markup.
-    public static func exportHTML(session: ChatSession, leafID: UUID) throws -> String {
+    public static func exportHTML(session: ChatSession, leafID: UUID, labels: ExportLabels = .english) throws -> String {
         guard Set(session.messages.map(\.id)).count == session.messages.count,
               Set(session.attempts.map(\.id)).count == session.attempts.count else {
             throw ChatInterchangeError.invalid("Selected session has duplicate message or attempt IDs.")
@@ -99,12 +151,12 @@ public enum ChatInterchange {
         guard sourceBytes <= maximumHTMLSourceBytes else {
             throw ChatInterchangeError.invalid("Selected path exceeds HTML export limit.")
         }
-        var html = "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">" +
+        var html = "<!doctype html>\n<html lang=\"\(escaped(labels.languageTag))\"><head><meta charset=\"utf-8\">" +
             "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; base-uri 'none'; form-action 'none'\">" +
             "<meta name=\"referrer\" content=\"no-referrer\"><title>\(escaped(session.title))</title></head><body>" +
             "<main><h1>\(escaped(session.title))</h1>"
         if !session.systemPrompt.isEmpty {
-            html += "<section><h2>System</h2><pre>\(escaped(session.systemPrompt))</pre></section>"
+            html += "<section><h2>\(escaped(labels.system))</h2><pre>\(escaped(session.systemPrompt))</pre></section>"
         }
         for message in path {
             let body: String
@@ -122,7 +174,7 @@ public enum ChatInterchange {
             guard sourceBytes <= maximumHTMLSourceBytes else {
                 throw ChatInterchangeError.invalid("Selected path exceeds HTML export limit.")
             }
-            let heading = message.role == .user ? "User" : "Assistant"
+            let heading = escaped(message.role == .user ? labels.user : labels.assistant)
             html += "<section><h2>\(heading)</h2><pre>\(escaped(body))</pre></section>"
         }
         return html + "</main></body></html>\n"
@@ -132,15 +184,9 @@ public enum ChatInterchange {
     /// {"format":"openai-messages","version":1,"messages":[...]}.
     /// This is not a ChatGPT account backup format.
     public static func previewOpenAIMessagesV1(_ data: Data) throws -> ImportPreview {
-        guard !data.isEmpty, data.count <= maximumImportBytes else {
-            throw ChatInterchangeError.invalid("Import must be nonempty and at most 2 MiB.")
-        }
-        guard String(data: data, encoding: .utf8) != nil, !data.contains(0) else {
-            throw ChatInterchangeError.invalid("Import must be UTF-8 JSON.")
-        }
-        try checkJSONDepth(data)
+        let decoded = try decodedRoot(data)
         let requiredKeys: Set<String> = ["format", "version", "messages"]
-        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let root = decoded as? [String: Any],
               Set(root.keys) == requiredKeys,
               root["format"] as? String == sourceFormat,
               let number = root["version"] as? NSNumber,
@@ -148,7 +194,10 @@ public enum ChatInterchange {
               String(cString: number.objCType) != "d",
               String(cString: number.objCType) != "f",
               number.intValue == sourceVersion,
-              number.doubleValue == Double(sourceVersion),
+              number.doubleValue == Double(sourceVersion) else {
+            throw ChatInterchangeError.input(.unsupported, "Unsupported D wrapper or version.")
+        }
+        guard
               let rawMessages = root["messages"] as? [[String: Any]],
               !rawMessages.isEmpty, rawMessages.count <= maximumMessages else {
             throw ChatInterchangeError.invalid("Import wrapper, version, or message count is unsupported.")
@@ -166,14 +215,14 @@ public enum ChatInterchange {
             }
             let location = "messages[\(index)]"
             if role == "tool" {
-                try appendLoss(.init(location: location, reason: "Tool result omitted; no tool is executed."),
+                try appendLoss(.init(location: location, reason: "Tool result omitted; no tool is executed.", kind: .tool, messageIndex: index),
                                to: &losses)
                 continue
             }
             guard role == "system" || role == "user" || role == "assistant" else {
                 throw ChatInterchangeError.invalid("Unknown role at \(location).")
             }
-            let content = try textContent(raw["content"]!, at: location, losses: &losses)
+            let content = try textContent(raw["content"]!, at: location, messageIndex: index, losses: &losses)
             guard !content.isEmpty else {
                 throw ChatInterchangeError.invalid("No representable text at \(location).")
             }
@@ -196,7 +245,7 @@ public enum ChatInterchange {
                 nextRole = mapped == .user ? .assistant : .user
             }
             for key in raw.keys.sorted() where key != "role" && key != "content" {
-                try appendLoss(.init(location: "\(location).\(key)", reason: "Unsupported field omitted."),
+                try appendLoss(.init(location: "\(location).\(key)", reason: "Unsupported field omitted.", kind: .field(key), field: key, messageIndex: index),
                                to: &losses)
             }
         }
@@ -207,7 +256,7 @@ public enum ChatInterchange {
                      messages: messages, losses: losses)
     }
 
-    private static func textContent(_ value: Any, at location: String, losses: inout [Loss]) throws -> String {
+    private static func textContent(_ value: Any, at location: String, messageIndex: Int, losses: inout [Loss]) throws -> String {
         if let text = value as? String { return text }
         guard let parts = value as? [Any], !parts.isEmpty, parts.count <= maximumMessages else {
             throw ChatInterchangeError.invalid("Content at \(location) must be text or a bounded parts array.")
@@ -225,10 +274,10 @@ public enum ChatInterchange {
                 text += fragment
                 for key in object.keys.sorted() where key != "type" && key != "text" {
                     try appendLoss(.init(location: "\(partLocation).\(key)",
-                                         reason: "Unsupported text-part field omitted."), to: &losses)
+                                         reason: "Unsupported text-part field omitted.", field: key, messageIndex: messageIndex), to: &losses)
                 }
             } else {
-                try appendLoss(.init(location: partLocation, reason: "Unsupported \(type) part omitted."),
+                try appendLoss(.init(location: partLocation, reason: "Unsupported \(type) part omitted.", kind: ["image_url", "input_audio", "file"].contains(type) ? .attachment : .unsupported, field: type, messageIndex: messageIndex),
                                to: &losses)
             }
         }
@@ -290,7 +339,7 @@ public enum ChatInterchange {
                     else if bytes[index] == 0x22 { break }
                     index += 1
                 }
-                guard index < bytes.count else { throw ChatInterchangeError.invalid("Unterminated JSON string.") }
+                guard index < bytes.count else { throw ChatInterchangeError.input(.invalidJSON, "Unterminated JSON string.") }
                 var after = index + 1
                 while after < bytes.count && [UInt8(9), 10, 13, 32].contains(bytes[after]) { after += 1 }
                 if after < bytes.count, bytes[after] == 0x3A, !containers.isEmpty,

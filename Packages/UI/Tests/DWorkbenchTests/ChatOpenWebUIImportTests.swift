@@ -41,7 +41,7 @@ struct ChatOpenWebUIImportTests {
         do {
             _ = try ChatInterchange.previewImport(data, selectedConversationIndex: selection)
             return "Unexpected success"
-        } catch let ChatInterchangeError.invalid(message) { return message }
+        } catch let error as ChatInterchangeError { return error.localizedDescription }
         catch { return "Unexpected error: \(error)" }
     }
 
@@ -66,6 +66,9 @@ struct ChatOpenWebUIImportTests {
         #expect(choices == [.init(index: 0, title: "Synthetic 👩🏽‍🎨")])
         let preview = try ChatInterchange.previewImport(original)
         #expect(preview.format == "open-webui-history" && preview.version == 1)
+        #expect(preview.losses.first { $0.kind == .branches }?.count == 1)
+        #expect(preview.losses.first { $0.field == "done" }?.kind == .completion)
+        #expect(preview.losses.first { $0.field == "model" }?.kind == .model)
         #expect(preview.sourceTitle == "Synthetic 👩🏽‍🎨" && preview.conversationIndex == 0)
         #expect(preview.systemPrompt.isEmpty)
         #expect(preview.messages.map(\.role) == [.user, .assistant])
