@@ -1423,6 +1423,7 @@ public enum ChatGenerationPhase: String, Sendable {
 
     public private(set) var preparingSendSessionID: UUID?
     private var preparingSendCancelled = false
+    private var preparingFrozenComparison = false
     @ObservationIgnored private var preparationWaiters: [CheckedContinuation<Void, Never>] = []
     private var automaticSearchIncluded = false
     public func hasPendingAutomaticSearch(for session: ChatSession) -> Bool {
@@ -1430,6 +1431,27 @@ public enum ChatGenerationPhase: String, Sendable {
         session.webOptions?.provider != nil && !session.archived && session.contextChoices?.deletedAt == nil &&
         !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isRunning &&
         !(preparingSendSessionID == session.id && automaticSearchIncluded)
+    }
+
+    private func beginInputPreparation(_ sessionID: UUID, frozenComparison: Bool) throws {
+        guard allowsSubmission(), !isDiscarding, !isRunning, pendingSaveAttemptID == nil else {
+            throw WorkflowIssue("已有聊天推理或待保存结果。")
+        }
+        guard preparingSendSessionID == nil else { throw WorkflowIssue("正在准备本次请求。", code: "chat.phase.preparing") }
+        preparingSendSessionID = sessionID
+        preparingSendCancelled = false
+        automaticSearchIncluded = false
+        preparingFrozenComparison = frozenComparison
+    }
+
+    private func finishInputPreparation() {
+        preparingSendSessionID = nil
+        automaticSearchIncluded = false
+        preparingFrozenComparison = false
+        if !isRunning { isCancelling = false }
+        let waiters = preparationWaiters
+        preparationWaiters = []
+        for waiter in waiters { waiter.resume() }
     }
 
     public func send(sessionID: UUID) async throws {
@@ -1445,13 +1467,8 @@ public enum ChatGenerationPhase: String, Sendable {
             try await regenerate(user.id, sessionID: sessionID)
             return
         }
-        preparingSendSessionID = sessionID; preparingSendCancelled = false; automaticSearchIncluded = false
-        defer {
-            preparingSendSessionID = nil; automaticSearchIncluded = false
-            if !isRunning { isCancelling = false }
-            let waiters = preparationWaiters; preparationWaiters = []
-            for waiter in waiters { waiter.resume() }
-        }
+        try beginInputPreparation(sessionID, frozenComparison: false)
+        defer { finishInputPreparation() }
         let selectedAtStart = state.selectedSessionID
         let search = try await prepareAutomaticWeb(sessionID: sessionID, selectedAtStart: selectedAtStart)
         try validatePreparingSend(sessionID, selectedAtStart: selectedAtStart)
@@ -1510,10 +1527,19 @@ public enum ChatGenerationPhase: String, Sendable {
         guard estimate <= (node.parameters["maximumPromptTokens"]?.integer ?? 0) else {
             throw WorkflowIssue("固定比较输入超过所选上下文预算；没有删减原始问题。")
         }
-        for reference in refs { _ = try await store.workflowData(reference) }
+        try beginInputPreparation(sessionID, frozenComparison: true)
+        defer { finishInputPreparation() }
+        let selection = state.selectedSessionID
+        for reference in refs {
+            _ = try await store.workflowData(reference)
+            try validatePreparingSend(sessionID, selectedAtStart: selection)
+        }
+        try validatePreparingSend(sessionID, selectedAtStart: selection)
+        try requireLoaded()
+        guard state.sessions[try index(sessionID)].selectedLeafID == session.selectedLeafID else { throw CancellationError() }
         try await launch(sessionID: sessionID, user: user, prepared: (node, original.messagesJSON, original.inputs, original.memoryUses ?? [], []),
                          systemPrompt: original.systemPrompt, outputFormat: original.outputFormat, expectedLeafID: session.selectedLeafID,
-                         clearDraft: false, comparisonSourceAttemptID: attemptID)
+                         clearDraft: false, comparisonSourceAttemptID: attemptID, preparedSend: true)
     }
 
     /// Replay the captured request, not settings or history edited since that attempt.
@@ -1547,6 +1573,7 @@ public enum ChatGenerationPhase: String, Sendable {
         guard preparingSendSessionID == nil || (preparedSend && preparingSendSessionID == sessionID && !preparingSendCancelled) else {
             throw WorkflowIssue("正在准备本次请求。", code: "chat.phase.preparing")
         }
+        try Task.checkCancellation()
         // A replay uses the immutable attempt, never the currently edited fields.
         guard replayedAttemptID != nil || !hasInvalidParameterText(sessionID: sessionID) else {
             throw WorkflowIssue("回答参数仍有未完成或无效输入，请先修正。")
@@ -1748,8 +1775,10 @@ public enum ChatGenerationPhase: String, Sendable {
     public func cancel() async {
         if preparingSendSessionID != nil {
             preparingSendCancelled = true; isCancelling = true
-            toolTask?.cancel()
-            _ = try? await toolTask?.value
+            if !preparingFrozenComparison {
+                toolTask?.cancel()
+                _ = try? await toolTask?.value
+            }
             if preparingSendSessionID != nil { await withCheckedContinuation { preparationWaiters.append($0) } }
         }
         guard let task = runTask else { return }

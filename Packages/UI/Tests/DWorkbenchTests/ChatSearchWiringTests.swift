@@ -375,6 +375,30 @@ struct ChatSearchWiringTests {
         }
     }
 
+    @Test func ordinaryRegenerationUsesCurrentSettingsAndCancelledComparisonCannotLaunch() async throws {
+        let transport = SearchWiringTransport(failure: .searchHTTP), engine = SearchAnswerEngine()
+        let (store, chat, id) = try await generationFixture(transport, engine: engine)
+        var options = ChatWebOptions(); options.provider = .brave; options.allowed = true; options.automaticSearch = true
+        try chat.setWebOptions(options, sessionID: id); try chat.updateDraft("Original question", sessionID: id)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        let original = try #require(chat.selectedSession?.attempts.first)
+        let count = await transport.requests().count
+        let cancelled = Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            try await chat.compare(original.id, configuration: original.node, sessionID: id)
+        }
+        await #expect(throws: CancellationError.self) { try await cancelled.value }
+        #expect(await engine.requests.count == 1 && !chat.canStopGeneration)
+        try chat.setSystemPrompt("New response rule", sessionID: id)
+        try await chat.regenerate(original.userMessageID, sessionID: id); await chat.waitForCompletion()
+        let session = try #require(chat.selectedSession), fresh = try #require(session.attempts.last)
+        #expect(fresh.id != original.id && fresh.systemPrompt == "New response rule")
+        #expect(chat.reusedSearchSource(fresh, in: session) == nil && fresh.automaticSearch == nil)
+        #expect(await transport.requests().count == count)
+        #expect(await engine.requests.count == 2)
+        try await store.close()
+    }
+
     private func generationFixture(_ transport: SearchWiringTransport, engine: SearchAnswerEngine,
                                    credential: @escaping @Sendable (ChatSearchProvider) async throws -> String = { _ in "fixture-secret-canary" }) async throws -> (ProjectStore, ChatController, UUID) {
         let parent = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent("AutomaticSearch-" + UUID().uuidString)
