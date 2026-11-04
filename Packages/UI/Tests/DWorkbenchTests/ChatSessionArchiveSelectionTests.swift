@@ -57,6 +57,32 @@ struct ChatSessionArchiveSelectionTests {
         #expect(selection.unresolvedExternalMemoryUses.isEmpty)
     }
 
+    @Test func archivesOnlySelectedConversationFromBatchAndCollectionProjects() throws {
+        var selected = ChatSession(title: "Selected")
+        selected.draft = "unsubmitted"
+        var state = ChatState()
+        state.sessions = [selected, ChatSession(title: "Other")]
+        for version in [3, 4] {
+            var archive = WorkflowArchive()
+            archive.version = version
+            archive.batchStages = []
+            if version == 4 { archive.collectionRequests = [] }
+            let result = try ChatSessionArchiveSelection.make(state: state, archive: archive, sessionID: selected.id)
+            #expect(result.chat.sessions.map(\.id) == [selected.id])
+            #expect(result.chat.sessions.first?.draft == "unsubmitted")
+            #expect(result.archive.batchStages == nil)
+            #expect(result.archive.collectionRequests == nil)
+            #expect(result.archive.version == version)
+        }
+        for version in [0, 5] {
+            var unsupported = WorkflowArchive()
+            unsupported.version = version
+            #expect(throws: WorkflowIssue.self) {
+                try ChatSessionArchiveSelection.make(state: state, archive: unsupported, sessionID: selected.id)
+            }
+        }
+    }
+
     @Test func conflictingSessionMemoryIdentityCannotPullInAnotherSource() throws {
         var session = ChatSession(title: "selected")
         let message = ChatMessage(parentID: nil, role: .user, text: "source")

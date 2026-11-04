@@ -190,6 +190,7 @@ public struct WorkflowAssetRecord: Codable, Sendable, Equatable {
     }
 }
 public struct WorkflowArchive: Codable, Sendable, Equatable {
+    static let supportedVersions = 1...4
     public var containerSubmissions: [WorkflowContainerSubmission]?
     public var assetCollection: WorkflowAssetCollection?
     public var collectionRequests: [WorkflowAssetCollectionRequest]?

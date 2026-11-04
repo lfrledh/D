@@ -3290,7 +3290,7 @@ extension ProjectStore {
         struct Header: Decodable { let version: Int }
         let decoder = JSONDecoder()
         guard let header = try? decoder.decode(Header.self, from: data) else { throw WorkflowIssue("流程快照已损坏，原件已保留。") }
-        guard [1, 2, 3, 4].contains(header.version) else {
+        guard WorkflowArchive.supportedVersions.contains(header.version) else {
             return .init(archive: nil, readOnlyReason: "流程格式 v\(header.version) 尚不支持；原始数据与连接已保留，只读。", originalBytes: data)
         }
         if let identity = try WorkflowArchiveInspection.unknownOperation(in: data) {
@@ -3425,7 +3425,7 @@ extension ProjectStore {
     }
 
     private func validateWorkflowArchive(_ archive: WorkflowArchive, assets: [ProjectAsset]) throws {
-        guard [1, 2, 3, 4].contains(archive.version), archive.graphs.count <= 256, archive.runs.count <= 4_096,
+        guard WorkflowArchive.supportedVersions.contains(archive.version), archive.graphs.count <= 256, archive.runs.count <= 4_096,
               archive.assets.count <= 32_768, Set(archive.graphs.map(\.id)).count == archive.graphs.count,
               Set(archive.runs.map(\.id)).count == archive.runs.count,
               Set(archive.assets.map { $0.reference.assetID }).count == archive.assets.count else {

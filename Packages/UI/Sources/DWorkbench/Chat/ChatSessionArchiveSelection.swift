@@ -23,7 +23,7 @@ public struct ChatSessionArchiveSelection: Sendable, Equatable {
     public static func make(state: ChatState, archive: WorkflowArchive,
                             sessionID: UUID) throws -> Self {
         try state.validate()
-        guard [1, 2].contains(archive.version), archive.assets.count <= 32_768,
+        guard WorkflowArchive.supportedVersions.contains(archive.version), archive.assets.count <= 32_768,
               let session = state.sessions.first(where: { $0.id == sessionID }) else {
             throw WorkflowIssue("The selected chat session or workflow archive is invalid.")
         }
