@@ -365,6 +365,12 @@ struct ChatSearchWiringTests {
             #expect(owner.reusedSearchSource(orphan, in: loaded) == .unavailable)
             orphan.replayedAttemptID = orphan.id
             #expect(owner.reusedSearchSource(orphan, in: loaded) == .unavailable)
+            var alternate = loaded
+            alternate.attempts[0] = ChatAttempt(id: UUID(), sessionID: id, userMessageID: original.userMessageID,
+                assistantMessageID: original.assistantMessageID, node: original.node, messagesJSON: original.messagesJSON,
+                inputs: original.inputs, systemPrompt: original.systemPrompt)
+            #expect(owner.transcriptAttempt(alternate.attempts[0].id, in: loaded) == nil)
+            #expect(owner.transcriptAttempt(alternate.attempts[0].id, in: alternate) == alternate.attempts[0])
             try await reopened.close()
         }
     }

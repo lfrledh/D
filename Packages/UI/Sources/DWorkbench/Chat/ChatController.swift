@@ -2344,12 +2344,16 @@ public struct ChatTranscriptStructure: Sendable {
     private var leafID: UUID?
     private var path: [ChatMessage] = []
     private var attemptIndices: [UUID: Int] = [:]
+    // Retain one array only after a real miss. Count alone cannot identify a snapshot.
+    private var negativeLookupSnapshot: [ChatAttempt]?
+
     private(set) var treeBuilds = 0
     private(set) var pathBuilds = 0
 
     func structure(for session: ChatSession) -> ChatTranscriptStructure {
         let changed = sessionID != session.id || messages != session.messages
         if changed {
+            negativeLookupSnapshot = nil
             attemptIndices = Dictionary(session.attempts.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
             sessionID = session.id; messages = session.messages
             byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -2375,9 +2379,17 @@ public struct ChatTranscriptStructure: Sendable {
         if let index = attemptIndices[id], session.attempts.indices.contains(index), session.attempts[index].id == id {
             return session.attempts[index]
         }
-        if attemptIndices[id] == nil && attemptIndices.count == session.attempts.count { return nil }
+        if attemptIndices[id] == nil, let snapshot = negativeLookupSnapshot,
+           snapshot.withUnsafeBufferPointer({ captured in
+               session.attempts.withUnsafeBufferPointer { captured.count == $0.count && captured.baseAddress == $0.baseAddress }
+           }) { return nil }
+        negativeLookupSnapshot = nil
         attemptIndices = Dictionary(session.attempts.enumerated().map { ($0.element.id, $0.offset) },
                                     uniquingKeysWith: { first, _ in first })
-        return attemptIndices[id].map { session.attempts[$0] }
+        guard let index = attemptIndices[id] else {
+            negativeLookupSnapshot = session.attempts
+            return nil
+        }
+        return session.attempts[index]
     }
 }
