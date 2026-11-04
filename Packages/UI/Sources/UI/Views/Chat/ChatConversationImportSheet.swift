@@ -107,14 +107,14 @@ struct ChatImportLossList: View {
         ForEach(losses.indices, id: \.self) { index in
             let loss = losses[index]
             VStack(alignment: .leading, spacing: 2) {
-                if let number = loss.messageIndex {
+                if let number = loss.messageIndex, (0..<ChatInterchange.maximumMessages).contains(number) {
                     Text(workflowText(language, "chat.conversationImportSheet.sourceMessage", arguments: ["number": String(number + 1)]))
                 }
                 if let field = loss.field { Text(verbatim: field).font(.caption.monospaced()) }
                 Text(workflowText(language, "chat.conversationImportSheet.loss." + loss.kind.rawValue,
                                   arguments: ["count": String(loss.count ?? 0)]))
                 DisclosureGroup(workflowText(language, "chat.conversationImportSheet.details")) {
-                    Text(verbatim: loss.location + "\n" + loss.reason).textSelection(.enabled)
+                    Text(verbatim: (loss.pointer ?? loss.location) + "\n" + loss.reason).textSelection(.enabled)
                 }
             }.font(.caption)
         }

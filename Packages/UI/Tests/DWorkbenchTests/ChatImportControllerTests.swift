@@ -18,6 +18,9 @@ struct ChatImportControllerTests {
         #expect(imported.messages.count == 2 && imported.importLossNotes?.count == 2)
         #expect(imported.messages.allSatisfy { $0.importedSource?.sourceSHA256.count == 64 && $0.attemptID == nil })
         #expect(chat.state.sessions.first(where: { $0.id == prior }) == original.sessions.first)
+        var bad = chat.state
+        bad.sessions[bad.sessions.count - 1].importLossDetails = [.init(location: "external", reason: "untrusted", messageIndex: Int.max)]
+        #expect(throws: WorkflowIssue.self) { try bad.validate() }
         let plan = try ChatContextPlan.build(path: imported.path(to: imported.selectedLeafID), attempts: [], prompt: "Continue", attachments: [], system: imported.systemPrompt)
         #expect(plan.messagesJSON.contains("not executable") && plan.messagesJSON.contains("Original system"))
         let html = try ChatInterchange.exportHTML(session: imported, leafID: #require(imported.selectedLeafID))

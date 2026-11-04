@@ -15,6 +15,8 @@ public enum ChatOpenWebUIImport {
     }
 
     private struct Entry {
+        let entryPointer: String
+        var chatPointer: String { entryPointer + (outer == nil ? "" : "/chat") }
         let outer: [String: Any]?
         let chat: [String: Any]
         let history: [String: Any]
@@ -56,6 +58,7 @@ public enum ChatOpenWebUIImport {
         var nodes: [String: Node] = [:]
         var losses: [ChatInterchange.Loss] = []
         for (ordinal, key) in sortedIDs.enumerated() {
+            let pointer = entry.chatPointer + "/history/messages/" + ChatInterchange.Loss.token(key)
             let location = "chat.history.messages[\(ordinal)]"
             guard let raw = rawMessages[key] as? [String: Any],
                   let id = raw["id"] as? String, id == key, !id.isEmpty,
@@ -79,11 +82,6 @@ public enum ChatOpenWebUIImport {
                 }
                 children.append(child)
             }
-            if role == "user" || role == "assistant" {
-                guard !content.isEmpty else { throw invalid("\(location) has no representable text.") }
-            } else {
-                try addLoss(location, "\(role) message omitted; it is not authorized as a system prompt or executed as a tool.", kind: role == "system" ? .systemMessage : .tool, messageIndex: ordinal, to: &losses)
-            }
             if let done = raw["done"] {
                 guard let number = done as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
                     throw invalid("\(location).done must be a Boolean.")
@@ -91,7 +89,12 @@ public enum ChatOpenWebUIImport {
                 guard number.boolValue else {
                     throw ChatInterchangeError.input(.unfinished, "\(location) is unfinished (done: false); finish or remove it before import.")
                 }
-                try addLoss("\(location).done", "Completion flag omitted; no execution is inferred.", kind: .completion, field: "done", messageIndex: ordinal, to: &losses)
+                try addLoss("\(location).done", "Completion flag omitted; no execution is inferred.", pointer: pointer + "/done", kind: .completion, field: "done", messageIndex: ordinal, to: &losses)
+            }
+            if role == "user" || role == "assistant" {
+                guard !content.isEmpty else { throw invalid("\(location) has no representable text.") }
+            } else {
+                try addLoss(location, "\(role) message omitted; it is not authorized as a system prompt or executed as a tool.", pointer: pointer, kind: role == "system" ? .systemMessage : .tool, messageIndex: ordinal, to: &losses)
             }
             for field in raw.keys.sorted() where !["id", "parentId", "childrenIds", "role", "content", "done"].contains(field) {
                 let reason: String
@@ -101,7 +104,7 @@ public enum ChatOpenWebUIImport {
                 case "files", "images", "attachments": reason = "Attachment omitted; no file or URI is read."
                 default: reason = "Unsupported message field omitted."
                 }
-                try addLoss("\(location).\(field)", reason, kind: .field(field), field: field, messageIndex: ordinal, to: &losses)
+                try addLoss("\(location).\(field)", reason, pointer: pointer + "/" + ChatInterchange.Loss.token(field), kind: .field(field), field: field, messageIndex: ordinal, to: &losses)
             }
             nodes[key] = .init(id: id, parent: parent, children: children, role: role,
                                content: content, sourceIndex: ordinal)
@@ -170,18 +173,18 @@ public enum ChatOpenWebUIImport {
         }
         guard !mapped.isEmpty else { throw invalid("Active path contains no representable user/assistant text.") }
         if nodes.count != path.count {
-            try addLoss("chat.history.messages", "\(nodes.count - path.count) alternate-branch message(s) omitted; only the currentId path is imported.", kind: .branches, count: nodes.count - path.count, to: &losses)
+            try addLoss("chat.history.messages", "\(nodes.count - path.count) alternate-branch message(s) omitted; only the currentId path is imported.", pointer: entry.chatPointer + "/history/messages", kind: .branches, count: nodes.count - path.count, to: &losses)
         }
         if let outer = entry.outer {
             for field in outer.keys.sorted() where field != "chat" {
-                try addLoss(field, "Archive entry field omitted.", kind: .archiveField, field: field, to: &losses)
+                try addLoss(field, "Archive entry field omitted.", pointer: entry.entryPointer + "/" + ChatInterchange.Loss.token(field), kind: .archiveField, field: field, to: &losses)
             }
         }
         for field in entry.chat.keys.sorted() where field != "title" && field != "history" {
-            try addLoss("chat.\(field)", "Chat setting or metadata omitted; no model or permission is selected.", kind: ["model", "models"].contains(field) ? .model : .setting, field: field, to: &losses)
+            try addLoss("chat.\(field)", "Chat setting or metadata omitted; no model or permission is selected.", pointer: entry.chatPointer + "/" + ChatInterchange.Loss.token(field), kind: ["model", "models"].contains(field) ? .model : .setting, field: field, to: &losses)
         }
         for field in entry.history.keys.sorted() where field != "currentId" && field != "messages" {
-            try addLoss("chat.history.\(field)", "History field omitted.", kind: .historyField, field: field, to: &losses)
+            try addLoss("chat.history.\(field)", "History field omitted.", pointer: entry.chatPointer + "/history/" + ChatInterchange.Loss.token(field), kind: .historyField, field: field, to: &losses)
         }
         return .init(format: format, version: formatVersion, systemPrompt: "", messages: mapped,
                      losses: losses, sourceTitle: entry.title, conversationIndex: index)
@@ -215,15 +218,15 @@ public enum ChatOpenWebUIImport {
             guard messages.count <= ChatInterchange.maximumMessages else {
                 throw invalid("Conversation \(index) has too many history messages (limit 1,000).")
             }
-            return .init(outer: outer, chat: chat, history: history, title: title)
+            return .init(entryPointer: root is [Any] ? "/" + String(index) : "", outer: outer, chat: chat, history: history, title: title)
         }
     }
 
     private static func addLoss(_ location: String, _ reason: String,
-                                kind: ChatInterchange.Loss.Kind, count: Int? = nil, field: String? = nil,
+                                pointer: String, kind: ChatInterchange.Loss.Kind, count: Int? = nil, field: String? = nil,
                                 messageIndex: Int? = nil, to losses: inout [ChatInterchange.Loss]) throws {
         guard losses.count < 4_096 else { throw invalid("Import has too many unsupported fields or parts.") }
-        losses.append(.init(location: location, reason: reason, kind: kind, count: count, field: field, messageIndex: messageIndex))
+        losses.append(.init(location: location, reason: reason, kind: kind, count: count, field: field, messageIndex: messageIndex, pointer: pointer))
     }
 
     private static func invalid(_ reason: String) -> ChatInterchangeError { .invalid(reason) }

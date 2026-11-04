@@ -233,8 +233,8 @@ public struct ChatState: Codable, Sendable, Equatable {
                 guard execution.record.source.sessionID == session.id else { throw WorkflowIssue("辅助任务来源不属于本会话。") }
             }
             if let details = session.importLossDetails {
-                guard details.count <= 4096, details.reduce(0, { $0 + $1.location.utf8.count + $1.reason.utf8.count + ($1.field?.utf8.count ?? 0) }) <= 1_048_576,
-                      details.allSatisfy({ ($0.count ?? 0) >= 0 && ($0.messageIndex ?? 0) >= 0 }) else {
+                guard details.count <= 4096, details.reduce(0, { $0 + $1.location.utf8.count + $1.reason.utf8.count + ($1.field?.utf8.count ?? 0) + ($1.pointer?.utf8.count ?? 0) }) <= 2_097_152,
+                      details.allSatisfy({ (0...ChatInterchange.maximumMessages).contains($0.count ?? 0) && (0..<ChatInterchange.maximumMessages).contains($0.messageIndex ?? 0) }) else {
                     throw WorkflowIssue("Imported transcript mapping details exceed the supported limit.")
                 }
             }

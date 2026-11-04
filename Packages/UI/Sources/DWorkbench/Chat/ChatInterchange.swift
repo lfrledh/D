@@ -63,14 +63,19 @@ public enum ChatInterchange {
         public let count: Int?
         public let field: String?
         public let messageIndex: Int?
+        public let pointer: String?
+        static func token(_ value: String) -> String {
+            value.replacingOccurrences(of: "~", with: "~0").replacingOccurrences(of: "/", with: "~1")
+        }
         init(location: String, reason: String, kind: Kind = .unsupported, count: Int? = nil,
-             field: String? = nil, messageIndex: Int? = nil) {
+             field: String? = nil, messageIndex: Int? = nil, pointer: String? = nil) {
             self.location = location
             self.reason = reason
             self.kind = kind
             self.count = count
             self.field = field
             self.messageIndex = messageIndex
+            self.pointer = pointer
         }
         public let location: String
         public let reason: String
@@ -215,7 +220,7 @@ public enum ChatInterchange {
             }
             let location = "messages[\(index)]"
             if role == "tool" {
-                try appendLoss(.init(location: location, reason: "Tool result omitted; no tool is executed.", kind: .tool, messageIndex: index),
+                try appendLoss(.init(location: location, reason: "Tool result omitted; no tool is executed.", kind: .tool, messageIndex: index, pointer: "/messages/\(index)"),
                                to: &losses)
                 continue
             }
@@ -245,7 +250,7 @@ public enum ChatInterchange {
                 nextRole = mapped == .user ? .assistant : .user
             }
             for key in raw.keys.sorted() where key != "role" && key != "content" {
-                try appendLoss(.init(location: "\(location).\(key)", reason: "Unsupported field omitted.", kind: .field(key), field: key, messageIndex: index),
+                try appendLoss(.init(location: "\(location).\(key)", reason: "Unsupported field omitted.", kind: .field(key), field: key, messageIndex: index, pointer: "/messages/\(index)/\(Loss.token(key))"),
                                to: &losses)
             }
         }
@@ -274,10 +279,10 @@ public enum ChatInterchange {
                 text += fragment
                 for key in object.keys.sorted() where key != "type" && key != "text" {
                     try appendLoss(.init(location: "\(partLocation).\(key)",
-                                         reason: "Unsupported text-part field omitted.", field: key, messageIndex: messageIndex), to: &losses)
+                                         reason: "Unsupported text-part field omitted.", field: key, messageIndex: messageIndex, pointer: "/messages/\(messageIndex)/content/\(index)/\(Loss.token(key))"), to: &losses)
                 }
             } else {
-                try appendLoss(.init(location: partLocation, reason: "Unsupported \(type) part omitted.", kind: ["image_url", "input_audio", "file"].contains(type) ? .attachment : .unsupported, field: type, messageIndex: messageIndex),
+                try appendLoss(.init(location: partLocation, reason: "Unsupported \(type) part omitted.", kind: ["image_url", "input_audio", "file"].contains(type) ? .attachment : .unsupported, field: type, messageIndex: messageIndex, pointer: "/messages/\(messageIndex)/content/\(index)"),
                                to: &losses)
             }
         }

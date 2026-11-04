@@ -96,6 +96,21 @@ struct ChatOpenWebUIImportTests {
         #expect(reason(try data(["title": "Ordinary JSON", "messages": []])).contains("history"))
     }
 
+    @Test func emptyUnfinishedMessageAndEscapedFieldLocation() throws {
+        let root = node("a/b~c", parent: NSNull(), children: [], role: "user", content: "hello", extras: ["x/y": true])
+        var c: [String: Any] = ["title": "Pointer", "history": ["currentId": "a/b~c", "messages": ["a/b~c": root]]]
+        let preview = try ChatInterchange.previewImport(data([standard(c)]))
+        #expect(preview.losses.contains { $0.pointer == "/0/chat/history/messages/a~1b~0c/x~1y" })
+        for done in [false, true] {
+            var empty = root; empty["content"] = ""; empty["done"] = done
+            c["history"] = ["currentId": "a/b~c", "messages": ["a/b~c": empty]]
+            do { _ = try ChatInterchange.previewImport(data(c)); Issue.record("Empty message accepted") }
+            catch let error as ChatInterchangeError {
+                #expect(done ? error.inputProblem == nil : error.inputProblem == .unfinished)
+            }
+        }
+    }
+
     @Test func multipleConversationsNeedSelectionAndPreserveChosenIndex() throws {
         var second = chat(); second["title"] = "Second"
         let archive = try data([standard(chat()), standard(second)])
