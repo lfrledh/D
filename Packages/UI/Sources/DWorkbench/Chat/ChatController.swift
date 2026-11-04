@@ -358,7 +358,7 @@ public enum ChatGenerationPhase: String, Sendable {
     private func invalidatePreparingSendForSelection(_ id: UUID) {
         guard preparingSendSessionID != nil, state.selectedSessionID != id else { return }
         preparingSendCancelled = true
-        toolTask?.cancel()
+        if !preparingFrozenComparison { toolTask?.cancel() }
     }
     public func rename(_ id: UUID, title: String) throws {
         try requireLoaded(); guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, title.utf8.count <= 512 else { throw WorkflowIssue("会话标题无效。") }
@@ -1773,13 +1773,13 @@ public enum ChatGenerationPhase: String, Sendable {
     }
 
     public func cancel() async {
-        if preparingSendSessionID != nil {
-            preparingSendCancelled = true; isCancelling = true
-            if !preparingFrozenComparison {
-                toolTask?.cancel()
-                _ = try? await toolTask?.value
-            }
-            if preparingSendSessionID != nil { await withCheckedContinuation { preparationWaiters.append($0) } }
+        if preparingSendSessionID != nil, runTask == nil {
+            preparingSendCancelled = true
+            isCancelling = true
+            if !preparingFrozenComparison { toolTask?.cancel() }
+            // Register before yielding. A later generation belongs to a new request.
+            await withCheckedContinuation { preparationWaiters.append($0) }
+            return
         }
         guard let task = runTask else { return }
         if !isCancelling {
