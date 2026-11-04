@@ -64,6 +64,9 @@ public enum ChatInterchange {
         public let field: String?
         public let messageIndex: Int?
         public let pointer: String?
+        var byteCount: Int {
+            location.utf8.count + reason.utf8.count + (field?.utf8.count ?? 0) + (pointer?.utf8.count ?? 0)
+        }
         static func token(_ value: String) -> String {
             value.replacingOccurrences(of: "~", with: "~0").replacingOccurrences(of: "/", with: "~1")
         }
@@ -79,6 +82,24 @@ public enum ChatInterchange {
         }
         public let location: String
         public let reason: String
+    }
+
+    /// Limit both the number and expanded size while parsing. Escaped JSON pointers
+    /// can repeat a long parent key for many otherwise tiny fields.
+    struct LossBuffer {
+        static let maximumBytes = 2_097_152
+        private(set) var values: [Loss] = []
+        private var bytes = 0
+        mutating func append(_ loss: Loss) throws {
+            guard values.count < 4_096 else {
+                throw ChatInterchangeError.invalid("Import has too many unsupported fields or parts.")
+            }
+            guard loss.byteCount <= Self.maximumBytes - bytes else {
+                throw ChatInterchangeError.invalid("Import mapping details exceed the 2 MiB preview limit.")
+            }
+            bytes += loss.byteCount
+            values.append(loss)
+        }
     }
 
     /// Parsing and previewing never changes ChatState or executes imported content.
@@ -210,7 +231,7 @@ public enum ChatInterchange {
 
         var systemPrompt = ""
         var messages: [ImportedMessage] = []
-        var losses: [Loss] = []
+        var losses = LossBuffer()
         var sawSystem = false
         var nextRole: ImportedMessage.Role = .user
         var textBytes = 0
@@ -258,10 +279,10 @@ public enum ChatInterchange {
             throw ChatInterchangeError.invalid("Import contains no user/assistant text.")
         }
         return .init(format: sourceFormat, version: sourceVersion, systemPrompt: systemPrompt,
-                     messages: messages, losses: losses)
+                     messages: messages, losses: losses.values)
     }
 
-    private static func textContent(_ value: Any, at location: String, messageIndex: Int, losses: inout [Loss]) throws -> String {
+    private static func textContent(_ value: Any, at location: String, messageIndex: Int, losses: inout LossBuffer) throws -> String {
         if let text = value as? String { return text }
         guard let parts = value as? [Any], !parts.isEmpty, parts.count <= maximumMessages else {
             throw ChatInterchangeError.invalid("Content at \(location) must be text or a bounded parts array.")
@@ -289,11 +310,8 @@ public enum ChatInterchange {
         return text
     }
 
-    private static func appendLoss(_ loss: Loss, to losses: inout [Loss]) throws {
-        guard losses.count < 4_096 else {
-            throw ChatInterchangeError.invalid("Import has too many unsupported fields or parts.")
-        }
-        losses.append(loss)
+    private static func appendLoss(_ loss: Loss, to losses: inout LossBuffer) throws {
+        try losses.append(loss)
     }
 
     static func checkJSONDepth(_ data: Data) throws {

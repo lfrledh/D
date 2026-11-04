@@ -843,10 +843,9 @@ struct ChatWorkbenchView: View {
                 }.padding(20).frame(minWidth: 560, minHeight: 360)
             case .conversationImport(let data, let title):
                 ChatConversationImportSheet(data: data, title: title, containsImport: { id in chat.state.sessions.contains { $0.id == id } },
-                    onCancel: { sheets.detail = nil }, onAccept: { index, chosenTitle, allowingLosses, importID in
+                    onClose: { sheets.detail = nil }, onAccept: { index, chosenTitle, allowingLosses, importID in
                         _ = try await chat.importConversation(data, title: chosenTitle, allowingLosses: allowingLosses,
                                                               importID: importID, selectedConversationIndex: index)
-                        sheets.detail = nil
                     })
             case .preview(let preview):
                 VStack(alignment: .leading) {

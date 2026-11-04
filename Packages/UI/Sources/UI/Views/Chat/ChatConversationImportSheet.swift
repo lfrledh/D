@@ -6,7 +6,7 @@ struct ChatConversationImportSheet: View {
     let data: Data
     let title: String
     let containsImport: (UUID) -> Bool
-    let onCancel: () -> Void
+    let onClose: () -> Void
     let onAccept: (Int?, String, Bool, UUID) async throws -> Void
     @Environment(\.dLanguageStore) private var language
     @State private var choices: [ChatOpenWebUIImport.ConversationChoice] = []
@@ -22,6 +22,21 @@ struct ChatConversationImportSheet: View {
     private func report(_ error: Error) {
         issue = error.localizedDescription
         issueKey = (error as? ChatInterchangeError).map { "chat.conversationImportSheet.error." + ($0.inputProblem?.rawValue ?? "structure") }
+    }
+
+    private func saveImport() async throws {
+        guard let preview, !saving, preview.losses.isEmpty || acceptLosses else {
+            throw ChatInterchangeError.invalid("Import preview or approval is unavailable.")
+        }
+        saving = true
+        defer { saving = false }
+        do {
+            try await onAccept(preview.conversationIndex, preview.sourceTitle ?? title, acceptLosses, importID)
+            pendingSave = false
+        } catch {
+            pendingSave = containsImport(importID)
+            throw error
+        }
     }
 
     var body: some View {
@@ -69,20 +84,16 @@ struct ChatConversationImportSheet: View {
                 } else { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             }
             HStack {
-                WorkbenchRequestCloseButton(title: workflowText(language, "workflow.action.cancel"), fallback: onCancel).disabled(saving)
+                WorkbenchRequestCloseButton(title: workflowText(language, "workflow.action.cancel"), fallback: onClose).disabled(saving)
                 Spacer()
                 Button(workflowText(language, pendingSave ? "chat.retrySave" : "chat.conversationImportSheet.createImportedConversation")) {
-                    guard let preview else { return }
-                    saving = true
                     Task { @MainActor in
-                        defer { saving = false }
-                        do { try await onAccept(preview.conversationIndex, preview.sourceTitle ?? title, acceptLosses, importID) }
-                        catch { pendingSave = containsImport(importID); report(error) }
+                        do { try await saveImport(); onClose() } catch { report(error) }
                     }
                 }.disabled(saving || preview == nil || (preview?.losses.isEmpty == false && !acceptLosses))
             }
         }.padding(20).frame(maxWidth: .infinity, maxHeight: .infinity)
-        .workbenchCloseProtection(isDirty: pendingSave, isSaving: saving, allowsDiscard: false)
+        .workbenchCloseProtection(isDirty: pendingSave, isSaving: saving, allowsDiscard: false, save: { try await saveImport() })
         .task {
             do {
                 choices = (try? ChatOpenWebUIImport.conversations(in: data)) ?? []

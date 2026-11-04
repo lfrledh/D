@@ -111,6 +111,15 @@ struct ChatOpenWebUIImportTests {
         }
     }
 
+    @Test func repeatedLongSourcePathsAreBoundedAtPreview() throws {
+        let id = String(repeating: "x", count: 32_768)
+        let fields = Dictionary(uniqueKeysWithValues: (0..<80).map { ("field\($0)", "x" as Any) })
+        let message = node(id, parent: NSNull(), children: [], role: "user", content: "hello", extras: fields)
+        let bytes = try data(["title": "Bounded", "history": ["currentId": id, "messages": [id: message]]])
+        #expect(bytes.count < ChatInterchange.maximumImportBytes)
+        #expect(reason(bytes).contains("preview limit"))
+    }
+
     @Test func multipleConversationsNeedSelectionAndPreserveChosenIndex() throws {
         var second = chat(); second["title"] = "Second"
         let archive = try data([standard(chat()), standard(second)])

@@ -56,7 +56,7 @@ public enum ChatOpenWebUIImport {
         // This does not depend on JSON dictionary iteration order or on the active path.
         let sortedIDs = rawMessages.keys.sorted()
         var nodes: [String: Node] = [:]
-        var losses: [ChatInterchange.Loss] = []
+        var losses = ChatInterchange.LossBuffer()
         for (ordinal, key) in sortedIDs.enumerated() {
             let pointer = entry.chatPointer + "/history/messages/" + ChatInterchange.Loss.token(key)
             let location = "chat.history.messages[\(ordinal)]"
@@ -187,7 +187,7 @@ public enum ChatOpenWebUIImport {
             try addLoss("chat.history.\(field)", "History field omitted.", pointer: entry.chatPointer + "/history/" + ChatInterchange.Loss.token(field), kind: .historyField, field: field, to: &losses)
         }
         return .init(format: format, version: formatVersion, systemPrompt: "", messages: mapped,
-                     losses: losses, sourceTitle: entry.title, conversationIndex: index)
+                     losses: losses.values, sourceTitle: entry.title, conversationIndex: index)
     }
 
     private static func archive(_ data: Data) throws -> [Entry] {
@@ -224,9 +224,8 @@ public enum ChatOpenWebUIImport {
 
     private static func addLoss(_ location: String, _ reason: String,
                                 pointer: String, kind: ChatInterchange.Loss.Kind, count: Int? = nil, field: String? = nil,
-                                messageIndex: Int? = nil, to losses: inout [ChatInterchange.Loss]) throws {
-        guard losses.count < 4_096 else { throw invalid("Import has too many unsupported fields or parts.") }
-        losses.append(.init(location: location, reason: reason, kind: kind, count: count, field: field, messageIndex: messageIndex, pointer: pointer))
+                                messageIndex: Int? = nil, to losses: inout ChatInterchange.LossBuffer) throws {
+        try losses.append(.init(location: location, reason: reason, kind: kind, count: count, field: field, messageIndex: messageIndex, pointer: pointer))
     }
 
     private static func invalid(_ reason: String) -> ChatInterchangeError { .invalid(reason) }
