@@ -1342,6 +1342,7 @@ ScrollViewReader { proxy in
                     scrollStates.capture(chat)
                     if scrollStates.markers === readingMarkers { scrollStates.markers = nil }
                     scrollRestoration = nil
+                    pendingBottomScroll = nil
                 }
                 .onChange(of: searchJump) { _, jump in
                     guard let jump, jump.sessionID == session.id,

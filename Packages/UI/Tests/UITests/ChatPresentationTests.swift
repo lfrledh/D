@@ -1049,6 +1049,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         window.makeKeyAndOrderFront(nil)
         defer { window.orderOut(nil); window.contentView = nil; window.close() }
         for target in [edited, laterAnswer.id, edited, laterAnswer.id] {
+            rectangles.removeAll()
             try chat.selectLeaf(target, sessionID: session.id)
             for _ in 0..<15 {
                 host.layoutSubtreeIfNeeded()
