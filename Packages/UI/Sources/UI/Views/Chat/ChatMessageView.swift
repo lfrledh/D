@@ -127,7 +127,6 @@ struct ChatMessageContent: View {
                 if !presentation.text.isEmpty {
                     ChatMarkdownView(messageID: message.id, text: presentation.text,
                                      rawText: presentation.rawText, isStreaming: presentation.isUnseparatedRaw)
-                        .id(message.id)
                 }
                 if !presentation.isUnseparatedRaw,
                    let calls = attempt.response?.toolCalls, !calls.isEmpty {
