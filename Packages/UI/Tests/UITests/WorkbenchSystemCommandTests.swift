@@ -14,6 +14,28 @@ import Testing
 }
 
 @Suite(.serialized) @MainActor struct WorkbenchSystemCommandTests {
+    @Test func retiringCommandBridgeCannotUnbindItsSameWindowReplacement() {
+        let window = MenuScopeWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.active = true
+        let root = NSView(frame: .init(x: 0, y: 0, width: 600, height: 400))
+        window.contentView = root
+        defer { window.close() }
+        let scope = WorkbenchCommandScope()
+        let old = WorkbenchCommandWindow.View(scope: scope)
+        root.addSubview(old)
+        let replacement = WorkbenchCommandWindow.View(scope: scope)
+        root.addSubview(replacement)
+        #expect(scope.window === window && scope.sourceView === replacement)
+        WorkbenchCommandWindow.dismantleNSView(old, coordinator: ())
+        #expect(scope.window === window && scope.sourceView === replacement)
+        old.removeFromSuperview()
+        #expect(scope.window === window && scope.sourceView === replacement)
+        #expect(scope.permitsVisibleCommands)
+        replacement.removeFromSuperview()
+        #expect(scope.window == nil && scope.sourceView == nil)
+    }
+
     @Test func visibleOwnerCommandResumesOnlyAfterAllChildGatesClose() throws {
         let window = MenuScopeWindow(contentRect: .init(x: 0, y: 0, width: 1080, height: 680),
                                      styleMask: [.titled], backing: .buffered, defer: false)

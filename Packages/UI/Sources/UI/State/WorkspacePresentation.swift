@@ -115,13 +115,29 @@ public extension FocusedValues {
 struct WorkbenchCommandWindow: NSViewRepresentable {
     let scope: WorkbenchCommandScope
     func makeNSView(context: Context) -> View { View(scope: scope) }
-    func updateNSView(_ view: View, context: Context) { view.scope = scope; scope.window = view.window; scope.sourceView = view }
-    static func dismantleNSView(_ view: View, coordinator: ()) { if view.scope.window === view.window { view.scope.window = nil } }
+    func updateNSView(_ view: View, context: Context) {
+        if view.scope !== scope { view.disconnect() }
+        view.scope = scope
+        view.connect()
+    }
+    static func dismantleNSView(_ view: View, coordinator: ()) { view.disconnect() }
     final class View: NSView {
         var scope: WorkbenchCommandScope
         init(scope: WorkbenchCommandScope) { self.scope = scope; super.init(frame: .zero) }
         required init?(coder: NSCoder) { fatalError("init(coder:)") }
-        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); scope.window = window; scope.sourceView = self }
+        func connect() {
+            guard let window else { disconnect(); return }
+            scope.window = window
+            scope.sourceView = self
+        }
+        func disconnect() {
+            // An outgoing bridge may detach after its replacement has bound
+            // the same window. It may only release its own current ownership.
+            guard scope.sourceView === self else { return }
+            scope.window = nil
+            scope.sourceView = nil
+        }
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); connect() }
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 }
