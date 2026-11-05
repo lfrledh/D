@@ -2809,10 +2809,12 @@ ScrollViewReader { proxy in
     }
 
     private func returnMessageFocus() {
+        ChatFocusProbe.record("dismiss pending=\(pendingMessageFocus != nil) detail=\(sheets.detail != nil)")
         guard sheets.detail == nil, let request = pendingMessageFocus else { return }
         pendingMessageFocus = nil
         // Run after the shared child panel restores its native responder.
         DispatchQueue.main.async {
+            ChatFocusProbe.record("return active=\(NSApp.isActive) nav=\(commandScope.permitsNavigation) commands=\(commandScope.permitsVisibleCommands) match=\(request.matches(owner: ObjectIdentifier(chat), session: session, visible: workspaceVisible))")
             guard sheets.detail == nil, sheets.narrowPanel == nil,
                   NSApp.isActive, commandScope.permitsVisibleCommands, commandScope.permitsNavigation,
                   request.matches(owner: ObjectIdentifier(chat), session: session, visible: workspaceVisible) else { return }
@@ -2821,6 +2823,7 @@ ScrollViewReader { proxy in
     }
 
     private func acceptMessageFocusReturn(_ token: UUID) -> Bool {
+        ChatFocusProbe.record("accept token=\(messageFocusReturn?.token == token) active=\(NSApp.isActive) nav=\(commandScope.permitsNavigation) commands=\(commandScope.permitsVisibleCommands)")
         guard let request = messageFocusReturn, request.token == token else { return false }
         messageFocusReturn = nil
         return NSApp.isActive && sheets.detail == nil && sheets.narrowPanel == nil &&

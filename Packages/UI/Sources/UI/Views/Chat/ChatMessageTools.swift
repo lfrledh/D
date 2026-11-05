@@ -2,6 +2,14 @@ import AppKit
 import DWorkbench
 import SwiftUI
 
+@MainActor enum ChatFocusProbe {
+    private static var count = 0
+    static func record(_ value: String) {
+        guard count < 32 else { return }; count += 1
+        NSLog("B9Focus %@", value)
+    }
+}
+
 /// An ephemeral UI request, scoped to one editor and its exact displayed path.
 struct ChatMessageFocusReturn: Equatable {
     let owner: ObjectIdentifier
@@ -116,16 +124,18 @@ struct ChatMessageTools: View {
             tools(compact: false, candidates: false).fixedSize()
             tools(compact: true, candidates: false).fixedSize()
         }
-        .onChange(of: focusedItem) { _, value in focus = value != nil || menuFocused || accessibleItem != nil }
-        .onChange(of: accessibleItem) { _, value in focus = value != nil || menuFocused || focusedItem != nil }
+        .onChange(of: focusedItem) { _, value in ChatFocusProbe.record("keyboard \(value ?? "nil")"); focus = value != nil || menuFocused || accessibleItem != nil }
+        .onChange(of: accessibleItem) { _, value in ChatFocusProbe.record("VO \(value ?? "nil")"); focus = value != nil || menuFocused || focusedItem != nil }
         .onChange(of: focusReturn, initial: true) { _, token in
             guard let token else { return }
+            ChatFocusProbe.record("row request")
             // Native child hosts can leave the SwiftUI value set while moving
             // firstResponder. Clear it before issuing a fresh, one-shot request.
             focusedItem = nil; accessibleItem = nil
             DispatchQueue.main.async {
                 guard acceptFocusReturn(token) else { return }
                 let target = user && commands.contains(where: { $0.id == "edit" && $0.enabled }) ? "edit" : "copy"
+                ChatFocusProbe.record("set \(target) VO=\(NSWorkspace.shared.isVoiceOverEnabled)")
                 focusedItem = target
                 if NSWorkspace.shared.isVoiceOverEnabled { accessibleItem = target }
             }
