@@ -3,9 +3,41 @@ import DWorkbench
 import SwiftUI
 import Testing
 @testable import UI
+@testable import SwiftStreamingMarkdown
+
+@MainActor private final class CountedMarkdownParagraph: ParagraphNSView {
+    var invalidations = 0
+    override func invalidateIntrinsicContentSize() {
+        invalidations += 1
+        super.invalidateIntrinsicContentSize()
+    }
+}
 
 @Suite("Message clarity boundaries", .serialized) @MainActor
 struct ChatMessageClarityTests {
+    @Test func unchangedNativeParagraphLayoutDoesNotInvalidateItsOwnMeasurement() {
+        let paragraph = CountedMarkdownParagraph()
+        let text = NSMutableAttributedString(string: String(repeating: "Long code history paragraph. 中文内容。 ", count: 12),
+            attributes: [.font: NSFont.systemFont(ofSize: 17)])
+        paragraph.setParagraphContents(text, animatedByWord: false)
+        paragraph.frame = .init(x: 0, y: 0, width: 320, height: 500)
+        paragraph.layout()
+        let before = paragraph.intrinsicContentSize
+        paragraph.invalidations = 0
+        for _ in 0..<12 {
+            paragraph.layout()
+            #expect(paragraph.intrinsicContentSize == before)
+        }
+        #expect(paragraph.invalidations == 0)
+        paragraph.frame.size.width = 240
+        paragraph.layout()
+        #expect(paragraph.invalidations > 0)
+        #expect(paragraph.intrinsicContentSize.height >= before.height)
+        paragraph.setParagraphContents(NSMutableAttributedString(string: "Short replacement", attributes: [.font: NSFont.systemFont(ofSize: 17)]),
+            animatedByWord: false)
+        #expect(paragraph.intrinsicContentSize.height < before.height)
+    }
+
     @Test func editingFocusReturnRequiresExactOwnerSessionAndDisplayedPath() throws {
         let owner = NSObject(), otherOwner = NSObject()
         var (session, message, _) = fixture()
