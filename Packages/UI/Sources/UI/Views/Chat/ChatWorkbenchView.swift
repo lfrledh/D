@@ -524,6 +524,7 @@ struct ChatWorkbenchView: View {
     @State private var favoritesOnly = false
     @State private var selectedTag = ""
     @State private var searchJump: ChatSearchJump?
+    @State private var pendingBottomScroll: UUID?
     @State private var inspectedAttemptID: UUID?
     @State private var showContextPreview = false
     @State private var lastBodyWidth: CGFloat = 0
@@ -730,13 +731,13 @@ struct ChatWorkbenchView: View {
         }
         .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
         .onChange(of: ObjectIdentifier(chat)) { _, _ in
-            sourceSelections = [:]; pendingMessageFocus = nil; messageFocusReturn = nil
+            sourceSelections = [:]; pendingMessageFocus = nil; messageFocusReturn = nil; pendingBottomScroll = nil
         }
         .onChange(of: workspaceVisible) { _, visible in
-            if !visible { pendingMessageFocus = nil; messageFocusReturn = nil }
+            if !visible { pendingMessageFocus = nil; messageFocusReturn = nil; pendingBottomScroll = nil }
         }
         .onChange(of: chat.state.selectedSessionID) { _, _ in
-            composerFocusRequest = nil; pendingMessageFocus = nil; messageFocusReturn = nil
+            composerFocusRequest = nil; pendingMessageFocus = nil; messageFocusReturn = nil; pendingBottomScroll = nil
         }
         .onChange(of: ChatMessageAcceptance(owner: ObjectIdentifier(chat), session: chat.state.selectedSessionID,
             loaded: chat.isLoaded, visible: workspaceVisible, count: session?.messages.count ?? 0)) { before, after in
@@ -1226,7 +1227,7 @@ ScrollViewReader { proxy in
                 .onScrollPhaseChange { _, newPhase, context in
                     guard chat.state.selectedSessionID == session.id else { return }
                     let userPhase = newPhase == .tracking || newPhase == .interacting || newPhase == .decelerating
-                    if userPhase { scrollRestoration = nil; searchJump = nil }
+                    if userPhase { scrollRestoration = nil; searchJump = nil; pendingBottomScroll = nil }
                     guard scrollRestoration?.sessionID != session.id else { return }
                     if userPhase || (userScrollingTranscript && newPhase == .idle) {
                         followsBottom = context.geometry.contentSize.height - context.geometry.contentOffset.y
@@ -1377,12 +1378,17 @@ ScrollViewReader { proxy in
     }
 
     private func scrollToLastMessage(in session: ChatSession, using proxy: ScrollViewProxy) {
-        // Resolve a concrete lazy-layout target; an estimated content edge may
-        // precede the final message until its height has been measured.
-        if let lastID = session.selectedLeafID {
-            proxy.scrollTo(lastID, anchor: .bottom)
-        } else {
-            proxy.scrollTo("chat-transcript-bottom", anchor: .bottom)
+        let request = UUID(), sessionID = session.id, leaf = session.selectedLeafID
+        pendingBottomScroll = request
+        // Do not ask a newly replaced lazy path to resolve another layout while
+        // SwiftUI is still applying that path. Only the latest intent may scroll.
+        DispatchQueue.main.async {
+            guard pendingBottomScroll == request else { return }
+            pendingBottomScroll = nil
+            guard workspaceVisible, followsBottom, chat.state.selectedSessionID == sessionID,
+                  chat.selectedSession?.selectedLeafID == leaf else { return }
+            if let leaf { proxy.scrollTo(leaf, anchor: .bottom) }
+            else { proxy.scrollTo("chat-transcript-bottom", anchor: .bottom) }
         }
     }
 

@@ -1022,6 +1022,47 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         try await close(store, root: root)
     }
 
+    @Test func switchingEditedBranchBackToLongCodeKeepsViewResponsive() async throws {
+        let code = (1...45).map { "let sample\($0) = \"历史代码 row \($0)\"" }.joined(separator: "\n")
+        let source = "# Historical code\n\nSynthetic review content.\n\n```swift\n" + code + "\n```\n\nEnd of the historical answer."
+        var session = try answeredSession(raw: source, status: .completed)
+        session.attempts[0].response = .init(rawText: source, finalText: source, finishReason: .stop)
+        let laterUser = ChatMessage(parentID: session.selectedLeafID, role: .user, text: "Later question")
+        let laterAnswer = ChatMessage(parentID: laterUser.id, role: .assistant, text: "", attemptID: UUID())
+        var laterAttempt = attempt(sessionID: session.id, user: laterUser, assistant: laterAnswer,
+            status: .completed, raw: "Short answer", node: try node())
+        laterAttempt.response = .init(rawText: "Short answer", finalText: "Short answer", finishReason: .stop)
+        session.messages += [laterUser, laterAnswer]
+        session.attempts.append(laterAttempt)
+        session.selectedLeafID = laterAnswer.id
+        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        let (chat, model, store, root) = try await fixture(state)
+        let edited = try chat.editUserMessage(session.messages[0].id, text: "Edited historical question", sessionID: session.id)
+        var rectangles: [String: CGRect] = [:]
+        let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model,
+            onChooseModel: {}, onSavedAsset: { _ in }, onAssetsChanged: {})
+            .observingLayout { rectangles[$0] = $1 })
+        let window = NSWindow(contentRect: .init(x: 80, y: 80, width: 1080, height: 612),
+            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer { window.orderOut(nil); window.contentView = nil; window.close() }
+        for target in [edited, laterAnswer.id, edited, laterAnswer.id] {
+            try chat.selectLeaf(target, sessionID: session.id)
+            for _ in 0..<15 {
+                host.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            #expect(chat.selectedSession?.selectedLeafID == target)
+            #expect(rectangles["message-\(target.uuidString)"] != nil)
+        }
+        #expect(chat.selectedSession?.attempts == session.attempts)
+        #expect(chat.selectedSession?.messages.count == 5)
+        try await chat.flush()
+        try await close(store, root: root)
+    }
+
     @Test func streamingMessageRealViewFixture() async throws {
         var session = ChatSession(title: "流式回答")
         session.configuration = try node()
