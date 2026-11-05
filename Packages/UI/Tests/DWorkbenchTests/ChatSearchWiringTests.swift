@@ -36,13 +36,17 @@ private actor SearchWiringTransport: ChatWebTransport {
 private actor SearchAnswerEngine: InferenceEngine {
     private(set) var requests: [InferenceRequest] = []
     private let emitsDelta: Bool
-    init(emitsDelta: Bool = true) { self.emitsDelta = emitsDelta }
+    private let answers: [String]
+    init(emitsDelta: Bool = true, answers: [String] = ["Local model answer"]) {
+        self.emitsDelta = emitsDelta; self.answers = answers
+    }
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        let answer = answers[min(requests.count, answers.count - 1)]
         requests.append(request)
         return .init(id: request.id, events: AsyncThrowingStream { c in
-            if emitsDelta { c.yield(.textDelta("Local model answer")) }; c.finish()
+            if emitsDelta { c.yield(.textDelta(answer)) }; c.finish()
         }, cancel: {}, outcome: {
-            .completed(.init(textResponse: .init(rawText: "Local model answer", finalText: "Local model answer", finishReason: .stop)))
+            .completed(.init(textResponse: .init(rawText: answer, finalText: answer, finishReason: .stop)))
         })
     }
 }
@@ -397,6 +401,44 @@ struct ChatSearchWiringTests {
         #expect(await transport.requests().count == count)
         #expect(await engine.requests.count == 2)
         try await store.close()
+    }
+
+    @Test func historicalCodeAnswerAndNewBranchKeepOriginalVersions() async throws {
+        let code = "## 历史代码 / Historical code\n\nSynthetic review content.\n\n" +
+            String(repeating: "A paragraph before the code. 中文与符号。\n\n", count: 3) +
+            "```swift\n" + (1...45).map { "let sample\($0) = \"历史代码 row \($0)\"\n" }.joined() +
+            "```\n\nHistorical answer end."
+        let engine = SearchAnswerEngine(answers: [code, "Latest synthetic answer. Previous code remains in history."])
+        let transport = SearchWiringTransport()
+        let (store, chat, id) = try await generationFixture(transport, engine: engine)
+        try chat.rename(id, title: "B9 historical code and focus")
+        for text in ["Historical user question", "Later user question"] {
+            try chat.updateDraft(text, sessionID: id)
+            try await chat.send(sessionID: id); await chat.waitForCompletion()
+        }
+        let original = try #require(chat.selectedSession)
+        #expect(original.messages.count == 4 && original.attempts.count == 2)
+        #expect(original.attempts.first?.response?.finalText == code)
+        #expect(original.attempts.allSatisfy { $0.status == .completed })
+        try await chat.flush()
+        let backup = store.rootURL.deletingLastPathComponent().appendingPathComponent("NativeHistory.dbackup")
+        _ = try await store.createBackup(at: backup)
+        print("B9_HISTORY_NATIVE_BACKUP=\(backup.path)")
+        let old = original.messages[0]
+        let replacement = try chat.editUserMessage(old.id, text: "Edited historical question", sessionID: id)
+        #expect(replacement != old.id)
+        let edited = try #require(chat.selectedSession)
+        #expect(edited.messages.contains(old))
+        #expect(edited.attempts == original.attempts)
+        #expect(edited.selectedLeafID == replacement)
+        #expect(await engine.requests.count == 2)
+        #expect(await transport.requests().isEmpty)
+        try await chat.flush(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        let saved = try await reopened.chatState()
+        #expect(saved.sessions.first?.attempts == original.attempts)
+        #expect(saved.sessions.first?.selectedLeafID == replacement)
+        try await reopened.close()
     }
 
     private func generationFixture(_ transport: SearchWiringTransport, engine: SearchAnswerEngine,
