@@ -171,16 +171,17 @@ extension EnvironmentValues {
         let url = cache.appendingPathComponent("B9-host-layout.json")
         observerTokens = [
             NotificationCenter.default.addObserver(forName: NSWindow.willStartLiveResizeNotification, object: nil, queue: .main) { notification in
+                guard let window = notification.object as? NSWindow else { return }
                 MainActor.assumeIsolated {
-                    guard let window = notification.object as? NSWindow else { return }
                     resizingWindow = window; records.removeAll(keepingCapacity: true)
                     stack.removeAll(keepingCapacity: true); sequence = 0; overflow = 0
                     started = ProcessInfo.processInfo.systemUptime
                 }
             },
             NotificationCenter.default.addObserver(forName: NSWindow.didEndLiveResizeNotification, object: nil, queue: .main) { notification in
+                guard let window = notification.object as? NSWindow else { return }
                 MainActor.assumeIsolated {
-                    guard let window = notification.object as? NSWindow, window === resizingWindow else { return }
+                    guard window === resizingWindow else { return }
                     let result = Snapshot(start: started, end: ProcessInfo.processInfo.systemUptime,
                         window: window.windowNumber, pid: ProcessInfo.processInfo.processIdentifier,
                         overflow: overflow + stack.count, rows: records)
