@@ -3,9 +3,54 @@ import DWorkbench
 import SwiftUI
 import Testing
 @testable import UI
+@testable import SwiftStreamingMarkdown
+
+@MainActor private final class CountedMarkdownParagraph: ParagraphNSView {
+    var invalidations = 0
+    override func invalidateIntrinsicContentSize() {
+        invalidations += 1
+        super.invalidateIntrinsicContentSize()
+    }
+}
 
 @Suite("Message clarity boundaries", .serialized) @MainActor
 struct ChatMessageClarityTests {
+    @Test func unchangedNativeParagraphLayoutDoesNotInvalidateItsOwnMeasurement() {
+        let paragraph = CountedMarkdownParagraph()
+        let text = NSMutableAttributedString(string: String(repeating: "Long code history paragraph. 中文内容。 ", count: 12),
+            attributes: [.font: NSFont.systemFont(ofSize: 17)])
+        paragraph.setParagraphContents(text, animatedByWord: false)
+        paragraph.frame = .init(x: 0, y: 0, width: 320, height: 500)
+        paragraph.layout()
+        let before = paragraph.intrinsicContentSize
+        paragraph.invalidations = 0
+        for _ in 0..<12 {
+            paragraph.layout()
+            #expect(paragraph.intrinsicContentSize == before)
+        }
+        #expect(paragraph.invalidations == 0)
+        paragraph.frame.size.width = 240
+        paragraph.layout()
+        #expect(paragraph.invalidations > 0)
+        #expect(paragraph.intrinsicContentSize.height >= before.height)
+        let originalWidthHeight = paragraph.intrinsicContentSize.height
+        let largerFont = NSMutableAttributedString(attributedString: text)
+        largerFont.addAttribute(.font, value: NSFont.systemFont(ofSize: 25),
+            range: NSRange(location: 0, length: largerFont.length))
+        paragraph.setParagraphContents(largerFont, animatedByWord: false)
+        let largerFontHeight = paragraph.intrinsicContentSize.height
+        #expect(largerFontHeight > originalWidthHeight)
+        paragraph.setParagraphContents(largerFont, lineSpacing: 12, animatedByWord: false)
+        #expect(paragraph.intrinsicContentSize.height > largerFontHeight)
+        paragraph.frame.size.width = 0; paragraph.layout()
+        paragraph.frame.size.width = 240; paragraph.layout()
+        #expect(paragraph.intrinsicContentSize.height > largerFontHeight)
+        paragraph.setParagraphContents(NSMutableAttributedString(string: "Short replacement", attributes: [.font: NSFont.systemFont(ofSize: 17)]),
+            animatedByWord: false)
+        #expect(paragraph.intrinsicContentSize.height < before.height)
+    }
+
+
     @Test func fittingMessageToolsExposeOnlyCurrentVariant() async throws {
         let messageID = UUID()
         var shown = Set<String>()
@@ -35,6 +80,23 @@ struct ChatMessageClarityTests {
             for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) }
             #expect(shown == [expected], "Only the displayed fitting alternative can own return focus")
         }
+    }
+
+    @Test func nativeParagraphAttachmentReplacementInvalidatesAtTheSameWidth() {
+        let paragraph = CountedMarkdownParagraph()
+        paragraph.frame = .init(x: 0, y: 0, width: 320, height: 300)
+        func attached(_ height: CGFloat) -> NSMutableAttributedString {
+            let attachment = NSTextAttachment()
+            attachment.attachmentCell = NSTextAttachmentCell(imageCell: NSImage(size: .init(width: 100, height: height)))
+            return NSMutableAttributedString(attachment: attachment)
+        }
+        paragraph.setParagraphContents(attached(40), animatedByWord: false)
+        paragraph.layout()
+        let short = paragraph.intrinsicContentSize.height
+        #expect(short >= 40, "The TextKit attachment fixture must have a measured height")
+        paragraph.setParagraphContents(attached(100), animatedByWord: false)
+        paragraph.layout()
+        #expect(paragraph.intrinsicContentSize.height > short)
     }
 
     @Test func editingFocusReturnRequiresExactOwnerSessionAndDisplayedPath() throws {

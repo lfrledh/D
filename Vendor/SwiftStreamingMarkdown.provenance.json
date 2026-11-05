@@ -637,7 +637,7 @@
     {
       "path": "Sources/MarkdownText/UI/Paragraph/AppKit/ParagraphNSView.swift",
       "upstreamSHA256": "676f82daf472cd7fe3da1c9fe621eabd92d8d356d2689b5a97ac16a9c4c46d6b",
-      "currentSHA256": "676f82daf472cd7fe3da1c9fe621eabd92d8d356d2689b5a97ac16a9c4c46d6b"
+      "currentSHA256": "ca624bcc2d1b267a383ff31aafe6c5b5f0486a69620ef03a171e08265c4abfba"
     },
     {
       "path": "Sources/MarkdownText/UI/Paragraph/AppKit/ParagraphView+macOS.swift",
