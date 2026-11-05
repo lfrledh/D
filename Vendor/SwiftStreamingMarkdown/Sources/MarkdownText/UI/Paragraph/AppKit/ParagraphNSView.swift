@@ -24,7 +24,6 @@ class ParagraphNSView: NSTextView {
   private var activeAnimations: [FadeAnimationData] = []
   private var fadeAnimationDisplayLink: CADisplayLink?
   private var cachedSize: CachedParagraphNSViewSize?
-  private var lastLayoutWidth: CGFloat?
 
   var textContextMenu: TextContextMenu?
   var markdownController: MarkdownController?
@@ -107,11 +106,9 @@ class ParagraphNSView: NSTextView {
 
   override func layout() {
     super.layout()
-    // A layout pass at the same width must not invalidate the measurement
-    // that requested it. Content changes already invalidate their own size.
-    guard lastLayoutWidth != bounds.width else { return }
-    lastLayoutWidth = bounds.width
-    invalidateCachedSize()
+    if bounds.width != cachedSize?.targetWidth {
+      invalidateCachedSize()
+    }
     invalidateIntrinsicContentSize()
   }
 
