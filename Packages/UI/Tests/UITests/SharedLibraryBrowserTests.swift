@@ -11,6 +11,45 @@ import UniformTypeIdentifiers
 
 @Suite @MainActor
 struct SharedLibraryBrowserTests {
+    @Test func scrollBindingKeepsItsReadOutsideBrowserConstruction() async throws {
+        let state = SharedLibraryBrowserState()
+        let store = try SharedLibraryStore()
+        var used = 0, added = 0, previewed = 0, prepared = 0, imported = 0, closed = 0
+        let browser = SharedLibraryBrowser(entries: SharedLibraryProjection.entries(models: [], readiness: [:], tools: [], projects: [], language: nil).filter { $0.item.kind == .model },
+            store: store, compact: true, canvasMode: .nodes, state: state,
+            onUse: { _ in used += 1 }, onAdd: { _ in added += 1 }, onPreview: { _ in previewed += 1 },
+            onPrepare: { _ in prepared += 1 }, onImport: { imported += 1 }, onClose: { closed += 1 })
+        let host = NSHostingView(rootView: browser)
+        host.frame = .init(x: 0, y: 0, width: 320, height: 600)
+        host.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(60))
+        host.layoutSubtreeIfNeeded()
+        var parentBodies = 0
+        let previous = WorkbenchCategoryUpdateProbe.libraryBody
+        WorkbenchCategoryUpdateProbe.libraryBody = { owner in
+            if owner == ObjectIdentifier(state) { parentBodies += 1 }
+        }
+        defer { WorkbenchCategoryUpdateProbe.libraryBody = previous }
+        let query = state.query, selection = state.selectedKeys
+        let key = state.modelScrollKey
+        for index in 0..<8 {
+            var position = ScrollPosition(idType: String.self)
+            position.scrollTo(id: "row-\(index)", anchor: .top)
+            state.navigationScrolls[key] = position
+            try await Task.sleep(for: .milliseconds(20))
+            host.layoutSubtreeIfNeeded()
+        }
+        #expect(parentBodies == 0)
+        #expect(state.query == query && state.selectedKeys == selection)
+        #expect(used + added + previewed + prepared + imported + closed == 0)
+        for index in 0..<40 {
+            let scope = SharedLibraryScrollPosition(state: state, key: "bounded-\(index)")
+            scope.position.wrappedValue = ScrollPosition(edge: .bottom)
+        }
+        #expect(state.navigationScrolls.count == 32)
+        #expect(state.navigationScrolls["bounded-39"] != nil)
+    }
+
     @Test(arguments: [
         ("Read-only sample.txt", "txt", "Read-only sample.txt"),
         ("Read-only sample.TXT", "txt", "Read-only sample.TXT"),

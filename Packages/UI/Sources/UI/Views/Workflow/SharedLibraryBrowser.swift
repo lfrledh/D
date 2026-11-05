@@ -583,6 +583,9 @@ public struct SharedLibraryBrowser: View {
     }
 
     public var body: some View {
+        #if DEBUG
+        let _ = WorkbenchCategoryUpdateProbe.libraryBody?(ObjectIdentifier(state))
+        #endif
         Group {
         if headerOnly { searchMore }
         else {
@@ -759,13 +762,8 @@ public struct SharedLibraryBrowser: View {
         }.buttonStyle(WorkbenchGlassButtonStyle()).padding(.horizontal, 12).padding(.vertical, 10)
     }
 
-    private var navigationScroll: Binding<ScrollPosition> {
-        let key = canvasMode == .nodes ? state.modelScrollKey : query.text.isEmpty ? state.operationPath.joined(separator: "/") : "search"
-        return Binding(get: { state.navigationScrolls[key] ?? ScrollPosition() }, set: { value in
-            if state.navigationScrolls[key] == nil, state.navigationScrolls.count >= 32,
-               let oldest = state.navigationScrolls.keys.sorted().first { state.navigationScrolls.removeValue(forKey: oldest) }
-            state.navigationScrolls[key] = value
-        })
+    private var navigationScrollKey: String {
+        canvasMode == .nodes ? state.modelScrollKey : query.text.isEmpty ? state.operationPath.joined(separator: "/") : "search"
     }
     private var compactBody: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -780,7 +778,7 @@ public struct SharedLibraryBrowser: View {
                     } else if canvasMode == .image || canvasMode == .video { resourceGrid }
                     else { ForEach(visible) { entry in entryRow(entry, compact: true) } }
                 }.padding(.bottom, 16)
-            }.scrollPosition(navigationScroll)
+            }.modifier(SharedLibraryScrollPosition(state: state, key: navigationScrollKey))
             searchFooter
         }.padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 16).frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -968,9 +966,9 @@ public struct SharedLibraryBrowser: View {
             Text(word("legend", "能力 / 我的标签")).font(.caption2).foregroundStyle(.secondary)
             bulkControls
             if canvasMode == .nodes {
-                WorkbenchScrollView { modelGroups.padding(.bottom, 16) }.scrollPosition(navigationScroll)
+                WorkbenchScrollView { modelGroups.padding(.bottom, 16) }.modifier(SharedLibraryScrollPosition(state: state, key: navigationScrollKey))
             } else if canvasMode == .programs, query.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                WorkbenchScrollView { operationNavigation.padding(.bottom, 16) }.scrollPosition(navigationScroll)
+                WorkbenchScrollView { operationNavigation.padding(.bottom, 16) }.modifier(SharedLibraryScrollPosition(state: state, key: navigationScrollKey))
             } else if case .failure = visibleResult {
                 Spacer()
             } else if visible.isEmpty {
@@ -978,11 +976,11 @@ public struct SharedLibraryBrowser: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if canvasMode == .image || canvasMode == .video || (canvasMode == nil && query.contentKinds.count == 1 && (query.contentKinds.contains(.image) || query.contentKinds.contains(.video))) {
                 WorkbenchScrollView { resourceGrid.padding(.bottom, 16) }
-                    .scrollPosition(navigationScroll).accessibilityIdentifier("shared-library-results")
+                    .modifier(SharedLibraryScrollPosition(state: state, key: navigationScrollKey)).accessibilityIdentifier("shared-library-results")
             } else {
                 List(selection: $state.selectedKeys) {
                     ForEach(visible) { entry in entryRow(entry, compact: false).tag(entry.id) }
-                }.listStyle(.plain).contentMargins(.bottom, 16, for: .scrollContent).scrollPosition(navigationScroll).accessibilityIdentifier("shared-library-results")
+                }.listStyle(.plain).contentMargins(.bottom, 16, for: .scrollContent).modifier(SharedLibraryScrollPosition(state: state, key: navigationScrollKey)).accessibilityIdentifier("shared-library-results")
             }
             searchFooter
         }.padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 16)
@@ -1982,5 +1980,25 @@ private struct LibraryPanelSurface: ViewModifier {
     let enabled: Bool
     @ViewBuilder func body(content: Content) -> some View {
         if enabled { content.workbenchPanel(cornerRadius: 12) } else { content }
+    }
+}
+
+
+/// SwiftUI reads a closure Binding's initial value during construction. Keep that
+/// Observation dependency in the scroll modifier instead of the whole browser.
+struct SharedLibraryScrollPosition: ViewModifier {
+    let state: SharedLibraryBrowserState
+    let key: String
+    func body(content: Content) -> some View { content.scrollPosition(position) }
+    var position: Binding<ScrollPosition> {
+        Binding(get: {
+            state.navigationScrolls[key] ?? ScrollPosition()
+        }, set: { value in
+            if state.navigationScrolls[key] == nil, state.navigationScrolls.count >= 32,
+               let oldest = state.navigationScrolls.keys.sorted().first {
+                state.navigationScrolls.removeValue(forKey: oldest)
+            }
+            state.navigationScrolls[key] = value
+        })
     }
 }

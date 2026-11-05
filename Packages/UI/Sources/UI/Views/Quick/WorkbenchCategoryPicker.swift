@@ -24,6 +24,7 @@ struct WorkbenchCategoryPicker: View {
 @MainActor enum WorkbenchCategoryUpdateProbe {
     static var workbenchBody: (() -> Void)?
     static var retainedUpdate: (() -> Void)?
+    static var libraryBody: ((ObjectIdentifier) -> Void)?
     private static let enabled = ProcessInfo.processInfo.environment["D_UI_DRAG_TRACE"] == "1"
     private static var events = 0, rootUpdates = 0, retainedUpdates = 0, presentations = 0
     private static var started: TimeInterval?
