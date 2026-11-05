@@ -1042,26 +1042,77 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model,
             onChooseModel: {}, onSavedAsset: { _ in }, onAssetsChanged: {})
             .observingLayout { rectangles[$0] = $1 })
+        host.sizingOptions = []
         let window = NSWindow(contentRect: .init(x: 80, y: 80, width: 1080, height: 612),
             styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
         window.makeKeyAndOrderFront(nil)
         defer { window.orderOut(nil); window.contentView = nil; window.close() }
-        for target in [edited, laterAnswer.id, edited, laterAnswer.id] {
-            rectangles.removeAll()
+        func settle() async throws {
+            for _ in 0..<15 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(20)) }
+        }
+        try await settle()
+        let viewportHeight = try #require(rectangles["transcript"]).height
+        func expectVisible(_ target: UUID) throws {
+            // Preferences need not emit again when a retained row has the same
+            // frame. Read the mounted marker's current geometry instead.
+            let measured = model.readingState(for: chat).markers?.capture(sessionID: session.id, path: [target])
+            let point = try #require(measured)
+            #expect(chat.selectedSession?.selectedLeafID == target && point.messageID == target)
+            #expect(point.offset <= 1 && point.height - point.offset <= (rectangles["transcript"]?.height ?? viewportHeight) + 1)
+        }
+        try expectVisible(edited)
+        for target in [laterAnswer.id, edited, laterAnswer.id] {
             try chat.selectLeaf(target, sessionID: session.id)
-            for _ in 0..<15 {
-                host.layoutSubtreeIfNeeded()
-                try await Task.sleep(for: .milliseconds(20))
-            }
-            #expect(chat.selectedSession?.selectedLeafID == target)
-            #expect(rectangles["message-\(target.uuidString)"] != nil)
+            try await settle(); try expectVisible(target)
         }
         #expect(chat.selectedSession?.attempts == session.attempts)
         #expect(chat.selectedSession?.messages.count == 5)
         try await chat.flush()
         try await close(store, root: root)
+    }
+
+    @Test func streamedMarkdownKeepsTailAfterParsingAndResize() async throws {
+        var session = ChatSession(title: "Bottom follow fixture")
+        session.configuration = try node(); session.draft = "Render the table"
+        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        let engine = ChatPresentationGatedStreamEngine()
+        let (chat, model, store, root) = try await fixture(state, engine: engine)
+        var rectangles: [String: CGRect] = [:]
+        let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model,
+            onChooseModel: {}, onSavedAsset: { _ in }, onAssetsChanged: {})
+            .observingLayout { rectangles[$0] = $1 })
+        host.sizingOptions = []
+        let window = NSWindow(contentRect: .init(x: 100, y: 100, width: 1080, height: 612),
+            styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
+        defer { window.orderOut(nil); window.contentView = nil; window.close() }
+        func settle() async throws {
+            for _ in 0..<25 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(20)) }
+        }
+        try await settle()
+        try await chat.send(sessionID: session.id)
+        for _ in 0..<100 where await engine.submissions == 0 { try await Task.sleep(for: .milliseconds(10)) }
+        let source = "# Rendered table\n\n| Left | Right |\n|---|---|\n" +
+            String(repeating: "| A fairly long cell with Unicode 中文 | Another fairly long cell value |\n", count: 60) + "\nEnd of the answer."
+        await engine.emit(source)
+        try await settle()
+        let leaf = try #require(chat.selectedSession?.selectedLeafID)
+        func expectTail(_ phase: String) throws {
+            let row = try #require(rectangles["message-\(leaf.uuidString)"])
+            let viewport = try #require(rectangles["transcript"])
+            #expect(row.maxY <= viewport.maxY + 1 && row.maxY >= viewport.maxY - 24, "\(phase) must keep the last row at the bottom")
+        }
+        try expectTail("stream")
+        await engine.drain(response: .init(rawText: source, finalText: source, finishReason: .stop))
+        await chat.waitForCompletion()
+        try await settle(); try expectTail("rendered")
+        window.setContentSize(.init(width: 900, height: 612))
+        try await settle(); try expectTail("resized")
+        #expect(await engine.submissions == 1)
+        #expect(chat.selectedSession?.attempts.first?.response?.finalText == source)
+        try await chat.flush(); try await close(store, root: root)
     }
 
     @Test func streamingMessageRealViewFixture() async throws {
@@ -1293,6 +1344,14 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         #expect(sheets.narrowSheetVisible)
         sheets.didDismissNarrowPanel()
         #expect(sheets.detail == .preview && sheets.pendingDetail == nil && !sheets.narrowSheetVisible)
+    }
+
+    @Test func accessibilityReadingMovementDoesNotConfuseContentGrowthOrTailClamping() {
+        let tail = ChatScrollPosition(offset: 600, distanceToBottom: 0)
+        #expect(!ChatScrollPosition.movedUpToRead(previous: tail, current: .init(offset: 600, distanceToBottom: 400)))
+        #expect(ChatScrollPosition.movedUpToRead(previous: tail, current: .init(offset: 300, distanceToBottom: 300)))
+        #expect(!ChatScrollPosition.movedUpToRead(previous: tail, current: .init(offset: 300, distanceToBottom: 700)))
+        #expect(!ChatScrollPosition.movedUpToRead(previous: tail, current: .init(offset: 300, distanceToBottom: 0)))
     }
 
     @Test func streamingGrowthDoesNotOverrideUserScrollPosition() {
@@ -1527,6 +1586,9 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         defer { window.close() }
         let owner = ChatReadingMarkers(), sessionID = UUID(), messageID = UUID()
         owner.register(marker, messageID: messageID, sessionID: sessionID)
+        marker.isHidden = true
+        XCTAssertNil(owner.capture(sessionID: sessionID, path: [messageID]))
+        marker.isHidden = false
         for target in [CGFloat(500), 1200] {
             scroll.contentView.scroll(to: .init(x: 0, y: target))
             scroll.reflectScrolledClipView(scroll.contentView)

@@ -272,6 +272,13 @@ struct ChatScrollPosition: Equatable {
     let offset: CGFloat
     let distanceToBottom: CGFloat
 
+    static func movedUpToRead(previous: Self, current: Self) -> Bool {
+        let previousExtent = previous.offset + previous.distanceToBottom
+        let currentExtent = current.offset + current.distanceToBottom
+        return abs(currentExtent - previousExtent) <= 1
+            && current.offset < previous.offset - 1 && current.distanceToBottom > 28
+    }
+
     static func followsBottom(previous: Self, current: Self, wasFollowing: Bool) -> Bool {
         guard abs(previous.offset - current.offset) > 1 else { return wasFollowing }
         return current.distanceToBottom <= 28
@@ -356,7 +363,7 @@ struct ChatReadingPoint {
         entries = entries.filter { $0.value.view != nil }
         for id in path {
             guard let entry = entries[Key(sessionID: sessionID, messageID: id)],
-                  let view = entry.view, view.window != nil,
+                  let view = entry.view, view.window != nil, !view.isHiddenOrHasHiddenAncestor,
                   let scroll = view.enclosingScrollView else { continue }
             let rect = view.convert(view.bounds, to: nil)
             let viewport = scroll.contentView.convert(scroll.contentView.bounds, to: nil)
@@ -517,6 +524,7 @@ struct ChatWorkbenchView: View {
     let onResolveSharedAsset: ((UUID, UUID?, UUID) async throws -> (ProjectStore, WorkflowAssetReference, String))?
 
     @Environment(\.dLanguageStore) private var language
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var commandScope = WorkbenchCommandScope()
     @State private var search = ""
     @State private var showArchived = false
@@ -1250,12 +1258,14 @@ ScrollViewReader { proxy in
                 } action: { previous, current in
                     guard chat.state.selectedSessionID == session.id,
                           scrollRestoration?.sessionID != session.id else { return }
-                    // Layout and programmatic movement are not a user's choice
-                    // to leave the bottom. Only an actual scroll gesture changes follow intent.
                     if userScrollingTranscript {
                         followsBottom = ChatScrollPosition.followsBottom(previous: previous, current: current,
                             wasFollowing: followsBottom)
                         if followsBottom { hasNewContent = false }
+                    } else if voiceOverEnabled && ChatScrollPosition.movedUpToRead(previous: previous, current: current) {
+                        // AX reading can move above the tail without a pointer-scroll phase.
+                        followsBottom = false
+                        pendingBottomScroll = nil
                     }
                     traceScroll("geometry", session: session, position: current)
                     saveScrollState(for: session.id)
