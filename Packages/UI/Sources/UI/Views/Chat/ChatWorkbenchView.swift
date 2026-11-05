@@ -739,6 +739,15 @@ struct ChatWorkbenchView: View {
         .onChange(of: chat.state.selectedSessionID) { _, _ in
             composerFocusRequest = nil; pendingMessageFocus = nil; messageFocusReturn = nil; pendingBottomScroll = nil
         }
+        .onChange(of: session?.selectedLeafID) { _, leaf in
+            if messageFocusReturn?.leafID != leaf { messageFocusReturn = nil }
+        }
+        .onChange(of: commandScope.permitsVisibleCommands) { _, permitted in
+            if !permitted { messageFocusReturn = nil }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            messageFocusReturn = nil
+        }
         .onChange(of: ChatMessageAcceptance(owner: ObjectIdentifier(chat), session: chat.state.selectedSessionID,
             loaded: chat.isLoaded, visible: workspaceVisible, count: session?.messages.count ?? 0)) { before, after in
             enteringMessages = after.acceptsArrival(after: before) ? Set((session?.messages.suffix(after.count - before.count) ?? []).map(\.id)) : []
@@ -1343,6 +1352,7 @@ ScrollViewReader { proxy in
                     if scrollStates.markers === readingMarkers { scrollStates.markers = nil }
                     scrollRestoration = nil
                     pendingBottomScroll = nil
+                    messageFocusReturn = nil
                 }
                 .onChange(of: searchJump) { _, jump in
                     guard let jump, jump.sessionID == session.id,
@@ -1996,7 +2006,7 @@ ScrollViewReader { proxy in
                     disabledReasons: messageDisabledReasons(message, session: session),
                     layoutProbe: layoutProbe, messageID: message.id,
                     focusReturn: focusReturnToken(for: message.id, in: session.id),
-                    acceptFocusReturn: acceptMessageFocusReturn)
+                    acceptFocusReturn: acceptMessageFocusReturn, finishFocusReturn: finishMessageFocusReturn)
             } footer: {
                 if !noticeKeys.isEmpty || attempt?.issue != nil || attempt?.automaticSearch?.noticeKey != nil || reusedSearch != nil {
                     ChatMessageNoticeView(attempt: attempt, keys: noticeKeys, reusedSearch: reusedSearch,
@@ -2825,10 +2835,17 @@ ScrollViewReader { proxy in
     private func acceptMessageFocusReturn(_ token: UUID) -> Bool {
         ChatFocusProbe.record("accept token=\(messageFocusReturn?.token == token) active=\(NSApp.isActive) nav=\(commandScope.permitsNavigation) commands=\(commandScope.permitsVisibleCommands)")
         guard let request = messageFocusReturn, request.token == token else { return false }
-        messageFocusReturn = nil
-        return NSApp.isActive && sheets.detail == nil && sheets.narrowPanel == nil &&
+        let valid = NSApp.isActive && sheets.detail == nil && sheets.narrowPanel == nil &&
             commandScope.permitsVisibleCommands && commandScope.permitsNavigation &&
             request.matches(owner: ObjectIdentifier(chat), session: session, visible: workspaceVisible)
+        if !valid { messageFocusReturn = nil }
+        return valid
+    }
+
+    private func finishMessageFocusReturn(_ token: UUID) {
+        guard messageFocusReturn?.token == token else { return }
+        ChatFocusProbe.record("applied")
+        messageFocusReturn = nil
     }
 
     private func present(_ item: ChatDetail) {
