@@ -427,7 +427,6 @@ struct ChatReadingPoint {
         let before = clip.bounds.origin.y
         var proposed = clip.bounds
         proposed.origin.y += clip.isFlipped ? delta : -delta
-        B9NativeScrollProbe.record("native-reading-align")
         clip.scroll(to: clip.constrainBoundsRect(proposed).origin)
         scroll.reflectScrolledClipView(clip)
         let movement = clip.bounds.origin.y - before
@@ -470,16 +469,6 @@ private struct ChatReadingMarker: NSViewRepresentable {
     }
 }
 #endif
-
-// Temporary B9 normal-App attribution; removed before product delivery.
-@MainActor private enum B9NativeScrollProbe {
-    private static var count = 0
-    static func record(_ event: String) {
-        guard ProcessInfo.processInfo.environment["D_B9_VO_SCROLL_PROBE"] == "1", count < 64 else { return }
-        count += 1
-        NSLog("B9_NATIVE_SCROLL %d %.6f %@", count, ProcessInfo.processInfo.systemUptime, event)
-    }
-}
 
 private enum ChatLayoutSpace { static let name = "chat-presentation-layout" }
 
@@ -1322,7 +1311,6 @@ ScrollViewReader { proxy in
                             scrollToLastMessage(in: current, using: scrollProxy)
                         } else if let anchor = restore.anchor {
                             traceScroll("scroll:restore", session: session, target: anchor.uuidString)
-                            B9NativeScrollProbe.record("proxy-restore-anchor")
                             scrollProxy.scrollTo(anchor, anchor: .top)
                             if let point = restored?.readingPoint {
                                 await restoreReadingPoint(point, ticket: restore)
@@ -1332,7 +1320,6 @@ ScrollViewReader { proxy in
                     }
                 }
                 .onAppear {
-                    B9NativeScrollProbe.record("transcript-appear")
                     scrollStates.markers = readingMarkers
                     if let jump = searchJump, jump.sessionID == session.id {
                         pendingBottomScroll = nil
@@ -1354,7 +1341,6 @@ ScrollViewReader { proxy in
                             scrollToLastMessage(in: session, using: scrollProxy)
                         } else if let anchor = saved.anchor {
                             traceScroll("scroll:appear-saved", session: session, target: anchor.uuidString)
-                            B9NativeScrollProbe.record("proxy-restore-anchor")
                             scrollProxy.scrollTo(anchor, anchor: .top)
                             if let point = saved.readingPoint {
                                 let restore = ChatScrollRestoration(sessionID: session.id, followsBottom: false, anchor: anchor)
@@ -1371,7 +1357,6 @@ ScrollViewReader { proxy in
                     }
                 }
                 .onDisappear {
-                    B9NativeScrollProbe.record("transcript-disappear")
                     // Primary capture happens before shell navigation. This fallback never
                     // replaces a valid internal point with a missing/unmounted marker.
                     scrollStates.capture(chat)
@@ -1427,7 +1412,6 @@ ScrollViewReader { proxy in
             guard workspaceVisible, followsBottom, chat.state.selectedSessionID == sessionID,
                   searchJump?.sessionID != sessionID,
                   chat.selectedSession?.selectedLeafID == leaf else { return }
-            B9NativeScrollProbe.record("proxy-bottom")
             if let leaf { proxy.scrollTo(leaf, anchor: .bottom) }
             else { proxy.scrollTo("chat-transcript-bottom", anchor: .bottom) }
         }
@@ -1454,7 +1438,6 @@ ScrollViewReader { proxy in
             } else {
                 previous = nil
                 if !materialized {
-                    B9NativeScrollProbe.record("proxy-search")
                     proxy.scrollTo(jump.messageID, anchor: .top)
                     materialized = true
                 }
