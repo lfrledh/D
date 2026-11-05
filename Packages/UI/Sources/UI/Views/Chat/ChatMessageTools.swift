@@ -93,12 +93,6 @@ enum ChatMessageMenuOrganization {
 
 struct ChatMessageTools: View {
     enum Variant: String { case candidates, regular, compact }
-    struct AccessibleItem: Hashable {
-        let variant: Variant
-        let action: String
-    }
-    @State private var visibleVariant: Variant?
-
     let commands: [ChatActionMenuItem]
     let menu: [ChatActionMenuItem]
     let user: Bool
@@ -118,21 +112,15 @@ struct ChatMessageTools: View {
     var focusReturn: UUID? = nil
     var acceptFocusReturn: (UUID) -> Bool = { _ in false }
     @Environment(\.chatMessageToolOpacity) private var toolOpacity
-    @FocusState private var focusedItem: String?
-    @AccessibilityFocusState(for: .voiceOver) private var accessibleItem: AccessibleItem?
     @State private var copied = false
     @State private var copyGeneration = 0
-    @State private var menuFocused = false
+
     var body: some View {
         ViewThatFits(in: .horizontal) {
             if candidateCount > 1 { tools(compact: false, candidates: true).fixedSize() }
             tools(compact: false, candidates: false).fixedSize()
             tools(compact: true, candidates: false).fixedSize()
         }
-        .onChange(of: focusedItem) { _, value in focus = value != nil || menuFocused || accessibleItem != nil }
-        .onChange(of: accessibleItem) { _, value in focus = value != nil || menuFocused || focusedItem != nil }
-        .onChange(of: focusReturn, initial: true) { _, token in requestReturn(token) }
-        .onChange(of: visibleVariant) { _, _ in requestReturn(focusReturn) }
         .task(id: copyGeneration) {
             guard copyGeneration > 0 else { return }
             try? await Task.sleep(for: .seconds(1.2))
@@ -140,84 +128,128 @@ struct ChatMessageTools: View {
         }
         .environment(\.workbenchMenuContext, contextID)
     }
-    private func requestReturn(_ token: UUID?) {
-        guard let token, let variant = visibleVariant else { return }
-        focusedItem = nil; accessibleItem = nil
-        DispatchQueue.main.async {
-            guard visibleVariant == variant, acceptFocusReturn(token) else { return }
-            guard let target = ChatMessageMenuOrganization.returnFocusID(user: user, compact: variant == .compact, commands: commands) else { return }
-            if NSWorkspace.shared.isVoiceOverEnabled {
-                accessibleItem = AccessibleItem(variant: variant, action: target)
-            } else { focusedItem = target }
-        }
-    }
 
     private func tools(compact: Bool, candidates: Bool) -> some View {
         let variant: Variant = candidates ? .candidates : compact ? .compact : .regular
-        return HStack(spacing: 4) {
-            ForEach(ChatMessageMenuOrganization.primaryIDs(user: user, compact: compact), id: \.self) { id in
-                if let item = commands.first(where: { $0.id == id }) {
-                    Button { activate(item) } label: {
-                        Image(systemName: id == "copy" && copied ? "checkmark" : ChatMessageMenuOrganization.symbols(id))
-                            .font(.system(size: 16)).frame(width: 28, height: 28).opacity(toolOpacity)
+        return ChatMessageToolFocus(focus: $focus, focusReturn: focusReturn,
+            returnAction: ChatMessageMenuOrganization.returnFocusID(user: user, compact: compact, commands: commands),
+            acceptFocusReturn: acceptFocusReturn) { keyboardFocus, accessibilityFocus, menuFocus in
+            HStack(spacing: 4) {
+                ForEach(ChatMessageMenuOrganization.primaryIDs(user: user, compact: compact), id: \.self) { id in
+                    if let item = commands.first(where: { $0.id == id }) {
+                        Button { activate(item) } label: {
+                            Image(systemName: id == "copy" && copied ? "checkmark" : ChatMessageMenuOrganization.symbols(id))
+                                .font(.system(size: 16)).frame(width: 28, height: 28).opacity(toolOpacity)
+                        }
+                        .buttonStyle(ChatMessageIconStyle()).focusable(interactions: [.edit, .activate])
+                        .focused(keyboardFocus, equals: id)
+                        .accessibilityFocused(accessibilityFocus, equals: id)
+                        .onKeyPress(phases: .down) { press in
+                            guard keyboardFocus.wrappedValue == id, press.modifiers.isEmpty,
+                                  press.key == .space || press.key == .return else { return .ignored }
+                            activate(item); return .handled
+                        }
+                        .disabled(!item.enabled)
+                        .help(help(item)).accessibilityLabel(id == "copy" && copied ? copiedTitle : item.title)
+                        .accessibilityIdentifier(identifier + "-" + id)
                     }
-                    .buttonStyle(ChatMessageIconStyle()).focusable(interactions: [.edit, .activate]).focused($focusedItem, equals: id)
-                    .accessibilityFocused($accessibleItem, equals: AccessibleItem(variant: variant, action: id))
-                    .onKeyPress(phases: .down) { press in
-                        guard focusedItem == id, press.modifiers.isEmpty, press.key == .space || press.key == .return else { return .ignored }
-                        activate(item); return .handled
-                    }
-                    .disabled(!item.enabled)
-                    .help(help(item)).accessibilityLabel(id == "copy" && copied ? copiedTitle : item.title)
-                    .accessibilityIdentifier(identifier + "-" + id)
                 }
-            }
-            WorkbenchMenu(moreTitle, keyboardFocusable: true, onPresentationChange: { menuOpen = $0 }, onFocusChange: {
-                menuFocused = $0; focus = $0 || focusedItem != nil || accessibleItem != nil
-            }) { WorkbenchMenuRows(items: menu.map(ChatActionMenu.convert)) } label: {
-                Image(systemName: "ellipsis").font(.system(size: 16)).frame(width: 28, height: 28).opacity(toolOpacity)
-            }.buttonStyle(ChatMessageIconStyle()).help(moreTitle).accessibilityLabel(moreTitle)
-                .accessibilityIdentifier(identifier)
-                .chatMeasured("message-menu-\(messageID.uuidString)", probe: layoutProbe)
-            if candidates, let choices = commands.first(where: { $0.id == "candidates" })?.children {
-                HStack(spacing: 0) {
-                    candidateButton("chevron.left", item: choices[max(0, candidateIndex - 1)], enabled: candidateIndex > 0)
-                    Text("\(candidateIndex + 1) / \(candidateCount)").font(.caption).monospacedDigit().opacity(toolOpacity)
-                    candidateButton("chevron.right", item: choices[min(choices.count - 1, candidateIndex + 1)], enabled: candidateIndex + 1 < choices.count)
+                WorkbenchMenu(moreTitle, keyboardFocusable: true,
+                    onPresentationChange: { menuOpen = $0 },
+                    onFocusChange: { menuFocus.wrappedValue = $0 }) {
+                        WorkbenchMenuRows(items: menu.map(ChatActionMenu.convert))
+                    } label: {
+                        Image(systemName: "ellipsis").font(.system(size: 16))
+                            .frame(width: 28, height: 28).opacity(toolOpacity)
+                    }
+                    .buttonStyle(ChatMessageIconStyle()).help(moreTitle).accessibilityLabel(moreTitle)
+                    .accessibilityIdentifier(identifier)
+                    .chatMeasured("message-menu-\(messageID.uuidString)", probe: layoutProbe)
+                if candidates, let choices = commands.first(where: { $0.id == "candidates" })?.children {
+                    HStack(spacing: 0) {
+                        candidateButton("chevron.left", item: choices[max(0, candidateIndex - 1)],
+                            enabled: candidateIndex > 0, focus: keyboardFocus)
+                        Text("\(candidateIndex + 1) / \(candidateCount)")
+                            .font(.caption).monospacedDigit().opacity(toolOpacity)
+                        candidateButton("chevron.right", item: choices[min(choices.count - 1, candidateIndex + 1)],
+                            enabled: candidateIndex + 1 < choices.count, focus: keyboardFocus)
+                    }
                 }
             }
         }
         .onAppear {
-            visibleVariant = variant
             #if DEBUG
             ChatRowUpdateProbe.messageToolsVariant?(messageID, variant.rawValue, true)
             #endif
         }
         .onDisappear {
-            if visibleVariant == variant { visibleVariant = nil }
             #if DEBUG
             ChatRowUpdateProbe.messageToolsVariant?(messageID, variant.rawValue, false)
             #endif
         }
     }
+
     private func activate(_ item: ChatActionMenuItem) {
         guard item.enabled, item.isCurrent() else { return }
         item.action?()
         if item.id == "copy" { copied = true; copyGeneration += 1 }
     }
-    private func candidateButton(_ symbol: String, item: ChatActionMenuItem, enabled: Bool) -> some View {
-        Button { if enabled { activate(item) } } label: { Image(systemName: symbol).font(.system(size: 12)).frame(width: 28, height: 28).opacity(toolOpacity) }
-            .buttonStyle(ChatMessageIconStyle())
-            .focusable(interactions: [.edit, .activate]).focused($focusedItem, equals: symbol)
-            .onKeyPress(phases: .down) { press in
-                guard focusedItem == symbol, press.modifiers.isEmpty, press.key == .space || press.key == .return else { return .ignored }
-                if enabled { activate(item) }; return .handled
-            }.disabled(!enabled).help(item.title).accessibilityLabel(item.title)
+    private func candidateButton(_ symbol: String, item: ChatActionMenuItem, enabled: Bool,
+                                 focus: FocusState<String?>.Binding) -> some View {
+        Button { if enabled { activate(item) } } label: {
+            Image(systemName: symbol).font(.system(size: 12)).frame(width: 28, height: 28).opacity(toolOpacity)
+        }
+        .buttonStyle(ChatMessageIconStyle())
+        .focusable(interactions: [.edit, .activate]).focused(focus, equals: symbol)
+        .onKeyPress(phases: .down) { press in
+            guard focus.wrappedValue == symbol, press.modifiers.isEmpty,
+                  press.key == .space || press.key == .return else { return .ignored }
+            if enabled { activate(item) }; return .handled
+        }.disabled(!enabled).help(item.title).accessibilityLabel(item.title)
     }
     private func help(_ item: ChatActionMenuItem) -> String {
         if item.id == "copy", copied { return copiedTitle }
         let detail = item.id == "new-candidate" ? regenerateHelp : item.id == "speak" ? readHelp : ""
         return item.title + (detail.isEmpty ? "" : "\n" + detail) + (item.enabled ? "" : "\n" + (disabledReasons[item.id] ?? ""))
+    }
+}
+
+/// Fitting alternatives have separate focus locations. A hidden alternative must
+/// neither register the displayed button's binding nor consume its return request.
+private struct ChatMessageToolFocus<Content: View>: View {
+    @Binding var focus: Bool
+    let focusReturn: UUID?
+    let returnAction: String?
+    let acceptFocusReturn: (UUID) -> Bool
+    @ViewBuilder let content: (FocusState<String?>.Binding, AccessibilityFocusState<String?>.Binding, Binding<Bool>) -> Content
+    @FocusState private var keyboardFocus: String?
+    @AccessibilityFocusState(for: .voiceOver) private var accessibilityFocus: String?
+    @State private var menuFocus = false
+    @State private var mounted = false
+
+    var body: some View {
+        content($keyboardFocus, $accessibilityFocus, $menuFocus)
+            .onAppear { mounted = true; publishFocus(); requestReturn(focusReturn) }
+            .onDisappear { mounted = false }
+            .onChange(of: keyboardFocus) { _, _ in publishFocus() }
+            .onChange(of: accessibilityFocus) { _, _ in publishFocus() }
+            .onChange(of: menuFocus) { _, _ in publishFocus() }
+            .onChange(of: focusReturn) { _, token in requestReturn(token) }
+    }
+
+    private func publishFocus() {
+        guard mounted else { return }
+        let next = keyboardFocus != nil || accessibilityFocus != nil || menuFocus
+        if focus != next { focus = next }
+    }
+    private func requestReturn(_ token: UUID?) {
+        guard mounted, let token, let action = returnAction else { return }
+        keyboardFocus = nil; accessibilityFocus = nil
+        DispatchQueue.main.async {
+            guard mounted, acceptFocusReturn(token) else { return }
+            if NSWorkspace.shared.isVoiceOverEnabled { accessibilityFocus = action }
+            else { keyboardFocus = action }
+        }
     }
 }
 
