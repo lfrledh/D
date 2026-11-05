@@ -742,9 +742,6 @@ struct ChatWorkbenchView: View {
         .onChange(of: session?.selectedLeafID) { _, leaf in
             if messageFocusReturn?.leafID != leaf { messageFocusReturn = nil }
         }
-        .onChange(of: commandScope.permitsVisibleCommands) { _, permitted in
-            if !permitted { messageFocusReturn = nil }
-        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             messageFocusReturn = nil
         }
@@ -2006,7 +2003,7 @@ ScrollViewReader { proxy in
                     disabledReasons: messageDisabledReasons(message, session: session),
                     layoutProbe: layoutProbe, messageID: message.id,
                     focusReturn: focusReturnToken(for: message.id, in: session.id),
-                    acceptFocusReturn: acceptMessageFocusReturn, finishFocusReturn: finishMessageFocusReturn)
+                    acceptFocusReturn: acceptMessageFocusReturn)
             } footer: {
                 if !noticeKeys.isEmpty || attempt?.issue != nil || attempt?.automaticSearch?.noticeKey != nil || reusedSearch != nil {
                     ChatMessageNoticeView(attempt: attempt, keys: noticeKeys, reusedSearch: reusedSearch,
@@ -2819,12 +2816,10 @@ ScrollViewReader { proxy in
     }
 
     private func returnMessageFocus() {
-        ChatFocusProbe.record("dismiss pending=\(pendingMessageFocus != nil) detail=\(sheets.detail != nil)")
         guard sheets.detail == nil, let request = pendingMessageFocus else { return }
         pendingMessageFocus = nil
         // Run after the shared child panel restores its native responder.
         DispatchQueue.main.async {
-            ChatFocusProbe.record("return active=\(NSApp.isActive) nav=\(commandScope.permitsNavigation) commands=\(commandScope.permitsVisibleCommands) match=\(request.matches(owner: ObjectIdentifier(chat), session: session, visible: workspaceVisible))")
             guard sheets.detail == nil, sheets.narrowPanel == nil,
                   NSApp.isActive, commandScope.permitsVisibleCommands, commandScope.permitsNavigation,
                   request.matches(owner: ObjectIdentifier(chat), session: session, visible: workspaceVisible) else { return }
@@ -2833,19 +2828,11 @@ ScrollViewReader { proxy in
     }
 
     private func acceptMessageFocusReturn(_ token: UUID) -> Bool {
-        ChatFocusProbe.record("accept token=\(messageFocusReturn?.token == token) active=\(NSApp.isActive) nav=\(commandScope.permitsNavigation) commands=\(commandScope.permitsVisibleCommands)")
         guard let request = messageFocusReturn, request.token == token else { return false }
-        let valid = NSApp.isActive && sheets.detail == nil && sheets.narrowPanel == nil &&
+        messageFocusReturn = nil
+        return NSApp.isActive && sheets.detail == nil && sheets.narrowPanel == nil &&
             commandScope.permitsVisibleCommands && commandScope.permitsNavigation &&
             request.matches(owner: ObjectIdentifier(chat), session: session, visible: workspaceVisible)
-        if !valid { messageFocusReturn = nil }
-        return valid
-    }
-
-    private func finishMessageFocusReturn(_ token: UUID) {
-        guard messageFocusReturn?.token == token else { return }
-        ChatFocusProbe.record("applied")
-        messageFocusReturn = nil
     }
 
     private func present(_ item: ChatDetail) {
@@ -3031,6 +3018,7 @@ struct ChatMessageRow<Content: View>: View, Equatable {
 }
 #if DEBUG
 @MainActor enum ChatRowUpdateProbe {
+    static var messageToolsVariant: ((UUID, String, Bool) -> Void)?
     static var body: ((UUID) -> Void)?
     static var browserBody: (() -> Void)?
     static var searchQuery: (() -> Void)?

@@ -6,6 +6,37 @@ import Testing
 
 @Suite("Message clarity boundaries", .serialized) @MainActor
 struct ChatMessageClarityTests {
+    @Test func fittingMessageToolsExposeOnlyCurrentVariant() async throws {
+        let messageID = UUID()
+        var shown = Set<String>()
+        ChatRowUpdateProbe.messageToolsVariant = { id, variant, visible in
+            guard id == messageID else { return }
+            if visible { shown.insert(variant) } else { shown.remove(variant) }
+        }
+        let commands: [ChatActionMenuItem] = [.init(id: "copy", title: "Copy", action: {}),
+            .init(id: "edit", title: "Edit", action: {}),
+            .init(id: "candidates", title: "Candidates", children: [
+                .init(id: "one", title: "One", action: {}), .init(id: "two", title: "Two", action: {})])]
+        #expect(ChatMessageMenuOrganization.returnFocusID(user: true, compact: false, commands: commands) == "edit")
+        #expect(ChatMessageMenuOrganization.returnFocusID(user: true, compact: true, commands: commands) == "copy")
+        #expect(ChatMessageMenuOrganization.returnFocusID(user: true, compact: true, commands: [.init(id: "copy", title: "Copy", enabled: false)]) == nil)
+        let tools = ChatMessageTools(commands: commands, menu: [], user: true, contextID: "fitting-fixture",
+            identifier: "fixture-tools", candidateIndex: 0, candidateCount: 2,
+            focus: .constant(false), menuOpen: .constant(false), moreTitle: "More", copiedTitle: "Copied",
+            regenerateHelp: "", readHelp: "", disabledReasons: [:], layoutProbe: nil, messageID: messageID)
+        let host = NSHostingView(rootView: tools.frame(maxWidth: .infinity, maxHeight: .infinity))
+        host.sizingOptions = []
+        let window = NSWindow(contentRect: .init(x: 100, y: 100, width: 300, height: 100),
+            styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
+        defer { window.orderOut(nil); window.contentView = nil; window.close(); ChatRowUpdateProbe.messageToolsVariant = nil }
+        for (width, expected) in [(300.0, "candidates"), (100.0, "regular"), (64.0, "compact"), (300.0, "candidates")] {
+            window.setContentSize(.init(width: width, height: 100))
+            for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) }
+            #expect(shown == [expected], "Only the displayed fitting alternative can own return focus")
+        }
+    }
+
     @Test func editingFocusReturnRequiresExactOwnerSessionAndDisplayedPath() throws {
         let owner = NSObject(), otherOwner = NSObject()
         var (session, message, _) = fixture()
