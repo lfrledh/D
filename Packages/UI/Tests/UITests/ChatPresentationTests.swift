@@ -1656,6 +1656,9 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
 
     private func exerciseCompletedStream(replay: Bool, nativeHistory: Bool = false,
                                          hiddenWorkflow: Bool = false, sharedLibrary: Bool = false) async throws {
+        let app = NSApplication.shared, previousPolicy = NSApplication.shared.activationPolicy()
+        app.setActivationPolicy(.regular)
+        defer { app.setActivationPolicy(previousPolicy) }
         let fixture = ChatPresentationTests()
         var modelNode = try fixture.node()
         modelNode.parameters["seed"] = .text("4202")
@@ -1726,7 +1729,8 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         } else { host = NSHostingView(rootView: content) }
         host.frame = .init(x: 0, y: 0, width: 1057, height: nativeHistory ? 520 : 640)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
+        window.isReleasedWhenClosed = false; window.contentView = host; window.makeKeyAndOrderFront(nil)
+        app.activate(ignoringOtherApps: true)
         defer { window.close() }
         do {
         host.layoutSubtreeIfNeeded()
@@ -1800,6 +1804,9 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let beforeDistance = try XCTUnwrap(scroll.documentView).frame.height
             - beforeOffset - scroll.contentView.bounds.height
         if !replay {
+            guard app.isActive && window.isKeyWindow else {
+                throw XCTSkip("The test process could not become the active key-window owner; no pointer result is claimed")
+            }
             XCTAssertGreaterThan(beforeDistance, 28, "Fixture must actually start away from Bottom")
             let rect = try XCTUnwrap(frames["bottom-button"])
             let target = NSAccessibilityElement()
