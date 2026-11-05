@@ -537,6 +537,8 @@ struct ChatWorkbenchView: View {
     @State private var emptyDraftSession = ChatSession()
     @State private var composerEditorHeight: CGFloat = 0
     @State private var composerFocusRequest: UUID?
+    @State private var pendingMessageFocus: ChatMessageFocusReturn?
+    @State private var messageFocusReturn: ChatMessageFocusReturn?
     @Environment(\.workbenchSidebars) private var sharedSidebars
     @State private var localSidebars = WorkbenchSidebarState()
     private var sidebars: WorkbenchSidebarState { sharedSidebars ?? localSidebars }
@@ -727,8 +729,15 @@ struct ChatWorkbenchView: View {
             }
         }
         .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
-        .onChange(of: ObjectIdentifier(chat)) { _, _ in sourceSelections = [:] }
-        .onChange(of: chat.state.selectedSessionID) { _, _ in composerFocusRequest = nil }
+        .onChange(of: ObjectIdentifier(chat)) { _, _ in
+            sourceSelections = [:]; pendingMessageFocus = nil; messageFocusReturn = nil
+        }
+        .onChange(of: workspaceVisible) { _, visible in
+            if !visible { pendingMessageFocus = nil; messageFocusReturn = nil }
+        }
+        .onChange(of: chat.state.selectedSessionID) { _, _ in
+            composerFocusRequest = nil; pendingMessageFocus = nil; messageFocusReturn = nil
+        }
         .onChange(of: ChatMessageAcceptance(owner: ObjectIdentifier(chat), session: chat.state.selectedSessionID,
             loaded: chat.isLoaded, visible: workspaceVisible, count: session?.messages.count ?? 0)) { before, after in
             enteringMessages = after.acceptsArrival(after: before) ? Set((session?.messages.suffix(after.count - before.count) ?? []).map(\.id)) : []
@@ -741,7 +750,7 @@ struct ChatWorkbenchView: View {
             }
             if !chat.isLoaded { await chat.load() }
         }
-        .workbenchSheet(item: Binding(get: { sheets.detail }, set: { sheets.detail = $0 }), title: detailTitle) { item in
+        .workbenchSheet(item: Binding(get: { sheets.detail }, set: { sheets.detail = $0 }), title: detailTitle, onDismiss: returnMessageFocus) { item in
             switch item {
             case .edit(let edit): editSheet(edit)
             case .message(let owner, let message, let attempt):
@@ -1168,7 +1177,8 @@ ScrollViewReader { proxy in
                                 speech: chat.speechPlaybackState, language: language?.effectiveLanguageIdentifier ?? "",
                                 reusedSearch: source, latestAnswer: message.id == latestAnswerID,
                                 pendingSave: attempt.map { chat.hasUnsavedResult($0.id) } == true,
-                                saveIssue: attempt.map { chat.hasUnsavedResult($0.id) } == true ? chat.saveIssue : nil)) {
+                                saveIssue: attempt.map { chat.hasUnsavedResult($0.id) } == true ? chat.saveIssue : nil,
+                                focusReturn: focusReturnToken(for: message.id, in: session.id))) {
                                     messageCard(message, session: session, siblings: siblings, attempt: attempt, reusedSearch: source,
                                         latestAnswer: message.id == latestAnswerID)
                                 }.equatable()
@@ -1977,7 +1987,9 @@ ScrollViewReader { proxy in
                     focus: focused, menuOpen: open, moreTitle: clarity("more"), copiedTitle: clarity("copied"),
                     regenerateHelp: clarity("regenerateHelp"), readHelp: clarity("readHelp"),
                     disabledReasons: messageDisabledReasons(message, session: session),
-                    layoutProbe: layoutProbe, messageID: message.id)
+                    layoutProbe: layoutProbe, messageID: message.id,
+                    focusReturn: focusReturnToken(for: message.id, in: session.id),
+                    acceptFocusReturn: acceptMessageFocusReturn)
             } footer: {
                 if !noticeKeys.isEmpty || attempt?.issue != nil || attempt?.automaticSearch?.noticeKey != nil || reusedSearch != nil {
                     ChatMessageNoticeView(attempt: attempt, keys: noticeKeys, reusedSearch: reusedSearch,
@@ -2783,7 +2795,40 @@ ScrollViewReader { proxy in
         } catch { report(error.localizedDescription, for: sessionID, code: (error as? WorkflowIssue)?.code) }
     }
 
+    private func focusReturnToken(for message: UUID, in session: UUID) -> UUID? {
+        guard let request = messageFocusReturn, request.messageID == message,
+              request.sessionID == session else { return nil }
+        return request.token
+    }
+
+    private func returnMessageFocus() {
+        guard sheets.detail == nil, let request = pendingMessageFocus else { return }
+        pendingMessageFocus = nil
+        // Run after the shared child panel restores its native responder.
+        DispatchQueue.main.async {
+            guard sheets.detail == nil, sheets.narrowPanel == nil,
+                  NSApp.isActive, commandScope.permitsVisibleCommands, commandScope.permitsNavigation,
+                  request.matches(owner: ObjectIdentifier(chat), session: session, visible: workspaceVisible) else { return }
+            messageFocusReturn = request
+        }
+    }
+
+    private func acceptMessageFocusReturn(_ token: UUID) -> Bool {
+        guard let request = messageFocusReturn, request.token == token else { return false }
+        messageFocusReturn = nil
+        return NSApp.isActive && sheets.detail == nil && sheets.narrowPanel == nil &&
+            commandScope.permitsVisibleCommands && commandScope.permitsNavigation &&
+            request.matches(owner: ObjectIdentifier(chat), session: session, visible: workspaceVisible)
+    }
+
     private func present(_ item: ChatDetail) {
+        messageFocusReturn = nil
+        pendingMessageFocus = nil
+        if case .edit(let edit) = item, let message = edit.messageID,
+           edit.kind == .message || edit.kind == .answer {
+            pendingMessageFocus = .init(owner: ObjectIdentifier(chat), sessionID: edit.sessionID,
+                editID: edit.id, messageID: message, leafID: session?.selectedLeafID)
+        }
         // Close the actual narrow pane as well as its presentation state before
         // replacing it with a detail sheet. Inline panes remain in place.
         if sheets.narrowPanel != nil { closeNarrowPanel() }
@@ -2818,7 +2863,11 @@ ScrollViewReader { proxy in
                 case .message:
                     guard let id = edit.messageID else { throw WorkflowIssue("消息不存在。") }
                     guard chat.state.selectedSessionID == edit.sessionID else { throw WorkflowIssue("请返回原对话后再编辑消息。") }
-                    _ = try chat.editUserMessage(id, text: text, sessionID: edit.sessionID)
+                    let replacement = try chat.editUserMessage(id, text: text, sessionID: edit.sessionID)
+                    if pendingMessageFocus?.editID == edit.id {
+                        pendingMessageFocus?.messageID = replacement
+                        pendingMessageFocus?.leafID = replacement
+                    }
                 case .answer:
                     guard let id = edit.messageID else { throw WorkflowIssue("回答不存在。") }
                     try ChatContextCommands.adopt(text, messageID: id, sessionID: edit.sessionID, in: chat)
@@ -2941,6 +2990,7 @@ struct ChatMessageRow<Content: View>: View, Equatable {
         var latestAnswer = false
         var pendingSave = false
         var saveIssue: String? = nil
+        var focusReturn: UUID? = nil
     }
     let projection: Projection
     @ViewBuilder let content: () -> Content

@@ -6,6 +6,29 @@ import Testing
 
 @Suite("Message clarity boundaries", .serialized) @MainActor
 struct ChatMessageClarityTests {
+    @Test func editingFocusReturnRequiresExactOwnerSessionAndDisplayedPath() throws {
+        let owner = NSObject(), otherOwner = NSObject()
+        var (session, message, _) = fixture()
+        let editID = UUID()
+        let original = ChatMessageFocusReturn(owner: ObjectIdentifier(owner), sessionID: session.id,
+            editID: editID, messageID: message.id, leafID: session.selectedLeafID)
+        #expect(original.matches(owner: ObjectIdentifier(owner), session: session, visible: true))
+        #expect(!original.matches(owner: ObjectIdentifier(otherOwner), session: session, visible: true))
+        #expect(!original.matches(owner: ObjectIdentifier(owner), session: session, visible: false))
+        #expect(!original.matches(owner: ObjectIdentifier(owner), session: ChatSession(), visible: true))
+        #expect(!original.matches(owner: ObjectIdentifier(owner), session: nil, visible: true))
+        let replacement = ChatMessage(parentID: nil, role: .user, text: "New branch")
+        session.messages.append(replacement); session.selectedLeafID = replacement.id
+        #expect(!original.matches(owner: ObjectIdentifier(owner), session: session, visible: true))
+        var retargeted = original
+        retargeted.messageID = replacement.id; retargeted.leafID = replacement.id
+        #expect(retargeted.matches(owner: ObjectIdentifier(owner), session: session, visible: true))
+        #expect(retargeted.editID == editID && retargeted.token == original.token)
+        let repeated = ChatMessageFocusReturn(owner: ObjectIdentifier(owner), sessionID: session.id,
+            editID: UUID(), messageID: replacement.id, leafID: replacement.id)
+        #expect(repeated.token != original.token)
+    }
+
     @Test func formalLanguageResourcesLoadAndChangeWithoutMissingMessageLabels() throws {
         let store = UILanguageStore(preferredLanguages: ["en"])
         let keys = ["copyMessage", "copyAnswer", "copyCurrent", "copied", "editMessage", "regenerate", "regenerateHelp", "read", "readHelp", "more", "quote", "fork", "generation", "editAnswer", "reproduce", "saveAsset", "artifact", "fields", "raw", "viewRaw", "copyRaw", "details", "detailsTitle", "notSaved", "retrySaveHelp", "preview", "unparsed", "length", "invalidFormat", "notRecorded", "context", "candidates", "sender", "time", "displayedVersion", "edited", "originalVersion", "recordedModel", "model", "modelRevision", "precision", "parameters", "state", "technical", "generating", "stopped", "partial", "failed", "emptyBody", "toolsUnexecuted", "copyCode", "copyTable", "reasonLoading", "reasonSaving", "reasonBusy", "reasonArchived", "reasonModel", "reasonParameters", "reasonNoQuestion", "reasonSpeech"]

@@ -2,6 +2,22 @@ import AppKit
 import DWorkbench
 import SwiftUI
 
+/// An ephemeral UI request, scoped to one editor and its exact displayed path.
+struct ChatMessageFocusReturn: Equatable {
+    let owner: ObjectIdentifier
+    let sessionID: UUID
+    let editID: UUID
+    var messageID: UUID
+    var leafID: UUID?
+    let token = UUID()
+
+    func matches(owner: ObjectIdentifier, session: ChatSession?, visible: Bool) -> Bool {
+        guard visible, self.owner == owner, let session, session.id == sessionID,
+              session.selectedLeafID == leafID else { return false }
+        return ((try? session.path(to: session.selectedLeafID)) ?? []).contains { $0.id == messageID }
+    }
+}
+
 /// A command is valid for the captured displayed value, not a later selection.
 /// Equality is checked only on invocation, never by hashing/encoding every row.
 struct ChatMessageCommandTarget {
@@ -86,6 +102,9 @@ struct ChatMessageTools: View {
     let disabledReasons: [String: String]
     let layoutProbe: ((String, CGRect) -> Void)?
     let messageID: UUID
+    var focusReturn: UUID? = nil
+    var acceptFocusReturn: (UUID) -> Bool = { _ in false }
+    @AccessibilityFocusState(for: .voiceOver) private var accessibleItem: String?
     @Environment(\.chatMessageToolOpacity) private var toolOpacity
     @FocusState private var focusedItem: String?
     @State private var copied = false
@@ -97,7 +116,20 @@ struct ChatMessageTools: View {
             tools(compact: false, candidates: false).fixedSize()
             tools(compact: true, candidates: false).fixedSize()
         }
-        .onChange(of: focusedItem) { _, value in focus = value != nil || menuFocused }
+        .onChange(of: focusedItem) { _, value in focus = value != nil || menuFocused || accessibleItem != nil }
+        .onChange(of: accessibleItem) { _, value in focus = value != nil || menuFocused || focusedItem != nil }
+        .onChange(of: focusReturn, initial: true) { _, token in
+            guard let token else { return }
+            // Native child hosts can leave the SwiftUI value set while moving
+            // firstResponder. Clear it before issuing a fresh, one-shot request.
+            focusedItem = nil; accessibleItem = nil
+            DispatchQueue.main.async {
+                guard acceptFocusReturn(token) else { return }
+                let target = user && commands.contains(where: { $0.id == "edit" && $0.enabled }) ? "edit" : "copy"
+                focusedItem = target
+                if NSWorkspace.shared.isVoiceOverEnabled { accessibleItem = target }
+            }
+        }
         .task(id: copyGeneration) {
             guard copyGeneration > 0 else { return }
             try? await Task.sleep(for: .seconds(1.2))
@@ -114,6 +146,7 @@ struct ChatMessageTools: View {
                             .font(.system(size: 16)).frame(width: 28, height: 28).opacity(toolOpacity)
                     }
                     .buttonStyle(ChatMessageIconStyle()).focusable(interactions: [.edit, .activate]).focused($focusedItem, equals: id)
+                    .accessibilityFocused($accessibleItem, equals: id)
                     .onKeyPress(phases: .down) { press in
                         guard focusedItem == id, press.modifiers.isEmpty, press.key == .space || press.key == .return else { return .ignored }
                         activate(item); return .handled
@@ -124,11 +157,12 @@ struct ChatMessageTools: View {
                 }
             }
             WorkbenchMenu(moreTitle, keyboardFocusable: true, onPresentationChange: { menuOpen = $0 }, onFocusChange: {
-                menuFocused = $0; focus = $0 || focusedItem != nil
+                menuFocused = $0; focus = $0 || focusedItem != nil || accessibleItem != nil
             }) { WorkbenchMenuRows(items: menu.map(ChatActionMenu.convert)) } label: {
                 Image(systemName: "ellipsis").font(.system(size: 16)).frame(width: 28, height: 28).opacity(toolOpacity)
             }.buttonStyle(ChatMessageIconStyle()).help(moreTitle).accessibilityLabel(moreTitle)
                 .accessibilityIdentifier(identifier)
+                .accessibilityFocused($accessibleItem, equals: "more")
                 .chatMeasured("message-menu-\(messageID.uuidString)", probe: layoutProbe)
             if candidates, let choices = commands.first(where: { $0.id == "candidates" })?.children {
                 HStack(spacing: 0) {
