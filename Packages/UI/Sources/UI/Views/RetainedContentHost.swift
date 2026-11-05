@@ -183,7 +183,7 @@ extension EnvironmentValues {
                     guard let window = notification.object as? NSWindow, window === resizingWindow else { return }
                     let result = Snapshot(start: started, end: ProcessInfo.processInfo.systemUptime,
                         window: window.windowNumber, pid: ProcessInfo.processInfo.processIdentifier,
-                        overflow: overflow, rows: records)
+                        overflow: overflow + stack.count, rows: records)
                     resizingWindow = nil
                     DispatchQueue.global(qos: .utility).async {
                         if let bytes = try? JSONEncoder().encode(result) {
