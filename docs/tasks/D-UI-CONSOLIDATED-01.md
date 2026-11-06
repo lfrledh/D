@@ -18,7 +18,7 @@
 
 见[现有发行事实表](../RELEASE_FREEZE_TRY.zh-CN.md#2026-11-06-审计续办当前包来源事实i026i027)。2工具+19库摘要/声明依赖对应，漏写libvpx已纠正；FFmpeg精确源码归档原已存在，x264精确commit从安装配方定位，归档/安装变换仍缺。七引擎/ACE/WASI/MCP按实际代码来源和执行边界分开，Audio未调用旧pitch副本保留为来源一致性缺口，不擅删能力。本轮未下载源码或重建引擎/模型。
 
-固定aff包只读事实经最终3b4复核：7份engine.json、2份runtime-origin及全部引擎文件逐字节相同，Resources共54,433文件差异仅10个SwiftPM资源包Info.plist/签名，资源清单摘要相同。声明依赖不等于动态实际加载、源码配方不等于完整许可通过；arm64引擎不被主App双架构掩盖。非实施者只读来源/实包，未冒称跑模型。
+固定aff包只读事实经最终3b4复核：7份engine.json、2份runtime-origin及全部引擎文件逐字节相同，Resources共54,433文件差异仅10个SwiftPM资源包Info.plist/签名，资源清单摘要相同。声明依赖不等于动态实际加载、源码配方不等于完整许可通过；arm64引擎不被主App双架构掩盖。非实施者只读来源/实包，未冒称跑模型。 最终只读复核发现runner来源摘要与二进制摘要的措辞混淆，已分开修正为runnerSourceSHA256对runner.c、二进制对engine.json；没有改随包字节。
 
 I030 pending请求与全局updates不能准确归属；已验证交易落盘/finish不清除unknownPaymentOutcome，当前进程仍可能不允许再购，Reload不解除。无清标记/猜关联/重启绕过；不重跑25币种或改付款代码。服务端账本恢复未来额外承诺条件，不是首发必建服务。五档已定金额保留，正式商品/账户/地区/真实付款未验。
 
