@@ -6,6 +6,7 @@ import StoreKit
 import StoreKitTest
 import Testing
 import UI
+import SwiftUI
 
 private final class TipStoreKitBundle: NSObject { }
 
@@ -96,6 +97,34 @@ private final class TipStoreKitBundle: NSObject { }
         #expect(after.count == 5 && session.allTransactions().count == 5)
         #expect(Set(after.keys) == Set(records.keys))
         print("TIP_FIVE exactIDs=5 verifiedLocal=5 recordKeysUnchanged=true purchaseCount=5")
+    }
+    /// Explicit attended capture only; never a normal suite delay or a real payment.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_STOREKIT_PANEL_CAPTURE"] == "1"))
+    func localFiveTierPanelNativeCapture() async throws {
+        let session = try testSession(); defer { session.clearTransactions() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-Tip-panel-" + UUID().uuidString)
+        defer { removeTestRecords(root) }
+        let store = TipStore(productIDs: Set((1...5).map { "d.localtest.tip.tier\($0)" }),
+                             bundleID: Bundle.main.bundleIdentifier ?? "", journalURL: root.appendingPathComponent("tips.json"), localTest: true)
+        await store.loadProducts()
+        try #require(store.products.count == 5 && store.localTest)
+        let suite = "D.TipPanel." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite)); defer { defaults.removePersistentDomain(forName: suite) }
+        let language = UILanguageStore(settings: defaults, directory: root.appendingPathComponent("LanguagePacks"))
+        let window = NSWindow(contentRect: .init(x: 150, y: 150, width: 640, height: 640), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; defer { store.presented = false; window.close() }
+        window.contentView = NSHostingView(rootView: Text("StoreKit local test · no real charge").frame(maxWidth: .infinity, maxHeight: .infinity)
+            .modifier(TipPresenter(owner: store)).environment(\.dLanguageStore, language))
+        for locale in ["zh-Hans", "en"] {
+            try language.select(locale); window.title = "D Tip QA " + locale
+            window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+            store.selectedID = "d.localtest.tip.tier4"; store.presented = true
+            try await Task.sleep(for: .seconds(1))
+            print("TIP_PANEL_READY language=\(locale) pid=\(ProcessInfo.processInfo.processIdentifier) window=\(window.windowNumber)")
+            fflush(stdout)
+            try await Task.sleep(for: .seconds(24))
+        }
+        #expect(session.allTransactions().isEmpty, "Visual capture never pays")
     }
     private func testSession() throws -> SKTestSession {
         let file = try #require(Bundle(for: TipStoreKitBundle.self).url(forResource: "Tips", withExtension: "storekit"))
@@ -296,9 +325,23 @@ private final class TipStoreKitBundle: NSObject { }
             case .unverified: unverifiedUnfinished += 1
             }
         }
-        #expect(!exactUnfinished && unverifiedUnfinished == 0 && session.allTransactions().count == 1)
+        let platformRows = session.allTransactions()
+        #expect(!exactUnfinished && unverifiedUnfinished == 0)
+        #expect(platformRows.filter { $0.state == .purchased }.count == 1)
+        #expect(platformRows.contains { $0.state == .failed }, "The earlier user cancellation remains a platform attempt, not a payment")
         try session.refundTransaction(identifier:transaction.identifier)
         print("TIP_LOCAL_REFUND requested=\(acceptedID) facts=\(session.allTransactions().map { "\($0.identifier):\($0.state.rawValue):\($0.cancelDate != nil)" })")
+        // Local refund notifications have a separately recorded delivery failure.
+        // Qualify the platform's exact verified history before testing explicit Reload.
+        var platformHasRevocation = false
+        for index in 0..<5 {
+            for await result in Transaction.all {
+                if case .verified(let value) = result, value.id == acceptedID, value.revocationDate != nil { platformHasRevocation = true }
+            }
+            if platformHasRevocation { break }
+            if index < 4 { try await Task.sleep(for: .milliseconds(200)) }
+        }
+        try #require(platformHasRevocation, "Platform history must expose the exact refund; no injected fact substitutes for it")
         await store.recoverHistory(recheckAccount: true)
         #expect(store.status == .uncertain && !store.canPurchase)
         try await wait("exact approved transaction refund persisted", store: store) {
