@@ -46,7 +46,7 @@ public struct LanguageSettingsView: View {
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                         .accessibilityIdentifier("language-error")
-                    DisclosureGroup(store.text("error.original", fallback: "Original diagnostic")) {
+                    DisclosureGroup(consistencyText(store, "error.original")) {
                         Text(importIssue.diagnostic).textSelection(.enabled)
                     }
                 }
@@ -55,7 +55,7 @@ public struct LanguageSettingsView: View {
                         .font(.caption)
                         .textSelection(.enabled)
                     if !diagnostic.technicalDetails.isEmpty {
-                        DisclosureGroup(store.text("error.original", fallback: "Original diagnostic")) {
+                        DisclosureGroup(consistencyText(store, "error.original")) {
                             Text(diagnostic.technicalDetails).font(.caption).textSelection(.enabled)
                         }
                     }
