@@ -36,6 +36,8 @@ public enum TipProducts {
     private var verifiedHistory: [String: TipReceipt] = [:]
     private var verifiedJournalKeys: Set<String> = []
     private var unmatchedPurchaseKey: String?
+    private var unresolvedReceiptKeys: Set<String> = []
+    private var unknownPaymentOutcome = false
     private let credentials: any TipCredentialVault
     private let expectsLocalTest: Bool
     private var eventRevision: UInt64 = 0
@@ -115,7 +117,10 @@ public enum TipProducts {
             products.count == allowedIDs.count ? .available : .partial
     }
     public var selectedProduct: Product? { products.first { $0.id == selectedID } }
-    public var canPurchase: Bool { selectedProduct != nil && !purchasing && !loading && recoveryStatus == .ready && journalIssue == nil && ![.uncertain, .recorded, .pending].contains(status) && (!expectsLocalTest || localTest) }
+    var hasUnresolvedPayment: Bool {
+        unknownPaymentOutcome || !unresolvedReceiptKeys.isEmpty || [.uncertain, .recorded, .pending].contains(status)
+    }
+    public var canPurchase: Bool { selectedProduct != nil && !purchasing && !loading && recoveryStatus == .ready && journalIssue == nil && !hasUnresolvedPayment && (!expectsLocalTest || localTest) }
     public func purchase(confirmIn window: NSWindow) async {
         guard canPurchase, let product = selectedProduct else { return }
         let attempt = beginPurchase()
@@ -124,7 +129,10 @@ public enum TipProducts {
             switch try await product.purchase(confirmIn: window) {
             case .success(let result): await receive(result, purchase: attempt)
             case .userCancelled: status = .cancelled
-            case .pending: status = .pending
+            case .pending:
+                // StoreKit supplies no transaction identity in this result.
+                // A later global update cannot prove it belongs to this request.
+                unknownPaymentOutcome = true; status = .pending
             @unknown default: status = .uncertain
             }
         } catch StoreKitError.userCancelled { status = .cancelled }
@@ -241,6 +249,7 @@ public enum TipProducts {
             defer { if fresh { pendingAcknowledgments.remove(fact.key) } }
             // No acknowledgment before persistence; callbacks can reenter while finishing.
             await finish()
+            unresolvedReceiptKeys.remove(fact.key)
             if let purchase, purchaseID == purchase {
                 if eventRevision != revision && [.uncertain, .failed].contains(status) { return }
                 // An explicit purchase finishes even if history/updates recorded it first or
@@ -255,14 +264,28 @@ public enum TipProducts {
             guard eventRevision == revision, recoveryGeneration == scopeGeneration,
                   fact.accountID == nil || verifiedScope?.contains(fact) == true,
                   journal[fact.key]?.revoked == fact.revoked else { return }
+            if status == .recorded {
+                guard unmatchedPurchaseKey == fact.key else { return }
+                unmatchedPurchaseKey = nil
+            }
+            if unknownPaymentOutcome || !unresolvedReceiptKeys.isEmpty {
+                // Retain real, durably verified history without treating an
+                // unrelated update/refund as resolution of a protected payment.
+                if status == .pending, fresh, !fact.revoked { status = .uncertain }
+                return
+            }
             if fresh && !fact.revoked {
                 eventRevision &+= 1; diagnostic = nil; status = .thanked
             } else if fact.revoked || (status == .uncertain && !pendingAcknowledgments.contains(fact.key)) {
                 eventRevision &+= 1; diagnostic = nil; status = .idle
             }
-        } catch { markUnverified(String(describing: error)) }
+        } catch { markUnverified(String(describing: error), receiptKey: fact.key) }
     }
-    func markUnverified(_ reason: String) { eventRevision &+= 1; diagnostic = reason; status = .uncertain }
+    func markUnverified(_ reason: String, receiptKey: String? = nil) {
+        if let receiptKey, unresolvedReceiptKeys.count < 4096 { unresolvedReceiptKeys.insert(receiptKey) }
+        else { unknownPaymentOutcome = true }
+        eventRevision &+= 1; diagnostic = reason; status = .uncertain
+    }
     /// Called only after StoreKit verification; fact injection is restricted to @testable tests.
     func persistVerified(_ fact: TipReceipt, credential: String?, generation: UInt64? = nil) async throws -> Bool {
         // Validate before writing sensitive material, then revalidate after the actor hop.

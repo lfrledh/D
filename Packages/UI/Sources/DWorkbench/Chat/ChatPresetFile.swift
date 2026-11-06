@@ -10,23 +10,23 @@ public enum ChatPresetFile {
         try validate(presets)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(Envelope(presets: presets))
-        guard data.count <= 2_097_152 else { throw WorkflowIssue("预设文件超过2MiB。") }
+        guard data.count <= 2_097_152 else { throw WorkflowIssue("Chat preset file exceeds 2 MiB.", code: "chat.presetFile.tooLarge") }
         return data
     }
     /// Returns a preview; importing does not apply anything to a conversation.
     public static func decode(_ data: Data) throws -> [ChatPromptPreset] {
-        guard !data.isEmpty, data.count <= 2_097_152 else { throw WorkflowIssue("预设文件为空或超过2MiB。") }
+        guard !data.isEmpty, data.count <= 2_097_152 else { throw WorkflowIssue("Chat preset file is empty or exceeds 2 MiB.", code: "chat.presetFile.emptyOrTooLarge") }
         let value = try JSONDecoder().decode(Envelope.self, from: data)
-        guard value.version == 1 else { throw WorkflowIssue("预设版本不支持。") }
+        guard value.version == 1 else { throw WorkflowIssue("Chat preset version is unsupported.", code: "chat.presetFile.unsupportedVersion") }
         try validate(value.presets)
         let original = try JSONSerialization.jsonObject(with: data) as? NSDictionary
         let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(value)) as? NSDictionary
-        guard original == encoded else { throw WorkflowIssue("预设包含未知或无法保留的字段；未导入。") }
+        guard original == encoded else { throw WorkflowIssue("Chat preset file has unknown or unsupported fields; nothing was imported.", code: "chat.presetFile.unsupportedFields") }
         return value.presets
     }
     private static func validate(_ presets: [ChatPromptPreset]) throws {
         guard presets.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
-            throw WorkflowIssue("新预设名称不能为空白。")
+            throw WorkflowIssue("A new chat preset name cannot be blank.", code: "chat.presetFile.blankName")
         }
         var state = ChatState(); state.presets = presets; try state.validate()
     }

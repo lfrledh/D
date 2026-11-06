@@ -251,8 +251,11 @@ public final class UILanguageStore {
                 let english = resource == "en" ? nil : builtIns["en"]
                 let pack = try LanguagePackCodec.decodeBuiltIn(data, english: english)
                 if let english, Set(pack.strings.keys) != Set(english.strings.keys) {
-                    diagnostics.append(.init(.builtInIncomplete, name: resource,
-                        detail: Set(english.strings.keys).subtracting(pack.strings.keys).sorted().joined(separator: "\n")))
+                    let missing = Set(english.strings.keys).subtracting(pack.strings.keys)
+                    let extra = Set(pack.strings.keys).subtracting(english.strings.keys)
+                    diagnostics.append(.init(missing.isEmpty ? .builtInInvalid : .builtInIncomplete, name: resource,
+                        detail: "missing: " + missing.sorted().joined(separator: ", ") +
+                            "\nextra: " + extra.sorted().joined(separator: ", ")))
                     continue
                 }
                 builtIns[pack.locale] = pack

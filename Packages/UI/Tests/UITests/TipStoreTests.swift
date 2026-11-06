@@ -13,7 +13,10 @@ import Testing
         value.endRecovery(generation: generation, succeeded: true)
         let purchase = value.beginPurchase()
         await value.acceptVerified(detailed("one", account: "A"), purchase: purchase) {}
-        #expect(value.status == .recorded)
+        #expect(value.status == .recorded && value.hasUnresolvedPayment)
+        await value.acceptVerified(detailed("other-refund", account: "B", revoked: true)) {}
+        await value.acceptVerified(detailed("other-fresh", account: "B")) {}
+        #expect(value.status == .recorded && value.hasUnresolvedPayment)
         value.finishProductLoad([], failure: "controlled catalog failure")
         #expect(value.catalogStatus == .unavailable && value.status == .recorded && !value.canPurchase)
         value.finishProductLoad([])
@@ -22,7 +25,7 @@ import Testing
         try value.acceptScope(scope("A"), generation: recheck)
         try await value.mergeHistory(detailed("one", account: "A"), credential: nil, generation: recheck)
         value.endRecovery(generation: recheck, succeeded: true)
-        #expect(value.status == .thanked && value.currentSupportRecords.count == 1)
+        #expect(value.status == .thanked && value.currentSupportRecords.count == 1 && !value.hasUnresolvedPayment)
         value.markUnverified("exact verification failure")
         value.finishProductLoad([], failure: "independent catalog failure")
         #expect(value.status == .uncertain && value.diagnostic == "exact verification failure")
@@ -37,6 +40,27 @@ import Testing
         #expect(TipProducts.productionIDs == Set(["d.tip.tier1", "d.tip.tier2", "d.tip.tier3", "d.tip.tier4", "d.tip.tier5"]))
         #expect(TipProducts.localTestIDs.count == 5)
         #expect(TipProducts.productionIDs.isDisjoint(with: TipProducts.localTestIDs))
+    }
+    @Test func exactFailedReceiptCanRecoverButUnrelatedRefundCannotResolveUnknownPayment() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-protected-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let value = owner(root.appendingPathComponent("journal.json"))
+        let target = fact("target")
+        value.markUnverified("known receipt save failure", receiptKey: target.key)
+        await value.acceptVerified(fact("unrelated", revoked: true)) {}
+        #expect(value.status == .uncertain && value.hasUnresolvedPayment)
+        await value.acceptVerified(target) {}
+        #expect(value.status == .thanked && !value.hasUnresolvedPayment)
+        value.markUnverified("unknown signature failure")
+        await value.acceptVerified(fact("later", revoked: true)) {}
+        await value.acceptVerified(fact("other-new")) {}
+        #expect(value.status == .uncertain && value.hasUnresolvedPayment)
+        let production = TipStore(productIDs: ["d.localtest.tip.small"], bundleID: "D.fixture",
+            journalURL: root.appendingPathComponent("production.json"), localTest: false, credentials: FixtureTipVault())
+        var finished = false
+        await production.acceptVerified(fact("xcode-in-normal-app")) { finished = true }
+        #expect(!finished && production.status == .uncertain)
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("production.json").path))
     }
     private func owner(_ url: URL, ids: Set<String> = ["d.localtest.tip.small"]) -> TipStore {
         TipStore(productIDs: ids, bundleID: "D.fixture", journalURL: url, localTest: true, credentials: FixtureTipVault())
@@ -84,7 +108,8 @@ import Testing
         #expect(suspended != nil)
         await value.acceptVerified(fact("one")) { }
         suspended?.resume(); await original.value
-        #expect(value.status == .thanked)
+        #expect(value.status == (uncertain ? .uncertain : .thanked),
+                "An unrelated verified delivery cannot resolve an earlier unknown verification failure")
         let saved = try JSONDecoder().decode([String: TipReceipt].self, from: Data(contentsOf: root.appendingPathComponent("journal.json")))
         #expect(saved.count == 1)
     }

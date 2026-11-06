@@ -5566,6 +5566,11 @@
     "workflow.language.tools.selectionChanged": "所选节点或工作流已改变，请重新检查输入与输出。",
     "workflow.language.tools.saving": "工作流正在保存，请稍后重试。",
     "workflow.language.tools.notEditable": "当前工作流不可编辑，暂时无法创建自定义节点。",
-    "workflow.language.tools.portConflict": "输入或输出端口的信息存在冲突，无法创建自定义节点。"
+    "workflow.language.tools.portConflict": "输入或输出端口的信息存在冲突，无法创建自定义节点。",
+    "chat.presetFile.tooLarge": "聊天预设文件超过 2 MiB。",
+    "chat.presetFile.emptyOrTooLarge": "聊天预设文件为空或超过 2 MiB。",
+    "chat.presetFile.unsupportedVersion": "不支持此聊天预设版本。",
+    "chat.presetFile.unsupportedFields": "聊天预设包含未知或无法保留的字段，未导入。",
+    "chat.presetFile.blankName": "新聊天预设的名称不能为空白。"
   }
 }

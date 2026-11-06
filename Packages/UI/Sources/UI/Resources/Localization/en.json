@@ -5566,6 +5566,11 @@
     "workflow.language.tools.selectionChanged": "The selected nodes or workflow have changed. Check the inputs and outputs again.",
     "workflow.language.tools.saving": "The workflow is being saved. Try again shortly.",
     "workflow.language.tools.notEditable": "The current workflow cannot be edited, so a custom node cannot be created right now.",
-    "workflow.language.tools.portConflict": "Conflicting input or output port information prevents the custom node from being created."
+    "workflow.language.tools.portConflict": "Conflicting input or output port information prevents the custom node from being created.",
+    "chat.presetFile.tooLarge": "The chat preset file exceeds 2 MiB.",
+    "chat.presetFile.emptyOrTooLarge": "The chat preset file is empty or exceeds 2 MiB.",
+    "chat.presetFile.unsupportedVersion": "This chat preset version is not supported.",
+    "chat.presetFile.unsupportedFields": "The chat presets contain unknown fields or fields that cannot be preserved. Nothing was imported.",
+    "chat.presetFile.blankName": "A new chat preset name cannot be blank."
   }
 }

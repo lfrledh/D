@@ -51,14 +51,14 @@ private final class TipStoreKitBundle: NSObject { }
         }
         #expect(session.allTransactions().isEmpty)
     }
-    @Test func fiveActualTierSelectionsPurchaseExactProductsAndColdReadWithoutRepurchase() async throws {
+    @Test func fiveActualTierSelectionsPurchaseExactProductsAndJournalReopenWithoutRepurchase() async throws {
         let session = try testSession(); defer { session.clearTransactions() }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-StoreKit-five-" + UUID().uuidString)
         defer { removeTestRecords(root) }
         let ids = Set((1...5).map { "d.localtest.tip.tier\($0)" })
         let store = TipStore(productIDs: ids, bundleID: Bundle.main.bundleIdentifier ?? "",
                              journalURL: root.appendingPathComponent("tips.json"), localTest: true)
-        await store.loadProducts()
+        store.start(); await store.loadProducts()
         try #require(store.products.count == 5 && store.catalogStatus == .available && store.localTest)
         let expected = [Decimal(1), 5, 10, 50, 100]
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400),
@@ -72,11 +72,19 @@ private final class TipStoreKitBundle: NSObject { }
             #expect(store.selectedProduct?.id == product.id && store.canPurchase)
             await store.purchase(confirmIn: window)
             try #require(store.status == .thanked, Comment(rawValue: store.diagnostic ?? "Payment did not complete"))
-            guard case .verified(let transaction)? = await Transaction.latest(for: product.id) else {
-                Issue.record("Missing verified exact tier transaction"); return
-            }
-            #expect(transaction.productID == product.id && transaction.price == expected[index])
-            #expect(transaction.currency?.identifier == "USD" && transaction.environment == .xcode)
+            // Store's public purchase path can only acknowledge a verified SDK
+            // result after persistence and finish. Finished consumables need not
+            // appear in Transaction.latest; compare its exact durable receipt to
+            // the independent local platform transaction instead.
+            let journal = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("tips.json"))) as? [String: [String: Any]])
+            let receipt = try #require(journal.values.first { $0["productID"] as? String == product.id })
+            let transactionID = try #require((receipt["transactionID"] as? String).flatMap(UInt64.init))
+            let transaction = try #require(session.allTransactions().first { UInt64($0.identifier) == transactionID })
+            #expect(transaction.productIdentifier == product.id && transaction.state == .purchased)
+            #expect(receipt["bundleID"] as? String == Bundle.main.bundleIdentifier)
+            #expect(receipt["currency"] as? String == "USD" && receipt["environment"] as? String == AppStore.Environment.xcode.rawValue)
+            let amount = try #require(receipt["amount"] as? NSNumber)
+            #expect(amount.decimalValue == expected[index])
         }
         let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("tips.json"))) as? [String: [String: Any]])
         #expect(records.count == 5 && Set(records.values.compactMap { $0["productID"] as? String }) == ids)
@@ -271,13 +279,27 @@ private final class TipStoreKitBundle: NSObject { }
         #expect(!FileManager.default.fileExists(atPath:root.appendingPathComponent("tips.json").path))
         let pending = try #require(session.allTransactions().last)
         try session.approveAskToBuyTransaction(identifier:pending.identifier)
-        try await wait("pending approval", store: store) { store.status == .thanked }
+        try await wait("approved transaction persisted", store: store) {
+            FileManager.default.fileExists(atPath: root.appendingPathComponent("tips.json").path)
+        }
         let accepted = try #require(try JSONSerialization.jsonObject(with:Data(contentsOf:root.appendingPathComponent("tips.json"))) as? [String:Any])
         let acceptedID = try #require(accepted.values.compactMap { ($0 as? [String: Any])?["transactionID"] as? String }.first.flatMap(UInt64.init))
+        #expect(acceptedID == UInt64(pending.identifier) && accepted.count == 1)
         let transaction = try #require(session.allTransactions().first { UInt64($0.identifier) == acceptedID })
+        #expect(transaction.state == .purchased && transaction.productIdentifier == store.selectedID)
+        try await wait("unresolved request stays protected", store: store) { store.status == .uncertain }
+        #expect(!store.canPurchase)
+        var exactUnfinished = false
+        for await result in Transaction.unfinished {
+            if case .verified(let value) = result, value.id == acceptedID { exactUnfinished = true }
+        }
+        #expect(!exactUnfinished && session.allTransactions().count == 1)
         try session.refundTransaction(identifier:transaction.identifier)
         print("TIP_LOCAL_REFUND requested=\(acceptedID) facts=\(session.allTransactions().map { "\($0.identifier):\($0.state.rawValue):\($0.cancelDate != nil)" })")
-        try await wait("refund", store: store) { store.status == .idle }
+        await store.recoverHistory(recheckAccount: true)
+        #expect(store.status == .uncertain && !store.canPurchase)
+        let refunded = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("tips.json"))) as? [String: [String: Any]])
+        #expect(refunded.values.first?["revoked"] as? Bool == true)
         if case .verified(let latest)? = await Transaction.latest(for: "d.localtest.tip.tier1") {
             print("TIP_LOCAL_REFUND latestRevoked=\(latest.revocationDate != nil) environment=\(latest.environment.rawValue)")
         } else { print("TIP_LOCAL_REFUND no verified latest transaction") }

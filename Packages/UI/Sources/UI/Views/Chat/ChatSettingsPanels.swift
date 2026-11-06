@@ -65,6 +65,7 @@ struct ChatPresetsManagementPanel: View {
     @State private var busy = false
     @State private var pending: ChatPresetImportDraft?
     @State private var issue: String?
+    @State private var issueCode: String?
     private func t(_ key: String, _ en: String, _ zh: String) -> String { workflowText(language, "chat.organization." + key, fallback: language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? zh : en) }
     var body: some View {
         VStack(alignment: .leading) {
@@ -81,7 +82,7 @@ struct ChatPresetsManagementPanel: View {
                         .disabled(pending.applied)
                 }.disabled(busy)
             }
-            if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red) }
+            if let issue { WorkbenchIssueText(raw: issue, key: issueCode).foregroundStyle(.red) }
         }.workbenchCloseProtection(isDirty: pending?.applied == true, isSaving: busy,
             allowsDiscard: pending?.applied != true, save: {
                 if let pending, pending.applied {
@@ -92,8 +93,8 @@ struct ChatPresetsManagementPanel: View {
     }
     private func commitImport(_ draft: ChatPresetImportDraft) async {
         guard !busy else { return }; busy = true; defer { busy = false }
-        do { try await draft.save(chat: chat, isAvailable: isAvailable); pending = nil; issue = nil }
-        catch { issue = error.localizedDescription }
+        do { try await draft.save(chat: chat, isAvailable: isAvailable); pending = nil; issue = nil; issueCode = nil }
+        catch { issue = error.localizedDescription; issueCode = (error as? WorkflowIssue)?.code }
     }
     private func importFile() async {
         guard !busy, pending?.applied != true, isAvailable() else { return }; busy = true; defer { busy = false }
@@ -105,8 +106,8 @@ struct ChatPresetsManagementPanel: View {
             let info = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard info.isRegularFile == true, let size = info.fileSize, size <= 2_097_152 else { throw WorkflowIssue(t("presets.importLimit", "Preset file must be at most 2 MiB.", "预设文件不能超过 2 MiB。")) }
             let data = try Data(contentsOf: url)
-            pending = try ChatPresetImportDraft(data); issue = nil
-        } catch { issue = error.localizedDescription }
+            pending = try ChatPresetImportDraft(data); issue = nil; issueCode = nil
+        } catch { issue = error.localizedDescription; issueCode = (error as? WorkflowIssue)?.code }
     }
     private func export(_ values: [ChatPromptPreset]) async {
         guard !busy, isAvailable() else { return }; busy = true; defer { busy = false }
@@ -116,8 +117,8 @@ struct ChatPresetsManagementPanel: View {
             guard await panel.begin() == .OK, let url = panel.url, isAvailable() else { return }
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            _ = try await chat.store.exportChatPresets(values, exportID: UUID(), directory: url); issue = nil
-        } catch { issue = error.localizedDescription }
+            _ = try await chat.store.exportChatPresets(values, exportID: UUID(), directory: url); issue = nil; issueCode = nil
+        } catch { issue = error.localizedDescription; issueCode = (error as? WorkflowIssue)?.code }
     }
 }
 

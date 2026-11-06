@@ -29,6 +29,14 @@ struct UILocalizationTests {
         let malformed = UILanguageStore(settings: nil, directory: nil, preferredLanguages: ["en"],
             builtInData: { _ in Data("{broken".utf8) })
         #expect(malformed.diagnostics.allSatisfy { $0.reason == .builtInInvalid && $0.detail != nil })
+        let extraOnly = UILanguageStore(settings: nil, directory: nil, preferredLanguages: ["en"],
+            builtInData: { name in
+                pack(locale: name, displayName: name,
+                     strings: name == "en" ? ["known": "Known"] : ["known": "已知", "extra": "额外"])
+            })
+        let extra = try #require(extraOnly.diagnostics.first)
+        #expect(extra.reason == .builtInInvalid && extra.technicalDetails.contains("extra: extra"))
+        #expect(!extra.summary(extraOnly).contains("missing required"))
     }
     @Test func speechStatusUsesTheServicesLocaleAdmissionAndLiveLanguage() throws {
         let store = UILanguageStore(preferredLanguages: ["en"])

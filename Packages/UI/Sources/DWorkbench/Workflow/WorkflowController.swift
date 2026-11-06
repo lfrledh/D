@@ -663,6 +663,22 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
     public func publishSelection(name: String, registration: WorkflowToolRegistration,
                                  inputs: [WorkflowToolInputBinding], outputs: [WorkflowNamedOutput],
                                  expectedSelection: Set<UUID>, expectedGraphID: UUID, expectedRevision: UUID) async throws {
+        let (body, root, index) = try toolPublicationContext(expectedSelection: expectedSelection,
+            expectedGraphID: expectedGraphID, expectedRevision: expectedRevision)
+        let result = try WorkflowToolEditing.extract(body, selected: expectedSelection, name: name,
+            inputs: inputs, outputs: outputs, tools: tools, registry: registry, registration: registration)
+        let path = bodyPath
+        var next = graphs
+        next[index] = try WorkflowGraphEditing.replacingBody(in: root, path: path, with: result.graph)
+        try await commitToolPublication(graphs: next, tools: tools + [result.tool])
+        if selectedGraphID == root.id, bodyPath == path { selectedNodeID = result.invocationID; selectedNodeIDs = [] }
+        errorMessage = nil; setProgress(.init("toolSaved"))
+        await onChange()
+    }
+
+    /// Read-only admission is shared by the command and its reentrant-save check.
+    func toolPublicationContext(expectedSelection: Set<UUID>, expectedGraphID: UUID,
+                                expectedRevision: UUID) throws -> (WorkflowGraph, WorkflowGraph, Int) {
         guard !isSaving else {
             throw WorkflowIssue("The workflow is being saved.", code: "workflow.language.tools.saving")
         }
@@ -675,15 +691,7 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
               let index = graphs.firstIndex(where: { $0.id == root.id }) else {
             throw WorkflowIssue("The selected nodes or workflow have changed.", code: "workflow.language.tools.selectionChanged")
         }
-        let result = try WorkflowToolEditing.extract(body, selected: expectedSelection, name: name,
-            inputs: inputs, outputs: outputs, tools: tools, registry: registry, registration: registration)
-        let path = bodyPath
-        var next = graphs
-        next[index] = try WorkflowGraphEditing.replacingBody(in: root, path: path, with: result.graph)
-        try await commitToolPublication(graphs: next, tools: tools + [result.tool])
-        if selectedGraphID == root.id, bodyPath == path { selectedNodeID = result.invocationID; selectedNodeIDs = [] }
-        errorMessage = nil; setProgress(.init("toolSaved"))
-        await onChange()
+        return (body, root, index)
     }
 
     private func commitToolPublication(graphs next: [WorkflowGraph], tools nextTools: [WorkflowToolDefinition]) async throws {

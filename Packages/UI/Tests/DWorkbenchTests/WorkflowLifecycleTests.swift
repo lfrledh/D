@@ -630,6 +630,16 @@ struct WorkflowLifecycleTests {
         let inputs: [WorkflowToolInputBinding] = [.init(name: "input", schema: .text, sourceNode: input, sourcePort: "output")]
         let outputs: [WorkflowNamedOutput] = [.init(name: "answer", nodeID: output, schema: .text)]
         let archiveBeforeName = try await store.workflowState().archive
+        do {
+            _ = try c.toolPublicationContext(expectedSelection: [output], expectedGraphID: before.id, expectedRevision: UUID())
+            Issue.record("Changed revision was accepted")
+        } catch { #expect((error as? WorkflowIssue)?.code == "workflow.language.tools.selectionChanged") }
+        c.selectedGraphID = nil
+        do {
+            _ = try c.toolPublicationContext(expectedSelection: [output], expectedGraphID: before.id, expectedRevision: before.revision)
+            Issue.record("Noneditable workflow was accepted")
+        } catch { #expect((error as? WorkflowIssue)?.code == "workflow.language.tools.notEditable") }
+        c.selectedGraphID = before.id; c.selectedNodeIDs = [output]
         for invalidName in ["", "  ", String(repeating: "x", count: 257), String(repeating: "字", count: 86)] {
             do {
                 try await c.publishSelection(name: invalidName, registration: registration, inputs: inputs, outputs: outputs, expectedSelection: [output], expectedGraphID: before.id, expectedRevision: before.revision)
@@ -643,7 +653,13 @@ struct WorkflowLifecycleTests {
                                          expectedSelection: [], expectedGraphID: before.id, expectedRevision: before.revision)
         }
         #expect(c.graph == before && c.tools.isEmpty)
-        c.beforeHistorySave = { throw WorkflowIssue("controlled publication failure") }
+        c.beforeHistorySave = {
+            do {
+                _ = try c.toolPublicationContext(expectedSelection: [output], expectedGraphID: before.id, expectedRevision: before.revision)
+                Issue.record("Concurrent publication was accepted during saving")
+            } catch { #expect((error as? WorkflowIssue)?.code == "workflow.language.tools.saving") }
+            throw WorkflowIssue("controlled publication failure")
+        }
         do { try await c.publishSelection(name: "Tool", registration: registration, inputs: inputs, outputs: outputs, expectedSelection: [output], expectedGraphID: before.id, expectedRevision: before.revision); Issue.record("Expected save failure") }
         catch { #expect(error.localizedDescription.contains("controlled publication failure")) }
         #expect(c.graph == before && c.tools.isEmpty && !c.isSaving)

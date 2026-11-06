@@ -37,6 +37,23 @@ private actor ConfigurationPanelEngine: InferenceEngine {
 
 @Suite("Chat configuration panels", .serialized)
 @MainActor struct ChatConfigurationPanelsTests {
+    @Test func chatPresetFileFailureCodesReachTheCurrentLanguage() throws {
+        let language = UILanguageStore(preferredLanguages: ["en"])
+        let inputs = [(Data(), "emptyOrTooLarge"),
+                      (Data(#"{"version":2,"presets":[]}"#.utf8), "unsupportedVersion"),
+                      (Data(#"{"version":1,"presets":[],"extra":true}"#.utf8), "unsupportedFields")]
+        for (data, suffix) in inputs {
+            do { _ = try ChatPresetImportDraft(data); Issue.record("Invalid file accepted") }
+            catch {
+                let issue = try #require(error as? WorkflowIssue)
+                #expect(issue.code == "chat.presetFile." + suffix)
+                try language.select("en")
+                #expect(workflowText(language, try #require(issue.code)).contains("chat preset"))
+                try language.select("zh-Hans")
+                #expect(workflowText(language, try #require(issue.code)).contains("聊天预设"))
+            }
+        }
+    }
     @Test func importPreviewIsCleanAndFailedCommitRetriesOnlySaveThenColdReads() async throws {
         let (store, engine, chat, root) = try await fixture()
         defer { try? FileManager.default.removeItem(at: root) }
