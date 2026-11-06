@@ -24,6 +24,13 @@ public actor ModelLibrary {
         var retiredLocations: [RetiredLocation]?
     }
     private struct LocalPublication: Codable { let record: StoredRecord; let stagePath: String? }
+    private struct PreparedPublication: Codable {
+        let record: StoredRecord
+        let parentBookmark: Data
+        let parentIdentity: ModelFileIdentity
+        let stageLeaf: String
+        let finalLeaf: String
+    }
     private struct RetiredLocation: Codable, Sendable { let url: URL; let root: ModelFileIdentity? }
     private struct DeletionIntent: Codable, Sendable {
         let path: String
@@ -62,6 +69,7 @@ public actor ModelLibrary {
     private var disk: DiskState { didSet { stateDidChange() } }
     private var rootScope: ModelScopedLocation?
     private var libraryRoot: ModelDirectory?
+    private var preparedRecoveryIssue: (id: ModelID, message: String)?
     private var libraryLock: ModelFileHandle?
     private var externalScopes: [ModelID: ModelScopedLocation] = [:]
     private var workers: [ModelID: Task<Void, Never>] = [:]
@@ -124,6 +132,17 @@ public actor ModelLibrary {
                 throw ModelLibraryError.integrity("Invalid local model publication recovery record.")
             }
             if !disk.records.contains(where: { $0.record.id == pending.record.id }) { disk.records.append(pending) }
+        }
+        // A pending external publication is a single known inventory item. Its
+        // unavailable destination must not prevent unrelated inventory from opening.
+        var pendingPreparedID: ModelID?
+        if try Self.exists("prepared-publication.json", in: directory) {
+            let pending = try JSONDecoder().decode(PreparedPublication.self,
+                from: directory.read("prepared-publication.json", maximum: 32 * 1024 * 1024))
+            guard pending.record.record.storage == .external, pending.record.publicationRoot != nil,
+                  pending.record.control?.role == .execution else { throw ModelLibraryError.integrity("Invalid prepared publication recovery record.") }
+            pendingPreparedID = pending.record.record.id
+            if !disk.records.contains(where: { $0.record.id == pendingPreparedID }) { disk.records.append(pending.record) }
         }
         var migratedWanIDs = Set<ModelID>()
         var correctedACESourceIDs = Set<ModelID>()
@@ -189,6 +208,11 @@ public actor ModelLibrary {
             } catch { libraryRoot = nil; rootScope = nil }
         }
         try recoverLocalPublication()
+        do { try recoverPreparedPublication() }
+        catch {
+            if let id = pendingPreparedID { preparedRecoveryIssue = (id, error.localizedDescription) }
+            else { throw error }
+        }
         for value in disk.records where value.record.storage == .external {
             if let bookmark = value.bookmark {
                 do { externalScopes[value.record.id] = try ModelScopedLocation.restore(bookmark) }
@@ -414,6 +438,10 @@ public actor ModelLibrary {
         let leaseCounts = Dictionary(grouping: leases.values, by: \.modelID).mapValues(\.count)
         let records = disk.records.map { stored -> ModelRecord in
             var record = stored.record
+            if let pending = preparedRecoveryIssue, pending.id == record.id {
+                record.availability = .unavailable; record.registrationState = .unregistered
+                record.error = pending.message
+            }
             record.activeLeaseCount = leaseCounts[record.id, default: 0]
             if record.storage == .managed, stored.control?.fileState == .partial,
                stored.verifiedRoot == nil, let selectedRoot = disk.rootURL {
@@ -952,7 +980,8 @@ public actor ModelLibrary {
     public func prepareVideo(_ id: ModelID, in selectedParent: URL) async throws -> URL {
         try await prepareVideo(id, in: selectedParent, checkpoint: { _ in })
     }
-    func prepareVideo(_ id: ModelID, in selectedParent: URL, checkpoint: @escaping @Sendable (Int) throws -> Void, managedOutput: ModelID? = nil) async throws -> URL {
+    func prepareVideo(_ id: ModelID, in selectedParent: URL, checkpoint: @escaping @Sendable (Int) throws -> Void, managedOutput: ModelID? = nil,
+                      completeAddition: (@Sendable (URL) async throws -> ModelReference)? = nil) async throws -> URL {
         try requireAdmission(); try requireIdleWorker()
         guard try canPrepareVideo(id) else { throw ModelLibraryError.unavailable("此模型暂未提供原生准备操作。") }
         let original = try stored(id), entry = try entry(for: id)
@@ -961,23 +990,30 @@ public actor ModelLibrary {
         let parent = try ModelDirectory(scope.url)
         let lease = ModelUsageLease(id: UUID(), modelID: id, reference: .init(directory: source.url, revision: entry.revision))
         leases[lease.id] = lease; disk.revision &+= 1
+        let publicationID = managedOutput ?? (completeAddition == nil ? nil : ModelID())
         let name = managedOutput?.description ?? (entry.id + "-" + UUID().uuidString)
         let converter = wanPreparation
         let journal = stateDirectory
         let writeIntent: @Sendable (ModelDirectory, [String: ModelFileIdentity]) throws -> Void = { stage, files in
-            guard let managedOutput else { return }
+            guard let publicationID else { return }
             var control = ModelResourceControl(fileState: .verified, origin: .prepared)
             control.role = .execution; control.parentResourceID = .init(rawValue: id.rawValue)
             control.requiredPaths = files.keys.sorted(); control.preparationRecipe = original.recipeIdentity
             let tree = try stage.requiredTree(paths: Set(files.keys))
             let size = files.values.reduce(UInt64(0)) { $0 + UInt64(max(0, $1.size)) }
-            let record = StoredRecord(record: .init(id: managedOutput, catalogID: entry.id, revision: entry.revision,
-                storage: .managed, state: .installed, availability: .available, downloadedBytes: size, totalBytes: size,
+            let record = StoredRecord(record: .init(id: publicationID, catalogID: entry.id, revision: entry.revision,
+                storage: managedOutput == nil ? .external : .managed, state: .installed, availability: .available, downloadedBytes: size, totalBytes: size,
                 error: nil, directory: parent.url.appendingPathComponent(name), activeLeaseCount: 0, registrationState: .unregistered),
                 recipeIdentity: original.recipeIdentity, verifiedFiles: tree.files, verifiedDirectories: tree.directories,
                 verifiedRoot: stage.identity, publicationRoot: stage.identity, control: control)
             let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-            try journal.atomicWrite(encoder.encode(LocalPublication(record: record, stagePath: "Installations/" + stage.url.lastPathComponent)), to: "local-publication.json", replace: true)
+            if managedOutput != nil {
+                try journal.atomicWrite(encoder.encode(LocalPublication(record: record, stagePath: "Installations/" + stage.url.lastPathComponent)), to: "local-publication.json", replace: true)
+            } else {
+                let intent = PreparedPublication(record: record, parentBookmark: scope.bookmark,
+                    parentIdentity: parent.identity, stageLeaf: stage.url.lastPathComponent, finalLeaf: name)
+                try journal.atomicWrite(encoder.encode(intent), to: "prepared-publication.json", replace: false)
+            }
         }
         let conversion = Task.detached {
             if ModelWanPreparation.supports(entry), let converter {
@@ -992,7 +1028,14 @@ public actor ModelLibrary {
                 guard let self else { throw CancellationError() }
                 // The tracked operation includes inventory publication, so shutdown
                 // drains this commit before releasing scopes and the source lease.
-                try await self.recordPreparedOutput(url, parentID: id, managedID: managedOutput)
+                let child: ModelID
+                if let publicationID, managedOutput == nil {
+                    try await self.recoverPreparedPublication()
+                    child = publicationID
+                } else { child = try await self.recordPreparedOutput(url, parentID: id, managedID: managedOutput) }
+                if let completeAddition {
+                    try await self.registerDuringPreparation(child, parentID: id, owner: lease.id, validate: completeAddition)
+                }
                 return url
             } onCancel: { conversion.cancel() }
         }
@@ -2197,7 +2240,7 @@ extension ModelLibrary {
 
 
 extension ModelLibrary {
-    private func recordPreparedOutput(_ url: URL, parentID: ModelID, managedID: ModelID? = nil) throws {
+    private func recordPreparedOutput(_ url: URL, parentID: ModelID, managedID: ModelID? = nil) throws -> ModelID {
         let parent = try stored(parentID), scope = try ModelScopedLocation(url), directory = try ModelDirectory(scope.url)
         let files = try directory.entries()
         let tree = try directory.requiredTree(paths: Set(files.keys))
@@ -2217,7 +2260,61 @@ extension ModelLibrary {
         externalScopes[id] = scope
         if managedID != nil { try commitLocalPublication(publishedRecord) }
         else { disk.records.append(publishedRecord); event(id, "prepared"); try persist(purpose: "prepared") }
+        return id
     }
+    /// Only an explicit preparation/add command opts in. Old files-only download
+    /// intent is unchanged. Keep the preparation slot until validation and save end.
+    public func prepareAndRegisterVideo(_ id: ModelID, in parent: URL,
+        validate: @escaping @Sendable (URL) async throws -> ModelReference) async throws -> ModelResourceID {
+        if let child = try preparedAdditionResource(for: id) {
+            try await registerPreparedResource(child, validate: validate)
+            return child
+        }
+        let output = try await prepareVideo(id, in: parent, checkpoint: { _ in }, completeAddition: validate)
+        guard let child = try preparedAdditionResource(for: id), try stored(child.modelID).record.directory?.standardizedFileURL.path == output.standardizedFileURL.path else {
+            throw ModelLibraryError.integrity("Prepared model identity changed after addition.")
+        }
+        return child
+    }
+
+    /// A retry reuses a uniquely identified published child, never a latest row.
+    public func preparedAdditionResource(for parentID: ModelID) throws -> ModelResourceID? {
+        try requireAdmission(); try recoverPreparedPublication()
+        let parent = try stored(parentID)
+        let children = disk.records.filter { $0.control?.parentResourceID?.modelID == parentID &&
+            $0.control?.role == .execution && $0.control?.fileState == .verified && $0.deletion == nil &&
+            $0.recipeIdentity == parent.recipeIdentity && $0.record.catalogID == parent.record.catalogID &&
+            $0.record.revision == parent.record.revision }
+        guard children.count <= 1 else { throw ModelLibraryError.integrity("More than one prepared copy matches this source; select the exact copy in the model library.") }
+        return children.first.map { .init(rawValue: $0.record.id.rawValue) }
+    }
+
+    private func registerDuringPreparation(_ id: ModelID, parentID: ModelID, owner: UUID,
+        validate: @escaping @Sendable (URL) async throws -> ModelReference) async throws {
+        guard preparationJobs[parentID]?.lease.id == owner, leases[owner]?.modelID == parentID else {
+            throw ModelLibraryError.integrity("Model preparation owner changed.")
+        }
+        let original = try stored(id), directory = try resolved(original)
+        guard original.control?.parentResourceID?.modelID == parentID, original.control?.role == .execution,
+              original.control?.automaticRegistrationRevoked != true else {
+            throw ModelLibraryError.integrity("Prepared model addition was revoked or changed.")
+        }
+        let lease = ModelUsageLease(id: UUID(), modelID: id,
+            reference: .init(directory: directory.url, revision: original.record.revision))
+        leases[lease.id] = lease
+        defer { release(lease) }
+        do {
+            try Task.checkCancellation()
+            let reference = try await validate(directory.url)
+            try Task.checkCancellation()
+            guard preparationJobs[parentID]?.lease.id == owner, leases[owner]?.modelID == parentID,
+                  try stored(id).control?.automaticRegistrationRevoked != true else {
+                throw ModelLibraryError.integrity("Model preparation owner changed.")
+            }
+            try commitPreparedRegistration(id, reference: reference, original: original)
+        } catch { preparedRegistrationFailed(id, error: error); throw error }
+    }
+
     public func registerPreparedResource(_ resource: ModelResourceID,
         validate: @escaping @Sendable (URL) async throws -> ModelReference) async throws {
         try requireAdmission(); try requireIdleWorker()
@@ -2552,13 +2649,60 @@ extension ModelLibrary {
         try persist(purpose: "localRecovery")
         try clearLocalPublication()
     }
-    private func clearLocalPublication() throws {
-        let identity = try stateDirectory.fileIdentity("local-publication.json")
+    private func recoverPreparedPublication() throws {
+        let journal = "prepared-publication.json"
+        guard try Self.exists(journal, in: stateDirectory) else { return }
+        let pending = try JSONDecoder().decode(PreparedPublication.self,
+            from: stateDirectory.read(journal, maximum: 32 * 1024 * 1024))
+        var record = pending.record
+        guard record.record.storage == .external, record.control?.role == .execution,
+              let sourceID = record.control?.parentResourceID?.modelID,
+              !pending.stageLeaf.contains("/"), pending.stageLeaf.hasPrefix(".d-"),
+              !pending.finalLeaf.contains("/"), pending.finalLeaf != ".", pending.finalLeaf != ".." else {
+            throw ModelLibraryError.integrity("Invalid prepared publication recovery record.")
+        }
+        let source = try stored(sourceID)
+        guard source.record.catalogID == record.record.catalogID, source.record.revision == record.record.revision,
+              source.recipeIdentity == record.recipeIdentity else { throw ModelLibraryError.integrity("Prepared source identity changed; files retained.") }
+        let scope = try ModelScopedLocation.restore(pending.parentBookmark), parent = try ModelDirectory(scope.url)
+        guard pending.parentIdentity.sameNode(parent.identity),
+              record.record.directory?.standardizedFileURL.path == parent.url.appendingPathComponent(pending.finalLeaf).standardizedFileURL.path else {
+            throw ModelLibraryError.integrity("Prepared destination identity changed; files retained.")
+        }
+        if !(try Self.exists(pending.finalLeaf, in: parent)) {
+            let stage = try parent.child(pending.stageLeaf)
+            guard record.publicationRoot?.sameNode(stage.identity) == true,
+                  try stage.entries(expectedPaths: Set(record.verifiedFiles.keys)) == record.verifiedFiles else {
+                throw ModelLibraryError.integrity("Prepared recovery files changed; all files retained.")
+            }
+            guard renameatx_np(parent.descriptor, pending.stageLeaf, parent.descriptor, pending.finalLeaf, UInt32(RENAME_EXCL)) == 0,
+                  fsync(parent.descriptor) == 0 else { throw ModelDirectory.failure("Recover prepared model publication") }
+        }
+        let directory = try parent.child(pending.finalLeaf)
+        guard record.publicationRoot?.sameNode(directory.identity) == true,
+              try directory.entries(expectedPaths: Set(record.verifiedFiles.keys)) == record.verifiedFiles else {
+            throw ModelLibraryError.integrity("Published prepared model changed; files retained.")
+        }
+        let outputScope = try ModelScopedLocation(directory.url)
+        record.bookmark = outputScope.bookmark
+        if let existing = disk.records.first(where: { $0.record.id == record.record.id }) {
+            guard existing.verifiedRoot?.sameNode(directory.identity) == true,
+                  existing.verifiedFiles == record.verifiedFiles else { throw ModelLibraryError.integrity("Prepared inventory owner changed.") }
+        } else { disk.records.append(record) }
+        externalScopes[record.record.id] = outputScope
+        try persist(purpose: "prepared")
+        try clearPublicationJournal(journal)
+        preparedRecoveryIssue = nil
+    }
+
+    private func clearLocalPublication() throws { try clearPublicationJournal("local-publication.json") }
+    private func clearPublicationJournal(_ name: String) throws {
+        let identity = try stateDirectory.fileIdentity(name)
         // The state directory also owns the index. Remove this exact journal,
         // not a whole-directory model-file set.
-        let (parent, name) = try stateDirectory.parent("local-publication.json")
+        let (parent, name) = try stateDirectory.parent(name)
         defer { Darwin.close(parent) }
-        guard try stateDirectory.fileIdentity("local-publication.json") == identity,
+        guard try stateDirectory.fileIdentity(name) == identity,
               unlinkat(parent, name, 0) == 0, fsync(parent) == 0 else {
             throw ModelLibraryError.storage("Could not retire model publication recovery record.")
         }

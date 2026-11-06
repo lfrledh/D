@@ -2,6 +2,7 @@ import DInference
 import Darwin
 import Foundation
 import Testing
+import Synchronization
 @testable import DWorkbench
 
 @Suite(.serialized)
@@ -341,5 +342,188 @@ extension ModelVideoPreparationTests {
         #expect(snapshot.downloads.isEmpty)
         await #expect(throws: ModelLibraryError.self) { _ = try await library.inspectLocalCandidates(at: f.source, catalogID: f.entry.id, revision: "wrong", validatePrepared: nil) }
         try await library.shutdown()
+    }
+}
+
+
+extension ModelVideoPreparationTests {
+    @Test func prepareAdditionHoldsSlotAndBothIdentitiesThroughValidation() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let server = try await LoopbackServer(f)
+        let raw = entry(f), eventFile = server.events
+        let library = try await ModelLibrary(stateDirectory: f.state, catalog: [raw, f.entry],
+            transport: URLSessionModelRangeTransport(allowsLocalHTTP: true), sourceBaseURL: server.url)
+        try await library.configureRoot(at: f.destination)
+        let source = try await library.registerExisting(at: f.source, catalogID: raw.id)
+        let before = try ModelDirectory(f.source).entries()
+        let parent = f.root.appendingPathComponent("prepared")
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        let output = try await library.prepareAndRegisterVideo(source, in: parent) { url in
+            let current = await library.snapshot()
+            let child = try #require(current.resources.first { $0.control.parentResourceID?.modelID == source })
+            #expect(current.records.first { $0.id == source }?.activeLeaseCount == 1)
+            #expect(child.record.activeLeaseCount == 1)
+            await #expect(throws: (any Error).self) { try await library.unregister(source) }
+            await #expect(throws: (any Error).self) { try await library.unregister(child.record.id) }
+            await #expect(throws: (any Error).self) { try await library.remove(child.record.id) }
+            _ = try await library.enqueueDownloads([f.entry.id], postAction: .filesOnly)
+            #expect(await library.snapshot().downloads.first?.state == .queued)
+            if FileManager.default.fileExists(atPath: eventFile.path) { #expect(try Data(contentsOf: eventFile).isEmpty) }
+            return .init(directory: url, revision: "fixture-execution")
+        }
+        let child = try #require(try await library.preparedAdditionResource(for: source))
+        let done = try #require(await library.snapshot().resources.first { $0.id == child })
+        #expect(done.record.registrationState == .registered)
+        #expect(done.id == output && done.record.activeLeaseCount == 0)
+        #expect(try ModelDirectory(f.source).entries() == before)
+        try await library.shutdown()
+    }
+
+    @Test(arguments: ["validation", "save", "cancel"])
+    func prepareAdditionFailureReusesExactPublishedChildAfterColdOpen(kind: String) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let fault = Mutex(false)
+        let raw = entry(f)
+        var library: ModelLibrary? = try await ModelLibrary(stateDirectory: f.state, catalog: [raw], checkpoint: { point in
+            if point == "registration.beforeWrite", fault.withLock({ $0 }) { throw ModelLibraryError.storage("isolated registration write failure") }
+        })
+        let source = try await library!.registerExisting(at: f.source, catalogID: raw.id)
+        let before = try ModelDirectory(f.source).entries()
+        fault.withLock { $0 = kind == "save" }
+        await #expect(throws: (any Error).self) {
+            _ = try await library!.prepareAndRegisterVideo(source, in: f.destination) { url in
+                if kind == "validation" { throw ModelLibraryError.integrity("isolated adapter validation failure") }
+                if kind == "cancel" { throw CancellationError() }
+                return .init(directory: url, revision: "fixture-execution")
+            }
+        }
+        let child = try #require(try await library!.preparedAdditionResource(for: source))
+        let failed = try #require(await library!.snapshot().resources.first { $0.id == child })
+        #expect(failed.record.registrationState == .unregistered && failed.record.activeLeaseCount == 0)
+        let output = try #require(failed.record.directory)
+        let published = try ModelDirectory(output).entries()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: f.destination.path).count == 1)
+        fault.withLock { $0 = false }
+        try await library!.shutdown(); library = nil
+        let cold = try await ModelLibrary(stateDirectory: f.state, catalog: [raw])
+        #expect(try await cold.preparedAdditionResource(for: source) == child)
+        let retry = try await cold.prepareAndRegisterVideo(source, in: f.root.appendingPathComponent("must-not-create")) {
+            .init(directory: $0, revision: "fixture-execution")
+        }
+        #expect(retry == child)
+        #expect(try ModelDirectory(output).entries() == published)
+        #expect(try ModelDirectory(f.source).entries() == before)
+        #expect(await cold.snapshot().resources.filter { $0.control.role == .execution }.count == 1)
+        #expect(await cold.snapshot().resources.first { $0.id == child }?.record.registrationState == .registered)
+        #expect(!FileManager.default.fileExists(atPath: f.root.appendingPathComponent("must-not-create").path))
+        try await cold.shutdown()
+    }
+}
+
+
+extension ModelVideoPreparationTests {
+    @Test(arguments: ["beforeWrite", "afterRename"])
+    func preparedInventoryPublicationRecoversWithoutShutdownFlush(boundary: String) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let blocked = Mutex(false)
+        let raw = entry(f)
+        var owner: ModelLibrary? = try await ModelLibrary(stateDirectory: f.state, catalog: [raw], checkpoint: { point in
+            if point == "prepared." + boundary { blocked.withLock { $0 = true }; throw ModelLibraryError.storage("isolated prepared inventory failure") }
+            if point.hasSuffix("beforeWrite"), blocked.withLock({ $0 }) { throw ModelLibraryError.storage("isolated persistent write failure") }
+        })
+        let source = try await owner!.registerExisting(at: f.source, catalogID: raw.id)
+        let original = try ModelDirectory(f.source).entries()
+        await #expect(throws: (any Error).self) {
+            _ = try await owner!.prepareAndRegisterVideo(source, in: f.destination) { .init(directory: $0, revision: "fixture-execution") }
+        }
+        let child = try #require(await owner!.snapshot().resources.first { $0.control.parentResourceID?.modelID == source })
+        let output = try #require(child.record.directory), files = try ModelDirectory(output).entries()
+        #expect(FileManager.default.fileExists(atPath: f.state.appendingPathComponent("prepared-publication.json").path))
+        // Persist remains unavailable: recovery must not rely on a successful quit flush.
+        await #expect(throws: (any Error).self) { try await owner!.shutdown() }
+        owner = nil
+        let cold = try await ModelLibrary(stateDirectory: f.state, catalog: [raw])
+        #expect(try await cold.preparedAdditionResource(for: source) == child.id)
+        #expect(!FileManager.default.fileExists(atPath: f.state.appendingPathComponent("prepared-publication.json").path))
+        let retry = try await cold.prepareAndRegisterVideo(source, in: f.root.appendingPathComponent("unused")) {
+            .init(directory: $0, revision: "fixture-execution")
+        }
+        #expect(retry == child.id)
+        #expect(try ModelDirectory(output).entries() == files)
+        #expect(try ModelDirectory(f.source).entries() == original)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: f.destination.path).count == 1)
+        try await cold.shutdown()
+    }
+}
+
+
+extension ModelVideoPreparationTests {
+    @Test(.timeLimit(.minutes(1))) func actualCancellationDuringPreparedAdditionKeepsPublishedFiles() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let raw = entry(f), owner = try await ModelLibrary(stateDirectory: f.state, catalog: [entry(f)])
+        let source = try await owner.registerExisting(at: f.source, catalogID: raw.id)
+        let (entered, enter) = AsyncStream<Void>.makeStream()
+        let (released, release) = AsyncStream<Void>.makeStream()
+        let request = Task {
+            try await owner.prepareAndRegisterVideo(source, in: f.destination) { url in
+                enter.yield(()); enter.finish()
+                for await _ in released { break }
+                try Task.checkCancellation()
+                return .init(directory: url, revision: "fixture-execution")
+            }
+        }
+        for await _ in entered { break }
+        request.cancel(); release.yield(()); release.finish()
+        await #expect(throws: CancellationError.self) { try await request.value }
+        let child = try #require(try await owner.preparedAdditionResource(for: source))
+        let record = try #require(await owner.snapshot().resources.first { $0.id == child })
+        #expect(record.record.registrationState == .unregistered)
+        #expect(await owner.snapshot().records.allSatisfy { $0.activeLeaseCount == 0 })
+        #expect(FileManager.default.fileExists(atPath: try #require(record.record.directory).path))
+        try await owner.shutdown()
+    }
+}
+
+
+extension ModelVideoPreparationTests {
+    @Test(arguments: ["unavailable", "replaced", "source-removed"])
+    func unavailablePreparedRecoveryDoesNotBlockOtherInventory(kind: String) async throws {
+        let f = try LibraryFixture(); defer { _ = chmod(f.destination.path, 0o700); f.clean() }
+        let blocked = Mutex(false), raw = entry(f)
+        var owner: ModelLibrary? = try await ModelLibrary(stateDirectory: f.state, catalog: [raw], checkpoint: { point in
+            if point == "prepared.beforeWrite" { blocked.withLock { $0 = true }; throw ModelLibraryError.storage("fixture publication failure") }
+            if point.hasSuffix("beforeWrite"), blocked.withLock({ $0 }) { throw ModelLibraryError.storage("fixture write blocked") }
+        })
+        let source = try await owner!.registerExisting(at: f.source, catalogID: raw.id)
+        let otherFiles = f.root.appendingPathComponent("other-original")
+        try f.writeModel(at: otherFiles)
+        let other = try await owner!.registerExisting(at: otherFiles, catalogID: raw.id)
+        await #expect(throws: (any Error).self) {
+            _ = try await owner!.prepareAndRegisterVideo(source, in: f.destination) { .init(directory: $0, revision: "fixture-execution") }
+        }
+        let child = try #require(await owner!.snapshot().resources.first { $0.control.parentResourceID?.modelID == source })
+        if kind == "source-removed" {
+            blocked.withLock { $0 = false }; try await owner!.remove(source)
+            blocked.withLock { $0 = true }
+        }
+        try? await owner!.shutdown(); owner = nil
+        if kind == "unavailable" { #expect(chmod(f.destination.path, 0) == 0) }
+        if kind == "replaced" {
+            try FileManager.default.moveItem(at: f.destination, to: f.root.appendingPathComponent("original-destination"))
+            try FileManager.default.createDirectory(at: f.destination, withIntermediateDirectories: false)
+        }
+        let cold = try await ModelLibrary(stateDirectory: f.state, catalog: [raw])
+        let state = await cold.snapshot()
+        #expect(state.resources.contains { $0.record.id == other })
+        #expect(state.resources.first { $0.id == child.id }?.record.availability == .unavailable)
+        #expect(state.resources.first { $0.id == child.id }?.record.error != nil)
+        #expect(FileManager.default.fileExists(atPath: f.state.appendingPathComponent("prepared-publication.json").path))
+        await #expect(throws: (any Error).self) { try await cold.preparedAdditionResource(for: source) }
+        if kind == "unavailable" {
+            #expect(chmod(f.destination.path, 0o700) == 0)
+            #expect(try await cold.preparedAdditionResource(for: source) == child.id)
+            #expect(await cold.snapshot().resources.first { $0.id == child.id }?.record.error == nil)
+        }
+        try await cold.shutdown()
     }
 }

@@ -605,7 +605,7 @@ public final class ModelLibraryModel {
 
     public func cancelImport() { importTask?.cancel() }
 
-    public func prepareVideo(_ id: ModelID, action: @escaping @MainActor (ModelID, URL) async throws -> Void) async {
+    public func prepareVideo(_ id: ModelID, successNotice: String = "preparedNotice", action: @escaping @MainActor (ModelID, URL) async throws -> Void) async {
         guard canChooseRoot else { return }
         isChoosingLocation = true
         do {
@@ -631,7 +631,7 @@ public final class ModelLibraryModel {
             do {
                 try await action(id, parent)
                 try Task.checkCancellation()
-                preparationNotice = managementText("preparedNotice", "独立执行包已准备并保留。请另行登记后选用；原始文件保留。")
+                preparationNotice = managementText(successNotice)
             }
             catch is CancellationError { }
             catch { self.report(error, context: managementText("prepareFailed", "执行包准备未完成")) }
@@ -1058,7 +1058,31 @@ extension ModelLibraryModel {
         await command { try await self.library.moveWaitingDownload(id, before: next) }
     }
     public func prepareResource(_ id: ModelID) async {
-        await prepareVideo(id) { id, parent in _ = try await self.library.prepareVideo(id, in: parent) }
+        guard !isChoosingLocation, globalOperation == nil else { return }
+        guard let validate = preparedValidator else {
+            errorMessage = managementText("prepareUnavailable"); return
+        }
+        globalOperation = .preparing; errorMessage = nil; preparationNotice = nil
+        do {
+            if let child = try await library.preparedAdditionResource(for: id) {
+                let task = Task { @MainActor in
+                    do {
+                        try await self.library.registerPreparedResource(child, validate: validate)
+                        self.selectedResource = child
+                        self.preparationNotice = self.managementText("prepared")
+                    } catch is CancellationError { }
+                    catch { self.report(error, context: self.managementText("prepareFailed")) }
+                }
+                preparation = task; await task.value; preparation = nil; globalOperation = nil
+                await refresh(); return
+            }
+        } catch {
+            globalOperation = nil; report(error, context: managementText("prepareFailed")); return
+        }
+        globalOperation = nil
+        await prepareVideo(id, successNotice: "prepared") { id, parent in
+            self.selectedResource = try await self.library.prepareAndRegisterVideo(id, in: parent, validate: validate)
+        }
     }
     private func command(_ body: () async throws -> Void) async {
         errorMessage = nil
