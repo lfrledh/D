@@ -442,17 +442,21 @@ extension ModelVideoPreparationTests {
         // Persist remains unavailable: recovery must not rely on a successful quit flush.
         await #expect(throws: (any Error).self) { try await owner!.shutdown() }
         owner = nil
-        let cold = try await ModelLibrary(stateDirectory: f.state, catalog: [raw])
-        #expect(try await cold.preparedAdditionResource(for: source) == child.id)
+        var cold: ModelLibrary? = try await ModelLibrary(stateDirectory: f.state, catalog: [raw])
+        #expect(try await cold!.preparedAdditionResource(for: source) == child.id)
         #expect(!FileManager.default.fileExists(atPath: f.state.appendingPathComponent("prepared-publication.json").path))
-        let retry = try await cold.prepareAndRegisterVideo(source, in: f.root.appendingPathComponent("unused")) {
+        let retry = try await cold!.prepareAndRegisterVideo(source, in: f.root.appendingPathComponent("unused")) {
             .init(directory: $0, revision: "fixture-execution")
         }
         #expect(retry == child.id)
         #expect(try ModelDirectory(output).entries() == files)
         #expect(try ModelDirectory(f.source).entries() == original)
         #expect(try FileManager.default.contentsOfDirectory(atPath: f.destination.path).count == 1)
-        try await cold.shutdown()
+        try await cold!.shutdown(); cold = nil
+        let again = try await ModelLibrary(stateDirectory: f.state, catalog: [raw])
+        #expect(try await again.resolve(child.record.id).directory.standardizedFileURL.path == output.standardizedFileURL.path)
+        #expect(await again.snapshot().resources.first { $0.id == child.id }?.record.registrationState == .registered)
+        try await again.shutdown()
     }
 }
 
@@ -524,6 +528,40 @@ extension ModelVideoPreparationTests {
             #expect(try await cold.preparedAdditionResource(for: source) == child.id)
             #expect(await cold.snapshot().resources.first { $0.id == child.id }?.record.error == nil)
         }
+        try await cold.shutdown()
+    }
+}
+
+
+extension ModelVideoPreparationTests {
+    @Test(arguments: ["remove", "unregister", "register"])
+    func pendingPreparedPublicationCannotResurrectExplicitCommands(action: String) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let fail = Mutex(true), raw = entry(f)
+        var owner: ModelLibrary? = try await ModelLibrary(stateDirectory: f.state, catalog: [raw], checkpoint: { point in
+            if point == "prepared.beforeWrite", fail.withLock({ $0 }) { throw ModelLibraryError.storage("fixture inventory failure") }
+        })
+        let source = try await owner!.registerExisting(at: f.source, catalogID: raw.id)
+        await #expect(throws: (any Error).self) {
+            _ = try await owner!.prepareAndRegisterVideo(source, in: f.destination) { .init(directory: $0, revision: "fixture-execution") }
+        }
+        let child = try #require(await owner!.snapshot().resources.first { $0.control.parentResourceID?.modelID == source })
+        // Removal cannot claim success while its exact durable publication is blocked.
+        await #expect(throws: (any Error).self) { try await owner!.remove(child.record.id) }
+        #expect(await owner!.snapshot().resources.contains { $0.id == child.id })
+        fail.withLock { $0 = false }
+        switch action {
+        case "remove": try await owner!.remove(child.record.id)
+        case "unregister": try await owner!.unregister(child.record.id)
+        default: try await owner!.registerPreparedResource(child.id) { .init(directory: $0, revision: "fixture-execution") }
+        }
+        #expect(!FileManager.default.fileExists(atPath: f.state.appendingPathComponent("prepared-publication.json").path))
+        try await owner!.shutdown(); owner = nil
+        let cold = try await ModelLibrary(stateDirectory: f.state, catalog: [raw])
+        let current = await cold.snapshot().resources.first { $0.id == child.id }
+        if action == "remove" { #expect(current == nil) }
+        else { #expect(current?.record.registrationState == (action == "register" ? .registered : .unregistered)) }
+        #expect(FileManager.default.fileExists(atPath: try #require(child.record.directory).path))
         try await cold.shutdown()
     }
 }

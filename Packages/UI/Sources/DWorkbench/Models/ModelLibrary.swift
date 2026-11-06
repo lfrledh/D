@@ -871,7 +871,7 @@ public actor ModelLibrary {
 
     public func rebind(_ id: ModelID, to selected: URL,
         preparedValidator: (@Sendable (URL) async throws -> ModelReference)? = nil) async throws {
-        try requireAdmission(); try requireIdleWorker()
+        try requireAdmission(); try settlePreparedPublication(for: id); try requireIdleWorker()
         // Rebinding also owns the heavy-operation slot. Downloads enqueued while
         // its validator runs must be reconsidered after either outcome drains.
         defer { scheduleDownloads() }
@@ -1086,7 +1086,7 @@ public actor ModelLibrary {
 
     public func remove(_ id: ModelID) async throws {
         try requireAdmission(); try requireIdleWorker()
-        try recoverLocalPublication()
+        try recoverLocalPublication(); try settlePreparedPublication(for: id)
         guard !leases.values.contains(where: { $0.modelID == id }) else { throw ModelLibraryError.busy("该模型仍用于运行或排队任务，不能移除。") }
         let value = try stored(id)
         if value.record.storage == .external {
@@ -1815,7 +1815,7 @@ extension ModelLibrary {
         }
     }
     public func unregister(_ id: ModelID) throws {
-        try requireAdmission()
+        try requireAdmission(); try settlePreparedPublication(for: id)
         let value = try stored(id)
         guard !leases.values.contains(where: { $0.modelID == id }), workers[id] == nil,
               preparationJobs[id] == nil, currentCopy?.sourceID != id else {
@@ -2318,7 +2318,9 @@ extension ModelLibrary {
     public func registerPreparedResource(_ resource: ModelResourceID,
         validate: @escaping @Sendable (URL) async throws -> ModelReference) async throws {
         try requireAdmission(); try requireIdleWorker()
-        let id = resource.modelID, original = try stored(id)
+        let id = resource.modelID
+        try settlePreparedPublication(for: id)
+        let original = try stored(id)
         guard original.control?.role == .execution, original.control?.fileState == .verified else {
             throw ModelLibraryError.unavailable("该资源不是已确认的执行包。")
         }
@@ -2649,6 +2651,15 @@ extension ModelLibrary {
         try persist(purpose: "localRecovery")
         try clearLocalPublication()
     }
+    private func settlePreparedPublication(for id: ModelID) throws {
+        let name = "prepared-publication.json"
+        guard try Self.exists(name, in: stateDirectory) else { return }
+        let pending = try JSONDecoder().decode(PreparedPublication.self,
+            from: stateDirectory.read(name, maximum: 32 * 1024 * 1024))
+        // Unrelated resources remain usable even if this output's volume is absent.
+        if pending.record.record.id == id { try recoverPreparedPublication() }
+    }
+
     private func recoverPreparedPublication() throws {
         let journal = "prepared-publication.json"
         guard try Self.exists(journal, in: stateDirectory) else { return }
@@ -2685,9 +2696,13 @@ extension ModelLibrary {
         }
         let outputScope = try ModelScopedLocation(directory.url)
         record.bookmark = outputScope.bookmark
-        if let existing = disk.records.first(where: { $0.record.id == record.record.id }) {
+        if let index = disk.records.firstIndex(where: { $0.record.id == record.record.id }) {
+            let existing = disk.records[index]
             guard existing.verifiedRoot?.sameNode(directory.identity) == true,
                   existing.verifiedFiles == record.verifiedFiles else { throw ModelLibraryError.integrity("Prepared inventory owner changed.") }
+            // Startup may have projected the journal before access was restored.
+            // Persist the renewed scope without overwriting registration/revocation.
+            disk.records[index].bookmark = outputScope.bookmark
         } else { disk.records.append(record) }
         externalScopes[record.record.id] = outputScope
         try persist(purpose: "prepared")
