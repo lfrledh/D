@@ -237,7 +237,9 @@ public struct WorkbenchChildPanelSize: Equatable {
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         fileDropTarget == nil ? super.draggingEntered(sender) : (fileDrop(sender) == nil ? [] : .copy)
     }
-    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { draggingEntered(sender) }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        fileDropTarget == nil ? super.draggingUpdated(sender) : (fileDrop(sender) == nil ? [] : .copy)
+    }
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
         fileDropTarget == nil ? super.prepareForDragOperation(sender) : fileDrop(sender) != nil
     }
