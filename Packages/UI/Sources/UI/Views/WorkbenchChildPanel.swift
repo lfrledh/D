@@ -218,6 +218,34 @@ public struct WorkbenchChildPanelSize: Equatable {
     }
     required init(rootView: AnyView) { fatalError("Use init(rootView:gate:)") }
     @MainActor required dynamic init?(coder: NSCoder) { fatalError("init(coder:)") }
+    weak var fileDropTarget: WorkbenchChildFileDrop.Anchor?
+    private func fileDrop(_ sender: NSDraggingInfo) -> (WorkbenchChildFileDrop.Anchor, [URL])? {
+        guard let window, sender.draggingDestinationWindow === window,
+              WorkbenchChildPanels.top(on: window)?.host === self,
+              window.attachedSheet == nil, NSApp.modalWindow == nil,
+              !closeGate.saving, !closeGate.asksToClose,
+              !WorkbenchPopupOverlay.isPresented(on: window),
+              let target = fileDropTarget, target.window === window,
+              target.isDescendant(of: self), !target.isHiddenOrHasHiddenAncestor,
+              target.bounds.contains(target.convert(sender.draggingLocation, from: nil)),
+              sender.draggingSourceOperationMask.contains(.copy), target.enabled else { return nil }
+        let urls = (sender.draggingPasteboard.readObjects(forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
+        guard urls.count == 1, let file = (urls[0] as NSURL).filePathURL else { return nil }
+        return (target, [file])
+    }
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        fileDropTarget == nil ? super.draggingEntered(sender) : (fileDrop(sender) == nil ? [] : .copy)
+    }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { draggingEntered(sender) }
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        fileDropTarget == nil ? super.prepareForDragOperation(sender) : fileDrop(sender) != nil
+    }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard fileDropTarget != nil else { return super.performDragOperation(sender) }
+        guard let (target, urls) = fileDrop(sender) else { return false }
+        return target.receive(urls)
+    }
     override var acceptsFirstResponder: Bool { true }
     override func cancelOperation(_ sender: Any?) {
         guard let window, WorkbenchChildPanels.top(on: window)?.host === self,
@@ -230,6 +258,43 @@ public struct WorkbenchChildPanelSize: Equatable {
             cancelOperation(nil)
         } else { super.keyDown(with: event) }
     }
+}
+
+/// Opt-in native file destination for a child form. The anchor never intercepts
+/// clicks; the mounted host owns AppKit drag delivery and rechecks the live region.
+struct WorkbenchChildFileDrop: NSViewRepresentable {
+    var enabled: Bool
+    var receive: ([URL]) -> Bool
+    @MainActor final class Anchor: NSView {
+        var enabled = false
+        var receive: ([URL]) -> Bool = { _ in false }
+        private weak var owner: WorkbenchChildHostingView?
+        private var priorTypes: [NSPasteboard.PasteboardType] = []
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); attach() }
+        func attach() {
+            var parent = superview
+            while let view = parent, !(view is WorkbenchChildHostingView) { parent = view.superview }
+            let host = parent as? WorkbenchChildHostingView
+            guard host !== owner else { return }
+            detach()
+            guard let host, window != nil else { return }
+            owner = host; priorTypes = host.registeredDraggedTypes
+            host.fileDropTarget = self; host.registerForDraggedTypes([.fileURL])
+        }
+        func detach() {
+            if let owner, owner.fileDropTarget === self {
+                owner.fileDropTarget = nil; owner.unregisterDraggedTypes()
+                if !priorTypes.isEmpty { owner.registerForDraggedTypes(priorTypes) }
+            }
+            owner = nil; priorTypes = []
+        }
+    }
+    func makeNSView(context: Context) -> Anchor { Anchor() }
+    func updateNSView(_ view: Anchor, context: Context) {
+        view.enabled = enabled; view.receive = receive; view.attach()
+    }
+    static func dismantleNSView(_ view: Anchor, coordinator: ()) { view.detach(); view.receive = { _ in false } }
 }
 
 /// B is a native hit-test barrier. AppKit keeps the entire mouse gesture here,

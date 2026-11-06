@@ -1,6 +1,5 @@
 import DWorkbench
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Folder, drop and restored-model entrances share one form and application owner.
 /// Accepting it never selects a node or changes the current project.
@@ -60,31 +59,19 @@ struct ModelLocalFilesForm: View {
             if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
         }.padding(20).frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
         }
-        // The whole scrolling form is the destination, including empty viewport space.
-        .contentShape(Rectangle())
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers, _ in
-            guard knownSource == nil, surfaceActive, providers.count == 1, let provider = providers.first,
-                  !model.isChoosingLocation, model.globalOperation == nil else { return false }
-            guard let intent = model.beginLocalInspection() else { return false }
+        .background(WorkbenchChildFileDrop(enabled: knownSource == nil && surfaceActive &&
+            !model.isChoosingLocation && model.globalOperation == nil) { urls in
+            guard knownSource == nil, surfaceActive, urls.count == 1,
+                  !model.isChoosingLocation, model.globalOperation == nil,
+                  let intent = model.beginLocalInspection() else { return false }
             let generation = UUID(); dropGeneration = generation
             Task { @MainActor in
-                do {
-                    let bytes: Data = try await withCheckedThrowingContinuation { continuation in
-                        provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, error in
-                            if let data { continuation.resume(returning: data) }
-                            else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)) }
-                        }
-                    }
-                    guard surfaceActive, dropGeneration == generation, model.isCurrentLocalInspection(intent),
-                          !model.isChoosingLocation, model.globalOperation == nil else { return }
-                    await model.chooseLocalFiles(at: try Self.droppedFileURL(bytes), inspectionID: intent,
-                                                acceptsResult: { surfaceActive && dropGeneration == generation })
-                } catch {
-                    if surfaceActive, dropGeneration == generation, model.isCurrentLocalInspection(intent) { model.errorMessage = error.localizedDescription }
-                }
+                guard surfaceActive, dropGeneration == generation, model.isCurrentLocalInspection(intent) else { return }
+                await model.chooseLocalFiles(at: urls[0], inspectionID: intent,
+                    acceptsResult: { surfaceActive && dropGeneration == generation })
             }
             return true
-        }
+        })
         .task(id: knownSource?.id) {
             if let knownSource, let directory = knownSource.directory {
                 await model.chooseLocalFiles(at: directory, catalogID: knownSource.catalogID, revision: knownSource.revision, acceptsResult: { surfaceActive })

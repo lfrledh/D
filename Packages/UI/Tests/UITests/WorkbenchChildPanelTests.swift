@@ -216,3 +216,67 @@ extension WorkbenchChildPanelTests {
         #expect(WorkbenchChildPanels.orphanedEscapeTarget(try key(), on:window) == nil)
     }
 }
+
+
+extension WorkbenchChildPanelTests {
+    @Test func fileDropUsesLiveTopPanelRegionAndDoesNotInterceptClicks() throws {
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 1080, height: 740), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = NSView()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-child-file-drop-" + UUID().uuidString)
+        defer { window.close(); try? FileManager.default.removeItem(at: root) }
+        let preferences = ChatDisplayPreferencesState(appearanceDirectory: root)
+        let panel = try #require(WorkbenchChildPanelHandle(owner: window, title: "Model form", content: AnyView(Text("Controlled form")), preferences: preferences, language: nil))
+        let surface = try #require(WorkbenchChildPanels.frontmostSurface(on: window)); surface.layoutSubtreeIfNeeded()
+        let host = try #require(surface.subviews.compactMap { $0 as? WorkbenchChildHostingView }.first)
+        let target = WorkbenchChildFileDrop.Anchor(frame: .init(x: 20, y: 80, width: 300, height: 150))
+        var received: [URL] = []; target.enabled = true; target.receive = { received += $0; return true }
+        host.addSubview(target); target.attach()
+        #expect(target.hitTest(.init(x: 30, y: 90)) == nil)
+        #expect(host.registeredDraggedTypes.contains(.fileURL))
+        let info = ChildFileDropInfo(urls: [URL(fileURLWithPath: "/tmp/controlled-model")])
+        info.draggingDestinationWindow = window
+        info.draggingLocation = target.convert(.init(x: 30, y: 30), to: nil)
+        #expect(host.draggingEntered(info) == .copy)
+        #expect(host.prepareForDragOperation(info) && host.performDragOperation(info))
+        #expect(received.count == 1 && received[0].path == "/tmp/controlled-model")
+        info.draggingLocation = target.convert(.init(x: 301, y: 30), to: nil)
+        #expect(host.draggingUpdated(info).isEmpty && !host.performDragOperation(info))
+        target.frame.size = .init(width: 400, height: 200)
+        #expect(host.draggingUpdated(info) == .copy, "Resize uses the current anchor bounds")
+        host.closeGate.asksToClose = true
+        #expect(!host.performDragOperation(info)); host.closeGate.asksToClose = false
+        target.enabled = false; #expect(!host.prepareForDragOperation(info)); target.enabled = true
+        let child = try #require(WorkbenchChildPanelHandle(owner: window, title: "Nested", content: AnyView(Text("Child")), preferences: preferences, language: nil))
+        #expect(host.draggingEntered(info).isEmpty && !host.performDragOperation(info)); child.close()
+        let many = ChildFileDropInfo(urls: [URL(fileURLWithPath: "/tmp/a"), URL(fileURLWithPath: "/tmp/b")])
+        many.draggingDestinationWindow = window; many.draggingLocation = info.draggingLocation
+        #expect(host.draggingEntered(many).isEmpty)
+        target.detach(); target.removeFromSuperview(); panel.close()
+        #expect(host.fileDropTarget == nil && received.count == 1)
+    }
+}
+
+@MainActor private final class ChildFileDropInfo: NSObject, NSDraggingInfo {
+    let draggingPasteboard = NSPasteboard.withUniqueName()
+    var draggingSourceOperationMask: NSDragOperation = .copy
+    var draggingDestinationWindow: NSWindow?
+    var draggingLocation = NSPoint(x: 100, y: 80)
+    var draggedImageLocation: NSPoint { .zero }
+    nonisolated var draggedImage: NSImage? { nil }
+    var draggingSource: Any? { nil }
+    var draggingSequenceNumber: Int { 1 }
+    var draggingFormation: NSDraggingFormation = .default
+    var animatesToDestination = false
+    var numberOfValidItemsForDrop = 0
+    var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+    init(urls: [URL]) {
+        super.init()
+        draggingPasteboard.writeObjects(urls as [NSURL])
+    }
+    func slideDraggedImage(to screenPoint: NSPoint) {}
+    nonisolated override func namesOfPromisedFilesDropped(atDestination dropDestination: URL) -> [String]? { nil }
+    func resetSpringLoading() {}
+    func enumerateDraggingItems(options enumOpts: NSDraggingItemEnumerationOptions, for view: NSView?,
+        classes classArray: [AnyClass], searchOptions: [NSPasteboard.ReadingOptionKey: Any],
+        using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {}
+}
