@@ -5,65 +5,6 @@ import Observation
 import SwiftUI
 import UniformTypeIdentifiers
 
-// TEMPORARY bounded I012/I017 probe. Removed before ordinary delivery.
-@MainActor enum CloseoutProbe {
-    static let mode = UUID(uuidString: ProcessInfo.processInfo.environment["D_UI_TEST_SESSION"] ?? "") == nil ? "" : ProcessInfo.processInfo.environment["D_CLOSEOUT_TRACE"] ?? ""
-    static let cached = mode == "resize" && ProcessInfo.processInfo.environment["D_BINDING_CACHE"] == "1"
-    static var counts: [String: Int] = [:]
-    static var chatCounts: [String: Int] = [:]
-    static var phase = "warmup"
-    static var observers: [NSObjectProtocol] = []
-    static var resizing = false
-    static var activeWindow = 0
-    static var layoutMS = 0.0
-    static let ready: Void = {
-        if mode == "chat" {
-            observers.append(DistributedNotificationCenter.default().addObserver(forName: .init("D.CloseoutProbe.ChatBegin"), object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { chatCounts = [:]; phase = "find"; NSLog("D_CLOSEOUT chat-mark uptime=%.6f", ProcessInfo.processInfo.systemUptime) }
-            })
-        }
-        guard mode == "resize" else { return }
-        observers.append(NotificationCenter.default.addObserver(forName: NSWindow.willStartLiveResizeNotification, object: nil, queue: .main) { note in
-            guard let window = note.object as? NSWindow else { return }
-            MainActor.assumeIsolated { activeWindow = window.windowNumber; counts = [:]; layoutMS = 0; resizing = true; NSLog("D_CLOSEOUT resize-start window=%d cache=%d uptime=%.6f", activeWindow, cached ? 1 : 0, ProcessInfo.processInfo.systemUptime) }
-        })
-        observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didEndLiveResizeNotification, object: nil, queue: .main) { note in
-            guard let window = note.object as? NSWindow else { return }
-            MainActor.assumeIsolated { guard activeWindow == window.windowNumber else { return }; resizing = false; NSLog("D_CLOSEOUT resize-end window=%d cache=%d uptime=%.6f inclusiveLayoutSumMS=%.3f counts=%@", activeWindow, cached ? 1 : 0, ProcessInfo.processInfo.systemUptime, layoutMS, String(describing: counts)) }
-        })
-    }()
-    static func count(_ key: String) { _ = ready; if resizing { counts[key, default: 0] += 1 } }
-    static func chat(_ event: String, _ detail: @autoclosure () -> String = "") {
-        _ = ready
-        guard mode == "chat" else { return }
-        chatCounts[event, default: 0] += 1
-        let n = chatCounts[event]!
-        if n <= 8 || n == 128 || n == 512 { NSLog("D_CLOSEOUT chat phase=%@ %@ n=%d uptime=%.6f %@", phase, event, n, ProcessInfo.processInfo.systemUptime, detail()) }
-    }
-}
-@MainActor private final class CloseoutBindingCache {
-    var owner: SharedLibraryBrowserState?
-    var key: String?
-    var value: Binding<ScrollPosition>?
-    func binding(_ state: SharedLibraryBrowserState, _ key: String) -> Binding<ScrollPosition> {
-        let probeKey = String(describing: ObjectIdentifier(state)) + ":" + key
-        CloseoutProbe.count("binding-request:" + probeKey)
-        // Preserve the owner property observation in both arms, independent of Binding initialization.
-        _ = state.navigationScrolls[key]
-        if CloseoutProbe.cached, owner === state, self.key == key, let value { return value }
-        CloseoutProbe.count("binding-create:" + probeKey)
-        // Both arms capture exactly the same owner/key and retain the same observable get/set.
-        let value = Binding(get: { CloseoutProbe.count("binding-get:" + probeKey); return state.navigationScrolls[key] ?? ScrollPosition() }, set: { value in
-            CloseoutProbe.count("binding-set:" + probeKey)
-            if state.navigationScrolls[key] == nil, state.navigationScrolls.count >= 32,
-               let oldest = state.navigationScrolls.keys.sorted().first { state.navigationScrolls.removeValue(forKey: oldest) }
-            state.navigationScrolls[key] = value
-        })
-        if CloseoutProbe.cached { owner = state; self.key = key; self.value = value }
-        return value
-    }
-}
-
 /// One visible receipt follows the existing project-owned request; it never drains
 /// or retries work. A replaced owner cannot publish a stale success destination.
 struct SharedLibraryCollectionFeedback {
@@ -499,7 +440,6 @@ public struct SharedLibraryBrowser: View {
     @Environment(\.dLanguageStore) private var language
     @Environment(\.workflowLibraryContext) private var workflowContext
     @Environment(\.workflowLibraryInsertionController) private var insertionController
-    @State private var closeoutBinding = CloseoutBindingCache()
     @State private var state: SharedLibraryBrowserState
     @State private var commandScope = WorkbenchCommandScope()
     @Environment(\.workbenchContentVisible) private var contentVisible
@@ -821,7 +761,11 @@ public struct SharedLibraryBrowser: View {
 
     private var navigationScroll: Binding<ScrollPosition> {
         let key = canvasMode == .nodes ? state.modelScrollKey : query.text.isEmpty ? state.operationPath.joined(separator: "/") : "search"
-        return closeoutBinding.binding(state, key)
+        return Binding(get: { state.navigationScrolls[key] ?? ScrollPosition() }, set: { value in
+            if state.navigationScrolls[key] == nil, state.navigationScrolls.count >= 32,
+               let oldest = state.navigationScrolls.keys.sorted().first { state.navigationScrolls.removeValue(forKey: oldest) }
+            state.navigationScrolls[key] = value
+        })
     }
     private var compactBody: some View {
         VStack(alignment: .leading, spacing: 12) {

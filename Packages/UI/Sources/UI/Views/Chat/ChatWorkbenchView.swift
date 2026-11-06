@@ -666,7 +666,6 @@ struct ChatWorkbenchView: View {
 
     @Environment(\.workbenchNavigationTop) private var navigationTop
     var body: some View {
-        let _ = CloseoutProbe.chat("body")
         GeometryReader { geometry in
             let sidebarShown = showSidebar
             let inspectorShown = showInspector
@@ -1235,13 +1234,11 @@ ScrollViewReader { proxy in
                 // entire message. A Markdown paragraph may regain focus after a
                 // link alert; binding that event to a tall message moves the reader.
                 .onScrollTargetVisibilityChange(idType: UUID.self, threshold: 0.001) { ids in
-                    CloseoutProbe.chat("visibility-callback")
                     // A restore can produce the only visibility callback. Record
                     // its current-path ID; the state-saving observer below still
                     // defers while restoration is pending. This never scrolls.
                     guard chat.state.selectedSessionID == session.id,
                           let first = chat.selectedPath.first(where: { ids.contains($0.id) }) else { return }
-                    CloseoutProbe.chat("visibility", "old=\(visibleMessageID?.uuidString ?? "none") new=\(first.id) changed=\(visibleMessageID != first.id)")
                     visibleMessageID = first.id
                 }
                 .defaultScrollAnchor(followsBottom ? .bottom : nil, for: .sizeChanges)
@@ -1274,7 +1271,6 @@ ScrollViewReader { proxy in
                         followsBottom = false
                         pendingBottomScroll = nil
                     }
-                    CloseoutProbe.chat("geometry", "offset=\(current.offset) distance=\(current.distanceToBottom)")
                     traceScroll("geometry", session: session, position: current)
                     saveScrollState(for: session.id)
                 }
