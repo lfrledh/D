@@ -8,6 +8,28 @@ import Testing
 
 @Suite(.serialized) @MainActor
 struct UILocalizationTests {
+    @Test func startupDiagnosticsKeepTypedCausesAndFollowLanguageIncludingBrokenBuiltIns() throws {
+        let store = UILanguageStore(preferredLanguages: ["en"])
+        let invalid = UILanguageDiagnostic(.externalInvalid, name: "user-pack.json", detail: "exact original diagnostic")
+        #expect(invalid.summary(store) == "The language pack “user-pack.json” cannot be used. Check the file or import it again.")
+        try store.select("zh-Hans")
+        #expect(invalid.summary(store) == "无法使用语言包“user-pack.json”。请检查文件或重新导入。")
+        #expect(invalid.technicalDetails == "user-pack.json\nexact original diagnostic")
+        let data = pack(locale: "fr", displayName: "Français", strings: ["unused.KEY": "user value"])
+        _ = try store.importPack(data: data)
+        let unknown = try #require(store.diagnostics.first { $0.reason == .unknownKeys })
+        #expect(!unknown.summary(store).contains("unused.KEY"))
+        #expect(unknown.technicalDetails.contains("unused.KEY = user value"))
+        let broken = UILanguageStore(settings: nil, directory: nil, preferredLanguages: ["en"],
+            builtInData: { _ in throw CocoaError(.fileReadNoPermission) })
+        #expect(broken.diagnostics.count == 2)
+        #expect(broken.diagnostics.allSatisfy { $0.reason == .builtInRead && $0.detail != nil })
+        #expect(broken.diagnostics[0].summary(broken) == "The built-in language file could not be read: en.")
+        #expect(broken.text("any.key", fallback: "Readable fallback") == "Readable fallback")
+        let malformed = UILanguageStore(settings: nil, directory: nil, preferredLanguages: ["en"],
+            builtInData: { _ in Data("{broken".utf8) })
+        #expect(malformed.diagnostics.allSatisfy { $0.reason == .builtInInvalid && $0.detail != nil })
+    }
     @Test func speechStatusUsesTheServicesLocaleAdmissionAndLiveLanguage() throws {
         let store = UILanguageStore(preferredLanguages: ["en"])
         for locale in ["en-US", "en_US", "zh_CN", "zh_Hans_CN"] {
@@ -124,7 +146,7 @@ struct UILocalizationTests {
         #expect(store.text("workflow.action.save", fallback: "save") == "Enregistrer")
         #expect(store.text("workflow.action.cancel", fallback: "cancel") == "Cancel")
         #expect(store.text("unknown.valid-key", fallback: "safe fallback") == "safe fallback")
-        #expect(store.diagnostics.contains { $0.contains("unknown.valid-key") })
+        #expect(store.diagnostics.contains { $0.reason == .unknownKeys && $0.technicalDetails.contains("unknown.valid-key") })
     }
 
     @Test
@@ -234,7 +256,7 @@ struct UILocalizationTests {
         let store = UILanguageStore(settings: fixture.settings, directory: fixture.directory,
                                     preferredLanguages: ["en"])
         #expect(store.effectiveLanguageIdentifier == "en")
-        #expect(store.diagnostics.contains { $0.contains("damaged.json") })
+        #expect(store.diagnostics.contains { $0.reason == .externalInvalid && $0.name == "damaged.json" })
         #expect(try Data(contentsOf: damaged) == bytes)
     }
 
@@ -256,7 +278,7 @@ struct UILocalizationTests {
         #expect(reopened.selection == UILanguageStore.systemIdentifier)
         #expect(reopened.effectiveLanguageIdentifier == "en")
         #expect(reopened.availableLanguages.contains { $0.id == reopened.selection })
-        #expect(reopened.diagnostics.contains { $0.contains("saved language is unavailable") })
+        #expect(reopened.diagnostics.contains { $0.reason == .savedUnavailable })
         #expect(fixture.settings.string(forKey: UILanguageStore.selectionDefaultsKey) == "fr-FR")
         #expect(try Data(contentsOf: broken) == original)
         expectFailure { try reopened.select("fr-FR") }
@@ -316,7 +338,7 @@ struct UILocalizationTests {
                                     preferredLanguages: ["zh-Hans"])
         #expect(store.selection == "en")
         #expect(store.effectiveLanguageIdentifier == "en")
-        #expect(store.diagnostics.contains { $0.contains("oversized-saved.json") })
+        #expect(store.diagnostics.contains { $0.reason == .externalInvalid && $0.name == "oversized-saved.json" })
         #expect(fixture.settings.string(forKey: UILanguageStore.selectionDefaultsKey) == preference)
         #expect(try Data(contentsOf: oversized) == bytes)
     }

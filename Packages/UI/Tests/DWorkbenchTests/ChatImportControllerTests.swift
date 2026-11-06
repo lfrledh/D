@@ -4,6 +4,16 @@ import Testing
 
 @Suite("Imported conversation provenance and persistence", .serialized) @MainActor
 struct ChatImportControllerTests {
+    @Test func localizedFallbackOnlyNamesEmptyNewImports() async throws {
+        let (store, chat) = try await fixture()
+        let zh = try await chat.importConversation(bytes, title: " \n ", allowingLosses: true, defaultTitle: "导入的对话")
+        let en = try await chat.importConversation(bytes, title: "", allowingLosses: true, defaultTitle: "Imported conversation")
+        let named = try await chat.importConversation(bytes, title: "Original User Name", allowingLosses: true, defaultTitle: "导入的对话")
+        #expect(chat.state.sessions.first { $0.id == zh }?.title == "导入的对话")
+        #expect(chat.state.sessions.first { $0.id == en }?.title == "Imported conversation")
+        #expect(chat.state.sessions.first { $0.id == named }?.title == "Original User Name")
+        try await store.close()
+    }
     private let bytes = Data(#"{"format":"openai-messages","version":1,"messages":[{"role":"system","content":"Original system"},{"role":"user","content":"你好 é 👩🏽‍🎨"},{"role":"assistant","content":"<script>not executable</script>","tool_calls":[]},{"role":"tool","content":"ignored"}]}"#.utf8)
 
     @Test func explicitLossAcceptanceCreatesNewNonExecutionHistoryAndRestores() async throws {

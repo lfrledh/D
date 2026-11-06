@@ -3,7 +3,7 @@
   "nonRenewingSubscriptions": [],
   "products": [
     {
-      "displayPrice": "0.99",
+      "displayPrice": "1",
       "familyShareable": false,
       "internalID": "D_LOCAL_TEST_TIP_01",
       "localizations": [
@@ -18,8 +18,88 @@
           "locale": "zh_Hans"
         }
       ],
-      "productID": "d.localtest.tip.small",
-      "referenceName": "D local StoreKit test tip",
+      "productID": "d.localtest.tip.tier1",
+      "referenceName": "D local StoreKit test tier 1",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "5",
+      "familyShareable": false,
+      "internalID": "D_LOCAL_TEST_TIP_02",
+      "localizations": [
+        {
+          "description": "Local test only. No real charge.",
+          "displayName": "Test tip — no charge",
+          "locale": "en_US"
+        },
+        {
+          "description": "仅本地测试，不会实际扣款。",
+          "displayName": "测试打赏 — 不扣款",
+          "locale": "zh_Hans"
+        }
+      ],
+      "productID": "d.localtest.tip.tier2",
+      "referenceName": "D local StoreKit test tier 2",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "10",
+      "familyShareable": false,
+      "internalID": "D_LOCAL_TEST_TIP_03",
+      "localizations": [
+        {
+          "description": "Local test only. No real charge.",
+          "displayName": "Test tip — no charge",
+          "locale": "en_US"
+        },
+        {
+          "description": "仅本地测试，不会实际扣款。",
+          "displayName": "测试打赏 — 不扣款",
+          "locale": "zh_Hans"
+        }
+      ],
+      "productID": "d.localtest.tip.tier3",
+      "referenceName": "D local StoreKit test tier 3",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "50",
+      "familyShareable": false,
+      "internalID": "D_LOCAL_TEST_TIP_04",
+      "localizations": [
+        {
+          "description": "Local test only. No real charge.",
+          "displayName": "Test tip — no charge",
+          "locale": "en_US"
+        },
+        {
+          "description": "仅本地测试，不会实际扣款。",
+          "displayName": "测试打赏 — 不扣款",
+          "locale": "zh_Hans"
+        }
+      ],
+      "productID": "d.localtest.tip.tier4",
+      "referenceName": "D local StoreKit test tier 4",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "100",
+      "familyShareable": false,
+      "internalID": "D_LOCAL_TEST_TIP_05",
+      "localizations": [
+        {
+          "description": "Local test only. No real charge.",
+          "displayName": "Test tip — no charge",
+          "locale": "en_US"
+        },
+        {
+          "description": "仅本地测试，不会实际扣款。",
+          "displayName": "测试打赏 — 不扣款",
+          "locale": "zh_Hans"
+        }
+      ],
+      "productID": "d.localtest.tip.tier5",
+      "referenceName": "D local StoreKit test tier 5",
       "type": "Consumable"
     }
   ],

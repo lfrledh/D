@@ -663,11 +663,17 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
     public func publishSelection(name: String, registration: WorkflowToolRegistration,
                                  inputs: [WorkflowToolInputBinding], outputs: [WorkflowNamedOutput],
                                  expectedSelection: Set<UUID>, expectedGraphID: UUID, expectedRevision: UUID) async throws {
-        guard canEditCanvas, !isRunning, !isSaving, !hasPendingSaves, let body = graph,
+        guard !isSaving else {
+            throw WorkflowIssue("The workflow is being saved.", code: "workflow.language.tools.saving")
+        }
+        guard canEditCanvas, !isRunning, !hasPendingSaves else {
+            throw WorkflowIssue("The current workflow cannot be edited.", code: "workflow.language.tools.notEditable")
+        }
+        guard let body = graph,
               body.id == expectedGraphID, body.revision == expectedRevision, selectedNodeIDs == expectedSelection,
               let root = rootGraph,
               let index = graphs.firstIndex(where: { $0.id == root.id }) else {
-            throw WorkflowIssue("封装目标已改变或正在保存；草稿保留，请重新检查边界。")
+            throw WorkflowIssue("The selected nodes or workflow have changed.", code: "workflow.language.tools.selectionChanged")
         }
         let result = try WorkflowToolEditing.extract(body, selected: expectedSelection, name: name,
             inputs: inputs, outputs: outputs, tools: tools, registry: registry, registration: registration)

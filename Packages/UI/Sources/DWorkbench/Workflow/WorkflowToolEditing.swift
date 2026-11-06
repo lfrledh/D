@@ -53,9 +53,18 @@ public enum WorkflowToolEditing {
         guard !title.isEmpty, title.utf8.count <= 256 else {
             throw WorkflowIssue("名称不能为空或过长。", code: "workflow.language.tools.invalidName")
         }
-        guard !selected.isEmpty, selected.isSubset(of: Set(graph.nodes.map(\.id))),
-              Set(inputs.map(\.name)).count == inputs.count, Set(outputs.map(\.name)).count == outputs.count,
-              !outputs.isEmpty else { throw WorkflowIssue("封装需要不重复的工具名、选区与公开接口。") }
+        guard !selected.isEmpty else {
+            throw WorkflowIssue("Select the nodes you want to combine first.", code: "workflow.language.tools.noSelection")
+        }
+        guard selected.isSubset(of: Set(graph.nodes.map(\.id))) else {
+            throw WorkflowIssue("The selected nodes or workflow have changed.", code: "workflow.language.tools.selectionChanged")
+        }
+        guard !outputs.isEmpty else {
+            throw WorkflowIssue("Select at least one output port.", code: "workflow.language.tools.noOutputs")
+        }
+        guard Set(inputs.map(\.name)).count == inputs.count, Set(outputs.map(\.name)).count == outputs.count else {
+            throw WorkflowIssue("Conflicting input or output port information.", code: "workflow.language.tools.portConflict")
+        }
         try registry.validate(graph, tools: tools)
         let incoming = graph.connections.filter { !selected.contains($0.sourceNode) && selected.contains($0.targetNode) }
         let outgoing = graph.connections.filter { selected.contains($0.sourceNode) && !selected.contains($0.targetNode) }

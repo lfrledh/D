@@ -3,6 +3,34 @@ import Testing
 @testable import DWorkbench
 
 struct WorkflowToolEditingTests {
+    @Test func extractionFailureCodesDescribeActualSelectionAndPortIdentity() throws {
+        let registry = WorkflowRegistry.standard
+        var input = try #require(registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("kept"))
+        let node = try #require(registry.operation("d.value.return")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [input, node], connections: [.init(sourceNode: input.id, targetNode: node.id)])
+        let output = WorkflowNamedOutput(name: "same", nodeID: node.id, schema: .text)
+        let binding = WorkflowToolInputBinding(name: "same", schema: .text, sourceNode: input.id, sourcePort: "output")
+        let checks: [(Set<UUID>, [WorkflowToolInputBinding], [WorkflowNamedOutput], String)] = [
+            ([], [], [output], "noSelection"),
+            ([UUID()], [], [output], "selectionChanged"),
+            ([node.id], [binding], [], "noOutputs"),
+            ([node.id], [binding, binding], [output], "portConflict"),
+            ([node.id], [binding], [output, output], "portConflict")
+        ]
+        for (selected, inputs, outputs, reason) in checks {
+            do {
+                _ = try WorkflowToolEditing.extract(graph, selected: selected, name: "Tool", inputs: inputs, outputs: outputs, tools: [])
+                Issue.record("Invalid boundary accepted")
+            } catch { #expect((error as? WorkflowIssue)?.code == "workflow.language.tools." + reason) }
+            #expect(graph.nodes == [input, node] && graph.connections.count == 1)
+        }
+        let result = try WorkflowToolEditing.extract(graph, selected: [node.id], name: "Tool",
+            inputs: [binding], outputs: [output], tools: [],
+            registration: .init(purpose: "Purpose", inputLabels: ["same": "Identical label"], outputLabels: ["same": "Identical label"]))
+        #expect(result.tool.graph.interface?.inputs.first?.name == "same")
+        #expect(result.tool.graph.interface?.outputs.first?.name == "same")
+    }
     @Test func selectionBecomesRealFixedToolWithBoundaryMappings() throws {
         let registry = WorkflowRegistry.standard
         var input = try #require(registry.operation("d.value.input")).definition.makeNode(); input.dataConfiguration = .init(value: .text("hello"))

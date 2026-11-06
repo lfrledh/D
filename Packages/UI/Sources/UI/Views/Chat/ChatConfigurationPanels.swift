@@ -84,6 +84,7 @@ struct ChatPresetsPanel: View {
     @State private var captureConfiguration = false
     @State private var issue: String?
     @State private var closeSaveApplied = false
+    @State private var saving = false
 
     init(chat: ChatController, sessionID: UUID?, onImport: @escaping () -> Void,
          onExport: @escaping ([ChatPromptPreset]) -> Void, showsHeading: Bool = true, isAvailable: @escaping @MainActor () -> Bool = { true }) {
@@ -134,6 +135,22 @@ struct ChatPresetsPanel: View {
             captureCurrentConfiguration: captureConfiguration, sessionID: sessionID, chat: chat) }
         if issue == nil { editorOpen = false; draftLoaded = false }
     }
+    private func saveAndFlush() async throws {
+        guard isAvailable() else { throw WorkflowIssue(workflowText(language, "chat.organization.defaults.targetChanged")) }
+        saving = true; defer { saving = false }
+        if !closeSaveApplied {
+            save()
+            guard issue == nil, !draftLoaded else {
+                throw WorkflowIssue(issue ?? text("closeSaveInvalid", "Complete a valid preset name and settings before saving.", "请填写有效的预设名称并完成参数后再保存。"))
+            }
+            closeSaveApplied = true; editorOpen = true; draftLoaded = true
+        }
+        do {
+            try await chat.flush()
+            guard isAvailable() else { throw WorkflowIssue(workflowText(language, "chat.organization.defaults.targetChanged")) }
+            closeSaveApplied = false; editorOpen = false; draftLoaded = false
+        } catch { issue = error.localizedDescription; throw error }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -178,7 +195,8 @@ struct ChatPresetsPanel: View {
                 Button(text("new", "New preset…", "新建预设…")) { load(nil) }
                 Spacer()
                 Button(text("import", "Import…", "导入…"), action: onImport)
-                Button(text("export", "Export…", "导出…")) { onExport(chat.state.presets) }
+                Button(text("export", "Export all chat presets…", "导出全部聊天预设…")) { onExport(chat.state.presets) }
+                    .help(workflowText(language, "chat.config.exportHelp"))
                     .disabled(chat.state.presets.isEmpty)
             }
             if editorOpen { editor }
@@ -186,24 +204,8 @@ struct ChatPresetsPanel: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .disabled(closeSaveApplied)
-        .workbenchCloseProtection(isDirty: closeSaveApplied || (draftLoaded && (name != (original?.name ?? "") || prompt != (original?.prompt ?? "") || selectionInstruction != (original?.selectionInstruction ?? "") || captureConfiguration)), allowsDiscard: !closeSaveApplied, save: {
-            guard isAvailable() else { throw WorkflowIssue(workflowText(language, "chat.organization.defaults.targetChanged")) }
-            if !closeSaveApplied {
-                save()
-                guard issue == nil, !draftLoaded else {
-                    throw WorkflowIssue(issue ?? text("closeSaveInvalid", "Complete a valid preset name and settings before saving.", "请填写有效的预设名称并完成参数后再保存。"))
-                }
-                closeSaveApplied = true; editorOpen = true; draftLoaded = true
-            }
-            do {
-                guard isAvailable() else { throw WorkflowIssue(workflowText(language, "chat.organization.defaults.targetChanged")) }
-                try await chat.flush()
-                guard isAvailable() else { throw WorkflowIssue(workflowText(language, "chat.organization.defaults.targetChanged")) }
-                closeSaveApplied = false; editorOpen = false; draftLoaded = false
-            }
-            catch { issue = error.localizedDescription; throw error }
-        })
+        .disabled(closeSaveApplied || saving)
+        .workbenchCloseProtection(isDirty: closeSaveApplied || (draftLoaded && (name != (original?.name ?? "") || prompt != (original?.prompt ?? "") || selectionInstruction != (original?.selectionInstruction ?? "") || captureConfiguration)), isSaving: saving, allowsDiscard: !closeSaveApplied, save: saveAndFlush)
         .onChange(of: sessionID) { _, _ in
             if draftLoaded || closeSaveApplied { return }
             editorOpen = false
@@ -245,7 +247,7 @@ struct ChatPresetsPanel: View {
                         .help(text("restoreHelp", "", ""))
                     Spacer()
                     Button(text("cancel", "Cancel", "取消")) { editorOpen = false; draftLoaded = false; issue = nil }
-                    Button(text("save", "Save preset", "保存预设"), action: save)
+                    Button(text("save", "Save preset", "保存预设")) { Task { do { try await saveAndFlush() } catch { issue = error.localizedDescription } } }
                         .disabled(!validName || invalidCapture || prompt.utf8.count > 65_536 ||
                                   selectionInstruction.utf8.count > 16_384 || !chat.isLoaded || chat.saveIssue != nil)
                         .accessibilityIdentifier("chat-preset-save")

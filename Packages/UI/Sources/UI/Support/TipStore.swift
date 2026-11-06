@@ -5,9 +5,21 @@ import StoreKit
 import CryptoKit
 import Security
 
+/// Proposed consumable IDs, pending App Store Connect creation. Currency is never
+/// encoded into identity, and no client price is substituted for StoreKit displayPrice.
+public enum TipProducts {
+    public static let productionIDs: Set<String> = Set((1...5).map { "d.tip.tier\($0)" })
+    #if DEBUG
+    public static let localTestIDs: Set<String> = Set((1...5).map { "d.localtest.tip.tier\($0)" })
+    #endif
+}
+
 /// Application-owned StoreKit listener. No project, model or feature entitlement depends on tips.
 @MainActor @Observable public final class TipStore {
     public enum Status: String { case idle, loading, unavailable, purchasing, pending, cancelled, thanked, recorded, failed, uncertain }
+    public enum CatalogStatus: String { case idle, loading, notConfigured, available, partial, unavailable }
+    public private(set) var catalogStatus: CatalogStatus = .idle
+    public private(set) var catalogDiagnostic: String?
     public private(set) var products: [Product] = []
     public private(set) var status: Status = .idle
     public private(set) var diagnostic: String?
@@ -16,12 +28,14 @@ import Security
     public private(set) var localTest = false
     public enum RecoveryFailure: String { case platform, verification, storage, credentials, capacity }
     public private(set) var recoveryFailure: RecoveryFailure?
+    public private(set) var recoveryDiagnostic: String?
     public enum RecoveryStatus { case idle, loading, ready, unavailable, failed }
     public private(set) var recoveryStatus: RecoveryStatus = .idle
     private(set) var verifiedScope: TipAccountScope?
     private(set) var recoveryGeneration: UInt64 = 0
     private var verifiedHistory: [String: TipReceipt] = [:]
     private var verifiedJournalKeys: Set<String> = []
+    private var unmatchedPurchaseKey: String?
     private let credentials: any TipCredentialVault
     private let expectsLocalTest: Bool
     private var eventRevision: UInt64 = 0
@@ -38,7 +52,7 @@ import Security
     @ObservationIgnored private var purchaseID: UUID?
     // Only in-flight verified handlers own entries; defer removes them after finish.
     @ObservationIgnored private var pendingAcknowledgments: Set<String> = []
-    /// Formal product identifiers remain undecided. The ordinary app supplies an empty allowlist.
+    /// Stable tier identifiers are injected by the app; StoreKit owns prices and storefront.
     public convenience init(productIDs: Set<String>, bundleID: String, journalURL: URL, localTest: Bool = false) {
         self.init(productIDs: productIDs, bundleID: bundleID, journalURL: journalURL, localTest: localTest,
                   credentials: TipKeychainVault(bundleID: bundleID, journalURL: journalURL))
@@ -78,24 +92,27 @@ import Security
     public func loadProducts() async {
         guard !loading, !purchasing else { return }
         guard journalIssue == nil else { status = .uncertain; return }
-        guard !allowedIDs.isEmpty else { products = []; status = .unavailable; return }
+        guard !allowedIDs.isEmpty else { products = []; catalogStatus = .notConfigured; return }
         loading = true; defer { loading = false }
-        let revision = eventRevision, previous = status
-        if ![.pending, .uncertain, .thanked].contains(status) { status = .loading; diagnostic = nil }
+        catalogStatus = .loading; catalogDiagnostic = nil
         do {
             await recoverHistory()
             if expectsLocalTest && !localTest { throw TipIssue.invalidTransaction }
             for await result in Transaction.unfinished { await receive(result) }
             let loaded = try await Product.products(for: allowedIDs)
-            products = loaded.filter { allowedIDs.contains($0.id) && $0.type == .consumable }.sorted { $0.price < $1.price }
-            if let selectedID, !products.contains(where: { $0.id == selectedID }) { self.selectedID = nil }
-            if eventRevision == revision {
-                status = products.isEmpty ? .unavailable : [.pending, .uncertain, .thanked].contains(previous) ? previous : .idle
-            }
+            finishProductLoad(loaded)
         } catch {
-            products = []
-            if eventRevision == revision { diagnostic = String(describing: error); status = .unavailable }
+            finishProductLoad([], failure: String(describing: error))
         }
+    }
+    /// Catalog refresh never acknowledges or clears an unresolved payment.
+    func finishProductLoad(_ loaded: [Product], failure: String? = nil) {
+        products = loaded.filter { allowedIDs.contains($0.id) && $0.type == .consumable }
+            .sorted { $0.id < $1.id }
+        if let selectedID, !products.contains(where: { $0.id == selectedID }) { self.selectedID = nil }
+        catalogDiagnostic = failure
+        catalogStatus = allowedIDs.isEmpty ? .notConfigured : products.isEmpty ? .unavailable :
+            products.count == allowedIDs.count ? .available : .partial
     }
     public var selectedProduct: Product? { products.first { $0.id == selectedID } }
     public var canPurchase: Bool { selectedProduct != nil && !purchasing && !loading && recoveryStatus == .ready && journalIssue == nil && ![.uncertain, .recorded, .pending].contains(status) && (!expectsLocalTest || localTest) }
@@ -122,7 +139,7 @@ import Security
     }
     @discardableResult func beginRecovery() -> UInt64 {
         recoveryGeneration &+= 1; verifiedScope = nil; verifiedHistory.removeAll()
-        recoveryStatus = .loading; recoveryFailure = nil; return recoveryGeneration
+        recoveryStatus = .loading; recoveryFailure = nil; recoveryDiagnostic = nil; return recoveryGeneration
     }
     func acceptScope(_ scope: TipAccountScope, generation: UInt64) throws {
         guard generation == recoveryGeneration, scope.bundleID == bundleID, !scope.accountID.isEmpty,
@@ -133,11 +150,17 @@ import Security
         guard generation == recoveryGeneration, verifiedScope?.contains(fact) == true else { throw TipIssue.invalidTransaction }
         _ = try await persistVerified(fact, credential: credential, generation: generation)
     }
-    func endRecovery(generation: UInt64, succeeded: Bool, failure: RecoveryFailure? = nil) {
+    func endRecovery(generation: UInt64, succeeded: Bool, failure: RecoveryFailure? = nil, diagnostic: String? = nil) {
         guard generation == recoveryGeneration else { return }
         recoveryStatus = succeeded ? .ready : .failed
         recoveryFailure = succeeded ? nil : failure ?? .platform
+        recoveryDiagnostic = succeeded ? nil : diagnostic
         if !succeeded { verifiedScope = nil; verifiedHistory.removeAll() }
+        if succeeded, status == .recorded, let key = unmatchedPurchaseKey,
+           let fact = verifiedHistory[key], verifiedScope?.contains(fact) == true {
+            status = fact.revoked ? .idle : .thanked
+            unmatchedPurchaseKey = nil; eventRevision &+= 1
+        }
     }
     public func recoverHistory(recheckAccount: Bool = false) async {
         guard !allowedIDs.isEmpty else { recoveryStatus = .unavailable; return }
@@ -186,7 +209,7 @@ import Security
             case is CocoaError: failure = .storage
             default: failure = .platform
             }
-            endRecovery(generation: generation, succeeded: false, failure: failure)
+            endRecovery(generation: generation, succeeded: false, failure: failure, diagnostic: String(describing: error))
         }
     }
     private static func fact(_ transaction: Transaction) -> TipReceipt {
@@ -225,6 +248,7 @@ import Security
                 // Never attribute the old account's acknowledgment to a newly verified account.
                 let sameAccount = fact.accountID == nil || verifiedScope?.contains(fact) == true
                 status = journal[fact.key]?.revoked == false ? (sameAccount ? .thanked : .recorded) : .idle
+                unmatchedPurchaseKey = status == .recorded ? fact.key : nil
                 diagnostic = nil; eventRevision &+= 1
                 return
             }

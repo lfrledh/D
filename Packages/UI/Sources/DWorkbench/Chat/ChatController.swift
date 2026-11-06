@@ -2143,7 +2143,8 @@ public enum ChatGenerationPhase: String, Sendable {
     /// The caller previews the same bytes before explicitly accepting any reported losses.
     @discardableResult public func importConversation(_ data: Data, title: String,
                                                        allowingLosses: Bool, importID: UUID = UUID(),
-                                                       selectedConversationIndex: Int? = nil) async throws -> UUID {
+                                                       selectedConversationIndex: Int? = nil,
+                                                       defaultTitle: String = "Imported conversation") async throws -> UUID {
         guard isLoaded else { throw WorkflowIssue(error ?? "Chat history has not loaded.") }
         guard allowsSubmission(), !isDiscarding else { throw WorkflowIssue("会话正在关闭。") }
         let preview = try ChatInterchange.previewImport(data, selectedConversationIndex: selectedConversationIndex)
@@ -2156,7 +2157,7 @@ public enum ChatGenerationPhase: String, Sendable {
             try await flush(); return importID // Retry saving the already created transcript, never create it twice.
         }
         try requireLoaded() // A new import cannot bypass an unresolved save failure.
-        var session = ChatSession(id: importID, title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Imported conversation" : title)
+        var session = ChatSession(id: importID, title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? defaultTitle : title)
         session.systemPrompt = imported.systemPrompt
         session.importLossDetails = imported.acknowledgedLosses
         session.importLossNotes = imported.acknowledgedLosses.map { $0.location + ": " + $0.reason }

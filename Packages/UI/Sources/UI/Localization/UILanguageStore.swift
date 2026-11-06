@@ -30,13 +30,47 @@ public enum UILanguageError: Error, LocalizedError, Equatable {
     }
 }
 
+/// Stable causes are retained; summaries resolve in the currently selected language.
+/// English literals are emergency fallbacks when the built-in resources themselves fail.
+public struct UILanguageDiagnostic: Equatable, Sendable {
+    public enum Reason: String, CaseIterable, Sendable {
+        case savedUnavailable, builtInRead, builtInIncomplete, builtInInvalid, externalList, reservedIdentifier, builtInConflict, duplicate, externalInvalid, unknownKeys
+    }
+    public let reason: Reason
+    public let name: String?
+    public let detail: String?
+    init(_ reason: Reason, name: String? = nil, detail: String? = nil) {
+        self.reason = reason; self.name = name; self.detail = detail
+    }
+    public var technicalDetails: String {
+        [name, detail].compactMap { $0 }.joined(separator: "\n")
+    }
+    @MainActor public func summary(_ store: UILanguageStore) -> String {
+        let fallback: String
+        switch reason {
+        case .savedUnavailable: fallback = "The previously selected language is unavailable. The interface now follows the system language."
+        case .builtInRead: fallback = "The built-in language file could not be read: {name}."
+        case .builtInIncomplete: fallback = "The built-in language file is missing required interface text: {name}."
+        case .builtInInvalid: fallback = "The built-in language file cannot be used: {name}."
+        case .externalList: fallback = "The list of saved language packs could not be read."
+        case .reservedIdentifier: fallback = "The language pack “{name}” uses an identifier that is not allowed for custom languages and was not loaded."
+        case .builtInConflict: fallback = "The language pack “{name}” conflicts with a built-in language and was not loaded."
+        case .duplicate: fallback = "The language pack “{name}” is duplicated. The duplicate was skipped."
+        case .externalInvalid: fallback = "The language pack “{name}” cannot be used. Check the file or import it again."
+        case .unknownKeys: fallback = "The language pack “{name}” contains text entries that this version does not use. Other entries are unaffected."
+        }
+        return store.text("language.diagnostic." + reason.rawValue, fallback: fallback,
+                          arguments: name.map { ["name": $0] } ?? [:])
+    }
+}
+
 @MainActor @Observable
 public final class UILanguageStore {
     public static let systemIdentifier = "system"
     static let selectionDefaultsKey = "D.UILanguage.Selection"
 
     public private(set) var selection: String
-    public private(set) var diagnostics: [String] = []
+    public private(set) var diagnostics: [UILanguageDiagnostic] = []
     private var contentRevision: UInt64 = 0
     // UI projection caches must also invalidate when a pack changes in place.
     var presentationRevision: UInt64 { contentRevision }
@@ -91,22 +125,29 @@ public final class UILanguageStore {
         return [UILanguage(id: Self.systemIdentifier, displayName: systemName)] + packs
     }
 
-    public init(
+    public convenience init(
         settings: UserDefaults? = nil,
         directory: URL? = nil,
         preferredLanguages: [String] = Locale.preferredLanguages
+    ) {
+        self.init(settings: settings, directory: directory, preferredLanguages: preferredLanguages,
+                  builtInData: Self.bundledData)
+    }
+
+    init(settings: UserDefaults?, directory: URL?, preferredLanguages: [String],
+         builtInData: (String) throws -> Data
     ) {
         self.settings = settings
         self.directory = directory
         self.preferredLanguages = preferredLanguages
         self.selection = settings?.string(forKey: Self.selectionDefaultsKey) ?? Self.systemIdentifier
-        loadBuiltIns()
+        loadBuiltIns(builtInData)
         loadExternalPacks()
         if selection != Self.systemIdentifier {
             if let exact = exactIdentifier(for: selection) {
                 selection = exact
             } else {
-                diagnostics.append("The saved language is unavailable; following the system language instead.")
+                diagnostics.append(.init(.savedUnavailable, name: selection))
                 selection = Self.systemIdentifier
             }
         }
@@ -191,24 +232,32 @@ public final class UILanguageStore {
         return pack.locale
     }
 
-    private func loadBuiltIns() {
+    private static func bundledData(_ resource: String) throws -> Data {
+        guard let url = Bundle.module.url(forResource: resource, withExtension: "json")
+            ?? Bundle.module.url(forResource: resource, withExtension: "json", subdirectory: "Localization") else {
+            throw CocoaError(.fileReadNoSuchFile)
+        }
+        return try Data(contentsOf: url)
+    }
+    private func loadBuiltIns(_ read: (String) throws -> Data) {
         for resource in ["en", "zh-Hans"] {
-            let url = Bundle.module.url(forResource: resource, withExtension: "json")
-                ?? Bundle.module.url(forResource: resource, withExtension: "json", subdirectory: "Localization")
-            guard let url, let data = try? Data(contentsOf: url) else {
-                diagnostics.append("Built-in language resource is unavailable: \(resource).")
+            let data: Data
+            do { data = try read(resource) }
+            catch {
+                diagnostics.append(.init(.builtInRead, name: resource, detail: String(describing: error)))
                 continue
             }
             do {
                 let english = resource == "en" ? nil : builtIns["en"]
                 let pack = try LanguagePackCodec.decodeBuiltIn(data, english: english)
                 if let english, Set(pack.strings.keys) != Set(english.strings.keys) {
-                    diagnostics.append("Built-in language resource has incomplete keys: \(resource).")
+                    diagnostics.append(.init(.builtInIncomplete, name: resource,
+                        detail: Set(english.strings.keys).subtracting(pack.strings.keys).sorted().joined(separator: "\n")))
                     continue
                 }
                 builtIns[pack.locale] = pack
             } catch {
-                diagnostics.append("Built-in language resource is invalid: \(resource).")
+                diagnostics.append(.init(.builtInInvalid, name: resource, detail: String(describing: error)))
             }
         }
     }
@@ -225,7 +274,7 @@ public final class UILanguageStore {
                 .sorted { $0.lastPathComponent < $1.lastPathComponent }
         } catch {
             if (error as? CocoaError)?.code == .fileReadNoSuchFile { return }
-            diagnostics.append("Saved language packs could not be listed.")
+            diagnostics.append(.init(.externalList, name: directory.lastPathComponent, detail: String(describing: error)))
             return
         }
         for url in urls {
@@ -233,21 +282,21 @@ public final class UILanguageStore {
                 let data = try LanguagePackFileReader.read(from: url)
                 let pack = try LanguagePackCodec.decode(data, english: builtIns["en"])
                 guard pack.locale != Self.systemIdentifier else {
-                    diagnostics.append("A saved pack used the reserved language identifier: \(pack.locale).")
+                    diagnostics.append(.init(.reservedIdentifier, name: pack.locale, detail: url.lastPathComponent))
                     continue
                 }
                 guard builtIns[pack.locale] == nil else {
-                    diagnostics.append("A saved pack tried to replace built-in language: \(pack.locale).")
+                    diagnostics.append(.init(.builtInConflict, name: pack.locale, detail: url.lastPathComponent))
                     continue
                 }
                 guard externalPacks[pack.locale] == nil else {
-                    diagnostics.append("Duplicate saved language pack: \(pack.locale).")
+                    diagnostics.append(.init(.duplicate, name: pack.locale, detail: url.lastPathComponent))
                     continue
                 }
                 externalPacks[pack.locale] = pack
                 reportUnknownKeys(in: pack)
             } catch {
-                diagnostics.append("Saved language pack is invalid: \(url.lastPathComponent).")
+                diagnostics.append(.init(.externalInvalid, name: url.lastPathComponent, detail: String(describing: error)))
             }
         }
     }
@@ -256,7 +305,8 @@ public final class UILanguageStore {
         guard let english = builtIns["en"] else { return }
         let unknown = Set(pack.strings.keys).subtracting(english.strings.keys).sorted()
         guard !unknown.isEmpty else { return }
-        diagnostics.append("Language \(pack.locale) contains unused keys: \(unknown.joined(separator: ", ")).")
+        diagnostics.append(.init(.unknownKeys, name: pack.locale,
+            detail: unknown.map { $0 + " = " + (pack.strings[$0] ?? "") }.joined(separator: "\n")))
     }
 
     // Explicit selections are exact; only Follow System may use language-family fallback.

@@ -152,11 +152,15 @@ struct WorkflowToolPanel: View {
                 if let graph = controller.graph {
                     WorkflowDependencySummary(graph: dependencyGraph(graph, selected: value.selected), controller: controller)
                 }
-                Text(t("parametersFromInputs", "公开参数沿用类型化输入；未映射的内部参数保持冻结。编辑副本可修改内部流程，再发布新定义版本。"))
+                Text(t("parametersFromInputs", "输入端口用于接收外部数据。内部节点的其他设置沿用保存时的值。如需修改，请先“复制为可编辑工作流”，修改后“保存新版本”。"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Button(t("extract", "按此接口封装选区")) {
-                guard let draft = boundary, controller.selectedNodeIDs == draft.selected else { controller.errorMessage = t("stale", "选区已改变，请重新检查边界。"); return }
+                guard let draft = boundary else {
+                    publicationError = "The selected nodes or workflow have changed."
+                    publicationErrorCode = "workflow.language.tools.selectionChanged"
+                    return
+                }
                 let outputs = draft.outputs.filter(\.included).map(\.value)
                 let registration = WorkflowToolRegistration(purpose: purpose, detail: detail.isEmpty ? nil : detail,
                     inputLabels: inputLabels.filter { key, _ in draft.inputs.contains { $0.name == key } },

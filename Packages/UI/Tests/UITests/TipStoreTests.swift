@@ -4,6 +4,40 @@ import Testing
 @testable import UI
 
 @Suite(.serialized) @MainActor struct TipStoreTests {
+    @Test func catalogReloadNeverClearsUnmatchedOrUnverifiedPayment() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-catalog-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let value = owner(root.appendingPathComponent("journal.json"))
+        let generation = value.beginRecovery()
+        try value.acceptScope(scope("B"), generation: generation)
+        value.endRecovery(generation: generation, succeeded: true)
+        let purchase = value.beginPurchase()
+        await value.acceptVerified(detailed("one", account: "A"), purchase: purchase) {}
+        #expect(value.status == .recorded)
+        value.finishProductLoad([], failure: "controlled catalog failure")
+        #expect(value.catalogStatus == .unavailable && value.status == .recorded && !value.canPurchase)
+        value.finishProductLoad([])
+        #expect(value.status == .recorded && value.catalogDiagnostic == nil)
+        let recheck = value.beginRecovery()
+        try value.acceptScope(scope("A"), generation: recheck)
+        try await value.mergeHistory(detailed("one", account: "A"), credential: nil, generation: recheck)
+        value.endRecovery(generation: recheck, succeeded: true)
+        #expect(value.status == .thanked && value.currentSupportRecords.count == 1)
+        value.markUnverified("exact verification failure")
+        value.finishProductLoad([], failure: "independent catalog failure")
+        #expect(value.status == .uncertain && value.diagnostic == "exact verification failure")
+        #expect(value.catalogDiagnostic == "independent catalog failure")
+        let failure = value.beginRecovery()
+        value.endRecovery(generation: failure, succeeded: false, failure: .credentials, diagnostic: "vault failure")
+        #expect(value.recoveryFailure == .credentials && value.recoveryDiagnostic == "vault failure")
+        #expect(value.diagnostic == "exact verification failure")
+    }
+
+    @Test func tierIdentitiesNeverEncodePricesOrUseLocalProductsInProduction() {
+        #expect(TipProducts.productionIDs == Set(["d.tip.tier1", "d.tip.tier2", "d.tip.tier3", "d.tip.tier4", "d.tip.tier5"]))
+        #expect(TipProducts.localTestIDs.count == 5)
+        #expect(TipProducts.productionIDs.isDisjoint(with: TipProducts.localTestIDs))
+    }
     private func owner(_ url: URL, ids: Set<String> = ["d.localtest.tip.small"]) -> TipStore {
         TipStore(productIDs: ids, bundleID: "D.fixture", journalURL: url, localTest: true, credentials: FixtureTipVault())
     }
@@ -37,7 +71,7 @@ import Testing
     @Test func ordinaryConfigurationHasNoInventedProductOrPurchase() async {
         let value = owner(FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),ids:[])
         await value.loadProducts()
-        #expect(value.products.isEmpty && value.status == .unavailable && !value.canPurchase)
+        #expect(value.products.isEmpty && value.catalogStatus == .notConfigured && !value.canPurchase)
     }
     @Test(arguments: [false, true]) func duplicateDeliveryCannotEraseTheFirstSuccessfulAcknowledgment(uncertain: Bool) async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tips-duplicate-" + UUID().uuidString)

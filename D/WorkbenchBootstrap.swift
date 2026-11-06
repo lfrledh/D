@@ -131,10 +131,18 @@ final class WorkbenchBootstrap {
             lowMemoryDecisions = LowMemoryDecisionStore(settings: settings)
             if tips == nil {
                 var test = false
+                var identifiers = TipProducts.productionIDs
                 #if DEBUG
                 test = ProcessInfo.processInfo.environment["D_STOREKIT_LOCAL_TEST"] == "1"
+                if test { identifiers = TipProducts.localTestIDs }
+                // Test methods own their SKTestSession and listener. The app host
+                // must not observe or finish the test's transactions independently.
+                if ProcessInfo.processInfo.environment["D_STOREKIT_TESTS"] == "1" { identifiers = [] }
                 #endif
-                tips = TipStore(productIDs: test ? ["d.localtest.tip.small"] : [],
+                #if D_STOREKIT_TEST_HOST
+                identifiers = [] // Explicit build-for-testing host; test methods own StoreKit.
+                #endif
+                tips = TipStore(productIDs: identifiers,
                     bundleID: Bundle.main.bundleIdentifier ?? "", journalURL: libraryDirectory.deletingLastPathComponent()
                         .appendingPathComponent(test ? "tip-test-journal.json" : "tip-journal.json"), localTest: test)
                 tips?.start()

@@ -574,6 +574,7 @@ struct ChatWorkbenchView: View {
     @State private var issues: [UUID: String] = [:]
     @State private var issueCodes: [UUID: String] = [:]
     @State private var globalIssue: String?
+    @State private var globalIssueCode: String?
     @State private var newPresetName = ""
     @State private var filePanelBusy = false
     @State private var ocrImport = false
@@ -645,7 +646,7 @@ struct ChatWorkbenchView: View {
     }
     private func report(_ message: String?, for sessionID: UUID?, code: String? = nil) {
         if let sessionID { issues[sessionID] = message; issueCodes[sessionID] = code }
-        else { globalIssue = message }
+        else { globalIssue = message; globalIssueCode = code }
     }
     private func visibleSessions(_ sessions: [ChatSession]) -> [ChatSession] {
         ChatContextSessionList.visible(sessions, archived: showArchived, deleted: showDeleted,
@@ -871,7 +872,8 @@ struct ChatWorkbenchView: View {
                 ChatConversationImportSheet(data: data, title: title, containsImport: { id in chat.state.sessions.contains { $0.id == id } },
                     onClose: { sheets.detail = nil }, onAccept: { index, chosenTitle, allowingLosses, importID in
                         _ = try await chat.importConversation(data, title: chosenTitle, allowingLosses: allowingLosses,
-                                                              importID: importID, selectedConversationIndex: index)
+                                                              importID: importID, selectedConversationIndex: index,
+                                                              defaultTitle: workflowText(language, "chat.import.defaultTitle"))
                     })
             case .preview(let preview):
                 VStack(alignment: .leading) {
@@ -2315,7 +2317,7 @@ ScrollViewReader { proxy in
                     .font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             if let globalIssue {
-                WorkbenchIssueText(raw: globalIssue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                WorkbenchIssueText(raw: globalIssue, key: globalIssueCode).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             if chat.selectedPath.last?.role == .user {
                 Text(label("awaitingReply", "所选路径止于用户消息；请点“生成回复”，或选已完成路径。"))
@@ -2704,12 +2706,15 @@ ScrollViewReader { proxy in
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
             let info = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-            guard info.isRegularFile == true else { throw WorkflowIssue("Choose a regular conversation file.") }
+            guard info.isRegularFile == true else {
+                throw WorkflowIssue("The selected item cannot be read as a conversation file. Choose another file.",
+                                    code: "chat.import.invalidFile")
+            }
             let file = try FileHandle(forReadingFrom: url)
             defer { try? file.close() }
             let data = try file.read(upToCount: ChatInterchange.maximumImportBytes + 1) ?? Data()
             present(.conversationImport(data, String(url.deletingPathExtension().lastPathComponent.prefix(100))))
-        } catch { report(error.localizedDescription, for: chat.state.selectedSessionID) }
+        } catch { report(error.localizedDescription, for: chat.state.selectedSessionID, code: (error as? WorkflowIssue)?.code) }
     }
 
     private func importPresets() async {

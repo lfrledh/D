@@ -12,6 +12,83 @@ private final class TipStoreKitBundle: NSObject { }
 /// Actual StoreKit APIs under an explicit Xcode local configuration. No App Store account or charge.
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["D_STOREKIT_TESTS"] == "1"), .serialized)
 @MainActor struct TipStoreKitTests {
+    @Test(arguments: ["USD", "EUR", "GBP", "JPY", "CNY"])
+    func localStorefrontReturnsApprovedTierAmountsWithItsOwnFormatting(currency: String) async throws {
+        // Local configuration values are placeholders, not a readback of formal
+        // price points. One representative EUR storefront is a formatting test.
+        let cases: [String: (String, String, [String])] = [
+            "USD": ("USA", "en_US", ["1", "5", "10", "50", "100"]),
+            "EUR": ("DEU", "de_DE", ["1", "5", "10", "50", "100"]),
+            "GBP": ("GBR", "en_GB", ["1", "5", "10", "50", "100"]),
+            "JPY": ("JPN", "ja_JP", ["100", "500", "1000", "5000", "10000"]),
+            "CNY": ("CHN", "zh_CN", ["5", "10", "20", "50", "100"])
+        ]
+        let (storefront, locale, amounts) = try #require(cases[currency])
+        let original = try #require(Bundle(for: TipStoreKitBundle.self).url(forResource: "Tips", withExtension: "storekit"))
+        var configuration = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: original)) as? [String: Any])
+        var rows = try #require(configuration["products"] as? [[String: Any]])
+        try #require(rows.count == 5)
+        for index in rows.indices { rows[index]["displayPrice"] = amounts[index] }
+        configuration["products"] = rows
+        var settings = try #require(configuration["settings"] as? [String: Any])
+        settings["_storefront"] = storefront; settings["_locale"] = locale; configuration["settings"] = settings
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("D-Tip-" + UUID().uuidString + ".storekit")
+        try JSONSerialization.data(withJSONObject: configuration).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let session = try SKTestSession(contentsOf: file)
+        session.resetToDefaultState(); session.clearTransactions(); session.disableDialogs = true
+        session.storefront = storefront
+        defer { session.clearTransactions() }
+        let ids = Set((1...5).map { "d.localtest.tip.tier\($0)" })
+        let products = try await Product.products(for: ids).sorted { $0.id < $1.id }
+        try #require(products.count == 5)
+        for (index, product) in products.enumerated() {
+            #expect(product.id == "d.localtest.tip.tier\(index + 1)")
+            #expect(product.price == Decimal(string: amounts[index]))
+            #expect(product.priceFormatStyle.currencyCode == currency)
+            #expect(!product.displayPrice.isEmpty)
+            print("TIP_CURRENCY_LOCAL \(currency) \(product.id) \(product.displayPrice)")
+        }
+        #expect(session.allTransactions().isEmpty)
+    }
+    @Test func fiveActualTierSelectionsPurchaseExactProductsAndColdReadWithoutRepurchase() async throws {
+        let session = try testSession(); defer { session.clearTransactions() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-StoreKit-five-" + UUID().uuidString)
+        defer { removeTestRecords(root) }
+        let ids = Set((1...5).map { "d.localtest.tip.tier\($0)" })
+        let store = TipStore(productIDs: ids, bundleID: Bundle.main.bundleIdentifier ?? "",
+                             journalURL: root.appendingPathComponent("tips.json"), localTest: true)
+        await store.loadProducts()
+        try #require(store.products.count == 5 && store.catalogStatus == .available && store.localTest)
+        let expected = [Decimal(1), 5, 10, 50, 100]
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; defer { window.close() }
+        for (index, product) in store.products.enumerated() {
+            #expect(product.id == "d.localtest.tip.tier\(index + 1)" && product.type == .consumable)
+            #expect(product.price == expected[index] && product.priceFormatStyle.currencyCode == "USD")
+            #expect(!product.displayPrice.isEmpty)
+            store.selectedID = product.id
+            #expect(store.selectedProduct?.id == product.id && store.canPurchase)
+            await store.purchase(confirmIn: window)
+            try #require(store.status == .thanked, Comment(rawValue: store.diagnostic ?? "Payment did not complete"))
+            guard case .verified(let transaction)? = await Transaction.latest(for: product.id) else {
+                Issue.record("Missing verified exact tier transaction"); return
+            }
+            #expect(transaction.productID == product.id && transaction.price == expected[index])
+            #expect(transaction.currency?.identifier == "USD" && transaction.environment == .xcode)
+        }
+        let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("tips.json"))) as? [String: [String: Any]])
+        #expect(records.count == 5 && Set(records.values.compactMap { $0["productID"] as? String }) == ids)
+        await store.recoverHistory(recheckAccount: true)
+        let cold = TipStore(productIDs: ids, bundleID: Bundle.main.bundleIdentifier ?? "",
+                            journalURL: root.appendingPathComponent("tips.json"), localTest: true)
+        await cold.loadProducts()
+        let after = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("tips.json"))) as? [String: [String: Any]])
+        #expect(after.count == 5 && session.allTransactions().count == 5)
+        #expect(Set(after.keys) == Set(records.keys))
+        print("TIP_FIVE exactIDs=5 verifiedLocal=5 recordKeysUnchanged=true purchaseCount=5")
+    }
     private func testSession() throws -> SKTestSession {
         let file = try #require(Bundle(for: TipStoreKitBundle.self).url(forResource: "Tips", withExtension: "storekit"))
         let session = try SKTestSession(contentsOf: file)
@@ -19,7 +96,7 @@ private final class TipStoreKitBundle: NSObject { }
         return session
     }
     private func owner(_ root: URL) -> TipStore {
-        TipStore(productIDs:["d.localtest.tip.small"],bundleID:Bundle.main.bundleIdentifier ?? "",journalURL:root.appendingPathComponent("tips.json"),localTest:true)
+        TipStore(productIDs:["d.localtest.tip.tier1"],bundleID:Bundle.main.bundleIdentifier ?? "",journalURL:root.appendingPathComponent("tips.json"),localTest:true)
     }
     private func coldCheckpoint() throws -> URL {
         let raw = ProcessInfo.processInfo.environment["D_UI_TEST_SESSION"] ?? ""
@@ -40,8 +117,8 @@ private final class TipStoreKitBundle: NSObject { }
             Issue.record("A verified local StoreKit app is required"); return
         }
         try #require(app.environment == .xcode && app.bundleID == Bundle.main.bundleIdentifier)
-        let product = try #require(try await Product.products(for: ["d.localtest.tip.small"]).first)
-        try #require(product.id == "d.localtest.tip.small" && product.type == .consumable)
+        let product = try #require(try await Product.products(for: ["d.localtest.tip.tier1"]).first)
+        try #require(product.id == "d.localtest.tip.tier1" && product.type == .consumable)
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; defer { window.close() }
         guard case .success(.verified(let transaction)) = try await product.purchase(confirmIn: window) else {
@@ -74,7 +151,7 @@ private final class TipStoreKitBundle: NSObject { }
         let id = try #require((checkpoint["transactionID"] as? String).flatMap(UInt64.init))
         func matches(_ t: Transaction) -> Bool {
             t.id == id && t.environment == .xcode && t.appBundleID == Bundle.main.bundleIdentifier
-                && t.productID == "d.localtest.tip.small"
+                && t.productID == "d.localtest.tip.tier1"
                 && String(t.originalID) == checkpoint["originalID"] as? String
                 && t.purchaseDate.timeIntervalSince1970 == checkpoint["purchaseDate"] as? Double
                 && t.productID == checkpoint["productID"] as? String
@@ -201,7 +278,7 @@ private final class TipStoreKitBundle: NSObject { }
         try session.refundTransaction(identifier:transaction.identifier)
         print("TIP_LOCAL_REFUND requested=\(acceptedID) facts=\(session.allTransactions().map { "\($0.identifier):\($0.state.rawValue):\($0.cancelDate != nil)" })")
         try await wait("refund", store: store) { store.status == .idle }
-        if case .verified(let latest)? = await Transaction.latest(for: "d.localtest.tip.small") {
+        if case .verified(let latest)? = await Transaction.latest(for: "d.localtest.tip.tier1") {
             print("TIP_LOCAL_REFUND latestRevoked=\(latest.revocationDate != nil) environment=\(latest.environment.rawValue)")
         } else { print("TIP_LOCAL_REFUND no verified latest transaction") }
     }
@@ -299,7 +376,7 @@ private final class TipStoreKitBundle: NSObject { }
             }
         }
         var latestVerified = false, latestTargetRevoked = false
-        if case .verified(let t)? = await Transaction.latest(for: "d.localtest.tip.small") {
+        if case .verified(let t)? = await Transaction.latest(for: "d.localtest.tip.tier1") {
             latestVerified = true; latestTargetRevoked = t.id == id && t.revocationDate != nil
         }
         print("TIP_ISOLATED_REFUND id=\(id) rawRevoked=\(automaticRevokedIDs) updateTotal=\(automaticUpdateTotal) updateUnverified=\(automaticUpdateUnverified) journalRevoked=\(String(describing: journalRevoked)) systemRevoked=\(systemRevoked) historyTotal=\(historyTotal) historyUnverified=\(historyUnverified) historyTargetRevoked=\(historyTargetRevoked) latestVerified=\(latestVerified) latestTargetRevoked=\(latestTargetRevoked)")
@@ -315,8 +392,8 @@ private final class TipStoreKitBundle: NSObject { }
             Issue.record("A verified local StoreKit app is required before purchasing"); return
         }
         try #require(app.environment == .xcode && app.bundleID == Bundle.main.bundleIdentifier)
-        let product = try #require(try await Product.products(for: ["d.localtest.tip.small"]).first)
-        try #require(product.id == "d.localtest.tip.small" && product.type == .consumable)
+        let product = try #require(try await Product.products(for: ["d.localtest.tip.tier1"]).first)
+        try #require(product.id == "d.localtest.tip.tier1" && product.type == .consumable)
         var revokedIDs: [UInt64] = [], updateTotal = 0, updateUnverified = 0
         let observer = Task { @MainActor in
             for await result in Transaction.updates {

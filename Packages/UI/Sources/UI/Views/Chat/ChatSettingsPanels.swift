@@ -63,8 +63,7 @@ struct ChatPresetsManagementPanel: View {
     let sessionID: UUID?
     @Environment(\.dLanguageStore) private var language
     @State private var busy = false
-    @State private var pending: Data?
-    @State private var pendingNames: [String] = []
+    @State private var pending: ChatPresetImportDraft?
     @State private var issue: String?
     private func t(_ key: String, _ en: String, _ zh: String) -> String { workflowText(language, "chat.organization." + key, fallback: language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? zh : en) }
     var body: some View {
@@ -73,20 +72,31 @@ struct ChatPresetsManagementPanel: View {
                 onImport: { Task { await importFile() } },
                 onExport: { values in Task { await export(values) } }, showsHeading: false, isAvailable: isAvailable).disabled(busy)
             if let pending {
-                Text(t("presets.importPreview", "Import copies: ", "将作为副本导入：") + pendingNames.joined(separator: "、"))
+                Text(t("presets.importPreview", "Import copies: ", "将作为副本导入：") + pending.names.joined(separator: "、"))
                 HStack {
-                    Button(t("presets.importConfirm", "Import these presets", "导入这些预设")) {
-                        do { guard isAvailable() else { return }; try chat.importPresets(pending); self.pending = nil; issue = nil }
-                        catch { issue = error.localizedDescription }
+                    Button(pending.applied ? workflowText(language, "chat.retrySave") : t("presets.importConfirm", "Import these chat presets", "导入这些聊天预设")) {
+                        Task { await commitImport(pending) }
                     }
                     Button(t("presets.importCancel", "Cancel import", "取消导入")) { self.pending = nil }
-                }
+                        .disabled(pending.applied)
+                }.disabled(busy)
             }
             if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red) }
-        }.workbenchCloseProtection(isDirty: pending != nil, isSaving: busy)
+        }.workbenchCloseProtection(isDirty: pending?.applied == true, isSaving: busy,
+            allowsDiscard: pending?.applied != true, save: {
+                if let pending, pending.applied {
+                    try await pending.save(chat: chat, isAvailable: isAvailable)
+                    self.pending = nil
+                }
+            })
+    }
+    private func commitImport(_ draft: ChatPresetImportDraft) async {
+        guard !busy else { return }; busy = true; defer { busy = false }
+        do { try await draft.save(chat: chat, isAvailable: isAvailable); pending = nil; issue = nil }
+        catch { issue = error.localizedDescription }
     }
     private func importFile() async {
-        guard !busy, isAvailable() else { return }; busy = true; defer { busy = false }
+        guard !busy, pending?.applied != true, isAvailable() else { return }; busy = true; defer { busy = false }
         let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
         guard await panel.begin() == .OK, let url = panel.url, isAvailable() else { return }
         let scoped = url.startAccessingSecurityScopedResource()
@@ -95,7 +105,7 @@ struct ChatPresetsManagementPanel: View {
             let info = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard info.isRegularFile == true, let size = info.fileSize, size <= 2_097_152 else { throw WorkflowIssue(t("presets.importLimit", "Preset file must be at most 2 MiB.", "预设文件不能超过 2 MiB。")) }
             let data = try Data(contentsOf: url)
-            pendingNames = try ChatPresetFile.decode(data).map(\.name); pending = data; issue = nil
+            pending = try ChatPresetImportDraft(data); issue = nil
         } catch { issue = error.localizedDescription }
     }
     private func export(_ values: [ChatPromptPreset]) async {
@@ -108,6 +118,27 @@ struct ChatPresetsManagementPanel: View {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             _ = try await chat.store.exportChatPresets(values, exportID: UUID(), directory: url); issue = nil
         } catch { issue = error.localizedDescription }
+    }
+}
+
+/// A file preview is not an edit. Once committed, retry only persistence and retain
+/// its newly assigned identities until saving succeeds, including through close gates.
+@MainActor @Observable final class ChatPresetImportDraft {
+    let data: Data
+    let names: [String]
+    private(set) var applied = false
+    init(_ data: Data) throws {
+        self.names = try ChatPresetFile.decode(data).map(\.name); self.data = data
+    }
+    func save(chat: ChatController, isAvailable: () -> Bool) async throws {
+        guard isAvailable() else {
+            throw WorkflowIssue("The workspace changed.", code: "chat.organization.defaults.targetChanged")
+        }
+        if !applied { try chat.importPresets(data); applied = true }
+        try await chat.flush()
+        guard isAvailable() else {
+            throw WorkflowIssue("The workspace changed.", code: "chat.organization.defaults.targetChanged")
+        }
     }
 }
 

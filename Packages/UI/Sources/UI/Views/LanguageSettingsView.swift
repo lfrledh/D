@@ -35,7 +35,7 @@ public struct LanguageSettingsView: View {
             }
 
             Section {
-                Button(store.text("language.import.action", fallback: "导入 JSON 语言包…"),
+                Button(store.text("language.import.action", fallback: "导入并使用语言包…"),
                        systemImage: "square.and.arrow.down") {
                     isImporting = true
                 }
@@ -51,16 +51,21 @@ public struct LanguageSettingsView: View {
                     }
                 }
                 ForEach(Array(store.diagnostics.enumerated()), id: \.offset) { _, diagnostic in
-                    Label(diagnostic, systemImage: "info.circle")
+                    Label(diagnostic.summary(store), systemImage: "info.circle")
                         .font(.caption)
                         .textSelection(.enabled)
+                    if !diagnostic.technicalDetails.isEmpty {
+                        DisclosureGroup(store.text("error.original", fallback: "Original diagnostic")) {
+                            Text(diagnostic.technicalDetails).font(.caption).textSelection(.enabled)
+                        }
+                    }
                 }
             } header: {
                 Text(store.text("language.section.packs", fallback: "语言包"))
             } footer: {
                 Text(store.text(
                     "language.import.footer",
-                    fallback: "仅导入纯 JSON 显示文字；语言包不能运行代码或访问网络。"
+                    fallback: "选择 JSON 格式的语言包。导入成功后，界面会立即切换为该语言。语言包只提供界面文字，不能运行代码或访问网络。"
                 ))
             }
         }

@@ -41,6 +41,9 @@ struct TipPanel: View {
                     }
                 }
             }
+            if ![.idle, .available].contains(owner.catalogStatus) {
+                Text(text(owner.catalogStatus.rawValue)).font(.callout).accessibilityIdentifier("tip-catalog-status")
+            }
             if owner.status != .idle { Text(text(owner.status.rawValue)).font(.callout).accessibilityIdentifier("tip-status") }
             if owner.recoveryStatus == .loading {
                 Text(text("records.loading")).font(.caption).accessibilityIdentifier("tip-record-sync")
@@ -53,9 +56,15 @@ struct TipPanel: View {
             if let diagnostic = owner.diagnostic {
                 DisclosureGroup(text("details")) { Text(diagnostic).font(.caption).textSelection(.enabled) }
             }
+            if let diagnostic = owner.catalogDiagnostic {
+                DisclosureGroup(text("details")) { Text(diagnostic).font(.caption).textSelection(.enabled) }
+            }
+            if let diagnostic = owner.recoveryDiagnostic {
+                DisclosureGroup(text("details")) { Text(diagnostic).font(.caption).textSelection(.enabled) }
+            }
             HStack {
                 Button(text("reload")) { Task { await owner.loadProducts() } }
-                    .disabled(owner.status == .loading || owner.status == .purchasing)
+                    .disabled(owner.catalogStatus == .loading || owner.status == .purchasing)
                     .accessibilityIdentifier("tip-reload")
                 Spacer()
                 if let product = owner.selectedProduct {

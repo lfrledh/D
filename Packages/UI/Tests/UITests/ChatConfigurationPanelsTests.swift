@@ -37,6 +37,36 @@ private actor ConfigurationPanelEngine: InferenceEngine {
 
 @Suite("Chat configuration panels", .serialized)
 @MainActor struct ChatConfigurationPanelsTests {
+    @Test func importPreviewIsCleanAndFailedCommitRetriesOnlySaveThenColdReads() async throws {
+        let (store, engine, chat, root) = try await fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let originals = [ChatPromptPreset(name: "User One", prompt: "Keep one"),
+                         ChatPromptPreset(name: "User Two", prompt: "Keep two")]
+        let data = try ChatPresetFile.encode(originals)
+        let preview = try ChatPresetImportDraft(data)
+        #expect(!preview.applied && preview.names == originals.map(\.name))
+        #expect(chat.state.presets.isEmpty && chat.state.sessions.isEmpty)
+        let obstruction = store.rootURL.appendingPathComponent("quick-chat.json")
+        try FileManager.default.createDirectory(at: obstruction, withIntermediateDirectories: false)
+        await #expect(throws: (any Error).self) { try await preview.save(chat: chat, isAvailable: { true }) }
+        #expect(preview.applied && chat.saveIssue != nil)
+        let applied = chat.state.presets
+        #expect(applied.count == 2 && Set(applied.map(\.id)).isDisjoint(with: originals.map(\.id)))
+        #expect(chat.state.sessions.isEmpty)
+        #expect(await engine.requests.isEmpty)
+        let preserved = root.appendingPathComponent("preserved-obstruction")
+        try FileManager.default.moveItem(at: obstruction, to: preserved)
+        try await preview.save(chat: chat, isAvailable: { true })
+        #expect(chat.state.presets == applied && chat.saveIssue == nil)
+        try await preview.save(chat: chat, isAvailable: { true })
+        #expect(chat.state.presets == applied)
+        let exported = try ChatPresetFile.decode(ChatPresetFile.encode(chat.state.presets))
+        #expect(exported.map(\.name) == originals.map(\.name))
+        try await chat.prepareForTermination(); try await store.close()
+        let cold = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await cold.chatState().presets == applied)
+        try await cold.close()
+    }
     private func fixture() async throws -> (ProjectStore, ConfigurationPanelEngine, ChatController, URL) {
         let root = URL(fileURLWithPath:
             ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory(), isDirectory: true)
