@@ -25,6 +25,7 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
         #if DEBUG
         WorkbenchCategoryUpdateProbe.retainedUpdate?()
         #endif
+        CloseoutProbe.count("root:" + identifier)
         host.rootView = RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, preparation: context.environment.workflowModelPreparation, installations: context.environment.workflowModelInstallations, featureHelp: context.environment.workbenchHelpStore, contentVisible: visible && context.environment.workbenchContentVisible, childClose: context.environment.workbenchChildClose, tips: context.environment.workbenchTips, sidebars: context.environment.workbenchSidebars, navigationTop: context.environment.workbenchNavigationTop, navigationModeWidth: context.environment.workbenchNavigationModeWidth, windowControlSize: context.environment.workbenchWindowControlSize, visualContext: WorkbenchVisualContext(context.environment))
         host.requestVisibility(visible)
     }
@@ -41,6 +42,12 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
 /// it is updating preferences. Keep one latest visibility request per host and
 /// apply native hiding after that update stack has unwound.
 @MainActor final class RetainedNativeHostingView<Content: View>: NSHostingView<Content> {
+    override func layout() {
+        let start = ProcessInfo.processInfo.systemUptime
+        CloseoutProbe.count("layout:" + (accessibilityIdentifier() ?? "none"))
+        super.layout()
+        if CloseoutProbe.resizing { CloseoutProbe.layoutMS += (ProcessInfo.processInfo.systemUptime - start) * 1000 }
+    }
     private var desiredVisible = true
     private var visibilityQueued = false
     private var visibilityInvalidated = false
