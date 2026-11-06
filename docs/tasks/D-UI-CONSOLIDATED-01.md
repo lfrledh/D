@@ -1,5 +1,45 @@
 # D-UI-CONSOLIDATED-01
 
+## 2026-11-06 顾问dc860审计续办（开发交付，待用户接纳）
+
+起点完整交付 `dc8600db76482966d76772bdec1825f7872d3cbb`，参考生产aff734d3；实际祖先检查0、开工索引/工作树干净、Lead唯一写入，未发现待接外部后继。本次产品 **3b4ffcd57481320fc0c8cba3c14ca7f7d2ca2275**，只有ChatConfigurationPanels.swift及现有测试文件；其余为以下现有记录的必要增量。三项待审中文未实施，无B10/付款/性能产品实验。
+
+### I015：普通预设保存失败的原位重试
+
+旧aff正常App实际新建“Nov6 Retry Old”并在专属quick-chat.json路径制造可逆目录写失败，应用ID A091C302…后按钮禁用；恢复文件后经外层保存门禁恢复（证明不是完全不可恢复）。3b4把整板禁用缩至保存中，已应用未落盘时仅开放原“重试保存”，列表/字段/恢复/取消仍锁定，原生文本编辑器同时isEditable=false及onEdit守卫。重试沿原saveAndFlush的flush分支，不再次setPreset或创建UUID；成功清除saveIssue并恢复操作。Task起始重复检查saving，准入与关闭gate保留。
+
+- **组件亲跑**：现有ChatConfigurationPanelsTests 8方法通过，新反例普通新建动作→目录写失败→同ID仅flush→已有项编辑→冷读，0推理。最初尝试用组件NSHostingView读SwiftUI AX子按钮，3次未取得子树，测试未到按钮；原失败留tests-red*.log，不把它算产品失败/原生通过，未引入测试平台。
+- **正常App亲跑**：3b4新建“Nov6 Retry Fixed”，真实保存后511CB97C-EBC1-4EB2-9D77-E61AD69C530E已应用但flush失败，面板“重试保存”可点，原生规则/描述AXValue不可写，名称/取消禁用。×仍有继续编辑/保存关闭门禁；返回后恢复目录，实际原位点击重试得到4项（原2项+修前/修后各1项），ID/内容准确，旧预设与所有session不变，未运行模型。
+- 通过现有行菜单编辑同一预设，保存内容“Edited existing preset; identity stays unchanged.”，仍同ID。正常Quit74917消失→桌面冷开75120→实际打开QA，4项可见；quick-chat.json与保存后逐字节一致，SHA256 bda7b7d9d32d9f37cafce385e4c1e3a439132d82c78b25acb6adb58925a1a933。
+- 原生验证边界：名称AXSet仅改变控件未发布SwiftUI绑定，改用真实点击/输入/Tab才开始反例；只读规则负向键入探针的firstResponder仍在默认规则框，未把该输入算已送达预设。只读能力由AX不可写、消费者双守卫及重试内容准确证明，探针产生的专属默认草稿已清空未保存。未声称覆盖全部输入法、物理断电或重复ENOSPC矩阵；实际导入重试沿上轮证据。
+- 非实施者只读固定3b4两文件实际差分，未发现阻断；指出组件不经过按钮/不覆盖已有项编辑后失败，此处正常App补的是新建原位失败与已有项正常保存，未扩称全部分支。
+
+### I026/I027与付款边界
+
+见[现有发行事实表](../RELEASE_FREEZE_TRY.zh-CN.md#2026-11-06-审计续办当前包来源事实i026i027)。2工具+19库摘要/声明依赖对应，漏写libvpx已纠正；FFmpeg精确源码归档原已存在，x264精确commit从安装配方定位，归档/安装变换仍缺。七引擎/ACE/WASI/MCP按实际代码来源和执行边界分开，Audio未调用旧pitch副本保留为来源一致性缺口，不擅删能力。本轮未下载源码或重建引擎/模型。
+
+固定aff包只读事实经最终3b4复核：7份engine.json、2份runtime-origin及全部引擎文件逐字节相同，Resources共54,433文件差异仅10个SwiftPM资源包Info.plist/签名，资源清单摘要相同。声明依赖不等于动态实际加载、源码配方不等于完整许可通过；arm64引擎不被主App双架构掩盖。非实施者只读来源/实包，未冒称跑模型。
+
+I030 pending请求与全局updates不能准确归属；已验证交易落盘/finish不清除unknownPaymentOutcome，当前进程仍可能不允许再购，Reload不解除。无清标记/猜关联/重启绕过；不重跑25币种或改付款代码。服务端账本恢复未来额外承诺条件，不是首发必建服务。五档已定金额保留，正式商品/账户/地区/真实付款未验。
+
+### I012一组资格核验与恢复；I017沿用无收益结论
+
+3b4正常Release、1280×800pt、中文、1×60Hz、45行合成历史（不是新模型生成）；sample30在已加载文本中但屏外，当前可见sample33–45。初启旁白落Quickstart/未启动engine，先解决真实系统入口；中文输入法下物理键查询变形即停止Return。临时选择已有ABC后八次前缀逐字读回sample30；原中文输入源已恢复，旁白已关闭，音量未改。
+
+Return后焦点读取-25204，截图仍sample33起；2秒短sample的152/152主线程样本在beginTransaction→flushTransactions，关闭旁白后仍不可响应。精确查询读回与Return相隔约41.3秒，Return仅核前台/包，未即时再读框；因此证明这组曾取得准确Find输入及提交后挂起现场，不证明成功跳转或把根因指定为锚点/AXFocusState。没有新产品插桩/布局改动。下一最小方法先在同入口即时读query/目标并提交，再收同段系统焦点/事务来源；本次不继续循环或轮换实现，具体修补范围须先审。
+
+专属75120正常Quit请求已送达但5秒未终结；已核PID/启动/路径/专属QA，落盘字节等于保存后的cold-chat，短sample已保留，无未保存用户内容/模型任务。按持续授权定向受控终止，PID消失→桌面冷开75556，实际打开同一QA/4项预设，内容字节不变。另做正常关闭设置→正常Quit75556消失→桌面冷开75798（16:25:11 JST），唯一个D实例准确新路径；受控终止不算正常Quit通过。旁白实读false，无新本人权限请求。
+
+I017不重测：沿用219 A/B/A无稳定收益和46e完整撤回；仍未达标，不宣布解决/延期。原NODE/PAN改善和ZOOM多数满意的用户事实保留，无FPS。
+
+### 正常候选、图号与停点
+
+- 桌面“D 最新版”→`CurrentD/Nov6-Retry-3b4ffcd5/D.app`。正常Apple Development hardened sandbox Release -O/WMO，deep-strict签名通过，七引擎、零第三方权重、无debug dylib/诊断宏。产品树eafa9a61…，资源清单a85e58b9…。首个构建因输出父目录不存在前置失败，创建明确候选目录后release-r2成功；模型runtimeVerification仍not-run。
+- 所有原始动作/图/受控失败/包身份留 `AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-audit-followup`，不提交原始trace或私有资源。UI-Retry-01-before为旧aff反例；**UI-Retry-02-r2-failed、03-saved、04-r2-cold均3b4正常App/中文/1280×800pt**，已直接会话展示。02-r2含完整可点重试；03保存后；04-r2冷开滚到完整四项。04原图停在上部未全见列表，保留并以r2更正，不覆盖图号。截图证明画面，动作/字节证据另记。
+- I012-before/after图为同3b4合成历史，不作为正常旁白通过或流畅度证据。只读复核数据与解释，指出提交前即时读回缺口，已保留。
+- 本轮不改中英资源；批准35对及B9-02保留。待用户中文确认仍是tips.partial扩句、真实JSON/结构解析摘要、商店后台短说明，不替用户批准。UI_CAPABILITY_WIRING已修正B9旧预设覆盖口径，集中待办头部不再指旧1c2。
+- 完整交付SHA/远端读回与当前候选记录见本节所属提交及CurrentD/receipt.json；未合并main/上传/发布/付款/部署。当前无必须立即本人操作步骤，停在用户视觉接纳与顾问审计；来源/许可、正式账户/地区及I012/I017剩余按原I项保留。
+
 ## 2026-11-06 已批准文案、五档打赏与有限收口（开发交付，待用户接纳）
 
 起点/远端 `a81dd54250753d94ab7476a66b26a8af53e38541`；原正常包源码 `1c2f37ed525595492e907f4874e9253404b9eb1d`，最终生产 `aff734d339c25e727322baedcee670e69e8a4835`。已核清祖先、唯一施工树、干净索引与未暂存；个人scheme摘要不变。原始规格/证据留 `AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-approved-copy-tips`。

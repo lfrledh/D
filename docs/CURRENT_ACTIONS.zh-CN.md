@@ -4,42 +4,36 @@
 
 ## 固定源码与候选
 
-- 仓库 `lfrledh/D`；分支 `codex/ui-consolidated-20261020`。
-- 唯一施工树 `/Volumes/CodexProjects/Codex/D-Worktrees/D-UI-CONSOLIDATED-20261020`。
-- 本轮起点/远端核对 `a81dd54250753d94ab7476a66b26a8af53e38541`，祖先退出0；原索引与任务树干净。主树个人scheme未变（SHA256 ca3635d8…）。11月6日收口前fetch仍为a81，无待接续外部提交。
-- 最新生产 `aff734d339c25e727322baedcee670e69e8a4835`；12项批准文案/相关行为、五档客户端、付款保护及正常App发现的详情标题漏键已修。临时219诊断与Binding缓存已完整撤回，aff相对46e仅两处本地化调用修正。
-- 正常完整候选 `D-Development/CurrentD/Nov6-aff734d3/D.app`；桌面 **D 最新版** 已读回指向此包。Release -O/WMO、主程序无debug dylib、正常Apple Development/沙盒签名，七引擎、零第三方权重。旧1c2/46e保留。
-- 生产与完整文档交付分开；最终完整SHA、远端读回、准确包/进程/截图索引以本页所属交付和 `CurrentD/receipt.json` 对应。
+- 仓库 `lfrledh/D`；分支 `codex/ui-consolidated-20261020`；唯一施工树 `/Volumes/CodexProjects/Codex/D-Worktrees/D-UI-CONSOLIDATED-20261020`。
+- 本次顾问审计续办起点/远端 `dc8600db76482966d76772bdec1825f7872d3cbb`，祖先退出0；开工索引/工作树干净，无其他写入者。参考生产aff734d3；不回退a81/main或整合分支。个人scheme内容/状态保留（SHA256 ca3635d8…）。
+- 最新生产 **`3b4ffcd57481320fc0c8cba3c14ca7f7d2ca2275`**：只改普通聊天预设保存失败的原位重试消费者与定向测试，未改文案、付款、运行时或性能路径。
+- 正常完整候选 **`D-Development/CurrentD/Nov6-Retry-3b4ffcd5/D.app`**；桌面 **D 最新版** 已读回此路径。Release -O/WMO、无debug dylib/诊断宏、Apple Development hardened sandbox、deep-strict签名，七引擎/零第三方权重；不是Store发行包。
+- 产品树SHA256 `eafa9a6177178faeff0b0a524dd6f6944c061592fd2bf48e2d5aad7581b1e670`；资源清单 `a85e58b9c30a8adb9756d0392c6373a19d4b76f8822e4e88d3ea24f4bbbe43f9`。生产与完整文档交付分开，最终完整SHA/远端读回以本页所属交付及 `CurrentD/receipt.json` 对应。
 
-## 本轮已实现与证据边界
+## 本次已完成与证据等级
 
-`D-UI-CONSOLIDATED-01` · 2026-11-06已批准12项文案、五档打赏及有限工程收口。不是B10。
-
-- 12项已接真实消费者。第6/7项使用“聊天预设”；预览不是未保存编辑，实际导入持有新身份，保存失败只重试持久化。同窗真实编辑仍经原关闭门禁。
-- 61项定向组件（49UI/12Workbench）通过；最终详情标题修正后19项语言测试复跑通过。5569中英键集合/重复/占位符检查通过。非实施者只读固定差分、测试与原始数据。
-- 正常46e包：预览关闭无确认/项目字节不变；两项导入新ID且session不变；全量导出与存储完全相等；默认规则草稿+导入预览仍弹保存门禁；语言导入立即切换、坏版本保留原包、诊断摘要动态换语。新增详情标题漏前缀已修；aff中英同版标题、真实箭头展开原诊断、再次预览关闭及字节保留亲跑。正常Quit68700消失→桌面入口冷开68890（14:16:38 JST），准确aff路径/Bundle，项目内容、2个预设ID/原session逐字节不变。
-- 软件本体免费；五档USD/EUR/GBP/JPY/CNY金额已定，自定义金额本轮暂不做。正式拟定ID `d.tip.tier1…5`；本地测试ID隔离，正常Release拒绝Xcode交易，UI价格只取StoreKit。
-- 本地StoreKit真实API：25个币种/金额返回、5个SKU购买与精确平台交易、取消、pending批准落盘finish、明确Reload退款通过；同进程新Store恢复不重复购买。pending请求无平台身份不能伪造匹配，仍保护重购。不是正式价格、真实付款或跨设备通过。
-- 正常46e实际正式商品载入失败/记录平台失败分开显示；无假价格，重新加载不付款。五档实际选择的中英图属于fa037本地测试宿主；最终正常包同版中英实图UI-NOV6-03-r2/04-r2/05-r2及r4/06-r2/07已直接展示。
+- **I015普通预设**：旧aff正常App复现已应用但主按钮禁用；新3b4正常App新建→隔离目录写失败→原位“重试保存”，同ID、仅一项、内容准确。仅flush，不再次setPreset/生成身份/推理；待保存编辑/删除继续锁定，×仍保留保存门禁。编辑已有项沿原ID；正常退出、冷读逐字节一致。8项定向组件通过，非实施者只读两文件差分；导入证据仅沿用，不替代普通按钮实测。
+- **I026/I027事实**：当前ExternalVideo的2工具+19原生库（含libvpx）、21项摘要/104条非系统声明依赖已对应；FFmpeg精确源码companion、VMAF code-only材料已在旧证据区，未重新下载/构建。x264 r3222精确源码commit已定位，源码归档及bottle到安装字节变换仍缺证据。七引擎来源、ACE固定vendor、WASI/MCP执行边界及未调用的旧pitch副本明确记录；不等于许可或Store通过。新包全部引擎文件与aff字节一致。
+- **I030准确口径**：已验证pending交易可落盘/finish，但缺平台请求身份，不能与全局updates一一归属，当前进程可能继续uncertain并禁再购，Reload不解除。未放宽保护、未重跑25币种、未改价格；未来服务端账本仅为另行承诺识别/回馈的条件项。
+- 上轮35对批准文案、5569键及61组件/19语言测试、本地StoreKit、导入导出和正常包证据保留为历史，未冒充本轮重跑。B9-02仍为“本次无法导入的内容”。本轮三项建议文案未批准、未实施：tips.partial补重试说明；JSON/结构解析摘要；商店后台短说明。
 
 ## 有限调查停点及仍开放事项
 
-- I012：旧正常App VO-F屏外历史持续刷新缺陷仍开放。本组真实输入读回不符，未取得合格目标跳转；采样未复现不能排除锚点假说。无产品修补保留，旁白已关，音量未变。下一最小判别须先证明精确Find跳转再对齐焦点/布局，不要求用户排错。
-- I017：同219优化包A/B/A五段，缓存确实消除Binding构造，但宽差中位均12pt，p95 A16/14/16对B16/16；layout包含sum约1527–1535ms，无稳定收益。实验撤净，resize未达标；几何/布局不是FPS，旧失败预算不清零。
-- NODE/PAN用户已反馈明显改善，ZOOM多数满意；本轮没有重开全性能矩阵，不回退已验证修补。模型、语音、B1—B9保存恢复等未受影响证据沿用；未重新跑真实模型。
-- I024/026/027/028/029/030/031发行缺口保持：正式签名安装升级、运行时Store适用、依赖许可、主体/隐私/公开资料、销售地区/商品精确价点/账号验证、自有代码许可。具体可审阅配置见[发行决定与五档表](RELEASE_FREEZE_TRY.zh-CN.md)，不代用户签协议或写后台。
-- 唯一问题状态：[D-I001–031](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)；逐项等级和当前截图：[活动任务](tasks/D-UI-CONSOLIDATED-01.md)。
+- **I012**：本次ABC物理键逐字读回准确sample30，屏外目标存在；Return后AX焦点超时、目标未可见，152/152主线程短样本在SwiftUI beginTransaction→flushTransactions。读回到Return相隔约41.3秒且没有即时再读，故合格输入不等于成功跳转或根因已定。旁白关后仍卡；已保存专属PID75120正常Quit未完，按持续授权定向恢复，冷读字节准确，另验PID75556正常Quit→消失→桌面冷开75798（16:25:11 JST）。无旁白产品实验；旁白关闭、原中文输入法恢复、音量未改。
+- 下一最小I012取证：同入口即时核query/目标后提交并定位系统焦点/布局事务来源；先给具体范围/验证条件，不改渲染器、锚点或Binding缓存，不要求用户代排错。
+- **I017未达标**：沿用219 A/B/A无稳定收益及完整撤回结论，本次未重测/优化。NODE/PAN用户反馈明显改善、ZOOM多数满意不被抹掉；未生成FPS。
+- I024/026/027/028/029/030/031仍分属正式安装/升级、运行时Store适用、来源/许可、主体/隐私/地区/账户、D许可；见[发行事实与决定](RELEASE_FREEZE_TRY.zh-CN.md)。不将全部余项算“等用户回Mac”。
+- 唯一状态：[D-I001–031](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)；本轮动作/图号/失败：[活动任务](tasks/D-UI-CONSOLIDATED-01.md)。
 
-## 授权、保护与交付停点
+## 授权、保护与停点
 
-- Lead唯一工程/文档写入与Mac操作者；其余角色只读固定快照。沿用[持续开发验收授权](MULTI_AGENT_WORKFLOW.zh-CN.md#持续开发验收授权与受阻处理)。构建、原生、性能和支付串行。
-- 仅专属QA项目与文件；保护原会话、个人scheme、原件、固定模型、B5同权重许可、A2、输入及保存恢复。当前正常退出均核实准确PID消失，未强杀。
-- 保留旧候选和原始失败。只显式暂存本轮文件，不reset/restore/stash/清理/重写历史或强推。
-- 正式商店配置、真实付款、商业协议、main合并、上传/提审/发布和部署不在本轮授权内。
-- 完成开发候选与工作分支推送后停在用户试用/独立顾问审计；不自动另开B10或追加架构实验。没有需要用户立即在Mac操作的工程前置。
+- Lead唯一工程/文档写入与Mac操作者；其他角色只读固定快照。沿用[持续授权](MULTI_AGENT_WORKFLOW.zh-CN.md#持续开发验收授权与受阻处理)。构建、原生和短采样串行。
+- 仅专属QA；原会话、个人scheme、原件、固定模型、B5同权重许可、A2、输入及保存保护保持。旧候选/失败不删，无未知进程强退，无系统权限更改。
+- 只显式暂存本轮文件，不reset/restore/stash/清理/改写历史或强推。正常工作分支提交推送；不合并main、不上传/提审/发布、不真实付款、不部署外部服务。
+- 交付后停在用户视觉接纳与顾问审计。不自动B10、不重复无信息性能实验。本次没有必须立即由本人操作Mac的步骤；待审中文及正式发行决定集中保留。
 
 ## 按需证据
 
-- 本轮原始日志/图/受控数据：AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-approved-copy-tips；上轮原始资料保留。
-- [既有性能分区](investigations/D-PERFORMANCE-ATTRIBUTION-01/regression-20261022/README.zh-CN.md)、[正式文案覆盖索引](UI_CAPABILITY_WIRING.zh-CN.md#已批准文案覆盖索引)、[模型能力与分级证据](RELEASE_MODEL_MATRIX.zh-CN.md)。
-- 历史入口：[整理前当前行动](history/UI-CURRENT-THROUGH-20261030.md)／[历史权限失败](history/UI-AUDIT-THROUGH-20261030.md)。接手仍需实时核对HEAD、索引和进程，本页不代替身份核验。
+- 本次原始日志/正常App图/受控故障/短样本：`AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-audit-followup`。未提交私有原始trace或完整诊断材料。
+- [性能分区](investigations/D-PERFORMANCE-ATTRIBUTION-01/regression-20261022/README.zh-CN.md)、[文案覆盖](UI_CAPABILITY_WIRING.zh-CN.md#已批准文案覆盖索引)、[模型证据](RELEASE_MODEL_MATRIX.zh-CN.md)。
+- [历史当前行动](history/UI-CURRENT-THROUGH-20261030.md)／[历史失败](history/UI-AUDIT-THROUGH-20261030.md)。每次接手仍需实时核对HEAD、索引和进程，不凭旧PID操作。
