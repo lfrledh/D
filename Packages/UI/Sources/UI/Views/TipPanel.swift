@@ -12,7 +12,7 @@ public struct TipPresenter: ViewModifier {
     public func body(content: Content) -> some View {
         content.environment(\.workbenchTips, owner)
             .workbenchSheet(isPresented: Binding(get: { owner?.presented == true }, set: { owner?.presented = $0 }),
-                title: workflowText(language, "tips.title"), size: .init(width: 460, height: 440)) {
+                title: workflowText(language, "tips.title"), size: .init(width: 460, height: 520)) {
                     if let owner { TipPanel(owner: owner) }
                 }
     }
