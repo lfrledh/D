@@ -991,3 +991,22 @@ extension ModelLibraryPresentationTests {
         try await library.shutdown()
     }
 }
+
+
+extension ModelLibraryPresentationTests {
+    @Test func localFolderDropResolvesFinderFileReferenceWithoutChangingSource() throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("FinderDrop-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("original.bin"), bytes = Data("unchanged".utf8)
+        try bytes.write(to: file)
+        let reference = try #require((root as NSURL).fileReferenceURL())
+        let resolved = try ModelLocalFilesForm.droppedFileURL(reference.dataRepresentation)
+        #expect(resolved.standardizedFileURL == root.standardizedFileURL)
+        #expect(try Data(contentsOf: file) == bytes)
+        #expect(throws: (any Error).self) {
+            try ModelLocalFilesForm.droppedFileURL(Data("https://example.com/model".utf8))
+        }
+    }
+}

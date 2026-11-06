@@ -1,5 +1,6 @@
 import DWorkbench
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Folder, drop and restored-model entrances share one form and application owner.
 /// Accepting it never selects a node or changes the current project.
@@ -9,6 +10,7 @@ struct ModelLocalFilesForm: View {
     var onComplete: (ModelResourceID) -> Void
     @Environment(\.dLanguageStore) private var language
     @State private var surfaceActive = false
+    @State private var dropGeneration = UUID()
     @State private var storage: ModelStorageKind = .external
     private func t(_ key: String) -> String { workflowText(language, "modelManagement." + key) }
     private var entry: ModelCatalogEntry? { model.catalog.first { $0.id == model.localFileSelection?.catalogID } }
@@ -58,10 +60,26 @@ struct ModelLocalFilesForm: View {
             if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
         }.padding(20).frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
             .contentShape(Rectangle())
-            .dropDestination(for: URL.self) { urls, _ in
-                guard knownSource == nil, urls.count == 1, let url = urls.first,
+            .onDrop(of: [.fileURL], isTargeted: nil) { providers, _ in
+                guard knownSource == nil, surfaceActive, providers.count == 1, let provider = providers.first,
                       !model.isChoosingLocation, model.globalOperation == nil else { return false }
-                Task { await model.chooseLocalFiles(at: url) }; return true
+                let generation = UUID(); dropGeneration = generation
+                Task { @MainActor in
+                    do {
+                        let bytes: Data = try await withCheckedThrowingContinuation { continuation in
+                            provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, error in
+                                if let data { continuation.resume(returning: data) }
+                                else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)) }
+                            }
+                        }
+                        guard surfaceActive, dropGeneration == generation,
+                              !model.isChoosingLocation, model.globalOperation == nil else { return }
+                        await model.chooseLocalFiles(at: try Self.droppedFileURL(bytes))
+                    } catch {
+                        if surfaceActive, dropGeneration == generation { model.errorMessage = error.localizedDescription }
+                    }
+                }
+                return true
             }
         }
         .task(id: knownSource?.id) {
@@ -70,7 +88,15 @@ struct ModelLocalFilesForm: View {
             }
         }
         .onAppear { surfaceActive = true }
-        .onDisappear { surfaceActive = false }
+        .onChange(of: model.isChoosingLocation) { _, choosing in if choosing { dropGeneration = UUID() } }
+        .onChange(of: model.localFileSelection) { _, _ in dropGeneration = UUID() }
+        .onDisappear { surfaceActive = false; dropGeneration = UUID() }
         .workbenchCloseProtection(isDirty: model.globalOperation == nil && (model.localFileSelection != nil || !model.localFileChoices.isEmpty))
     }
+    static func droppedFileURL(_ bytes: Data) throws -> URL {
+        guard let url = URL(dataRepresentation: bytes, relativeTo: nil), url.isFileURL,
+              let path = (url as NSURL).filePathURL else { throw CocoaError(.fileReadUnsupportedScheme) }
+        return path
+    }
+
 }
