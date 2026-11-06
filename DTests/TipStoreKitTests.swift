@@ -8,6 +8,8 @@ import Testing
 import UI
 import SwiftUI
 
+private typealias Transaction = StoreKit.Transaction
+
 private final class TipStoreKitBundle: NSObject { }
 
 /// Actual StoreKit APIs under an explicit Xcode local configuration. No App Store account or charge.
