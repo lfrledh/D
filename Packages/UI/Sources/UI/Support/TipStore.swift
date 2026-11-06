@@ -118,7 +118,12 @@ public enum TipProducts {
     }
     public var selectedProduct: Product? { products.first { $0.id == selectedID } }
     var hasUnresolvedPayment: Bool {
-        unknownPaymentOutcome || !unresolvedReceiptKeys.isEmpty || [.uncertain, .recorded, .pending].contains(status)
+        protectedPaymentStatus != nil || [.uncertain, .recorded, .pending].contains(status)
+    }
+    private var protectedPaymentStatus: Status? {
+        if unknownPaymentOutcome || !unresolvedReceiptKeys.isEmpty { return status == .pending ? .pending : .uncertain }
+        if unmatchedPurchaseKey != nil { return .recorded }
+        return nil
     }
     public var canPurchase: Bool { selectedProduct != nil && !purchasing && !loading && recoveryStatus == .ready && journalIssue == nil && !hasUnresolvedPayment && (!expectsLocalTest || localTest) }
     public func purchase(confirmIn window: NSWindow) async {
@@ -133,7 +138,7 @@ public enum TipProducts {
                 // StoreKit supplies no transaction identity in this result.
                 // A later global update cannot prove it belongs to this request.
                 unknownPaymentOutcome = true; status = .pending
-            @unknown default: status = .uncertain
+            @unknown default: markUnverified("Unknown StoreKit purchase outcome")
             }
         } catch StoreKitError.userCancelled { status = .cancelled }
         catch { diagnostic = String(describing: error); status = .failed }
@@ -164,10 +169,11 @@ public enum TipProducts {
         recoveryFailure = succeeded ? nil : failure ?? .platform
         recoveryDiagnostic = succeeded ? nil : diagnostic
         if !succeeded { verifiedScope = nil; verifiedHistory.removeAll() }
-        if succeeded, status == .recorded, let key = unmatchedPurchaseKey,
+        if succeeded, let key = unmatchedPurchaseKey,
            let fact = verifiedHistory[key], verifiedScope?.contains(fact) == true {
-            status = fact.revoked ? .idle : .thanked
-            unmatchedPurchaseKey = nil; eventRevision &+= 1
+            unmatchedPurchaseKey = nil
+            status = protectedPaymentStatus ?? (fact.revoked ? .idle : .thanked)
+            eventRevision &+= 1
         }
     }
     public func recoverHistory(recheckAccount: Bool = false) async {
@@ -249,32 +255,34 @@ public enum TipProducts {
             defer { if fresh { pendingAcknowledgments.remove(fact.key) } }
             // No acknowledgment before persistence; callbacks can reenter while finishing.
             await finish()
-            unresolvedReceiptKeys.remove(fact.key)
+            // An older completion must not erase a newer failure for the same receipt.
+            let resolvedReceipt = eventRevision == revision && unresolvedReceiptKeys.remove(fact.key) != nil
             if let purchase, purchaseID == purchase {
                 if eventRevision != revision && [.uncertain, .failed].contains(status) { return }
                 // An explicit purchase finishes even if history/updates recorded it first or
                 // app reactivation rechecked the same account while StoreKit was finishing.
                 // Never attribute the old account's acknowledgment to a newly verified account.
                 let sameAccount = fact.accountID == nil || verifiedScope?.contains(fact) == true
-                status = journal[fact.key]?.revoked == false ? (sameAccount ? .thanked : .recorded) : .idle
-                unmatchedPurchaseKey = status == .recorded ? fact.key : nil
-                diagnostic = nil; eventRevision &+= 1
+                let active = journal[fact.key]?.revoked == false
+                if active && !sameAccount { unmatchedPurchaseKey = fact.key }
+                else if unmatchedPurchaseKey == fact.key { unmatchedPurchaseKey = nil }
+                status = protectedPaymentStatus ?? (active ? .thanked : .idle)
+                if protectedPaymentStatus == nil { diagnostic = nil }
+                eventRevision &+= 1
                 return
             }
             guard eventRevision == revision, recoveryGeneration == scopeGeneration,
                   fact.accountID == nil || verifiedScope?.contains(fact) == true,
                   journal[fact.key]?.revoked == fact.revoked else { return }
-            if status == .recorded {
-                guard unmatchedPurchaseKey == fact.key else { return }
-                unmatchedPurchaseKey = nil
-            }
-            if unknownPaymentOutcome || !unresolvedReceiptKeys.isEmpty {
+            let resolvedUnmatched = unmatchedPurchaseKey == fact.key
+            if resolvedUnmatched { unmatchedPurchaseKey = nil }
+            if let protected = protectedPaymentStatus {
                 // Retain real, durably verified history without treating an
                 // unrelated update/refund as resolution of a protected payment.
-                if status == .pending, fresh, !fact.revoked { status = .uncertain }
+                status = protected == .pending && fresh && !fact.revoked ? .uncertain : protected
                 return
             }
-            if fresh && !fact.revoked {
+            if (fresh || resolvedReceipt || resolvedUnmatched) && !fact.revoked {
                 eventRevision &+= 1; diagnostic = nil; status = .thanked
             } else if fact.revoked || (status == .uncertain && !pendingAcknowledgments.contains(fact.key)) {
                 eventRevision &+= 1; diagnostic = nil; status = .idle

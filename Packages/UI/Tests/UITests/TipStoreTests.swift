@@ -62,6 +62,42 @@ import Testing
         #expect(!finished && production.status == .uncertain)
         #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("production.json").path))
     }
+    @Test func unmatchedPurchaseSurvivesAnotherReceiptFailureAndExactDuplicateResolvesIt() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-combined-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let value = owner(root.appendingPathComponent("journal.json"))
+        let generation = value.beginRecovery()
+        try value.acceptScope(scope("B"), generation: generation)
+        value.endRecovery(generation: generation, succeeded: true)
+        let purchase = value.beginPurchase(), unmatched = detailed("A-paid", account: "A")
+        await value.acceptVerified(unmatched, purchase: purchase) {}
+        let other = detailed("B-paid", account: "B")
+        value.markUnverified("B save failed", receiptKey: other.key)
+        await value.acceptVerified(other) {}
+        #expect(value.status == .recorded && value.hasUnresolvedPayment && !value.canPurchase)
+        let next = value.beginRecovery()
+        try value.acceptScope(scope("A"), generation: next)
+        value.endRecovery(generation: next, succeeded: true)
+        // Same transaction is already in the journal: fresh=false must still resolve its protection.
+        await value.acceptVerified(unmatched) {}
+        #expect(value.status == .thanked && !value.hasUnresolvedPayment)
+    }
+    @Test func suspendedOldFinishCannotEraseNewSameReceiptSaveFailure() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-new-refund-failure-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let value = owner(root.appendingPathComponent("journal.json")), originalFact = fact("same")
+        var suspended: CheckedContinuation<Void, Never>?
+        let original = Task { await value.acceptVerified(originalFact) { await withCheckedContinuation { suspended = $0 } } }
+        for _ in 0..<100 { if suspended != nil { break }; await Task.yield() }
+        try #require(suspended != nil)
+        value.markUnverified("new same-receipt refund failed to save", receiptKey: originalFact.key)
+        suspended?.resume(); await original.value
+        #expect(value.status == .uncertain && value.hasUnresolvedPayment)
+        await value.acceptVerified(fact("unrelated", revoked: true)) {}
+        #expect(value.status == .uncertain && value.hasUnresolvedPayment)
+        await value.acceptVerified(fact("same", revoked: true)) {}
+        #expect(value.status == .idle && !value.hasUnresolvedPayment)
+    }
     private func owner(_ url: URL, ids: Set<String> = ["d.localtest.tip.small"]) -> TipStore {
         TipStore(productIDs: ids, bundleID: "D.fixture", journalURL: url, localTest: true, credentials: FixtureTipVault())
     }

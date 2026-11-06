@@ -289,17 +289,23 @@ private final class TipStoreKitBundle: NSObject { }
         #expect(transaction.state == .purchased && transaction.productIdentifier == store.selectedID)
         try await wait("unresolved request stays protected", store: store) { store.status == .uncertain }
         #expect(!store.canPurchase)
-        var exactUnfinished = false
+        var exactUnfinished = false, unverifiedUnfinished = 0
         for await result in Transaction.unfinished {
-            if case .verified(let value) = result, value.id == acceptedID { exactUnfinished = true }
+            switch result {
+            case .verified(let value): exactUnfinished = exactUnfinished || value.id == acceptedID
+            case .unverified: unverifiedUnfinished += 1
+            }
         }
-        #expect(!exactUnfinished && session.allTransactions().count == 1)
+        #expect(!exactUnfinished && unverifiedUnfinished == 0 && session.allTransactions().count == 1)
         try session.refundTransaction(identifier:transaction.identifier)
         print("TIP_LOCAL_REFUND requested=\(acceptedID) facts=\(session.allTransactions().map { "\($0.identifier):\($0.state.rawValue):\($0.cancelDate != nil)" })")
         await store.recoverHistory(recheckAccount: true)
         #expect(store.status == .uncertain && !store.canPurchase)
-        let refunded = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("tips.json"))) as? [String: [String: Any]])
-        #expect(refunded.values.first?["revoked"] as? Bool == true)
+        try await wait("exact approved transaction refund persisted", store: store) {
+            guard let data = try? Data(contentsOf: root.appendingPathComponent("tips.json")),
+                  let records = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Any]] else { return false }
+            return records.values.contains { $0["transactionID"] as? String == String(acceptedID) && $0["revoked"] as? Bool == true }
+        }
         if case .verified(let latest)? = await Transaction.latest(for: "d.localtest.tip.tier1") {
             print("TIP_LOCAL_REFUND latestRevoked=\(latest.revocationDate != nil) environment=\(latest.environment.rawValue)")
         } else { print("TIP_LOCAL_REFUND no verified latest transaction") }
