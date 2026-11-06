@@ -147,6 +147,13 @@ public final class ModelLibraryModel {
         guard globalOperation == nil else { return }
         localInspectionID = UUID(); localFileChoices = []; localFileSelection = nil
     }
+    // Claim the intent when an input is accepted, before asynchronous provider loading.
+    func beginLocalInspection() -> UUID? {
+        guard globalOperation == nil else { return nil }
+        clearLocalDraft(); errorMessage = nil
+        return localInspectionID
+    }
+    func isCurrentLocalInspection(_ intent: UUID) -> Bool { localInspectionID == intent }
     public var errorMessage: String?
     public private(set) var preparationNotice: String?
     public private(set) var snapshot: ModelLibrarySnapshot?
@@ -471,7 +478,7 @@ public final class ModelLibraryModel {
         await refresh()
     }
 
-    public func chooseLocalFiles(catalogID: String? = nil) async {
+    public func chooseLocalFiles(catalogID: String? = nil, acceptsResult: @MainActor () -> Bool = { true }) async {
         guard !isChoosingLocation, globalOperation == nil else { return }
         isChoosingLocation = true; clearLocalDraft(); errorMessage = nil
         let panel = NSOpenPanel()
@@ -481,18 +488,18 @@ public final class ModelLibraryModel {
         let response = await panel.begin()
         defer { isChoosingLocation = false }
         guard response == .OK, let url = panel.url else { return }
-        await chooseLocalFiles(at: url, catalogID: catalogID)
+        await chooseLocalFiles(at: url, catalogID: catalogID, acceptsResult: acceptsResult)
     }
-    func chooseLocalFiles(at url: URL, catalogID: String? = nil, revision: String? = nil) async {
-        guard globalOperation == nil else { return }
-        let intent = UUID(); localInspectionID = intent
-        localFileSelection = nil; localFileChoices = []; errorMessage = nil
+    func chooseLocalFiles(at url: URL, catalogID: String? = nil, revision: String? = nil,
+                          inspectionID: UUID? = nil, acceptsResult: @MainActor () -> Bool = { true }) async {
+        guard globalOperation == nil, let intent = inspectionID ?? beginLocalInspection(),
+              localInspectionID == intent else { return }
         do {
             let choices = try await library.inspectLocalCandidates(at: url, catalogID: catalogID, revision: revision, validatePrepared: preparedValidator)
-            guard localInspectionID == intent else { return }
+            guard localInspectionID == intent, !Task.isCancelled, acceptsResult() else { return }
             localFileChoices = choices
             if choices.count == 1 { localFileSelection = choices[0] }
-        } catch { if localInspectionID == intent { report(error, context: managementText("importFailed")) } }
+        } catch { if localInspectionID == intent, !Task.isCancelled, acceptsResult() { report(error, context: managementText("importFailed")) } }
     }
     struct LocalSubmission {
         let selection: ModelLocalFileSelection

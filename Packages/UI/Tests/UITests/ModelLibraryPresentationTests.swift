@@ -1010,3 +1010,48 @@ extension ModelLibraryPresentationTests {
         }
     }
 }
+
+
+private actor LocalInspectionGate {
+    private var started = false
+    private var ready: CheckedContinuation<Void, Never>?
+    private var release: CheckedContinuation<Void, Never>?
+    func wait() async {
+        started = true; ready?.resume(); ready = nil
+        await withCheckedContinuation { release = $0 }
+    }
+    func waitForStart() async { if !started { await withCheckedContinuation { ready = $0 } } }
+    func open() { release?.resume(); release = nil }
+}
+extension ModelLibraryPresentationTests {
+    @Test func localInspectionClaimsDropBeforeLoadingAndRejectsClosedSurface() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("DropIntent-" + UUID().uuidString)
+        let a = root.appendingPathComponent("slow", isDirectory: true), b = root.appendingPathComponent("new", isDirectory: true)
+        for p in [a,b] { try FileManager.default.createDirectory(at: p, withIntermediateDirectories: true) }
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("{}".utf8).write(to: a.appendingPathComponent("D-VIDEO-PACK.json"))
+        let bytes = Data("valid".utf8); try bytes.write(to: b.appendingPathComponent("weights.bin"))
+        let entry = ModelCatalogEntry(id: "drop-intent", title: "Drop intent fixture", repository: "fixture/local", revision: String(repeating: "a", count: 40),
+            files: [.init(path:"weights.bin",size:UInt64(bytes.count),sha256:SHA256.hash(data:bytes).map {String(format:"%02x",$0)}.joined())])
+        let library = try await ModelLibrary(stateDirectory:root.appendingPathComponent("state"),catalog:[entry])
+        let model = ModelLibraryModel(library:library), firstGate = LocalInspectionGate()
+        model.preparedValidator = { _ in await firstGate.wait(); throw CocoaError(.fileReadCorruptFile) }
+        let first = Task { await model.chooseLocalFiles(at:a) }
+        await firstGate.waitForStart()
+        // B has arrived, but its provider has not finished. A must no longer publish.
+        let newer = try #require(model.beginLocalInspection())
+        await firstGate.open(); await first.value
+        #expect(model.isCurrentLocalInspection(newer) && model.errorMessage == nil && model.localFileSelection == nil)
+        await model.chooseLocalFiles(at:b,inspectionID:newer)
+        #expect(model.localFileSelection?.directory.standardizedFileURL == b.standardizedFileURL)
+        let closingGate = LocalInspectionGate(); var visible = true
+        model.preparedValidator = { _ in await closingGate.wait(); throw CocoaError(.fileReadCorruptFile) }
+        let closing = Task { await model.chooseLocalFiles(at:a,acceptsResult:{visible}) }
+        await closingGate.waitForStart(); visible = false
+        await closingGate.open(); await closing.value
+        #expect(model.errorMessage == nil && model.localFileSelection == nil)
+        #expect((await library.snapshot()).records.isEmpty)
+        try await library.shutdown()
+    }
+}

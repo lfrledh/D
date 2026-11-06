@@ -17,7 +17,7 @@ struct ModelLocalFilesForm: View {
     var body: some View {
         ScrollView { VStack(alignment: .leading, spacing: 16) {
             if knownSource == nil {
-                Button(t("chooseFolder")) { Task { await model.chooseLocalFiles() } }
+                Button(t("chooseFolder")) { Task { await model.chooseLocalFiles(acceptsResult: { surfaceActive }) } }
                     .disabled(model.isChoosingLocation || model.globalOperation != nil)
             }
             if model.localFileChoices.count > 1 {
@@ -63,6 +63,7 @@ struct ModelLocalFilesForm: View {
             .onDrop(of: [.fileURL], isTargeted: nil) { providers, _ in
                 guard knownSource == nil, surfaceActive, providers.count == 1, let provider = providers.first,
                       !model.isChoosingLocation, model.globalOperation == nil else { return false }
+                guard let intent = model.beginLocalInspection() else { return false }
                 let generation = UUID(); dropGeneration = generation
                 Task { @MainActor in
                     do {
@@ -72,11 +73,12 @@ struct ModelLocalFilesForm: View {
                                 else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)) }
                             }
                         }
-                        guard surfaceActive, dropGeneration == generation,
+                        guard surfaceActive, dropGeneration == generation, model.isCurrentLocalInspection(intent),
                               !model.isChoosingLocation, model.globalOperation == nil else { return }
-                        await model.chooseLocalFiles(at: try Self.droppedFileURL(bytes))
+                        await model.chooseLocalFiles(at: try Self.droppedFileURL(bytes), inspectionID: intent,
+                                                    acceptsResult: { surfaceActive && dropGeneration == generation })
                     } catch {
-                        if surfaceActive, dropGeneration == generation { model.errorMessage = error.localizedDescription }
+                        if surfaceActive, dropGeneration == generation, model.isCurrentLocalInspection(intent) { model.errorMessage = error.localizedDescription }
                     }
                 }
                 return true
@@ -84,12 +86,11 @@ struct ModelLocalFilesForm: View {
         }
         .task(id: knownSource?.id) {
             if let knownSource, let directory = knownSource.directory {
-                await model.chooseLocalFiles(at: directory, catalogID: knownSource.catalogID, revision: knownSource.revision)
+                await model.chooseLocalFiles(at: directory, catalogID: knownSource.catalogID, revision: knownSource.revision, acceptsResult: { surfaceActive })
             }
         }
         .onAppear { surfaceActive = true }
         .onChange(of: model.isChoosingLocation) { _, choosing in if choosing { dropGeneration = UUID() } }
-        .onChange(of: model.localFileSelection) { _, _ in dropGeneration = UUID() }
         .onDisappear { surfaceActive = false; dropGeneration = UUID() }
         .workbenchCloseProtection(isDirty: model.globalOperation == nil && (model.localFileSelection != nil || !model.localFileChoices.isEmpty))
     }
