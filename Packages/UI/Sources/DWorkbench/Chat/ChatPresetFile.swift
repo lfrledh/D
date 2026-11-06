@@ -16,7 +16,13 @@ public enum ChatPresetFile {
     /// Returns a preview; importing does not apply anything to a conversation.
     public static func decode(_ data: Data) throws -> [ChatPromptPreset] {
         guard !data.isEmpty, data.count <= 2_097_152 else { throw WorkflowIssue("Chat preset file is empty or exceeds 2 MiB.", code: "chat.presetFile.emptyOrTooLarge") }
-        let value = try JSONDecoder().decode(Envelope.self, from: data)
+        let value: Envelope
+        do { value = try JSONDecoder().decode(Envelope.self, from: data) }
+        catch let error as DecodingError {
+            // Only structural decoding belongs here. Validation and I/O retain
+            // their distinct reasons; preserve the original diagnostic verbatim.
+            throw WorkflowIssue(String(describing: error), code: "chat.presetFile.invalidStructure")
+        }
         guard value.version == 1 else { throw WorkflowIssue("Chat preset version is unsupported.", code: "chat.presetFile.unsupportedVersion") }
         try validate(value.presets)
         let original = try JSONSerialization.jsonObject(with: data) as? NSDictionary

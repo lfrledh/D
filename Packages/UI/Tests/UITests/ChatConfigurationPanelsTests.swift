@@ -54,6 +54,33 @@ private actor ConfigurationPanelEngine: InferenceEngine {
             }
         }
     }
+    @Test func malformedPresetSummaryUsesStableReasonAndRetainsRawDiagnostic() throws {
+        let language = UILanguageStore(preferredLanguages: ["en"])
+        for text in ["{", #"{"version":1,"presets":"not-an-array"}"#,
+                     #"{"version":1,"presets":[{}]}"#] {
+            do { _ = try ChatPresetImportDraft(Data(text.utf8)); Issue.record("Malformed file accepted") }
+            catch {
+                let issue = try #require(error as? WorkflowIssue)
+                #expect(issue.code == "chat.presetFile.invalidStructure")
+                let original = issue.localizedDescription
+                #expect(!original.isEmpty && !original.contains("Unable to read this chat preset file"))
+                try language.select("en")
+                #expect(workflowText(language, try #require(issue.code)).hasPrefix("Unable to read"))
+                try language.select("zh-Hans")
+                #expect(workflowText(language, try #require(issue.code)) == "无法读取此聊天预设文件。请确认文件完整，或重新导出后再试。")
+                #expect(issue.localizedDescription == original)
+            }
+        }
+        var blank = ChatPromptPreset(name: "Valid", prompt: "User content")
+        let valid = try ChatPresetFile.encode([blank])
+        var object = try #require(JSONSerialization.jsonObject(with: valid) as? [String: Any])
+        var presets = try #require(object["presets"] as? [[String: Any]])
+        presets[0]["name"] = "  "; object["presets"] = presets
+        do { _ = try ChatPresetFile.decode(JSONSerialization.data(withJSONObject: object)); Issue.record("Blank name accepted") }
+        catch { #expect((error as? WorkflowIssue)?.code == "chat.presetFile.blankName") }
+        blank.prompt = "Unchanged identity"
+        #expect(try ChatPresetFile.decode(ChatPresetFile.encode([blank])) == [blank])
+    }
     @Test func importPreviewIsCleanAndFailedCommitRetriesOnlySaveThenColdReads() async throws {
         let (store, engine, chat, root) = try await fixture()
         defer { try? FileManager.default.removeItem(at: root) }

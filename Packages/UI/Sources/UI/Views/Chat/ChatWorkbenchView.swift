@@ -2731,7 +2731,7 @@ ScrollViewReader { proxy in
             let data = try Data(contentsOf: url)
             let presets = try ChatPresetFile.decode(data)
             present(.presetImport(presets, data))
-        } catch { report(error.localizedDescription, for: chat.state.selectedSessionID) }
+        } catch { report(error.localizedDescription, for: chat.state.selectedSessionID, code: (error as? WorkflowIssue)?.code) }
     }
     private func exportPresets(_ presets: [ChatPromptPreset], sessionID: UUID) async {
         guard !filePanelBusy else { return }
