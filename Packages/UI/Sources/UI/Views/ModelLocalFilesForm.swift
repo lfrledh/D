@@ -59,30 +59,31 @@ struct ModelLocalFilesForm: View {
             if model.globalOperation != nil { ProgressView(); Button(t("cancel")) { model.cancelImport() } }
             if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
         }.padding(20).frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
-            .contentShape(Rectangle())
-            .onDrop(of: [.fileURL], isTargeted: nil) { providers, _ in
-                guard knownSource == nil, surfaceActive, providers.count == 1, let provider = providers.first,
-                      !model.isChoosingLocation, model.globalOperation == nil else { return false }
-                guard let intent = model.beginLocalInspection() else { return false }
-                let generation = UUID(); dropGeneration = generation
-                Task { @MainActor in
-                    do {
-                        let bytes: Data = try await withCheckedThrowingContinuation { continuation in
-                            provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, error in
-                                if let data { continuation.resume(returning: data) }
-                                else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)) }
-                            }
+        }
+        // The whole scrolling form is the destination, including empty viewport space.
+        .contentShape(Rectangle())
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers, _ in
+            guard knownSource == nil, surfaceActive, providers.count == 1, let provider = providers.first,
+                  !model.isChoosingLocation, model.globalOperation == nil else { return false }
+            guard let intent = model.beginLocalInspection() else { return false }
+            let generation = UUID(); dropGeneration = generation
+            Task { @MainActor in
+                do {
+                    let bytes: Data = try await withCheckedThrowingContinuation { continuation in
+                        provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, error in
+                            if let data { continuation.resume(returning: data) }
+                            else { continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown)) }
                         }
-                        guard surfaceActive, dropGeneration == generation, model.isCurrentLocalInspection(intent),
-                              !model.isChoosingLocation, model.globalOperation == nil else { return }
-                        await model.chooseLocalFiles(at: try Self.droppedFileURL(bytes), inspectionID: intent,
-                                                    acceptsResult: { surfaceActive && dropGeneration == generation })
-                    } catch {
-                        if surfaceActive, dropGeneration == generation, model.isCurrentLocalInspection(intent) { model.errorMessage = error.localizedDescription }
                     }
+                    guard surfaceActive, dropGeneration == generation, model.isCurrentLocalInspection(intent),
+                          !model.isChoosingLocation, model.globalOperation == nil else { return }
+                    await model.chooseLocalFiles(at: try Self.droppedFileURL(bytes), inspectionID: intent,
+                                                acceptsResult: { surfaceActive && dropGeneration == generation })
+                } catch {
+                    if surfaceActive, dropGeneration == generation, model.isCurrentLocalInspection(intent) { model.errorMessage = error.localizedDescription }
                 }
-                return true
             }
+            return true
         }
         .task(id: knownSource?.id) {
             if let knownSource, let directory = knownSource.directory {
