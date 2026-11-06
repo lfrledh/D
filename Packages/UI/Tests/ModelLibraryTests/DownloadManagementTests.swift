@@ -180,7 +180,8 @@ struct DownloadManagementTests {
         try await library.configureRoot(at: f.destination)
         _ = try await library.enqueueDownloads(["raw", "ready"], postAction: .register)
         let done = try await wait(library) { $0.downloads.count == 2 && $0.downloads.allSatisfy { $0.state == .completed } }
-        #expect(done.downloads[0].postActionError != nil)
+        #expect(done.downloads[0].postActionError == nil)
+        #expect(done.resources[0].record.state == .preparationRequired)
         #expect(done.resources[0].record.registrationState == .pending)
         #expect(done.resources[1].record.registrationState == .registered)
         #expect(await transport.maximumActive <= 2)
@@ -1103,6 +1104,27 @@ extension DownloadManagementTests {
         #expect(await library.snapshot().downloads.isEmpty)
         #expect(await library.snapshot().resources[0].control.fileState == .deleted)
         try await library.shutdown()
+    }
+
+    @Test func removalRevokesQueuedRegistrationAcrossColdOpen() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let transfer = FixtureTransfer(f.contents)
+        var owner: ModelLibrary? = try await library(f, transport: transfer)
+        try await owner!.configureRoot(at: f.destination); try await owner!.pauseQueue()
+        let task = try await owner!.enqueueDownloads([f.entry.id], postAction: .register, startIfIdle: false)[0]
+        try await owner!.unregister(task.resourceID.modelID)
+        try await owner!.shutdown(); owner = nil
+        let reopened = try await library(f, transport: transfer)
+        try await reopened.resumeQueue(includePaused: true)
+        let done = try await wait(reopened) { $0.downloads.first?.state == .completed }
+        #expect(done.downloads[0].postAction == .register) // original intent remains historical fact
+        #expect(done.resources[0].record.registrationState == .unregistered)
+        #expect(done.resources[0].control.automaticRegistrationRevoked == true)
+        let count = await transfer.requests
+        try await reopened.registerResource(task.resourceID) // a new explicit action
+        #expect(await reopened.snapshot().resources[0].record.registrationState == .registered)
+        #expect(await transfer.requests == count)
+        try await reopened.shutdown()
     }
 
     @Test func managerPausedRequestKeepsPolicyAfterColdOpen() async throws {

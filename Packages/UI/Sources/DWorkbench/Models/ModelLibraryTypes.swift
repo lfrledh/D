@@ -83,6 +83,8 @@ public struct ModelCatalogEntry: Identifiable, Codable, Sendable, Equatable {
     /// Adapter model choice (for example text:<revision>), distinct from operationID.
     public let workflowIdentity: String?
     public let preparation: ModelPreparation
+    /// Fixed prepared recipes supported for local addition, never offered as downloads.
+    public let localPreparedOnly: Bool
     public let modelSpec: String
     public let memoryGuidance: String
     public let provenance: String?
@@ -92,15 +94,15 @@ public struct ModelCatalogEntry: Identifiable, Codable, Sendable, Equatable {
                 imageProfile: ImageModelProfile? = nil, workflowProfileID: String? = nil,
                 workflowIdentity: String? = nil, preparation: ModelPreparation = .none,
                 modelSpec: String = "固定版本模型文件", memoryGuidance: String = "运行所需内存取决于所选设备与任务；安装后仍需验证执行引擎。",
-                provenance: String? = nil, acquisitionDisclosure: ModelAcquisitionDisclosure? = nil) {
+                provenance: String? = nil, acquisitionDisclosure: ModelAcquisitionDisclosure? = nil, localPreparedOnly: Bool = false) {
         self.id = id; self.title = title; self.repository = repository; self.revision = revision
         self.files = files; self.imageProfile = imageProfile; self.workflowProfileID = workflowProfileID
-        self.workflowIdentity = workflowIdentity; self.preparation = preparation
+        self.workflowIdentity = workflowIdentity; self.preparation = preparation; self.localPreparedOnly = localPreparedOnly
         self.modelSpec = modelSpec; self.memoryGuidance = memoryGuidance; self.provenance = provenance; self.acquisitionDisclosure = acquisitionDisclosure
     }
     private enum CodingKeys: String, CodingKey {
         case id, title, repository, revision, files, imageProfile, workflowProfileID, workflowIdentity
-        case preparation, modelSpec, memoryGuidance, provenance, acquisitionDisclosure
+        case preparation, modelSpec, memoryGuidance, provenance, acquisitionDisclosure, localPreparedOnly
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -114,7 +116,8 @@ public struct ModelCatalogEntry: Identifiable, Codable, Sendable, Equatable {
                   modelSpec: try values.decodeIfPresent(String.self, forKey: .modelSpec) ?? "固定版本模型文件",
                   memoryGuidance: try values.decodeIfPresent(String.self, forKey: .memoryGuidance) ?? "运行所需内存取决于设备与任务。",
                   provenance: try values.decodeIfPresent(String.self, forKey: .provenance),
-                  acquisitionDisclosure: try values.decodeIfPresent(ModelAcquisitionDisclosure.self, forKey: .acquisitionDisclosure))
+                  acquisitionDisclosure: try values.decodeIfPresent(ModelAcquisitionDisclosure.self, forKey: .acquisitionDisclosure),
+                  localPreparedOnly: try values.decodeIfPresent(Bool.self, forKey: .localPreparedOnly) ?? false)
     }
 }
 
@@ -317,6 +320,8 @@ public struct ModelResourceControl: Codable, Sendable, Equatable {
     public var parentResourceID: ModelResourceID?
     public var executionRevision: String?
     public var retryNotBefore: Date?
+    /// Explicit removal revokes a queued completion even after cold reopen.
+    public var automaticRegistrationRevoked: Bool?
     public var preparationRecipe: String?
     public var requiredPaths: [String]?
     public var requiresTokenizerUpgrade: Bool?
@@ -385,9 +390,10 @@ public struct ModelReadOnlyConfiguration: Identifiable, Sendable, Equatable {
 }
 
 /// Captured by an explicit directory chooser; submitting rechecks the physical root.
-public struct ModelLocalFileSelection: Sendable {
+public struct ModelLocalFileSelection: Sendable, Equatable {
     public let directory: URL
     public let catalogID: String
+    public let revision: String
     public let prepared: Bool
     public let supportsOriginal: Bool
     public let estimatedBytes: UInt64?

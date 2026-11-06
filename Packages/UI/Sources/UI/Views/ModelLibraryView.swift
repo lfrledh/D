@@ -14,9 +14,6 @@ public struct ModelLibraryView: View {
     @State private var accessChecking: UUID?
     @State private var accessMessage: [UUID: String] = [:]
     @State private var importVisible = false
-    @State private var importCatalogID = ""
-    @State private var importKind: WorkflowModelKind = .text
-    @State private var importStorage: ModelStorageKind = .external
     @State private var deletingTask: ModelDownloadTask?
     @State private var cleanupPartial = false
     @State private var narrowDetail = false
@@ -127,7 +124,7 @@ public struct ModelLibraryView: View {
             ModelAcquisitionView(model: model, request: request)
         }
         .workbenchSheet(isPresented: $importVisible, title: text("import", "登记模型…"), size: .init(width: 680, height: 520)) {
-            localImport.workbenchCloseProtection(isDirty: !importCatalogID.isEmpty || importStorage != .external)
+            ModelLocalFilesForm(model: model) { _ in importVisible = false }
         }
         .workbenchSheet(item: $deletingTask, title: workflowText(language, "childPanel.name.delete")) { task in deleteConfirmation(task) }
         .workbenchConfirmation(text("confirm", "确认操作"), isPresented: Binding(get: { confirmation != nil }, set: { if !$0 { confirmation = nil } }), presenting: confirmation) { action in
@@ -260,7 +257,7 @@ public struct ModelLibraryView: View {
         HStack(spacing: 8) {
             refreshButton
             if model.workspace == "resources" {
-                Button(text("import", "登记模型…")) { importVisible = true }.accessibilityIdentifier("model-manager-import")
+                Button(text("import", "登记模型…")) { model.clearLocalDraft(); importVisible = true }.accessibilityIdentifier("model-manager-import").disabled(model.globalOperation != nil || model.isChoosingLocation)
             }
             Button(text("acquire", "新建下载…")) { model.requestAcquisition() }
                 .accessibilityIdentifier("model-manager-acquire")
@@ -312,6 +309,13 @@ public struct ModelLibraryView: View {
                                 WorkflowTechnicalDetails(value: item.identity)
                                 Text(item.location?.path ?? text("locationUnread", "位置尚未读取")).font(.caption).textSelection(.enabled)
                                 Text(text("readOnlyHelp", "保留既有能力；此配置不由下载库直接管理。无文件扫描或虚构下载历史。")).font(.caption).foregroundStyle(.secondary)
+                                if let location = item.location {
+                                    Button(text("local.add")) {
+                                        model.clearLocalDraft(); importVisible = true
+                                        let exact = model.catalog.filter { $0.workflowIdentity == item.identity }
+                                        Task { await model.chooseLocalFiles(at: location, catalogID: exact.count == 1 ? exact[0].id : nil) }
+                                    }.disabled(model.globalOperation != nil)
+                                }
                                 if item.selectable, let action = model.configurationSelectionAction {
                                     Button(text("useTarget", "用于：") + (model.currentSelectionTitle ?? text("targetUnavailable", "目标已改变，请重新选择"))) { Task { await action(item) } }.disabled(model.currentSelectionTitle == nil)
                                 }
@@ -368,7 +372,7 @@ public struct ModelLibraryView: View {
                     (resource.control.requiresTokenizerUpgrade == true && resource.control.role != .execution && record.storage == .external) {
                     Button(text("reverify", "重新校验文件")) { Task { await model.reverify(resource) } }.help(text("reverify.help")).disabled(record.activeLeaseCount > 0 || model.hasActiveWork || model.globalOperation != nil)
                 }
-                if resource.control.fileState == .deleted {
+                if resource.control.fileState == .deleted, entry?.localPreparedOnly != true {
                     Button(text("getSame", "新建下载…")) { model.requestAcquisition(catalogIDs: [record.catalogID]) }
                 }
                 if record.registrationState != .registered {
@@ -488,67 +492,6 @@ public struct ModelLibraryView: View {
             WorkflowTechnicalDetails(value: ["Task: " + task.id.uuidString, "Resource: " + task.resourceID.description, "Attempt: " + task.attemptID.uuidString, "Attempts: " + String(task.attempts), "Generation: " + task.generation.uuidString].joined(separator: "\n"))
 
         }.buttonStyle(WorkbenchGlassButtonStyle())
-    }
-    private var localImport: some View {
-        ScrollView { VStack(alignment: .leading, spacing: 16) {
-            WorkbenchPicker(text("configuration", "配置"), selection: $importCatalogID) {
-                WorkbenchChoice(text("local.chooseModel"), value: "")
-                if model.explicitRegistration != nil { WorkbenchChoice(text("local.existingConfiguration"), value: "existing-supported") }
-                WorkbenchChoiceForEach(model.catalog) { WorkbenchChoice($0.title, value: $0.id) }
-            }.disabled(model.globalOperation != nil)
-            if importCatalogID == "existing-supported" {
-                WorkbenchPicker(text("configuration", "配置"), selection: $importKind) {
-                    WorkbenchChoice(text("kind.text", "文字"), value: WorkflowModelKind.text)
-                    WorkbenchChoice(text("kind.music", "音乐"), value: WorkflowModelKind.music)
-                    WorkbenchChoice(text("kind.video", "视频"), value: WorkflowModelKind.video)
-                }
-                Text(text("local.originalHelp"))
-                Text(text("local.legacyCopyUnavailable")).font(.caption)
-                Button(text("local.title")) { Task { await model.importConfiguration(kind: importKind) } }
-                    .disabled(model.isChoosingLocation || model.globalOperation != nil)
-            }
-            if let entry = model.catalog.first(where: { $0.id == importCatalogID }) {
-                ModelAcquisitionInformation(entry: entry)
-                Button(text("chooseFolder")) { Task { await model.chooseLocalFiles(catalogID: entry.id) } }
-                    .disabled(model.isChoosingLocation || model.globalOperation != nil)
-                if let selection = model.localFileSelection, selection.catalogID == entry.id {
-                    field("local.source", "", selection.directory.path)
-                    Picker(text("local.usage"), selection: $importStorage) {
-                        Text(text("local.original")).tag(ModelStorageKind.external).disabled(!selection.supportsOriginal)
-                        Text(text("local.copy")).tag(ModelStorageKind.managed)
-                    }.pickerStyle(.radioGroup).disabled(model.globalOperation != nil)
-                    if !selection.supportsOriginal { Text(text("local.originalUnsupported")).font(.callout) }
-                    Text(text(importStorage == .external ? "local.originalHelp" : "local.copyHelp")).font(.callout)
-                    if importStorage == .managed {
-                        field("local.library", "", model.rootURL?.path ?? text("noRoot"))
-                        Button(text("local.changeLocation")) { Task { await model.chooseRoot() } }.disabled(!model.canChooseRoot)
-                        if !selection.prepared && entry.preparation != .none { Text(text(entry.id == "wan21-t2v-1.3b-bf16" ? "local.conversionHelp" : "local.packagingHelp")).font(.callout) }
-                        if let bytes = selection.estimatedBytes { Text(text("local.size").replacingOccurrences(of: "{size}", with: ModelLibraryModel.formatBytes(bytes))).font(.caption) }
-                        Text(text("local.spaceUnknown")).font(.caption)
-                    }
-                    if entry.workflowProfileID == "d.music.ace-step-1.5-xl-sft" {
-                        Text(text("local.aceDerived")).font(.caption)
-                    }
-                    Text(text("local.noGeneration")).font(.caption).foregroundStyle(.secondary)
-                    Button(text(importStorage == .managed ? "local.copyRegister" : "local.title")) {
-                        let submittedCatalog = importCatalogID, submittedStorage = importStorage
-                        Task {
-                            if await model.submitLocalFiles(storage: submittedStorage),
-                               importCatalogID == submittedCatalog, importStorage == submittedStorage,
-                               model.localFileSelection == nil {
-                                // A committed registration is no longer an unsaved form.
-                                importCatalogID = ""; importStorage = .external
-                            }
-                        }
-                    }.buttonStyle(WorkbenchPrimaryButtonStyle())
-                        .disabled(model.globalOperation != nil || model.hasActiveWork || (importStorage == .external && !selection.supportsOriginal) || (importStorage == .managed && model.rootURL == nil))
-                        .accessibilityIdentifier("model-local-submit")
-                }
-            }
-            if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
-            if let notice = model.preparationNotice { Text(notice).font(.callout) }
-            Button(text("cancel")) { importVisible = false }
-        }.padding(20).frame(maxWidth: .infinity) }
     }
     private func field(_ key: String, _ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) { Text(text(key, title)).font(.caption).foregroundStyle(.secondary); Text(value).font(.callout).textSelection(.enabled) }

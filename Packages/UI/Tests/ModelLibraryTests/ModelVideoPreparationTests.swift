@@ -256,3 +256,90 @@ extension ModelVideoPreparationTests {
         try await library.shutdown()
     }
 }
+
+extension ModelVideoPreparationTests {
+    @Test func compatiblePreparedCopyClosesEncoderAndSurvivesSourceRemovalAndColdOpen() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let profile = ExternalVideoExecutionProfile.ltx23BF16Full
+        let pack = f.root.appendingPathComponent("prepared-local")
+        try FileManager.default.createDirectory(at: pack, withIntermediateDirectories: true)
+        var files = [ModelFile]()
+        for prefix in ["model", "text_encoder"] {
+            for file in f.entry.files {
+                let path = prefix + "/" + file.path, target = pack.appendingPathComponent(path)
+                try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try f.contents[file.path]!.write(to: target)
+                files.append(.init(path: path, size: file.size, sha256: file.sha256))
+            }
+        }
+        try JSONEncoder().encode(ExternalVideoModelManifest(profile: profile)).write(to: pack.appendingPathComponent(ExternalVideoModelManifest.filename))
+        let entry = ModelCatalogEntry(id: "local-" + profile.rawValue, title: "Controlled LTX closure fixture", repository: "fixture/local",
+            revision: profile.modelRevision, files: files, workflowProfileID: "d.video." + profile.rawValue,
+            workflowIdentity: "video:" + profile.modelIdentity, preparation: .required, localPreparedOnly: true)
+        let validate: @Sendable (URL) async throws -> ModelReference = { url in
+            let marker = try JSONDecoder().decode(ExternalVideoModelManifest.self, from: Data(contentsOf: url.appendingPathComponent(ExternalVideoModelManifest.filename)))
+            try marker.validate()
+            return .init(directory: url, revision: marker.profile.modelIdentity)
+        }
+        let before = try ModelDirectory(pack).entries()
+        var owner: ModelLibrary? = try await ModelLibrary(stateDirectory: f.state, catalog: [entry])
+        try await owner!.configureRoot(at: f.destination)
+        await #expect(throws: ModelLibraryError.self) { _ = try await owner!.enqueueDownloads([entry.id], postAction: .register) }
+        let choices = try await owner!.inspectLocalCandidates(at: pack, validatePrepared: validate)
+        #expect(choices.count == 1 && choices[0].supportsOriginal)
+        let id = try await owner!.registerLocalFiles(choices[0], storage: .managed, validatePrepared: validate)
+        let snapshot = await owner!.snapshot()
+        let copy = try #require(snapshot.records.first { $0.id == id }?.directory)
+        #expect(snapshot.uniqueRunnableResource(identity: entry.workflowIdentity!)?.record.id == id)
+        #expect(try ModelDirectory(pack).entries() == before)
+        #expect(try ModelDirectory(copy).entries().count == files.count + 1)
+        try await owner!.shutdown(); owner = nil
+        // Disconnect the exact fixture source without modifying its contents.
+        try FileManager.default.moveItem(at: pack, to: f.root.appendingPathComponent("source-disconnected"))
+        let reopened = try await ModelLibrary(stateDirectory: f.state, catalog: [entry])
+        try await reopened.reverifyResource(.init(rawValue: id.rawValue), preparedValidator: validate)
+        #expect(await reopened.snapshot().uniqueRunnableResource(identity: entry.workflowIdentity!)?.record.id == id)
+        #expect(try ModelDirectory(copy).verifyRequired(files).files.count == files.count)
+        #expect(await reopened.snapshot().downloads.isEmpty)
+        try await reopened.shutdown()
+    }
+}
+
+extension ModelVideoPreparationTests {
+    @Test func localRecipeResourcesAreExactAndDoNotBecomeDownloads() throws {
+        let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let entries = try ModelCatalog.entries().filter(\.localPreparedOnly)
+        for (index, names) in [["ltx23-bf16", "gemma3-bf16"], ["ltx23-q8-test", "gemma3-q4-test"]].enumerated() {
+            var expected = [ModelFile]()
+            for (prefix, name) in zip(["model", "text_encoder"], names) {
+                let data = try Data(contentsOf: repo.appendingPathComponent("Backends/Video/Adapters/Resources/" + name + ".json"))
+                let value = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+                for file in try #require(value["files"] as? [[String: Any]]) {
+                    expected.append(.init(path: prefix + "/" + (file["name"] as! String), size: (file["size"] as! NSNumber).uint64Value, sha256: file["sha256"] as! String))
+                }
+            }
+            #expect(entries[index].files == expected)
+        }
+        #expect(entries.count == 2 && entries.allSatisfy(\.localPreparedOnly))
+        #expect(entries.map { $0.files.count } == [28, 26]) // marker is separately validated and captured
+        #expect(entries.allSatisfy { $0.files.contains { $0.path == "text_encoder/tokenizer.json" } && $0.files.contains { $0.path == "text_encoder/tokenizer.model" } })
+        #expect(entries[0].workflowIdentity != entries[1].workflowIdentity)
+        #expect(try ModelCatalog.entries().filter { !$0.localPreparedOnly }.count == 18)
+    }
+
+    @Test func copyAdditionDoesNotReenableAnExplicitlyRemovedSource() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let library = try await ModelLibrary(stateDirectory: f.state, catalog: [f.entry])
+        try await library.configureRoot(at: f.destination)
+        let selection = try await library.inspectLocalCandidates(at: f.source, validatePrepared: nil)[0]
+        let original = try await library.registerLocalFiles(selection, storage: .external, validatePrepared: nil)
+        try await library.unregister(original)
+        let copy = try await library.registerLocalFiles(selection, storage: .managed, validatePrepared: nil)
+        let snapshot = await library.snapshot()
+        #expect(snapshot.records.first { $0.id == original }?.registrationState == .unregistered)
+        #expect(snapshot.records.first { $0.id == copy }?.registrationState == .registered)
+        #expect(snapshot.downloads.isEmpty)
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.inspectLocalCandidates(at: f.source, catalogID: f.entry.id, revision: "wrong", validatePrepared: nil) }
+        try await library.shutdown()
+    }
+}

@@ -4515,7 +4515,7 @@ extension ProjectStore {
                     try Task.checkCancellation()
                     let lease = try await modelLibrary.acquireForBackup(id); leases.append(lease)
                     let entry = try await modelLibrary.catalogEntry(for: id)
-                    dependencies.append(.init(catalogID: entry.id, revision: entry.revision, files: entry.files))
+                    dependencies.append(.init(catalogID: entry.id, revision: entry.revision, files: entry.files, relativeRoot: "Models/" + id.description))
                     let root = try ModelDirectory(lease.reference.directory)
                     for file in entry.files {
                         try Task.checkCancellation()

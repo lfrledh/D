@@ -18,10 +18,21 @@ public struct ProjectBackupModelDependency: Sendable {
     public let catalogID: String
     public let revision: String
     public let files: [ModelFile]
-    public init(catalogID: String, revision: String, files: [ModelFile]) {
-        self.catalogID = catalogID; self.revision = revision; self.files = files
+    public let relativeRoot: String?
+    public init(catalogID: String, revision: String, files: [ModelFile], relativeRoot: String? = nil) {
+        self.catalogID = catalogID; self.revision = revision; self.files = files; self.relativeRoot = relativeRoot
     }
 }
+
+/// A verified restore output, never the project that initiated restoration.
+public struct ProjectRestoredModel: Sendable, Identifiable {
+    public let id: String
+    public let catalogID: String
+    public let revision: String
+    public let directory: URL?
+    public let diagnostic: String?
+}
+
 
 public struct ProjectBackupPlan: Sendable {
     public let projectID: UUID
@@ -43,9 +54,10 @@ public struct ProjectBackupReceipt: Sendable {
     public let fileCount: Int
     public let byteCount: UInt64
     public let missing: [String]
-    public init(id: UUID, directory: URL, complete: Bool, fileCount: Int, byteCount: UInt64, missing: [String]) {
+    public let restoredModels: [ProjectRestoredModel]
+    public init(id: UUID, directory: URL, complete: Bool, fileCount: Int, byteCount: UInt64, missing: [String], restoredModels: [ProjectRestoredModel] = []) {
         self.id = id; self.directory = directory; self.complete = complete
-        self.fileCount = fileCount; self.byteCount = byteCount; self.missing = missing
+        self.fileCount = fileCount; self.byteCount = byteCount; self.missing = missing; self.restoredModels = restoredModels
     }
 }
 
@@ -158,7 +170,7 @@ private extension ProjectBackup {
 
     struct Entry: Codable { let path: String; let sha256: String; let byteCount: UInt64 }
     struct DependencyFile: Codable { let path: String; let size: UInt64; let digest: String; let algorithm: String }
-    struct Dependency: Codable { let catalogID: String; let revision: String; let files: [DependencyFile] }
+    struct Dependency: Codable { let catalogID: String; let revision: String; let files: [DependencyFile]; var relativeRoot: String? = nil }
     struct Manifest: Codable {
         let version: Int
         let id: UUID
@@ -430,7 +442,7 @@ private extension ProjectBackup {
         try checkPublishedTarget(target.lastPathComponent, in: parent, expected: ownedStage)
         guard fsync(staging.fd) == 0 else { throw io("sync replacement directory after restore publication", published: true) }
         guard fsync(parent) == 0 else { throw io("sync published restore parent", published: true) }
-        return receipt(manifest, at: target)
+        return receipt(manifest, at: target, restoredModels: restoredModels(manifest, at: target, root: stage))
     }
 
     static func makeManifest(_ plan: ProjectBackupPlan, allowIncomplete: Bool) throws -> Manifest {
@@ -468,7 +480,8 @@ private extension ProjectBackup {
                 return DependencyFile(path: file.path, size: file.size, digest: file.sha256,
                                       algorithm: file.digestAlgorithm.rawValue)
             }
-            dependencies.append(Dependency(catalogID: item.catalogID, revision: item.revision, files: files))
+            if let root = item.relativeRoot { try validModelRoot(root) }
+            dependencies.append(Dependency(catalogID: item.catalogID, revision: item.revision, files: files, relativeRoot: item.relativeRoot))
         }
         return Manifest(version: 1, id: UUID(), projectID: plan.projectID, revision: plan.revision,
                         createdAt: Date(), files: entries, modelDependencies: dependencies, missing: plan.missing)
@@ -498,6 +511,7 @@ private extension ProjectBackup {
         var modelCount = 0
         for dependency in manifest.modelDependencies {
             guard validLabel(dependency.catalogID), validLabel(dependency.revision) else { throw ProjectBackupError.invalidPackage("model identity") }
+            if let root = dependency.relativeRoot { try validModelRoot(root) }
             modelCount += dependency.files.count
             guard modelCount <= maxEntries else { throw ProjectBackupError.invalidPackage("too many model files") }
             for file in dependency.files {
@@ -526,10 +540,58 @@ private extension ProjectBackup {
         return receipt(manifest, at: directory)
     }
 
-    static func receipt(_ manifest: Manifest, at url: URL) -> ProjectBackupReceipt {
+    static func receipt(_ manifest: Manifest, at url: URL, restoredModels: [ProjectRestoredModel] = []) -> ProjectBackupReceipt {
         ProjectBackupReceipt(id: manifest.id, directory: url, complete: manifest.missing.isEmpty,
                              fileCount: manifest.files.count,
-                             byteCount: manifest.files.reduce(0) { $0 + $1.byteCount }, missing: manifest.missing)
+                             byteCount: manifest.files.reduce(0) { $0 + $1.byteCount }, missing: manifest.missing, restoredModels: restoredModels)
+    }
+
+    static func validModelRoot(_ path: String) throws {
+        try validRelative(path)
+        guard path.split(separator: "/").count == 2, path.hasPrefix("Models/"),
+              UUID(uuidString: String(path.dropFirst(7))) != nil else { throw ProjectBackupError.invalidPackage("invalid model root") }
+    }
+
+    static func restoredModels(_ manifest: Manifest, at url: URL, root: Int32) -> [ProjectRestoredModel] {
+        let entries = Dictionary(uniqueKeysWithValues: manifest.files.map { ($0.path, $0) })
+        let roots = Set(manifest.files.compactMap { entry -> String? in
+            let parts = entry.path.split(separator: "/")
+            guard parts.count >= 3, parts[0] == "Models", UUID(uuidString: String(parts[1])) != nil else { return nil }
+            return parts.prefix(2).joined(separator: "/")
+        })
+        func matches(_ dependency: Dependency, _ candidate: String) throws -> Bool {
+            let prefix = candidate + "/"
+            let expected = Set(dependency.files.map { prefix + $0.path })
+            guard !expected.isEmpty, expected.count == dependency.files.count,
+                  Set(entries.keys.filter { $0.hasPrefix(prefix) }) == expected else { return false }
+            for file in dependency.files {
+                guard let item = entries[prefix + file.path], item.byteCount == file.size else { return false }
+                if file.algorithm == "sha256" { guard item.sha256 == file.digest else { return false } }
+                else {
+                    // Legacy manifests recorded catalog Git-blob digests for small
+                    // configs. Recheck those bytes, not a guessed folder-name match.
+                    guard file.size <= 32 * 1024 * 1024 else { return false }
+                    let data = try readSmall(prefix + file.path, in: root, limit: Int(file.size))
+                    var hash = Insecure.SHA1(); hash.update(data: Data("blob \(file.size)\0".utf8)); hash.update(data: data)
+                    guard hash.finalize().map({ String(format: "%02x", $0) }).joined() == file.digest else { return false }
+                }
+            }
+            return true
+        }
+        return manifest.modelDependencies.enumerated().map { index, dependency in
+            let id = dependency.relativeRoot ?? "legacy-\(index)-" + dependency.catalogID
+            do {
+                let candidates = try (dependency.relativeRoot.map { [$0] } ?? Array(roots)).filter { try matches(dependency, $0) }
+                guard candidates.count == 1, let candidate = candidates.first else {
+                    return .init(id: id, catalogID: dependency.catalogID, revision: dependency.revision, directory: nil,
+                        diagnostic: candidates.isEmpty ? "Restored model files do not match a complete recorded file set." : "More than one restored copy matches this legacy model record; no copy was chosen.")
+                }
+                return .init(id: id, catalogID: dependency.catalogID, revision: dependency.revision,
+                    directory: url.appendingPathComponent(candidate, isDirectory: true), diagnostic: nil)
+            } catch {
+                return .init(id: id, catalogID: dependency.catalogID, revision: dependency.revision, directory: nil, diagnostic: error.localizedDescription)
+            }
+        }
     }
 
     static func validRelative(_ path: String) throws {
@@ -777,7 +839,9 @@ private extension ProjectBackup {
         return hex(hasher.finalize())
     }
     static func readSmall(_ name: String, in root: Int32, limit: Int) throws -> Data {
-        let fd = openat(root, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        // Package metadata names are reserved and cannot enter validRelative;
+        // nested restored-model files still traverse every parent with O_NOFOLLOW.
+        let fd = name.contains("/") ? try relativeFile(name, in: root) : openat(root, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard fd >= 0 else { throw io("open package metadata") }
         defer { Darwin.close(fd) }
         let before = try identity(fd)

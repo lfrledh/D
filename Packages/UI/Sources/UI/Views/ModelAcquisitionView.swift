@@ -28,7 +28,6 @@ struct ModelAcquisitionView: View {
     @State private var selection: Set<String> = []
     @State private var search = ""
     @State private var confirming = false
-    @State private var register = false
     @State private var useTarget = false
     @State private var tokenVisible = false
     @State private var checking: String?
@@ -37,7 +36,7 @@ struct ModelAcquisitionView: View {
     private func t(_ key: String, _ arguments: [String: String] = [:]) -> String {
         workflowText(language, "modelAcquisition." + key, arguments: arguments)
     }
-    private var selected: [ModelCatalogEntry] { model.catalog.filter { selection.contains($0.id) } }
+    private var selected: [ModelCatalogEntry] { model.catalog.filter { !$0.localPreparedOnly && selection.contains($0.id) } }
     private var pending: Bool { !model.pendingCatalogIDs.isEmpty || checking != nil || model.acquisitionSubmissionID != nil || model.globalOperation != nil }
     private func matchingResources(_ entry: ModelCatalogEntry) -> [ModelResource] {
         ModelLibraryModel.acquisitionResources(entry, snapshot: model.snapshot)
@@ -69,7 +68,7 @@ struct ModelAcquisitionView: View {
                 TextField(t("search"), text: $search).textFieldStyle(WorkbenchGlassTextFieldStyle()).padding(20)
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
-                        ForEach(model.catalog.filter { search.isEmpty || $0.title.localizedStandardContains(search) }) { entry in
+                        ForEach(model.catalog.filter { !$0.localPreparedOnly && (search.isEmpty || $0.title.localizedStandardContains(search)) }) { entry in
                             VStack(alignment: .leading, spacing: 8) {
                                 Toggle(entry.title, isOn: Binding(get: { selection.contains(entry.id) }, set: { if $0 { selection.insert(entry.id) } else { selection.remove(entry.id) } }))
                                 ModelSpecificationFields(descriptor: ModelAcquisitionInformation.descriptor(entry), font: .caption)
@@ -89,10 +88,10 @@ struct ModelAcquisitionView: View {
                         }
                         storage
                         Text(t("afterDownload")).font(.headline)
-                        Toggle(t("register"), isOn: $register).onChange(of: register) { _, value in if !value { useTarget = false } }
+                        Text(workflowText(language, "modelManagement.local.add"))
                         if let target = request.target {
                             Toggle(t("useTarget", ["target": target.title]), isOn: $useTarget)
-                                .disabled(!register || !target.isCurrent())
+                                .disabled(!target.isCurrent())
                             if !target.isCurrent() { Text(t("targetChanged")).foregroundStyle(.orange) }
                         }
                         Text(t("queueNotice")).font(.caption)
@@ -115,7 +114,7 @@ struct ModelAcquisitionView: View {
         .buttonStyle(WorkbenchGlassButtonStyle())
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityIdentifier("model-acquisition-confirmation")
-        .workbenchCloseProtection(isDirty: !selection.isEmpty || register || useTarget, isSaving: pending)
+        .workbenchCloseProtection(isDirty: !selection.isEmpty || useTarget, isSaving: pending)
         .workbenchSheet(isPresented: $tokenVisible, title: workflowText(language, "modelManagement.accessToken"), size: .init(width: 600, height: 380)) {
             ModelAccessTokenEditor(model: model)
         }
@@ -147,13 +146,13 @@ struct ModelAcquisitionView: View {
         } else if selected.count == 1, let entry = selected.first, let current = task(entry) {
             Button(t(ModelAcquisitionPresentation.taskActionKey(current.state))) { model.selectedTask = current.id; model.workspace = "downloads"; model.acquisitionRequest = nil }.buttonStyle(WorkbenchPrimaryButtonStyle())
         } else if selected.count == 1, let entry = selected.first, let current = resource(entry), current.control.fileState == .verified {
-            if register, useTarget, request.target != nil, current.record.state == .installed {
+            if useTarget, request.target != nil, current.record.state == .installed {
                 Button(t(ModelAcquisitionPresentation.existingUseKey(registered: current.record.registrationState == .registered))) {
                     Task { await model.confirmExistingRegistration(requestID: request.id, resource: current, useTarget: true) }
                 }.buttonStyle(WorkbenchPrimaryButtonStyle()).disabled(pending)
                     .help(current.record.registrationState == .registered ? t("useTarget", ["target": request.target?.title ?? ""]) : t("useExisting.help", ["target": request.target?.title ?? ""]))
             } else if current.record.registrationState != .registered && current.record.state == .installed {
-                Button(t("register")) { Task { await model.confirmExistingRegistration(requestID: request.id, resource: current) } }.buttonStyle(WorkbenchPrimaryButtonStyle()).disabled(pending)
+                Button(workflowText(language, "modelManagement.local.add")) { Task { await model.confirmExistingRegistration(requestID: request.id, resource: current) } }.buttonStyle(WorkbenchPrimaryButtonStyle()).disabled(pending)
             } else { Button(t("viewExisting")) { viewResource(current) }.buttonStyle(WorkbenchPrimaryButtonStyle()) }
         } else if selected.count == 1, let entry = selected.first, accessRequired(entry) {
             if entry.acquisitionDisclosure?.access == .readToken, !model.downloadCredentialConnected {
@@ -205,8 +204,8 @@ struct ModelAcquisitionView: View {
         }
     }
     private func submit(_ entries: [ModelCatalogEntry]) {
-        let register = register, use = useTarget
-        Task { await model.confirmAcquisition(requestID: request.id, entries: entries, register: register, useTarget: use) }
+        let use = useTarget
+        Task { await model.confirmAcquisition(requestID: request.id, entries: entries, register: true, useTarget: use) }
     }
     private func viewResource(_ resource: ModelResource) {
         guard let entry = model.presentationEntry(for: resource.record) else { return }

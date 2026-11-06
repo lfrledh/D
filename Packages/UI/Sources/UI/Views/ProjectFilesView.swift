@@ -143,6 +143,7 @@ struct ProjectFilesView: View {
     var onOpenGraph: (UUID, UUID) -> Bool = { _, _ in false }
     let onClose: () -> Void
     var initialAssetID: UUID? = nil
+    var modelPresentation: ModelLibraryModel? = nil
 
     @Environment(\.dLanguageStore) private var language
     @State private var overview: ProjectFileOverview?
@@ -152,6 +153,8 @@ struct ProjectFilesView: View {
     @State private var receipt: ProjectBackupReceipt?
     @State private var receiptKind: ProjectFileOperation?
     @State private var restoredURL: URL?
+    @State private var addingRestoredModel: ProjectRestoredModel?
+    @State private var addedRestoredModels: [String: ModelResourceID] = [:]
     @State private var models: [ModelRecord] = []
     @State private var modelTitles: [String: String] = [:]
     @State private var chosenModels: Set<ModelID> = []
@@ -262,6 +265,21 @@ struct ProjectFilesView: View {
                 Text(workflowText(language, "files.receipt.count", arguments: ["count": String(receipt.fileCount)]) + " · " + bytes(receipt.byteCount))
                 ForEach(receipt.missing, id: \.self) { Text($0).textSelection(.enabled) }
             }
+            if receiptKind == .restore, let receipt, let modelPresentation {
+                ForEach(receipt.restoredModels) { item in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(modelPresentation.catalog.first(where: { $0.id == item.catalogID && $0.revision == item.revision })?.title ?? item.catalogID)
+                        if let directory = item.directory { Text(directory.path).font(.caption).textSelection(.enabled) }
+                        if let diagnostic = item.diagnostic { Text(diagnostic).font(.caption).foregroundStyle(.orange).textSelection(.enabled) }
+                        if let id = addedRestoredModels[item.id], let record = modelPresentation.snapshot?.resources.first(where: { $0.id == id })?.record {
+                            Text(workflowText(language, "modelManagement.registration." + record.registrationState.rawValue))
+                        } else {
+                            Button(workflowText(language, "modelManagement.local.add")) { modelPresentation.clearLocalDraft(); addingRestoredModel = item }
+                                .disabled(item.directory == nil || modelPresentation.globalOperation != nil)
+                        }
+                    }
+                }
+            }
             if receiptKind == .restore, let restoredURL {
                 Button(word("openRestored")) {
                     Task { if let error = await onOpenRestored(restoredURL) { message = .init(key: "files.error.open", diagnostic: error) } }
@@ -280,6 +298,15 @@ struct ProjectFilesView: View {
         .padding(20).frame(minWidth: 760, minHeight: 520)
         .task(id: instanceID) { await refresh(); await loadModels() }
         .onDisappear { job?.cancel() }
+        .workbenchSheet(item: $addingRestoredModel, title: workflowText(language, "modelManagement.local.title"), size: .init(width: 680, height: 520)) { item in
+            if let modelPresentation {
+                ModelLocalFilesForm(model: modelPresentation, knownSource: item) { resource in
+                    guard addingRestoredModel?.id == item.id, receipt?.restoredModels.contains(where: { $0.id == item.id && $0.directory == item.directory }) == true else { return }
+                    addedRestoredModels[item.id] = resource
+                    addingRestoredModel = nil
+                }
+            }
+        }
         .workbenchConfirmation(word("incomplete"), isPresented: Binding(get: { pendingBackup != nil }, set: { if !$0 { pendingBackup = nil } })) {
             Button(workflowText(language, "workflow.action.cancel"), role: .cancel) { pendingBackup = nil }.keyboardShortcut(.defaultAction)
             Button(word("backupIncomplete.continue")) {
@@ -573,7 +600,12 @@ struct ProjectFilesView: View {
                     allowIncomplete: allowIncomplete)
                 guard isActive() else { return }
                 receipt = value; receiptKind = .restore
-                restoredURL = target
+                restoredURL = target; addedRestoredModels = [:]
+                // This is the new restore result, never currentStore or its selection.
+                if let modelPresentation, modelPresentation.globalOperation == nil {
+                    modelPresentation.clearLocalDraft()
+                    addingRestoredModel = value.restoredModels.first(where: { $0.directory != nil })
+                }
                 message = .key(value.complete ? "files.restoreComplete" : "files.restorePartial")
             } catch is CancellationError { if isActive() { message = .key("files.cancelled.single") } }
             catch ProjectBackupError.incompleteRequiresConfirmation where !allowIncomplete {

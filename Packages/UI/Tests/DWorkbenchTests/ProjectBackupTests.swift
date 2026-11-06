@@ -393,3 +393,49 @@ struct ProjectBackupTests {
         guard written == data.count, fsync(fd) == 0 else { throw Interrupted.now }
     }
 }
+
+extension ProjectBackupTests {
+    @Test(arguments: [false, true]) func restoredModelRootsPreserveTwoCopiesAndLegacyAmbiguity(legacy: Bool) async throws {
+        try await fixture { root in
+            let data = Data("same exact model".utf8), config = Data("configuration".utf8)
+            var git = Insecure.SHA1(); git.update(data: Data("blob \(config.count)\0".utf8)); git.update(data: config)
+            let files: [ModelFile] = [
+                .init(path: "weights.bin", size: UInt64(data.count), sha256: hash(data)),
+                .init(path: "tokenizer/config.json", size: UInt64(config.count), sha256: git.finalize().map { String(format: "%02x", $0) }.joined(), digestAlgorithm: .gitBlobSHA1)
+            ]
+            let roots = ["Models/" + UUID().uuidString, "Models/" + UUID().uuidString]
+            let inputs = roots.flatMap { prefix in [
+                ProjectBackupInput(relativePath: prefix + "/weights.bin", sourceURL: nil, data: data, sha256: hash(data), byteCount: UInt64(data.count)),
+                ProjectBackupInput(relativePath: prefix + "/tokenizer/config.json", sourceURL: nil, data: config, sha256: hash(config), byteCount: UInt64(config.count))
+            ] }
+            let plan = ProjectBackupPlan(projectID: UUID(), revision: 3, files: inputs,
+                modelDependencies: roots.map { .init(catalogID: "same-model", revision: "fixed-revision", files: files, relativeRoot: legacy ? nil : $0) })
+            let backup = root.appendingPathComponent("backup"), restored = root.appendingPathComponent("restored")
+            _ = try await ProjectBackup.create(plan, at: backup)
+            let result = try await ProjectBackup.restore(at: backup, to: restored)
+            #expect(result.restoredModels.count == 2 && result.complete)
+            if legacy {
+                #expect(result.restoredModels.allSatisfy { $0.directory == nil && $0.diagnostic?.contains("More than one") == true })
+            } else {
+                #expect(Set(result.restoredModels.compactMap(\.directory)) == Set(roots.map { restored.appendingPathComponent($0, isDirectory: true) }))
+                #expect(result.restoredModels.allSatisfy { $0.diagnostic == nil })
+            }
+            #expect(try await ProjectBackup.verify(at: backup).complete)
+        }
+    }
+
+    @Test func legacyUniqueModelRootCanBeAddedWithoutRepeatingRestore() async throws {
+        try await fixture { root in
+            let bytes = Data("exact".utf8), relative = "Models/" + UUID().uuidString
+            let file = ModelFile(path: "model.bin", size: UInt64(bytes.count), sha256: hash(bytes))
+            let plan = ProjectBackupPlan(projectID: UUID(), revision: 0,
+                files: [.init(relativePath: relative + "/model.bin", sourceURL: nil, data: bytes, sha256: hash(bytes), byteCount: UInt64(bytes.count))],
+                modelDependencies: [.init(catalogID: "legacy-model", revision: "fixed", files: [file])])
+            let backup = root.appendingPathComponent("backup"), restored = root.appendingPathComponent("restored")
+            _ = try await ProjectBackup.create(plan, at: backup)
+            let receipt = try await ProjectBackup.restore(at: backup, to: restored)
+            #expect(receipt.restoredModels.first?.directory == restored.appendingPathComponent(relative, isDirectory: true))
+            #expect(receipt.restoredModels.first?.diagnostic == nil)
+        }
+    }
+}

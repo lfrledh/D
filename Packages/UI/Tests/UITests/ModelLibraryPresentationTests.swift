@@ -283,6 +283,10 @@ extension ModelLibraryPresentationTests {
                 continue
             }
             let operation = try #require(entry.workflowProfileID), identity = try #require(entry.workflowIdentity)
+            if entry.localPreparedOnly {
+                #expect(ModelLibraryModel.nodeDownloadEntry(operationID: operation, identity: identity, catalog: catalog) == nil)
+                continue
+            }
             if operation == "d.model.language" {
                 #expect(ModelLibraryModel.nodeDownloadEntry(operationID: "d.text.rewrite", identity: identity, catalog: catalog)?.id == entry.id)
                 #expect(ModelLibraryModel.nodeDownloadEntry(operationID: WorkflowModelRoutes.qwen35, identity: identity, catalog: catalog) == nil)
@@ -948,6 +952,42 @@ extension ModelLibraryPresentationTests {
         let duplicate = await model.submitLocalFiles(storage: .external)
         let afterDuplicate = await library.snapshot()
         #expect(!duplicate && afterDuplicate.records == afterSuccess.records)
+        try await library.shutdown()
+    }
+}
+
+
+extension ModelLibraryPresentationTests {
+    @Test func localSubmissionUsesCapturedRestoreIdentityAndRejectsReplacedDraft() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("CapturedLocal-" + UUID().uuidString)
+        let a = root.appendingPathComponent("restore-a"), b = root.appendingPathComponent("restore-b")
+        for folder in [a, b] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
+        defer { try? FileManager.default.removeItem(at: root) }
+        let data = Data("isolated exact local model".utf8)
+        for folder in [a, b] { try data.write(to: folder.appendingPathComponent("weights.bin")) }
+        let entry = ModelCatalogEntry(id: "captured-local", title: "Captured local fixture", repository: "fixture/local", revision: String(repeating: "a", count: 40),
+            files: [.init(path: "weights.bin", size: UInt64(data.count), sha256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())])
+        let library = try await ModelLibrary(stateDirectory: root.appendingPathComponent("state"), catalog: [entry])
+        let model = ModelLibraryModel(library: library)
+        await model.chooseLocalFiles(at: a, catalogID: entry.id, revision: entry.revision)
+        let original = try #require(model.captureLocalSubmission())
+        await model.chooseLocalFiles(at: b, catalogID: entry.id, revision: entry.revision)
+        #expect(!model.isCurrentLocalSubmission(original))
+        #expect(await model.submitLocalFiles(original, storage: .external) == nil)
+        #expect((await library.snapshot()).records.isEmpty)
+        let current = try #require(model.captureLocalSubmission())
+        model.selectedResource = ModelResourceID(rawValue: UUID())
+        let added = try #require(await model.submitLocalFiles(current, storage: .external))
+        // The action returns the committed identity; selection is not its output channel.
+        model.selectedResource = ModelResourceID(rawValue: UUID())
+        #expect(added != model.selectedResource)
+        let record = try #require((await library.snapshot()).records.first { $0.id.rawValue == added.rawValue })
+        #expect(record.registrationState == .registered)
+        #expect(model.localFileSelection == nil && model.isCurrentLocalSubmission(current))
+        model.clearLocalDraft()
+        #expect(!model.isCurrentLocalSubmission(current))
+        #expect((await library.snapshot()).records.count == 1)
         try await library.shutdown()
     }
 }

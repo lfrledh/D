@@ -1710,6 +1710,7 @@ extension ModelLibrary {
         do {
         for catalogID in catalogIDs {
             let entry = try catalogEntry(catalogID), recipe = try Self.recipeIdentity(entry)
+            guard !entry.localPreparedOnly else { throw ModelLibraryError.unavailable("This fixed recipe accepts local files only.") }
             let existing = disk.records.first { $0.record.storage == .managed && $0.record.catalogID == catalogID && $0.recipeIdentity == recipe && $0.control?.fileState != .deleted && $0.deletion == nil }
             let id: ModelID
             if let existing {
@@ -1737,7 +1738,7 @@ extension ModelLibrary {
             }
             let task = ModelDownloadTask(resourceID: .init(rawValue: id.rawValue), catalogID: catalogID, recipeIdentity: recipe, postAction: postAction, createdAt: now(), acquisitionSnapshot: try .init(entry: entry, recipeIdentity: recipe))
             disk.downloads = (disk.downloads ?? []) + [task]; result.append(task)
-            mutate(id) { $0.control?.downloadOwner = .init(task) }
+            mutate(id) { $0.control?.downloadOwner = .init(task); if postAction == .register { $0.control?.automaticRegistrationRevoked = false } }
             event(id, "downloadRequested")
         }
         if startIfIdle, wasEmpty, disk.queueState == .waitingForResume { disk.queueState = .running }
@@ -1759,7 +1760,7 @@ extension ModelLibrary {
         }
         _ = try resolved(value)
         let previous = try stored(id), previousTasks = disk.downloads
-        mutate(id) { $0.record.registrationState = .registered }
+        mutate(id) { $0.record.registrationState = .registered; $0.control?.automaticRegistrationRevoked = false }
         event(id, "registered")
         if let clearingTask { disk.downloads![try taskIndex(clearingTask)].postActionError = nil }
         do { try persist(purpose: "registration") }
@@ -1777,7 +1778,7 @@ extension ModelLibrary {
               preparationJobs[id] == nil, currentCopy?.sourceID != id else {
             throw ModelLibraryError.busy("该资源正在使用、排队或准备，不能解除登记。")
         }
-        mutate(id) { $0.record.registrationState = .unregistered }
+        mutate(id) { $0.record.registrationState = .unregistered; $0.control?.automaticRegistrationRevoked = true }
         event(id, "unregistered")
         do { try persist() }
         catch {
@@ -2125,7 +2126,18 @@ extension ModelLibrary {
     private func finishPostAction(_ id: UUID) {
         guard let index = try? taskIndex(id), disk.downloads![index].state == .completed,
               disk.downloads![index].postAction == .register else { return }
-        do { try registerResource(disk.downloads![index].resourceID); disk.downloads![index].postActionError = nil }
+        // A verified raw format awaiting preparation is a real library item,
+        // not a failed registration and not an executable installation.
+        let resource = disk.downloads![index].resourceID
+        guard let owner = try? stored(resource.modelID), owner.control?.downloadOwner?.matches(disk.downloads![index]) == true,
+              owner.control?.automaticRegistrationRevoked != true else { return }
+        if let value = try? stored(resource.modelID), value.record.state == .preparationRequired {
+            mutate(resource.modelID) { $0.record.registrationState = .pending }
+            disk.downloads![index].postActionError = nil
+            do { try persist() } catch { /* retained files; persistence admission stays closed */ }
+            return
+        }
+        do { try registerResource(resource); disk.downloads![index].postActionError = nil }
         catch {
             disk.downloads![index].postActionError = error.localizedDescription
             mutate(disk.downloads![index].resourceID.modelID) { $0.record.registrationState = .pending }
@@ -2236,7 +2248,7 @@ extension ModelLibrary {
         guard reference.directory.standardizedFileURL == current.url.standardizedFileURL, reference.revision?.isEmpty == false else {
             throw ModelLibraryError.integrity("执行包验证返回错误的资源身份。")
         }
-        mutate(id) { $0.control?.executionRevision = reference.revision; $0.record.registrationState = .registered; $0.record.error = nil }
+        mutate(id) { $0.control?.executionRevision = reference.revision; $0.record.registrationState = .registered; $0.record.error = nil; $0.control?.automaticRegistrationRevoked = false }
         event(id, "registered")
         do { try persist(purpose: "registration") }
         catch {
@@ -2334,6 +2346,40 @@ extension ModelLibrary {
 
 
 extension ModelLibrary {
+    /// A user-selected folder only. Layout/size narrows the fixed recipes; the
+    /// accepted addition still verifies every pinned digest before registration.
+    public func inspectLocalCandidates(at url: URL, catalogID: String? = nil, revision: String? = nil,
+        validatePrepared: (@Sendable (URL) async throws -> ModelReference)?) async throws -> [ModelLocalFileSelection] {
+        let scope = try ModelScopedLocation(url), directory = try ModelDirectory(scope.url)
+        let entries = catalog.filter { (catalogID == nil || $0.id == catalogID) && (revision == nil || $0.revision == revision) }
+        let prepared = try Self.exists("D-VIDEO-PACK.json", in: directory) || Self.exists("D-VIDEO-PREPARED.json", in: directory)
+        let reference: ModelReference?
+        if prepared {
+            guard let validatePrepared else { throw ModelLibraryError.unavailable("Prepared model validation is unavailable.") }
+            reference = try await validatePrepared(directory.url)
+        } else { reference = nil }
+        var matches = [ModelLocalFileSelection]()
+        for entry in entries {
+            try Task.checkCancellation()
+            if let reference {
+                guard entry.workflowIdentity == "video:" + (reference.revision ?? ""),
+                      reference.directory.standardizedFileURL == directory.url.standardizedFileURL else { continue }
+                let files = try Self.preparedFiles(in: directory, entry: entry)
+                let tree = try directory.requiredTree(paths: Set(files.map(\.path)))
+                guard files.allSatisfy({ tree.files[$0.path]?.size == Int64($0.size) }) else { continue }
+                matches.append(.init(directory: directory.url, catalogID: entry.id, revision: entry.revision, prepared: true,
+                    supportsOriginal: true, estimatedBytes: files.reduce(0) { $0 + $1.size }, rootIdentity: directory.identity))
+            } else if !entry.localPreparedOnly,
+                      let tree = try? directory.requiredTree(paths: Set(entry.files.map(\.path))),
+                      entry.files.allSatisfy({ tree.files[$0.path]?.size == Int64($0.size) }) {
+                matches.append(.init(directory: directory.url, catalogID: entry.id, revision: entry.revision, prepared: false,
+                    supportsOriginal: entry.preparation == .none, estimatedBytes: entry.totalBytes, rootIdentity: directory.identity))
+            }
+        }
+        guard !matches.isEmpty else { throw ModelLibraryError.integrity("No complete supported model recipe matches this folder. Check the exact model, components and file sizes.") }
+        return matches
+    }
+
     /// Explicit chooser inspection only; never called from a view's body or idle refresh.
     public func inspectLocalFiles(at url: URL, catalogID: String,
         validatePrepared: (@Sendable (URL) async throws -> ModelReference)?) async throws -> ModelLocalFileSelection {
@@ -2347,13 +2393,14 @@ extension ModelLibrary {
                   entry.workflowIdentity == "video:" + (reference.revision ?? "") else {
                 throw ModelLibraryError.integrity("Prepared files do not match this exact model and precision.")
             }
-            return .init(directory: directory.url, catalogID: entry.id, prepared: true, supportsOriginal: true,
+            return .init(directory: directory.url, catalogID: entry.id, revision: entry.revision, prepared: true, supportsOriginal: true,
                          estimatedBytes: nil, rootIdentity: directory.identity)
         }
+        guard !entry.localPreparedOnly else { throw ModelLibraryError.integrity("This model requires its complete prepared pack, including the text encoder and identity manifest.") }
         // Validate the selected layout before offering a file-use promise; full
         // content verification remains part of the accepted operation.
         _ = try directory.requiredTree(paths: Set(entry.files.map(\.path)))
-        return .init(directory: directory.url, catalogID: entry.id, prepared: false,
+        return .init(directory: directory.url, catalogID: entry.id, revision: entry.revision, prepared: false,
                      supportsOriginal: entry.preparation == .none, estimatedBytes: entry.totalBytes, rootIdentity: directory.identity)
     }
 
@@ -2364,17 +2411,18 @@ extension ModelLibrary {
         let scope = try ModelScopedLocation(selection.directory), directory = try ModelDirectory(scope.url)
         guard directory.identity == selection.rootIdentity else { throw ModelLibraryError.integrity("Selected model folder changed. Choose it again.") }
         let entry = try catalogEntry(selection.catalogID)
+        guard entry.revision == selection.revision else { throw ModelLibraryError.integrity("Selected model revision changed.") }
         guard storage == .managed || selection.supportsOriginal else { throw ModelLibraryError.unavailable("This format requires a model copy.") }
         if selection.prepared {
             guard let validatePrepared else { throw ModelLibraryError.unavailable("Prepared model validation is unavailable.") }
             return try await registerPreparedLocal(at: directory.url, entry: entry, storage: storage, validate: validatePrepared)
         }
-        let prior = Set(disk.records.map { $0.record.id })
+        let prior = Dictionary(uniqueKeysWithValues: disk.records.map { ($0.record.id, $0.record.registrationState) })
         let source = try await registerExternal(at: directory.url, catalogID: entry.id)
         if storage == .external { return source }
         // Source inventory is provenance. A new copy request does not also
         // authorize the source as a second execution installation.
-        if !prior.contains(source), try stored(source).record.registrationState == .registered { try unregister(source) }
+        if prior[source] != .registered, try stored(source).record.registrationState == .registered { try unregister(source) }
         if entry.preparation == .none {
             let result = try await copyExistingToLibrary(source)
             try registerResource(.init(rawValue: result.rawValue))
@@ -2400,6 +2448,7 @@ extension ModelLibrary {
         let scope = try ModelScopedLocation(url), source = try ModelDirectory(scope.url)
         if let owner = disk.records.first(where: { $0.record.storage == .managed && $0.verifiedRoot?.sameNode(source.identity) == true }) {
             guard owner.record.catalogID == entry.id, storage == .managed else { throw ModelLibraryError.busy("This folder already belongs to a managed installation; use its existing record.") }
+            try await registerPreparedResource(.init(rawValue: owner.record.id.rawValue), validate: validate)
             return owner.record.id
         }
         let existing = disk.records.first { $0.record.catalogID == entry.id && $0.control?.role == .execution &&
@@ -2442,6 +2491,15 @@ extension ModelLibrary {
         return result
     }
     private static func preparedFiles(in directory: ModelDirectory, entry: ModelCatalogEntry) throws -> [ModelFile] {
+        if entry.localPreparedOnly {
+            let data = try directory.read(ExternalVideoModelManifest.filename, maximum: 65_536)
+            let manifest = try JSONDecoder().decode(ExternalVideoModelManifest.self, from: data)
+            try manifest.validate()
+            guard entry.workflowIdentity == "video:" + manifest.profile.modelIdentity, entry.revision == manifest.modelRevision else {
+                throw ModelLibraryError.integrity("Prepared pack differs from the exact local recipe.")
+            }
+            return entry.files + [.init(path: ExternalVideoModelManifest.filename, size: UInt64(data.count), sha256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())]
+        }
         if ModelWanPreparation.supports(entry) { return try ModelWanPreparation.requiredFiles(in: directory, entry: entry) }
         return try ModelVideoPreparation.requiredFiles(in: directory, entry: entry)
     }

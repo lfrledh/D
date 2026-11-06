@@ -7,7 +7,8 @@ import DWorkbench
     @Test func allFrozenDisclosuresHaveSeparatedFactsAndLocalizedSources() throws {
         let entries = try ModelCatalog.entries()
         let zh = UILanguageStore(preferredLanguages: ["zh-Hans"]), en = UILanguageStore(preferredLanguages: ["en"])
-        for entry in entries {
+        #expect(entries.filter(\.localPreparedOnly).count == 2)
+        for entry in entries where !entry.localPreparedOnly {
             let memoryKey = "modelManagement.catalog." + entry.id + ".memory"
             #expect(en.text(memoryKey, fallback: "MISSING") != "MISSING")
             #expect(zh.text(memoryKey, fallback: "MISSING") != "MISSING")

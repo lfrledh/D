@@ -736,7 +736,7 @@ public struct DualWorkbenchView: View {
                     controller.selectedGraphID = graphID; controller.selectedNodeID = nodeID
                     returnToLibrary = false; filesRoute = nil; navigate(to: .workflow)
                     return true
-                }, onClose: { filesRoute = nil }, initialAssetID: route.assetID)
+                }, onClose: { filesRoute = nil }, initialAssetID: route.assetID, modelPresentation: library)
             .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
         }
     }

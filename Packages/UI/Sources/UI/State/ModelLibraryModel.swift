@@ -49,7 +49,7 @@ public final class ModelLibraryModel {
     func confirmAcquisition(requestID: UUID, entries: [ModelCatalogEntry], register: Bool, useTarget: Bool) async {
         guard acquisitionSubmissionID == nil, pendingCatalogIDs.isEmpty, globalOperation == nil, !isChoosingLocation else { return }
         guard let request = acquisitionRequest, request.id == requestID else { return }
-        guard !entries.isEmpty, entries.allSatisfy({ catalog.contains($0) }) else {
+        guard !entries.isEmpty, entries.allSatisfy({ !$0.localPreparedOnly && catalog.contains($0) }) else {
             errorMessage = managementText("targetChanged", "选用目标或配置已改变，资源保留。")
             return
         }
@@ -137,6 +137,16 @@ public final class ModelLibraryModel {
     @ObservationIgnored public var preparedValidator: (@Sendable (URL) async throws -> ModelReference)?
     @ObservationIgnored private let language: UILanguageStore?
     public private(set) var localFileSelection: ModelLocalFileSelection?
+    public private(set) var localFileChoices: [ModelLocalFileSelection] = []
+    @ObservationIgnored private var localInspectionID = UUID()
+    public func selectLocalCandidate(_ catalogID: String) {
+        guard globalOperation == nil else { return }
+        localFileSelection = localFileChoices.first { $0.catalogID == catalogID }
+    }
+    public func clearLocalDraft() {
+        guard globalOperation == nil else { return }
+        localInspectionID = UUID(); localFileChoices = []; localFileSelection = nil
+    }
     public var errorMessage: String?
     public private(set) var preparationNotice: String?
     public private(set) var snapshot: ModelLibrarySnapshot?
@@ -461,9 +471,9 @@ public final class ModelLibraryModel {
         await refresh()
     }
 
-    public func chooseLocalFiles(catalogID: String) async {
+    public func chooseLocalFiles(catalogID: String? = nil) async {
         guard !isChoosingLocation, globalOperation == nil else { return }
-        isChoosingLocation = true; localFileSelection = nil; errorMessage = nil
+        isChoosingLocation = true; clearLocalDraft(); errorMessage = nil
         let panel = NSOpenPanel()
         panel.title = managementText("local.title")
         panel.message = managementText("importExternalMessage")
@@ -473,22 +483,49 @@ public final class ModelLibraryModel {
         guard response == .OK, let url = panel.url else { return }
         await chooseLocalFiles(at: url, catalogID: catalogID)
     }
-    func chooseLocalFiles(at url: URL, catalogID: String) async {
-        do { localFileSelection = try await library.inspectLocalFiles(at: url, catalogID: catalogID, validatePrepared: preparedValidator) }
-        catch { report(error, context: managementText("importFailed")) }
+    func chooseLocalFiles(at url: URL, catalogID: String? = nil, revision: String? = nil) async {
+        guard globalOperation == nil else { return }
+        let intent = UUID(); localInspectionID = intent
+        localFileSelection = nil; localFileChoices = []; errorMessage = nil
+        do {
+            let choices = try await library.inspectLocalCandidates(at: url, catalogID: catalogID, revision: revision, validatePrepared: preparedValidator)
+            guard localInspectionID == intent else { return }
+            localFileChoices = choices
+            if choices.count == 1 { localFileSelection = choices[0] }
+        } catch { if localInspectionID == intent { report(error, context: managementText("importFailed")) } }
     }
+    struct LocalSubmission {
+        let selection: ModelLocalFileSelection
+        let inspectionID: UUID
+    }
+    func captureLocalSubmission(matching source: ProjectRestoredModel? = nil) -> LocalSubmission? {
+        guard let selection = localFileSelection else { return nil }
+        if let source {
+            guard source.directory?.standardizedFileURL == selection.directory.standardizedFileURL,
+                  source.catalogID == selection.catalogID, source.revision == selection.revision else { return nil }
+        }
+        return .init(selection: selection, inspectionID: localInspectionID)
+    }
+    func isCurrentLocalSubmission(_ value: LocalSubmission) -> Bool { localInspectionID == value.inspectionID }
     @discardableResult
     public func submitLocalFiles(storage: ModelStorageKind) async -> Bool {
-        guard let selection = localFileSelection, globalOperation == nil, !isChoosingLocation else { return false }
-        var committed = false
+        guard let submission = captureLocalSubmission() else { return false }
+        return await submitLocalFiles(submission, storage: storage) != nil
+    }
+    func submitLocalFiles(_ submission: LocalSubmission, storage: ModelStorageKind) async -> ModelResourceID? {
+        guard localInspectionID == submission.inspectionID, localFileSelection == submission.selection,
+              globalOperation == nil, !isChoosingLocation else { return nil }
+        let selection = submission.selection
+        var committed: ModelResourceID?
         globalOperation = storage == .managed ? .copying : .registering; errorMessage = nil; preparationNotice = nil
         // Retained by the application model, not a sheet task or selected node.
         let task = Task { @MainActor in
             do {
                 let id = try await library.registerLocalFiles(selection, storage: storage, validatePrepared: preparedValidator)
-                selectedResource = .init(rawValue: id.rawValue)
+                let resource = ModelResourceID(rawValue: id.rawValue)
+                selectedResource = resource
                 preparationNotice = managementText(storage == .managed ? "local.copied" : "local.registered")
-                workspace = "resources"; localFileSelection = nil; committed = true
+                workspace = "resources"; localFileSelection = nil; localFileChoices = []; committed = resource
             } catch is CancellationError { preparationNotice = managementText("local.cancelled") }
             catch { report(error, context: managementText("importFailed")) }
         }
@@ -813,7 +850,7 @@ extension ModelLibraryModel {
                                   catalog: [ModelCatalogEntry]) -> ModelCatalogEntry? {
         guard let choice = WorkflowModelRoutes.draftChoice(operationID: operationID, modelID: identity),
               WorkflowRegistry.standard.operation(operationID)?.definition.modelKind == choice.kind else { return nil }
-        let matches = catalog.filter { WorkflowModelRoutes.supports($0, operationID: operationID, identity: identity) }
+        let matches = catalog.filter { !$0.localPreparedOnly && WorkflowModelRoutes.supports($0, operationID: operationID, identity: identity) }
         return matches.count == 1 ? matches.first : nil
     }
 
@@ -894,6 +931,7 @@ extension ModelLibraryModel {
                 if let download, download.state == .failed || download.state == .cancelled {
                     throw WorkflowIssue(download.error ?? nodeText("stopped", "下载已停止；节点与已下载文件保留。请明确重试。"))
                 }
+                guard resource.control.automaticRegistrationRevoked != true else { finished = true; continue }
                 guard resource.control.fileState == .verified else { continue }
                 if request.entry.preparation != .none {
                     preparationNotice = nodeText("needsPreparation", "文件已取得，仍须在模型与下载中准备执行包；节点尚未就绪。")

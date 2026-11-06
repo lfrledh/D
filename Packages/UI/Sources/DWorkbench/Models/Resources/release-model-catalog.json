@@ -2694,6 +2694,306 @@
           }
         ]
       }
+    },
+    {
+      "id": "local-ltx-2.3-dev-bf16-full-v1",
+      "title": "LTX2.3 BF16 Full",
+      "repository": "dgrauet/ltx-2.3-mlx",
+      "revision": "cfc837526e56abf8657823a0ae192eec3a40177d",
+      "files": [
+        {
+          "path": "model/LICENSE",
+          "size": 21399,
+          "sha256": "e28ef68d90e17b06308e4c5cba5c9a967b70c3d67f87ddc3dfc46a312cb6a134"
+        },
+        {
+          "path": "model/README.md",
+          "size": 2589,
+          "sha256": "aeeb2a51544eb6207f57a56976c2ba6333e403be25a115ab6766250eaa968bb2"
+        },
+        {
+          "path": "model/audio_vae.safetensors",
+          "size": 106509048,
+          "sha256": "442119db8eaf976f83a105cc8c5f2c930e0f625062f9776b10adcdb7bc96c416"
+        },
+        {
+          "path": "model/config.json",
+          "size": 951,
+          "sha256": "2dd64d4f8b7a385b0471a23a6e2069e4bc0f9d9903fc289347b2e4cac3c776ec"
+        },
+        {
+          "path": "model/connector.safetensors",
+          "size": 6344495512,
+          "sha256": "5885c2bd7af4e761b3257cf5b17bc1fdb2d187cea3ca520ea723b6a129b7029f"
+        },
+        {
+          "path": "model/embedded_config.json",
+          "size": 7234,
+          "sha256": "c09755357e21d2b2eb15ea2b5c3c11f1e6b44c514ebb6d8babeee30e86f7bd14"
+        },
+        {
+          "path": "model/split_model.json",
+          "size": 1756,
+          "sha256": "5d42e96f3f61efd93d8e00e7eef6b3d72769ca570bf115c578c21a209a9ed048"
+        },
+        {
+          "path": "model/transformer-dev.safetensors",
+          "size": 37987706193,
+          "sha256": "ac914855a09df67a855df79de63a3c21205eb7bda8a86f838dae1a02a7bfe19b"
+        },
+        {
+          "path": "model/vae_decoder.safetensors",
+          "size": 814349531,
+          "sha256": "f404026fe0b59418eaec4a3fcdc474125c798f0b787dc390f6eb4e79934d4160"
+        },
+        {
+          "path": "model/vae_encoder.safetensors",
+          "size": 637885319,
+          "sha256": "1512f5ef8387901db0baecb328690676e2667ddf2b63e28f8e6645188c1a8c06"
+        },
+        {
+          "path": "model/vocoder.safetensors",
+          "size": 258313851,
+          "sha256": "410cee86c14f76956bf487d153211ef15050fe8bf51f86d47a1d27ca6e3ba287"
+        },
+        {
+          "path": "text_encoder/README.md",
+          "size": 945,
+          "sha256": "b17563367ffc5811b01ca9614227bb8ac8e0c2d0bcfb54aceaee756faee4a046"
+        },
+        {
+          "path": "text_encoder/added_tokens.json",
+          "size": 35,
+          "sha256": "50b2f405ba56a26d4913fd772089992252d7f942123cc0a034d96424221ba946"
+        },
+        {
+          "path": "text_encoder/chat_template.json",
+          "size": 1615,
+          "sha256": "fe16baf728db49457cde32802cd7efc0ac8a7a9877dbe22fe3322b2d9dc6ccd9"
+        },
+        {
+          "path": "text_encoder/config.json",
+          "size": 1039,
+          "sha256": "16a876d6326c4762377a74118847bd3410b66a1875ba05aeb6b695ddbf64b21f"
+        },
+        {
+          "path": "text_encoder/generation_config.json",
+          "size": 192,
+          "sha256": "e04ecb65db447404710114fb282baaac482d22a95e2244ecaab428b81672ba78"
+        },
+        {
+          "path": "text_encoder/model-00001-of-00005.safetensors",
+          "size": 5301386994,
+          "sha256": "319b50ee905f2cfb3f2a9061ed4858ad77a31a73a35a119ea6b7492347069968"
+        },
+        {
+          "path": "text_encoder/model-00002-of-00005.safetensors",
+          "size": 5261631359,
+          "sha256": "c6d569f73b66667ad5c4ad5d34f98a301868f2b98ca1c2deada9da9f002cc0d1"
+        },
+        {
+          "path": "text_encoder/model-00003-of-00005.safetensors",
+          "size": 5348137629,
+          "sha256": "8038b2b0e059d3d7a3cdcc911dc3f499952341564526eb9b3b4e6036041b2b37"
+        },
+        {
+          "path": "text_encoder/model-00004-of-00005.safetensors",
+          "size": 5363867587,
+          "sha256": "7211182ea44707e0857413691164fc146940cf6b3cdf85f7ff037c59a71d5ffa"
+        },
+        {
+          "path": "text_encoder/model-00005-of-00005.safetensors",
+          "size": 5113526967,
+          "sha256": "71666d602253574a56bb07719d5d8a958baa9a1373c2c4255ebbec1fc796bc45"
+        },
+        {
+          "path": "text_encoder/model.safetensors.index.json",
+          "size": 108605,
+          "sha256": "788cc42a1a92835df62d9a3791f47105f63504c7c404637a73288e9b11bc7b82"
+        },
+        {
+          "path": "text_encoder/preprocessor_config.json",
+          "size": 570,
+          "sha256": "f688d6bb20c5017601c4011de7ca656da8485b540b05013efdaf986c0fcc918d"
+        },
+        {
+          "path": "text_encoder/processor_config.json",
+          "size": 70,
+          "sha256": "3ffd5f11778dc73e2b69b3c00535e4121e1badf7018136263cd17b5b34fbaa53"
+        },
+        {
+          "path": "text_encoder/special_tokens_map.json",
+          "size": 662,
+          "sha256": "2f7b0adf4fb469770bb1490e3e35df87b1dc578246c5e7e6fc76ecf33213a397"
+        },
+        {
+          "path": "text_encoder/tokenizer.json",
+          "size": 33384568,
+          "sha256": "4667f2089529e8e7657cfb6d1c19910ae71ff5f28aa7ab2ff2763330affad795"
+        },
+        {
+          "path": "text_encoder/tokenizer.model",
+          "size": 4689074,
+          "sha256": "1299c11d7cf632ef3b4e11937501358ada021bbdf7c47638d13c0ee982f2e79c"
+        },
+        {
+          "path": "text_encoder/tokenizer_config.json",
+          "size": 1157007,
+          "sha256": "0d95398b39395e5cfb290683a78f3fb0551223c672d8b033333c1a5307473760"
+        }
+      ],
+      "workflowProfileID": "d.video.ltx-2.3-dev-bf16-full-v1",
+      "workflowIdentity": "video:ltx-2.3-dev-bf16-full-v1@cfc837526e56abf8657823a0ae192eec3a40177d",
+      "preparation": "required",
+      "localPreparedOnly": true,
+      "modelSpec": "BF16",
+      "memoryGuidance": "",
+      "provenance": "dgrauet/ltx-2.3-mlx@cfc837526e56abf8657823a0ae192eec3a40177d + mlx-community/gemma-3-12b-it-bf16@b8b9b412cb795bd6115fdce8c9a0ef0d1664db3a"
+    },
+    {
+      "id": "local-ltx-2.3-dev-q8-gemma3-q4-test-v1",
+      "title": "LTX2.3 Q8 / Gemma3 Q4",
+      "repository": "dgrauet/ltx-2.3-mlx-q8",
+      "revision": "6671a7572a530862d1d60ce393b5d93491e3f76b",
+      "files": [
+        {
+          "path": "model/LICENSE",
+          "size": 21399,
+          "sha256": "e28ef68d90e17b06308e4c5cba5c9a967b70c3d67f87ddc3dfc46a312cb6a134"
+        },
+        {
+          "path": "model/README.md",
+          "size": 2977,
+          "sha256": "1f0bbc7bf285b87d3e4e2e11054849c11c3d0f6d9c28be531f3dcccc9fb3cbaa"
+        },
+        {
+          "path": "model/audio_vae.safetensors",
+          "size": 106509048,
+          "sha256": "442119db8eaf976f83a105cc8c5f2c930e0f625062f9776b10adcdb7bc96c416"
+        },
+        {
+          "path": "model/config.json",
+          "size": 951,
+          "sha256": "2dd64d4f8b7a385b0471a23a6e2069e4bc0f9d9903fc289347b2e4cac3c776ec"
+        },
+        {
+          "path": "model/connector.safetensors",
+          "size": 6344495512,
+          "sha256": "5885c2bd7af4e761b3257cf5b17bc1fdb2d187cea3ca520ea723b6a129b7029f"
+        },
+        {
+          "path": "model/embedded_config.json",
+          "size": 7234,
+          "sha256": "c09755357e21d2b2eb15ea2b5c3c11f1e6b44c514ebb6d8babeee30e86f7bd14"
+        },
+        {
+          "path": "model/quantize_config.json",
+          "size": 100,
+          "sha256": "aebe5755de31b1619d5d50b5f6fdc1e53123097505c328cfddb45b4ebc4e447b"
+        },
+        {
+          "path": "model/split_model.json",
+          "size": 1835,
+          "sha256": "45dcbdc86120ad9c9af193670be2276a897cbd8c574114fdbfb366e2c8962f02"
+        },
+        {
+          "path": "model/transformer-dev.safetensors",
+          "size": 20597189549,
+          "sha256": "bd28c73e333581a81c4b3e2213051bfcce989fdb40682d22f062cf8b691455e2"
+        },
+        {
+          "path": "model/vae_decoder.safetensors",
+          "size": 814349531,
+          "sha256": "f404026fe0b59418eaec4a3fcdc474125c798f0b787dc390f6eb4e79934d4160"
+        },
+        {
+          "path": "model/vae_encoder.safetensors",
+          "size": 637885319,
+          "sha256": "1512f5ef8387901db0baecb328690676e2667ddf2b63e28f8e6645188c1a8c06"
+        },
+        {
+          "path": "model/vocoder.safetensors",
+          "size": 258313851,
+          "sha256": "410cee86c14f76956bf487d153211ef15050fe8bf51f86d47a1d27ca6e3ba287"
+        },
+        {
+          "path": "text_encoder/README.md",
+          "size": 945,
+          "sha256": "e6cbf9a42bcd91e2ca8299ba0c509b3b4df5d565b59866ccca79c2f3cbe6a6a0"
+        },
+        {
+          "path": "text_encoder/added_tokens.json",
+          "size": 35,
+          "sha256": "50b2f405ba56a26d4913fd772089992252d7f942123cc0a034d96424221ba946"
+        },
+        {
+          "path": "text_encoder/chat_template.json",
+          "size": 1615,
+          "sha256": "fe16baf728db49457cde32802cd7efc0ac8a7a9877dbe22fe3322b2d9dc6ccd9"
+        },
+        {
+          "path": "text_encoder/config.json",
+          "size": 1141,
+          "sha256": "73ed96a3f1d596fcf3c07f17ed7e4358fd99be688c97da45f2464fd48dd069ed"
+        },
+        {
+          "path": "text_encoder/generation_config.json",
+          "size": 192,
+          "sha256": "e04ecb65db447404710114fb282baaac482d22a95e2244ecaab428b81672ba78"
+        },
+        {
+          "path": "text_encoder/model-00001-of-00002.safetensors",
+          "size": 5367455313,
+          "sha256": "995cbd05b7bfd8f5ab5307b476eb5496b5ec3f5256a9dd26366236ce8816c93f"
+        },
+        {
+          "path": "text_encoder/model-00002-of-00002.safetensors",
+          "size": 2661219935,
+          "sha256": "8b7af7eb5ff32109fc65cbcd0af5b8016ac0de46df17f40705f043f899495333"
+        },
+        {
+          "path": "text_encoder/model.safetensors.index.json",
+          "size": 108605,
+          "sha256": "788cc42a1a92835df62d9a3791f47105f63504c7c404637a73288e9b11bc7b82"
+        },
+        {
+          "path": "text_encoder/preprocessor_config.json",
+          "size": 570,
+          "sha256": "f688d6bb20c5017601c4011de7ca656da8485b540b05013efdaf986c0fcc918d"
+        },
+        {
+          "path": "text_encoder/processor_config.json",
+          "size": 70,
+          "sha256": "3ffd5f11778dc73e2b69b3c00535e4121e1badf7018136263cd17b5b34fbaa53"
+        },
+        {
+          "path": "text_encoder/special_tokens_map.json",
+          "size": 662,
+          "sha256": "2f7b0adf4fb469770bb1490e3e35df87b1dc578246c5e7e6fc76ecf33213a397"
+        },
+        {
+          "path": "text_encoder/tokenizer.json",
+          "size": 33384568,
+          "sha256": "4667f2089529e8e7657cfb6d1c19910ae71ff5f28aa7ab2ff2763330affad795"
+        },
+        {
+          "path": "text_encoder/tokenizer.model",
+          "size": 4689074,
+          "sha256": "1299c11d7cf632ef3b4e11937501358ada021bbdf7c47638d13c0ee982f2e79c"
+        },
+        {
+          "path": "text_encoder/tokenizer_config.json",
+          "size": 1157007,
+          "sha256": "0d95398b39395e5cfb290683a78f3fb0551223c672d8b033333c1a5307473760"
+        }
+      ],
+      "workflowProfileID": "d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1",
+      "workflowIdentity": "video:ltx-2.3-dev-q8-gemma3-q4-test-v1@6671a7572a530862d1d60ce393b5d93491e3f76b",
+      "preparation": "required",
+      "localPreparedOnly": true,
+      "modelSpec": "Q8 / Gemma3 Q4",
+      "memoryGuidance": "",
+      "provenance": "dgrauet/ltx-2.3-mlx-q8@6671a7572a530862d1d60ce393b5d93491e3f76b + mlx-community/gemma-3-12b-it-4bit@86cc6a8dedbc456dd0e4af01a9d09f396f77e558"
     }
   ],
   "schemaVersion": 1
