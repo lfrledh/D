@@ -84,6 +84,32 @@ private actor ConfigurationPanelEngine: InferenceEngine {
         #expect(try await cold.chatState().presets == applied)
         try await cold.close()
     }
+    @Test func ordinaryPresetFlushRetryPreservesNewAndEditedIdentityWithoutInference() async throws {
+        let (store, engine, chat, root) = try await fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let obstruction = store.rootURL.appendingPathComponent("quick-chat.json")
+        try FileManager.default.createDirectory(at: obstruction, withIntermediateDirectories: false)
+        let preset = ChatPromptPreset(name: "Retry fixture", prompt: "Preserve this exact text")
+        try ChatConfigurationActions.savePreset(preset, captureCurrentConfiguration: false,
+            sessionID: nil, chat: chat)
+        await #expect(throws: (any Error).self) { try await chat.flush() }
+        #expect(chat.saveIssue != nil && chat.state.presets == [preset])
+        try FileManager.default.moveItem(at: obstruction, to: root.appendingPathComponent("failed-write-obstruction"))
+        try await chat.flush()
+        #expect(chat.saveIssue == nil && chat.state.presets == [preset])
+        var edited = preset
+        edited.prompt = "Edited text with the same identity"
+        try ChatConfigurationActions.savePreset(edited, captureCurrentConfiguration: false,
+            sessionID: nil, chat: chat)
+        try await chat.flush()
+        #expect(chat.state.presets == [edited] && edited.id == preset.id)
+        #expect(await engine.requests.isEmpty && chat.state.sessions.isEmpty)
+        try await chat.prepareForTermination(); try await store.close()
+        let cold = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await cold.chatState().presets == [edited])
+        try await cold.close()
+    }
+
     private func fixture() async throws -> (ProjectStore, ConfigurationPanelEngine, ChatController, URL) {
         let root = URL(fileURLWithPath:
             ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory(), isDirectory: true)

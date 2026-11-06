@@ -148,6 +148,7 @@ struct ChatPresetsPanel: View {
         do {
             try await chat.flush()
             guard isAvailable() else { throw WorkflowIssue(workflowText(language, "chat.organization.defaults.targetChanged")) }
+            issue = nil
             closeSaveApplied = false; editorOpen = false; draftLoaded = false
         } catch { issue = error.localizedDescription; throw error }
     }
@@ -190,7 +191,7 @@ struct ChatPresetsPanel: View {
                         .menuStyle(.borderlessButton)
                         .accessibilityLabel(text("presetActions", "Preset actions", "预设操作") + ": " + preset.name)
                 }
-            }
+            }.disabled(closeSaveApplied)
             HStack {
                 Button(text("new", "New preset…", "新建预设…")) { load(nil) }
                 Spacer()
@@ -198,13 +199,13 @@ struct ChatPresetsPanel: View {
                 Button(text("export", "Export all chat presets…", "导出全部聊天预设…")) { onExport(chat.state.presets) }
                     .help(workflowText(language, "chat.config.exportHelp"))
                     .disabled(chat.state.presets.isEmpty)
-            }
+            }.disabled(closeSaveApplied)
             if editorOpen { editor }
             if let issue { WorkbenchIssueText(raw: issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .disabled(closeSaveApplied || saving)
+        .disabled(saving)
         .workbenchCloseProtection(isDirty: closeSaveApplied || (draftLoaded && (name != (original?.name ?? "") || prompt != (original?.prompt ?? "") || selectionInstruction != (original?.selectionInstruction ?? "") || captureConfiguration)), isSaving: saving, allowsDiscard: !closeSaveApplied, save: saveAndFlush)
         .onChange(of: sessionID) { _, _ in
             if draftLoaded || closeSaveApplied { return }
@@ -215,20 +216,21 @@ struct ChatPresetsPanel: View {
     }
 
     private var editor: some View {
-        DisclosureGroup(isExpanded: $editorOpen) {
+        DisclosureGroup(isExpanded: Binding(get: { editorOpen }, set: { if !closeSaveApplied && !saving { editorOpen = $0 } })) {
             VStack(alignment: .leading, spacing: 8) {
+                Group {
                 TextField(text("name", "Name", "名称"), text: $name)
                     .accessibilityLabel(text("name", "Name", "名称"))
                     .accessibilityIdentifier("chat-preset-name")
                 Text(text("system", "System prompt", "系统提示"))
-                TextSourcesQuestionEditor(value: prompt, editEpoch: 0, isEditable: true,
-                    accessibilityIdentifier: "chat-preset-prompt", onEdit: { prompt = $0 })
+                TextSourcesQuestionEditor(value: prompt, editEpoch: 0, isEditable: !closeSaveApplied && !saving,
+                    accessibilityIdentifier: "chat-preset-prompt", onEdit: { if !closeSaveApplied && !saving { prompt = $0 } })
                     .id("prompt:" + (editingID?.uuidString ?? "new"))
                     .accessibilityLabel(text("system", "System prompt", "系统提示"))
                     .frame(height: 90).workbenchInputSurface()
                 Text(text("selection", "Selection instruction (optional)", "选段指令（可选）"))
-                TextSourcesQuestionEditor(value: selectionInstruction, editEpoch: 0, isEditable: true,
-                    accessibilityIdentifier: "chat-preset-selection", onEdit: { selectionInstruction = $0 })
+                TextSourcesQuestionEditor(value: selectionInstruction, editEpoch: 0, isEditable: !closeSaveApplied && !saving,
+                    accessibilityIdentifier: "chat-preset-selection", onEdit: { if !closeSaveApplied && !saving { selectionInstruction = $0 } })
                     .id("selection:" + (editingID?.uuidString ?? "new"))
                     .accessibilityLabel(text("selection", "Selection instruction (optional)", "选段指令（可选）"))
                     .frame(height: 70).workbenchInputSurface()
@@ -241,15 +243,23 @@ struct ChatPresetsPanel: View {
                         "请先完成当前数值输入，再保存参数。"))
                         .font(.caption).foregroundStyle(.red)
                 }
+                }.disabled(closeSaveApplied)
                 HStack {
                     Button(text("restore", "Restore saved version", "恢复已保存版本")) { load(original) }
-                        .disabled(original == nil)
+                        .disabled(original == nil || closeSaveApplied)
                         .help(text("restoreHelp", "", ""))
                     Spacer()
                     Button(text("cancel", "Cancel", "取消")) { editorOpen = false; draftLoaded = false; issue = nil }
-                    Button(text("save", "Save preset", "保存预设")) { Task { do { try await saveAndFlush() } catch { issue = error.localizedDescription } } }
-                        .disabled(!validName || invalidCapture || prompt.utf8.count > 65_536 ||
-                                  selectionInstruction.utf8.count > 16_384 || !chat.isLoaded || chat.saveIssue != nil)
+                        .disabled(closeSaveApplied)
+                    Button(closeSaveApplied ? workflowText(language, "chat.retrySave") : text("save", "Save preset", "保存预设")) {
+                        Task {
+                            guard !saving else { return }
+                            do { try await saveAndFlush() } catch { issue = error.localizedDescription }
+                        }
+                    }
+                        .disabled(!isAvailable() || !chat.isLoaded || (!closeSaveApplied &&
+                            (!validName || invalidCapture || prompt.utf8.count > 65_536 ||
+                             selectionInstruction.utf8.count > 16_384 || chat.saveIssue != nil)))
                         .accessibilityIdentifier("chat-preset-save")
                 }
             }.padding(.top, 8)
