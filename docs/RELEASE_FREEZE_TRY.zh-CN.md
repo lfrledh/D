@@ -53,12 +53,14 @@
 | 4 / `d.tip.tier4` | Consumable / D Tip Tier 4 | 50 | 50 | 50 | 5000 | 50 |
 | 5 / `d.tip.tier5` | Consumable / D Tip Tier 5 | 100 | 100 | 100 | 10000 | 100 |
 
-五档拟定显示名/说明复用已批准语言资源的 `tips.title`、`tips.body`；不新增收费承诺或宣传文案。各商品ID不含货币或金额，单次只选一档，经系统确认付款。客户端不会把本表用作显示价格；真实 `Product.displayPrice` 缺失时只显示获取失败。
+五档拟定显示名可复用已批准语言资源的 `tips.title`。App内完整说明 `tips.body` 保持不变，但英文超过App Store Connect商品Description的45字符限制，不能原样录入。后台专用短说明草稿为中文“支持D的开发，不解锁功能。”、英文“Support D. Does not unlock features.”；仅供用户/顾问审阅，尚未批准或录入，也不替换App文案。显示名30字符、说明45字符的字段限制及实际后台读回均须分别核对。[Apple商品字段要求](https://developer.apple.com/help/app-store-connect/reference/in-app-purchases-and-subscriptions/in-app-purchase-information)
+
+各商品ID不含货币或金额，单次只选一档，经系统确认付款。客户端不会把本表用作显示价格；真实 `Product.displayPrice` 缺失时只显示获取失败。
 
 | 待录入字段 / 页面 | 已准备 | 尚缺/后续最小动作 |
 |---|---|---|
 | App本体价格 | 免费已决定 | 获准后由有权账户在App定价页配置并读回 |
-| In-App Purchases：5个商品 | 上述ID、消费型、参考名、已批准双语标题/说明 | 确认真实App记录/商品ID可用，创建5个商品；本轮不执行 |
+| In-App Purchases：5个商品 | 上述ID、消费型、参考名、已批准App标题/说明；后台短说明为待审草稿 | 确认短说明、真实App记录/商品ID与字段可用，创建5个商品并读回；本轮不执行 |
 | Price Schedule：基准地区 | 推荐美国/USD五档作为自动定价基准 | 账户持有人确认销售地区；逐档读取精确可用price point，不可用则报具体差异，不取近似值 |
 | 手动价格地区 | GBP英国、JPY日本、CNY中国大陆；所有获准EUR及其他USD地区均使用本表数字 | 最终销售地区未定，所有指定币种须按实际获准storefront逐一登记；不能把“EUR”作为单一地区或把语言当地区 |
 | 其他获准地区 | USD基准自动定价 | 读取Apple生成价表；指定币种人工价格优先，不自动覆盖 |
