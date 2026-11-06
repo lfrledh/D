@@ -1,5 +1,7 @@
 # Quick UI 实施接线映射
 
+2026-11-06最终a9dc46dd普通包：真实Finder拖入中英两组→准确型号/目录→同一原位/副本添加，解析摘要随语言变化且保留原诊断，恢复准确路径直接进入添加表单，正常退出/桌面冷开已验。中间aeb/fac/ba95证据与失败保留在任务；新普通网络下载全链/两套LTX真权重准备仍未验，不把组件或历史升级为本轮亲跑。
+
 2026-10-08增量：本页仍是能力/消费者的人工索引，不是第二执行协议。当前展示由[UI-PRESENTATION-REBUILD-01](tasks/UI-PRESENTATION-REBUILD-01.md)接续，依据设计v0.3；下方模型表沿用原核对范围，不自动升级为本轮实调。
 
 | 本轮呈现位置 | 既有动作/所有者 |
@@ -115,6 +117,8 @@ Qwen视频由当前后端按2fps取帧，超过maximumVideoFrames预算报错，
 当前实际状态、精确外盘R目录、唯一推荐包及下次桌面动作仍只见[当前行动](CURRENT_ACTIONS.zh-CN.md)、[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)、[试用入口](RELEASE_FREEZE_TRY.zh-CN.md)。本页准备完毕不表示F17/F19已验，也不自动开始视觉改版。
 
 ## 已批准文案覆盖索引
+
+2026-11-06 8c0a后继：26个既有批准键与解析摘要已接正式双语资源；ModelAcquisition新普通下载自动内部添加，ModelLocalFilesForm共用folder/drop/恢复路径，旧filesOnly意图保留，两个LTX兼容闭包仅本地添加不伪造下载。实际普通App/组件/历史范围见任务本轮节。三项旧待审稿已由最新用户批准，历史记述保留；续审13–32仍未实施。
 
 2026-11-06接续12项：`chat.import.*`→导入Controller/文件入口；`workflow.language.tools.*`→选区/接口/保存原因；`language.import.* / language.diagnostic.*`→动态语言诊断与折叠详情；`chat.config.export* / chat.organization.presets.import*`→全部聊天预设导出及预览/保存门禁；`refinement.settings.cacheNote`→既有目录准入；`tips.*`→商品/付款/记录独立状态。用户已批准12项及五档价格；最终aff734d3交付：49 UI+12 Workbench定向通过，标题漏键修后19项语言复跑；普通App及本地StoreKit按任务逐项表分级，正式支付未验。唯一新增必要缺档摘要为`tips.partial`，待集中文案审阅。这里不复制语言正文或另建术语表。
 

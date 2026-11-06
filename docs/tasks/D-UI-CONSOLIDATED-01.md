@@ -1,5 +1,61 @@
 # D-UI-CONSOLIDATED-01
 
+## 2026-11-06 本轮最终交付（a9dc46dd，待顾问审计/用户接纳）
+
+- 最终生产`a9dc46dd549072b03afeb2acfdd8ab109f52599a`，桌面“D 最新版”→`CurrentD/Nov6-Models-a9dc46dd/D.app`。正常Release -O/WMO、Apple Development hardened sandbox、七引擎/零第三方权重，主执行文件SHA256 `4349170635c930d916b2bcd15bfe10411347a4d5cbda452a9cca9ddb16aa281c`；产品输入`cbe8c320…`、资源清单`e66db1da…`。a7因只读发现主动取消未交付；a9使用同一正常构建入口和本轮私有缓存、独立APFS克隆发布，门禁未跳过。此段为当前结论，下文中间版失败/待验按当时状态保留。
+- **最终普通App**：真实Finder英文/中文两组，准确源/目标与新drag pasteboard会话→型号识别→原位/副本选择→真实点击添加。原位ID9DA63881…未新建副本；管理副本8533C86A…复用已完成文件，库存10→10，不重复复制。源目录临时改名隔离后，以真实滚轮移到可见按钮并重新校验管理副本，完成后源目录还原；源/副本/恢复项399114字节、相同SHA fa91bb45…、不同inode、非符号链接。没有物理卸载整个盘，也不是GPU运行。两次校验按钮屏外导致owner守卫拒发，原失败保留，不能当作已经点击；r3实际到达按钮。
+- 同版实际畸形预设导入，批准中英摘要随语言变化，原DecodingError不变。UI-Add-11-r1停在页面上部未见错误；r2滚到实际摘要取代其证据用途，旧图不覆盖。表单/菜单仍可正常关闭，当前规则和预设未修改。
+- 同版将明确合成的小备份恢复为`SwiftF0-Restored-a9dc46dd.dproject`，2文件/400KB；自动进入准确Models路径的同一添加表单，无第二次选文件夹。原位完成ID88FD42B5…，发起恢复的旧项目没有被改指向；小备份不是本轮真实模型生成。
+- 正常Quit13260确认消失→桌面入口冷开13917（22:00:51 JST，1280×800pt），三个准确模型记录均available/registered/installed、lease0；QA quick-chat SHA仍bda7b7d9…，此前预设和会话不变。旁白off、原中文输入法保持，音量未改；当前无必须本人立即操作。大权重/模型推理、正式安装/账户/付款仍未升级为通过。
+- 最终同版真实图：UI-Add-10-r1拖入英文；11-r2解析英文；12-r1同一错误中文；13-r1恢复路径；14-r1副本选择；15-r1冷开全景，均正常包/1280×800pt，已直接展示。动作日志与文件/冷开身份分别在`native-a9-*`；21项ExternalVideo实包摘要与旧包相同见`external-video-a9dc46dd-comparison.json`。最终资源/签名门禁不是运行时或许可验收。
+- 末段组件亲跑：准备/恢复r7为24 UI方法＋19准备方法，1真实LTX环境门禁跳过；原生drop-r1为38方法，复核修正回退后drop-r2为14子面板方法。不是把重跑相同方法累加成覆盖总量。非实施者固定ba95与a7只读发现已修；其未操作Mac或亲跑测试。
+
+### 末段修正与反证
+
+- fac正常包在真实Finder拖放会话后，模型表单未触发检查。临时有限诊断确认680×180接收视图已注册且可见，但没有isTargeted/drop回调；AX/原生坐标一致。最小独立宿主在内容树内/兄弟位置均可接收同样Finder输入，不能据此归因共享overlay。早期探针受自动缩窗和前置遮挡影响的无效输入分开保留。364将目的地从滚动document移至完整viewport；未改玻璃/关闭门禁，临时日志全部撤去，ba95正常包在准确Finder/D目标、pasteboard新会话下仍无回调，证明viewport方案无效；已撤掉该SwiftUI接收路径。a7改为同一表单的原生宿主opt-in目标，anchor不截点击；当前bounds、顶层owner、保存/嵌套/系统面板每次准入重核，仍调用同一模型inspection。38组件通过，非实施者发现无target时updated错误回退entered；a9修回super.draggingUpdated，14项子面板测试再过。最终正常包实拖另记。
+- 独立复核另确认：下载后原始模型的准备按钮仍走旧“生成执行包后另行登记”分支。257f在同一preparation job内核准确child、保留父子lease、适配验证/持久登记后再释放槽和调度下一下载；不放宽公共idle守卫。UI成功用已有“执行包已准备”状态，并选准确库条目，不宣称直接使用原件/已开始推理。
+- 失败重试复用唯一parent/recipe/型号/版本匹配的已发布child，不用最新行。仅这条明确prepare+add分支在发布前写容量1 `prepared-publication.json`，记录父目录授权/物理身份、准确stage/final叶和完整文件；恢复核对后原子不覆盖发布/库存写入，再退役。原件不变；未知/替换路径拒绝。目标暂不可访问或来源被移除时保留该项错误/journal，其他库存可读，不把离线盘变成全库启动前置。
+- `tests-prepare-add-r7`：24个UI方法、19个准备方法通过，1个真实LTX环境门禁跳过。新增队列未抢占、父子移除门禁、验证/登记保存失败、真实Task.cancel、prepared.beforeWrite/afterRename且退出flush持续失败后的冷恢复同ID，以及目录权限拒读/替换/来源移除隔离。小型CPU夹具不等于全量模型/GPU。早期测试编译和URL目录尾斜线失败保留，修后没有削弱物理身份/文件校验。
+- 非实施者复核了原槽释放竞态、文案原件/副本误述、库存发布失败和启动隔离；Lead已修。固定364复核另发现恢复bookmark未写回及待发布journal可能复活已移除项，ba95已修；连续两次冷开resolve及移除/解除登记/登记后冷开反例通过。处理只针对准确pending child，不让其他资源牵连恢复。非实施者固定ba95只读差分和r7日志确认两项关闭，未操作Mac。364构建在该发现后取消、无候选交付；ba95随后完成正常包对照，最终被a9接续。
+
+
+## 2026-11-06 批准文案与模型添加流程（8c0a后继，实现与中间验收记录）
+
+实际起点/远端 `8c0a381e2c6bd971b7b9c9429453d903107f1cba`；祖先0、fetch无新后继、初始索引/工作树干净。Lead独占写入/Mac，个人scheme保持。初始生产检查点 `aebbcffe57d5e851910905638a8bdc7b98e617fb`，分为aba4批准文案/解析、f4d4模型流程与反例、aebbc来源登记。原3b4候选/普通预设重试保护保留。本轮不是B10，续审13–32不实施。
+
+- 最终ba95正常Release编译、签名及零权重门禁通过，发布前普通ditto复制遇ENOSPC，guard保留失败回执并移除自身未发布半成品。未删旧候选/用户文件，改用同卷APFS独立克隆已签名产物后重核源码身份、引擎/资源、签名、零权重与主执行文件；原失败不改写为首次成功。准确恢复结果见`release-ba95fcf8/package-recovery.json`。
+
+### 实现范围与证据边界
+
+- **正式双语资源**：26个既有批准键逐字采用中文并配英文；新增`chat.presetFile.invalidStructure`仅映射JSONDecoder的DecodingError，原诊断保留。容量、版本、未知字段、空名及读取权限错误仍各自分流。资源5571键，无重复/集合差/占位符差，组件包括畸形JSON和字段类型反例。实际管理入口沿ChatSettingsPanels→稳定原因→WorkbenchIssueText，兼容旧ChatWorkbench入口也保留原因码。没有修改3b4保存消费者/原生编辑器双守卫。
+- **入口消费者**：`chat.systemPrompt/clearSystem/systemPromptMeaning/defaultRulesSettings/organization.defaults.*`是当前对话/新对话规则；`commonPresets/manageCommonPresets/organization.presets.*`是同一chat.state.presets；`workflow.language.control.chooseTool/noTools/missingTool/error.{missingTool,changedTool,mismatchedToolFields}`保留工具ID/版本/摘要；两资产名仅`baseline02.library.kind.asset/metadata.panel.sourceAsset`；`modelManagement.task.publishing`保留内部状态；四张`consistency.help`按批准purpose/object，不增加固定模型节点更换能力。`tips.partial`补明确重新加载。正文只在原JSON，不另造文案镜像。
+- **普通下载**：ModelAcquisitionView移除自动登记勾选，新普通请求使用既有`.register`；旧`.filesOnly`意图不重写。finishPostAction再次核任务所有者和持久撤销标记，主动移除后迟到完成不恢复登记。原始视频文件完成时显示需要准备，不伪装可运行；后续失败复用已完成文件。
+- **本地添加**：ModelLocalFilesForm共用文件夹/拖入/恢复已知路径，固定目录文件闭包识别，唯一匹配直接预填；歧义才选实际型号。仅原位与副本两选项，添加命令由应用ModelLibraryModel持有，不靠视图存活。完成身份通过捕获selection/inspection token及实际返回ResourceID传递，不读取后来selectedResource。关闭后后台继续；旧回调不关闭新表单。
+- **兼容副本**：原有explicitRegistration中未有下载目录的两个LTX2.3 dev（BF16 full、Q8+Gemma Q4 test）按已有固定四份适配manifest补中央localPreparedOnly规则：model/编码器/tokenizer完整28/26项，再加准备manifest。保持18个真实可下载型号，两个兼容配方不能下载。原位既有校验不删，完整副本沿原发布/恢复机制；所需物理文件不允许符号链接的现有限制保持，不暗中借源文件。不是新增模型或运行时。小文件结构夹具证明复制/源隔离/冷读，不能据此声称真实LTX权重或GPU已跑。
+- **恢复衔接**：备份新增可选relativeRoot；旧备份以清单内闭包/摘要唯一匹配，歧义明确不猜目录。原子恢复后给新项目的模型回执，UI直接打开同一添加表单无需重选文件夹；两选项仍由用户选择，单项失败留表单重试，不重跑项目恢复，不访问发起恢复的旧Store。无模型旧项目不强迁移。
+- **组件亲跑**：保存原失败tests-model-r1（测试改动定位错误）、r2（备份根元数据与嵌套读取区分错误，已修）、review-r5（旧断言把local-only误当下载项，改为负向断言）。r3恢复21 UI/24备份等通过；final-r4语言/解析及针对模型/备份通过；review-r6新增捕获身份/旧草稿替换与目录/下载选择通过。没有删除行为断言或把夹具当真实下载/模型运行。
+- **非实施者复核**：只读review-r1发现运行时不就绪会丢兼容目录身份、旧添加回调/共享选择误归属；本轮改中央目录与捕获提交身份。review-r2重新核固定摘要/实际接线，未见新增确定阻断。复核者不操作Mac、不写入、不冒称亲跑。
+
+### 既有有限收口
+
+I026/I027：x264精确官方commit归档848719字节，SHA256 `6eeb82934e69fd51e043bd8c5b0d152839638d1ce7aa4eea65a3fedcf83ff224`，已记录源码/安装配方/无声明补丁。bottle→安装→D重定位重建→签后副本9个有文件字节的命名Mach-O section一致；另外2个zero-fill结构及LINKEDIT不在这些摘要覆盖内，whole-file/loadcommand/signature差异分列，不外推LINKEDIT/可重现编译/许可通过。native/SOURCES的sourceSHA256明确指输入二进制。最终资源独立APFS副本只更新来源JSON及对应清单，不重建/替换19库/2工具。FFmpeg/VMAF沿用原精确归档，Audio旧pitch仍未调用，建议后续先核是否需保留再单独决定，不擅删能力。
+
+I030：批准商品Description中文24字符、英文41字符均≤45，仅待录入材料，不改App说明/正式后台。最小平台建议在既有发行材料：请求发出前持久化有界attempt，真实交易按transactionID单独账本；pending无平台请求ID不能以SKU/时间/同账户猜归属。当前Bool及未匹配状态只在内存，跨进程未知请求保护尚未完成；本轮未改付款代码/重跑25币种/部署服务。
+
+I017：仍未达标；原A/B/A无收益与完整撤回沿用，本轮不重复实验。NODE/PAN改善及ZOOM多数满意的用户事实保持。I012按本次即时入口取证授权另外记录；未取得有效输入就不Return，不扩产品修补。
+
+### 正常候选实测与本轮发现
+
+- aebbcffe正常Release（1280×800pt）实际导入畸形JSON，显示批准摘要；切英文后同一错误按当前语言显示，展开原始DecodingError保持。schemaVersion错误另外分流，未被解析摘要吞掉；3b4普通预设保存逻辑未改，故其故障/冷开证据沿用。
+- 既有真实SwiftF0 399114字节小文件：文件夹入口唯一识别；原位添加后源路径/摘要不变。独立副本新ResourceID `8533C86A…`，非符号链接、inode不同、摘要相同；暂时改名仅本轮专属源目录后，正常App对副本“再次校验文件”通过，随后恢复源目录。不是推理/GPU验收。首次副本提交遇已有QA库路径未重新连接，保留表单/原件，通过现有位置选择器重选同一授权目录后重试成功，无新系统权限修改。
+- 普通App下载确认实际识别上述完整模型，预计0 KB，动作转“查看已有模型”，没有重复任务。新普通下载完成自动登记、旧filesOnly、移除后迟到完成仍为本轮组件＋未受影响的历史下载证据，不冒称本轮重新网络下载。
+- 恢复使用Store生成的合法空QA project.json＋同一真实SwiftF0文件构成的明确合成备份，不声称由本轮App创建备份。正常恢复在32 MiB QA卷因安全空间预检拒绝（卷尚有29 MiB，不等于物理完全写满）；改专属外盘目录后实际生成新项目/准确Models路径并自动进入共用添加表单，无模型文件夹二次选择。原位“添加模型”完成，回执对应本次恢复项；旧Nov6 Preset Retry的聊天摘要仍bda7b7d9…，恢复权重与源相同。恢复不会自行推理。
+- **原生发现并修补拖入**：aebbcffe的Transferable URL路径未进入识别。前两次目标被另一应用盖住，脚本拒发；纠正前后关系后真实Finder源/目标PID匹配、drag pasteboard为public.file-url引用URL，送达后仍无结果。d1fea749改用既有`.onDrop(.fileURL)`数据路径及文件引用URL规范化。只读复核再发现A检查/B provider和关闭期间检查两个时序，fac7329a在接收拖入即推进模型inspection intent、写回前核呈现有效性；不取消已提交复制/登记。新增4项定向反例通过；r1/r3目录URL尾斜杠测试构造失败保留，改为真实目录URL，不删断言。
+- d1中间正常包构建按上述复核主动取消，guarded runner记录cancelled并清理子进程，未交付/运行；fac为新正常构建。当前fac正常包实际Finder拖入仍未进入表单，局部诊断中（未通过）和冷开收尾，aeb图片不能冒称fac新增拖入路径通过。
+- **I012有界取证**：aeb正常App/专属45行历史，sample30处于当前视口sample33上方；启用VO后的即时资格未取得唯一聚焦的Find字段；随后只读观察前台为VoiceOver Quickstart，独立字段读取未返回字段。即时资格脚本exit3，未键入/未Return/未采样，不重复无效入口。旁白已实读关闭、SCIM.ITABC恢复、音量未改，Quickstart正常退出；D可操作，聊天逐字节未变。本组没有合格Find，不判断旧焦点事务根因。下一最小方法是先排除Quickstart入口占用，再经真实Find字段即时核对；新产品修补仍须先审有限差分。
+
+构建中不操作Mac。原始证据统一`AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-model-add-copy`，不提交大trace/私有样本。下列历史三项未批准是当时事实，今天批准不倒写旧回执。
+
 ## 2026-11-06 顾问dc860审计续办（开发交付，待用户接纳）
 
 起点完整交付 `dc8600db76482966d76772bdec1825f7872d3cbb`，参考生产aff734d3；实际祖先检查0、开工索引/工作树干净、Lead唯一写入，未发现待接外部后继。本次产品 **3b4ffcd57481320fc0c8cba3c14ca7f7d2ca2275**，只有ChatConfigurationPanels.swift及现有测试文件；其余为以下现有记录的必要增量。三项待审中文未实施，无B10/付款/性能产品实验。

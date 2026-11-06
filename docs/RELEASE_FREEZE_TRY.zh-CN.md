@@ -35,15 +35,19 @@
 
 当前pending边界（I030）：StoreKit成功批准会通过Transaction.updates交付交易，但本客户端无法把缺少平台身份的pending请求与某条全局更新准确一一对应。交易可验证、落盘并finish，当前进程的unknownPaymentOutcome仍可能保持，Reload不解除未知请求保护，后续打赏仍被禁用。本轮不称继续购买闭环已通过，也不清标记、凭同SKU/时间猜关联或要求重启绕过。appAccountToken的公开语义为账户关联，不未经论证当逐单编号；若后续改关联须先审最小平台方案。服务端账本仅为未来额外识别/回馈承诺的条件项，不是当前首发必建服务。[Apple pending](https://developer.apple.com/documentation/storekit/product/purchaseresult/pending) · [账户关联](https://developer.apple.com/documentation/storekit/product/purchaseoption/appaccounttoken(_:))
 
+I030下一步最小方案（本轮仅调查，未改付款代码）：沿用TipStore和现有私有账本，提交购买前先持久保存有限的请求记录（本机attemptID、商品、bundle/environment、已验证账户范围、dispatching）。保存失败不调用purchase；pending更新该原记录，冷开先恢复未决记录，再消费Transaction.updates。直接success回包才能把捕获的attempt与该已验证transaction.id关联；全局更新只按精确交易ID入账/finish，不能按同SKU、金额、时间或“只有一个未决”认领旧请求。现有unknownPaymentOutcome及两个未完成集合只是内存状态，**尚未完成跨进程未知请求保护**。appTransactionID是同账户/App的稳定范围，不是逐次请求ID；无账户/换账户时不能借别的交易解锁。Apple对pending成功交付updates的说明不能证明拒绝会发交易，空历史/超时也不能证明拒绝。appAccountToken继续为账户语义，不发明逐单用途。
+
+拟议持久化先仅追加已有私有支持记录中的请求状态；交易凭据继续现有Keychain，项目与日志不存凭据。最小验证为提交前写失败、pending冷开、拒绝无事件、同商品异设备/异账户、直接成功与落盘失败、重复updates/finish中断；不重跑既有25组价格测试。当前公开API证据不足以让无身份pending自动解除；若允许用户明确发起另一笔打赏且旧请求仍可能完成，这是另待审的行为取舍。无服务器、无新账号、本轮无正式账户/真实付款。依据：[pending](https://developer.apple.com/documentation/storekit/product/purchaseresult/pending)、[updates](https://developer.apple.com/documentation/storekit/transaction/updates)、[appTransactionID](https://developer.apple.com/documentation/storekit/apptransaction/apptransactionid)、[Ask to Buy](https://developer.apple.com/documentation/storekit/testing-ask-to-buy-in-xcode)、[WWDC25账户token](https://developer.apple.com/videos/play/wwdc2025/249/)。
+
 ### 2026-11-06 审计续办：当前包来源事实（I026/I027）
 
-先核固定 `Nov6-aff734d3/D.app` 与 `dc8600db`，再核最终 `Nov6-Retry-3b4ffcd5/D.app`：7份engine.json、2份runtime-origin及全部引擎文件字节与前包一致（完整Resources比对54,433文件，差异仅10个SwiftPM资源包的Info.plist/签名）；事实表适用于新候选，资源清单摘要仍a85e58b9…。本轮仅聊天预设消费者改变。19库限定为ExternalVideo的 `native/` FFmpeg依赖集，不包括Python及wheel内其他库。`otool -L` 是声明的动态链接边，不是本轮执行模型或观察全部库已加载。完整签后摘要/依赖边留 `run-20261106-audit-followup/external-video-current-facts.json`，大原件仍在原受控目录；不新增永久许可台账。
+前轮dc860审计续办的资源证据：先核 `Nov6-aff734d3/D.app`，再核 `Nov6-Retry-3b4ffcd5/D.app`：7份engine.json、2份runtime-origin及全部引擎文件字节与前包一致（完整Resources比对54,433文件，差异仅10个SwiftPM资源包的Info.plist/签名）；事实表适用于新候选，资源清单摘要仍a85e58b9…。该前轮仅聊天预设消费者改变；本轮aebbcffe另有模型添加/备份/文案及来源登记，最终包资源另验，不由旧版本外推。19库限定为ExternalVideo的 `native/` FFmpeg依赖集，不包括Python及wheel内其他库。`otool -L` 是声明的动态链接边，不是本轮执行模型或观察全部库已加载。完整签后摘要/依赖边留 `run-20261106-audit-followup/external-video-current-facts.json`，大原件仍在原受控目录；不新增永久许可台账。
 
 | 当前组件 | 精确身份、随包字节与来源 | 修改/构建及实际接线 | 缺口与判断边界 |
 |---|---|---|---|
 | ExternalVideo FFmpeg/ffprobe及19库 | 21/21实际签后SHA/长度匹配engine.json；7个FFmpeg自有库+11个外部组件的12库，含libvpx；均arm64 | runtime-origin的输入二进制摘要与签后清单分开。104条非系统链接边均解析到本engine内；无Homebrew绝对依赖。14/14 native许可文件摘要相同 | 不由链接闭合推定许可证/Store通过；ffmpeg/ffprobe/x264/libvpx签名抽查通过，其余签名沿正常整包门禁 |
 | FFmpeg 9.0.1 companion | 既有 `run-20261027-quality-closeout/distribution/ffmpeg-9.0.1.tar.xz`，12,036,420字节，SHA256 `cf38e0e28c7e5605942c4a77755349b0145804a397af37eb1fb4c77cb237f635` | [来源登记](../Backends/Video/Packaging/Licenses/ffmpeg-9.0.1-SOURCE.json)；随包Homebrew配方SHA `c350685d70db3a93a983062d28db5e677f7dc7651ba391a269ad6620b589073f`。prepare_external_video_engine.py校验归档、配方、许可/原始工具，App不内嵌源码归档 | upstream配方参考9989cb08…不是已证installedTapCommit（仍null）；companion须独立交付，其他依赖对应源码不能由此覆盖 |
-| x264 r3222 | 本机安装配方明确源码commit `b35605ace3ddf7c1a5d67a2eb553f034aef41d55`，配方SHA `9165e288b689999b374401c1045a1904102ff279fb534f514d6569fcb608e264`；header为r3222 b35605a/REV_DIFF0 | 安装输入库SHA `e0d737b88c67ac30e8561d9267d10495529cfede1af45838914c0b522c37a26d` 与native/SOURCES及实际runtime-origin相等。既有二进制bottle SHA `b631667b5ad55c6c3ae383484f658c5b4ba14da8a2fbb1d537975695852529ca`，其配方相同 | 未找到对应源码归档/摘要；bottle内库与安装输入字节不同，安装重定位/签名变换未闭合。不能把sourceSHA256（二进制输入）叫源码摘要。最小后续：保存该精确commit的对应源码/修改材料及可核对的安装变换；不以最新源码替代 |
+| x264 r3222 | 本机安装配方明确源码commit `b35605ace3ddf7c1a5d67a2eb553f034aef41d55`，配方SHA `9165e288b689999b374401c1045a1904102ff279fb534f514d6569fcb608e264`；header为r3222 b35605a/REV_DIFF0 | 安装输入库SHA `e0d737b88c67ac30e8561d9267d10495529cfede1af45838914c0b522c37a26d` 与native/SOURCES及实际runtime-origin相等。既有二进制bottle SHA `b631667b5ad55c6c3ae383484f658c5b4ba14da8a2fbb1d537975695852529ca`，其配方相同 | 本轮从该精确官方commit取得848,719字节源码归档，SHA `6eeb82934e69fd51e043bd8c5b0d152839638d1ce7aa4eea65a3fedcf83ff224`；COPYING/configure/Makefile/x264.h及本机配方摘要已保存。bottle→安装输入→按D脚本重定位的独立副本→3b4候选签后库，9个具有文件字节的具名Mach-O section摘要相等；另2个zero-fill section（__common/__bss）的结构及LINKEDIT不由这9项摘要覆盖。加载标识/签名与整体摘要分别记录。此为静态分段及重定位复演，不是历史构建复现，也未闭合所有LINKEDIT/签名差异的来源。sourceSHA256仍指二进制输入；完整许可判断继续开放 |
 | VMAF 3.2.0 | 既有 `run-20261026-appstore-v2/tmp/vmaf-v3.2.0.tar.gz`，18,583,070字节，SHA `a28f93f3b4fa65601be324587072e32a6a704a304ba7b1aec9b70b3f709bc1dc` | code-only输入库SHA `e3de03e30a6b74fa01c1b33dda7a869eea71b879ef5b2e51b336ff4054f350b1` 匹配runtime-origin；构建参数/builtInModels=false见libvmaf-no-models.json | 不能把被替代的Homebrew库当最终输入；其余外部依赖完整源码交付仍分别开放 |
 | Audio / MRT2 | Stable Audio固定 `779434a908193105335fd8d833418603625b2859`，13个vendor文件匹配；MRT2 SDK来源 `694a545e4ba0b88bf1150137b129582166d3e07f`，5/5 provider匹配 | vendor/PROVENANCE.json、vendor/SOURCE.json及MRT2_EXPORT_PROVENANCE.md；仅exported small路径，导出图有执行含义 | Audio没有统一runtime-origin；12个可比provider中11相同。另1个未使用旧pitch副本见下文；代码许可不授模型权利 |
 | Video / Pitch | Wan来源 `87db56a51758fefb748a359b90a5283bb8ba4837`，8个vendor/4个provider匹配；SwiftF0 0.1.2来源 `8e968fe53b818da318d46e14b84b3d0b41192ad1`，2个provider匹配 | PROVENANCE和prepare脚本/补丁随固定源码；实际音高装配使用独立PitchEngine及包内core，权重路径显式传入 | SwiftF0代码MIT、weightLicense=null，权重取得/权利另核；主App双架构不证明这些arm64入口支持Intel |
@@ -52,7 +56,7 @@
 
 其余六引擎46个定向文件与各自engine.json摘要/长度一致，已查原生入口均arm64；不外推未查文件或本轮实际推理。Audio内 `provider/d_pitch_analysis_backend.py` 的旧副本SHA `46c10713e29400f7c16680cc91d9c94d1127e936ec1a9d8becf36ee004f8e513` 仍从modelDirectory/core.py加载；**正常装配不调用它**（BundledAudioEngine/AppSessionFactory使用独立PitchEngine和bundledCore）。这是随包旧文件/来源一致性缺口，本轮不改后端或删能力，不将其报成当前已执行下载代码。上述许可材料存在不等于分发权利通过；专业许可及D自身许可仍由用户另行决定。
 
-模型目录的 18 项、280 条文件记录中含模板、固定计算图和 3 个 ACE 检查点 Python 文件。ACE 准备代码在私有运行视图跳过下载的 Python，执行源码取自校验过的包内 vendor。Wan/ACE 相应权重读取使用 weights_only。包内还含 Wasmtime/WASI 的 Python 分析能力和需要显式许可的远程 MCP，应分别向审核说明其执行边界。
+当前中央目录保留18个可下载项、280条文件记录，另有2个仅本地准备包的LTX2.3兼容项/54条固定文件定义；后两项没有下载动作，不新增后端。可下载记录中含模板、固定计算图和 3 个 ACE 检查点 Python 文件。ACE 准备代码在私有运行视图跳过下载的 Python，执行源码取自校验过的包内 vendor。Wan/ACE 相应权重读取使用 weights_only。包内还含 Wasmtime/WASI 的 Python 分析能力和需要显式许可的远程 MCP，应分别向审核说明其执行边界。
 
 本机支付记录与开发者对账分开。五档客户端接线不代表商店商品已创建。平台关于消费型历史的说明、沙盒账户检验、正式商品字段及分发配置分别见 [Apple 消费型历史](https://developer.apple.com/documentation/bundleresources/information-property-list/skincludeconsumableinapppurchasehistory)、[沙盒测试](https://developer.apple.com/help/app-store-connect/test-in-app-purchases/overview-of-testing-in-sandbox/)、[商品信息](https://developer.apple.com/help/app-store-connect/reference/in-app-purchases-and-subscriptions/in-app-purchase-information)、[分发描述文件](https://developer.apple.com/help/account/provisioning-profiles/create-an-app-store-provisioning-profile)。正式隐私材料以实际收集方、目的及保留政策为准。[App 隐私披露](https://developer.apple.com/app-store/app-privacy-details/)
 
@@ -72,14 +76,14 @@
 | 4 / `d.tip.tier4` | Consumable / D Tip Tier 4 | 50 | 50 | 50 | 5000 | 50 |
 | 5 / `d.tip.tier5` | Consumable / D Tip Tier 5 | 100 | 100 | 100 | 10000 | 100 |
 
-五档拟定显示名可复用已批准语言资源的 `tips.title`。App内完整说明 `tips.body` 保持不变，但英文超过App Store Connect商品Description的45字符限制，不能原样录入。后台专用短说明草稿为中文“支持D的开发，不解锁功能。”、英文“Support D. Does not unlock features.”；仅供用户/顾问审阅，尚未批准或录入，也不替换App文案。显示名30字符、说明45字符的字段限制及实际后台读回均须分别核对。[Apple商品字段要求](https://developer.apple.com/help/app-store-connect/reference/in-app-purchases-and-subscriptions/in-app-purchase-information)
+五档拟定显示名可复用已批准语言资源的 `tips.title`。App内完整说明 `tips.body` 保持不变，但英文超过App Store Connect商品Description的45字符限制，不能原样录入。2026-11-06本轮批准的商品Description为中文“感谢你支持 D 的开发！软件免费，打赏完全自愿。”（24字符）；对应英文“Thank you! D is free. Tips are voluntary.”（41字符）。均低于45字符；保留感谢、软件免费和自愿三项语义，只准备待录入材料，未创建正式商品或写入后台，不替换App内付款边界说明。显示名30字符、说明45字符的字段限制及实际后台读回均须分别核对。[Apple商品字段要求](https://developer.apple.com/help/app-store-connect/reference/in-app-purchases-and-subscriptions/in-app-purchase-information)
 
 各商品ID不含货币或金额，单次只选一档，经系统确认付款。客户端不会把本表用作显示价格；真实 `Product.displayPrice` 缺失时只显示获取失败。
 
 | 待录入字段 / 页面 | 已准备 | 尚缺/后续最小动作 |
 |---|---|---|
 | App本体价格 | 免费已决定 | 获准后由有权账户在App定价页配置并读回 |
-| In-App Purchases：5个商品 | 上述ID、消费型、参考名、已批准App标题/说明；后台短说明为待审草稿 | 确认短说明、真实App记录/商品ID与字段可用，创建5个商品并读回；本轮不执行 |
+| In-App Purchases：5个商品 | 上述ID、消费型、参考名、已批准App标题/说明；后台短说明已由用户批准、仅待录入 | 按已批准短说明录入、真实App记录/商品ID与字段可用，创建5个商品并读回；本轮不执行 |
 | Price Schedule：基准地区 | 推荐美国/USD五档作为自动定价基准 | 账户持有人确认销售地区；逐档读取精确可用price point，不可用则报具体差异，不取近似值 |
 | 手动价格地区 | GBP英国、JPY日本、CNY中国大陆；所有获准EUR及其他USD地区均使用本表数字 | 最终销售地区未定，所有指定币种须按实际获准storefront逐一登记；不能把“EUR”作为单一地区或把语言当地区 |
 | 其他获准地区 | USD基准自动定价 | 读取Apple生成价表；指定币种人工价格优先，不自动覆盖 |
@@ -122,3 +126,5 @@ Apple允许按基准地区自动生成其他地区价格，也可逐storefront�
 **本版尚无真实原生图。** CUA读取Finder明确报告Mac已锁定、自动解锁未成功；Agent立即停止相应GUI，未启动候选、未轮询或改变权限。全宿主事件测试另停在key-window前置、零事件，两者各自记录。不能用旧截图、构建或离屏检查替代同版原生验收。
 
 [唯一合并待验清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)列明新布局静态自检、遮挡命中/双向连线、明确目标→非模型执行→保存冷开，以及连续拖动手感的步骤、预期和已验部分。Agent负责尚缺的确定性检查；用户集中观察体验，不逐项催验。详细失败与版本证据见[任务R16](tasks/UI-PRESENTATION-REBUILD-01.md#r16节点工作面分层与入口归位2026-10-10)。旧R15真实截图与性能证据保留在任务记录，不能当成本版图。F26继续延期。
+
+本轮最终a9dc46dd正常候选复核：ExternalVideo同一21项实包字节/长度与fac/aeb/旧3b4相同，来源JSON更新不改变库/工具；资源清单e66db1da…，主执行文件43491706…，正常签名/零权重门禁通过。`run-20261106-model-add-copy/external-video-a9dc46dd-comparison.json`保留准确对应。仅静态分发事实，不是动态加载、模型运行或许可通过。
