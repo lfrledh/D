@@ -1,6 +1,6 @@
 # 本地候选与发行复现材料
 
-2026-11-04 · COPY-B9-RELEASE-CLOSEOUT-20261104-r1。唯一实际版本和启动入口见[当前行动](CURRENT_ACTIONS.zh-CN.md)，不是下方历史R16包。当前仅Apple Development签名的完整沙盒Release；不是Mac App Store分发、提审或发行通过。
+2026-11-06 · 已批准12项文案、五档打赏及有限工程收口。唯一实际版本和启动入口见[当前行动](CURRENT_ACTIONS.zh-CN.md)，不是下方历史R16包。当前仅Apple Development签名的完整沙盒Release；不是Mac App Store分发、提审或发行通过。
 
 ## 当前可复现路径与证据等级
 
@@ -8,12 +8,12 @@
 2. 无模型时仍可打开项目/查看已有资产；选择真实目录条目后取得/校验/登记与执行就绪分开显示。审核者需要自有可用资源及相应第三方资格，不能用固定回复冒充推理。
 3. 用独立项目验证Quick/工作流、输入/Undo、保存冷开。Qwen9B Q4停止前缀与准确步骤保存失败→只保存恢复已有正常App证据；沿用版本见任务归档，不外推全部模型/配置。
 4. 低内存方式保持同一准确权重，默认询问；拒绝不推理，同意一次不改默认，已记住选择可撤销。不同模型原始精度/变体的实模证据分别见矩阵。
-5. 帮助“支持开发者…”及设置“打赏支持”共用面板。普通Release无正式商品，不能付款；本地Xcode配置只作测试，不是商店账户/跨设备验收。
+5. 帮助“支持开发者…”及设置“打赏支持”共用面板。11月6日已批准免费本体与五档消费型打赏，客户端使用稳定拟定商品ID；正式后台尚未创建/核验，获取不到时不显示虚构价格。本地Xcode配置只作测试，不是商店账户/跨设备验收。
 6. 干净配置/独立容器不等于另一台干净Mac；Intel、Store签名安装/升级、正式账号及系统强制批准仍按D-I024记录，不清用户模型/权限制造首次使用。
 
 ## 支持记录的数据流与隐私事实
 
-本轮客户端已实施并有15组件/2本地Xcode方法验证的方案（正式账户/跨设备仍未验）：StoreKit验证结果→应用/环境/交易去重→逐笔时间、实际Decimal金额及币种、应用范围匿名账户、退款/撤销→应用私有账本；原签名凭据进本机、不云同步的Keychain。创作项目、公开日志和截图不含这些记录。未知金额/身份保留未知，不用商品现价或名称倒推；不跨币种加总，也无积分/余额/会员权益。
+既有客户端已实施、历史15组件/2本地Xcode方法验证的方案（正式账户/跨设备仍未验）：StoreKit验证结果→应用/环境/交易去重→逐笔时间、实际Decimal金额及币种、应用范围匿名账户、退款/撤销→应用私有账本；原签名凭据进本机、不云同步的Keychain。创作项目、公开日志和截图不含这些记录。未知金额/身份保留未知，不用商品现价或名称倒推；不跨币种加总，也无积分/余额/会员权益。
 
 配置了商品时，启动/面板打开/返回应用有限读取`AppTransaction.shared`与`Transaction.all`；不轮询、不自动`refresh`/`AppStore.sync`触发账户认证。每次重新核对先撤销可展示账户范围，旧本地文件不能自行认领给新账户；离线失败保留原记录。已验证历史恢复不再次购买或发放权益。新购买在凭据和账本落盘后finish；失败只恢复同一交易。历史同步状态与支付状态独立。
 
@@ -27,7 +27,7 @@
 |---|---|---|---|
 | D1 · 依赖分发、D 自有代码的许可与公开范围，由用户与许可顾问决定 | 优先保留当前编码与推理能力。按实际二进制补足可获取的完整对应源码、构建/修改说明，逐组件核对再分发及商店条件。评审演示下载数据如何由固定包内代码使用。 | 经批准替换特定编码器或取得相应第三方权利，需要重新验证格式、画质和跨机支持，可能产生许可成本。D 自有代码是否公开单独决定。 | 商店分发许可和运行方式核准（I026/027/031） |
 | D2 · 支持记录的正式保证，由用户决定，Lead 验证平台 | 先验证同一沙盒账户在两台 Mac 的购买、恢复、退款及切换账户，按已验证范围展示记录。保留本地跨进程恢复证据与自动退款零通知记录。 | 如承诺开发者侧对账，需另批最小签名验证/幂等账本，选择地区、负责人、预算、保留期限、删除与备份责任。仅传必要交易/环境/退款字段，另做身份验证。 | 跨设备或开发者侧保证及正式 IAP（I028/030） |
-| D3 · App 售价及可选打赏商品，由用户定金额和地区 | 两项分开选择。打赏推荐先一档消耗型，文案“支持早期开发 / Support early development”，价格取 StoreKit。需要正式稳定商品 ID、参考名、类型、本地化、基础地区及价格档、销售地区、审核截图和说明。 | 多档增加本地化、定价及退款验证成本。现有本地 SKU 与生产隔离。创作功能独立于交易。 | 正式核价、商品配置及购买审核（I030） |
+| D3 · 本体免费、五档打赏金额已批准；销售地区及后台操作仍待对应授权 | 使用下方五档待录入表；界面价格只取StoreKit。消费型可重复购买，不解锁功能。本轮暂不做自定义金额。 | USD为自动定价基准；已指定币种逐地区人工覆盖，不以界面语言推定storefront，不暗改不支持的精确价格点。 | 后台字段/地区/精确价格点读回、商品配置及购买审核（I030），不再等待售价或自定义金额决定 |
 | D4 · 公开主体与支持承诺，由用户/顾问确认 | 按准确模型/精度和已测硬件填写能力，将尚缺的演示列入验证。提供真实支持与隐私 URL、联系主体、地区、年龄/内容及出口加密信息。审核路径采用可合法使用的合成输入、导入、保存、冷开，有权使用的准确模型再验证生成。 | 扩大支持硬件/地区需要相应设备、资源和支持成本。隐私材料分别描述本机项目、Speech、搜索词/所访网页、MCP 许可服务、模型下载和 StoreKit，外部账本会改变申报与维护。 | 公开材料、隐私披露及正式审核范围（I022/028/029） |
 | D5 · 正式发行操作，由账户持有人授权 | 用显式正式 App ID、匹配的 Mac App Store 配置与分发签名验证 Archive、安装、升级、恢复。每一步分别记录对应制品与结果。 | 可由有资格的账户管理员配置证书/描述文件或使用获准自动签名。需要相应账号角色、测试设备和审核时间。 | main 接纳、标签、上传、提审、发布各需独立授权（I024/025） |
 
@@ -35,11 +35,37 @@
 
 模型目录的 18 项、280 条文件记录中含模板、固定计算图和 3 个 ACE 检查点 Python 文件。ACE 准备代码在私有运行视图跳过下载的 Python，执行源码取自校验过的包内 vendor。Wan/ACE 相应权重读取使用 weights_only。包内还含 Wasmtime/WASI 的 Python 分析能力和需要显式许可的远程 MCP，应分别向审核说明其执行边界。
 
-本机支付记录与开发者对账分开。普通候选的商品名单为空。平台关于消费型历史的说明、沙盒账户检验、正式商品字段及分发配置分别见 [Apple 消费型历史](https://developer.apple.com/documentation/bundleresources/information-property-list/skincludeconsumableinapppurchasehistory)、[沙盒测试](https://developer.apple.com/help/app-store-connect/test-in-app-purchases/overview-of-testing-in-sandbox/)、[商品信息](https://developer.apple.com/help/app-store-connect/reference/in-app-purchases-and-subscriptions/in-app-purchase-information)、[分发描述文件](https://developer.apple.com/help/account/provisioning-profiles/create-an-app-store-provisioning-profile)。正式隐私材料以实际收集方、目的及保留政策为准。[App 隐私披露](https://developer.apple.com/app-store/app-privacy-details/)
+本机支付记录与开发者对账分开。五档客户端接线不代表商店商品已创建。平台关于消费型历史的说明、沙盒账户检验、正式商品字段及分发配置分别见 [Apple 消费型历史](https://developer.apple.com/documentation/bundleresources/information-property-list/skincludeconsumableinapppurchasehistory)、[沙盒测试](https://developer.apple.com/help/app-store-connect/test-in-app-purchases/overview-of-testing-in-sandbox/)、[商品信息](https://developer.apple.com/help/app-store-connect/reference/in-app-purchases-and-subscriptions/in-app-purchase-information)、[分发描述文件](https://developer.apple.com/help/account/provisioning-profiles/create-an-app-store-provisioning-profile)。正式隐私材料以实际收集方、目的及保留政策为准。[App 隐私披露](https://developer.apple.com/app-store/app-privacy-details/)
 
 本机最低部署目标 macOS 26.2，开发签名和主程序两架构有本地产物证据。每个引擎/硬件的可承诺范围见[精确模型矩阵](RELEASE_MODEL_MATRIX.zh-CN.md)。
 
 正式商店截图必须来自最终正常候选；现有截图用于本地审阅。新支持同步说明是实现所需最小双语草稿，随实际语言资源交用户/顾问审阅，不扩整批文案。
+
+## 五档打赏：App Store Connect待录入表（2026-11-06用户批准）
+
+下列ID为与客户端一致的拟定ID，**尚未在正式商店创建或读回**。软件本体免费；五档均为Consumable，无权益、余额或订阅；自定义金额本轮暂不实施。未进行后台写入、签协议、真实付款或上传。
+
+| 档位 / 拟定稳定商品ID | 类型 / 参考名称 | USD | EUR | GBP | JPY | CNY |
+|---|---|---:|---:|---:|---:|---:|
+| 1 / `d.tip.tier1` | Consumable / D Tip Tier 1 | 1 | 1 | 1 | 100 | 5 |
+| 2 / `d.tip.tier2` | Consumable / D Tip Tier 2 | 5 | 5 | 5 | 500 | 10 |
+| 3 / `d.tip.tier3` | Consumable / D Tip Tier 3 | 10 | 10 | 10 | 1000 | 20 |
+| 4 / `d.tip.tier4` | Consumable / D Tip Tier 4 | 50 | 50 | 50 | 5000 | 50 |
+| 5 / `d.tip.tier5` | Consumable / D Tip Tier 5 | 100 | 100 | 100 | 10000 | 100 |
+
+五档拟定显示名/说明复用已批准语言资源的 `tips.title`、`tips.body`；不新增收费承诺或宣传文案。各商品ID不含货币或金额，单次只选一档，经系统确认付款。客户端不会把本表用作显示价格；真实 `Product.displayPrice` 缺失时只显示获取失败。
+
+| 待录入字段 / 页面 | 已准备 | 尚缺/后续最小动作 |
+|---|---|---|
+| App本体价格 | 免费已决定 | 获准后由有权账户在App定价页配置并读回 |
+| In-App Purchases：5个商品 | 上述ID、消费型、参考名、已批准双语标题/说明 | 确认真实App记录/商品ID可用，创建5个商品；本轮不执行 |
+| Price Schedule：基准地区 | 推荐美国/USD五档作为自动定价基准 | 账户持有人确认销售地区；逐档读取精确可用price point，不可用则报具体差异，不取近似值 |
+| 手动价格地区 | GBP英国、JPY日本、CNY中国大陆；所有获准EUR及其他USD地区均使用本表数字 | 最终销售地区未定，所有指定币种须按实际获准storefront逐一登记；不能把“EUR”作为单一地区或把语言当地区 |
+| 其他获准地区 | USD基准自动定价 | 读取Apple生成价表；指定币种人工价格优先，不自动覆盖 |
+| 商品审核/可销售状态 | 可从最终正常候选取得面板截图；无权益说明已有 | 真实主体、账号角色、协议、税务/银行、销售地区、审核图与说明仍须对应步骤，不填虚假资料 |
+| 平台验证 | 本地五档配置与正式ID隔离 | 正式商品/地区价格读回、沙盒账户和跨设备仍未验；本地StoreKit与格式夹具不替代 |
+
+Apple允许按基准地区自动生成其他地区价格，也可逐storefront人工覆盖；人工覆盖后的地区需自行维护。精确可用价格点须从授权后台读取。[官方定价说明](https://developer.apple.com/help/app-store-connect/manage-in-app-purchases/set-a-price-for-an-in-app-purchase/) 本地StoreKit配置金额只是测试占位值，虽能按storefront格式显示，但不连接正式price point。[官方本地测试说明](https://developer.apple.com/documentation/xcode/setting-up-storekit-testing-in-xcode)
 
 ## 历史R16试用记录（原事实保留，不作当前入口）
 

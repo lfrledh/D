@@ -116,6 +116,8 @@ Qwen视频由当前后端按2fps取帧，超过maximumVideoFrames预算报错，
 
 ## 已批准文案覆盖索引
 
+2026-11-06接续12项：`chat.import.*`→导入Controller/文件入口；`workflow.language.tools.*`→选区/接口/保存原因；`language.import.* / language.diagnostic.*`→动态语言诊断与折叠详情；`chat.config.export* / chat.organization.presets.import*`→全部聊天预设导出及预览/保存门禁；`refinement.settings.cacheNote`→既有目录准入；`tips.*`→商品/付款/记录独立状态。用户已批准12项及五档价格；最终aff734d3交付：49 UI+12 Workbench定向通过，标题漏键修后19项语言复跑；普通App及本地StoreKit按任务逐项表分级，正式支付未验。唯一新增必要缺档摘要为`tips.partial`，待集中文案审阅。这里不复制语言正文或另建术语表。
+
 本表只定位正式资源和代码，不复制译文；正文唯一来源为 `Packages/UI/Sources/UI/Resources/Localization/{zh-Hans,en}.json`。动态键按实际调用核对，未审文案归D-I013。下方“验证”仅适用对应回执路径。
 
 | 模块 | 键范围／代码入口 | 状态与版本 | 例外／证据 |
