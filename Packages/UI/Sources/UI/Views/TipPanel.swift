@@ -44,6 +44,7 @@ struct TipPanel: View {
             if ![.idle, .available].contains(owner.catalogStatus) {
                 Text(text(owner.catalogStatus.rawValue)).font(.callout).accessibilityIdentifier("tip-catalog-status")
             }
+            if owner.capacityLimitReached { Text(text("records.capacity")).font(.callout) }
             if owner.status != .idle { Text(text(owner.status.rawValue)).font(.callout).accessibilityIdentifier("tip-status") }
             if owner.recoveryStatus == .loading {
                 Text(text("records.loading")).font(.caption).accessibilityIdentifier("tip-record-sync")
@@ -68,7 +69,7 @@ struct TipPanel: View {
                     .accessibilityIdentifier("tip-reload")
                 if owner.needsRetrySave {
                     Button(workflowText(language, "chat.retrySave")) { owner.retrySave() }
-                        .disabled(owner.status == .purchasing).accessibilityIdentifier("tip-retry-save")
+                        .disabled(!owner.canRetrySave).accessibilityIdentifier("tip-retry-save")
                 }
                 Spacer()
                 if let product = owner.selectedProduct {

@@ -188,7 +188,8 @@ private final class TipStoreKitBundle: NSObject { }
         let pending = try #require(session.allTransactions().last)
         let checkpoint: [String: Any] = ["pid": ProcessInfo.processInfo.processIdentifier,
             "bundleID": Bundle.main.bundleIdentifier ?? "", "created": Date().timeIntervalSince1970,
-            "attemptID": id, "productID": try #require(store.selectedID), "platformTestIdentifier": pending.identifier]
+            "attemptID": id, "productID": try #require(store.selectedID),
+            "scope": try #require(request["scope"] as? [String: Any]), "platformTestIdentifier": pending.identifier]
         try JSONSerialization.data(withJSONObject: checkpoint).write(to: file, options: .atomic)
         prepared = true
         print("TIP_PENDING_PREPARE pid=\(ProcessInfo.processInfo.processIdentifier) attempt=\(id) durablePending=true")
@@ -213,6 +214,11 @@ private final class TipStoreKitBundle: NSObject { }
         try #require(store.status == .pending && !store.canPurchase)
         let initial = try attemptRecords(journal)
         try #require(initial.count == 1 && initial[attemptID]?["phase"] as? String == "pending")
+        try #require(initial[attemptID]?["productID"] as? String == checkpoint["productID"] as? String)
+        let scope = try #require(initial[attemptID]?["scope"] as? [String: String])
+        let previousScope = try #require(checkpoint["scope"] as? [String: String])
+        try #require(scope == previousScope && scope["bundleID"] == Bundle.main.bundleIdentifier)
+        try #require(scope["environment"] == AppStore.Environment.xcode.rawValue && scope["accountID"]?.isEmpty == false)
         await store.loadProducts(); store.selectedID = checkpoint["productID"] as? String
         try #require(store.localTest && !store.canPurchase)
         // The local test knows which platform request it approved. D's production
@@ -223,11 +229,20 @@ private final class TipStoreKitBundle: NSObject { }
         #expect(receipts.values.first?["transactionID"] as? String == String(identifier))
         #expect(after[attemptID]?["phase"] as? String == "pending" && after[attemptID]?["receiptKey"] == nil)
         #expect(!store.canPurchase && session.allTransactions().count == 1)
-        var exactUnfinished = false
-        for await result in Transaction.unfinished {
-            if case .verified(let transaction) = result, transaction.id == UInt64(identifier) { exactUnfinished = true }
+        var exactUnfinished = true, unfinishedCount = 0, unverifiedCount = 0
+        for index in 0..<20 {
+            exactUnfinished = false; unfinishedCount = 0; unverifiedCount = 0
+            for await result in Transaction.unfinished {
+                unfinishedCount += 1
+                switch result {
+                case .verified(let transaction): if transaction.id == UInt64(identifier) { exactUnfinished = true }
+                case .unverified: unverifiedCount += 1
+                }
+            }
+            if unfinishedCount == 0 { break }
+            if index < 19 { try await Task.sleep(for: .milliseconds(100)) }
         }
-        #expect(!exactUnfinished)
+        #expect(!exactUnfinished && unfinishedCount == 0 && unverifiedCount == 0)
         print("TIP_PENDING_RECOVER oldPID=\(previousPID) pid=\(ProcessInfo.processInfo.processIdentifier) exactRequestRetained=true globalReceiptPersisted=true anonymousPendingStillProtected=true")
         session.clearTransactions(); removeTestRecords(root); try FileManager.default.removeItem(at: file)
     }

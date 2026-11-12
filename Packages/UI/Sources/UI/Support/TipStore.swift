@@ -152,7 +152,9 @@ public enum TipProducts {
         if unmatchedPurchaseKey != nil { return .recorded }
         return nil
     }
-    public var canPurchase: Bool { selectedProduct != nil && !purchasing && !loading && recoveryStatus == .ready && journalIssue == nil && !hasUnresolvedPayment && (!expectsLocalTest || localTest) }
+    public var capacityLimitReached: Bool { journal.count >= 4096 || attempts.count >= 1024 }
+    public var canRetrySave: Bool { needsRetrySave && !purchasing }
+    public var canPurchase: Bool { !capacityLimitReached && selectedProduct != nil && !purchasing && !loading && recoveryStatus == .ready && journalIssue == nil && !hasUnresolvedPayment && (!expectsLocalTest || localTest) }
     public func purchase(confirmIn window: NSWindow) async {
         guard canPurchase, let product = selectedProduct else { return }
         var attempt: UUID?
@@ -275,6 +277,7 @@ public enum TipProducts {
     /// A prepared record is known not to have reached StoreKit. A dispatch
     /// marker is conservative: the API may have received the request.
     func preparePurchase(productID: String) throws -> UUID {
+        guard !capacityLimitReached else { throw TipIssue.journalTooLarge }
         guard !purchasing, !hasUnresolvedPayment, let scope = verifiedScope,
               allowedIDs.contains(productID), validEnvironment(scope.environment) else { throw TipIssue.invalidTransaction }
         let id = UUID()
@@ -323,7 +326,7 @@ public enum TipProducts {
         persistProtection(); status = protectedPaymentStatus ?? .idle
     }
     private func associateVerified(_ fact: TipReceipt, purchase: UUID) throws {
-        _ = try preparedRecord(fact)
+        _ = try validatedReceipt(fact)
         guard purchaseID == purchase, let attempt = attempts[purchase.uuidString],
               attempt.productID == fact.productID, attempt.scope.bundleID == fact.bundleID,
               attempt.scope.environment == fact.environment,
@@ -410,14 +413,17 @@ public enum TipProducts {
         }
         return try recordVerified(fact)
     }
-    private func preparedRecord(_ fact: TipReceipt) throws -> [String: TipReceipt] {
+    private func validatedReceipt(_ fact: TipReceipt) throws -> TipReceipt {
         guard journalIssue == nil else { throw TipIssue.invalidJournal }
         guard allowedIDs.contains(fact.productID), fact.bundleID == bundleID,
               !fact.transactionID.isEmpty, validEnvironment(fact.environment),
               fact.amount.map({ !$0.isNaN && $0 >= 0 }) ?? true else { throw TipIssue.invalidTransaction }
         try fact.validateRefundSnapshot()
         let old = journal[fact.key]
-        let merged = try old?.merging(fact, currentSnapshotVerified: verifiedJournalKeys.contains(fact.key)) ?? fact
+        return try old?.merging(fact, currentSnapshotVerified: verifiedJournalKeys.contains(fact.key)) ?? fact
+    }
+    private func preparedRecord(_ fact: TipReceipt) throws -> [String: TipReceipt] {
+        let merged = try validatedReceipt(fact)
         var next = journal; next[fact.key] = merged
         let data = try JSONEncoder().encode(next)
         guard data.count <= 2_097_152, next.count <= 4096 else { throw TipIssue.journalTooLarge }

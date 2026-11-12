@@ -227,6 +227,36 @@ import Testing
         #expect(cold.hasUnresolvedPayment && cold.attempts[id.uuidString]?.phase == .cancelled)
     }
 
+    @Test func fullReceiptLedgerRejectsNewPurchaseButRetainsAlreadyReturnedExactAssociation() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-full-receipts-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent("tips.json")
+        var old: [String: TipReceipt] = [:]
+        for index in 0..<4095 { let receipt = fact("initial-\(index)"); old[receipt.key] = receipt }
+        try JSONEncoder().encode(old).write(to: url)
+        let value = owner(url), gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
+        let attempt = try begin(value)
+        // A different verified update fills the last receipt slot while purchase is in flight.
+        _ = try value.recordVerified(fact("other-last-slot"))
+        let direct = detailed("captured-after-full"), before = try Data(contentsOf: url)
+        var finished = false
+        await value.acceptVerified(direct, purchase: attempt) { finished = true }
+        #expect(!finished && value.status == .uncertain && value.capacityLimitReached)
+        let saved = try JSONDecoder().decode(TipJournal.self, from: Data(contentsOf: url))
+        #expect(saved.receipts.count == 4096 && saved.receipts[direct.key] == nil)
+        #expect(saved.attempts[attempt.uuidString]?.phase == .awaitingRecord)
+        #expect(saved.attempts[attempt.uuidString]?.receiptKey == direct.key)
+        #expect(try Data(contentsOf: url) != before, "The direct association is preserved despite receipt capacity")
+        let cold = owner(url), next = cold.beginRecovery(); try cold.acceptScope(scope("A"), generation: next)
+        cold.endRecovery(generation: next, succeeded: true)
+        let protected = try Data(contentsOf: url)
+        #expect(throws: (any Error).self) { try cold.preparePurchase(productID: "d.localtest.tip.small") }
+        #expect(cold.hasUnresolvedPayment && !cold.canPurchase && cold.capacityLimitReached)
+        #expect(try Data(contentsOf: url) == protected && cold.attempts.count == 1)
+    }
+
     @Test func requestCapacityAndUnknownJournalVersionNeverDiscardProtection() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-bound-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
