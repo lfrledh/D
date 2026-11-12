@@ -196,7 +196,7 @@ private final class TipStoreKitBundle: NSObject { }
         // No finish/clear/reset; the next host reads this exact request and platform session.
     }
 
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_STOREKIT_COLD_STAGE"] == "pending-recover"))
+    @Test(.enabled(if: ["pending-recover", "pending-refresh"].contains(ProcessInfo.processInfo.environment["D_STOREKIT_COLD_STAGE"] ?? "")))
     func coldPendingRequestRecover() async throws {
         let file = try coldCheckpoint(), root = file.deletingPathExtension().appendingPathExtension("request")
         let checkpoint = try journalObject(file), previousPID = try #require(checkpoint["pid"] as? Int)
@@ -208,8 +208,12 @@ private final class TipStoreKitBundle: NSObject { }
         let identifier = try #require((checkpoint["platformTestIdentifier"] as? NSNumber)?.uintValue)
         let configuration = try #require(Bundle(for: TipStoreKitBundle.self).url(forResource: "Tips", withExtension: "storekit"))
         let session = try SKTestSession(contentsOf: configuration) // No reset, clear, or new purchase.
+        let approvedHistory = ProcessInfo.processInfo.environment["D_STOREKIT_COLD_STAGE"] == "pending-refresh"
         let retained = session.allTransactions().contains { $0.identifier == identifier && $0.productIdentifier == checkpoint["productID"] as? String }
         try #require(retained, "Platform cross-host precondition failed; never substitute another transaction")
+        if approvedHistory {
+            try #require(session.allTransactions().contains { $0.identifier == identifier && $0.state == .purchased }, "History recovery requires the previously approved platform transaction")
+        }
         let store = owner(root), journal = root.appendingPathComponent("tips.json")
         try #require(store.status == .pending && !store.canPurchase)
         let initial = try attemptRecords(journal)
@@ -225,7 +229,7 @@ private final class TipStoreKitBundle: NSObject { }
         try #require(store.localTest && !store.canPurchase)
         // The local test knows which platform request it approved. D's production
         // listener is deliberately not given that test-only association.
-        try session.approveAskToBuyTransaction(identifier: identifier)
+        if !approvedHistory { try session.approveAskToBuyTransaction(identifier: identifier) }
         for _ in 0..<100 {
             if (try? receiptRecords(journal))?.count == 1 { break }
             try await Task.sleep(for: .milliseconds(50))
@@ -259,7 +263,7 @@ private final class TipStoreKitBundle: NSObject { }
             if index < 19 { try await Task.sleep(for: .milliseconds(100)) }
         }
         try #require(!exactUnfinished && unfinishedCount == 0 && unverifiedCount == 0)
-        print("TIP_PENDING_RECOVER oldPID=\(previousPID) pid=\(ProcessInfo.processInfo.processIdentifier) exactRequestRetained=true globalReceiptPersisted=true anonymousPendingStillProtected=true")
+        print("TIP_PENDING_RECOVER oldPID=\(previousPID) pid=\(ProcessInfo.processInfo.processIdentifier) route=\(approvedHistory ? "approved-history" : "approval-after-start") exactRequestRetained=true globalReceiptPersisted=true anonymousPendingStillProtected=true")
         session.clearTransactions(); removeTestRecords(root); try FileManager.default.removeItem(at: file)
     }
 
