@@ -60,6 +60,7 @@ class EnginePackagingTests(unittest.TestCase):
         (self.site / "setuptools-1.dist-info").mkdir()
         self.provider.mkdir()
         (self.provider / "d_audio_backend.py").write_text("# backend", encoding="utf-8")
+        (self.provider / "d_audio_access.py").write_text("# access", encoding="utf-8")
         (self.provider / "d_audio_contract.py").write_text("# contract", encoding="utf-8")
         (self.provider / "d_audio_sa3.py").write_text("# sa3", encoding="utf-8")
         self.vendor.mkdir()
@@ -147,6 +148,24 @@ class EnginePackagingTests(unittest.TestCase):
     def test_missing_interpreter_is_refused(self) -> None:
         (self.python_root / "bin/python3.12").unlink()
         self.assert_rejected(self.base / "bad-interpreter")
+
+    def test_provider_closure_excludes_independent_engines_without_changing_sources(self) -> None:
+        for name in ("d_pitch_analysis_backend.py", "d_audio_mrt2.py", "d_singing_backend.py"):
+            (self.provider / name).write_text("# independent engine", encoding="utf-8")
+        before = digest_tree(self.provider)
+        output = self.base / "bounded-provider"
+        result = self.run_cli(output)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        expected = {"d_audio_backend.py", "d_audio_access.py", "d_audio_contract.py", "d_audio_sa3.py"}
+        self.assertEqual({p.name for p in (output / "provider").iterdir()}, expected)
+        manifest = json.loads((output / "engine.json").read_text(encoding="utf-8"))
+        self.assertEqual({p["path"] for p in manifest["files"] if p["path"].startswith("provider/")},
+                         {"provider/" + p for p in expected})
+        self.assertEqual(digest_tree(self.provider), before)
+
+    def test_missing_imported_access_provider_is_refused(self) -> None:
+        (self.provider / "d_audio_access.py").unlink()
+        self.assert_rejected(self.base / "missing-access")
 
     def test_unknown_site_component_is_refused(self) -> None:
         (self.site / "plugin").mkdir()

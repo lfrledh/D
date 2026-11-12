@@ -279,9 +279,11 @@ def prepare(args: argparse.Namespace) -> None:
     if not stdlib.is_dir() or stdlib.is_symlink() or not (stdlib / "LICENSE.txt").is_file() or not (stdlib / "encodings/__init__.py").is_file():
         raise PackagingError("python-root must contain lib/python3.12/LICENSE.txt and encodings/__init__.py")
     _validate_tree(stdlib, "stdlib", skip=True)
-    required_provider = ("d_audio_backend.py", "d_audio_contract.py", "d_audio_sa3.py")
+    # AudioEngine's SA3 entry imports exactly this local closure. Other audio
+    # engines have independently packaged providers and must not leak in here.
+    required_provider = ("d_audio_backend.py", "d_audio_access.py", "d_audio_contract.py", "d_audio_sa3.py")
     if any(not (provider / name).is_file() for name in required_provider):
-        raise PackagingError("provider-directory must contain d_audio_backend.py, d_audio_contract.py, and d_audio_sa3.py")
+        raise PackagingError("provider-directory must contain " + ", ".join(required_provider))
 
     staging: Path | None = None
     try:
@@ -291,7 +293,9 @@ def prepare(args: argparse.Namespace) -> None:
         shutil.copy2(interpreter, target_python / "bin" / "python3")
         _copy_tree(stdlib, target_python / "lib" / "python3.12", exclude_site_packages=True)
         _copy_site_packages(site_packages, target_python / "lib" / "python3.12" / "site-packages")
-        _copy_tree(provider, staging / "provider")
+        (staging / "provider").mkdir()
+        for name in required_provider:
+            shutil.copy2(provider / name, staging / "provider" / name)
         _copy_tree(vendor, staging / "vendor")
         _copy_tree(manifests, staging / "model-manifests")
         manifest = _manifest(staging)
