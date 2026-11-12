@@ -2240,7 +2240,7 @@
     "chat.questionMaterials": "Materials supplied with this question",
     "chat.sourceOriginal": "View original",
     "chat.noQuestionMaterials": "No materials recorded for this question.",
-    "chat.sourceHistoryNote": "For more conversation context and memory sources, view “The content and settings sent for this request”.",
+    "chat.sourceHistoryNote": "For more conversation context and memory sources, view “What was sent and its settings”.",
     "chat.importedSourcesUnavailable": "No local execution sources were recorded for this imported answer.",
     "chat.noSourceSelection": "No answer selected",
     "chat.chooseAnswerSources": "Choose Sources from an answer's actions.",

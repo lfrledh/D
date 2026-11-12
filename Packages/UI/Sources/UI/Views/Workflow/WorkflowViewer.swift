@@ -48,6 +48,12 @@ struct WorkflowViewerCallIdentity:Hashable {
     private(set) var displayedValue: WorkflowValue?
     private(set) var provenance: String?
     private(set) var failure: String?
+    private(set) var commandIssue: WorkflowIssue?
+    func performViewerCommand(_ command: () throws -> Void) {
+        commandIssue = nil
+        do { try command() }
+        catch { commandIssue = error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription) }
+    }
     private(set) var loading = false
     private(set) var suspended = false
     private(set) var editingAnnotations = false
@@ -118,7 +124,7 @@ struct WorkflowViewerCallIdentity:Hashable {
     }
     func replace(_ target:WorkflowViewerTarget) {
         guard !editingAnnotations else { return }
-        stop();self.target=target;load()
+        stop();commandIssue=nil;self.target=target;load()
     }
     @discardableResult func load() -> Task<Void,Never>? {
         guard !editingAnnotations else { return nil }
@@ -311,8 +317,7 @@ struct WorkflowViewerCallIdentity:Hashable {
             if let session { self?.windows[session.id]?.panel.setTitle(title) }
         },reopen:{ [weak self,weak model] in
             guard let self,let model,session.canRead else { return }
-            do { try self.open(session.target,model:model,language:language,newWindow:true,ownerWindow:ownerWindow) }
-            catch { model.reportIssue(error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription)) }
+            try self.open(session.target,model:model,language:language,newWindow:true,ownerWindow:ownerWindow)
         }).environment(\.workflowViewerOpenAsset, { [weak self,weak session] ref in
             guard let self,let session,session.canRead,!session.suspended else { return }
             let target=WorkflowViewerTarget(title:session.target.title,subtitle:session.target.subtitle,value:.asset(ref))
@@ -346,7 +351,7 @@ extension EnvironmentValues {
 @MainActor struct WorkflowViewerContent:View {
     let session:WorkflowViewerSession
     var titleChanged: (String) -> Void = { _ in }
-    let reopen:() -> Void
+    let reopen:() throws -> Void
     @Environment(\.dLanguageStore) private var language
     @State private var showInfo=false
     @State private var search=""
@@ -358,8 +363,11 @@ extension EnvironmentValues {
             HStack {
                 VStack(alignment:.leading) { Text(session.displayTitle(language)).font(.headline).lineLimit(2);Text(session.displaySubtitle(language)).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
                 Spacer()
-                Button(text("newViewer"),systemImage:"rectangle.on.rectangle",action:reopen).workbenchHelp("WORKSPACE-VIEWER-NEW").disabled(!session.canRead || session.suspended)
+                Button(text("newViewer"),systemImage:"rectangle.on.rectangle") { session.performViewerCommand(reopen) }.workbenchHelp("WORKSPACE-VIEWER-NEW").disabled(!session.canRead || session.suspended)
                 Button(text("info"),systemImage:"info.circle") { showInfo.toggle() }.workbenchHelp("WORKSPACE-VIEWER-INFO").disabled(session.editingAnnotations)
+            }
+            if let issue = session.commandIssue {
+                WorkbenchIssueText(raw: issue.reason, key: issue.code).foregroundStyle(.orange)
             }
             if !session.canRead || session.suspended {
                 ContentUnavailableView(text("sourceClosed"),systemImage:"externaldrive.badge.exclamationmark")

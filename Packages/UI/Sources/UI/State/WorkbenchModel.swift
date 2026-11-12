@@ -471,8 +471,6 @@ public final class WorkbenchModel {
         get { projectSession.errorMessage }
         set { projectSession.errorMessage = newValue }
     }
-    public var errorCode: String? { projectSession.errorCode }
-    public func reportIssue(_ issue: WorkflowIssue) { projectSession.reportIssue(issue) }
     public var isChangingProject: Bool { projectSession.isChangingProject || isChoosingLocation }
     public var isBusy: Bool { projectSession.isBusy }
     public var canGenerate: Bool { projectSession.canGenerate && !isChoosingLocation }

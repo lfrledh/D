@@ -130,7 +130,7 @@ public struct WorkbenchView: View {
         )) {
             Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.3"), role: .cancel) { model.clearError() }.keyboardShortcut(.defaultAction)
         } message: {
-            WorkbenchIssueText(raw: model.errorMessage ?? "", key: model.errorCode)
+            Text(model.errorMessage ?? "")
         }
         .workbenchSheet(isPresented: Binding(
             get: { library?.isPresented ?? false },

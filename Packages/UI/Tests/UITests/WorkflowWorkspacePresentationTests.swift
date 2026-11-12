@@ -536,6 +536,24 @@ extension WorkflowWorkspacePresentationTests {
 }
 
 extension WorkflowWorkspacePresentationTests {
+    @Test func viewerCommandFailureStaysWithVisibleViewerAndKeepsContent() async throws {
+        let f = try await RenderingWorkspaceFixture.make()
+        let viewer = f.viewer(.init(title: "Original", subtitle: "", value: .data(.text("frozen output"))))
+        await viewer.load()?.value
+        let generation = viewer.generation, language = UILanguageStore(preferredLanguages: ["en"])
+        viewer.performViewerCommand { throw WorkflowIssue("exact original diagnostic", code: "workflow.viewer.windowLimit") }
+        let issue = try #require(viewer.commandIssue)
+        #expect(issue.code == "workflow.viewer.windowLimit" && issue.reason == "exact original diagnostic")
+        #expect(viewer.displayedValue == .data(.text("frozen output")) && viewer.generation == generation && viewer.failure == nil)
+        #expect(f.owner.errorMessage == nil)
+        #expect(workflowText(language, issue.code!) == "The viewer limit (4 windows) has been reached. Close one before opening another.")
+        try language.select("zh-Hans")
+        #expect(workflowText(language, issue.code!) == "查看窗口已达到上限（4 个）。请先关闭一个，再打开新窗口。")
+        viewer.performViewerCommand {}
+        #expect(viewer.commandIssue == nil && viewer.generation == generation)
+        viewer.suspend(); try await f.close()
+    }
+
     @Test(arguments: ["zh-Hans", "en"])
     func modelDraftInsertionAndPreparationCopyInBothLanguages(locale: String) async throws {
         let f = try await RenderingWorkspaceFixture.make()

@@ -664,7 +664,7 @@ public struct DualWorkbenchView: View {
                     onRecent: { id in Task { if await model.openRecentProject(id: id) { projectsVisible = false; navigate(to: .workflow) } } },
                     onModels: { presentQuickModelSelection() })
                 if let error = model.errorMessage {
-                    WorkbenchIssueText(raw: error, key: model.errorCode).foregroundStyle(.red).textSelection(.enabled).padding()
+                    Text(error).foregroundStyle(.red).textSelection(.enabled).padding()
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
             .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
