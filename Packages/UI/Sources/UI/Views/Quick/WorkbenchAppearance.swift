@@ -312,7 +312,14 @@ private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
             .foregroundStyle(palette.foregroundColor)
             .background {
                 Group {
-                    if native { Color.clear }
+                    if native {
+                        if resolved.readability.enabled && resolved.readability.amount > 0 {
+                            WorkbenchLocalSurface(owner: background, palette: palette, readabilityOnly: true,
+                                surfaceGroup: inheritedGroup ?? group, surfaceRole: role, readability: resolved.readability,
+                                contour: { rect, inset in shape.inset(by: inset).path(in: rect).cgPath })
+                                .clipShape(shape)
+                        } else { Color.clear }
+                    }
                     else if let local = appearance.local {
                         WorkbenchLocalSurface(owner: background, palette: palette, strength: local.strength,
                             drawsGlass: effects.usesCanvasBlend && local.material == .glass,

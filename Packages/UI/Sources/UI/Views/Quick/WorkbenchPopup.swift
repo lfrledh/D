@@ -130,13 +130,14 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
     init(entries: [WorkbenchPopupEntry], depth: Int, style: WorkbenchPopupStyle, popup: WorkbenchPopupOverlay) {
         self.entries = entries; super.init(frame: .zero)
         wantsLayer = true; layer?.cornerRadius = WorkbenchSurfaceMetrics.menuRadius; layer?.masksToBounds = false; layer?.borderWidth = 0.6
-        setAccessibilityElement(false); glass.setAccessibilityElement(false); addSubview(glass)
+        setAccessibilityElement(false); glass.setAccessibilityElement(false)
         nativeGlass.cornerRadius = WorkbenchSurfaceMetrics.menuRadius; nativeGlass.style = .regular
         nativeGlass.setAccessibilityElement(false); foreground.setAccessibilityElement(false)
         addSubview(nativeGlass); nativeGlass.contentView = foreground
         scroll.drawsBackground = false; scroll.contentView.drawsBackground = false; scroll.borderType = .noBorder
         scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.documentView = document
         document.setAccessibilityElement(false); foreground.addSubview(scroll)
+        foreground.addSubview(glass, positioned: .below, relativeTo: scroll)
         for (i,entry) in entries.enumerated() {
             if entry.captured.separator { let line = NSBox(); line.boxType = .separator; document.addSubview(line); separators[i] = line; rows.append(nil) }
             else { let row = WorkbenchPopupRow(entry: entry, depth: depth, index: i); row.popup = popup; document.addSubview(row); rows.append(row) }
@@ -155,18 +156,20 @@ private final class WorkbenchPopupDocument: NSView { override var isFlipped: Boo
         layer?.masksToBounds = !usesNativeGlass
         nativeGlass.isHidden = !usesNativeGlass
         nativeGlass.tintColor = style.nativeTint
+        glass.owner = style.owner; glass.palette = style.palette; glass.strength = style.strength
+        glass.readabilityOnly = usesNativeGlass; glass.drawsGlass = style.drawsGlass
+        glass.isCanvas = false; glass.surfaceRole = .popup; glass.surfaceGroup = "popup-\(ObjectIdentifier(self))"; glass.readability = style.readability
+        glass.contour = { rect, inset in CGPath(roundedRect: rect.insetBy(dx: inset, dy: inset), cornerWidth: max(0,WorkbenchSurfaceMetrics.menuRadius-inset), cornerHeight: max(0,WorkbenchSurfaceMetrics.menuRadius-inset), transform: nil) }
         if usesNativeGlass {
             if nativeGlass.contentView !== foreground { nativeGlass.contentView = foreground }
-            glass.isHidden = true; layer?.backgroundColor = nil; layer?.borderWidth = 0
+            glass.isHidden = !style.readability.enabled || style.readability.amount == 0
+            layer?.backgroundColor = nil; layer?.borderWidth = 0
         } else {
             if foreground.superview !== self { nativeGlass.contentView = nil; addSubview(foreground) }
-            glass.owner = style.owner; glass.palette = style.palette; glass.strength = style.strength; glass.drawsGlass = style.drawsGlass
-            glass.isCanvas = false; glass.surfaceRole = .popup; glass.surfaceGroup = "popup-\(ObjectIdentifier(self))"; glass.readability = style.readability
-            glass.contour = { rect, inset in CGPath(roundedRect: rect.insetBy(dx: inset, dy: inset), cornerWidth: max(0,WorkbenchSurfaceMetrics.menuRadius-inset), cornerHeight: max(0,WorkbenchSurfaceMetrics.menuRadius-inset), transform: nil) }
             glass.isHidden = style.legacyFill != nil; layer?.backgroundColor = style.legacyFill?.cgColor
             layer?.borderWidth = 0.6; layer?.borderColor = style.foreground.withAlphaComponent(0.22).cgColor
-            style.owner?.surfaces.add(glass); glass.needsDisplay = true
         }
+        style.owner?.surfaces.add(glass); glass.needsDisplay = true
         for row in rows.compactMap({ $0 }) { row.foreground = style.foreground; row.accent = style.accent; row.refresh() }
         needsLayout = true
     }

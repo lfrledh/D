@@ -6,6 +6,14 @@ struct ChatDisplayPreferencesPanel: View {
     let state: ChatDisplayPreferencesState
     @Environment(\.dLanguageStore) private var language
     @Environment(\.colorScheme) private var hostScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+    private var supportsReadability: Bool {
+        WorkbenchResolvedAppearance(preferences: state.preferences, scheme: hostScheme,
+            reduceMotion: reduceMotion, reduceTransparency: reduceTransparency,
+            increasedContrast: contrast == .increased).nativeGlass
+    }
     @State private var previewGroup = UUID().uuidString
     @State private var glassStrength: Double?
     @State private var enhancement: Double?
@@ -276,7 +284,7 @@ struct ChatDisplayPreferencesPanel: View {
                     var appearance = candidate.resolvedAppearance
                     var settings = appearance.resolvedReadability; settings.enabled = enabled
                     appearance.readability = settings; candidate.appearance = appearance
-                } })).workbenchHelp("SETTINGS-READABILITY").disabled(state.preferences.resolvedAppearance.local?.material == .glass)
+                } })).workbenchHelp("SETTINGS-READABILITY").disabled(!supportsReadability)
             Text(consistencyText(language, "copy.readabilityHelp")).font(.caption).foregroundStyle(.secondary)
             Text(consistencyText(language, "SETTINGS-AMOUNT"))
             WorkbenchValueSlider(value: state.preferences.resolvedAppearance.resolvedReadability.amount,
@@ -286,7 +294,7 @@ struct ChatDisplayPreferencesPanel: View {
                     var settings = appearance.resolvedReadability; settings.amount = value
                     appearance.readability = settings; candidate.appearance = appearance
                 } }).workbenchHelp("SETTINGS-AMOUNT").frame(height: 24)
-                .disabled(!state.preferences.resolvedAppearance.resolvedReadability.enabled || state.preferences.resolvedAppearance.local?.material == .glass)
+                .disabled(!state.preferences.resolvedAppearance.resolvedReadability.enabled || !supportsReadability)
             appearancePreview(for: state.preferences.preferredColorScheme ?? hostScheme)
         }.disabled(state.hasInvalidStoredRecord)
     }

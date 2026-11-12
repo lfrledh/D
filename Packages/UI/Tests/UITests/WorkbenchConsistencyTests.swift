@@ -271,6 +271,67 @@ import Testing
         front.readability = .init(enabled:true,amount:0);#expect(try pixels(front) == off)
         front.readability.amount=1;#expect(try pixels(front) != off)
     }
+    @Test func nativeReadabilityAdjunctIsTransparentAndNeverBuildsAnotherGlass() throws {
+        let w = window(); defer { w.close() }
+        let owner = WorkbenchBackgroundOwner(), root = WorkbenchBackgroundNSView(frame: .init(x: 0, y: 0, width: 800, height: 600))
+        root.isCanvas = true; root.owner = owner; owner.root = root; w.contentView = root
+        _ = surface(owner, in: root, rect: .init(x: 20, y: 20, width: 300, height: 220), group: "back")
+        let front = surface(owner, in: root, rect: .init(x: 40, y: 40, width: 180, height: 120), group: "front")
+        front.readabilityOnly = true
+        #expect(!front.isOpaque && front.hitTest(.init(x: 50, y: 50)) == nil)
+        front.readability.enabled = false
+        let off = try pixels(front); #expect(off.allSatisfy { $0 == 0 })
+        front.readability = .init(enabled: true, amount: 0)
+        #expect(try pixels(front) == off)
+        front.readability.amount = 0.25
+        let low = try pixels(front)
+        front.readability.amount = 1
+        let high = try pixels(front)
+        #expect(low != off && high != low)
+        #expect(low.reduce(0) { $0 + Int($1) } < high.reduce(0) { $0 + Int($1) })
+        #expect(high.prefix(4).allSatisfy { $0 == 0 }) // Rounded corner stays transparent.
+        #expect(!front.usesContinuousGlass && front.continuousGlassParameters == nil)
+    }
+
+    @Test func nativeMenuAndSubmenuReceiveReadabilityWithoutReplacingTheirGlassOrCommands() async throws {
+        let w = window(); defer { w.close() }
+        let owner = WorkbenchBackgroundOwner(), root = WorkbenchBackgroundNSView(frame: .init(x: 0, y: 0, width: 800, height: 600))
+        root.isCanvas = true; root.owner = owner; owner.root = root; w.contentView = root
+        _ = surface(owner, in: root, rect: root.bounds, group: "panel-under-menu")
+        let anchor = NSView(frame: .init(x: 40, y: 40, width: 40, height: 30)); root.addSubview(anchor)
+        var calls = 0
+        func nativeStyle(enabled: Bool) -> WorkbenchPopupStyle {
+            .init(owner: owner, palette: .defaultLight, strength: 0.55, drawsGlass: true,
+                legacyFill: nil, readability: .init(enabled: enabled, amount: 1), nativeGlass: true)
+        }
+        var local = nativeStyle(enabled: false)
+        let items: [WorkbenchPopupItem] = [.init(id: "parent", title: "Parent", children: [
+            .init(id: "child", title: "Child", action: { calls += 1 })])]
+        let popup = try #require(WorkbenchPopupOverlay.present(from: anchor, contextID: "owner", title: "Menu",
+            items: items, style: local, validContext: { true }))
+        popup.keyDown(with: try key(124)); try await settle(popup)
+        let native = views(popup).compactMap { $0 as? NSGlassEffectView }
+        let adjuncts = views(popup).compactMap { $0 as? WorkbenchBackgroundNSView }
+        #expect(native.count == 2 && adjuncts.count == 2)
+        #expect(adjuncts.allSatisfy { $0.isHidden && $0.readabilityOnly })
+        local = nativeStyle(enabled: true)
+        popup.update(contextID: "owner", title: "Menu", items: items, style: local)
+        try await settle(popup)
+        #expect(views(popup).compactMap { $0 as? NSGlassEffectView }.map(ObjectIdentifier.init) == native.map(ObjectIdentifier.init))
+        for adjunct in adjuncts {
+            #expect(!adjunct.isHidden && !adjunct.isOpaque && adjunct.owner === owner)
+            #expect(!owner.readability.effect(for: adjunct).patches.isEmpty)
+            #expect(try pixels(adjunct).contains { $0 != 0 })
+            #expect(!adjunct.usesContinuousGlass)
+        }
+        local = nativeStyle(enabled: false)
+        popup.update(contextID: "owner", title: "Menu", items: items, style: local)
+        #expect(adjuncts.allSatisfy { $0.isHidden })
+        try button("child", in: popup).performClick(nil)
+        await Task.yield(); try await Task.sleep(for: .milliseconds(10))
+        #expect(calls == 1 && popup.superview == nil)
+    }
+
     @Test func containmentAndIndependentOverlapAreDifferentAndHiddenViewsStopContributing() throws {
         let w=window();defer{w.close()};let owner=WorkbenchBackgroundOwner(),root=WorkbenchBackgroundNSView(frame:.init(x:0,y:0,width:800,height:600));root.isCanvas=true;owner.root=root;root.owner=owner;w.contentView=root
         let back=surface(owner,in:root,rect:.init(x:20,y:20,width:300,height:220),group:"panel")

@@ -437,6 +437,9 @@ extension EnvironmentValues {
         }
     }
     var isGeometryOnly = false
+    // Native Liquid Glass owns the optical surface. This transparent adjunct
+    // paints only the existing finite readability patches, never another glass.
+    var readabilityOnly = false
     var palette = WorkbenchPalette.defaultLight
     var strength = 0.55
     var drawsGlass = true { didSet { if oldValue != drawsGlass { owner?.readability.configure(self) } } }
@@ -468,7 +471,7 @@ extension EnvironmentValues {
     private var observedGeometry: Geometry?
     private(set) var geometryInvalidationCount = 0
     override var isFlipped: Bool { true }
-    override var isOpaque: Bool { !isGeometryOnly }
+    override var isOpaque: Bool { !isGeometryOnly && !readabilityOnly }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func viewDidMoveToSuperview() { super.viewDidMoveToSuperview(); observeGeometry() }
     override func viewDidMoveToWindow() {
@@ -545,7 +548,7 @@ extension EnvironmentValues {
         WorkbenchGlassUpdateProbe.event?("refresh")
         #endif
         let clipped = visibleRect.intersection(bounds)
-        guard !isCanvas, !isGeometryOnly, drawsGlass, strength > 0,
+        guard !isCanvas, !isGeometryOnly, !readabilityOnly, drawsGlass, strength > 0,
               !isHiddenOrHasHiddenAncestor, !clipped.isNull, !clipped.isEmpty,
               bounds.width > 0, bounds.height > 0, let owner,
               let image = owner.glassImage(canvas: palette.canvas) else {
@@ -595,6 +598,10 @@ extension EnvironmentValues {
         guard let c = NSGraphicsContext.current?.cgContext else { return }
         refreshGlass()
         guard glassHost == nil else { return } // Shader owns the entire optical background.
+        if readabilityOnly {
+            WorkbenchReadabilityRegistry.paint(owner?.readability.effect(for: self) ?? .none, in: c, view: self)
+            return
+        }
         owner?.didDraw()
         #if DEBUG
         WorkbenchBackgroundCounters.draw()
@@ -620,6 +627,7 @@ struct WorkbenchLocalSurface: NSViewRepresentable {
     var isCanvas = false
     var strength = 0.55
     var drawsGlass = true
+    var readabilityOnly = false
     var surfaceGroup: String? = nil
     var surfaceRole = WorkbenchSurfaceRole.panel
     var readability = WorkbenchReadabilitySettings()
@@ -635,7 +643,7 @@ struct WorkbenchLocalSurface: NSViewRepresentable {
         prepare?()
         if view.owner !== owner { view.owner?.readability.remove(view) }
         view.owner = owner; view.palette = palette; view.isCanvas = isCanvas
-        view.strength = strength; view.drawsGlass = drawsGlass; view.contour = contour
+        view.strength = strength; view.readabilityOnly = readabilityOnly; view.drawsGlass = drawsGlass; view.contour = contour
         view.surfaceGroup = surfaceGroup; view.surfaceRole = surfaceRole; view.readability = readability
         view.stylesWindowTitlebar = stylesWindowTitlebar; view.legacyTitlebarBlend = legacyTitlebarBlend
         view.synchronizeTitlebar()
