@@ -283,7 +283,11 @@ class DevelopmentResourceTests(unittest.TestCase):
         required = ("runner", "libwasmtime.dylib", "runtime/python.wasm",
                     "runtime/lib/python3.14/encodings/__init__.py", "runtime/lib/python3.14/csv.py",
                     "runtime/lib/python3.14/statistics.py", "runtime/lib/python3.14/d_result.py",
-                    "LICENSE-CPython.txt", "LICENSE-Wasmtime.txt", "PROVENANCE.json")
+                    "LICENSE-CPython.txt", "LICENSE-Wasmtime.txt", "PROVENANCE.json",
+                    "Licenses/SOURCES.json", "Licenses/wasi-libc.txt", "Licenses/wasi-apache.txt",
+                    "Licenses/wasi-apache-llvm.txt", "Licenses/wasi-mit.txt", "Licenses/cloudlibc.txt",
+                    "Licenses/musl.txt", "Licenses/dlmalloc.txt", "Licenses/compiler-rt.txt",
+                    "Licenses/libmpdec.txt", "Licenses/expat.txt", "Licenses/hacl.txt")
         for relative in required:
             path = engine / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -301,6 +305,20 @@ class DevelopmentResourceTests(unittest.TestCase):
         self.assertEqual(embedded.returncode, 0, embedded.stderr)
         self.assertEqual((destination / name / "runtime/python.wasm").read_bytes(),
                          (engine / "runtime/python.wasm").read_bytes())
+        notice = "Licenses/compiler-rt.txt"
+        self.assertEqual((destination / name / notice).read_bytes(), (engine / notice).read_bytes())
+        original_notice = (engine / notice).read_bytes()
+        (engine / notice).write_bytes(b"changed notice")
+        _, tampered = self.prepare(self.root / "tampered-notice")
+        self.assert_failure(tampered)
+        (engine / notice).unlink()
+        manifest["files"] = manifest_files(engine)
+        (engine / "engine.json").write_text(json.dumps(manifest))
+        _, missing = self.prepare(self.root / "missing-notice")
+        self.assert_failure(missing)
+        self.assertIn(notice, missing.stderr)
+        (engine / notice).write_bytes(original_notice)
+        manifest["files"] = manifest_files(engine)
         manifest["engine"] = "native-host-python"
         (engine / "engine.json").write_text(json.dumps(manifest))
         _, rejected = self.prepare(self.root / "invalid-wasi-resources")

@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "pythonModuleSHA256": "864f6f66494b9f40fee54cd366092ae7bfd1da32792b1c783ea2ff4985678bc3",
+  "wasiSDK": "24.0-arm64-macos",
+  "wasiLibcCommit": "b9ef79d7dbd47c6c5bafdae760823467c2f60b70",
+  "llvmCommit": "26a1d6601d727a96f4301d0d8647b5a42760ae0c",
+  "files": [
+    {
+      "file": "wasi-libc.txt",
+      "sha256": "673f577e363e80e0058bd78214683f045d1d0c63930969a87f01a1d87d7cf1d6",
+      "source": "https://github.com/WebAssembly/wasi-libc/blob/b9ef79d7dbd47c6c5bafdae760823467c2f60b70/LICENSE",
+      "scope": "Static WASI libc input; confirmed definitions in the fixed python.wasm, not a claim about every archive member."
+    },
+    {
+      "file": "wasi-apache.txt",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+      "source": "https://github.com/WebAssembly/wasi-libc/blob/b9ef79d7dbd47c6c5bafdae760823467c2f60b70/LICENSE-APACHE",
+      "scope": "Static WASI libc input; confirmed definitions in the fixed python.wasm, not a claim about every archive member."
+    },
+    {
+      "file": "wasi-apache-llvm.txt",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+      "source": "https://github.com/WebAssembly/wasi-libc/blob/b9ef79d7dbd47c6c5bafdae760823467c2f60b70/LICENSE-APACHE-LLVM",
+      "scope": "Static WASI libc input; confirmed definitions in the fixed python.wasm, not a claim about every archive member."
+    },
+    {
+      "file": "wasi-mit.txt",
+      "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "source": "https://github.com/WebAssembly/wasi-libc/blob/b9ef79d7dbd47c6c5bafdae760823467c2f60b70/LICENSE-MIT",
+      "scope": "Static WASI libc input; confirmed definitions in the fixed python.wasm, not a claim about every archive member."
+    },
+    {
+      "file": "cloudlibc.txt",
+      "sha256": "c8b789cf5a746611e6300a0cc7750dbf92b61912a709d04e639245f7290656d0",
+      "source": "https://github.com/WebAssembly/wasi-libc/blob/b9ef79d7dbd47c6c5bafdae760823467c2f60b70/libc-bottom-half/cloudlibc/LICENSE",
+      "scope": "Static WASI libc input; confirmed definitions in the fixed python.wasm, not a claim about every archive member."
+    },
+    {
+      "file": "musl.txt",
+      "sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af",
+      "source": "https://github.com/WebAssembly/wasi-libc/blob/b9ef79d7dbd47c6c5bafdae760823467c2f60b70/libc-top-half/musl/COPYRIGHT",
+      "scope": "Static WASI libc input; confirmed definitions in the fixed python.wasm, not a claim about every archive member."
+    },
+    {
+      "file": "dlmalloc.txt",
+      "sha256": "1096a42cd80e41cd7b4fca4d51bb9d022244aed2e9d8f7d638a5b20da2d2c6e7",
+      "source": "https://github.com/WebAssembly/wasi-libc/blob/b9ef79d7dbd47c6c5bafdae760823467c2f60b70/dlmalloc/src/malloc.c",
+      "scope": "Unmodified initial source notice. dlmalloc/dlfree are defined in the fixed python.wasm."
+    },
+    {
+      "file": "compiler-rt.txt",
+      "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d",
+      "source": "https://raw.githubusercontent.com/llvm/llvm-project/26a1d6601d727a96f4301d0d8647b5a42760ae0c/compiler-rt/LICENSE.TXT",
+      "scope": "Confirmed __muloti4, __multi3, __ashlti3 and __udivti3 definitions; not the whole LLVM distribution."
+    },
+    {
+      "file": "libmpdec.txt",
+      "sha256": "b07528d8b1dbf1e2d2741052996f0876e23342ce2d30d0effa39c5457716c25a",
+      "source": "CPython-3.14.8 source archive c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73 / Modules/_decimal/libmpdec/mpdecimal.c",
+      "scope": "Static link and defined mpd_qadd confirmed."
+    },
+    {
+      "file": "expat.txt",
+      "sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
+      "source": "CPython-3.14.8 source archive c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73 / Modules/expat/COPYING",
+      "scope": "Fixed CPython link input; no claim that all archive members were retained."
+    },
+    {
+      "file": "hacl.txt",
+      "sha256": "998ce04fb8ad9dedb0bc1b44938f8c3dcf1089780fa105ce1c8c30fb5554d78c",
+      "source": "CPython-3.14.8 source archive c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73 / Modules/_hacl/Hacl_Hash_SHA2.c",
+      "scope": "Fixed CPython link input; original shared HACL source header."
+    }
+  ]
+}

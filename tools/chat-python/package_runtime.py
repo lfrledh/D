@@ -27,6 +27,24 @@ def digest(path: Path) -> str:
     return value.hexdigest()
 
 
+def copy_static_notices(destination: Path, module: Path) -> dict:
+    """Keep the fixed WASI module's source notices with its packaged bytes."""
+    source = ROOT / "tools/chat-python/Licenses"
+    manifest = json.loads((source / "SOURCES.json").read_text())
+    if digest(module) != manifest["pythonModuleSHA256"]:
+        raise ValueError("WASI module changed; review its static sources and notices before packaging.")
+    for item in manifest["files"]:
+        path = source / item["file"]
+        if path.parent != source or path.is_symlink() or digest(path) != item["sha256"]:
+            raise ValueError("Static runtime notice is missing or changed: " + item["file"])
+    destination.mkdir()
+    for item in manifest["files"]:
+        shutil.copy2(source / item["file"], destination / item["file"])
+    shutil.copy2(source / "SOURCES.json", destination / "SOURCES.json")
+    return {"sourceManifest": "Licenses/SOURCES.json", "sourceManifestSHA256": digest(source / "SOURCES.json"),
+            "wasiLibcCommit": manifest["wasiLibcCommit"], "llvmCommit": manifest["llvmCommit"]}
+
+
 def package(source: Path, capi: Path, destination: Path, identity: str) -> None:
     if not re.fullmatch(r"[0-9a-fA-F]{40}", identity):
         raise ValueError("Use the existing development signing identity SHA; no new identity is created.")
@@ -61,6 +79,7 @@ def package(source: Path, capi: Path, destination: Path, identity: str) -> None:
         shutil.copy2(capi / "lib/libwasmtime.dylib", stage / "libwasmtime.dylib")
         shutil.copy2(source / "LICENSE", stage / "LICENSE-CPython.txt")
         shutil.copy2(capi / "LICENSE", stage / "LICENSE-Wasmtime.txt")
+        static_sources = copy_static_notices(stage / "Licenses", module)
         subprocess.run(["/usr/bin/clang", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
                         "-I", str(capi / "include"), str(ROOT / "tools/chat-python/runner.c"),
                         "-L", str(capi / "lib"), "-lwasmtime", "-Wl,-rpath,@loader_path",
@@ -82,7 +101,11 @@ def package(source: Path, capi: Path, destination: Path, identity: str) -> None:
                        "moduleSHA256": digest(module), "license": "LICENSE-CPython.txt"},
             "wasmtime": {"version": "49.0.2", "source": "https://github.com/bytecodealliance/wasmtime/releases/tag/v49.0.2",
                          "archiveSHA256": "f7000ab1661495d09b9dc87a11b356941b4e6097f295434bcb30a8cf1393b0d5",
+                         "archiveKind": "aarch64-macos C API binary input",
+                         "sourceArchive": "https://github.com/bytecodealliance/wasmtime/releases/download/v49.0.2/wasmtime-v49.0.2-src.tar.gz",
+                         "sourceArchiveSHA256": "8dbfaa56c576471e954e96e24e57acaab2457f68a194a97386ecc2c56f1faba2",
                          "license": "LICENSE-Wasmtime.txt"},
+            "staticSources": static_sources,
             "wasiSDK": "24.0-arm64-macos", "engine": "pulley64", "networkGranted": False,
             "runnerSourceSHA256": digest(ROOT / "tools/chat-python/runner.c"),
             "inputResponsibility": "Version headers checked here. Verify official archive hashes before extracting/building.",

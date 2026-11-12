@@ -105,7 +105,10 @@ ENGINE_CONTRACTS["ChatPython.dengine"] = {
         "runtime/lib/python3.14/encodings/__init__.py",
         "runtime/lib/python3.14/csv.py", "runtime/lib/python3.14/statistics.py",
         "runtime/lib/python3.14/d_result.py", "LICENSE-CPython.txt", "LICENSE-Wasmtime.txt",
-        "PROVENANCE.json",
+        "PROVENANCE.json", "Licenses/SOURCES.json", "Licenses/wasi-libc.txt",
+        "Licenses/wasi-apache.txt", "Licenses/wasi-apache-llvm.txt", "Licenses/wasi-mit.txt",
+        "Licenses/cloudlibc.txt", "Licenses/musl.txt", "Licenses/dlmalloc.txt",
+        "Licenses/compiler-rt.txt", "Licenses/libmpdec.txt", "Licenses/expat.txt", "Licenses/hacl.txt",
     ),
 }
 
