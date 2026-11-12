@@ -38,6 +38,8 @@ public enum TipProducts {
     private var unmatchedPurchaseKey: String?
     private var unresolvedReceiptKeys: Set<String> = []
     private var unknownPaymentOutcome = false
+    private(set) var attempts: [String: TipAttempt] = [:]
+    public private(set) var needsRetrySave = false
     private let credentials: any TipCredentialVault
     private let expectsLocalTest: Bool
     private var eventRevision: UInt64 = 0
@@ -66,13 +68,36 @@ public enum TipProducts {
             if FileManager.default.fileExists(atPath: journalURL.path) {
                 let data = try Data(contentsOf: journalURL)
                 guard data.count <= 2_097_152 else { throw TipIssue.journalTooLarge }
-                let old = try JSONDecoder().decode([String: TipReceipt].self, from: data)
-                for (key, fact) in old {
+                let stored: TipJournal
+                if (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["version"] != nil {
+                    stored = try JSONDecoder().decode(TipJournal.self, from: data)
+                    guard stored.version == 1 else { throw TipIssue.invalidJournal }
+                } else {
+                    stored = TipJournal(receipts: try JSONDecoder().decode([String: TipReceipt].self, from: data))
+                }
+                guard stored.receipts.count <= 4096, stored.attempts.count <= 1024,
+                      stored.unresolvedReceiptKeys.count <= 4096 else { throw TipIssue.journalTooLarge }
+                for (key, fact) in stored.receipts {
                     // Legacy transaction-only keys migrate in memory, without assigning an account or price.
                     guard (key == fact.transactionID || key == fact.key), fact.bundleID == bundleID,
                           !fact.transactionID.isEmpty, journal[fact.key] == nil else { throw TipIssue.invalidJournal }
                     journal[fact.key] = fact
                 }
+                for (key, attempt) in stored.attempts {
+                    guard key == attempt.id.uuidString, attempt.scope.bundleID == bundleID,
+                          !attempt.scope.accountID.isEmpty, !attempt.productID.isEmpty,
+                          validEnvironment(attempt.scope.environment),
+                          attempt.created.timeIntervalSince1970.isFinite,
+                          [TipAttempt.Phase.awaitingRecord, .completed].contains(attempt.phase) == (attempt.receiptKey != nil),
+                          attempt.phase != .completed || journal[attempt.receiptKey ?? ""] != nil else { throw TipIssue.invalidJournal }
+                    if let receipt = journal[attempt.receiptKey ?? ""] {
+                        guard receipt.productID == attempt.productID, receipt.bundleID == attempt.scope.bundleID,
+                              receipt.environment == attempt.scope.environment else { throw TipIssue.invalidJournal }
+                    }
+                }
+                attempts = stored.attempts; unknownPaymentOutcome = stored.unknownPaymentOutcome
+                unresolvedReceiptKeys = stored.unresolvedReceiptKeys; unmatchedPurchaseKey = stored.unmatchedPurchaseKey
+                status = protectedPaymentStatus ?? .idle
             }
         } catch { journalIssue = String(describing: error); diagnostic = journalIssue; status = .uncertain }
     }
@@ -121,27 +146,35 @@ public enum TipProducts {
         protectedPaymentStatus != nil || [.uncertain, .recorded, .pending].contains(status)
     }
     private var protectedPaymentStatus: Status? {
-        if unknownPaymentOutcome || !unresolvedReceiptKeys.isEmpty { return status == .pending ? .pending : .uncertain }
+        if needsRetrySave || unknownPaymentOutcome || !unresolvedReceiptKeys.isEmpty { return .uncertain }
+        let open = attempts.values.filter { $0.phase.isUnresolved }
+        if !open.isEmpty { return open.allSatisfy { $0.phase == .pending } ? .pending : .uncertain }
         if unmatchedPurchaseKey != nil { return .recorded }
         return nil
     }
     public var canPurchase: Bool { selectedProduct != nil && !purchasing && !loading && recoveryStatus == .ready && journalIssue == nil && !hasUnresolvedPayment && (!expectsLocalTest || localTest) }
     public func purchase(confirmIn window: NSWindow) async {
         guard canPurchase, let product = selectedProduct else { return }
-        let attempt = beginPurchase()
+        var attempt: UUID?
         defer { purchasing = false; if purchaseID == attempt { purchaseID = nil } }
         do {
+            let id = try preparePurchase(productID: product.id); attempt = id
+            try dispatchPurchase(id)
+            // No suspension between the durable dispatch marker and this API.
+            // A crash in that narrow interval remains conservatively unknown.
             switch try await product.purchase(confirmIn: window) {
-            case .success(let result): await receive(result, purchase: attempt)
-            case .userCancelled: status = .cancelled
-            case .pending:
-                // StoreKit supplies no transaction identity in this result.
-                // A later global update cannot prove it belongs to this request.
-                unknownPaymentOutcome = true; status = .pending
-            @unknown default: markUnverified("Unknown StoreKit purchase outcome")
+            case .success(let result): await receive(result, purchase: id)
+            case .userCancelled: completePurchase(id, phase: .cancelled)
+            case .pending: completePurchase(id, phase: .pending)
+            @unknown default: completePurchase(id, phase: .unknown, reason: "Unknown StoreKit purchase outcome")
             }
-        } catch StoreKitError.userCancelled { status = .cancelled }
-        catch { diagnostic = String(describing: error); status = .failed }
+        } catch StoreKitError.userCancelled {
+            if let attempt { completePurchase(attempt, phase: .cancelled) }
+        } catch {
+            if let attempt, attempts[attempt.uuidString]?.phase != .prepared {
+                completePurchase(attempt, phase: .unknown, reason: String(describing: error))
+            } else { diagnostic = String(describing: error); status = .failed }
+        }
     }
     /// Only currently platform-verified records may be projected for the verified application account.
     /// Loading a local journal is never equivalent to platform verification after a cold start.
@@ -161,7 +194,9 @@ public enum TipProducts {
     }
     func mergeHistory(_ fact: TipReceipt, credential: String?, generation: UInt64) async throws {
         guard generation == recoveryGeneration, verifiedScope?.contains(fact) == true else { throw TipIssue.invalidTransaction }
+        let revision = eventRevision
         _ = try await persistVerified(fact, credential: credential, generation: generation)
+        if revision == eventRevision, unresolvedReceiptKeys.remove(fact.key) != nil { persistProtection() }
     }
     func endRecovery(generation: UInt64, succeeded: Bool, failure: RecoveryFailure? = nil, diagnostic: String? = nil) {
         guard generation == recoveryGeneration else { return }
@@ -169,9 +204,10 @@ public enum TipProducts {
         recoveryFailure = succeeded ? nil : failure ?? .platform
         recoveryDiagnostic = succeeded ? nil : diagnostic
         if !succeeded { verifiedScope = nil; verifiedHistory.removeAll() }
+        if succeeded, protectedPaymentStatus == nil, status == .uncertain { status = .idle }
         if succeeded, let key = unmatchedPurchaseKey,
            let fact = verifiedHistory[key], verifiedScope?.contains(fact) == true {
-            unmatchedPurchaseKey = nil
+            unmatchedPurchaseKey = nil; persistProtection()
             status = protectedPaymentStatus ?? (fact.revoked ? .idle : .thanked)
             eventRevision &+= 1
         }
@@ -236,12 +272,77 @@ public enum TipProducts {
             revocationPercentage: transaction.revocationPercentage,
             revocationReason: transaction.revocationReason?.rawValue)
     }
-    func beginPurchase() -> UUID {
-        let id = UUID(); purchaseID = id; purchasing = true; status = .purchasing; diagnostic = nil; return id
+    /// A prepared record is known not to have reached StoreKit. A dispatch
+    /// marker is conservative: the API may have received the request.
+    func preparePurchase(productID: String) throws -> UUID {
+        guard !purchasing, !hasUnresolvedPayment, let scope = verifiedScope,
+              allowedIDs.contains(productID), validEnvironment(scope.environment) else { throw TipIssue.invalidTransaction }
+        let id = UUID()
+        var next = durableJournal
+        next.attempts[id.uuidString] = .init(id: id, productID: productID, scope: scope,
+                                           created: Date(), phase: .prepared, receiptKey: nil)
+        try writeJournal(next)
+        attempts = next.attempts; purchaseID = id; purchasing = true; status = .purchasing; diagnostic = nil
+        return id
+    }
+    func dispatchPurchase(_ id: UUID) throws {
+        guard purchaseID == id, attempts[id.uuidString]?.phase == .prepared else { throw TipIssue.invalidTransaction }
+        var next = durableJournal; next.attempts[id.uuidString]?.phase = .dispatching
+        // Failure must leave this request prepared, with zero purchase calls.
+        try writeJournal(next); attempts = next.attempts
+    }
+    func completePurchase(_ id: UUID, phase: TipAttempt.Phase, reason: String? = nil) {
+        guard purchaseID == id, let old = attempts[id.uuidString],
+              [.dispatching, .pending, .unknown].contains(old.phase),
+              [.cancelled, .pending, .unknown].contains(phase) else { return }
+        attempts[id.uuidString]?.phase = phase
+        if let reason { diagnostic = reason }
+        persistProtection()
+        status = protectedPaymentStatus ?? (phase == .cancelled ? .cancelled : .uncertain)
+    }
+    private var durableJournal: TipJournal {
+        .init(receipts: journal, attempts: attempts, unknownPaymentOutcome: unknownPaymentOutcome,
+              unresolvedReceiptKeys: unresolvedReceiptKeys, unmatchedPurchaseKey: unmatchedPurchaseKey)
+    }
+    private func writeJournal(_ value: TipJournal) throws {
+        guard journalIssue == nil else { throw TipIssue.invalidJournal }
+        let data = try JSONEncoder().encode(value)
+        guard data.count <= 2_097_152, value.receipts.count <= 4096,
+              value.attempts.count <= 1024, value.unresolvedReceiptKeys.count <= 4096 else { throw TipIssue.journalTooLarge }
+        try FileManager.default.createDirectory(at: journalURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: journalURL, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: journalURL.path)
+    }
+    private func persistProtection() {
+        do { try writeJournal(durableJournal); needsRetrySave = false }
+        catch { needsRetrySave = true; diagnostic = String(describing: error); status = .uncertain }
+    }
+    /// Persists already captured facts only. Never calls purchase or invents an outcome.
+    public func retrySave() {
+        guard needsRetrySave, !purchasing else { return }
+        persistProtection(); status = protectedPaymentStatus ?? .idle
+    }
+    private func associateVerified(_ fact: TipReceipt, purchase: UUID) throws {
+        _ = try preparedRecord(fact)
+        guard purchaseID == purchase, let attempt = attempts[purchase.uuidString],
+              attempt.productID == fact.productID, attempt.scope.bundleID == fact.bundleID,
+              attempt.scope.environment == fact.environment,
+              attempt.receiptKey == nil || attempt.receiptKey == fact.key,
+              [.dispatching, .awaitingRecord, .completed].contains(attempt.phase) else { throw TipIssue.invalidTransaction }
+        if attempt.phase == .completed { return }
+        attempts[purchase.uuidString]?.phase = .awaitingRecord
+        attempts[purchase.uuidString]?.receiptKey = fact.key
+        // Retain the exact captured association in memory on a write failure,
+        // and persist it before credentials/receipt acknowledgment. Cold recovery
+        // may resolve only an association that actually reached durable storage.
+        do { try writeJournal(durableJournal); needsRetrySave = false }
+        catch { needsRetrySave = true; throw error }
     }
     private func receive(_ result: VerificationResult<Transaction>, purchase: UUID? = nil) async {
         switch result {
-        case .unverified(_, _): markUnverified("StoreKit transaction verification failed")
+        case .unverified(_, _):
+            if let purchase { completePurchase(purchase, phase: .unknown, reason: "StoreKit transaction verification failed") }
+            else { markUnverified("StoreKit transaction verification failed") }
         case .verified(let transaction):
             guard transaction.productType == .consumable else { markUnverified("Unexpected StoreKit product type"); return }
             await acceptVerified(Self.fact(transaction), credential: result.jwsRepresentation, purchase: purchase) { await transaction.finish() }
@@ -250,6 +351,7 @@ public enum TipProducts {
     func acceptVerified(_ fact: TipReceipt, credential: String? = nil, purchase: UUID? = nil, finish: () async -> Void) async {
         do {
             let revision = eventRevision, scopeGeneration = recoveryGeneration
+            if let purchase { try associateVerified(fact, purchase: purchase) }
             let fresh = try await persistVerified(fact, credential: credential)
             if fresh { pendingAcknowledgments.insert(fact.key) }
             defer { if fresh { pendingAcknowledgments.remove(fact.key) } }
@@ -257,6 +359,7 @@ public enum TipProducts {
             await finish()
             // An older completion must not erase a newer failure for the same receipt.
             let resolvedReceipt = eventRevision == revision && unresolvedReceiptKeys.remove(fact.key) != nil
+            if resolvedReceipt { persistProtection() }
             if let purchase, purchaseID == purchase {
                 if eventRevision != revision && [.uncertain, .failed].contains(status) { return }
                 // An explicit purchase finishes even if history/updates recorded it first or
@@ -266,6 +369,7 @@ public enum TipProducts {
                 let active = journal[fact.key]?.revoked == false
                 if active && !sameAccount { unmatchedPurchaseKey = fact.key }
                 else if unmatchedPurchaseKey == fact.key { unmatchedPurchaseKey = nil }
+                persistProtection()
                 status = protectedPaymentStatus ?? (active ? .thanked : .idle)
                 if protectedPaymentStatus == nil { diagnostic = nil }
                 eventRevision &+= 1
@@ -275,7 +379,7 @@ public enum TipProducts {
                   fact.accountID == nil || verifiedScope?.contains(fact) == true,
                   journal[fact.key]?.revoked == fact.revoked else { return }
             let resolvedUnmatched = unmatchedPurchaseKey == fact.key
-            if resolvedUnmatched { unmatchedPurchaseKey = nil }
+            if resolvedUnmatched { unmatchedPurchaseKey = nil; persistProtection() }
             if let protected = protectedPaymentStatus {
                 // Retain real, durably verified history without treating an
                 // unrelated update/refund as resolution of a protected payment.
@@ -293,6 +397,7 @@ public enum TipProducts {
         if let receiptKey, unresolvedReceiptKeys.count < 4096 { unresolvedReceiptKeys.insert(receiptKey) }
         else { unknownPaymentOutcome = true }
         eventRevision &+= 1; diagnostic = reason; status = .uncertain
+        persistProtection()
     }
     /// Called only after StoreKit verification; fact injection is restricted to @testable tests.
     func persistVerified(_ fact: TipReceipt, credential: String?, generation: UInt64? = nil) async throws -> Bool {
@@ -305,7 +410,7 @@ public enum TipProducts {
         }
         return try recordVerified(fact)
     }
-    private func preparedRecord(_ fact: TipReceipt) throws -> ([String: TipReceipt], Data) {
+    private func preparedRecord(_ fact: TipReceipt) throws -> [String: TipReceipt] {
         guard journalIssue == nil else { throw TipIssue.invalidJournal }
         guard allowedIDs.contains(fact.productID), fact.bundleID == bundleID,
               !fact.transactionID.isEmpty, validEnvironment(fact.environment),
@@ -316,15 +421,22 @@ public enum TipProducts {
         var next = journal; next[fact.key] = merged
         let data = try JSONEncoder().encode(next)
         guard data.count <= 2_097_152, next.count <= 4096 else { throw TipIssue.journalTooLarge }
-        return (next, data)
+        return next
     }
     func recordVerified(_ fact: TipReceipt) throws -> Bool {
-        let old = journal[fact.key], (next, data) = try preparedRecord(fact)
-        if next != journal {
-            try FileManager.default.createDirectory(at: journalURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: journalURL, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: journalURL.path)
-            journal = next
+        let old = journal[fact.key], next = try preparedRecord(fact)
+        var envelope = durableJournal; envelope.receipts = next
+        // Only associations established by a direct verified purchase callback
+        // may settle here, including recovery through verified Transaction.all.
+        for (id, attempt) in envelope.attempts where attempt.phase == .awaitingRecord && attempt.receiptKey == fact.key {
+            guard attempt.productID == fact.productID, attempt.scope.bundleID == fact.bundleID,
+                  attempt.scope.environment == fact.environment else { throw TipIssue.invalidTransaction }
+            envelope.attempts[id]?.phase = .completed
+            if fact.accountID != nil && verifiedScope?.contains(fact) != true { envelope.unmatchedPurchaseKey = fact.key }
+        }
+        if next != journal || envelope.attempts != attempts || envelope.unmatchedPurchaseKey != unmatchedPurchaseKey || needsRetrySave {
+            try writeJournal(envelope)
+            journal = next; attempts = envelope.attempts; unmatchedPurchaseKey = envelope.unmatchedPurchaseKey; needsRetrySave = false
         }
         verifiedJournalKeys.insert(fact.key)
         if verifiedScope?.contains(fact) == true {
@@ -339,7 +451,34 @@ public enum TipProducts {
             [AppStore.Environment.production.rawValue, AppStore.Environment.sandbox.rawValue].contains(environment)
     }
 }
-struct TipAccountScope: Equatable {
+/// Bounded local request evidence, separate from platform-verified receipts.
+/// An account is a scope, never an order identifier.
+struct TipAttempt: Codable, Equatable {
+    enum Phase: String, Codable {
+        case prepared, dispatching, pending, unknown, awaitingRecord, completed, cancelled
+        var isUnresolved: Bool { [.dispatching, .pending, .unknown, .awaitingRecord].contains(self) }
+    }
+    let id: UUID
+    let productID: String
+    let scope: TipAccountScope
+    let created: Date
+    var phase: Phase
+    var receiptKey: String?
+}
+struct TipJournal: Codable {
+    let version: Int
+    var receipts: [String: TipReceipt]
+    var attempts: [String: TipAttempt]
+    var unknownPaymentOutcome: Bool
+    var unresolvedReceiptKeys: Set<String>
+    var unmatchedPurchaseKey: String?
+    init(receipts: [String: TipReceipt], attempts: [String: TipAttempt] = [:], unknownPaymentOutcome: Bool = false,
+         unresolvedReceiptKeys: Set<String> = [], unmatchedPurchaseKey: String? = nil) {
+        version = 1; self.receipts = receipts; self.attempts = attempts; self.unknownPaymentOutcome = unknownPaymentOutcome
+        self.unresolvedReceiptKeys = unresolvedReceiptKeys; self.unmatchedPurchaseKey = unmatchedPurchaseKey
+    }
+}
+struct TipAccountScope: Codable, Equatable {
     let bundleID: String
     let environment: String
     let accountID: String

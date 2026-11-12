@@ -11,7 +11,7 @@ import Testing
         let generation = value.beginRecovery()
         try value.acceptScope(scope("B"), generation: generation)
         value.endRecovery(generation: generation, succeeded: true)
-        let purchase = value.beginPurchase()
+        let purchase = try begin(value)
         await value.acceptVerified(detailed("one", account: "A"), purchase: purchase) {}
         #expect(value.status == .recorded && value.hasUnresolvedPayment)
         await value.acceptVerified(detailed("other-refund", account: "B", revoked: true)) {}
@@ -60,7 +60,8 @@ import Testing
         var finished = false
         await production.acceptVerified(fact("xcode-in-normal-app")) { finished = true }
         #expect(!finished && production.status == .uncertain)
-        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("production.json").path))
+        let protected = try JSONDecoder().decode(TipJournal.self, from: Data(contentsOf: root.appendingPathComponent("production.json")))
+        #expect(protected.receipts.isEmpty && !protected.unresolvedReceiptKeys.isEmpty)
     }
     @Test func unmatchedPurchaseSurvivesAnotherReceiptFailureAndExactDuplicateResolvesIt() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-combined-" + UUID().uuidString)
@@ -69,7 +70,7 @@ import Testing
         let generation = value.beginRecovery()
         try value.acceptScope(scope("B"), generation: generation)
         value.endRecovery(generation: generation, succeeded: true)
-        let purchase = value.beginPurchase(), unmatched = detailed("A-paid", account: "A")
+        let purchase = try begin(value), unmatched = detailed("A-paid", account: "A")
         await value.acceptVerified(unmatched, purchase: purchase) {}
         let other = detailed("B-paid", account: "B")
         value.markUnverified("B save failed", receiptKey: other.key)
@@ -97,6 +98,161 @@ import Testing
         #expect(value.status == .uncertain && value.hasUnresolvedPayment)
         await value.acceptVerified(fact("same", revoked: true)) {}
         #expect(value.status == .idle && !value.hasUnresolvedPayment)
+    }
+    @Test func purchaseMarkersRefuseDispatchOnEitherWriteFailure() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-dispatch-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("owned blocker".utf8).write(to: root)
+        let url = root.appendingPathComponent("tips.json"), value = owner(url)
+        let gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
+        #expect(throws: (any Error).self) { try value.preparePurchase(productID: "d.localtest.tip.small") }
+        #expect(value.attempts.isEmpty)
+        try FileManager.default.removeItem(at: root)
+        let id = try value.preparePurchase(productID: "d.localtest.tip.small")
+        let held = root.appendingPathComponent("prepared.json")
+        try FileManager.default.moveItem(at: url, to: held)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+        #expect(throws: (any Error).self) { try value.dispatchPurchase(id) }
+        #expect(value.attempts[id.uuidString]?.phase == .prepared)
+        let cold = owner(held)
+        #expect(cold.attempts[id.uuidString]?.phase == .prepared && !cold.hasUnresolvedPayment)
+        // Public purchase invokes StoreKit only after both of these writes.
+    }
+
+    @Test(arguments: [TipAttempt.Phase.dispatching, .pending, .unknown])
+    func unresolvedRequestSurvivesColdObjectAndUnrelatedVerifiedHistory(phase: TipAttempt.Phase) async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-request-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("tips.json"), value = owner(url)
+        let gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
+        let id = try begin(value)
+        if phase != .dispatching { value.completePurchase(id, phase: phase) }
+        let cold = owner(url)
+        #expect(cold.hasUnresolvedPayment && cold.attempts[id.uuidString]?.phase == phase)
+        let next = cold.beginRecovery(); try cold.acceptScope(scope("A"), generation: next)
+        try await cold.mergeHistory(detailed("same-sku-different-transaction"), credential: nil, generation: next)
+        cold.endRecovery(generation: next, succeeded: true)
+        await cold.acceptVerified(detailed("other-refund", revoked: true)) {}
+        cold.finishProductLoad([])
+        #expect(cold.hasUnresolvedPayment && !cold.canPurchase && cold.attempts[id.uuidString]?.receiptKey == nil)
+        #expect(cold.attempts[id.uuidString]?.phase == phase)
+        #expect(throws: (any Error).self) { try cold.preparePurchase(productID: "d.localtest.tip.small") }
+    }
+
+    @Test func exactDirectAssociationSurvivesCredentialFailureAndRecoversFromVerifiedHistory() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-exact-retry-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("tips.json"), vault = FixtureTipVault(); vault.fail = true
+        let value = TipStore(productIDs: ["d.localtest.tip.small"], bundleID: "D.fixture", journalURL: url, localTest: true, credentials: vault)
+        let gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
+        let id = try begin(value), exact = detailed("captured-exact")
+        var finished = 0
+        await value.acceptVerified(exact, credential: "verified-signed", purchase: id) { finished += 1 }
+        #expect(finished == 0 && value.attempts[id.uuidString]?.phase == .awaitingRecord)
+        #expect(value.attempts[id.uuidString]?.receiptKey == exact.key && value.hasUnresolvedPayment)
+        let cold = owner(url), next = cold.beginRecovery(); try cold.acceptScope(scope("A"), generation: next)
+        await cold.acceptVerified(detailed("same-product-unrelated")) { finished += 1 }
+        #expect(cold.hasUnresolvedPayment && cold.attempts[id.uuidString]?.phase == .awaitingRecord)
+        try await cold.mergeHistory(exact, credential: "verified-signed", generation: next)
+        cold.endRecovery(generation: next, succeeded: true)
+        #expect(cold.attempts[id.uuidString]?.phase == .completed && !cold.hasUnresolvedPayment)
+        #expect(cold.currentSupportRecords.contains { $0.transactionID == exact.transactionID })
+        await cold.acceptVerified(exact) { finished += 1 }
+        let saved = try JSONDecoder().decode(TipJournal.self, from: Data(contentsOf: url))
+        #expect(saved.attempts.count == 1 && saved.attempts[id.uuidString]?.receiptKey == exact.key)
+        #expect(saved.receipts.count == 2 && finished == 2)
+    }
+
+    @Test func exactAssociationPrecedesLedgerFailureAndColdRetryDoesNotRepurchase() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-ledger-after-association-" + UUID().uuidString)
+        let held = root.appendingPathExtension("held")
+        defer { try? FileManager.default.removeItem(at: root); try? FileManager.default.removeItem(at: held) }
+        let url = root.appendingPathComponent("tips.json"), vault = FixtureTipVault()
+        let value = TipStore(productIDs: ["d.localtest.tip.small"], bundleID: "D.fixture", journalURL: url, localTest: true, credentials: vault)
+        let gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
+        let id = try begin(value), exact = detailed("direct-ledger-retry")
+        var continuation: CheckedContinuation<Void, Never>?, finished = 0
+        vault.pause = { await withCheckedContinuation { continuation = $0 } }
+        let handling = Task { await value.acceptVerified(exact, credential: "verified", purchase: id) { finished += 1 } }
+        for _ in 0..<100 { if continuation != nil { break }; await Task.yield() }
+        try #require(continuation != nil)
+        let linked = try JSONDecoder().decode(TipJournal.self, from: Data(contentsOf: url))
+        #expect(linked.receipts.isEmpty && linked.attempts[id.uuidString]?.receiptKey == exact.key)
+        try FileManager.default.moveItem(at: root, to: held)
+        try Data("controlled ledger blocker".utf8).write(to: root)
+        continuation?.resume(); await handling.value
+        #expect(finished == 0 && value.needsRetrySave && value.hasUnresolvedPayment)
+        try FileManager.default.removeItem(at: root); try FileManager.default.moveItem(at: held, to: root)
+        let cold = owner(url)
+        #expect(cold.hasUnresolvedPayment && cold.attempts[id.uuidString]?.phase == .awaitingRecord)
+        let next = cold.beginRecovery(); try cold.acceptScope(scope("A"), generation: next)
+        cold.endRecovery(generation: next, succeeded: true)
+        await cold.acceptVerified(exact, credential: "verified") { finished += 1 }
+        #expect(finished == 1 && !cold.hasUnresolvedPayment && cold.attempts[id.uuidString]?.phase == .completed)
+        #expect(try JSONDecoder().decode(TipJournal.self, from: Data(contentsOf: url)).receipts.count == 1)
+    }
+
+    @Test func retryProtectionSaveWritesOnlyCapturedState() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-protection-retry-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("blocker".utf8).write(to: root)
+        let url = root.appendingPathComponent("tips.json"), value = owner(url)
+        value.markUnverified("captured unknown outcome")
+        #expect(value.needsRetrySave && value.hasUnresolvedPayment)
+        try FileManager.default.removeItem(at: root)
+        value.retrySave()
+        #expect(!value.needsRetrySave && value.hasUnresolvedPayment)
+        let saved = try JSONDecoder().decode(TipJournal.self, from: Data(contentsOf: url))
+        #expect(saved.receipts.isEmpty && saved.attempts.isEmpty && saved.unknownPaymentOutcome)
+        #expect(owner(url).hasUnresolvedPayment)
+    }
+
+    @Test func explicitCancellationCannotEraseAnotherUnknownOutcome() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-cancel-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("tips.json"), value = owner(url)
+        let gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
+        let id = try begin(value)
+        value.markUnverified("unrelated platform verification failure")
+        value.completePurchase(UUID(), phase: .cancelled)
+        #expect(value.attempts[id.uuidString]?.phase == .dispatching)
+        value.completePurchase(id, phase: .cancelled)
+        #expect(value.attempts[id.uuidString]?.phase == .cancelled && value.hasUnresolvedPayment)
+        let cold = owner(url)
+        #expect(cold.hasUnresolvedPayment && cold.attempts[id.uuidString]?.phase == .cancelled)
+    }
+
+    @Test func requestCapacityAndUnknownJournalVersionNeverDiscardProtection() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-bound-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent("tips.json")
+        var envelope = TipJournal(receipts: [:])
+        for _ in 0..<1024 {
+            let id = UUID(); envelope.attempts[id.uuidString] = .init(id: id, productID: "d.localtest.tip.small",
+                scope: scope("A"), created: Date(), phase: .prepared, receiptKey: nil)
+        }
+        let bytes = try JSONEncoder().encode(envelope); try bytes.write(to: url)
+        let value = owner(url), gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
+        #expect(throws: (any Error).self) { try value.preparePurchase(productID: "d.localtest.tip.small") }
+        #expect(try Data(contentsOf: url) == bytes && value.attempts.count == 1024)
+        var invalid = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any]); invalid["version"] = 99
+        try JSONSerialization.data(withJSONObject: invalid).write(to: url)
+        let broken = owner(url)
+        #expect(broken.status == .uncertain && !broken.canPurchase)
+        #expect(throws: (any Error).self) { try broken.recordVerified(fact("new")) }
+    }
+
+    private func begin(_ value: TipStore) throws -> UUID {
+        let id = try value.preparePurchase(productID: "d.localtest.tip.small")
+        try value.dispatchPurchase(id)
+        return id
     }
     private func owner(_ url: URL, ids: Set<String> = ["d.localtest.tip.small"]) -> TipStore {
         TipStore(productIDs: ids, bundleID: "D.fixture", journalURL: url, localTest: true, credentials: FixtureTipVault())
@@ -146,7 +302,7 @@ import Testing
         suspended?.resume(); await original.value
         #expect(value.status == (uncertain ? .uncertain : .thanked),
                 "An unrelated verified delivery cannot resolve an earlier unknown verification failure")
-        let saved = try JSONDecoder().decode([String: TipReceipt].self, from: Data(contentsOf: root.appendingPathComponent("journal.json")))
+        let saved = try JSONDecoder().decode(TipJournal.self, from: Data(contentsOf: root.appendingPathComponent("journal.json"))).receipts
         #expect(saved.count == 1)
     }
     @Test func failedWriteDoesNotFinishAndRefundWinsSuspendedFinish() async throws {
@@ -196,7 +352,7 @@ import Testing
         #expect(value.currentSupportRecords.first { $0.transactionID == "unknown" }?.amount == nil)
         let data = try Data(contentsOf: url)
         #expect(!String(decoding: data, as: UTF8.self).contains("signed fixture"))
-        let saved = try JSONDecoder().decode([String: TipReceipt].self, from: data)
+        let saved = try JSONDecoder().decode(TipJournal.self, from: data).receipts
         #expect(saved.count == 3 && saved[detailed("one").key]?.amount == Decimal(string: "1.23456789"))
         #expect(saved[detailed("two").key]?.currency == "JPY")
         #expect((try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber)?.intValue == 0o600)
@@ -250,7 +406,8 @@ import Testing
         var finished = 0
         await value.acceptVerified(detailed("one"), credential: "signed") { finished += 1 }
         #expect(finished == 0 && value.status == .uncertain)
-        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("journal.json").path))
+        let protected = try JSONDecoder().decode(TipJournal.self, from: Data(contentsOf: root.appendingPathComponent("journal.json")))
+        #expect(protected.receipts.isEmpty && !protected.unresolvedReceiptKeys.isEmpty)
         vault.fail = false
         await value.acceptVerified(detailed("one"), credential: "signed") { finished += 1 }
         #expect(finished == 1 && value.status == .thanked && vault.values.count == 1)
@@ -260,7 +417,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: root) }
         let value = owner(root.appendingPathComponent("journal.json"))
         let gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
-        let purchase = value.beginPurchase()
+        let purchase = try begin(value)
         try await value.mergeHistory(detailed("one"), credential: nil, generation: gen)
         value.endRecovery(generation: gen, succeeded: true)
         var suspended: CheckedContinuation<Void, Never>?
@@ -272,8 +429,7 @@ import Testing
         suspended?.resume(); await result.value
         #expect(value.status == .recorded && value.currentSupportRecords.isEmpty)
         let again = value.beginRecovery(); try value.acceptScope(scope("A"), generation: again)
-        let second = value.beginPurchase()
-        await value.acceptVerified(detailed("one"), purchase: second) { }
+        await value.acceptVerified(detailed("one"), purchase: purchase) { }
         #expect(value.status == .thanked, "An explicit payment response ends even when history already recorded it")
     }
     @Test func completedPurchaseDoesNotEraseANewerUnverifiedTransaction() async throws {
@@ -282,7 +438,7 @@ import Testing
         let value = owner(root.appendingPathComponent("journal.json"))
         let gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
         value.endRecovery(generation: gen, succeeded: true)
-        let purchase = value.beginPurchase()
+        let purchase = try begin(value)
         var suspended: CheckedContinuation<Void, Never>?
         let result = Task { await value.acceptVerified(detailed("one"), purchase: purchase) { await withCheckedContinuation { suspended = $0 } } }
         for _ in 0..<100 { if suspended != nil { break }; await Task.yield() }
@@ -358,12 +514,12 @@ import Testing
         _ = try await value.persistVerified(versioned(301), credential: "new")
         held?.resume(); _ = try await old.value
         #expect(Set(vault.values.values) == ["old", "new"])
-        let data = try JSONDecoder().decode([String: TipReceipt].self, from: Data(contentsOf: url))
+        let data = try JSONDecoder().decode(TipJournal.self, from: Data(contentsOf: url)).receipts
         #expect(data.values.first?.revoked == false)
         try JSONEncoder().encode([versioned(999999).key: versioned(999999, revoked: true)]).write(to: url)
         let cold = owner(url)
         _ = try cold.recordVerified(versioned(301))
-        let restored = try JSONDecoder().decode([String: TipReceipt].self, from: Data(contentsOf: url))
+        let restored = try JSONDecoder().decode(TipJournal.self, from: Data(contentsOf: url)).receipts
         #expect(restored.values.first?.signedDate == versioned(301).signedDate && restored.values.first?.revoked == false)
     }
 
@@ -377,7 +533,7 @@ import Testing
         try await cold.mergeHistory(detailed("one", amount: nil, currency: nil), credential: nil, generation: gen)
         cold.endRecovery(generation: gen, succeeded: true)
         #expect(cold.currentSupportRecords.count == 1 && cold.currentSupportRecords[0].amount == nil)
-        let saved = try JSONDecoder().decode([String: TipReceipt].self, from: Data(contentsOf: url))
+        let saved = try JSONDecoder().decode(TipJournal.self, from: Data(contentsOf: url)).receipts
         #expect(saved[detailed("one").key]?.amount == nil)
         try await cold.mergeHistory(detailed("one", amount: Decimal(string: "2.99")), credential: nil, generation: gen)
         #expect(cold.currentSupportRecords[0].amount == Decimal(string: "2.99"))

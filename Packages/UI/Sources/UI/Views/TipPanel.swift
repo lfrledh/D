@@ -66,6 +66,10 @@ struct TipPanel: View {
                 Button(text("reload")) { Task { await owner.loadProducts() } }
                     .disabled(owner.catalogStatus == .loading || owner.status == .purchasing)
                     .accessibilityIdentifier("tip-reload")
+                if owner.needsRetrySave {
+                    Button(workflowText(language, "chat.retrySave")) { owner.retrySave() }
+                        .disabled(owner.status == .purchasing).accessibilityIdentifier("tip-retry-save")
+                }
                 Spacer()
                 if let product = owner.selectedProduct {
                     Button(text("purchase").replacingOccurrences(of: "{price}", with: product.displayPrice)) {

@@ -79,7 +79,7 @@ private final class TipStoreKitBundle: NSObject { }
             // result after persistence and finish. Finished consumables need not
             // appear in Transaction.latest; compare its exact durable receipt to
             // the independent local platform transaction instead.
-            let journal = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("tips.json"))) as? [String: [String: Any]])
+            let journal = try receiptRecords(root.appendingPathComponent("tips.json"))
             let receipt = try #require(journal.values.first { $0["productID"] as? String == product.id })
             let transactionID = try #require((receipt["transactionID"] as? String).flatMap(UInt64.init))
             let transaction = try #require(session.allTransactions().first { UInt64($0.identifier) == transactionID })
@@ -89,13 +89,13 @@ private final class TipStoreKitBundle: NSObject { }
             let amount = try #require(receipt["amount"] as? NSNumber)
             #expect(amount.decimalValue == expected[index])
         }
-        let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("tips.json"))) as? [String: [String: Any]])
+        let records = try receiptRecords(root.appendingPathComponent("tips.json"))
         #expect(records.count == 5 && Set(records.values.compactMap { $0["productID"] as? String }) == ids)
         await store.recoverHistory(recheckAccount: true)
         let cold = TipStore(productIDs: ids, bundleID: Bundle.main.bundleIdentifier ?? "",
                             journalURL: root.appendingPathComponent("tips.json"), localTest: true)
         await cold.loadProducts()
-        let after = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("tips.json"))) as? [String: [String: Any]])
+        let after = try receiptRecords(root.appendingPathComponent("tips.json"))
         #expect(after.count == 5 && session.allTransactions().count == 5)
         #expect(Set(after.keys) == Set(records.keys))
         print("TIP_FIVE exactIDs=5 verifiedLocal=5 recordKeysUnchanged=true purchaseCount=5")
@@ -128,6 +128,110 @@ private final class TipStoreKitBundle: NSObject { }
         }
         #expect(session.allTransactions().isEmpty, "Visual capture never pays")
     }
+    private func journalObject(_ file: URL) throws -> [String: Any] {
+        try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+    }
+    private func receiptRecords(_ file: URL) throws -> [String: [String: Any]] {
+        let object = try journalObject(file)
+        if object["version"] != nil {
+            try #require(object["version"] as? Int == 1)
+            return try #require(object["receipts"] as? [String: [String: Any]])
+        }
+        return try #require(object as? [String: [String: Any]])
+    }
+    private func attemptRecords(_ file: URL) throws -> [String: [String: Any]] {
+        try #require(journalObject(file)["attempts"] as? [String: [String: Any]])
+    }
+
+    @Test func requestWriteFailureMakesZeroActualStoreKitPurchasesThenOneExplicitRetry() async throws {
+        let session = try testSession(); defer { session.clearTransactions() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-Tip-request-failure-" + UUID().uuidString)
+        defer { removeTestRecords(root) }
+        try Data("controlled file blocks journal directory".utf8).write(to: root)
+        let store = owner(root); await store.loadProducts()
+        store.selectedID = try #require(store.products.first?.id)
+        try #require(store.canPurchase)
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; defer { window.close() }
+        await store.purchase(confirmIn: window)
+        #expect(store.status == .failed && session.allTransactions().isEmpty)
+        try FileManager.default.removeItem(at: root)
+        await store.purchase(confirmIn: window)
+        #expect(store.status == .thanked && session.allTransactions().count == 1)
+        let file = root.appendingPathComponent("tips.json")
+        let receipts = try receiptRecords(file), attempts = try attemptRecords(file)
+        let receiptKey = try #require(receipts.keys.first), attempt = try #require(attempts.values.first)
+        #expect(receipts.count == 1 && attempts.count == 1 && attempt["phase"] as? String == "completed")
+        #expect(attempt["receiptKey"] as? String == receiptKey)
+        #expect(attempt["productID"] as? String == store.selectedID)
+        print("TIP_REQUEST_WRITE_FAILURE actualPurchasesBeforeRepair=0 afterExplicitRetry=1 exactAssociation=true")
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_STOREKIT_COLD_STAGE"] == "pending-prepare"))
+    func coldPendingRequestPrepare() async throws {
+        let file = try coldCheckpoint(), root = file.deletingPathExtension().appendingPathExtension("request")
+        try #require(!FileManager.default.fileExists(atPath: file.path) && !FileManager.default.fileExists(atPath: root.path))
+        let session = try testSession(); session.askToBuyEnabled = true
+        var prepared = false
+        defer { if !prepared { session.clearTransactions(); removeTestRecords(root) } }
+        let store = owner(root); await store.loadProducts()
+        store.selectedID = try #require(store.products.first?.id)
+        try #require(store.localTest && store.canPurchase)
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; defer { window.close() }
+        await store.purchase(confirmIn: window)
+        try #require(store.status == .pending && !store.canPurchase)
+        let journal = root.appendingPathComponent("tips.json"), attempts = try attemptRecords(journal)
+        let id = try #require(attempts.keys.first), request = try #require(attempts[id])
+        try #require(attempts.count == 1 && request["phase"] as? String == "pending" && request["receiptKey"] == nil)
+        try #require(try receiptRecords(journal).isEmpty)
+        let pending = try #require(session.allTransactions().last)
+        let checkpoint: [String: Any] = ["pid": ProcessInfo.processInfo.processIdentifier,
+            "bundleID": Bundle.main.bundleIdentifier ?? "", "created": Date().timeIntervalSince1970,
+            "attemptID": id, "productID": try #require(store.selectedID), "platformTestIdentifier": pending.identifier]
+        try JSONSerialization.data(withJSONObject: checkpoint).write(to: file, options: .atomic)
+        prepared = true
+        print("TIP_PENDING_PREPARE pid=\(ProcessInfo.processInfo.processIdentifier) attempt=\(id) durablePending=true")
+        // No finish/clear/reset; the next host reads this exact request and platform session.
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_STOREKIT_COLD_STAGE"] == "pending-recover"))
+    func coldPendingRequestRecover() async throws {
+        let file = try coldCheckpoint(), root = file.deletingPathExtension().appendingPathExtension("request")
+        let checkpoint = try journalObject(file), previousPID = try #require(checkpoint["pid"] as? Int)
+        try #require(previousPID != Int(ProcessInfo.processInfo.processIdentifier))
+        try #require(checkpoint["bundleID"] as? String == Bundle.main.bundleIdentifier)
+        let created = try #require(checkpoint["created"] as? Double)
+        try #require((0...1_800).contains(Date().timeIntervalSince1970 - created))
+        let attemptID = try #require(checkpoint["attemptID"] as? String)
+        let identifier = try #require((checkpoint["platformTestIdentifier"] as? NSNumber)?.uintValue)
+        let configuration = try #require(Bundle(for: TipStoreKitBundle.self).url(forResource: "Tips", withExtension: "storekit"))
+        let session = try SKTestSession(contentsOf: configuration) // No reset, clear, or new purchase.
+        let retained = session.allTransactions().contains { $0.identifier == identifier && $0.productIdentifier == checkpoint["productID"] as? String }
+        try #require(retained, "Platform cross-host precondition failed; never substitute another transaction")
+        let store = owner(root), journal = root.appendingPathComponent("tips.json")
+        try #require(store.status == .pending && !store.canPurchase)
+        let initial = try attemptRecords(journal)
+        try #require(initial.count == 1 && initial[attemptID]?["phase"] as? String == "pending")
+        await store.loadProducts(); store.selectedID = checkpoint["productID"] as? String
+        try #require(store.localTest && !store.canPurchase)
+        // The local test knows which platform request it approved. D's production
+        // listener is deliberately not given that test-only association.
+        store.start(); try session.approveAskToBuyTransaction(identifier: identifier)
+        try await wait("cross-host approved receipt", store: store) { (try? receiptRecords(journal))?.count == 1 }
+        let receipts = try receiptRecords(journal), after = try attemptRecords(journal)
+        #expect(receipts.values.first?["transactionID"] as? String == String(identifier))
+        #expect(after[attemptID]?["phase"] as? String == "pending" && after[attemptID]?["receiptKey"] == nil)
+        #expect(!store.canPurchase && session.allTransactions().count == 1)
+        var exactUnfinished = false
+        for await result in Transaction.unfinished {
+            if case .verified(let transaction) = result, transaction.id == UInt64(identifier) { exactUnfinished = true }
+        }
+        #expect(!exactUnfinished)
+        print("TIP_PENDING_RECOVER oldPID=\(previousPID) pid=\(ProcessInfo.processInfo.processIdentifier) exactRequestRetained=true globalReceiptPersisted=true anonymousPendingStillProtected=true")
+        session.clearTransactions(); removeTestRecords(root); try FileManager.default.removeItem(at: file)
+    }
+
     private func testSession() throws -> SKTestSession {
         let file = try #require(Bundle(for: TipStoreKitBundle.self).url(forResource: "Tips", withExtension: "storekit"))
         let session = try SKTestSession(contentsOf: file)
@@ -216,7 +320,7 @@ private final class TipStoreKitBundle: NSObject { }
         let store = owner(root); store.start()
         let journal = root.appendingPathComponent("tips.json")
         try await wait("cross-host recovery", store: store) { FileManager.default.fileExists(atPath: journal.path) }
-        let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: journal)) as? [String: [String: Any]])
+        let records = try receiptRecords(journal)
         #expect(records.count == 1 && records.values.first?["transactionID"] as? String == String(id))
         var remainsUnfinished = true, remainingTotal = 0, remainingUnverified = 0
         for index in 0..<10 {
@@ -270,7 +374,7 @@ private final class TipStoreKitBundle: NSObject { }
         // A second transaction for the same consumable remains a valid independent tip.
         await store.purchase(confirmIn:window)
         #expect(store.status == .thanked, Comment(rawValue: store.diagnostic ?? "no diagnostic"))
-        let records = try #require(try JSONSerialization.jsonObject(with:Data(contentsOf:root.appendingPathComponent("tips.json"))) as? [String:Any])
+        let records = try receiptRecords(root.appendingPathComponent("tips.json"))
         #expect(records.count == 2)
         // Simulate process exit after StoreKit accepted but before D acknowledged.
         let result = try await product.purchase(confirmIn: window)
@@ -286,8 +390,8 @@ private final class TipStoreKitBundle: NSObject { }
         }
         print("TIP_LOCAL_RECOVERY environment=\(unfinished.environment.rawValue) unfinished=\(unfinishedCount) containsCurrent=\(unfinishedContainsCurrent)")
         let cold = owner(root); cold.start()
-        try await wait("unfinished recovery", store: cold) { (try? Data(contentsOf: root.appendingPathComponent("tips.json"))).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }?.count == 3 }
-        let recovered = try #require(try JSONSerialization.jsonObject(with:Data(contentsOf:root.appendingPathComponent("tips.json"))) as? [String:Any])
+        try await wait("unfinished recovery", store: cold) { (try? receiptRecords(root.appendingPathComponent("tips.json")))?.count == 3 }
+        let recovered = try receiptRecords(root.appendingPathComponent("tips.json"))
         #expect(recovered.count == 3 && recovered.values.contains { ($0 as? [String: Any])?["transactionID"] as? String == String(unfinished.id) })
         #expect(session.allTransactions().count == 3, "Recovery must not purchase again")
     }
@@ -302,18 +406,18 @@ private final class TipStoreKitBundle: NSObject { }
         try await session.setSimulatedError(.generic(.userCancelled), forAPI: .purchase)
         await store.purchase(confirmIn:window)
         #expect(store.status == .cancelled)
-        #expect(!FileManager.default.fileExists(atPath:root.appendingPathComponent("tips.json").path))
+        #expect(try receiptRecords(root.appendingPathComponent("tips.json")).isEmpty)
         try await session.setSimulatedError(nil, forAPI: .purchase)
         session.askToBuyEnabled = true
         await store.purchase(confirmIn:window)
         #expect(store.status == .pending && !store.canPurchase)
-        #expect(!FileManager.default.fileExists(atPath:root.appendingPathComponent("tips.json").path))
+        #expect(try receiptRecords(root.appendingPathComponent("tips.json")).isEmpty)
         let pending = try #require(session.allTransactions().last)
         try session.approveAskToBuyTransaction(identifier:pending.identifier)
         try await wait("approved transaction persisted", store: store) {
-            FileManager.default.fileExists(atPath: root.appendingPathComponent("tips.json").path)
+            (try? receiptRecords(root.appendingPathComponent("tips.json")))?.count == 1
         }
-        let accepted = try #require(try JSONSerialization.jsonObject(with:Data(contentsOf:root.appendingPathComponent("tips.json"))) as? [String:Any])
+        let accepted = try receiptRecords(root.appendingPathComponent("tips.json"))
         let acceptedID = try #require(accepted.values.compactMap { ($0 as? [String: Any])?["transactionID"] as? String }.first.flatMap(UInt64.init))
         #expect(acceptedID == UInt64(pending.identifier) && accepted.count == 1)
         let transaction = try #require(session.allTransactions().first { UInt64($0.identifier) == acceptedID })
@@ -347,8 +451,7 @@ private final class TipStoreKitBundle: NSObject { }
         await store.recoverHistory(recheckAccount: true)
         #expect(store.status == .uncertain && !store.canPurchase)
         try await wait("exact approved transaction refund persisted", store: store) {
-            guard let data = try? Data(contentsOf: root.appendingPathComponent("tips.json")),
-                  let records = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Any]] else { return false }
+            guard let records = try? receiptRecords(root.appendingPathComponent("tips.json")) else { return false }
             return records.values.contains { $0["transactionID"] as? String == String(acceptedID) && $0["revoked"] as? Bool == true }
         }
         if case .verified(let latest)? = await Transaction.latest(for: "d.localtest.tip.tier1") {
@@ -394,7 +497,7 @@ private final class TipStoreKitBundle: NSObject { }
         let file = root.appendingPathComponent("tips.json")
         #expect(FileManager.default.fileExists(atPath: file.path))
         if FileManager.default.fileExists(atPath: file.path) {
-            let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+            let records = try receiptRecords(file)
             #expect(records.count == 1 && records.values.contains { ($0 as? [String: Any])?["transactionID"] as? String == String(first.id) })
         }
         #expect(session.allTransactions().count == 1, "Recovery never purchases again")
@@ -425,7 +528,7 @@ private final class TipStoreKitBundle: NSObject { }
         await store.purchase(confirmIn: window)
         #expect(store.status == .thanked, Comment(rawValue: store.diagnostic ?? "no diagnostic"))
         let file = root.appendingPathComponent("tips.json")
-        let initial = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        let initial = try receiptRecords(file)
         let id = try #require(initial.values.compactMap { ($0 as? [String: Any])?["transactionID"] as? String }.first.flatMap(UInt64.init))
         let transaction = try #require(session.allTransactions().first { UInt64($0.identifier) == id })
         try session.refundTransaction(identifier: transaction.identifier)
@@ -433,7 +536,7 @@ private final class TipStoreKitBundle: NSObject { }
             if revokedIDs.contains(id), store.status == .idle { break }
             try await Task.sleep(for: .milliseconds(50))
         }
-        let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: [String: Any]])
+        let records = try receiptRecords(file)
         let journalRevoked = records.values.first { $0["transactionID"] as? String == String(id) }?["revoked"] as? Bool
         let systemRevoked = session.allTransactions().first { UInt64($0.identifier) == id }?.cancelDate != nil
         // Freeze the automatic-listener result before explicit history reads,
@@ -526,7 +629,7 @@ private final class TipStoreKitBundle: NSObject { }
         await store.purchase(confirmIn: window)
         #expect(store.status == .thanked, Comment(rawValue: store.diagnostic ?? "no diagnostic"))
         let file = root.appendingPathComponent("tips.json")
-        let initial = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: [String: Any]])
+        let initial = try receiptRecords(file)
         #expect(initial.count == 2)
         #expect(initial.values.allSatisfy { $0["purchaseDate"] != nil && $0["accountID"] != nil })
         let transactionCount = session.allTransactions().count
@@ -546,7 +649,7 @@ private final class TipStoreKitBundle: NSObject { }
         try FileManager.default.removeItem(at: file)
         let cold = owner(root); await cold.loadProducts()
         #expect(cold.recoveryStatus == .ready)
-        let restored = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: [String: Any]])
+        let restored = try receiptRecords(file)
         #expect(Set(restored.keys) == Set(initial.keys))
         #expect(cold.status != .thanked, "Historical recovery is not a new payment")
         #expect(session.allTransactions().count == transactionCount, "Recovery never starts another purchase")
@@ -578,7 +681,7 @@ private final class TipStoreKitBundle: NSObject { }
         try #require(platformHasRevocation, "The verified platform history must expose revocation before testing D's explicit reload")
         await store.loadProducts()
         #expect(store.recoveryStatus == .ready)
-        let records = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("tips.json"))) as? [String: [String: Any]])
+        let records = try receiptRecords(root.appendingPathComponent("tips.json"))
         #expect(records.count == 1 && records.values.first?["revoked"] as? Bool == true)
         #expect(records.values.first?["revocationDate"] != nil)
         #expect(session.allTransactions().count == 1, "Refund recovery never purchases again")
