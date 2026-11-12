@@ -1155,6 +1155,28 @@ class PreparedIdentityTests(unittest.TestCase):
         self.assertEqual(result["DSourceCommit"], self.production)
         self.assertEqual(result["DDeliveryCommit"], self.delivery)
 
+    def test_ordinary_candidate_rejects_test_bundle_and_detached_symbols_without_mutating_them(self):
+        app = self.root / "candidate.app"
+        plugins = app / "Contents/PlugIns"
+        plugins.mkdir(parents=True)
+        # A legitimate plugin is not a test merely because it uses PlugIns.
+        (plugins / "Example.appex").mkdir()
+        self.core._reject_test_artifacts(app)
+        for name in ("DTests.xctest", "DTests.xctest.dSYM"):
+            with self.subTest(name=name):
+                artifact = plugins / name
+                artifact.mkdir()
+                (artifact / "fixture").write_bytes(b"preserve")
+                with self.assertRaisesRegex(self.core.BuildError, "test artifact"):
+                    self.core._reject_test_artifacts(app)
+                self.assertEqual((artifact / "fixture").read_bytes(), b"preserve")
+                (artifact / "fixture").unlink(); artifact.rmdir()
+        link = plugins / "Other.XCTEST"
+        link.symlink_to(self.root / "absent-test-target")
+        with self.assertRaisesRegex(self.core.BuildError, "test artifact"):
+            self.core._reject_test_artifacts(app)
+        self.assertTrue(link.is_symlink())
+
 
 if __name__ == "__main__":
     unittest.main()

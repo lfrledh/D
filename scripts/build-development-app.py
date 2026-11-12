@@ -1342,6 +1342,15 @@ def _prepared_info(source: Path, production: str, delivery: str) -> dict[str, An
     return value
 
 
+def _reject_test_artifacts(app: Path) -> None:
+    """A reused build directory must not publish XCTest products as an ordinary App."""
+    for root, directories, files in os.walk(app, followlinks=False):
+        for name in directories + files:
+            if name.lower().endswith((".xctest", ".xctest.dsym")):
+                relative = (Path(root) / name).relative_to(app)
+                raise BuildError("test artifact in ordinary candidate: " + str(relative))
+
+
 def _execute_prepared(config_path: Path, run_root: Path, timeout: float) -> tuple[dict[str, Any], Path]:
     """Current seven-engine path. Signed by Xcode, never mutate signed inputs."""
     cfg = _read_json(config_path, "prepared build configuration")
@@ -1411,6 +1420,7 @@ def _execute_prepared(config_path: Path, run_root: Path, timeout: float) -> tupl
             raise BuildError("source or signing input changed during build")
         if core.validate_prepared(resources) != manifest: raise BuildError("prepared resources changed during build")
         built = derived / "Build/Products" / cfg["configuration"] / "D.app"
+        _reject_test_artifacts(built)
         actual_info = plistlib.loads((built / "Contents/Info.plist").read_bytes())
         for key in ["DSourceCommit", "DDeliveryCommit", "DProductInputSHA256", "DResourceManifestSHA256", "DBuildConfiguration"]:
             if actual_info.get(key) != info[key]: raise BuildError("built identity mismatch: " + key)
@@ -1437,6 +1447,7 @@ def _execute_prepared(config_path: Path, run_root: Path, timeout: float) -> tupl
         try:
             _run_stage("copy-signed-app", ["/usr/bin/ditto", str(built), str(staged_app)], dict(os.environ),
                        run_root / "copy.log", timeout, report["stages"])
+            _reject_test_artifacts(staged_app)
             subprocess.run(["codesign", "--verify", "--deep", "--strict", str(staged_app)], check=True)
             if (staged_app / "Contents/Info.plist").read_bytes() != (built / "Contents/Info.plist").read_bytes():
                 raise BuildError("copied candidate identity differs")
