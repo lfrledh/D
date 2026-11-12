@@ -10,6 +10,26 @@ import Testing
 
 @Suite @MainActor
 struct ModelLibraryPresentationTests {
+    @Test func unsupportedLocalFolderKeepsTypedReasonAcrossLanguageChanges() async throws {
+        let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+        let root = URL(fileURLWithPath: base).appendingPathComponent("UnsupportedLocal-" + UUID().uuidString)
+        let source = root.appendingPathComponent("empty-model")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = try await ModelLibrary(stateDirectory: root.appendingPathComponent("state"))
+        let model = ModelLibraryModel(library: library)
+        await model.chooseLocalFiles(at: source)
+        #expect(model.localFileSelection == nil && model.localFileChoices.isEmpty)
+        let raw = try #require(model.errorMessage), key = try #require(model.errorCode)
+        #expect(key == "modelManagement.local.noSupportedModel")
+        let zh = UILanguageStore(preferredLanguages: ["zh-Hans"]), en = UILanguageStore(preferredLanguages: ["en"])
+        #expect(zh.text(key, fallback: raw) != en.text(key, fallback: raw))
+        #expect(model.errorMessage == raw && model.errorCode == key)
+        #expect(await library.snapshot().records.isEmpty)
+        model.clearError()
+        #expect(model.errorMessage == nil && model.errorCode == nil)
+        try await library.shutdown()
+    }
     @Test func memoryRefreshPreservesPresentationWhileRealChangesStillPublish() async throws {
         let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
         let root = URL(fileURLWithPath: base).appendingPathComponent("LibraryPresentation-" + UUID().uuidString)

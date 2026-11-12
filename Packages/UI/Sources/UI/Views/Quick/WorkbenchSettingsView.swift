@@ -186,8 +186,6 @@ public struct WorkbenchSettingsView: View {
                     }
                     Spacer()
                     if let searchTargetLabel { Text(searchTargetLabel).font(.caption).foregroundStyle(.secondary) }
-                    Text(text("scope", "Application preferences and the captured workspace. Each section states its scope.",
-                              "应用偏好与当前工作区；各项均标明实际作用范围。")).font(.caption).foregroundStyle(.secondary)
                 }.padding(16).frame(width: 210)
                 Divider()
                 ZStack {

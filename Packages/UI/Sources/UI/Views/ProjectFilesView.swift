@@ -270,7 +270,7 @@ struct ProjectFilesView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(modelPresentation.catalog.first(where: { $0.id == item.catalogID && $0.revision == item.revision })?.title ?? item.catalogID)
                         if let directory = item.directory { Text(directory.path).font(.caption).textSelection(.enabled) }
-                        if let diagnostic = item.diagnostic { Text(diagnostic).font(.caption).foregroundStyle(.orange).textSelection(.enabled) }
+                        if let diagnostic = item.diagnostic { WorkbenchIssueText(raw: diagnostic, key: item.diagnosticCode).font(.caption).foregroundStyle(.orange).textSelection(.enabled) }
                         if let id = addedRestoredModels[item.id], let record = modelPresentation.snapshot?.resources.first(where: { $0.id == id })?.record {
                             Text(workflowText(language, "modelManagement.registration." + record.registrationState.rawValue))
                         } else {

@@ -2475,7 +2475,7 @@ extension ModelLibrary {
                     supportsOriginal: entry.preparation == .none, estimatedBytes: entry.totalBytes, rootIdentity: directory.identity))
             }
         }
-        guard !matches.isEmpty else { throw ModelLibraryError.integrity("No complete supported model recipe matches this folder. Check the exact model, components and file sizes.") }
+        guard !matches.isEmpty else { throw ModelLibraryError.unsupportedLocalFiles }
         return matches
     }
 

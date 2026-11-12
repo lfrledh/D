@@ -31,6 +31,7 @@ public struct ProjectRestoredModel: Sendable, Identifiable {
     public let revision: String
     public let directory: URL?
     public let diagnostic: String?
+    public var diagnosticCode: String? = nil
 }
 
 
@@ -584,7 +585,8 @@ private extension ProjectBackup {
                 let candidates = try (dependency.relativeRoot.map { [$0] } ?? Array(roots)).filter { try matches(dependency, $0) }
                 guard candidates.count == 1, let candidate = candidates.first else {
                     return .init(id: id, catalogID: dependency.catalogID, revision: dependency.revision, directory: nil,
-                        diagnostic: candidates.isEmpty ? "Restored model files do not match a complete recorded file set." : "More than one restored copy matches this legacy model record; no copy was chosen.")
+                        diagnostic: candidates.isEmpty ? "Restored model files do not match a complete recorded file set." : "More than one restored copy matches this legacy model record; no copy was chosen.",
+                        diagnosticCode: candidates.isEmpty ? "files.restore.modelMismatch" : "files.restore.modelAmbiguous")
                 }
                 return .init(id: id, catalogID: dependency.catalogID, revision: dependency.revision,
                     directory: url.appendingPathComponent(candidate, isDirectory: true), diagnostic: nil)

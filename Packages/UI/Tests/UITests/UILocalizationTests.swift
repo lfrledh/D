@@ -63,9 +63,9 @@ struct UILocalizationTests {
         do { _ = try store.importPack(data: Data("{broken".utf8)); Issue.record("Invalid JSON was installed") }
         catch { failure = LanguageSettingsIssue(error) }
         let issue = try #require(failure)
-        #expect(issue.summary(store) == "The language pack is not valid JSON.")
+        #expect(issue.summary(store) == "The language pack has a format error. Check its JSON content.")
         try store.select("zh-Hans")
-        #expect(issue.summary(store) == "语言包不是有效的JSON。")
+        #expect(issue.summary(store) == "语言包格式有误，请检查 JSON 内容。")
         #expect(issue.diagnostic == "The language pack is not valid JSON.")
         #expect(store.availableLanguages.map(\.id) == before.map(\.id))
         #expect(store.availableLanguages.filter { $0.id != UILanguageStore.systemIdentifier } == before.filter { $0.id != UILanguageStore.systemIdentifier })

@@ -76,7 +76,7 @@ public struct ModelLibraryView: View {
     public var body: some View {
         VStack(spacing: 0) {
             if let error = model.errorMessage ?? model.snapshot?.queueError {
-                HStack { Image(systemName: "exclamationmark.triangle"); Text(error).textSelection(.enabled); Spacer(); Button(text("dismiss", "收起")) { model.clearError() } }
+                HStack { Image(systemName: "exclamationmark.triangle"); WorkbenchIssueText(raw: error, key: model.errorMessage != nil ? model.errorCode : nil).textSelection(.enabled); Spacer(); Button(text("dismiss", "收起")) { model.clearError() } }
                     .font(.callout).padding(12).background(.orange.opacity(0.1))
             }
             if let notice = model.preparationNotice { Text(notice).font(.callout).padding(8) }
@@ -355,7 +355,6 @@ public struct ModelLibraryView: View {
             field("origin", "取得方式", text("origin." + resource.control.origin.rawValue, resource.control.origin.rawValue))
             field("repository", "内容来源", entry?.repository ?? text("unknown", "未知"))
             Divider()
-            Text(text("knownScope", "当前已知资源与引用；未扫描所有历史项目。")).font(.caption).foregroundStyle(.secondary)
             if record.activeLeaseCount > 0 { Text(text("inUse", "正在运行、排队、准备或备份中，文件受到保护。")) }
             if resource.control.requiresTokenizerUpgrade == true {
                 Text(text(resource.control.role == .execution ? "tokenizerExecutionUpgrade" : (record.storage == .external ? "tokenizerExternal" : "tokenizerUpgrade"), ""))
@@ -411,7 +410,6 @@ public struct ModelLibraryView: View {
                     }
                 }.environment(\.workbenchMenuContext, "resource:\(ObjectIdentifier(model)):\(resource.id)")
             }.buttonStyle(WorkbenchGlassButtonStyle())
-            if record.registrationState != .registered { Text(text("registrationHelp", "文件完整不等于已接入执行；登记不会改变当前节点或运行模型。")).font(.caption).foregroundStyle(.secondary) }
             DisclosureGroup(text("technical", "身份与来源详情")) {
             WorkflowTechnicalDetails(value: resource.id.description + "\n" + record.revision + "\n" + resourceLocation(resource))
             field("resourceID", "资源身份", resource.id.description)
@@ -582,7 +580,7 @@ public struct ModelLibraryView: View {
             Text(text("deleteTaskHelp", "不会删除已完成的模型文件。"))
             if !task.state.isTerminal { Text(text("deleteActiveHelp", "此任务会先停止，正在写入的内容处理结束后再删除记录。")) }
             if canCleanPartial(task) { Toggle(text("cleanupPartial", "同时删除这项任务未完成的下载文件"), isOn: $cleanupPartial) }
-            if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
+            if let error = model.errorMessage { WorkbenchIssueText(raw: error, key: model.errorCode).foregroundStyle(.orange).textSelection(.enabled) }
             HStack {
                 Button(text("cancel", "取消")) { deletingTask = nil }
                 Spacer()
@@ -684,7 +682,7 @@ struct ModelStorageDownloadSettings: View {
             Button(text("credentialRemove")) { Task { await model.removeDownloadCredential() } }
                 .disabled(!model.canChangeDownloadCredential).accessibilityIdentifier("model-credential-remove")
             Text(text("credentialHelp")).font(.caption).foregroundStyle(.secondary)
-            if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
+            if let error = model.errorMessage { WorkbenchIssueText(raw: error, key: model.errorCode).foregroundStyle(.orange).textSelection(.enabled) }
         }.buttonStyle(WorkbenchGlassButtonStyle()).frame(maxWidth: .infinity, alignment: .leading)
         .workbenchSheet(isPresented: $tokenVisible, title: text("accessToken"), size: .init(width: 600, height: 380)) { ModelAccessTokenEditor(model: model) }
     }

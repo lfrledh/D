@@ -154,7 +154,8 @@ public final class ModelLibraryModel {
         return localInspectionID
     }
     func isCurrentLocalInspection(_ intent: UUID) -> Bool { localInspectionID == intent }
-    public var errorMessage: String?
+    public var errorMessage: String? { didSet { errorCode = nil } }
+    public private(set) var errorCode: String?
     public private(set) var preparationNotice: String?
     public private(set) var snapshot: ModelLibrarySnapshot?
     public private(set) var isChoosingLocation = false
@@ -756,7 +757,12 @@ public final class ModelLibraryModel {
         return issue.statusCode.map { message.replacingOccurrences(of: "{code}", with: String($0)) } ?? message
     }
     private func report(_ error: Error, context: String) {
-        errorMessage = "\(context)。\n\(credentialMessage(error))"
+        if case ModelLibraryError.unsupportedLocalFiles = error {
+            errorMessage = error.localizedDescription
+            errorCode = "modelManagement.local.noSupportedModel"
+        } else {
+            errorMessage = "\(context)。\n\(credentialMessage(error))"
+        }
     }
 }
 

@@ -519,7 +519,6 @@
     "name_key": "consistency.help.CANVAS-HAND.name",
     "help_key": "consistency.help.CANVAS-HAND.purpose",
     "object_key": "consistency.help.CANVAS-HAND.object",
-    "conditions_key": "consistency.help.CANVAS-HAND.conditions",
     "category": "view",
     "aliases": [
       "平移",
@@ -558,7 +557,6 @@
     "name_key": "consistency.help.CANVAS-FIT.name",
     "help_key": "consistency.help.CANVAS-FIT.purpose",
     "object_key": "consistency.help.CANVAS-FIT.object",
-    "conditions_key": "consistency.help.CANVAS-FIT.conditions",
     "category": "view",
     "aliases": [
       "适合窗口",
@@ -649,7 +647,6 @@
     "name_key": "consistency.help.SETTINGS-THEME.name",
     "help_key": "consistency.help.SETTINGS-THEME.purpose",
     "object_key": "consistency.help.SETTINGS-THEME.object",
-    "conditions_key": "consistency.help.SETTINGS-THEME.conditions",
     "category": "view",
     "aliases": [
       "主题",
@@ -662,7 +659,6 @@
     "name_key": "consistency.help.SETTINGS-WALLPAPER.name",
     "help_key": "consistency.help.SETTINGS-WALLPAPER.purpose",
     "object_key": "consistency.help.SETTINGS-WALLPAPER.object",
-    "conditions_key": "consistency.help.SETTINGS-WALLPAPER.conditions",
     "category": "view",
     "aliases": [
       "选择背景图片…",
@@ -675,7 +671,6 @@
     "name_key": "consistency.help.SETTINGS-SOLID.name",
     "help_key": "consistency.help.SETTINGS-SOLID.purpose",
     "object_key": "consistency.help.SETTINGS-SOLID.object",
-    "conditions_key": "consistency.help.SETTINGS-SOLID.conditions",
     "category": "view",
     "aliases": [
       "恢复纯色",
@@ -688,7 +683,6 @@
     "name_key": "consistency.help.SETTINGS-MATERIAL.name",
     "help_key": "consistency.help.SETTINGS-MATERIAL.purpose",
     "object_key": "consistency.help.SETTINGS-MATERIAL.object",
-    "conditions_key": "consistency.help.SETTINGS-MATERIAL.conditions",
     "category": "view",
     "aliases": [
       "面板材质",
@@ -753,7 +747,6 @@
     "name_key": "consistency.help.SETTINGS-LANGUAGE.name",
     "help_key": "consistency.help.SETTINGS-LANGUAGE.purpose",
     "object_key": "consistency.help.SETTINGS-LANGUAGE.object",
-    "conditions_key": "consistency.help.SETTINGS-LANGUAGE.conditions",
     "category": "view",
     "aliases": [
       "界面语言",
@@ -909,7 +902,6 @@
     "name_key": "consistency.help.TAB-WORKFLOW-LEFT-PROPERTIES.name",
     "help_key": "consistency.help.TAB-WORKFLOW-LEFT-PROPERTIES.purpose",
     "object_key": "consistency.help.TAB-WORKFLOW-LEFT-PROPERTIES.object",
-    "conditions_key": "consistency.help.TAB-WORKFLOW-LEFT-PROPERTIES.conditions",
     "category": "view",
     "aliases": [
       "属性",
@@ -1500,7 +1492,6 @@
     "name_key": "consistency.help.TAB-WORKFLOW-LEFT-MODELS.name",
     "help_key": "consistency.help.TAB-WORKFLOW-LEFT-MODELS.purpose",
     "object_key": "consistency.help.TAB-WORKFLOW-LEFT-MODELS.object",
-    "conditions_key": "consistency.help.TAB-WORKFLOW-LEFT-MODELS.conditions",
     "category": "models",
     "aliases": [
       "模型节点",
@@ -1513,7 +1504,6 @@
     "name_key": "consistency.help.TAB-WORKFLOW-LEFT-PROGRAMS.name",
     "help_key": "consistency.help.TAB-WORKFLOW-LEFT-PROGRAMS.purpose",
     "object_key": "consistency.help.TAB-WORKFLOW-LEFT-PROGRAMS.object",
-    "conditions_key": "consistency.help.TAB-WORKFLOW-LEFT-PROGRAMS.conditions",
     "category": "build",
     "aliases": [
       "程序节点",

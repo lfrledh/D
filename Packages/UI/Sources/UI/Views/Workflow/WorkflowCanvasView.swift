@@ -1603,7 +1603,7 @@ WorkflowNodeInspector(controller: controller, metadata: metadata, node: node,
     private func openValue(_ value:WorkflowValue,_ call:WorkflowCallReference,_ title:String, port: String? = nil, side: WorkflowViewerValueSide = .output) {
         guard let viewerModel,viewerModel.projectSession.workflow === controller else { return }
         do { try viewerModel.viewers.open(.init(title:title,subtitle:controller.runs.first { $0.id == call.address.runID }.map { WorkflowHumanPresentation.run($0,in:controller.runs,stages:controller.batchStages,language:languageStore) } ?? "",value:value,call:call,port:port,side:side,usesCallTitle: true),model:viewerModel,language:languageStore) }
-        catch { controller.errorMessage=error.localizedDescription }
+        catch { controller.reportIssue(error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription)) }
     }
     private func openCall(_ run:WorkflowRun,record:WorkflowPlanCallRecord) {
         let port=record.step.outputs.keys.sorted().first
@@ -2732,7 +2732,7 @@ struct WorkflowAssetPreview: View {
                             if let openViewerAsset { openViewerAsset(reference) }
                             else if let viewerModel,viewerModel.projectSession.workflow === controller {
                                 do { try viewerModel.viewers.open(.init(title:controller.availableAssets.first { $0.id == reference.assetID }?.name ?? "D",subtitle:viewerModel.manifest?.name ?? "",value:.asset(reference)),model:viewerModel,language:languageStore) }
-                                catch { controller.errorMessage=error.localizedDescription }
+                                catch { controller.reportIssue(error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription)) }
                             } else { inspectImage=image }
                         } label: {
                             Image(nsImage: image).resizable().scaledToFit().frame(maxHeight: 180)

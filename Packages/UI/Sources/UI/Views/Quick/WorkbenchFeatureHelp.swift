@@ -7,7 +7,7 @@ struct WorkbenchFeature: Decodable, Identifiable {
     let name_key: String
     let help_key: String
     let object_key: String
-    let conditions_key: String
+    let conditions_key: String?
     let category: String
     let aliases: [String]
     let destructive: Bool
@@ -141,7 +141,7 @@ struct WorkbenchFeatureGuide: View {
                             }
                             section("purpose", feature.help_key)
                             section("object", feature.object_key)
-                            section("conditions", feature.conditions_key)
+                            if let key = feature.conditions_key { section("conditions", key) }
                             if let reason = currentReason {
                                 Text(reason).foregroundStyle(.secondary)
                             } else if presentation.token == nil {

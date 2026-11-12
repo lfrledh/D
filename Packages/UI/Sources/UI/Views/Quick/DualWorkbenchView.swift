@@ -664,7 +664,7 @@ public struct DualWorkbenchView: View {
                     onRecent: { id in Task { if await model.openRecentProject(id: id) { projectsVisible = false; navigate(to: .workflow) } } },
                     onModels: { presentQuickModelSelection() })
                 if let error = model.errorMessage {
-                    Text(error).foregroundStyle(.red).textSelection(.enabled).padding()
+                    WorkbenchIssueText(raw: error, key: model.errorCode).foregroundStyle(.red).textSelection(.enabled).padding()
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
             .workbenchPresentation(state: automaticQuickModel.chatDisplaySettings)
@@ -1185,7 +1185,7 @@ public struct DualWorkbenchView: View {
         if let runtime=value.runtimeValue {
             guard let controller=canvasModel.projectSession.workflow,runtime.isCurrent(in:controller) else { issue=t("runtimeUnavailable");return }
             do { canvasModel.viewers.library=metadata;try canvasModel.viewers.open(.init(title:value.item.title,subtitle:value.item.detail,value:runtime.value,call:runtime.call,port:runtime.port,usesCallTitle: true,runtimeSource:runtime.source),model:canvasModel,language:language,ownerWindow:previewWindow) }
-            catch { issue=error.localizedDescription }
+            catch { issueValue = error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription) }
             return
         }
         let request = UUID(); previewNavigationRequest = request
@@ -1219,7 +1219,7 @@ public struct DualWorkbenchView: View {
             if snapshot.assets.contains(where: { $0.id == identity.2 }) {
                 failedAssetRoute = .init(store: source, instanceID: snapshot.effectiveInstanceID, assetID: identity.2)
             }
-            issue = error.localizedDescription
+            issueValue = error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription)
         }
     }
     private func readLibraryPreview(_ value: SharedLibraryBrowserEntry) async throws -> ProjectReadOnlyContent {

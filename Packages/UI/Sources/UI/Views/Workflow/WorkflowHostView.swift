@@ -80,7 +80,7 @@ struct WorkflowHostView: View {
                         guard let reference,model.projectSession.workflow === controller else { return }
                         controller.mediaPreviewReference=nil
                         do { try model.viewers.open(.init(title:controller.availableAssets.first { $0.id == reference.assetID }?.name ?? "D",subtitle:model.manifest?.name ?? "",value:.asset(reference)),model:model,language:languageStore) }
-                        catch { controller.errorMessage=error.localizedDescription }
+                        catch { controller.reportIssue(error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription)) }
                     }
 
             } else { ProgressView((languageStore?.text("workflow.host.loading", fallback: "正在读取项目流程…") ?? "正在读取项目流程…")) }

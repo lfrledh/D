@@ -99,7 +99,9 @@ public final class ProjectSession {
                 && ($0.id == activeDocument?.sourceAssetID || $0.id == referenceImageAssetID || $0.jobID.map(jobs.contains) == true)
         }
     }
-    public var errorMessage: String?
+    public var errorMessage: String? { didSet { errorCode = nil } }
+    public private(set) var errorCode: String?
+    public func reportIssue(_ issue: WorkflowIssue) { errorMessage = issue.reason; errorCode = issue.code }
     public private(set) var isChangingProject = false
     public private(set) var phases: [UUID: String] = [:]
     public private(set) var phaseCodes: [UUID: String] = [:]

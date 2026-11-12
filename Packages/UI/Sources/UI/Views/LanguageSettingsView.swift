@@ -27,11 +27,6 @@ public struct LanguageSettingsView: View {
                 }
             } header: {
                 Text(store.text("language.section.display", fallback: "显示"))
-            } footer: {
-                Text(store.text(
-                    "language.display.footer",
-                    fallback: "显示语言不会改变模型、参数值、用户内容或执行数据。"
-                ))
             }
 
             Section {

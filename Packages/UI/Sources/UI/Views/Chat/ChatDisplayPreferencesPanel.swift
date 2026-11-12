@@ -277,8 +277,6 @@ struct ChatDisplayPreferencesPanel: View {
                     var settings = appearance.resolvedReadability; settings.enabled = enabled
                     appearance.readability = settings; candidate.appearance = appearance
                 } })).workbenchHelp("SETTINGS-READABILITY").disabled(state.preferences.resolvedAppearance.local?.material == .glass)
-            Text(workflowText(language, "chat.displayPreferencesPanel.nativeLiquidGlassManagesRefractionAndForegroundAdaptationThisSlider"))
-                .font(.caption).foregroundStyle(.secondary)
             Text(consistencyText(language, "copy.readabilityHelp")).font(.caption).foregroundStyle(.secondary)
             Text(consistencyText(language, "SETTINGS-AMOUNT"))
             WorkbenchValueSlider(value: state.preferences.resolvedAppearance.resolvedReadability.amount,
@@ -290,8 +288,6 @@ struct ChatDisplayPreferencesPanel: View {
                 } }).workbenchHelp("SETTINGS-AMOUNT").frame(height: 24)
                 .disabled(!state.preferences.resolvedAppearance.resolvedReadability.enabled || state.preferences.resolvedAppearance.local?.material == .glass)
             appearancePreview(for: state.preferences.preferredColorScheme ?? hostScheme)
-            Text(workflowText(language, "chat.displayPreferencesPanel.panelsSampleOnlyDSCanvasNeverYourDesktopImages"))
-                .font(.caption).foregroundStyle(.secondary)
         }.disabled(state.hasInvalidStoredRecord)
     }
 

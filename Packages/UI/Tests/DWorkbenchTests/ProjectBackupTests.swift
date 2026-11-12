@@ -395,6 +395,24 @@ struct ProjectBackupTests {
 }
 
 extension ProjectBackupTests {
+    @Test func restoredModelMismatchKeepsProjectAndTypedDiagnostic() async throws {
+        try await fixture { root in
+            let bytes = Data("restored exact bytes".utf8), relative = "Models/" + UUID().uuidString
+            let declared = ModelFile(path: "model.bin", size: UInt64(bytes.count), sha256: String(repeating: "0", count: 64))
+            let plan = ProjectBackupPlan(projectID: UUID(), revision: 0,
+                files: [.init(relativePath: relative + "/model.bin", sourceURL: nil, data: bytes, sha256: hash(bytes), byteCount: UInt64(bytes.count))],
+                modelDependencies: [.init(catalogID: "exact-model", revision: "fixed", files: [declared], relativeRoot: relative)])
+            let backup = root.appendingPathComponent("backup"), restored = root.appendingPathComponent("restored")
+            _ = try await ProjectBackup.create(plan, at: backup)
+            let receipt = try await ProjectBackup.restore(at: backup, to: restored)
+            let model = try #require(receipt.restoredModels.first)
+            #expect(receipt.complete && model.directory == nil)
+            #expect(model.diagnosticCode == "files.restore.modelMismatch" && model.diagnostic != nil)
+            #expect(try Data(contentsOf: restored.appendingPathComponent(relative + "/model.bin")) == bytes)
+            #expect(try await ProjectBackup.verify(at: backup).complete)
+        }
+    }
+
     @Test(arguments: [false, true]) func restoredModelRootsPreserveTwoCopiesAndLegacyAmbiguity(legacy: Bool) async throws {
         try await fixture { root in
             let data = Data("same exact model".utf8), config = Data("configuration".utf8)
@@ -416,9 +434,10 @@ extension ProjectBackupTests {
             #expect(result.restoredModels.count == 2 && result.complete)
             if legacy {
                 #expect(result.restoredModels.allSatisfy { $0.directory == nil && $0.diagnostic?.contains("More than one") == true })
+                #expect(result.restoredModels.allSatisfy { $0.diagnosticCode == "files.restore.modelAmbiguous" })
             } else {
                 #expect(Set(result.restoredModels.compactMap(\.directory)) == Set(roots.map { restored.appendingPathComponent($0, isDirectory: true) }))
-                #expect(result.restoredModels.allSatisfy { $0.diagnostic == nil })
+                #expect(result.restoredModels.allSatisfy { $0.diagnostic == nil && $0.diagnosticCode == nil })
             }
             #expect(try await ProjectBackup.verify(at: backup).complete)
         }

@@ -62,12 +62,23 @@ struct WorkbenchAddendumTests {
         #expect(WorkbenchFeatures.all.count == 127)
         #expect(Set(WorkbenchFeatures.all.map(\.id)).count == 127)
         for feature in WorkbenchFeatures.all {
-            for key in [feature.name_key, feature.help_key, feature.object_key, feature.conditions_key] {
+            for key in [feature.name_key, feature.help_key, feature.object_key] + [feature.conditions_key].compactMap { $0 } {
                 let value = WorkbenchFeatures.text(key, language: language)
                 #expect(!value.isEmpty && !value.contains("consistency.") && value != String(key.dropFirst(12)))
             }
             #expect(WorkbenchFeatures.purpose(feature.id, language: language) == WorkbenchFeatures.text(feature.help_key, language: language))
         }
+    }
+    @Test func onlyApprovedStaticConditionsAreOmittedWithoutDroppingLiveReasons() throws {
+        let omitted: Set<String> = ["SETTINGS-THEME", "SETTINGS-WALLPAPER", "SETTINGS-SOLID", "SETTINGS-MATERIAL", "SETTINGS-LANGUAGE",
+            "CANVAS-HAND", "CANVAS-FIT", "TAB-WORKFLOW-LEFT-MODELS", "TAB-WORKFLOW-LEFT-PROGRAMS", "TAB-WORKFLOW-LEFT-PROPERTIES"]
+        #expect(Set(WorkbenchFeatures.all.filter { $0.conditions_key == nil }.map(\.id)) == omitted)
+        let store = WorkbenchHelpStore(), token = UUID()
+        store.update(token, context: .init(featureID: "CANVAS-HAND", owner: "closed-project", unavailableReason: "Project unavailable"))
+        store.pin(token)
+        #expect(store.presentation?.context?.unavailableReason == "Project unavailable")
+        #expect(WorkbenchFeatures.feature("SETTINGS-READABILITY")?.conditions_key != nil)
+        #expect(WorkbenchFeatures.feature("SETTINGS-AMOUNT")?.conditions_key != nil)
     }
     @Test func pinnedHelpRetainsItsContextAndCannotFollowANewTarget() throws {
         let store = WorkbenchHelpStore(), token = UUID()

@@ -42,7 +42,6 @@ struct ModelLocalFilesForm: View {
                     Text(t("local.spaceUnknown")).font(.caption)
                 }
                 if entry.workflowProfileID == "d.music.ace-step-1.5-xl-sft" { Text(t("local.aceDerived")).font(.caption) }
-                Text(t("local.noGeneration")).font(.caption).foregroundStyle(.secondary)
                 Button(t("local.add")) {
                     guard let submission = model.captureLocalSubmission(matching: knownSource) else { return }
                     let selectedStorage = storage
@@ -56,7 +55,7 @@ struct ModelLocalFilesForm: View {
                     .accessibilityIdentifier("model-local-submit")
             }
             if model.globalOperation != nil { ProgressView(); Button(t("cancel")) { model.cancelImport() } }
-            if let error = model.errorMessage { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
+            if let error = model.errorMessage { WorkbenchIssueText(raw: error, key: model.errorCode).foregroundStyle(.orange).textSelection(.enabled) }
         }.padding(20).frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
         }
         .background(WorkbenchChildFileDrop(enabled: knownSource == nil && surfaceActive &&
