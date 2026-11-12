@@ -6,6 +6,62 @@ import Testing
 
 @Suite(.serialized)
 struct ModelWanPreparationTests {
+    @Test(.timeLimit(.minutes(1)))
+    func localManagedAdditionKeepsQueuedDownloadBehindValidation() async throws {
+        let f = try LibraryFixture(large: true); defer { f.clean() }
+        let raw = entry(f), server = try await LoopbackServer(f, mode: "gate")
+        let (entered, enter) = AsyncStream<Void>.makeStream()
+        let (resumed, resume) = AsyncStream<Void>.makeStream()
+        defer { resume.finish() }
+        let library = try await ModelLibrary(stateDirectory: f.state, catalog: [raw, f.entry],
+            transport: URLSessionModelRangeTransport(allowsLocalHTTP: true), sourceBaseURL: server.url,
+            wanPreparation: { _, target in
+                enter.yield(()); enter.finish()
+                for await _ in resumed { break }
+                try Task.checkCancellation()
+                try Self.writePack(at: target, original: raw)
+            })
+        try await library.configureRoot(at: f.destination)
+        let source = try await library.registerExisting(at: f.source, catalogID: raw.id)
+        let before = try ModelDirectory(f.source).entries()
+        let selection = try await library.inspectLocalFiles(at: f.source, catalogID: raw.id, validatePrepared: nil)
+        let eventFile = server.events
+        let request = Task {
+            try await library.registerLocalFiles(selection, storage: .managed) { url in
+                let current = await library.snapshot()
+                let child = try #require(current.resources.first { $0.control.parentResourceID?.modelID == source })
+                #expect(current.records.first { $0.id == source }?.activeLeaseCount == 1)
+                #expect(child.record.activeLeaseCount == 1)
+                #expect(current.downloads.first?.state == .queued)
+                #expect(!FileManager.default.fileExists(atPath: eventFile.path))
+                await #expect(throws: (any Error).self) { try await library.unregister(source) }
+                await #expect(throws: (any Error).self) { try await library.remove(child.record.id) }
+                return .init(directory: url, revision: "fixture-execution")
+            }
+        }
+        for await _ in entered { break }
+        let downloads = try await library.enqueueDownloads([f.entry.id], postAction: .filesOnly)
+        #expect(await library.snapshot().downloads.first?.state == .queued)
+        resume.yield(()); resume.finish()
+        do {
+            let added = try await request.value
+            let done = try #require(await library.snapshot().records.first { $0.id == added })
+            #expect(done.registrationState == .registered && done.activeLeaseCount == 0 && done.storage == .managed)
+            #expect(try ModelDirectory(f.source).entries() == before)
+            try server.setMode("valid")
+            let taskID = try #require(downloads.first).id
+            for _ in 0..<1_500 {
+                if await library.snapshot().downloads.first(where: { $0.id == taskID })?.state == .completed { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            #expect(await library.snapshot().downloads.first(where: { $0.id == taskID })?.state == .completed)
+            #expect(!(try server.eventRows()).isEmpty)
+            try await library.shutdown()
+        } catch {
+            try server.setMode("valid"); try? await library.shutdown(); throw error
+        }
+    }
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["D_TEST_WAN_FULL_ROOT"] != nil))
     func actualFullWanDirectoryImportsWithoutReadingExtras() async throws {
         let env = ProcessInfo.processInfo.environment

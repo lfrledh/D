@@ -347,6 +347,75 @@ extension ModelVideoPreparationTests {
 
 
 extension ModelVideoPreparationTests {
+    @Test(arguments: ["validation", "save"])
+    func localManagedAdditionFailureRetriesExactChildAfterColdOpen(kind: String) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let raw = entry(f), fault = Mutex(false)
+        var owner: ModelLibrary? = try await ModelLibrary(stateDirectory: f.state, catalog: [raw], checkpoint: { point in
+            if point == "registration.beforeWrite", fault.withLock({ $0 }) {
+                throw ModelLibraryError.storage("isolated managed registration write failure")
+            }
+        })
+        try await owner!.configureRoot(at: f.destination)
+        let source = try await owner!.registerExisting(at: f.source, catalogID: raw.id)
+        let selection = try await owner!.inspectLocalFiles(at: f.source, catalogID: raw.id, validatePrepared: nil)
+        let original = try ModelDirectory(f.source).entries()
+        fault.withLock { $0 = kind == "save" }
+        await #expect(throws: (any Error).self) {
+            try await owner!.registerLocalFiles(selection, storage: .managed) { url in
+                if kind == "validation" { throw ModelLibraryError.integrity("isolated adapter validation failure") }
+                return .init(directory: url, revision: "fixture-execution")
+            }
+        }
+        let child = try #require(await owner!.snapshot().resources.first { $0.control.parentResourceID?.modelID == source })
+        let output = try #require(child.record.directory), files = try ModelDirectory(output).entries()
+        #expect(child.record.storage == .managed && child.record.registrationState == .unregistered)
+        #expect(await owner!.snapshot().records.allSatisfy { $0.activeLeaseCount == 0 })
+        fault.withLock { $0 = false }
+        try await owner!.shutdown(); owner = nil
+        let cold = try await ModelLibrary(stateDirectory: f.state, catalog: [raw])
+        let retried = try await cold.registerLocalFiles(selection, storage: .managed) { .init(directory: $0, revision: "fixture-execution") }
+        #expect(retried == child.record.id)
+        #expect(await cold.snapshot().resources.filter { $0.control.role == .execution }.count == 1)
+        #expect(await cold.snapshot().records.first { $0.id == retried }?.registrationState == .registered)
+        #expect(try ModelDirectory(output).entries() == files && ModelDirectory(f.source).entries() == original)
+        try await cold.shutdown()
+    }
+
+    @Test(.timeLimit(.minutes(1))) func cancellingLocalManagedAdditionPreservesChildAndReleasesQueue() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let raw = entry(f), server = try await LoopbackServer(f)
+        let owner = try await ModelLibrary(stateDirectory: f.state, catalog: [raw, f.entry],
+            transport: URLSessionModelRangeTransport(allowsLocalHTTP: true), sourceBaseURL: server.url)
+        try await owner.configureRoot(at: f.destination)
+        let source = try await owner.registerExisting(at: f.source, catalogID: raw.id)
+        let selection = try await owner.inspectLocalFiles(at: f.source, catalogID: raw.id, validatePrepared: nil)
+        let original = try ModelDirectory(f.source).entries()
+        let (entered, enter) = AsyncStream<Void>.makeStream(), (resumed, resume) = AsyncStream<Void>.makeStream()
+        defer { resume.finish() }
+        let request = Task {
+            try await owner.registerLocalFiles(selection, storage: .managed) { url in
+                enter.yield(()); enter.finish()
+                for await _ in resumed { break }
+                try Task.checkCancellation()
+                return .init(directory: url, revision: "fixture-execution")
+            }
+        }
+        for await _ in entered { break }
+        let downloads = try await owner.enqueueDownloads([f.entry.id], postAction: .filesOnly)
+        #expect(await owner.snapshot().downloads.first?.state == .queued)
+        request.cancel(); resume.yield(()); resume.finish()
+        await #expect(throws: CancellationError.self) { try await request.value }
+        let child = try #require(await owner.snapshot().resources.first { $0.control.parentResourceID?.modelID == source })
+        #expect(child.record.registrationState == .unregistered && child.record.storage == .managed)
+        #expect(child.record.activeLeaseCount == 0)
+        #expect(FileManager.default.fileExists(atPath: try #require(child.record.directory).path))
+        #expect(try ModelDirectory(f.source).entries() == original)
+        _ = try await waitRecord(owner, id: try #require(downloads.first).resourceID.modelID, matching: { $0.state == .installed })
+        #expect(await owner.snapshot().records.allSatisfy { $0.activeLeaseCount == 0 })
+        try await owner.shutdown()
+    }
+
     @Test func prepareAdditionHoldsSlotAndBothIdentitiesThroughValidation() async throws {
         let f = try LibraryFixture(); defer { f.clean() }
         let server = try await LoopbackServer(f)

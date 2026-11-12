@@ -2537,8 +2537,10 @@ extension ModelLibrary {
             return prior.record.id
         }
         let id = ModelID(), parent = try root.child("Installations")
-        _ = try await prepareVideo(source, in: parent.url, checkpoint: { _ in }, managedOutput: id)
-        try await registerPreparedResource(.init(rawValue: id.rawValue), validate: validatePrepared)
+        // Keep the preparation slot and parent/child leases through adapter
+        // validation and registration persistence before dispatching queued work.
+        _ = try await prepareVideo(source, in: parent.url, checkpoint: { _ in },
+            managedOutput: id, completeAddition: validatePrepared)
         return id
     }
 
