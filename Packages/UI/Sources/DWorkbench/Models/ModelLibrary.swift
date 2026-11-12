@@ -2358,7 +2358,12 @@ extension ModelLibrary {
         }
         let worker = workers[id]
         await withTaskCancellationHandler { await worker?.value } onCancel: { worker?.cancel() }
-        if let error = try stored(id).record.error { throw ModelLibraryError.unavailable(error) }
+        if let error = try stored(id).record.error {
+            // Preserve cancellation only on failure. A committed registration
+            // must not turn into a cancellation because its caller stopped late.
+            try Task.checkCancellation()
+            throw ModelLibraryError.unavailable(error)
+        }
     }
     private func commitPreparedRegistration(_ id: ModelID, reference: ModelReference, original: StoredRecord) throws {
         let current = try resolved(original)
