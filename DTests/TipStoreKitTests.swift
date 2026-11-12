@@ -219,16 +219,32 @@ private final class TipStoreKitBundle: NSObject { }
         let previousScope = try #require(checkpoint["scope"] as? [String: String])
         try #require(scope == previousScope && scope["bundleID"] == Bundle.main.bundleIdentifier)
         try #require(scope["environment"] == AppStore.Environment.xcode.rawValue && scope["accountID"]?.isEmpty == false)
-        await store.loadProducts(); store.selectedID = checkpoint["productID"] as? String
+        // Match the App's listener-before-user-action order. Loading products
+        // suspends after start, before this test sends the external approval.
+        store.start(); await store.loadProducts(); store.selectedID = checkpoint["productID"] as? String
         try #require(store.localTest && !store.canPurchase)
         // The local test knows which platform request it approved. D's production
         // listener is deliberately not given that test-only association.
-        store.start(); try session.approveAskToBuyTransaction(identifier: identifier)
-        try await wait("cross-host approved receipt", store: store) { (try? receiptRecords(journal))?.count == 1 }
+        try session.approveAskToBuyTransaction(identifier: identifier)
+        for _ in 0..<100 {
+            if (try? receiptRecords(journal))?.count == 1 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        var verifiedHistory = 0, unverifiedHistory = 0, exactHistory = false
+        for await result in Transaction.all {
+            switch result {
+            case .verified(let transaction):
+                verifiedHistory += 1
+                if transaction.id == UInt64(identifier) { exactHistory = true }
+            case .unverified: unverifiedHistory += 1
+            }
+        }
+        print("TIP_PENDING_PLATFORM approvedStates=\(session.allTransactions().map { $0.state.rawValue }) verifiedHistory=\(verifiedHistory) unverifiedHistory=\(unverifiedHistory) exactHistory=\(exactHistory) journalReceipts=\((try? receiptRecords(journal))?.count ?? -1)")
+        try #require((try? receiptRecords(journal))?.count == 1, "Approval did not reach D's journal; preserve the checkpoint, do not report success or reset the platform session")
         let receipts = try receiptRecords(journal), after = try attemptRecords(journal)
-        #expect(receipts.values.first?["transactionID"] as? String == String(identifier))
-        #expect(after[attemptID]?["phase"] as? String == "pending" && after[attemptID]?["receiptKey"] == nil)
-        #expect(!store.canPurchase && session.allTransactions().count == 1)
+        try #require(receipts.values.first?["transactionID"] as? String == String(identifier))
+        try #require(after[attemptID]?["phase"] as? String == "pending" && after[attemptID]?["receiptKey"] == nil)
+        try #require(!store.canPurchase && session.allTransactions().count == 1)
         var exactUnfinished = true, unfinishedCount = 0, unverifiedCount = 0
         for index in 0..<20 {
             exactUnfinished = false; unfinishedCount = 0; unverifiedCount = 0
@@ -242,7 +258,7 @@ private final class TipStoreKitBundle: NSObject { }
             if unfinishedCount == 0 { break }
             if index < 19 { try await Task.sleep(for: .milliseconds(100)) }
         }
-        #expect(!exactUnfinished && unfinishedCount == 0 && unverifiedCount == 0)
+        try #require(!exactUnfinished && unfinishedCount == 0 && unverifiedCount == 0)
         print("TIP_PENDING_RECOVER oldPID=\(previousPID) pid=\(ProcessInfo.processInfo.processIdentifier) exactRequestRetained=true globalReceiptPersisted=true anonymousPendingStillProtected=true")
         session.clearTransactions(); removeTestRecords(root); try FileManager.default.removeItem(at: file)
     }
