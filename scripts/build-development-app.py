@@ -1344,7 +1344,9 @@ def _prepared_info(source: Path, production: str, delivery: str) -> dict[str, An
 
 def _reject_test_artifacts(app: Path) -> None:
     """A reused build directory must not publish XCTest products as an ordinary App."""
-    for root, directories, files in os.walk(app, followlinks=False):
+    def unreadable(error: OSError) -> None:
+        raise BuildError("cannot inspect ordinary candidate: " + str(error)) from error
+    for root, directories, files in os.walk(app, followlinks=False, onerror=unreadable):
         for name in directories + files:
             if name.lower().endswith((".xctest", ".xctest.dsym")):
                 relative = (Path(root) / name).relative_to(app)

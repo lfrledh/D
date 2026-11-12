@@ -1177,6 +1177,15 @@ class PreparedIdentityTests(unittest.TestCase):
             self.core._reject_test_artifacts(app)
         self.assertTrue(link.is_symlink())
 
+    def test_unreadable_candidate_is_not_reported_as_test_free(self):
+        from unittest.mock import patch
+        def denied(path, **kwargs):
+            kwargs["onerror"](PermissionError("fixture traversal denied"))
+            return iter(())
+        with patch.object(self.core.os, "walk", side_effect=denied):
+            with self.assertRaisesRegex(self.core.BuildError, "cannot inspect ordinary candidate"):
+                self.core._reject_test_artifacts(self.root / "candidate.app")
+
 
 if __name__ == "__main__":
     unittest.main()
