@@ -36,6 +36,9 @@ struct ModelWanPreparationTests {
                 #expect(!FileManager.default.fileExists(atPath: eventFile.path))
                 await #expect(throws: (any Error).self) { try await library.unregister(source) }
                 await #expect(throws: (any Error).self) { try await library.remove(child.record.id) }
+                await #expect(throws: (any Error).self) { try await library.configureRoot(at: f.destination) }
+                await #expect(throws: (any Error).self) { try await library.registerExisting(at: f.source, catalogID: raw.id) }
+                await #expect(throws: (any Error).self) { try await library.registerLocalFiles(selection, storage: .external, validatePrepared: nil) }
                 return .init(directory: url, revision: "fixture-execution")
             }
         }

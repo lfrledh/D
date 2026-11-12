@@ -259,8 +259,9 @@ extension ModelVideoPreparationTests {
 }
 
 extension ModelVideoPreparationTests {
-    @Test func compatiblePreparedCopyClosesEncoderAndSurvivesSourceRemovalAndColdOpen() async throws {
-        let f = try LibraryFixture(); defer { f.clean() }
+    @Test(arguments: [false, true]) func compatiblePreparedCopyClosesEncoderAndSurvivesSourceRemovalAndColdOpen(queuedDownload: Bool) async throws {
+        let f = try LibraryFixture(large: queuedDownload); defer { f.clean() }
+        let server = try await LoopbackServer(f, mode: "gate")
         let profile = ExternalVideoExecutionProfile.ltx23BF16Full
         let pack = f.root.appendingPathComponent("prepared-local")
         try FileManager.default.createDirectory(at: pack, withIntermediateDirectories: true)
@@ -283,12 +284,40 @@ extension ModelVideoPreparationTests {
             return .init(directory: url, revision: marker.profile.modelIdentity)
         }
         let before = try ModelDirectory(pack).entries()
-        var owner: ModelLibrary? = try await ModelLibrary(stateDirectory: f.state, catalog: [entry])
+        var owner: ModelLibrary? = try await ModelLibrary(stateDirectory: f.state, catalog: [entry, f.entry],
+            transport: URLSessionModelRangeTransport(allowsLocalHTTP: true), sourceBaseURL: server.url)
         try await owner!.configureRoot(at: f.destination)
         await #expect(throws: ModelLibraryError.self) { _ = try await owner!.enqueueDownloads([entry.id], postAction: .register) }
         let choices = try await owner!.inspectLocalCandidates(at: pack, validatePrepared: validate)
         #expect(choices.count == 1 && choices[0].supportsOriginal)
-        let id = try await owner!.registerLocalFiles(choices[0], storage: .managed, validatePrepared: validate)
+        let id: ModelID
+        do {
+            let (entered, enter) = AsyncStream<Void>.makeStream(), (resumed, resume) = AsyncStream<Void>.makeStream()
+            let firstValidation = Mutex(true), library = owner!
+            defer { resume.finish() }
+            let request = Task {
+                try await library.registerLocalFiles(choices[0], storage: .managed) { url in
+                    if queuedDownload, firstValidation.withLock({ value in let old = value; value = false; return old }) {
+                        enter.yield(()); enter.finish()
+                        for await _ in resumed { break }
+                    }
+                    return try await validate(url)
+                }
+            }
+            var download: ModelDownloadTask?
+            if queuedDownload {
+                for await _ in entered { break }
+                download = try await library.enqueueDownloads([f.entry.id], postAction: .filesOnly).first
+                #expect(await library.snapshot().downloads.first?.state == .queued)
+                resume.yield(()); resume.finish()
+            }
+            do { id = try await request.value }
+            catch { try server.setMode("valid"); try? await library.shutdown(); throw error }
+            if let download {
+                try server.setMode("valid")
+                _ = try await waitRecord(library, id: download.resourceID.modelID, matching: { $0.state == .installed })
+            }
+        } // Release this task's library reference before the independent cold instance.
         let snapshot = await owner!.snapshot()
         let copy = try #require(snapshot.records.first { $0.id == id }?.directory)
         #expect(snapshot.uniqueRunnableResource(identity: entry.workflowIdentity!)?.record.id == id)
@@ -297,11 +326,11 @@ extension ModelVideoPreparationTests {
         try await owner!.shutdown(); owner = nil
         // Disconnect the exact fixture source without modifying its contents.
         try FileManager.default.moveItem(at: pack, to: f.root.appendingPathComponent("source-disconnected"))
-        let reopened = try await ModelLibrary(stateDirectory: f.state, catalog: [entry])
+        let reopened = try await ModelLibrary(stateDirectory: f.state, catalog: [entry, f.entry])
         try await reopened.reverifyResource(.init(rawValue: id.rawValue), preparedValidator: validate)
         #expect(await reopened.snapshot().uniqueRunnableResource(identity: entry.workflowIdentity!)?.record.id == id)
         #expect(try ModelDirectory(copy).verifyRequired(files).files.count == files.count)
-        #expect(await reopened.snapshot().downloads.isEmpty)
+        #expect(await reopened.snapshot().downloads.count == (queuedDownload ? 1 : 0))
         try await reopened.shutdown()
     }
 }
@@ -347,6 +376,35 @@ extension ModelVideoPreparationTests {
 
 
 extension ModelVideoPreparationTests {
+    @Test(.timeLimit(.minutes(1))) func shutdownDrainsWholeLocalAdditionBeforeReleasingLocations() async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let raw = entry(f), validationExited = Mutex(false)
+        let owner = try await ModelLibrary(stateDirectory: f.state, catalog: [raw])
+        try await owner.configureRoot(at: f.destination)
+        let selection = try await owner.inspectLocalFiles(at: f.source, catalogID: raw.id, validatePrepared: nil)
+        let original = try ModelDirectory(f.source).entries()
+        let (entered, enter) = AsyncStream<Void>.makeStream()
+        let request = Task {
+            try await owner.registerLocalFiles(selection, storage: .managed) { url in
+                defer { validationExited.withLock { $0 = true } }
+                enter.yield(()); enter.finish()
+                try await Task.sleep(for: .seconds(30))
+                return .init(directory: url, revision: "fixture-execution")
+            }
+        }
+        for await _ in entered { break }
+        try await owner.shutdown()
+        #expect(validationExited.withLock { $0 })
+        await #expect(throws: CancellationError.self) { try await request.value }
+        let state = await owner.snapshot()
+        #expect(state.records.allSatisfy { $0.activeLeaseCount == 0 })
+        let child = try #require(state.resources.first { $0.control.role == .execution })
+        #expect(child.record.registrationState == .unregistered)
+        #expect(FileManager.default.fileExists(atPath: try #require(child.record.directory).path))
+        #expect(try ModelDirectory(f.source).entries() == original)
+        await #expect(throws: (any Error).self) { try await owner.registerLocalFiles(selection, storage: .external, validatePrepared: nil) }
+    }
+
     @Test(arguments: ["validation", "save"])
     func localManagedAdditionFailureRetriesExactChildAfterColdOpen(kind: String) async throws {
         let f = try LibraryFixture(); defer { f.clean() }

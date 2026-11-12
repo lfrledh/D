@@ -84,6 +84,9 @@ public actor ModelLibrary {
     private var cancelledOperations: Set<ModelID> = []
     private var localRegistrationFailures: [ModelID: any Error] = [:]
     private var copyJob: Task<[String: ModelFileIdentity], any Error>?
+    // One explicit local-add command spans verification, copy/preparation and
+    // registration. Phase workers still own their existing leases and guards.
+    private var localAddition: (id: UUID, job: Task<ModelID, any Error>)?
     private var currentCopy: ModelCopyProgress? { didSet { stateDidChange() } }
     private var copyKnownFiles: [String: ModelFileIdentity] = [:]
     private static let chunkBytes: UInt64 = 16 * 1024 * 1024
@@ -553,7 +556,7 @@ public actor ModelLibrary {
 
     public func configureRoot(at selected: URL) throws {
         try requireAdmission()
-        guard workers.isEmpty, preparationJobs.isEmpty, copyJob == nil, leases.isEmpty else { throw ModelLibraryError.busy("模型正在下载、校验或用于任务；请等待结束后更换模型库位置。") }
+        guard localAddition == nil, workers.isEmpty, preparationJobs.isEmpty, copyJob == nil, leases.isEmpty else { throw ModelLibraryError.busy("模型正在下载、校验或用于任务；请等待结束后更换模型库位置。") }
         let scope = try ModelScopedLocation(selected)
         let hasManaged = disk.records.contains { $0.record.storage == .managed }
         let candidate = try ModelDirectory(scope.url)
@@ -650,8 +653,8 @@ public actor ModelLibrary {
         return storage == .managed ? try await copyExistingToLibrary(sourceID) : sourceID
     }
 
-    private func registerExternal(at selected: URL, catalogID: String) async throws -> ModelID {
-        try requireAdmission(); try requireIdleWorker()
+    private func registerExternal(at selected: URL, catalogID: String, additionOwner: UUID? = nil) async throws -> ModelID {
+        try requireAdmission(); try requireIdleWorker(additionOwner: additionOwner)
         let entry = try catalogEntry(catalogID)
         let scope = try ModelScopedLocation(selected)
         let directory = try ModelDirectory(scope.url)
@@ -700,8 +703,9 @@ public actor ModelLibrary {
 
     func copyExistingToLibrary(_ sourceID: ModelID,
                                checkpoint: @escaping @Sendable (UInt64) throws -> Void,
-                               afterIndexRename: @escaping @Sendable () throws -> Void = {}) async throws -> ModelID {
-        try requireAdmission(); try requireIdleWorker(); try Task.checkCancellation()
+                               afterIndexRename: @escaping @Sendable () throws -> Void = {},
+                               additionOwner: UUID? = nil) async throws -> ModelID {
+        try requireAdmission(); try requireIdleWorker(additionOwner: additionOwner); try Task.checkCancellation()
         try recoverLocalPublication()
         let original = try stored(sourceID)
         guard original.record.storage == .external,
@@ -981,8 +985,9 @@ public actor ModelLibrary {
         try await prepareVideo(id, in: selectedParent, checkpoint: { _ in })
     }
     func prepareVideo(_ id: ModelID, in selectedParent: URL, checkpoint: @escaping @Sendable (Int) throws -> Void, managedOutput: ModelID? = nil,
-                      completeAddition: (@Sendable (URL) async throws -> ModelReference)? = nil) async throws -> URL {
-        try requireAdmission(); try requireIdleWorker()
+                      completeAddition: (@Sendable (URL) async throws -> ModelReference)? = nil,
+                      additionOwner: UUID? = nil) async throws -> URL {
+        try requireAdmission(); try requireIdleWorker(additionOwner: additionOwner)
         guard try canPrepareVideo(id) else { throw ModelLibraryError.unavailable("此模型暂未提供原生准备操作。") }
         let original = try stored(id), entry = try entry(for: id)
         let source = try resolved(original)
@@ -1163,6 +1168,11 @@ public actor ModelLibrary {
         retryWake?.cancel(); retryWake = nil
         disk.queueState = .waitingForResume
         do {
+            if let addition = localAddition {
+                addition.job.cancel()
+                _ = await addition.job.result
+                finishLocalAddition(addition.id)
+            }
             let preparing = preparationJobs
             for task in preparing.values { task.job.cancel() }
             for (id, task) in preparing {
@@ -1574,7 +1584,11 @@ public actor ModelLibrary {
         catch { queueError = "状态保存失败；队列已停止：" + error.localizedDescription; retryWake?.cancel(); throw error }
     }
     private func requireAdmission() throws { if !accepting { throw ModelLibraryError.busy("模型库正在关闭，请等待应用退出。") } }
-    private func requireIdleWorker(allowingCleanup: ModelID? = nil) throws { if !workers.isEmpty || !preparationJobs.isEmpty || copyJob != nil || cleanupReservations.contains(where: { $0 != allowingCleanup }) { throw ModelLibraryError.busy("请先等待或暂停当前模型操作。") } }
+    private func requireIdleWorker(allowingCleanup: ModelID? = nil, additionOwner: UUID? = nil) throws {
+        if (localAddition != nil && localAddition?.id != additionOwner) || !workers.isEmpty || !preparationJobs.isEmpty || copyJob != nil || cleanupReservations.contains(where: { $0 != allowingCleanup }) {
+            throw ModelLibraryError.busy("请先等待或暂停当前模型操作。")
+        }
+    }
     private func stored(_ id: ModelID) throws -> StoredRecord {
         guard let result = disk.records.first(where: { $0.record.id == id }) else { throw ModelLibraryError.unavailable("模型记录不存在。") }; return result
     }
@@ -2071,7 +2085,7 @@ extension ModelLibrary {
     }
     private func scheduleDownloads() {
         retryWake?.cancel(); retryWake = nil
-        guard accepting, queueError == nil, disk.queueState == .running, workers.isEmpty,
+        guard accepting, localAddition == nil, queueError == nil, disk.queueState == .running, workers.isEmpty,
               preparationJobs.isEmpty, copyJob == nil, cleanupReservations.isEmpty else { return }
         let currentTime = now()
         if let index = disk.downloads?.firstIndex(where: { $0.state == .queued || ($0.state == .waitingRetry && ($0.earliestRetry ?? .distantFuture) <= currentTime) }) {
@@ -2317,7 +2331,11 @@ extension ModelLibrary {
 
     public func registerPreparedResource(_ resource: ModelResourceID,
         validate: @escaping @Sendable (URL) async throws -> ModelReference) async throws {
-        try requireAdmission(); try requireIdleWorker()
+        try await registerPreparedResource(resource, additionOwner: nil, validate: validate)
+    }
+    private func registerPreparedResource(_ resource: ModelResourceID, additionOwner: UUID?,
+        validate: @escaping @Sendable (URL) async throws -> ModelReference) async throws {
+        try requireAdmission(); try requireIdleWorker(additionOwner: additionOwner)
         let id = resource.modelID
         try settlePreparedPublication(for: id)
         let original = try stored(id)
@@ -2506,6 +2524,20 @@ extension ModelLibrary {
     public func registerLocalFiles(_ selection: ModelLocalFileSelection, storage: ModelStorageKind,
         validatePrepared: (@Sendable (URL) async throws -> ModelReference)?) async throws -> ModelID {
         try requireAdmission(); try requireIdleWorker(); try Task.checkCancellation()
+        let id = UUID()
+        let job = Task { try await performLocalAddition(selection, storage: storage, validatePrepared: validatePrepared, owner: id) }
+        localAddition = (id, job)
+        let result = await withTaskCancellationHandler { await job.result } onCancel: { job.cancel() }
+        finishLocalAddition(id)
+        return try result.get()
+    }
+    private func finishLocalAddition(_ id: UUID) {
+        guard localAddition?.id == id else { return }
+        localAddition = nil; scheduleDownloads()
+    }
+    private func performLocalAddition(_ selection: ModelLocalFileSelection, storage: ModelStorageKind,
+        validatePrepared: (@Sendable (URL) async throws -> ModelReference)?, owner: UUID) async throws -> ModelID {
+        try requireAdmission(); try Task.checkCancellation()
         try recoverLocalPublication()
         let scope = try ModelScopedLocation(selection.directory), directory = try ModelDirectory(scope.url)
         guard directory.identity == selection.rootIdentity else { throw ModelLibraryError.integrity("Selected model folder changed. Choose it again.") }
@@ -2514,16 +2546,16 @@ extension ModelLibrary {
         guard storage == .managed || selection.supportsOriginal else { throw ModelLibraryError.unavailable("This format requires a model copy.") }
         if selection.prepared {
             guard let validatePrepared else { throw ModelLibraryError.unavailable("Prepared model validation is unavailable.") }
-            return try await registerPreparedLocal(at: directory.url, entry: entry, storage: storage, validate: validatePrepared)
+            return try await registerPreparedLocal(at: directory.url, entry: entry, storage: storage, additionOwner: owner, validate: validatePrepared)
         }
         let prior = Dictionary(uniqueKeysWithValues: disk.records.map { ($0.record.id, $0.record.registrationState) })
-        let source = try await registerExternal(at: directory.url, catalogID: entry.id)
+        let source = try await registerExternal(at: directory.url, catalogID: entry.id, additionOwner: owner)
         if storage == .external { return source }
         // Source inventory is provenance. A new copy request does not also
         // authorize the source as a second execution installation.
         if prior[source] != .registered, try stored(source).record.registrationState == .registered { try unregister(source) }
         if entry.preparation == .none {
-            let result = try await copyExistingToLibrary(source)
+            let result = try await copyExistingToLibrary(source, checkpoint: { _ in }, additionOwner: owner)
             try registerResource(.init(rawValue: result.rawValue))
             return result
         }
@@ -2533,23 +2565,23 @@ extension ModelLibrary {
         // failure, without rerunning conversion or copying the raw source first.
         if let prior = disk.records.first(where: { $0.control?.parentResourceID?.modelID == source &&
             $0.control?.role == .execution && $0.control?.fileState == .verified && $0.record.storage == .managed }) {
-            try await registerPreparedResource(.init(rawValue: prior.record.id.rawValue), validate: validatePrepared)
+            try await registerPreparedResource(.init(rawValue: prior.record.id.rawValue), additionOwner: owner, validate: validatePrepared)
             return prior.record.id
         }
         let id = ModelID(), parent = try root.child("Installations")
         // Keep the preparation slot and parent/child leases through adapter
         // validation and registration persistence before dispatching queued work.
         _ = try await prepareVideo(source, in: parent.url, checkpoint: { _ in },
-            managedOutput: id, completeAddition: validatePrepared)
+            managedOutput: id, completeAddition: validatePrepared, additionOwner: owner)
         return id
     }
 
-    private func registerPreparedLocal(at url: URL, entry: ModelCatalogEntry, storage: ModelStorageKind,
+    private func registerPreparedLocal(at url: URL, entry: ModelCatalogEntry, storage: ModelStorageKind, additionOwner: UUID,
         validate: @escaping @Sendable (URL) async throws -> ModelReference) async throws -> ModelID {
         let scope = try ModelScopedLocation(url), source = try ModelDirectory(scope.url)
         if let owner = disk.records.first(where: { $0.record.storage == .managed && $0.verifiedRoot?.sameNode(source.identity) == true }) {
             guard owner.record.catalogID == entry.id, storage == .managed else { throw ModelLibraryError.busy("This folder already belongs to a managed installation; use its existing record.") }
-            try await registerPreparedResource(.init(rawValue: owner.record.id.rawValue), validate: validate)
+            try await registerPreparedResource(.init(rawValue: owner.record.id.rawValue), additionOwner: additionOwner, validate: validate)
             return owner.record.id
         }
         let existing = disk.records.first { $0.record.catalogID == entry.id && $0.control?.role == .execution &&
@@ -2584,11 +2616,11 @@ extension ModelLibrary {
             sourceID = id
         }
         if storage == .external {
-            try await registerPreparedResource(.init(rawValue: sourceID.rawValue), validate: validate)
+            try await registerPreparedResource(.init(rawValue: sourceID.rawValue), additionOwner: additionOwner, validate: validate)
             return sourceID
         }
-        let result = try await copyExistingToLibrary(sourceID)
-        try await registerPreparedResource(.init(rawValue: result.rawValue), validate: validate)
+        let result = try await copyExistingToLibrary(sourceID, checkpoint: { _ in }, additionOwner: additionOwner)
+        try await registerPreparedResource(.init(rawValue: result.rawValue), additionOwner: additionOwner, validate: validate)
         return result
     }
     private static func preparedFiles(in directory: ModelDirectory, entry: ModelCatalogEntry) throws -> [ModelFile] {
