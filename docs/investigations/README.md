@@ -4,6 +4,7 @@
 
 |日期|任务|类别|状态与入口|
 |---|---|---|---|
+|2026-11-13|D-UI-CONSOLIDATED-01 / SSD清理|获准维护与恢复审计|[精确删除范围、实际空间与恢复依据](20261113-SSD-CLEANUP/README.md)；175缓存、12旧App、4旧模型根已清理；当前候选/源码/有效模型保留|
 |2026-10-18|D-PERFORMANCE-ATTRIBUTION-01|性能归因调查|[Phase 2报告、数据与复算](D-PERFORMANCE-ATTRIBUTION-01/phase-02/REPORT.zh-CN.md)：旧证据全线程/时间切片与有限显示关联已复算；原生及因果实验未通过准入，待独立复核，未批准性能修补；[Phase 1历史](D-PERFORMANCE-ATTRIBUTION-01/README.md)保留|
 
 ## 归档约定

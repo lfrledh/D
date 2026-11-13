@@ -1,0 +1,77 @@
+[
+  {
+    "checkpoint": "capacity-before.json",
+    "capacityCeiling": 2000189177856,
+    "capacityFree": 275058688,
+    "volumes": [
+      {
+        "name": "CodexProjects",
+        "capacityInUse": 1772048519168
+      },
+      {
+        "name": "aroma",
+        "capacityInUse": 227565756416
+      }
+    ]
+  },
+  {
+    "checkpoint": "capacity-after-caches.json",
+    "capacityCeiling": 2000189177856,
+    "capacityFree": 41680617472,
+    "volumes": [
+      {
+        "name": "CodexProjects",
+        "capacityInUse": 1730642956288
+      },
+      {
+        "name": "aroma",
+        "capacityInUse": 227565756416
+      }
+    ]
+  },
+  {
+    "checkpoint": "capacity-after-apps.json",
+    "capacityCeiling": 2000189177856,
+    "capacityFree": 72391708672,
+    "volumes": [
+      {
+        "name": "CodexProjects",
+        "capacityInUse": 1699931865088
+      },
+      {
+        "name": "aroma",
+        "capacityInUse": 227565756416
+      }
+    ]
+  },
+  {
+    "checkpoint": "capacity-after-models.json",
+    "capacityCeiling": 2000189177856,
+    "capacityFree": 72391462912,
+    "volumes": [
+      {
+        "name": "CodexProjects",
+        "capacityInUse": 1699932110848
+      },
+      {
+        "name": "aroma",
+        "capacityInUse": 227565756416
+      }
+    ]
+  },
+  {
+    "checkpoint": "capacity-final.json",
+    "capacityCeiling": 2000189177856,
+    "capacityFree": 72390172672,
+    "volumes": [
+      {
+        "name": "CodexProjects",
+        "capacityInUse": 1699933401088
+      },
+      {
+        "name": "aroma",
+        "capacityInUse": 227565756416
+      }
+    ]
+  }
+]

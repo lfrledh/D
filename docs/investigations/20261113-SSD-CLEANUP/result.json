@@ -1,0 +1,20 @@
+{
+  "measuredAt": "2026-11-13T09:38:45.924031+09:00",
+  "unit": "bytes; GB in README means decimal 1e9 bytes",
+  "containerBeforeFree": 275058688,
+  "containerAfterFree": 72390172672,
+  "observedNetFreeIncrease": 72115113984,
+  "directoryAccountingBytes": 638759456768,
+  "cacheRootsRemoved": 175,
+  "appBundlesRemoved": 12,
+  "modelRootsRemoved": 4,
+  "duplicateModelFilesRemoved": 248,
+  "retainedSourceModelFilesVerified": 124,
+  "duplicateModelFileBytes": 454148356678,
+  "scope": "user-approved cleanup only; no product source or working candidate replacement",
+  "sourceHEAD": "8b41882a71b3d7e88dea47fc0ec80cc491f4920a",
+  "desktopSource": "a9dc46dd549072b03afeb2acfdd8ab109f52599a",
+  "rootConvention": "All paths in this evidence set are relative to /Volumes/CodexProjects; retained-source identity hashes are SHA-256 unless stated otherwise",
+  "sourceVerification": "Each retained source matched the original manifest hash; both removed counterparts were compared byte-for-byte in 8 MiB chunks; all file identities/sizes/mtimes stayed unchanged. 124 source files, 248 removed counterparts.",
+  "protect": "Current a9 and new 8b ordinary Apps deep/strict signature verified after deletion; receipt, four prior dirty docs, personal scheme and H3 wrapper hashes unchanged. No worktree removed."
+}

@@ -1,0 +1,1738 @@
+[
+  {
+    "group": "text05",
+    "relative": "README.md",
+    "size": 748,
+    "sha256": "8cd48183a9d10279e02291f12f03a2db5585c222a0cf77f97dca3c87f79bd5e1",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "9112fd338440b927dc9d12e668e224d34aa090f2",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-0.5B-Instruct-4bit/README.md",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-0.5B-Instruct-4bit/README.md",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-0.5B-Instruct-4bit/README.md"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.357095+09:00"
+  },
+  {
+    "group": "text05",
+    "relative": "added_tokens.json",
+    "size": 605,
+    "sha256": "58b54bbe36fc752f79a24a271ef66a0a0830054b4dfad94bde757d851968060b",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "482ced4679301bf287ebb310bdd1790eb4514232",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-0.5B-Instruct-4bit/added_tokens.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-0.5B-Instruct-4bit/added_tokens.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-0.5B-Instruct-4bit/added_tokens.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.357564+09:00"
+  },
+  {
+    "group": "text05",
+    "relative": "config.json",
+    "size": 783,
+    "sha256": "b045e57ea90b8f1b35f89f954b176a5c1faa02bd0af2c89bcec191239d66cef4",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "e3c0e76e4e54c951f36d49e3042347b58382136e",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-0.5B-Instruct-4bit/config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-0.5B-Instruct-4bit/config.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-0.5B-Instruct-4bit/config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.357768+09:00"
+  },
+  {
+    "group": "text05",
+    "relative": "merges.txt",
+    "size": 1671853,
+    "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-0.5B-Instruct-4bit/merges.txt",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-0.5B-Instruct-4bit/merges.txt",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-0.5B-Instruct-4bit/merges.txt"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.362260+09:00"
+  },
+  {
+    "group": "text05",
+    "relative": "model.safetensors",
+    "size": 278064920,
+    "sha256": "ddffab9cbc7bf6dde941c6724841eeca8981fcfa81ca20ff8efff1396326d153",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "ddffab9cbc7bf6dde941c6724841eeca8981fcfa81ca20ff8efff1396326d153",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-0.5B-Instruct-4bit/model.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-0.5B-Instruct-4bit/model.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-0.5B-Instruct-4bit/model.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.645635+09:00"
+  },
+  {
+    "group": "text05",
+    "relative": "model.safetensors.index.json",
+    "size": 44209,
+    "sha256": "54001cb4c11197119c206dde28e7be08e5872aab6c6d271aed339ec77e84f870",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "8831428421e282132532f717fcaba43f8c7f5445",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-0.5B-Instruct-4bit/model.safetensors.index.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-0.5B-Instruct-4bit/model.safetensors.index.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-0.5B-Instruct-4bit/model.safetensors.index.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.646548+09:00"
+  },
+  {
+    "group": "text05",
+    "relative": "special_tokens_map.json",
+    "size": 613,
+    "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "ac23c0aaa2434523c494330aeb79c58395378103",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-0.5B-Instruct-4bit/special_tokens_map.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-0.5B-Instruct-4bit/special_tokens_map.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-0.5B-Instruct-4bit/special_tokens_map.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.646932+09:00"
+  },
+  {
+    "group": "text05",
+    "relative": "tokenizer.json",
+    "size": 7031673,
+    "sha256": "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-0.5B-Instruct-4bit/tokenizer.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-0.5B-Instruct-4bit/tokenizer.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-0.5B-Instruct-4bit/tokenizer.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.661858+09:00"
+  },
+  {
+    "group": "text05",
+    "relative": "tokenizer_config.json",
+    "size": 7308,
+    "sha256": "f7c61e32b7a17d19bf8e7037dcb74079a833e53ea9801f24008cac68458f03b7",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "482ccbc1096b0e9400e86e33f189681c2aebdab9",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-0.5B-Instruct-4bit/tokenizer_config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-0.5B-Instruct-4bit/tokenizer_config.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-0.5B-Instruct-4bit/tokenizer_config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.662417+09:00"
+  },
+  {
+    "group": "text05",
+    "relative": "vocab.json",
+    "size": 2776833,
+    "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "4783fe10ac3adce15ac8f358ef5462739852c569",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-0.5B-Instruct-4bit/vocab.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-0.5B-Instruct-4bit/vocab.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-0.5B-Instruct-4bit/vocab.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.671235+09:00"
+  },
+  {
+    "group": "text15",
+    "relative": "README.md",
+    "size": 748,
+    "sha256": "a92215db397e14395a74b850e8e83d4f15d87551ecc4adc0093b671d556308ce",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "0a8005b4dede12c63ec8edfaa107c2e5af23cdef",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-1.5B-Instruct-4bit/README.md",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-1.5B-Instruct-4bit/README.md",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-1.5B-Instruct-4bit/README.md"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.672632+09:00"
+  },
+  {
+    "group": "text15",
+    "relative": "added_tokens.json",
+    "size": 605,
+    "sha256": "58b54bbe36fc752f79a24a271ef66a0a0830054b4dfad94bde757d851968060b",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "482ced4679301bf287ebb310bdd1790eb4514232",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-1.5B-Instruct-4bit/added_tokens.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-1.5B-Instruct-4bit/added_tokens.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-1.5B-Instruct-4bit/added_tokens.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.672977+09:00"
+  },
+  {
+    "group": "text15",
+    "relative": "config.json",
+    "size": 784,
+    "sha256": "636d3e2a15e8914b8cf82b05cc2288a811f9bd93c3bf1afc00cab701a70b47c0",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "d2741b5d6d48fa6f2ada841a2d6deb8a20137e5f",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-1.5B-Instruct-4bit/config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-1.5B-Instruct-4bit/config.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-1.5B-Instruct-4bit/config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.673337+09:00"
+  },
+  {
+    "group": "text15",
+    "relative": "merges.txt",
+    "size": 1671853,
+    "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-1.5B-Instruct-4bit/merges.txt",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-1.5B-Instruct-4bit/merges.txt",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-1.5B-Instruct-4bit/merges.txt"
+    ],
+    "verifiedAt": "2026-11-13T09:33:01.677671+09:00"
+  },
+  {
+    "group": "text15",
+    "relative": "model.safetensors",
+    "size": 868628559,
+    "sha256": "0979f33d1bc58afcf696d13f57977644e7b11a6f0eec3e631d8e9463d18c0717",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "0979f33d1bc58afcf696d13f57977644e7b11a6f0eec3e631d8e9463d18c0717",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-1.5B-Instruct-4bit/model.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-1.5B-Instruct-4bit/model.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-1.5B-Instruct-4bit/model.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:33:02.584459+09:00"
+  },
+  {
+    "group": "text15",
+    "relative": "model.safetensors.index.json",
+    "size": 51569,
+    "sha256": "6b98634d5044f0e2ad45228a374f8445904e571f1082392d08a6ce54f5d517ca",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "87eb58d416654c6c0ef987be30f6981a3176ffae",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-1.5B-Instruct-4bit/model.safetensors.index.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-1.5B-Instruct-4bit/model.safetensors.index.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-1.5B-Instruct-4bit/model.safetensors.index.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:02.585477+09:00"
+  },
+  {
+    "group": "text15",
+    "relative": "special_tokens_map.json",
+    "size": 613,
+    "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "ac23c0aaa2434523c494330aeb79c58395378103",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-1.5B-Instruct-4bit/special_tokens_map.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-1.5B-Instruct-4bit/special_tokens_map.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-1.5B-Instruct-4bit/special_tokens_map.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:02.585986+09:00"
+  },
+  {
+    "group": "text15",
+    "relative": "tokenizer.json",
+    "size": 7031673,
+    "sha256": "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-1.5B-Instruct-4bit/tokenizer.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-1.5B-Instruct-4bit/tokenizer.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-1.5B-Instruct-4bit/tokenizer.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:02.600871+09:00"
+  },
+  {
+    "group": "text15",
+    "relative": "tokenizer_config.json",
+    "size": 7308,
+    "sha256": "f7c61e32b7a17d19bf8e7037dcb74079a833e53ea9801f24008cac68458f03b7",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "482ccbc1096b0e9400e86e33f189681c2aebdab9",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-1.5B-Instruct-4bit/tokenizer_config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-1.5B-Instruct-4bit/tokenizer_config.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-1.5B-Instruct-4bit/tokenizer_config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:02.601356+09:00"
+  },
+  {
+    "group": "text15",
+    "relative": "vocab.json",
+    "size": 2776833,
+    "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "4783fe10ac3adce15ac8f358ef5462739852c569",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-1.5B-Instruct-4bit/vocab.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-1.5B-Instruct-4bit/vocab.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-1.5B-Instruct-4bit/vocab.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:02.607628+09:00"
+  },
+  {
+    "group": "text7",
+    "relative": "README.md",
+    "size": 732,
+    "sha256": "bcc928c815d856439e238f1977b50c93580ec5e79118e588b20f03aba1a215f5",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "489ab8c8d3cac6fb0d0ac178febdbf39be363e9e",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-7B-Instruct-4bit/README.md",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-7B-Instruct-4bit/README.md",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-7B-Instruct-4bit/README.md"
+    ],
+    "verifiedAt": "2026-11-13T09:33:02.608593+09:00"
+  },
+  {
+    "group": "text7",
+    "relative": "added_tokens.json",
+    "size": 605,
+    "sha256": "58b54bbe36fc752f79a24a271ef66a0a0830054b4dfad94bde757d851968060b",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "482ced4679301bf287ebb310bdd1790eb4514232",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-7B-Instruct-4bit/added_tokens.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-7B-Instruct-4bit/added_tokens.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-7B-Instruct-4bit/added_tokens.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:02.609070+09:00"
+  },
+  {
+    "group": "text7",
+    "relative": "config.json",
+    "size": 787,
+    "sha256": "1661a349986919d13820d3981623776138d50783d13e247cdc5b075a22b62698",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "f9dd0a512675c68d5d8d18f7e44d9f29141af60d",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-7B-Instruct-4bit/config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-7B-Instruct-4bit/config.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-7B-Instruct-4bit/config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:02.609406+09:00"
+  },
+  {
+    "group": "text7",
+    "relative": "merges.txt",
+    "size": 1671853,
+    "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-7B-Instruct-4bit/merges.txt",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-7B-Instruct-4bit/merges.txt",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-7B-Instruct-4bit/merges.txt"
+    ],
+    "verifiedAt": "2026-11-13T09:33:02.614006+09:00"
+  },
+  {
+    "group": "text7",
+    "relative": "model.safetensors",
+    "size": 4284346255,
+    "sha256": "86110f368236b53cf4c2336f991a85703b17bcc60bb75f292b4002ec0219f071",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "86110f368236b53cf4c2336f991a85703b17bcc60bb75f292b4002ec0219f071",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-7B-Instruct-4bit/model.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-7B-Instruct-4bit/model.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-7B-Instruct-4bit/model.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:33:07.023630+09:00"
+  },
+  {
+    "group": "text7",
+    "relative": "model.safetensors.index.json",
+    "size": 51711,
+    "sha256": "23cd562592dd96686d2e799eb02e4b578a4038b6045eaefe860d270cc060e24f",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "669ba50dd3bc0e1ed5f31cd939a54d5dd37c3c85",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-7B-Instruct-4bit/model.safetensors.index.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-7B-Instruct-4bit/model.safetensors.index.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-7B-Instruct-4bit/model.safetensors.index.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:07.025626+09:00"
+  },
+  {
+    "group": "text7",
+    "relative": "special_tokens_map.json",
+    "size": 613,
+    "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "ac23c0aaa2434523c494330aeb79c58395378103",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-7B-Instruct-4bit/special_tokens_map.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-7B-Instruct-4bit/special_tokens_map.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-7B-Instruct-4bit/special_tokens_map.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:07.026096+09:00"
+  },
+  {
+    "group": "text7",
+    "relative": "tokenizer.json",
+    "size": 7031673,
+    "sha256": "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-7B-Instruct-4bit/tokenizer.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-7B-Instruct-4bit/tokenizer.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-7B-Instruct-4bit/tokenizer.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:07.041353+09:00"
+  },
+  {
+    "group": "text7",
+    "relative": "tokenizer_config.json",
+    "size": 7280,
+    "sha256": "4921d4cbae33349a9cb3b2ad3a7622efdea10a5d208c9f333c77b154aa714888",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "816372d7ae55ff163ebec9e9d2286c6b462539be",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-7B-Instruct-4bit/tokenizer_config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-7B-Instruct-4bit/tokenizer_config.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-7B-Instruct-4bit/tokenizer_config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:07.042252+09:00"
+  },
+  {
+    "group": "text7",
+    "relative": "vocab.json",
+    "size": 2776833,
+    "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "4783fe10ac3adce15ac8f358ef5462739852c569",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-7B-Instruct-4bit/vocab.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-7B-Instruct-4bit/vocab.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-7B-Instruct-4bit/vocab.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:07.048539+09:00"
+  },
+  {
+    "group": "text32",
+    "relative": "README.md",
+    "size": 740,
+    "sha256": "bd83290d21af83f3d47149e1ddc44f0fdfb8e108bb7d6c68ae1e68b20334851b",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "67f4f5b95e3e5f69a6be8e3f0cff0eb17804c49c",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-32B-Instruct-4bit/README.md",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-32B-Instruct-4bit/README.md",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-32B-Instruct-4bit/README.md"
+    ],
+    "verifiedAt": "2026-11-13T09:33:07.049058+09:00"
+  },
+  {
+    "group": "text32",
+    "relative": "added_tokens.json",
+    "size": 605,
+    "sha256": "58b54bbe36fc752f79a24a271ef66a0a0830054b4dfad94bde757d851968060b",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "482ced4679301bf287ebb310bdd1790eb4514232",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-32B-Instruct-4bit/added_tokens.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-32B-Instruct-4bit/added_tokens.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-32B-Instruct-4bit/added_tokens.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:07.049432+09:00"
+  },
+  {
+    "group": "text32",
+    "relative": "config.json",
+    "size": 787,
+    "sha256": "c027829d800805358d67ac87819a3754fd8240be973f7147840651310fd30ae3",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "898bd81a540a54dfbd50e052e60ed01d10244a8a",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-32B-Instruct-4bit/config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-32B-Instruct-4bit/config.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-32B-Instruct-4bit/config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:07.049781+09:00"
+  },
+  {
+    "group": "text32",
+    "relative": "merges.txt",
+    "size": 1671853,
+    "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-32B-Instruct-4bit/merges.txt",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-32B-Instruct-4bit/merges.txt",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-32B-Instruct-4bit/merges.txt"
+    ],
+    "verifiedAt": "2026-11-13T09:33:07.054284+09:00"
+  },
+  {
+    "group": "text32",
+    "relative": "model-00001-of-00004.safetensors",
+    "size": 5366582717,
+    "sha256": "3187f89267bdebe362410a3b23c2767d9d0707f4ffbbf7a945e5cd0abf535a21",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "3187f89267bdebe362410a3b23c2767d9d0707f4ffbbf7a945e5cd0abf535a21",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-32B-Instruct-4bit/model-00001-of-00004.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-32B-Instruct-4bit/model-00001-of-00004.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-32B-Instruct-4bit/model-00001-of-00004.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:33:12.544854+09:00"
+  },
+  {
+    "group": "text32",
+    "relative": "model-00002-of-00004.safetensors",
+    "size": 5335712920,
+    "sha256": "31547d7a3e6583eea8bcc1b7230680f8132143c43c19cab3eab75f6b31d33e33",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "31547d7a3e6583eea8bcc1b7230680f8132143c43c19cab3eab75f6b31d33e33",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-32B-Instruct-4bit/model-00002-of-00004.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-32B-Instruct-4bit/model-00002-of-00004.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-32B-Instruct-4bit/model-00002-of-00004.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:33:17.847108+09:00"
+  },
+  {
+    "group": "text32",
+    "relative": "model-00003-of-00004.safetensors",
+    "size": 5366641934,
+    "sha256": "d00aec153b1ea6540446c1769ef76004e4ee11855844919f48434f0d4f77b33f",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "d00aec153b1ea6540446c1769ef76004e4ee11855844919f48434f0d4f77b33f",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-32B-Instruct-4bit/model-00003-of-00004.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-32B-Instruct-4bit/model-00003-of-00004.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-32B-Instruct-4bit/model-00003-of-00004.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:33:23.029574+09:00"
+  },
+  {
+    "group": "text32",
+    "relative": "model-00004-of-00004.safetensors",
+    "size": 2362540888,
+    "sha256": "4dae2dd0355ac7ad5440ccd4d5f60a08084cda924c058402b979654359150743",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "4dae2dd0355ac7ad5440ccd4d5f60a08084cda924c058402b979654359150743",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-32B-Instruct-4bit/model-00004-of-00004.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-32B-Instruct-4bit/model-00004-of-00004.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-32B-Instruct-4bit/model-00004-of-00004.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:33:25.338414+09:00"
+  },
+  {
+    "group": "text32",
+    "relative": "model.safetensors.index.json",
+    "size": 143017,
+    "sha256": "7b6da9b2b1f3ebd698ae15f9fcf6ba3099e742ec07e5d383f28b7cb77a4d16db",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "7949fa6067e06f908f1c2ec24cc73fc3c74bd9c7",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-32B-Instruct-4bit/model.safetensors.index.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-32B-Instruct-4bit/model.safetensors.index.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-32B-Instruct-4bit/model.safetensors.index.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:25.339566+09:00"
+  },
+  {
+    "group": "text32",
+    "relative": "special_tokens_map.json",
+    "size": 613,
+    "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "ac23c0aaa2434523c494330aeb79c58395378103",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-32B-Instruct-4bit/special_tokens_map.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-32B-Instruct-4bit/special_tokens_map.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-32B-Instruct-4bit/special_tokens_map.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:25.340060+09:00"
+  },
+  {
+    "group": "text32",
+    "relative": "tokenizer.json",
+    "size": 7031673,
+    "sha256": "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-32B-Instruct-4bit/tokenizer.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-32B-Instruct-4bit/tokenizer.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-32B-Instruct-4bit/tokenizer.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:25.354956+09:00"
+  },
+  {
+    "group": "text32",
+    "relative": "tokenizer_config.json",
+    "size": 7308,
+    "sha256": "f7c61e32b7a17d19bf8e7037dcb74079a833e53ea9801f24008cac68458f03b7",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "482ccbc1096b0e9400e86e33f189681c2aebdab9",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-32B-Instruct-4bit/tokenizer_config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-32B-Instruct-4bit/tokenizer_config.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-32B-Instruct-4bit/tokenizer_config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:25.355381+09:00"
+  },
+  {
+    "group": "text32",
+    "relative": "vocab.json",
+    "size": 2776833,
+    "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "4783fe10ac3adce15ac8f358ef5462739852c569",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-32B-Instruct-4bit/vocab.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-32B-Instruct-4bit/vocab.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-32B-Instruct-4bit/vocab.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:25.361652+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "README.md",
+    "size": 1030,
+    "sha256": "8f91ff4d58aba8579c0eb2085e7a32252ae06e1c663a8186433d20367ffa5bcb",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "4d2cfa0d1a0ae2b371cfcbbaeb6c9271b5c37a34",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/README.md",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/README.md",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/README.md"
+    ],
+    "verifiedAt": "2026-11-13T09:33:25.362833+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "added_tokens.json",
+    "size": 605,
+    "sha256": "58b54bbe36fc752f79a24a271ef66a0a0830054b4dfad94bde757d851968060b",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "482ced4679301bf287ebb310bdd1790eb4514232",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/added_tokens.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/added_tokens.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/added_tokens.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:25.363192+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "config.json",
+    "size": 867,
+    "sha256": "e90d6a9d124497005f84c9664ac2fa32cbee5c053db81b8391e8ce7e24ce7d70",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "271f6015cea40672f77518257e443e8b8ed0714d",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/config.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:33:25.363538+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "merges.txt",
+    "size": 1671853,
+    "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/merges.txt",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/merges.txt",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/merges.txt"
+    ],
+    "verifiedAt": "2026-11-13T09:33:25.367963+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "model-00001-of-00008.safetensors",
+    "size": 5365567669,
+    "sha256": "bb2d1b4a13922b9cf8f678cf4038fe0029a8e82b6a3f62f0ddd2ef465aa7bfcd",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "bb2d1b4a13922b9cf8f678cf4038fe0029a8e82b6a3f62f0ddd2ef465aa7bfcd",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/model-00001-of-00008.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/model-00001-of-00008.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/model-00001-of-00008.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:33:30.560578+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "model-00002-of-00008.safetensors",
+    "size": 5294878254,
+    "sha256": "2f3d8ec00ac84f8b0974c8f8bd0ffaf52eea03389bce8c9b7dbfe1fbced8dc69",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "2f3d8ec00ac84f8b0974c8f8bd0ffaf52eea03389bce8c9b7dbfe1fbced8dc69",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/model-00002-of-00008.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/model-00002-of-00008.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/model-00002-of-00008.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:33:35.903669+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "model-00003-of-00008.safetensors",
+    "size": 5346171097,
+    "sha256": "a7298c0f9bd50bae89b88e0f756c2cea72153708a5c7c7e180167fcdfc4fb776",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "a7298c0f9bd50bae89b88e0f756c2cea72153708a5c7c7e180167fcdfc4fb776",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/model-00003-of-00008.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/model-00003-of-00008.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/model-00003-of-00008.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:33:41.370159+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "model-00004-of-00008.safetensors",
+    "size": 5294845297,
+    "sha256": "a451751db86b2bca11b11fcb75e7f334c292a14b11b1c3ef7b73030112c8d617",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "a451751db86b2bca11b11fcb75e7f334c292a14b11b1c3ef7b73030112c8d617",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/model-00004-of-00008.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/model-00004-of-00008.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/model-00004-of-00008.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:33:46.838061+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "model-00005-of-00008.safetensors",
+    "size": 5294878217,
+    "sha256": "9944e778df5d838cf5b6db7efbfaed20a950147ab7301348e47f507c9e1a5ff1",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "9944e778df5d838cf5b6db7efbfaed20a950147ab7301348e47f507c9e1a5ff1",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/model-00005-of-00008.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/model-00005-of-00008.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/model-00005-of-00008.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:33:52.527002+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "model-00006-of-00008.safetensors",
+    "size": 5294878204,
+    "sha256": "7c2f81a0fe416672d1402c32ce6c5bab7839ebf928a187c69752f0e5b830e826",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "7c2f81a0fe416672d1402c32ce6c5bab7839ebf928a187c69752f0e5b830e826",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/model-00006-of-00008.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/model-00006-of-00008.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/model-00006-of-00008.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:34:01.773429+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "model-00007-of-00008.safetensors",
+    "size": 5346171091,
+    "sha256": "18e695fb046211557b6488763f0199f46f0e7fb043b174334090532ae09f3425",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "18e695fb046211557b6488763f0199f46f0e7fb043b174334090532ae09f3425",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/model-00007-of-00008.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/model-00007-of-00008.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/model-00007-of-00008.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:34:08.796222+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "model-00008-of-00008.safetensors",
+    "size": 3663161100,
+    "sha256": "9ca0704db10d4933fbed678e9546594ce5851a5b605014c5972d3eeda28cb885",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "9ca0704db10d4933fbed678e9546594ce5851a5b605014c5972d3eeda28cb885",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/model-00008-of-00008.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/model-00008-of-00008.safetensors",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/model-00008-of-00008.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:34:12.759433+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "model.safetensors.index.json",
+    "size": 178697,
+    "sha256": "b357714b2314bcd2cd1d1fd3cbfde06f9e8b25d3029d6085cf27eba3ebb7170f",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "58cd021523883d798fd7fa85020fc72c14c05bfb",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/model.safetensors.index.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/model.safetensors.index.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/model.safetensors.index.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:12.760790+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "special_tokens_map.json",
+    "size": 613,
+    "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "ac23c0aaa2434523c494330aeb79c58395378103",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/special_tokens_map.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/special_tokens_map.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/special_tokens_map.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:12.761343+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "tokenizer.json",
+    "size": 7031673,
+    "sha256": "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/tokenizer.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/tokenizer.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/tokenizer.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:12.777412+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "tokenizer_config.json",
+    "size": 7308,
+    "sha256": "f7c61e32b7a17d19bf8e7037dcb74079a833e53ea9801f24008cac68458f03b7",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "482ccbc1096b0e9400e86e33f189681c2aebdab9",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/tokenizer_config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/tokenizer_config.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/tokenizer_config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:12.778187+09:00"
+  },
+  {
+    "group": "text72",
+    "relative": "vocab.json",
+    "size": 2776833,
+    "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "4783fe10ac3adce15ac8f358ef5462739852c569",
+    "retainedSource": "Codex/D-Development/Models/Qwen2.5-72B-Instruct-4bit/vocab.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Qwen2.5-72B-Instruct-4bit/vocab.json",
+      "D-TestKit-Archive-20260912/Models/Qwen2.5-72B-Instruct-4bit/vocab.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:12.785468+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "model_index.json",
+    "size": 446,
+    "sha256": "51a76cb1cf3ed37423a1128c79c22faee8e6fbe7f5aaeb737f0a258930dbaac0",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "51a76cb1cf3ed37423a1128c79c22faee8e6fbe7f5aaeb737f0a258930dbaac0",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/model_index.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/model_index.json",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/model_index.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:40.135842+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "quantization.json",
+    "size": 87581,
+    "sha256": "c5677332fdcfa4700faf1cfc43727164288d571a5d8cfc6c01d312e44554102d",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "c5677332fdcfa4700faf1cfc43727164288d571a5d8cfc6c01d312e44554102d",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/quantization.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/quantization.json",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/quantization.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:40.137661+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "scheduler/scheduler_config.json",
+    "size": 486,
+    "sha256": "067afb012cef64553a763447d1efd93daeffcc0123ca7e25b09f8de20b90762e",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "067afb012cef64553a763447d1efd93daeffcc0123ca7e25b09f8de20b90762e",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/scheduler/scheduler_config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/scheduler/scheduler_config.json",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/scheduler/scheduler_config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:40.138157+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "text_encoder/config.json",
+    "size": 1536,
+    "sha256": "214b4c29a0d975e9fddf9994a5673f22cb2c4c5750352f9227c2c3251ebeab40",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "214b4c29a0d975e9fddf9994a5673f22cb2c4c5750352f9227c2c3251ebeab40",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/text_encoder/config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/text_encoder/config.json",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/text_encoder/config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:40.138984+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "text_encoder/generation_config.json",
+    "size": 214,
+    "sha256": "4347b1aeed2b2b78bc059920a0b7f5fec71482e1344952b76d7665d638d71f13",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "4347b1aeed2b2b78bc059920a0b7f5fec71482e1344952b76d7665d638d71f13",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/text_encoder/generation_config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/text_encoder/generation_config.json",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/text_encoder/generation_config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:40.139417+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "text_encoder/model-00001-of-00002.safetensors",
+    "size": 3134533437,
+    "sha256": "10a014829174ef9d0b418968b40aceb01e383a2ed1967932102c9f3a53cac203",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "10a014829174ef9d0b418968b40aceb01e383a2ed1967932102c9f3a53cac203",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/text_encoder/model-00001-of-00002.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/text_encoder/model-00001-of-00002.safetensors",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/text_encoder/model-00001-of-00002.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:34:43.218958+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "text_encoder/model-00002-of-00002.safetensors",
+    "size": 1731352978,
+    "sha256": "7e806e70be0c3ed85a40cfcccd7a16ceda2a307d08d0ace8a94fce8e2f4506b9",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "7e806e70be0c3ed85a40cfcccd7a16ceda2a307d08d0ace8a94fce8e2f4506b9",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/text_encoder/model-00002-of-00002.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/text_encoder/model-00002-of-00002.safetensors",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/text_encoder/model-00002-of-00002.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:34:44.908846+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "tokenizer/added_tokens.json",
+    "size": 707,
+    "sha256": "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/tokenizer/added_tokens.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/tokenizer/added_tokens.json",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/tokenizer/added_tokens.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:44.909539+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "tokenizer/chat_template.jinja",
+    "size": 4168,
+    "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/tokenizer/chat_template.jinja",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/tokenizer/chat_template.jinja",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/tokenizer/chat_template.jinja"
+    ],
+    "verifiedAt": "2026-11-13T09:34:44.910099+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "tokenizer/merges.txt",
+    "size": 1671853,
+    "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/tokenizer/merges.txt",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/tokenizer/merges.txt",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/tokenizer/merges.txt"
+    ],
+    "verifiedAt": "2026-11-13T09:34:44.913183+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "tokenizer/special_tokens_map.json",
+    "size": 613,
+    "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/tokenizer/special_tokens_map.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/tokenizer/special_tokens_map.json",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/tokenizer/special_tokens_map.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:44.913570+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "tokenizer/tokenizer.json",
+    "size": 11422654,
+    "sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/tokenizer/tokenizer.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/tokenizer/tokenizer.json",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/tokenizer/tokenizer.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:44.928939+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "tokenizer/tokenizer_config.json",
+    "size": 5404,
+    "sha256": "443bfa629eb16387a12edbf92a76f6a6f10b2af3b53d87ba1550adfcf45f7fa0",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "443bfa629eb16387a12edbf92a76f6a6f10b2af3b53d87ba1550adfcf45f7fa0",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/tokenizer/tokenizer_config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/tokenizer/tokenizer_config.json",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/tokenizer/tokenizer_config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:44.929450+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "tokenizer/vocab.json",
+    "size": 2776833,
+    "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/tokenizer/vocab.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/tokenizer/vocab.json",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/tokenizer/vocab.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:44.933514+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "transformer/config.json",
+    "size": 541,
+    "sha256": "09733c74a3da6d17dd0a0472a091a8950c7c6935889c32c16cc800ede05029de",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "09733c74a3da6d17dd0a0472a091a8950c7c6935889c32c16cc800ede05029de",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/transformer/config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/transformer/config.json",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/transformer/config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:44.933891+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "transformer/diffusion_pytorch_model.safetensors",
+    "size": 4376555784,
+    "sha256": "fdfeceb12ae2eeb71a4c264e9bf85680645e2d99e859189e15c3192ecdaf59bc",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "fdfeceb12ae2eeb71a4c264e9bf85680645e2d99e859189e15c3192ecdaf59bc",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/transformer/diffusion_pytorch_model.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/transformer/diffusion_pytorch_model.safetensors",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/transformer/diffusion_pytorch_model.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:34:49.204902+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "vae/config.json",
+    "size": 821,
+    "sha256": "0d6dfb69ae95a5e2ac9836284bbb63d8b38ce67b25ba2dff380752b2a10ab948",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "0d6dfb69ae95a5e2ac9836284bbb63d8b38ce67b25ba2dff380752b2a10ab948",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/vae/config.json",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/vae/config.json",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/vae/config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:34:49.205814+09:00"
+  },
+  {
+    "group": "image4",
+    "relative": "vae/diffusion_pytorch_model.safetensors",
+    "size": 168120878,
+    "sha256": "ca70d2202afe6415bdbcb8793ba8cd99fd159cfe6192381504d6c4d3036e0f04",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "ca70d2202afe6415bdbcb8793ba8cd99fd159cfe6192381504d6c4d3036e0f04",
+    "retainedSource": "Codex/D-Development/Models/FLUX.2-klein-4B-q8/vae/diffusion_pytorch_model.safetensors",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/FLUX.2-klein-4B-q8/vae/diffusion_pytorch_model.safetensors",
+      "D-TestKit-Archive-20260912/Models/FLUX.2-klein-4B-q8/vae/diffusion_pytorch_model.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:34:49.370425+09:00"
+  },
+  {
+    "group": "audio-small",
+    "relative": "MLX/dit_sm-music_f16.npz",
+    "size": 919193814,
+    "sha256": "8ed3f38e2597f361ee675051f1265d9aa2ae2fffce1c61acd2e9fe31e1db1cbc",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "8ed3f38e2597f361ee675051f1265d9aa2ae2fffce1c61acd2e9fe31e1db1cbc",
+    "retainedSource": "Codex/D-Development/Models/Stable-Audio-3-small-music-MLX/MLX/dit_sm-music_f16.npz",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Stable-Audio-3-small-music-MLX/MLX/dit_sm-music_f16.npz",
+      "D-TestKit-Archive-20260912/Models/Stable-Audio-3-small-music-MLX/MLX/dit_sm-music_f16.npz"
+    ],
+    "verifiedAt": "2026-11-13T09:34:50.274297+09:00"
+  },
+  {
+    "group": "audio-small",
+    "relative": "MLX/t5gemma_f16.npz",
+    "size": 567443068,
+    "sha256": "8deb20489f36d9aec539f26c9c67321f99bc5fe300d470435ed6e76be4f16bbd",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "8deb20489f36d9aec539f26c9c67321f99bc5fe300d470435ed6e76be4f16bbd",
+    "retainedSource": "Codex/D-Development/Models/Stable-Audio-3-small-music-MLX/MLX/t5gemma_f16.npz",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Stable-Audio-3-small-music-MLX/MLX/t5gemma_f16.npz",
+      "D-TestKit-Archive-20260912/Models/Stable-Audio-3-small-music-MLX/MLX/t5gemma_f16.npz"
+    ],
+    "verifiedAt": "2026-11-13T09:34:50.852316+09:00"
+  },
+  {
+    "group": "audio-small",
+    "relative": "MLX/same_s_encoder_f32.npz",
+    "size": 214946620,
+    "sha256": "a48f80d81c30d74c45e2a3047082c4891f715e24c44645adb9c1f4f07afdaf0c",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "a48f80d81c30d74c45e2a3047082c4891f715e24c44645adb9c1f4f07afdaf0c",
+    "retainedSource": "Codex/D-Development/Models/Stable-Audio-3-small-music-MLX/MLX/same_s_encoder_f32.npz",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Stable-Audio-3-small-music-MLX/MLX/same_s_encoder_f32.npz",
+      "D-TestKit-Archive-20260912/Models/Stable-Audio-3-small-music-MLX/MLX/same_s_encoder_f32.npz"
+    ],
+    "verifiedAt": "2026-11-13T09:34:51.069546+09:00"
+  },
+  {
+    "group": "audio-small",
+    "relative": "MLX/same_s_decoder_f32.npz",
+    "size": 218090820,
+    "sha256": "909928a8e6937c1ebe6ac4b729f0462bd3773704a11ea18278e42671dc69bfe4",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "909928a8e6937c1ebe6ac4b729f0462bd3773704a11ea18278e42671dc69bfe4",
+    "retainedSource": "Codex/D-Development/Models/Stable-Audio-3-small-music-MLX/MLX/same_s_decoder_f32.npz",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Stable-Audio-3-small-music-MLX/MLX/same_s_decoder_f32.npz",
+      "D-TestKit-Archive-20260912/Models/Stable-Audio-3-small-music-MLX/MLX/same_s_decoder_f32.npz"
+    ],
+    "verifiedAt": "2026-11-13T09:34:51.279509+09:00"
+  },
+  {
+    "group": "audio-medium",
+    "relative": "MLX/dit_medium_f16.npz",
+    "size": 2907300946,
+    "sha256": "f9e5647ea3225818657d47d47ae4b34afa29c0568206ca89566c1a758944a38e",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "f9e5647ea3225818657d47d47ae4b34afa29c0568206ca89566c1a758944a38e",
+    "retainedSource": "Codex/D-Development/Models/Stable-Audio-3-medium-MLX/MLX/dit_medium_f16.npz",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Stable-Audio-3-medium-MLX/MLX/dit_medium_f16.npz",
+      "D-TestKit-Archive-20260912/Models/Stable-Audio-3-medium-MLX/MLX/dit_medium_f16.npz"
+    ],
+    "verifiedAt": "2026-11-13T09:34:54.294432+09:00"
+  },
+  {
+    "group": "audio-medium",
+    "relative": "MLX/t5gemma_f16.npz",
+    "size": 567443068,
+    "sha256": "8deb20489f36d9aec539f26c9c67321f99bc5fe300d470435ed6e76be4f16bbd",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "8deb20489f36d9aec539f26c9c67321f99bc5fe300d470435ed6e76be4f16bbd",
+    "retainedSource": "Codex/D-Development/Models/Stable-Audio-3-medium-MLX/MLX/t5gemma_f16.npz",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Stable-Audio-3-medium-MLX/MLX/t5gemma_f16.npz",
+      "D-TestKit-Archive-20260912/Models/Stable-Audio-3-medium-MLX/MLX/t5gemma_f16.npz"
+    ],
+    "verifiedAt": "2026-11-13T09:34:54.855102+09:00"
+  },
+  {
+    "group": "audio-medium",
+    "relative": "MLX/same_l_encoder_f32.npz",
+    "size": 1704313504,
+    "sha256": "c5caafc6bd29fc3d4cb7a08b0d3725041fa2100711f86a4f05d2638c532871d2",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "c5caafc6bd29fc3d4cb7a08b0d3725041fa2100711f86a4f05d2638c532871d2",
+    "retainedSource": "Codex/D-Development/Models/Stable-Audio-3-medium-MLX/MLX/same_l_encoder_f32.npz",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Stable-Audio-3-medium-MLX/MLX/same_l_encoder_f32.npz",
+      "D-TestKit-Archive-20260912/Models/Stable-Audio-3-medium-MLX/MLX/same_l_encoder_f32.npz"
+    ],
+    "verifiedAt": "2026-11-13T09:34:56.596410+09:00"
+  },
+  {
+    "group": "audio-medium",
+    "relative": "MLX/same_l_decoder_f32.npz",
+    "size": 1704311976,
+    "sha256": "84924be2122d3a20fce443f40b782d9cd88e8e73707476326003ac47659a2287",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "84924be2122d3a20fce443f40b782d9cd88e8e73707476326003ac47659a2287",
+    "retainedSource": "Codex/D-Development/Models/Stable-Audio-3-medium-MLX/MLX/same_l_decoder_f32.npz",
+    "removedIdenticalCopies": [
+      "D-TestKit/Models/Stable-Audio-3-medium-MLX/MLX/same_l_decoder_f32.npz",
+      "D-TestKit-Archive-20260912/Models/Stable-Audio-3-medium-MLX/MLX/same_l_decoder_f32.npz"
+    ],
+    "verifiedAt": "2026-11-13T09:34:58.351466+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00001-of-00014.safetensors",
+    "size": 4932328944,
+    "sha256": "6b9dfbc930e505402ae9d7e5091a9d7d656cda5f34614f01cfe70bfb0cca27cb",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "6b9dfbc930e505402ae9d7e5091a9d7d656cda5f34614f01cfe70bfb0cca27cb",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00001-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00001-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00001-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:35:03.228778+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00002-of-00014.safetensors",
+    "size": 4875990528,
+    "sha256": "d8bb44b4ff303fe76fe9e894022fb3dc71b15a2e716592790fe0e3c3e60478fa",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "d8bb44b4ff303fe76fe9e894022fb3dc71b15a2e716592790fe0e3c3e60478fa",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00002-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00002-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00002-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:35:08.484344+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00003-of-00014.safetensors",
+    "size": 4875990552,
+    "sha256": "54f22e8b3168f8dc962fac0d313607ebf52a12b433d4cf3098a0d82d9f042940",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "54f22e8b3168f8dc962fac0d313607ebf52a12b433d4cf3098a0d82d9f042940",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00003-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00003-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00003-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:35:13.822536+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00004-of-00014.safetensors",
+    "size": 4875990584,
+    "sha256": "ad09c74d3c13ee29b5d0d84548fd8a3424a651564eaccd519946c296e59c557f",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "ad09c74d3c13ee29b5d0d84548fd8a3424a651564eaccd519946c296e59c557f",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00004-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00004-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00004-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:35:19.033385+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00005-of-00014.safetensors",
+    "size": 4875990584,
+    "sha256": "fc993c8a0e2a5b0570f383e1a95dc3a1281d1b224b6f3ee908f4827941e1dfc2",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "fc993c8a0e2a5b0570f383e1a95dc3a1281d1b224b6f3ee908f4827941e1dfc2",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00005-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00005-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00005-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:35:24.263653+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00006-of-00014.safetensors",
+    "size": 4875990584,
+    "sha256": "82f05620d1f718a90c362b221d6a184ff1a0f53301d706882d3df49695fa1974",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "82f05620d1f718a90c362b221d6a184ff1a0f53301d706882d3df49695fa1974",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00006-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00006-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00006-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:35:29.394011+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00007-of-00014.safetensors",
+    "size": 4875990584,
+    "sha256": "fb91da8cb01ff4de3eef0eab1c3e769a734b3a1aafc61734068638a0d6c86934",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "fb91da8cb01ff4de3eef0eab1c3e769a734b3a1aafc61734068638a0d6c86934",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00007-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00007-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00007-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:35:34.648451+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00008-of-00014.safetensors",
+    "size": 4875990584,
+    "sha256": "431ca56535c8781944ce3801f5eb61c45531e853ecc5846d936ebaf4761b764f",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "431ca56535c8781944ce3801f5eb61c45531e853ecc5846d936ebaf4761b764f",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00008-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00008-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00008-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:35:40.231965+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00009-of-00014.safetensors",
+    "size": 4875990584,
+    "sha256": "3825e3f4302f4d2f7d76aa7430d2ce0864fde6b9e540a5806bf0d8e38e4d9f47",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "3825e3f4302f4d2f7d76aa7430d2ce0864fde6b9e540a5806bf0d8e38e4d9f47",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00009-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00009-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00009-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:35:45.488801+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00010-of-00014.safetensors",
+    "size": 4875990584,
+    "sha256": "aded5a4d1d5e22dbd8b6f79266b6eb88c840411b09527c53917a1419ace22e2f",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "aded5a4d1d5e22dbd8b6f79266b6eb88c840411b09527c53917a1419ace22e2f",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00010-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00010-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00010-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:35:50.616904+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00011-of-00014.safetensors",
+    "size": 4875990584,
+    "sha256": "3820ffe8d8d6477f6fe8d614ef3c87abb264ee39accebf43a1507b970d80946f",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "3820ffe8d8d6477f6fe8d614ef3c87abb264ee39accebf43a1507b970d80946f",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00011-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00011-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00011-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:35:55.806409+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00012-of-00014.safetensors",
+    "size": 4875990584,
+    "sha256": "05ad2d08ce71963121c9b03f1d9ec5d7641052f4b23c6c12b80d71065eb8e98e",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "05ad2d08ce71963121c9b03f1d9ec5d7641052f4b23c6c12b80d71065eb8e98e",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00012-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00012-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00012-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:36:00.799611+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00013-of-00014.safetensors",
+    "size": 4875990584,
+    "sha256": "b64f2289871261fdd1abbd3b78bcd66011b341de3dc8eeb2ed1a473ee7c8d95c",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "b64f2289871261fdd1abbd3b78bcd66011b341de3dc8eeb2ed1a473ee7c8d95c",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00013-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00013-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00013-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:36:05.640421+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model-00014-of-00014.safetensors",
+    "size": 3270697008,
+    "sha256": "e45b6c9998c77ee5a6577f9f47bc76416c1d4d387169e50c4c9d3134ea51b13b",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "e45b6c9998c77ee5a6577f9f47bc76416c1d4d387169e50c4c9d3134ea51b13b",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model-00014-of-00014.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model-00014-of-00014.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model-00014-of-00014.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:36:08.906211+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model-00001-of-00013.safetensors",
+    "size": 5227812968,
+    "sha256": "0b3386565e476bfdea287e9ea9f269d036e5c649ed14bb9b4afac1dc4661bd2a",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "0b3386565e476bfdea287e9ea9f269d036e5c649ed14bb9b4afac1dc4661bd2a",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model-00001-of-00013.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model-00001-of-00013.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model-00001-of-00013.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:36:14.806294+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model-00002-of-00013.safetensors",
+    "size": 5164578856,
+    "sha256": "9c98fd4579c9bc96d1b1bbf65c1243f9256df60bccd229570cecc61897773003",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "9c98fd4579c9bc96d1b1bbf65c1243f9256df60bccd229570cecc61897773003",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model-00002-of-00013.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model-00002-of-00013.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model-00002-of-00013.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:36:22.601558+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model-00003-of-00013.safetensors",
+    "size": 5164578872,
+    "sha256": "fa484c940d4170199fb69f5016739df2daf6ecd1150631b12a297e06e3964730",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "fa484c940d4170199fb69f5016739df2daf6ecd1150631b12a297e06e3964730",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model-00003-of-00013.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model-00003-of-00013.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model-00003-of-00013.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:36:30.454112+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model-00004-of-00013.safetensors",
+    "size": 5164578896,
+    "sha256": "4a851df37cce2d14b39cb58df41def7b591b1f11b8520a32b421a5fa3e997c9f",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "4a851df37cce2d14b39cb58df41def7b591b1f11b8520a32b421a5fa3e997c9f",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model-00004-of-00013.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model-00004-of-00013.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model-00004-of-00013.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:36:37.041219+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model-00005-of-00013.safetensors",
+    "size": 5164578896,
+    "sha256": "3fe6ff94dc9d3107c6776a25277d2b72b5443f88cf0f4ed835fd5b65a94ea5d4",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "3fe6ff94dc9d3107c6776a25277d2b72b5443f88cf0f4ed835fd5b65a94ea5d4",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model-00005-of-00013.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model-00005-of-00013.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model-00005-of-00013.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:36:42.832117+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model-00006-of-00013.safetensors",
+    "size": 5164578896,
+    "sha256": "79b47e1b9ff03a2c6f06dd15a28972acf32c0867172ee34e5aa6e96b99494127",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "79b47e1b9ff03a2c6f06dd15a28972acf32c0867172ee34e5aa6e96b99494127",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model-00006-of-00013.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model-00006-of-00013.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model-00006-of-00013.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:36:48.213075+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model-00007-of-00013.safetensors",
+    "size": 5164578896,
+    "sha256": "6ac4d6ce639786b722a8dd99843ed56dcab48a0d174a4b0f9b8cdcbe5160fb0f",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "6ac4d6ce639786b722a8dd99843ed56dcab48a0d174a4b0f9b8cdcbe5160fb0f",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model-00007-of-00013.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model-00007-of-00013.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model-00007-of-00013.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:36:53.785610+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model-00008-of-00013.safetensors",
+    "size": 5164578896,
+    "sha256": "03531812243fb0a333e01efa7e3d39750580bca8cbf2ba0529da419278eab736",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "03531812243fb0a333e01efa7e3d39750580bca8cbf2ba0529da419278eab736",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model-00008-of-00013.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model-00008-of-00013.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model-00008-of-00013.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:36:59.279620+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model-00009-of-00013.safetensors",
+    "size": 5164578896,
+    "sha256": "7e82a80b0d0d267026eb841b81523069cc7b956c1ebd8a18c07e462ffb262487",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "7e82a80b0d0d267026eb841b81523069cc7b956c1ebd8a18c07e462ffb262487",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model-00009-of-00013.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model-00009-of-00013.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model-00009-of-00013.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:37:04.624768+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model-00010-of-00013.safetensors",
+    "size": 5164578896,
+    "sha256": "ef0a1f6b65145232543dd2232d58d91a4d31f44b0da5084acf22cea123255481",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "ef0a1f6b65145232543dd2232d58d91a4d31f44b0da5084acf22cea123255481",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model-00010-of-00013.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model-00010-of-00013.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model-00010-of-00013.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:37:10.257519+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model-00011-of-00013.safetensors",
+    "size": 5164578896,
+    "sha256": "bf885b8f2f078c5499b75fded21094a26bfe0e6e00bee276e499443ecd2f298d",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "bf885b8f2f078c5499b75fded21094a26bfe0e6e00bee276e499443ecd2f298d",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model-00011-of-00013.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model-00011-of-00013.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model-00011-of-00013.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:37:15.997001+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model-00012-of-00013.safetensors",
+    "size": 5164578896,
+    "sha256": "dc717572d014ebf8527e35af815d10eb2f5a6bc87253b8a7d2f456965192db69",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "dc717572d014ebf8527e35af815d10eb2f5a6bc87253b8a7d2f456965192db69",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model-00012-of-00013.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model-00012-of-00013.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model-00012-of-00013.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:37:21.707311+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model-00013-of-00013.safetensors",
+    "size": 4242305176,
+    "sha256": "8bfd852d5817e9836de1d3ec8dbac1c5446b167568b717371f08282b22291aa2",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "8bfd852d5817e9836de1d3ec8dbac1c5446b167568b717371f08282b22291aa2",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model-00013-of-00013.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model-00013-of-00013.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model-00013-of-00013.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:37:26.440873+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/video_vae/source/model.safetensors",
+    "size": 10415548320,
+    "sha256": "5f0c2e161d895a9fee7645ca32d4a7e3a22b90cacfcbeba62ec999cdbbefe0d3",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "5f0c2e161d895a9fee7645ca32d4a7e3a22b90cacfcbeba62ec999cdbbefe0d3",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/video_vae/source/model.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/video_vae/source/model.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/video_vae/source/model.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:37:38.040473+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/audio_vae/model.safetensors",
+    "size": 605429308,
+    "sha256": "37dddc2f3e6d5d5139d823d5ea283bbf304dadcb885b1ccda818aa13dade5ea2",
+    "manifestAlgorithm": "sha256",
+    "manifestChecksum": "37dddc2f3e6d5d5139d823d5ea283bbf304dadcb885b1ccda818aa13dade5ea2",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/audio_vae/model.safetensors",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/audio_vae/model.safetensors",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/audio_vae/model.safetensors"
+    ],
+    "verifiedAt": "2026-11-13T09:37:38.688372+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/tokenizer/tokenizer.json",
+    "size": 7032403,
+    "sha256": "a5d85b6dcc535e6b93115a9ef287e6132fdbf30270da6218194ba742261173c7",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "c6cc1014128b19d1fc46b1d30a23e3b1d35db421",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/tokenizer/tokenizer.json",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/tokenizer/tokenizer.json",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/tokenizer/tokenizer.json"
+    ],
+    "verifiedAt": "2026-11-13T09:37:38.704467+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/config.json",
+    "size": 604,
+    "sha256": "f619093a231fcfbcc3d035bec26c50ad864e7331a500d5c519f5045dc1e50458",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "94cc6ca1254d9d04b3f7cc06a8c9fc05d0ded065",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/config.json",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/config.json",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:37:38.705346+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/video_vae/config.json",
+    "size": 1807,
+    "sha256": "3edd2cdd1ebc823c868be55ef917e1b3b8a398fde4d3150dae44a3bf05d9f627",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "20f91e40ea9bc24c21a0e757715f93acf49eb841",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/video_vae/config.json",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/video_vae/config.json",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/video_vae/config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:37:38.705669+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/audio_vae/config.json",
+    "size": 1973,
+    "sha256": "d8f3bcc62e23c7e9806970fa63cca6139c06faa3797cf9c94034f60db8512771",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "bc2a8dc3bfe9037e1f0e82e97f309019b6a398e6",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/audio_vae/config.json",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/audio_vae/config.json",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/audio_vae/config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:37:38.706010+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/model.safetensors.index.json",
+    "size": 97831,
+    "sha256": "06c952c569285870b811989b794b9766493e280fb77fbcb957fc4e5fcf25403a",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "b7f68f12031a25c81d72d46a284fe9e1daa448b8",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/model.safetensors.index.json",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/model.safetensors.index.json",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/model.safetensors.index.json"
+    ],
+    "verifiedAt": "2026-11-13T09:37:38.706704+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/text_encoder/config.json",
+    "size": 1474,
+    "sha256": "d2dd0c60d01b9e195d9447c52da61c7302d28828524914c044d9c6e1b81d0427",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "29e925092dee9f14278c53e7e7d876cea8a997bc",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/text_encoder/config.json",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/text_encoder/config.json",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/text_encoder/config.json"
+    ],
+    "verifiedAt": "2026-11-13T09:37:38.707020+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "FL2VA/transformer/model.safetensors.index.json",
+    "size": 38323,
+    "sha256": "fb457a26ffa6294660e249b0ddd03a337f2e5393f770b5c34c8b8f90a29a7efb",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "89d6b0862f66080854b239ad7a0b50c31a6de986",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/FL2VA/transformer/model.safetensors.index.json",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/FL2VA/transformer/model.safetensors.index.json",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/FL2VA/transformer/model.safetensors.index.json"
+    ],
+    "verifiedAt": "2026-11-13T09:37:38.707549+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "LICENSE",
+    "size": 17604,
+    "sha256": "59b99642b95ea21630e311198ddbfffbfe05aadba0c2f5d884cbdf4efcc90f44",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "c389b45855337ccec8ddeb389f4fe902abcd0b19",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/LICENSE",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/LICENSE",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/LICENSE"
+    ],
+    "verifiedAt": "2026-11-13T09:37:38.708174+09:00"
+  },
+  {
+    "group": "H3",
+    "relative": "README.md",
+    "size": 38406,
+    "sha256": "f0116a90332496bdfcc827320c603a26b849c73bf804f2674d03682fbbd2334a",
+    "manifestAlgorithm": "git-blob-sha1",
+    "manifestChecksum": "08b20eb59ca77aaf19627152a0ee61b1ffc83070",
+    "retainedSource": "Codex/D-Development/Models/D-Video-Packs/H3-FL2VA-BF16/model/README.md",
+    "removedIdenticalCopies": [
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw/README.md",
+      "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model/README.md"
+    ],
+    "verifiedAt": "2026-11-13T09:37:38.708799+09:00"
+  }
+]

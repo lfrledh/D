@@ -1,0 +1,1447 @@
+[
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261017-07-wheel-zoom/app/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:02.534022+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261017-07-wheel-zoom/app/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:03.259897+09:00",
+    "directoryAccountedBytes": 115171328
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261017-07-wheel-zoom/app/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:03.295854+09:00",
+    "directoryAccountedBytes": 649134080
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261017-07-wheel-zoom/app/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:03.493300+09:00",
+    "directoryAccountedBytes": 359481344
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261017-07-wheel-zoom/app/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:03.494172+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261017-07-wheel-zoom/app/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:04.225573+09:00",
+    "directoryAccountedBytes": 974860288
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-05-glass-performance/app/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:04.227638+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-05-glass-performance/app/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:04.840699+09:00",
+    "directoryAccountedBytes": 113344512
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-05-glass-performance/app/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:04.863908+09:00",
+    "directoryAccountedBytes": 324599808
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-05-glass-performance/app/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:05.103248+09:00",
+    "directoryAccountedBytes": 179765248
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-05-glass-performance/app/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:05.104201+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-05-glass-performance/app/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:05.554043+09:00",
+    "directoryAccountedBytes": 853897216
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-05-glass-performance/cpu/build/out/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:05.555683+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-05-glass-performance/cpu/build/out/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:07.184979+09:00",
+    "directoryAccountedBytes": 4061560832
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-05-glass-performance/cpu/build/out/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:07.332398+09:00",
+    "directoryAccountedBytes": 2364469248
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-05-glass-performance/cpu/build/out/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:08.806900+09:00",
+    "directoryAccountedBytes": 2608140288
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-05-glass-performance/cpu/build/out/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:08.807687+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-02-addendum/app/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:08.823248+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-02-addendum/app/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:09.847930+09:00",
+    "directoryAccountedBytes": 115486720
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-02-addendum/app/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:09.874842+09:00",
+    "directoryAccountedBytes": 324558848
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-02-addendum/app/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:10.013046+09:00",
+    "directoryAccountedBytes": 179695616
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-02-addendum/app/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:10.013744+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-02-addendum/app/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:10.526325+09:00",
+    "directoryAccountedBytes": 851329024
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:10.528121+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:11.119918+09:00",
+    "directoryAccountedBytes": 113274880
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:11.138966+09:00",
+    "directoryAccountedBytes": 324546560
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:11.249237+09:00",
+    "directoryAccountedBytes": 179691520
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:11.249765+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:11.889932+09:00",
+    "directoryAccountedBytes": 842211328
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData2/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:11.891329+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData2/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:12.469744+09:00",
+    "directoryAccountedBytes": 115109888
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData2/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:12.514220+09:00",
+    "directoryAccountedBytes": 649105408
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData2/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:12.930855+09:00",
+    "directoryAccountedBytes": 359411712
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData2/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:12.931702+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData2/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:13.535528+09:00",
+    "directoryAccountedBytes": 977498112
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/cpu/build/out/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:13.536462+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/cpu/build/out/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:14.676129+09:00",
+    "directoryAccountedBytes": 3812249600
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/cpu/build/out/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:14.790135+09:00",
+    "directoryAccountedBytes": 2152341504
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/cpu/build/out/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:15.825931+09:00",
+    "directoryAccountedBytes": 2412859392
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/cpu/build/out/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:15.826626+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-06-canvas-redraw/app/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:15.827185+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-06-canvas-redraw/app/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:16.203112+09:00",
+    "directoryAccountedBytes": 113426432
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-06-canvas-redraw/app/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:16.214040+09:00",
+    "directoryAccountedBytes": 324571136
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-06-canvas-redraw/app/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:16.295890+09:00",
+    "directoryAccountedBytes": 179752960
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-06-canvas-redraw/app/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:16.296503+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-06-canvas-redraw/app/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:16.695694+09:00",
+    "directoryAccountedBytes": 843038720
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-06-canvas-redraw/cpu/build/out/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:16.696869+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-06-canvas-redraw/cpu/build/out/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:18.106673+09:00",
+    "directoryAccountedBytes": 4307030016
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-06-canvas-redraw/cpu/build/out/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:18.440396+09:00",
+    "directoryAccountedBytes": 2576580608
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-06-canvas-redraw/cpu/build/out/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:19.643825+09:00",
+    "directoryAccountedBytes": 2803367936
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-06-canvas-redraw/cpu/build/out/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:19.644308+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-01/app/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:19.645706+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-01/app/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:20.778807+09:00",
+    "directoryAccountedBytes": 185708544
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-01/app/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:20.974310+09:00",
+    "directoryAccountedBytes": 2246000640
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-01/app/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:22.175904+09:00",
+    "directoryAccountedBytes": 1437290496
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-01/app/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:22.176485+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-01/app/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:23.208629+09:00",
+    "directoryAccountedBytes": 2665938944
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-01/cpu/build/out/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:23.209804+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-01/cpu/build/out/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:24.346218+09:00",
+    "directoryAccountedBytes": 3558461440
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-01/cpu/build/out/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:24.450969+09:00",
+    "directoryAccountedBytes": 1940246528
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-01/cpu/build/out/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:25.419726+09:00",
+    "directoryAccountedBytes": 2217635840
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-01/cpu/build/out/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:25.420403+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/app/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:25.421164+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/app/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:26.080775+09:00",
+    "directoryAccountedBytes": 131727360
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/app/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:26.130317+09:00",
+    "directoryAccountedBytes": 823447552
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/app/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:26.338262+09:00",
+    "directoryAccountedBytes": 538894336
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/app/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:26.338754+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/app/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:27.004436+09:00",
+    "directoryAccountedBytes": 1381359616
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/cpu/build/out/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:27.005261+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/cpu/build/out/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:28.021646+09:00",
+    "directoryAccountedBytes": 2293923840
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/cpu/build/out/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:28.066527+09:00",
+    "directoryAccountedBytes": 1036869632
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/cpu/build/out/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:28.608744+09:00",
+    "directoryAccountedBytes": 1241829376
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/cpu/build/out/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:28.609483+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/tests/StartupBuild/out/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:28.610213+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/tests/StartupBuild/out/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:28.617948+09:00",
+    "directoryAccountedBytes": 2949120
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/tests/StartupBuild/out/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:28.619884+09:00",
+    "directoryAccountedBytes": 30769152
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/tests/StartupBuild/out/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:28.625389+09:00",
+    "directoryAccountedBytes": 8032256
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/tests/StartupBuild/out/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:28.626211+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-03-inputs/app/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:28.626922+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-03-inputs/app/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:29.280491+09:00",
+    "directoryAccountedBytes": 162816000
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-03-inputs/app/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:29.356472+09:00",
+    "directoryAccountedBytes": 1646952448
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-03-inputs/app/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:29.840554+09:00",
+    "directoryAccountedBytes": 1077919744
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-03-inputs/app/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:29.841742+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-03-inputs/app/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:30.712932+09:00",
+    "directoryAccountedBytes": 2155905024
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-03-inputs/cpu/build/out/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:30.713829+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-03-inputs/cpu/build/out/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:31.722061+09:00",
+    "directoryAccountedBytes": 3033817088
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-03-inputs/cpu/build/out/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:31.791204+09:00",
+    "directoryAccountedBytes": 1555341312
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-03-inputs/cpu/build/out/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:32.579293+09:00",
+    "directoryAccountedBytes": 1827295232
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-03-inputs/cpu/build/out/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:32.580004+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-02/app/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:32.581137+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-02/app/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:33.332370+09:00",
+    "directoryAccountedBytes": 143650816
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-02/app/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:33.406556+09:00",
+    "directoryAccountedBytes": 1097936896
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-02/app/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:33.714214+09:00",
+    "directoryAccountedBytes": 718573568
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-02/app/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:33.715018+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-02/app/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:34.415590+09:00",
+    "directoryAccountedBytes": 1657839616
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-02/cpu/build/out/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:34.416487+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-02/cpu/build/out/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:35.400728+09:00",
+    "directoryAccountedBytes": 2541928448
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-02/cpu/build/out/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:35.456792+09:00",
+    "directoryAccountedBytes": 1209679872
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-02/cpu/build/out/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:36.089668+09:00",
+    "directoryAccountedBytes": 1436950528
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-02/cpu/build/out/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:36.090427+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-04-titlebar/app/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:36.091912+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-04-titlebar/app/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:36.796808+09:00",
+    "directoryAccountedBytes": 170569728
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-04-titlebar/app/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:36.906256+09:00",
+    "directoryAccountedBytes": 1921490944
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-04-titlebar/app/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:37.468285+09:00",
+    "directoryAccountedBytes": 1257611264
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-04-titlebar/app/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:37.469194+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-04-titlebar/app/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:38.475437+09:00",
+    "directoryAccountedBytes": 2406400000
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-04-titlebar/cpu/build/out/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:38.476815+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-04-titlebar/cpu/build/out/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:39.485160+09:00",
+    "directoryAccountedBytes": 3280273408
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-04-titlebar/cpu/build/out/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:39.573572+09:00",
+    "directoryAccountedBytes": 1728192512
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-04-titlebar/cpu/build/out/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:40.604311+09:00",
+    "directoryAccountedBytes": 2022518784
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-04-titlebar/cpu/build/out/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:40.604806+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/app/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:40.605997+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/app/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:41.278602+09:00",
+    "directoryAccountedBytes": 151154688
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/app/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:41.354432+09:00",
+    "directoryAccountedBytes": 1372426240
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/app/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:41.777092+09:00",
+    "directoryAccountedBytes": 898232320
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/app/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:41.777899+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/app/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:42.679769+09:00",
+    "directoryAccountedBytes": 1905405952
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/cpu/build/out/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:42.680906+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/cpu/build/out/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:43.903106+09:00",
+    "directoryAccountedBytes": 2786709504
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/cpu/build/out/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:43.973741+09:00",
+    "directoryAccountedBytes": 1382490112
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/cpu/build/out/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:44.667325+09:00",
+    "directoryAccountedBytes": 1632071680
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/cpu/build/out/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:44.668105+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/app/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:44.669863+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/app/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:45.230546+09:00",
+    "directoryAccountedBytes": 125661184
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/app/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:45.276053+09:00",
+    "directoryAccountedBytes": 973668352
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/app/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:45.533233+09:00",
+    "directoryAccountedBytes": 539168768
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/app/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:45.534323+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/app/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:46.145928+09:00",
+    "directoryAccountedBytes": 1259696128
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-06/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:46.147637+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-06/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:46.850487+09:00",
+    "directoryAccountedBytes": 138715136
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-06/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:47.253748+09:00",
+    "directoryAccountedBytes": 2921340928
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-06/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:48.112231+09:00",
+    "directoryAccountedBytes": 1617735680
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-06/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:48.112873+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-06/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:48.952467+09:00",
+    "directoryAccountedBytes": 1887584256
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-01/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:48.953311+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-01/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:49.503191+09:00",
+    "directoryAccountedBytes": 127803392
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-01/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:49.577034+09:00",
+    "directoryAccountedBytes": 1298280448
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-01/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:49.860739+09:00",
+    "directoryAccountedBytes": 718929920
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-01/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:49.861746+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-01/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:50.509513+09:00",
+    "directoryAccountedBytes": 1389473792
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-07/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:50.511123+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-07/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:51.370373+09:00",
+    "directoryAccountedBytes": 142929920
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-07/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:51.554441+09:00",
+    "directoryAccountedBytes": 3245953024
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-07/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:52.415149+09:00",
+    "directoryAccountedBytes": 1797496832
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-07/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:52.415677+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-07/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:53.399523+09:00",
+    "directoryAccountedBytes": 1993547776
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-02/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:53.400499+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-02/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:53.952774+09:00",
+    "directoryAccountedBytes": 129777664
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-02/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:54.018346+09:00",
+    "directoryAccountedBytes": 1622892544
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-02/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:54.389650+09:00",
+    "directoryAccountedBytes": 898691072
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-02/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:54.390234+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-02/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:55.080656+09:00",
+    "directoryAccountedBytes": 1489018880
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-05/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:55.081693+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-05/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:55.671592+09:00",
+    "directoryAccountedBytes": 135360512
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-05/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:55.812175+09:00",
+    "directoryAccountedBytes": 2596728832
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-05/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:56.610011+09:00",
+    "directoryAccountedBytes": 1437974528
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-05/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:56.610678+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-05/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:57.336943+09:00",
+    "directoryAccountedBytes": 1788153856
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-04/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:57.337908+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-04/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:57.889567+09:00",
+    "directoryAccountedBytes": 133464064
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-04/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:58.019001+09:00",
+    "directoryAccountedBytes": 2272116736
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-04/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:58.558132+09:00",
+    "directoryAccountedBytes": 1258213376
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-04/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:58.558919+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-04/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:59.437541+09:00",
+    "directoryAccountedBytes": 1688858624
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-03/ReviewDerivedData/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:31:59.438349+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-03/ReviewDerivedData/Index.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:32:00.075905+09:00",
+    "directoryAccountedBytes": 131485696
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-03/ReviewDerivedData/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:32:00.191000+09:00",
+    "directoryAccountedBytes": 1947504640
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-03/ReviewDerivedData/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:32:00.926063+09:00",
+    "directoryAccountedBytes": 1078452224
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-03/ReviewDerivedData/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:32:00.927192+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-03/ReviewDerivedData/Build/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:32:01.699356+09:00",
+    "directoryAccountedBytes": 1589735424
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/cpu/build/out/SDKStatCaches.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:32:01.701380+09:00",
+    "directoryAccountedBytes": 15294464
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/cpu/build/out/Intermediates.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:32:03.362541+09:00",
+    "directoryAccountedBytes": 3996246016
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/cpu/build/out/SDKExplicitPrecompiledModules",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:32:03.690599+09:00",
+    "directoryAccountedBytes": 1578987520
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/cpu/build/out/ModuleCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:32:05.457281+09:00",
+    "directoryAccountedBytes": 2998587392
+  },
+  {
+    "kind": "compiler-cache",
+    "path": "Codex/D-Development/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/cpu/build/out/CompilationCache.noindex",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:32:05.458015+09:00",
+    "directoryAccountedBytes": 28672
+  },
+  {
+    "kind": "old-app",
+    "path": "Codex/D-Development/CurrentD/B9-Followup-1c2f37ed/D.app",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:35:14.523734+09:00",
+    "directoryAccountedBytes": 2956169216,
+    "sourceCommit": "1c2f37ed525595492e907f4874e9253404b9eb1d",
+    "bundleID": "first-test.D.preview.unifiedvisual20261026",
+    "infoSHA256": "eb28ba5f434ef5243e041b02d4d7ef4864bc0b2a75e5bf0af9c6f87da668bde9",
+    "executableSHA256": "c44a0ff9ea97f6464d6c79d5938c7e946ac354dae7c695e02ed25072eb727837",
+    "productInputSHA256": "1c0b30796e7847accbfebf1dcec49c135551b7ef32e5136c9ae6c18382f02b02",
+    "resourceManifestSHA256": "a85e58b9c30a8adb9756d0392c6373a19d4b76f8822e4e88d3ea24f4bbbe43f9",
+    "sourceAncestorOfRemoteExit": 0,
+    "retainedBuildReport": "Codex/D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-b9-followup/release-qualified/build-report.json",
+    "buildReportStatus": "packaged"
+  },
+  {
+    "kind": "old-app",
+    "path": "Codex/D-Development/CurrentD/Nov6-46e23fbe/D.app",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:35:29.658394+09:00",
+    "directoryAccountedBytes": 2956832768,
+    "sourceCommit": "46e23fbec16715e80fff1046e4c4a8543236b317",
+    "bundleID": "first-test.D.preview.unifiedvisual20261026",
+    "infoSHA256": "c4749818ab103b59fb3bcb2d7acdbcaab59acec8ac8341e5a3bfc4ee1b5a16d1",
+    "executableSHA256": "d2346f947e77a16056bf20f07bea792d19d3006a8c566e99ba6494e1c95dd4c8",
+    "productInputSHA256": "c592505e7b17f74454d461219cc8bec6ceb5b9a8a37ab4f94ec6a76ddf80f6c3",
+    "resourceManifestSHA256": "a85e58b9c30a8adb9756d0392c6373a19d4b76f8822e4e88d3ea24f4bbbe43f9",
+    "sourceAncestorOfRemoteExit": 0,
+    "retainedBuildReport": "Codex/D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-approved-copy-tips/release-final/build-report.json",
+    "buildReportStatus": "packaged"
+  },
+  {
+    "kind": "old-app",
+    "path": "Codex/D-Development/CurrentD/Nov6-Diagnostic-21950944/D.app",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:35:43.219115+09:00",
+    "directoryAccountedBytes": 2956886016,
+    "sourceCommit": "2195094411a8f6591f690b8cb70864b7927058eb",
+    "bundleID": "first-test.D.preview.unifiedvisual20261026",
+    "infoSHA256": "76055faf58170a320d65471f8479cac42a06d8439189d739e64c21e1670143cb",
+    "executableSHA256": "7cae34013f39dd3848fa29c58876cbb7b8fb39e270a9485380e76fed9efed6da",
+    "productInputSHA256": "f0e932ced4807f27c38a88a8bc76de79af39f33976c5fdd542af9489b054fc71",
+    "resourceManifestSHA256": "a85e58b9c30a8adb9756d0392c6373a19d4b76f8822e4e88d3ea24f4bbbe43f9",
+    "sourceAncestorOfRemoteExit": 0,
+    "retainedBuildReport": "Codex/D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-approved-copy-tips/release-diagnostic/build-report.json",
+    "buildReportStatus": "packaged"
+  },
+  {
+    "kind": "old-app",
+    "path": "Codex/D-Development/CurrentD/Nov6-Models-aebbcffe/D.app",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:35:59.614836+09:00",
+    "directoryAccountedBytes": 2957254656,
+    "sourceCommit": "aebbcffe57d5e851910905638a8bdc7b98e617fb",
+    "bundleID": "first-test.D.preview.unifiedvisual20261026",
+    "infoSHA256": "8e6a53d7233e81af5d1ab104b06a8a91a85e2f7650481594a98da84e497d0891",
+    "executableSHA256": "e7097feb78e71b17dfa5bf055bf99d2bbf9b55e026602d08ace042005fdce9d1",
+    "productInputSHA256": "09f4cdb8e7cb3bc740301287dfa5744bd25ce82713d3d2cf0168713200e1a9f8",
+    "resourceManifestSHA256": "e66db1daf9e2a01a74d5fbe9ae92127fb7da7053358c983e4348f305add8979b",
+    "sourceAncestorOfRemoteExit": 0,
+    "retainedBuildReport": "Codex/D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-model-add-copy/release-aebbcffe/build-report.json",
+    "buildReportStatus": "packaged"
+  },
+  {
+    "kind": "old-app",
+    "path": "Codex/D-Development/CurrentD/Nov6-Models-ba95fcf8/D.app",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:36:44.822018+09:00",
+    "directoryAccountedBytes": 2957418496,
+    "sourceCommit": "ba95fcf872fcd6be03ccf9b132d483b98e76d8a1",
+    "bundleID": "first-test.D.preview.unifiedvisual20261026",
+    "infoSHA256": "924c612b9cfd64a822cd32a4c521423f8128e0f575697bbdd7cef723efdb1353",
+    "executableSHA256": "95180bdb074b8a0778406f392e192455cd57dda66b089da2992b0077e2802cb9",
+    "productInputSHA256": "90393b4e07b0d425ff8d30e92e500e03bbab9adcacfe9889103697e288d51665",
+    "resourceManifestSHA256": "e66db1daf9e2a01a74d5fbe9ae92127fb7da7053358c983e4348f305add8979b",
+    "sourceAncestorOfRemoteExit": 0,
+    "retainedBuildReport": "Codex/D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-model-add-copy/release-ba95fcf8/build-report.json",
+    "buildReportStatus": "failed"
+  },
+  {
+    "kind": "old-app",
+    "path": "Codex/D-Development/CurrentD/Nov6-Models-fac7329a/D.app",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:37:04.058763+09:00",
+    "directoryAccountedBytes": 2957324288,
+    "sourceCommit": "fac7329a7580fedb1bc62c2b337b7381fa2a5fe2",
+    "bundleID": "first-test.D.preview.unifiedvisual20261026",
+    "infoSHA256": "d24494c864738697946e8c3b2768846ca391a8fb9b09db765a6c3fc949303d83",
+    "executableSHA256": "516e437afc0151c67ed94f1ed56c07c62d6c909df9b87605c615fd52c94b9015",
+    "productInputSHA256": "ee57f9d4fb7ffa5e7d3d548d1a588975cfc70ca1a58696f1f492f90989535394",
+    "resourceManifestSHA256": "e66db1daf9e2a01a74d5fbe9ae92127fb7da7053358c983e4348f305add8979b",
+    "sourceAncestorOfRemoteExit": 0,
+    "retainedBuildReport": "Codex/D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-model-add-copy/release-fac7329a/build-report.json",
+    "buildReportStatus": "packaged"
+  },
+  {
+    "kind": "old-app",
+    "path": "Codex/D-Development/CurrentD/Nov6-Retry-3b4ffcd5/D.app",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:37:16.899067+09:00",
+    "directoryAccountedBytes": 2956857344,
+    "sourceCommit": "3b4ffcd57481320fc0c8cba3c14ca7f7d2ca2275",
+    "bundleID": "first-test.D.preview.unifiedvisual20261026",
+    "infoSHA256": "04e189d75654bebee61d1bf032b043d42a39f8c97761252db063e34cf5875464",
+    "executableSHA256": "0627cb498a311eb41d17e359861ee962cb98eeeb7e8ab5360eeab94de6dd14dd",
+    "productInputSHA256": "eafa9a6177178faeff0b0a524dd6f6944c061592fd2bf48e2d5aad7581b1e670",
+    "resourceManifestSHA256": "a85e58b9c30a8adb9756d0392c6373a19d4b76f8822e4e88d3ea24f4bbbe43f9",
+    "sourceAncestorOfRemoteExit": 0,
+    "retainedBuildReport": "Codex/D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-audit-followup/release-r2/build-report.json",
+    "buildReportStatus": "packaged"
+  },
+  {
+    "kind": "old-app",
+    "path": "Codex/D-Development/CurrentD/Nov6-aff734d3/D.app",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:37:29.736176+09:00",
+    "directoryAccountedBytes": 2956832768,
+    "sourceCommit": "aff734d339c25e727322baedcee670e69e8a4835",
+    "bundleID": "first-test.D.preview.unifiedvisual20261026",
+    "infoSHA256": "172870ba76789ba749bb0cf975ee1d10fe310cc49bd9414581ebc03edec1bb4f",
+    "executableSHA256": "5535d9974aa0229ca829e484eb9ca694a79933f32d36105d2c2c27d124705102",
+    "productInputSHA256": "bde55611ac87b1e28e01b49609b8fd6bdb8ceb75782833dec8f0a6c19f9362d5",
+    "resourceManifestSHA256": "a85e58b9c30a8adb9756d0392c6373a19d4b76f8822e4e88d3ea24f4bbbe43f9",
+    "sourceAncestorOfRemoteExit": 0,
+    "retainedBuildReport": "Codex/D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-approved-copy-tips/release-corrected/build-report.json",
+    "buildReportStatus": "packaged"
+  },
+  {
+    "kind": "old-app",
+    "path": "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/budget/D Release Freeze.app",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:37:37.889954+09:00",
+    "directoryAccountedBytes": 2361163776,
+    "sourceCommit": "6e8d35ec7f593c53b1c54b9829819dd3c1c2fbd7",
+    "bundleID": "first-test.D",
+    "infoSHA256": "16092eb2646aabbc8caf7fefbb070f9bf5dde3608002c25dbc5884cfd8cc6e0f",
+    "executableSHA256": "3194fecb33906993f83edb4699b7d71cc1872dee2bde4912141785e50a3f9b3c",
+    "productInputSHA256": null,
+    "resourceManifestSHA256": null,
+    "sourceAncestorOfRemoteExit": 0
+  },
+  {
+    "kind": "old-app",
+    "path": "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/intermediate-9cdf/D Release Freeze Closeout.app",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:37:40.708222+09:00",
+    "directoryAccountedBytes": 2361159680,
+    "sourceCommit": "9cdf8e51222852ba67bb410929ff0c613511a4a1",
+    "bundleID": "first-test.D",
+    "infoSHA256": "16092eb2646aabbc8caf7fefbb070f9bf5dde3608002c25dbc5884cfd8cc6e0f",
+    "executableSHA256": "59ff221c075a6765f60cc5ef2f72e76dfb0a004e75c3cb3da1e5e4dedea45981",
+    "productInputSHA256": null,
+    "resourceManifestSHA256": null,
+    "sourceAncestorOfRemoteExit": 0
+  },
+  {
+    "kind": "old-app",
+    "path": "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/intermediate-41ad/D Release Freeze Closeout.app",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:37:42.830727+09:00",
+    "directoryAccountedBytes": 2361290752,
+    "sourceCommit": "41ad63026da948eef6e3b5f5837f63744f1a2c98",
+    "bundleID": "first-test.D",
+    "infoSHA256": "16092eb2646aabbc8caf7fefbb070f9bf5dde3608002c25dbc5884cfd8cc6e0f",
+    "executableSHA256": "2c3512b2d74684bab79e66b5376de0c80e7c48624d53c0d704e854bd10abc1cc",
+    "productInputSHA256": null,
+    "resourceManifestSHA256": null,
+    "sourceAncestorOfRemoteExit": 0
+  },
+  {
+    "kind": "old-app",
+    "path": "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/D Release Freeze Closeout.app",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:37:45.215455+09:00",
+    "directoryAccountedBytes": 2361307136,
+    "sourceCommit": "b315ffa0c2d8d191204b0b93f1afdaaaae46e865",
+    "bundleID": "first-test.D",
+    "infoSHA256": "16092eb2646aabbc8caf7fefbb070f9bf5dde3608002c25dbc5884cfd8cc6e0f",
+    "executableSHA256": "ebdb4432be61c2dbcb4a2730355d95af36fbef4fdebba8780b40d98efc2a2045",
+    "productInputSHA256": null,
+    "resourceManifestSHA256": null,
+    "sourceAncestorOfRemoteExit": 0
+  },
+  {
+    "kind": "duplicate-model",
+    "path": "D-TestKit/Models",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:38:00.222053+09:00",
+    "directoryAccountedBytes": 83050762240,
+    "fileCount": 86,
+    "fileBytes": 83050571478
+  },
+  {
+    "kind": "duplicate-model",
+    "path": "D-TestKit-Archive-20260912/Models",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:38:00.230199+09:00",
+    "directoryAccountedBytes": 83050762240,
+    "fileCount": 86,
+    "fileBytes": 83050571478
+  },
+  {
+    "kind": "duplicate-model",
+    "path": "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/models/MiniMax-H3-raw",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:38:00.268217+09:00",
+    "directoryAccountedBytes": 144023691264,
+    "fileCount": 38,
+    "fileBytes": 144023606861
+  },
+  {
+    "kind": "duplicate-model",
+    "path": "Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/prepared-video/minimax-h3-fl2va-bf16-74F352A8-D8C8-413F-959E-2D68274DCA2E/model",
+    "status": "removed",
+    "removedAt": "2026-11-13T09:38:00.306896+09:00",
+    "directoryAccountedBytes": 144023691264,
+    "fileCount": 38,
+    "fileBytes": 144023606861
+  }
+]
