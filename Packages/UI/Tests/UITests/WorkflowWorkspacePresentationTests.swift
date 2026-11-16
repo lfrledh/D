@@ -1150,6 +1150,14 @@ extension WorkflowWorkspacePresentationTests {
         for entry in entries {
             guard case .operation(let operation, let identity?) = entry.selection else { continue }
             let choice = try #require(WorkflowModelRoutes.draftChoice(operationID: operation, modelID: identity))
+            let definition = try #require(f.controller.registry.operation(operation)?.definition)
+            #expect(WorkbenchModelCard.selectedName(definition: definition, modelID: identity,
+                choices: [], language: nil) == (SharedLibraryProjection.descriptor(for: choice)?.title ?? choice.displayName))
+            #expect(WorkbenchModelCard.selectedName(definition: definition, modelID: identity + "unknown",
+                choices: [], language: nil) == nil)
+            let noModel = try #require(f.controller.registry.operation("d.text.input")?.definition)
+            #expect(WorkbenchModelCard.selectedName(definition: noModel, modelID: identity,
+                choices: [], language: nil) == nil)
             #expect(choice.kind == f.controller.registry.operation(operation)?.definition.modelKind)
             #expect(SharedLibraryBrowserLogic.insertionIssue(for: entry, controller: f.controller, language: nil) == nil)
             #expect(WorkflowModelRoutes.draftChoice(operationID: "d.text.input", modelID: identity) == nil)

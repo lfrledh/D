@@ -4,6 +4,18 @@ import SwiftUI
 /// Facts from the exact selected configuration and registered operation. Merely
 /// reading this card cannot prepare a model, acquire a lease or start a request.
 struct WorkbenchModelCard: View {
+    static func selectedChoice(definition: WorkflowOperationDefinition, modelID: String?,
+                               choices: [WorkflowModelChoice]) -> WorkflowModelChoice? {
+        choices.first { $0.id == modelID && $0.kind == definition.modelKind }
+            ?? modelID.flatMap { WorkflowModelRoutes.draftChoice(operationID: definition.id, modelID: $0) }
+    }
+    static func selectedName(definition: WorkflowOperationDefinition, modelID: String?,
+                             choices: [WorkflowModelChoice], language: UILanguageStore?) -> String? {
+        guard let choice = selectedChoice(definition: definition, modelID: modelID, choices: choices) else { return nil }
+        return SharedLibraryProjection.descriptor(for: choice).map {
+            ModelNodeUILocalization.display($0, language: language).title
+        } ?? choice.displayName
+    }
     let definition: WorkflowOperationDefinition
     let modelID: String?
     let choices: [WorkflowModelChoice]
@@ -17,8 +29,7 @@ struct WorkbenchModelCard: View {
     @State private var details = false
     @Environment(\.workbenchMenuContext) private var helpOwner
     private var choice: WorkflowModelChoice? {
-        choices.first { $0.id == modelID && $0.kind == definition.modelKind }
-            ?? modelID.flatMap { WorkflowModelRoutes.draftChoice(operationID: definition.id, modelID: $0) }
+        Self.selectedChoice(definition: definition, modelID: modelID, choices: choices)
     }
     private var descriptor: ModelNodeDescriptor? { choice.flatMap(SharedLibraryProjection.descriptor(for:)).map { ModelNodeUILocalization.display($0, language: language) } }
     private var name: String {

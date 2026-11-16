@@ -62,8 +62,8 @@ struct QuickGenerationView: View {
     private var definition: WorkflowOperationDefinition? { quick.definition }
     private var title: String {
         let id = quick.draft?.node.parameters["modelID"]?.string ?? ""
-        return model.projectSession.explicitModelChoices.first { $0.id == id }?.displayName
-            ?? ModelNodeCatalog.entries.first { descriptor in WorkflowModelKind.allCases.contains { id == $0.rawValue + ":" + descriptor.revision } }?.title
+        return definition.flatMap { WorkbenchModelCard.selectedName(definition: $0, modelID: id,
+            choices: model.projectSession.explicitModelChoices, language: language) }
             ?? (id.isEmpty ? refinementText("chooseModel", fallback: "选择一个模型") : refinementText("modelNotReady", fallback: "指定模型未准备"))
     }
     @Environment(\.workbenchNavigationTop) private var navigationTop
