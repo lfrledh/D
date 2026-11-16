@@ -259,7 +259,8 @@ extension ModelVideoPreparationTests {
 }
 
 extension ModelVideoPreparationTests {
-    @Test(.timeLimit(.minutes(1))) func cancelledPreparedCopyKeepsExactCompleteChildAndCancellation() async throws {
+    @Test(.timeLimit(.minutes(1)), arguments: ["cancel", "save"])
+    func interruptedPreparedCopyKeepsExactCompleteChildAndColdRetry(kind: String) async throws {
         let f = try LibraryFixture(); defer { f.clean() }
         let profile = ExternalVideoExecutionProfile.ltx23BF16Full
         let pack = f.root.appendingPathComponent("prepared-local")
@@ -283,33 +284,51 @@ extension ModelVideoPreparationTests {
             return .init(directory: url, revision: marker.profile.modelIdentity)
         }
         let original = try ModelDirectory(pack).entries()
-        let owner = try await ModelLibrary(stateDirectory: f.state, catalog: [entry, f.entry])
-        try await owner.configureRoot(at: f.destination)
-        let choices = try await owner.inspectLocalCandidates(at: pack, validatePrepared: validate)
+        let failRegistration = Mutex(false), failedWrites = Mutex(0)
+        var owner: ModelLibrary? = try await ModelLibrary(stateDirectory: f.state, catalog: [entry, f.entry], checkpoint: { point in
+            if point == "registration.beforeWrite", failRegistration.withLock({ $0 }) {
+                failedWrites.withLock { $0 += 1 }
+                throw ModelLibraryError.storage("isolated prepared-copy registration write failure")
+            }
+        })
+        try await owner!.configureRoot(at: f.destination)
+        let choices = try await owner!.inspectLocalCandidates(at: pack, validatePrepared: validate)
         let (entered, enter) = AsyncStream<Void>.makeStream(), calls = Mutex(0)
-        let request = Task {
+        let request = Task { [owner = owner!] in
             try await owner.registerLocalFiles(choices[0], storage: .managed) { url in
                 let count = calls.withLock { $0 += 1; return $0 }
                 if count == 2 {
                     enter.yield(()); enter.finish()
-                    try await Task.sleep(for: .seconds(30))
+                    if kind == "cancel" { try await Task.sleep(for: .seconds(30)) }
+                    else { failRegistration.withLock { $0 = true } }
                 }
                 return try await validate(url)
             }
         }
         for await _ in entered { break }
-        request.cancel()
-        await #expect(throws: CancellationError.self) { try await request.value }
-        let copies = await owner.snapshot().resources.filter { $0.record.storage == .managed }
+        if kind == "cancel" {
+            request.cancel()
+            await #expect(throws: CancellationError.self) { try await request.value }
+        } else {
+            await #expect(throws: (any Error).self) { try await request.value }
+            #expect(failedWrites.withLock { $0 } == 1)
+        }
+        let copies = await owner!.snapshot().resources.filter { $0.record.storage == .managed }
         let copy = try #require(copies.first)
         #expect(copies.count == 1 && copy.record.registrationState == .unregistered && copy.record.activeLeaseCount == 0)
         let output = try #require(copy.record.directory)
         #expect(try ModelDirectory(output).verifyRequired(files).files.count == files.count)
         #expect(try ModelDirectory(pack).entries() == original)
-        let retry = try await owner.registerLocalFiles(choices[0], storage: .managed, validatePrepared: validate)
+        let completedFiles = try ModelDirectory(output).entries()
+        try await owner!.shutdown(); owner = nil
+        let cold = try await ModelLibrary(stateDirectory: f.state, catalog: [entry, f.entry])
+        let retry = try await cold.registerLocalFiles(choices[0], storage: .managed, validatePrepared: validate)
         #expect(retry == copy.record.id)
-        #expect(await owner.snapshot().resources.filter { $0.record.storage == .managed }.count == 1)
-        try await owner.shutdown()
+        let recovered = await cold.snapshot().resources.filter { $0.record.storage == .managed }
+        #expect(recovered.count == 1 && recovered.first?.record.registrationState == .registered)
+        #expect(try ModelDirectory(output).entries() == completedFiles)
+        #expect(try ModelDirectory(pack).entries() == original)
+        try await cold.shutdown()
     }
 
     @Test(arguments: [false, true]) func compatiblePreparedCopyClosesEncoderAndSurvivesSourceRemovalAndColdOpen(queuedDownload: Bool) async throws {
