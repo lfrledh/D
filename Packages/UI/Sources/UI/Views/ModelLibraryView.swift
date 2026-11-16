@@ -515,7 +515,7 @@ public struct ModelLibraryView: View {
     }
     private func descriptor(_ entry: ModelCatalogEntry?) -> ModelNodeDescriptor? {
         guard let entry else { return nil }
-        return ModelNodeCatalog.entries.first { $0.revision == entry.revision && ($0.id == entry.workflowIdentity || $0.modelIdentity == entry.repository || (entry.id == "stable-audio-small-music" && $0.id == "sm-music")) }
+        return ModelAcquisitionInformation.descriptor(entry)
     }
     private func taskStatus(_ task: ModelDownloadTask) -> String {
         if let pending = model.pendingDownloadAction(for: task) { return text("pending." + String(describing: pending), pending.title) }

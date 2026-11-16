@@ -45,6 +45,36 @@ import DWorkbench
         #expect(ModelAcquisitionInformation.descriptor(entry) == source)
     }
 
+    @Test func registeredVideoSpecificationsUseExactRoutesWithoutGuessingCounts() throws {
+        let entries = try ModelCatalog.entries()
+        let h3 = try #require(entries.first { $0.workflowProfileID == "d.video.minimax-h3-fl2va-bf16-full-v1" })
+        let source = try #require(ModelAcquisitionInformation.descriptor(h3))
+        #expect(source.parameterScale?.publishedBillions == "33")
+        #expect(source.parameterScale?.scope == .transformer && source.weightSummary == "BF16")
+        #expect(source.parameterScale?.sourceURLs.isEmpty == false)
+        let q8 = try #require(entries.first { $0.id == "local-ltx-2.3-dev-q8-gemma3-q4-test-v1" })
+        #expect(ModelAcquisitionInformation.descriptor(q8)?.weightSummary == "model.spec.weight.ltxMixed")
+        let ltx25 = try #require(entries.first { $0.workflowProfileID == "d.video.ltx-2.5-dev-bf16-full-v1" })
+        let ltx = try #require(ModelAcquisitionInformation.descriptor(ltx25))
+        #expect(ltx.parameterScale == nil && ltx.weightSummary == "BF16")
+        for (revision, operation, identity) in [
+            ("unrecorded-version", h3.workflowProfileID, h3.workflowIdentity),
+            (h3.revision, h3.workflowProfileID, "unknown-model"),
+            (h3.revision, "d.model.language", h3.workflowIdentity)
+        ] {
+            let changed = ModelCatalogEntry(id: h3.id, title: h3.title, repository: h3.repository,
+                revision: revision, files: h3.files, workflowProfileID: operation, workflowIdentity: identity)
+            #expect(ModelAcquisitionInformation.descriptor(changed) == nil)
+        }
+        for entry in entries {
+            let previous = ModelNodeCatalog.entries.first {
+                $0.revision == entry.revision && ($0.id == entry.workflowIdentity || $0.modelIdentity == entry.repository
+                    || (entry.id == "stable-audio-small-music" && $0.id == "sm-music"))
+            }
+            if let previous { #expect(ModelAcquisitionInformation.descriptor(entry) == previous) }
+        }
+    }
+
     @Test func exactModelFunctionsDoNotCrossFamiliesOrDuplicateMetadata() throws {
         let entries = SharedLibraryProjection.entries(models: [], readiness: [:], tools: [], projects: [], language: nil)
         let legacy = try #require(entries.first { SharedModelLibraryCard.functions($0).contains { $0.id == "d.text.rewrite" } })

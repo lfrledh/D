@@ -219,7 +219,14 @@ struct ModelAcquisitionInformation: View {
     @Environment(\.dLanguageStore) private var language
     @State private var sourcesVisible = false
     static func descriptor(_ entry: ModelCatalogEntry) -> ModelNodeDescriptor? {
-        ModelNodeCatalog.entries.first { $0.revision == entry.revision && ($0.id == entry.workflowIdentity || $0.modelIdentity == entry.repository || (entry.id == "stable-audio-small-music" && $0.id == "sm-music")) }
+        if entry.workflowProfileID != nil || entry.workflowIdentity != nil {
+            guard let operation = entry.workflowProfileID, let identity = entry.workflowIdentity,
+                  let choice = WorkflowModelRoutes.draftChoice(operationID: operation, modelID: identity),
+                  let descriptor = SharedLibraryProjection.descriptor(for: choice),
+                  descriptor.revision == entry.revision else { return nil }
+            return descriptor
+        }
+        return ModelNodeCatalog.entries.first { $0.revision == entry.revision && ($0.modelIdentity == entry.repository || (entry.id == "stable-audio-small-music" && $0.id == "sm-music")) }
     }
     private func t(_ key: String) -> String { workflowText(language, "modelAcquisition." + key) }
     var body: some View {
