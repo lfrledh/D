@@ -1,18 +1,18 @@
 # 本地候选与发行复现材料
 
-2026-11-16 · 11月12日集中任务续办中；旧候选证据按版本沿用。唯一实际版本和启动入口见[当前行动](CURRENT_ACTIONS.zh-CN.md)，不是下方历史R16包。当前仅Apple Development签名的完整沙盒Release；不是Mac App Store分发、提审或发行通过。
+2026-11-16 · 11月12日集中任务已形成固定开发交付，待顾问审计/用户接纳；旧候选证据按版本沿用。唯一实际版本和启动入口见[当前行动](CURRENT_ACTIONS.zh-CN.md)，不是下方历史R16包。当前仅Apple Development签名的完整沙盒Release；不是Mac App Store分发、提审或发行通过。
 
 ### 2026-11-16 当前组合包与引擎导入补验
 
-- 当前生产825de3f83617e54e434d89883c7c48760bc47f2d；正常Release -O/WMO开发签名包已核七引擎、零第三方权重及无XCTest/诊断残留。签后摘要和资源身份见`run-20261116-resume-closeout/release-825de3f8-r1/build-report.json`；相对cd5七引擎/资源和Privacy不变。下条5d Archive是历史证据，825独立Archive已实际完成502.902秒，五项身份/七引擎/零权重/无测试残留/严格签名/Privacy/双架构dSYM通过；准确回执`H-Archive-825de3f8/{receipt,validation}.json`，不以旧归档替代。
+- 最终生产781c211dbb2a1089bf1c2e10e754b453fc5ffbd3；正常Release -O/WMO开发签名包已核七引擎、零第三方权重及无XCTest/诊断残留。签后摘要和资源身份见`run-20261116-resume-closeout/release-781c211d-r1/build-report.json`；资源仍5889c310…b0a514。781独立Archive实际567.884秒exit0，五项身份/七引擎/零权重（54,436文件、2,681归档成员）/无测试残留/严格签名/Privacy/arm64+x86_64 dSYM全部通过；`H-Archive-781c211d/{receipt,validation}.json`。非实施者核实际包与回执。825 Archive502.902秒及下条5d为历史，不替代最终产物。
 - 同5d本地Archive实际成功（约474秒），从归档Info定位Products/Applications/D.app；五项源码/资源身份及准确bundle匹配、七引擎库存相等、零权重扫描54,436文件/无测试残留、Apple Development 3V4T79WLQS及sandbox通过，PrivacyInfo与源码逐字节相同，arm64/x86_64两个UUID与归档dSYM匹配。使用正常Archive Action/Release/WMO，无DEBUG_DYLIB，不修改Team/证书、不exportArchive或上传。当时普通App为5d候选，归档不等于原生验收。证据`H-Archive-5d8ced39/receipt.json`和`validation.json`；首次检查脚本错误地向源Info读取由Xcode注入的bundle字段而KeyError，修正为与已固定配置比较后全门禁通过，未降低包检查。
-- Audio/Pitch受影响真实导入：复用既有沙盒父宿主方法，复制的是5d普通包未修改的签名解释器、provider和依赖（825同资源按身份沿用）。Audio实际导入四个provider、MLX、NumPy、SentencePiece并验证13项vendor；Pitch导入provider/ONNXRuntime并从包内swift_f0/core.py取得SwiftF0类，两者exit0。没有加载模型权重、没有推理；证据为 `H-sandbox-import-result.json` / `H-sandbox-import-identity.json`。
+- Audio/Pitch受影响真实导入：复用既有沙盒父宿主方法，复制的是5d普通包未修改的签名解释器、provider和依赖（最终781同资源按身份沿用）。Audio实际导入四个provider、MLX、NumPy、SentencePiece并验证13项vendor；Pitch导入provider/ONNXRuntime并从包内swift_f0/core.py取得SwiftF0类，两者exit0。没有加载模型权重、没有推理；证据为 `H-sandbox-import-result.json` / `H-sandbox-import-identity.json`。
 - 首次直接从shell运行继承沙盒解释器在Python开始前被libsecinit拒绝（exit133）；保留资格失败，不称引擎业务失败，不修改entitlement绕过。后续既有签名沙盒父宿主对照成功。此导入不冒充普通App音频生成或正式Store安装。
 - 当前源码的Archive、正式分发签名/账号、许可/公开材料和实际安装升级仍各自分级，来源材料齐全不等于发行权利通过。
 
 ## 当前可复现路径与证据等级
 
-1. 当前825独立候选在`D-Development/CurrentD/Nov16-Final-825de3f8/D.app`；桌面“D 最新版”仍是a9，待最后普通链/冷开结束后切换，不能用旧入口验新包。使用候选前核对包内源码及交付回执。正式App不含第三方模型权重；本地资源来自用户明确选择的下载或原文件/副本路径。新用户选择目录时由系统授权，不预授全盘权限。
+1. 当前781独立候选在`D-Development/CurrentD/Nov16-Final-781c211d/D.app`；桌面“D 最新版”已更新并实际冷开到准确包，22:29:01 JST/PID49028/窗口2549，旧普通测试历史保留。使用候选前核对包内源码及交付回执。正式App不含第三方模型权重；本地资源来自用户明确选择的下载或原文件/副本路径。新用户选择目录时由系统授权，不预授全盘权限。
 2. 无模型时仍可打开项目/查看已有资产；选择真实目录条目后取得/校验/登记与执行就绪分开显示。审核者需要自有可用资源及相应第三方资格，不能用固定回复冒充推理。
 3. 用独立项目验证Quick/工作流、输入/Undo、保存冷开。Qwen9B Q4停止前缀与准确步骤保存失败→只保存恢复已有正常App证据；沿用版本见任务归档，不外推全部模型/配置。
 4. 低内存方式保持同一准确权重，默认询问；拒绝不推理，同意一次不改默认，已记住选择可撤销。不同模型原始精度/变体的实模证据分别见矩阵。

@@ -515,3 +515,5 @@ Return后1.2秒发起焦点读取，AXFocusedUIElement返回-25204；截图仍sa
 正常包/专属45行历史/英文1280×800，VO关闭。安全页面SwiftUI来源控制可采；目标公开layout追踪设备不支持。受支持目标录制准确覆盖CG下滚（ready+99.5ms），D挂起且ktrace收尾失败，三个来源表空；保留exit2，不归因权限或无更新。随后只一组前置5s sample：down400捕到实际scrollWheel后恢复等待；同过程反向up400再次99%CPU。4181主线程样本中3107为RunLoop observer→NSHostingView.beginTransaction→GraphHost.flushTransactions，另有CA提交→layout→render→flush；事件分发返回后不收敛，不支持滚轮函数自身持续递归。sample为聚合树，不能命名首个失效attribute；Python monotonic非Swift uptime同起点，按epoch墙钟关联。
 
 消费帧ChatMessageTools:127–136/155–201不等于触发源；ChatWorkbenchView:1275/1469只捕到阅读状态普通内存getter，内部taskState setter未归属D特定task。已排除variant写入与旧独立焦点改动的历史失败保持。删除阅读保存、task、hover或再试anchor/Binding没有充分依据；本轮不新增E产品改动。Lead需对这一最小QA复现取得具体失效属性/视图归属，公开来源工具在挂起时无法完成收尾，更多聚合sample不能补齐；当前不转用户排错。原始E-target-825-r2与E-transition-825-*受控本地，两个准确已保存QA恢复及22文件字节保持另记。I017局部稳定几何改善不被此缺陷抹去，仍无呈现FPS或用户达标结论。
+
+最终781c211d保留5d隐藏Quick尺寸隔离及825 E取证后的原产品路径；最后差分只修模型目录就绪投影/配置选择边界，未重做resize/旁白实验。原生LTX播放与模型卡、容器/正常Quit不是新的性能测量，I012/I017不因此关闭。
