@@ -377,7 +377,14 @@ struct ContainerProjectionIdentity: Equatable {
             Button { toggle(item) } label: {
                 Image(systemName: selected(item) ? "checkmark.square.fill" : "square")
                     .font(.system(size: 16 * scale)).frame(width: 28 * scale, height: 28 * scale).contentShape(Rectangle())
-            }.buttonStyle(.plain).accessibilityLabel(t("choose"))
+            }.buttonStyle(.plain)
+                .accessibilityRepresentation {
+                    Toggle(name(item), isOn: Binding(
+                        get: { selected(item) },
+                        set: { value in if value != selected(item) { toggle(item) } }
+                    ))
+                    .accessibilityIdentifier("container-select-" + item.id)
+                }
                 .disabled(item.value == nil || item.failure != nil || (review && (!mutable || item.record.map { !controller.canEditContainerCall(.init(address: $0.address, stepID: $0.id)) } == true)))
             VStack(alignment: .leading, spacing: 5 * scale) {
                 Text(name(item)).fontWeight(.medium).lineLimit(2).textSelection(.enabled)
