@@ -1,8 +1,194 @@
 # D-UI-CONSOLIDATED-01
 
-## 2026-11-06 本轮最终交付（a9dc46dd，待顾问审计/用户接纳）
+### 11月16日 LTX2.5普通825完整请求（执行中）
 
-- 最终生产`a9dc46dd549072b03afeb2acfdd8ab109f52599a`，桌面“D 最新版”→`CurrentD/Nov6-Models-a9dc46dd/D.app`。正常Release -O/WMO、Apple Development hardened sandbox、七引擎/零第三方权重，主执行文件SHA256 `4349170635c930d916b2bcd15bfe10411347a4d5cbda452a9cca9ddb16aa281c`；产品输入`cbe8c320…`、资源清单`e66db1da…`。a7因只读发现主动取消未交付；a9使用同一正常构建入口和本轮私有缓存、独立APFS克隆发布，门禁未跳过。此段为当前结论，下文中间版失败/待验按当时状态保留。
+- 40067为准确`NormalQA16Final825/D.app`正常开发签名沙盒实例；现成LTX2.5 execution原目录经系统Open→直接原位添加，20文件70,937,200,161B（含D-VIDEO-PACK），revision e378b7e1…；未复制70GB或重新下载。模型库显示已添加/完整/原件位置，选用后Quick显示Model ready。
+- 实际键入并提交704×480/97帧/24fps/30步/CFG3/STG1/seed42、negative空/无首帧、15GiB fixed+streamWeights；冻结草稿与真实request逐值核对，保持原BF16和既定低内存许可。run4566DBC2…已由真实Generate按钮提交，provider沿普通43200秒边界，不用15分钟短限或缩步数。N16-G18-r1为英文1280×800真实运行状态；尚不算输出/保存/冷开通过。后续结果在此段增补。
+
+### 11月16日 E最后转换期取证与H最终Archive（825）
+
+- E安全页面控制可正常录制/导出，目标长代码开启公开layout选项却明确报`Cannot enable layout tracing on an unsupported device`，不归因为权限。改受支持选项，在tracing-ready后99.5ms即时核目标/CG所属并向下400px，动作在录制0.818–0.930s内；D持续100%单线程，record20s收尾仍`Failed stopping ktrace session`/exit2，causes、updates、time三表0行。旧失败不隐藏，不继续重采同通道。
+- 进一步唯一一组前置`sample`、无Instruments并行：同825/1280×800/英文/45行合成历史，down400真实捕到`sendEvent→scrollWheel→HostingScrollView→NSScrollingAnimator`后恢复等待（4276中4263主线程样本mach_msg）；反向up400的sample开始确认比动作早163ms，4181主线程样本中3107位于RunLoop observer→beginTransaction→flushTransactions，另有CA提交/窗口layout/render→flush。采样为聚合树无逐样本时序；Python monotonic与Swift uptime原点不同，关联用两端epoch墙钟，未强行对齐。
+- 新证据将已捕获挂起限定为事件分发返回后的事务/布局不收敛，削弱“只有Instruments导致”和“滚轮函数持续重入”；不能找到首个失效attribute。仅一帧`ChatWorkbenchView:1275→saveScrollState:1469→ChatReadingStateStore:319`在普通内存getter，无发布/I/O；另一State setter来自SwiftUI task内部，不能指定为D某个task。没有因果充分的安全局部修法；删阅读保存/task/hover或恢复旧anchor/variant/Binding均越过证据。Lead下一最小责任是取得具体视图失效属性，或从这一最小已保存复现隔离公开SDK例子；更多同类聚合sample不会补齐此信息。本轮有界取证结束，I012工程未完成，非等待用户排错。
+- 两个已保存专属PID36621/39764正常Cmd-Q未结束；22份QA文件逐字节未变后，按持续许可只终止对应准确实例并冷开，未触碰普通D/未知进程；VO保持关闭、输入源与音量未改。N16-E10/E11是真实前后视野，不证明缺陷修复。`E-target-825-r2-*`、`E-transition-825-{sample,reverse-*}`含完整动作与恢复记录，非实施者独立复核。
+- H同825正常Archive实际502.902秒成功；签后五项身份与普通包相同，7引擎/零权重/无测试残留、Apple Development 3V4T79WLQS/hardened sandbox、Privacy原字节、arm64/x86_64与dSYM UUID均通过。`H-Archive-825de3f8/{receipt,validation}.json`。这不是Store分发/安装、正式许可或普通App真实模型通过。
+
+
+### 11月16日 825容器实际选择、关闭保护及续跑
+
+- 普通825隔离QA（仅包身份与根签名不同，106文件字节Mach-O区段一致）实际将两项有效候选读为有名称的AXCheckBox/value=1，失败项value=0/disabled；物理点击失败项未改变选择。现有AXSelected原本存在，本次只补有名称的选择语义，不新增业务状态。系统Tab实际落到资产拖动项，Space打开其只读Viewer、不采用；未把AXFocus返回0冒称已落到指定第三项，也不宣称所有Tab路径通过。
+- 实际容器设置中切自动保存、物理输入尚未加入的标签；Esc和×均触发未保存门禁，Keep Editing保留输入，Close Without Saving未写规则。N16-G16-r1英文1280×800/100%，内部棋盘背景/合成项目。没有绕过保存门禁或操作用户项目。
+- 正常Cmd-S/Quit35945消失→36621冷开，通过真实系统Open重开Mixed项目，两个选择仍在；N16-G17-r1。底部按钮两次坐标资格返回AXWindow，均未发送鼠标事件；随后准确按钮AXPress执行采用续跑，不能称该按钮CG鼠标已通过。
+- 原父run2D627D70…/图像partial前缀保持，决定只采用D4ED9E1B…与0B974E4B…，失败3A456577…未进入；新child6CD25515…completed，stage16072E36…finished，两个Map项各CPU-CoreGraphics缩放/PNG转换，新四资产。旧图像/文字冻结记录除继承的新stepID外相同，无新增模型执行。历史父run仍waiting但旧stage已finished，当前活动摘要不再显示未处理关卡。非实施者对前后快照独立核对；这不是新模型生成。`G-final825-{before,after}-adopt-snapshot.json`及原生动作/冷读记录。
+
+
+### 11月16日 D 原始跨host监听对照（825de3f8，仅本地StoreKit）
+
+- 新独立session93AA497E…，Release测试宏已从实际D编译命令核实，全局TipStore空IDs早退。测试宿主不嵌普通包DSourceCommit字段，因此不伪称包内源码读回；r1固定4e普通消费者、r2仅DTests差分至825de3f8，成功构建日志、测试模块摘要和bundle `first-test.D.storekitlocal.D`共同确定对象。最初身份脚本对此缺字段拒绝、未运行购买；改为准确测试产物证据后执行，不向普通包放松门禁。
+- 34807只创建一个本地pending请求并落盘后退出；34836核同bundle/精确attempt/保存scope/已验证同账户/准确平台pending后，只建立原始Transaction.updates监听，不构造D消费者/不读取历史。监听就绪1.026秒后批准，5.282秒窗口events=[]、拒收/未验证0；窗口冻结后Transaction.all有准确交易。自动监听断言失败（exit65）如实保留，不能以历史成功覆盖。
+- 第三host34860使用同checkpoint从已批准历史恢复，单笔journal/finish成立、不再次购买；匿名pending仍保留且canPurchase=false。准备/恢复exit0，原始观察失败。反证支持“本地跨host即时交付缺口在D消费者之外也存在”，不指定Apple根因、正式沙盒结果或五秒外结论；已有同host真实即时更新成功沿用。普通App启动/开面板/重激活有限history恢复已实现，无需轮询、猜清请求或新服务。
+- 非实施者只读提出同账户准入与拒收计数命名，两项在825补入再构建。`D-raw-{1,2,3}.log/.xcresult`、`D-raw-host-identity.json`及`D-raw-stages-result.json`；测试诊断不默认进入普通App。未知请求再次打赏政策与1024容量归档仍待决定，未借局部工具缺口停止其他工程。
+
+### 11月16日 af7 Dev与系统面板／帮助补验
+
+- af7普通App使用既有准确Dev revision26afe3a78bb242c0a8bb181dcc8937bb16e5c66c、32文件112.823GB原位资源；512²/50步/CFG4/seed42/无参考图、明确15GiB分层。run D2C8375E…完整完成，PNG资产4D470BC7…/版本BD5475E9…，419244B、512²/sRGB；SHA256 `8129bb869bfb4415145913427ad1f934a7c4f11f027806fc2b705e98267f8182`，完整解码通过。创建请求至资产发布2679.195秒，不是纯推理计时/FPS。
+- 保存→正常Quit29348消失→32752冷开，同一冻结run及输出身份/版本/摘要保持、无新尝试。Quick全文件在完成快照到Cmd-S/冷读间摘要不同，未将整份字节一致写为通过；精确运行与内容核对独立成立。N16-G10/G11/G12为运行、完成、冷开的真实普通图，中文1280×800/100%，不是通用画质接纳。`G-Dev-{start,completed,cold,image-validation,cold-validation}.json`。
+- 同版Mixed合成项目实际从项目文件子面板打开系统恢复Open和创建备份Save，Esc分别只取消系统面板，父面板继续存在，未触发恢复/备份写入；随后明确关闭父面板。帮助HAND正常中英显示用途/对象、不显示已移除的条件；READABILITY仍保留条件，未扩改其待审文字。N16-A09-r1/r2同版中英实图，`A-G-help-panel-cancel.json`，不冒称全部帮助项或文件操作已执行。
+- 容器实际基线已能读到选中项AXSelected=1，但三个选择按钮均只称“勾选此项”，缺当前资产名。4e0dfa67只为现有选择按钮增加命名checkbox表示、复用原绑定与禁用守卫；非实施者只读无业务身份阻断；后续825正常包验证见本页最新增量。未把原基线改写为没有任何选中状态。
+
+### 11月16日最终af7普通包的A补验（正在续办）
+
+- 正常生产`af7aba358c9c47fe80f281a8fb7bbbd4203bad95`，独立`CurrentD/Nov16-Final-af7aba35/D.app`。Release/Apple Development/七引擎/零权重门禁完成；隔离`NormalQA16Closeout/D.app`只改包身份和根签名，106个文件字节Mach-O区段相同。未切桌面、未完成最终Archive，不能提前称整个收口完成。
+- c6c规格消费者与af7真实Viewer准入反例通过6方法/7参数（`A-model-and-viewer-tests.log`）；非实施者只读无阻断。普通af7已核H3管理行、详情及Quick均33B生成主干/BF16，N16-A05-r1英文1280×800，非新事实推算。
+- 普通af7经实际查看器按钮连续打开到4个，第5次显示已批准上限摘要；关闭1个后数量3，再打开回4，最后逐个正常关闭。N16-A07-r1中文1280×800。对象为专属音高元数据夹具，不冒称音频渲染/GPU。owner/source失效两个分支通过实际无owner和关闭source的组件guard，未注入预设错误；普通UI已有门禁不安全绕过，仍非该两异常的普通App画面。
+- 两份恢复夹具初次因catalogID含空格被合法模型身份校验拒绝，未进入目标分支。保留r1，另生成合法ID的r2，不改产品/项目原字节或故意错误摘要。af7真实系统选择器→唯一新目标→恢复：mismatch中文、ambiguous英文均项目成功保留，模型分别显示批准的typed摘要、添加禁用，原诊断保留。新instance分别73AF2324…/56B8D218…，当前Pitch项目未切换或重写。N16-A06-r4、A08-r1为滚到实际结果后的同版画面；A06-r1/r2是前置失败、r3尚未滚到摘要，不冒称可见摘要通过。`A-typed-fixtures-r2.json/A-restored-projects-final.json`。
+- 其余未改动组件/实际网络/输入保护按精确证据版本沿用；Dev普通App已完成（见上），LTX2.5仍待串行执行，H3和27B已完成结果详见下文。未增加新文案/下载模型/清理范围。
+
+
+### 11月16日 H3完成、A原生补验及规格遗漏
+
+- cd5普通H3 run673F79C3…真实完成，原144GB BF16路径/固定50步和显式streaming不变；512²22帧、32kHz双声道，124,883B MP4完整视频/音轨解码通过。模型进程正常结束；保存、正常Cmd-Q26354消失后27319冷开，run/资产版本/输出摘要逐一相同，未重推理。N16-G09-r1直接展示真实产物，非夹具。用户听感/画质仍待接纳。
+- A同cd5实际经系统文件面板选专属空目录，中文/英文均显示已批准的noSupportedModel摘要和可展开原诊断；N16-A04-r1为英文1280×800。切设置会关闭当前添加表单，因此英文是同一空目录再次选择，不冒称原表单一直保留；稳定原因随语言投影仍有原组件证据。
+- 普通管理列表H3两规格误报“未记录”，同一Quick有33B/BF16。只读定位到ModelLibraryView与ModelAcquisitionInformation重复旧名称匹配，H3 repository与descriptor的FL2VA身份不同；实际已有精确revision规格。当前局部修补统一operation+identity的固定route，再核revision；未知/不一致仍nil，无workflow字段沿用旧精确映射。不据144GB或名称推算参数，不改库存/运行。定向测试和修后原生正在补齐。
+
+### 11月16日16:10 当前执行增量
+
+- cd5正常Release完成，源/包/资源/签名/七引擎/零权重及无XCTest残留已核，非实施者只读确认。独立普通QA副本106个文件字节Mach-O区段一致。N16-G08-r1已直接展示中文1280×800全景，H3顶部与卡片名称一致。
+- 同一H3准确参数新run673F79C3…已跨过旧`bookmark is stale`失败并启动原生H3；尚在运行，不算完整生成。旧13D10A64失败与r1/r2无效probe保留。新编译AX辅助程序未获信任的前置失败后，使用既有已授权Swift宿主，未改系统权限。
+- 用户明确批准删除本轮已验Q8副本。仅删除`ManagedModels/.d-model-library/Installations/D029FD05-6EC2-4A54-92BC-736ACC720FB8`，删除前无D实例/打开文件；27个原文件inode与大小保持，证据/索引保留。可用26.09→62.92GB，差36.829GB。该副本此后不可运行；已有冷开证据对应删除前。此前可用空间已经自行回升，未声称由本次清理之外动作释放。原始`B-Q8-approved-cleanup.json`。
+
+### 11月16日 G：普通H3准入反例与局部修补中
+
+- 正常5d经当前系统文件面板选择保留的H3原始BF16执行包，完成完整校验/添加及用于当前Quick。真实物理录入并从持久Quick草稿读回512²/22帧/24fps/50步/CFG1/seed42/fixed streaming/15GiB，未使用AXValue仅显示的值。run13D10A64…在provider文件访问阶段exit2：`bookmark is stale`，模型未加载，失败记录保留，未重复发起重推理。
+- `ExternalVideoProcess`原样序列化环境，遗漏其他provider已有`LocalProviderProcess.childEnvironment`。有界签名沙盒宿主使用同版本完整解释器、原`d_audio_access`和原ExternalVideoProcess，同批自有空目录fresh书签，父解析均非stale/samePath；A1/A2现有环境均两grant stale，B仅保留父已存在且等于NSHomeDirectory的CFFIXED_USER_HOME，两grant准确解析/可读且drain。`G-access-probe-r3.log`支持有限因果修补，不冒称原H3目录或推理通过。r1签名资格失误、r2父解析误用security-scope选项导致Code259/空grant均无效保留；原书签字节不进回执。
+- cd5c7d77只复用现成容器上下文白名单，不合成home、不继承全环境、不放宽stale/路径/权限检查，不改取消和drain。ExternalVideoProcessTests 8项通过（含实际spawn环境/取消/超时/drain），非实施者只读无阻断。普通App跨过准入及完整生成仍须修正包复验。
+- 同场景顶部错误“指定模型未准备”由旧kind:revision猜法无法匹配video:profile@revision；实际Quick owner正确，未按错误假说改owner。a4747b08只让标题复用卡片准确route/目录本地化，保留库存与就绪独立。真实目录全项/unknown/非模型operation定向测试通过，非实施者只读无阻断；普通H3修后实图待补。
+
+
+### 11月16日 B/A：真实Q8独立副本与双语移除确认
+
+- 正常5d在新隔离身份`first-test.D.preview.q8copy20261116`和空专属库中，从保留的准确LTX2.3 Q8/Gemma3 Q4执行包选择“复制到模型库”。真实普通复制27个必要文件36,826,797,244B；不是clone/hardlink/symlink。源29项inode/大小/mtime不变，副本27项新inode、完整闭包/无额外项。准备包身份revision6671a757…不变，不以Q8代替BF16。
+- 复制约9.89GB时实际关闭本地添加表单及管理器，后台继续到完成；重新打开看到managed child `D029FD05…`已添加/完整。PID20603正常退出→20884冷开同一child、唯一副本/原位未添加记录均保持；20884再正常Quit消失。没有重新复制/生成，Q8源未断开，不能将既有SwiftF0专属源隔离证据改称本次36GB副本断盘实测。
+- A普通界面：同一5d在1080×612pt中文和英文分别实际打开“更多→将模型移除出可选列表”及确认，长按钮/完整后果可见，选择“保留/Keep”后记录未变。图N16-A01-r1菜单、A02-r1中文确认、A03-r1英文确认；本次不删除模型。冷读原生显示校验完整、prepared copy与36.83GB，精确文件/身份与状态见`B-Q8-complete-before-cold.json`、`B-Q8-cold-final.json`。
+- 本次Q8验证已占用真实独立文件36.83GB，15:31外盘余3.287GB。保留该已添加副本，不扩清理。两次收据脚本读取错误字段发生在只读核验，未启动后续App；修为真实嵌套record/availability后完成读回，不作为产品失败或成功。
+
+
+### 11月16日 G：27B普通App真实完成与冷开
+
+- 5d正常隔离App经严格QA副本完成真实执行，不修改产品准入。准确原始BF16、revision1d4bf0f2…、输入上限1024/输出256、temperature0/topP0.95、seed42、thinking off、自动策略/15GiB。数值最初仅AXValue改变显示、未提交的资格失败已识别；停止尚未推理的请求，改用可见字段物理点击/键入/Tab，再核真实冻结参数，未把错误条件混入通过证据。
+- 实际低内存确认显示同一权重分层加载，remember=false，CGEvent只允许本次。请求BD95666E…的execution record为allowOnce/executionStarted/completed，90 prompt tokens、10 generation tokens、MLX峰值6,047,113,946B；不是整机内存/FPS。原始输出及response均为合法JSON `{"answer":42,"ok":true}`，finishReason stop/cause completed。
+- 普通App实际保存；PID15456正常Cmd-Q消失→PID17751同包冷开，准确session/attempt/output不变、quick-chat.json SHA256仍1c0501ff…2a8bf，没有新attempt或再次推理；实际画面显示同一回答。冷开首屏的模型准备状态待核验与已保存输出分开，不据此称重推理通过。17751再正常Quit，未强退。
+- 图N16-G05-r1为低内存确认，G06-r1为完成，G07-r1为冷开；中文1080×612，D内部棋盘测试背景。正文渲染显示圆引号，保存的rawText/response仍ASCII JSON。私有`G-27B-request-before-consent.json`、`G-27B-completed-before-cold.json`、`G-27B-cold-disk.json`、`G-27B-cold-native.txt`。
+- 原始目录准入失败与第一次明确停止的QA记录继续保留；这条完整执行使用显式QA独立副本，不冒充原带下载缓存/来源记录目录可原位运行。其他准确大模型继续；本地Archive已完成，见发行材料11月16日增量，未整体交审。
+
+### 11月16日准确27B准入反例（普通App，未冒称推理通过）
+
+- 5d正常隔离App先实际选27B BF16、添加已有原目录，31项清单文件检查后库存显示已登记/已校验；用于当前Quick后，执行准入明确拒绝“文字模型目录仅允许预定义的普通文件”。没有加载模型或生成内容。源目录额外存在下载缓存和开发来源记录，权重未损坏。
+- 只读复核确认库存与执行契约不同：`ModelLibraryTypes`区分文件可用与执行ready；`externalVerificationIgnoresUnrelatedContent`刻意允许库存源目录的无关项，`TextModelProfiles`执行目录更严格。不能为取得验收结果放宽执行校验或全局收紧其他模型的来源目录。
+- 本轮按冻结manifest在同一APFS卷建立专属严格QA副本：31个普通文件、55,586,113,293逻辑字节，逐文件clonefile且无普通复制回退、无hardlink/symlink；源inode/大小/mtime未变，QA inode独立。来源回执置目录外。普通App已选择这份副本并发起添加；结果继续核。此证据不算原始带额外项目录的原位执行成功。
+- 私有证据：本run `G-Qwen27B-Strict-QA-receipt.json`，正常进程与失败消息留在专属QA记录；不把AXPress返回0当作成功选用，后续以真实准入、输出和冷读确认。
+
+### 11月16日普通5d组合验收增量（仍在施工）
+
+- 正常Release `5d8ced39bffea72f22ec2390795e22ba3ab17e83`已构建为`CurrentD/Nov16-Resize-5d8ced39/D.app`；首次因旧受控DTests产物被门禁拒绝，两个已知产物移至本run隔离保留后，重新正常构建/签名/七引擎/零权重/测试残留门禁通过，未从最终签名包拔文件交付。独立QA副本仅bundle身份和根签名不同，106个Mach-O文件区段一致。
+- F普通包B/B→A/A→B/B，A为d4、B为5d，1080×612中文同Fields四节点/背景/面板/100%及Quick预热；每段241真实边缘拖动。B宽度平均几何误差11.53/9.98/10.64/9.90pt，A12.52/12.12pt；P95 B16/14/14/12、A16/16。回到B保持改善方向；几何不是呈现FPS，仍有迟滞，I017不关闭。前述诊断inclusive耗时不能当普通包CPU时间。原始`F-normal-geometry-summary.json`及6段输入。
+- 同5d亲跑Quick→Canvas调整宽度→Quick，原草稿追加英文后Undo/Redo并恢复；SCIM物理nihao显示组字，Space提交你好，再切页/resize/返回Undo恢复原草稿；未发送/推理，输入源未改。`N16-F01-r1`为1080×612全景、`N16-F02-r1-ime`为1280×800真实组字。61事件节点拖动只有目标移动60/30pt；手形空白拖动所有节点同移，指针空白不平移；现有节点撤销快捷键为Cmd-Option-Z（Cmd-Z保留文本），实测撤回节点移动。实际30正/30反滚轮放缩、两栏收放完成，侧栏不推动节点；这些为行为/几何冒烟，不声明四动作新性能达标。
+- B同一SwiftF0既有实际下载项目在5d直接打开即显示节点BB153…模型已就绪且已保存；正常Quit15034消失→新PID15456重开同项目仍一致，无需进入管理器。网络下载沿用Nov13精确记录，未重下。
+- H直接终端启动两包内Python均exit133、libsecinit sandbox继承在Python前拒绝，保留前置失败。复用已有F28签名沙盒父宿主模式，最终包Audio/Pitch字节不改，顺序实际导入全部四个Audio provider、numpy/mlx/sentencepiece、13个vendor校验，以及独立Pitch provider/numpy/onnxruntime和包内SwiftF0类；两者exit0。`H-sandbox-import-result/identity.json`。不是模型推理，也不是普通D沙盒任务执行。
+- G27B原BF16源在普通App按精确文件校验加入成功；实际用于/发送被执行器拒绝，原诊断“文字模型目录仅允许预定义的普通文件”。源含31个正确manifest文件及两个额外开发项`.cache`、`D-DEVELOPMENT-PROVENANCE.json`；未修改/清理原件，未用Q4替代，正在核现有严格运行输入及两层校验契约，不能把已添加写成可运行。
+
+### 11月16日 E 单因素结论与 F 产品检查点（5d8ced39，普通包尚待复验）
+
+- E跳过variant生命周期写入的单因素失败：准确PID11303/37a诊断Release，日志armed后所有尝试均skipped=true、无返焦token，真实scrollUp400后仍约99% CPU/事务持续。绕过已撤净，无E产品修补。独立复核找到旧8dc3a22已将候选keyboard/AX/menu状态完全隔离而真实VO-F仍失败、403fed4撤回，因此不再把variant+action当新实验。
+- 最后一次现有SwiftUI Instruments来源记录（PID13168、20s）覆盖真实滚动：start 14:04:21.038、scroll interacting约14:04:35；工具结束报`Failed stopping ktrace session`、退出2。导出swiftui-full-causes、swiftui-updates均0行，未得到起始attribute/事务所有者；不把空表当D没有更新。真实OS26.6.2(25G83)/Xcode Instruments27.2(27B52)，原trace/TOC含环境信息仅受控本地、不提交。测试实例项目逐字节未变；先正常退出不完成，按持续授权仅恢复此已核QA。没有反复采同一失败条件。
+- 同trace只读复核进一步确认：不只是SwiftUI两表空，time-profile/time-sample及10个kdebug原始store亦仅初始化载荷、无事件索引；tick/SystemCPUUsage有内容。动作在窗内，导出run/schema无过滤错误，不能只解释为D事务未结束。模板为Deferred、Layout Updates未包含；它不解释底层流也空。旧TimeProfiler有效不代表SwiftUI来源通道合格。下一次仅先在安全页面验证单次已完成侧栏动作的采集/停止及原始行，资格不成立就停止该通道，不再对挂起空采样。
+- E具体未闭：ChatWorkbenchView的phase/geometry/visibleMessageID与ChatMessageTools的生命周期之后，SwiftUI `GraphHost.flushTransactions/SizeFittingState/LazyLayout/Focus`仍循环；已观测D回调不提供初始事务来源。返焦guard未通过、跳过variant写入仍挂、旧候选焦点隔离仍挂；据现有证据不能选择可靠局部修法，不能靠更换renderer/ID/焦点或关闭辅助功能掩盖。下一最小动作由Lead恢复现有SwiftUI来源采集条件后，用这一已合格VO-off反例取得首个循环的源attribute；若公开工具仍不可观测，提供最小复现给SDK调查。E保持工程未完成，非“待用户排错”，不阻塞其他项。
+- F产品5d8ced39只给Quick根opt-in几何壳：隐藏页保留非零尺寸，每次root/environment仍更新；真正异步unhide前同步最新bounds，显示后正常跟随，编辑器不重建，不加缓存/计时器。非实施者核实际patch与因果记录未发现阻断；普通包仍需复验，I017不关闭。
+- F定向4方法/6参数通过：隐藏尺寸、延迟显示前新尺寸、同一NSTextView与Undo、快速隐藏/显示/失效、组字/门禁和默认未启用路径。一次较宽59方法组中同4方法通过，但原生关键窗口前置失败1、未配置媒体fixture目录2失败；保留`F-retained-tests.log`，不改产品/删断言让该组伪通过。随后只跑直接受影响4方法`F-retained-targeted.log`通过；其余无关媒体历史证据沿用。
+- B历史核收：Nov13普通8b新SwiftF0任务AD39…399114B、attempt1→register→resource6F4F…，正常退出33569→33887冷开同ID/完整字节/无重复任务，实际已选节点BB153…；这条网络链不重下。旧QB08/QB09同时暴露owner/cold-readiness消费者缺陷，本轮510已修，最终包仅复验该同对象的显示/绑定。下载中关闭管理器未验，不由完成后的关闭补称。
+
+### 11月16日 C/E/F 有界原生增量（37a + 明示诊断，尚非最终交付）
+
+- C修后真实两级菜单draw：parent 220×76、child 220×44，所属画布1280×800；sameWindow=true、sourceImage=true，分别产生2/1片局部补层，实际screen draw。读取中途NSLog缓冲造成JSON尾部截断，正常Quit后22行完整，不能当产品缺陷。on/off截图差小但非零；正常d4中英操作与此绘制证据互补，诊断图不是普通包最终图。
+- E同一45行专属历史、1280×800、VO关闭，实际scrollUp400进入D后挂起。第一组标记API调用编译失败，不用其无回调推论；修正后先确认mark再送事件，得到interacting、geometry、visible row与两轮tools appear/disappear。所有return-request token=false，在guard即返回，未发生返焦操作；最后回调后约0.72s开始短sample，主线程持续flushTransactions。只能确认真实事务挂起，不能按栈占比指认初始触发源。限量日志前8及128/512策略不代表实际geometry≤8。两个已保存专属QA均先正常terminate未结束，再依持续授权精确恢复，项目字节不变；这不算正常Quit通过。现只验证armed且无真实返焦token时跳过variant生命周期写入的新单因素，失败不叠实验。
+- F 1080×612中文、Fields四节点、100%、左栏开/右栏关、D棋盘背景、readability off，241个原生边缘拖动事件/段、同包同wrapper，仅B保持隐藏Quick子host尺寸。A1/A2同进程访问过设置，计数/耗时明显不同，**不作为干净单因素耗时基线**；B1/B2与重启后同访问条件A3/A4比较：隐藏Quick尺寸变更从61/63次降0；inclusive宿主layout累计1579.8/1575.5ms 对1948.8/1963.1ms（嵌套累计，非独占CPU）；CGWindow宽度平均偏离输入位置10.86/11.16pt 对12.57/12.47pt，P95 14 对18/16。241事件均保留，投递迟延相近；几何与layout不是呈现FPS，尚不能称resize达到用户目标。B返回Quick时尺寸同步，正常Quit两次均结束。
+- 原始入口：`C-fixed-probe.log/C-fixed-probe-extracted.json`、`E-scroll-callback-r2.sample.txt/E-callback-probe-r2.log`、`F-diagnostic-geometry-summary.json/F-{A1,A3,B}.log`；6文件诊断第一组按备份字节撤净。单因素后续与正式修补需分开记录，原旧实验失败不改写。
+
+### 11月16日 D 持久化验证增量（37a59b9f，尚非最终交付）
+
+- 本地StoreKit、正常优化测试宿主，未用正式账户/商品/付款。固定精确pending申请：prepare PID6549→recover PID6570→history冷开PID6692；新同宿主对照PID7407。原始日志只留本run，正式产品未保留诊断。
+- 跨宿主审批前即时核对同一测试transaction仍为deferred/pending；listener已进入await，批准后5.32s未yield，未进入D的receive/保存。之后独立历史枚举见同交易purchased且验证通过，但不倒写为自动成功。监听结束发生在失败收尾，不能据此推断期间早退。
+- 随后真正新进程通过启动history恢复精确已验证记录；无未完成交易。此host未观测finish调用，不声称它重新finish。匿名pending仍无准确关联，保持原请求与禁止重复购买。
+- 同宿主对照只创建一笔本地pending：审批后约0.593s进入listener，随后verified→凭据→journal→finish；冻结结果在Transaction.all前，1条精确记录且原匿名请求未被猜清。测试通过。与上一失败的差别是平台请求的创建/批准是否跨host；证据不足以归因SDK缺陷，也不支持修改D付款保护或添加轮询。
+- 非实施者只读链路/原始日志复核一致。≤64事件临时诊断已按保存字节撤净；新增正式回归只保留显式环境启用的一组同宿主反例，不扩25币种矩阵。具体原始入口：`run-20261116-resume-closeout/D-pending-{prepare,recover,refresh,same-host}.log`。1024请求容量及未知请求新购买决策继续按既有I030待决。
+
+## 2026-11-16 续办：已核停点，继续工程（进行中）
+
+实际起点/远端`7c16154aaaa6bb2deb7747659f70878975f0e008`，产品仍`8b41882a`；原4份dirty文档精确备份后接续，不以旧正文否定已实现217处。当前无运行D；CUA库存连接正常。开发卷/备份卷共享容器可用56.20GB，低于11月13日72.39GB历史点；不扩大清理。
+
+停止原因：原始`filesystem-block.json`记录11月13日02:12约21MB可用和实际ENOSPC（截图/回执/缓存操作）；03:18恢复点仍标工程未完成。其后已有小型普通App下载、恢复、typed/两关卡保存冷开证据；用户再将当时任务转为只读盘点及获准清理，7c提交仅清理记录，结束后没有回到产品收口。未发现证明清理后整包仍不可继续的外部条件；材料核查、已有小场景与确定缺陷仍须继续，不能用清理交付替代本任务完成。历史原因只据现存日志，不推测其他会话/工具硬限制。
+
+本轮证据根`run-20261116-resume-closeout`；先补已证模型owner/冷开就绪、batch冷读误报dirty、人工关卡旧waiting状态，再按A–I继续；旧失败预算不刷新，用户决定仅阻塞直接依赖项。桌面仍a9，普通新8b尚未接纳，不把旧桌面当新包证据。未提交收口文档和个人scheme保持；唯一Lead写入/Mac，三路固定7c只读复核。此段不是最终回执。
+
+### 11月16日已落地增量（进行中，非最终验收）
+
+- `510215d9`：冷开读取准确graph模型就绪；Quick/Canvas各用自己的库owner；完成批次冷开不误写dirty；人工决定完成仅结算相同run/call/step/node的旧waiting，不覆盖releasing。旧失败及修后定向记录见本run `batch-cold-before/ownership-cold-after/container-after-r2/r3`。
+- `380d874b`：正常诊断App两级菜单真实绘制中owner缺失，非opacity猜测。共享声明式Marker从其实际window取得弱画布owner，旧缺失/foreign继承反例失败→修后通过；23子面板/路由/视觉组件通过。只读复核建议的重复环境更新及编辑器身份已补，2参数通过；菜单/命中/关闭命令未改。
+- `475cf9a1`：prepared-local副本最终registration.beforeWrite故障一次，完整唯一child未登记、lease0；owner释放后冷开，重试ID与完整文件闭包不变。保留原CancellationError反例，两参数通过。第一次测试未释放旧owner而遇busy是测试前置失败，修正后通过；不是崩溃/断电或大权重验证。
+- `d4ebddb1/cf29f3bd`：本地StoreKit每次审批前核相同测试ID/deferred/pending；自动账本快照必须在Transaction.all之前冻结。后续历史同步不能使自动路径伪通过。平台本轮验证进行中。
+- 普通510包（独立包身份、106个Mach-O数据区段相等）N16-G01/G02/G03：合成finished批次冷读已保存、mixed失败选项disabled/正常项可选、保存退出→新PID冷读selection1；pitch reference只读查看不伪造文本。PID97570→正常退出→97945→正常退出；模型GPU未运行。
+- 正常d4包N16-C01-r1/r2、C02/C03/C04：1280×800pt/100%、专属棋盘背景，中英真实设置/一级/子菜单，off/0.5/1读回，CGEvent命中确属PID5472；首r1预览触发器屏外，r2滚入可见区后再测。像素差不能单独证明补层有效，修后draw归属核对仍继续。正常Quit5472消失；桌面仍a9未切最终。
+- 模型目录设置打开的是Locate Existing Library，当前QA根在内盘；已取消而未误将空新目录当原库。真Q8副本使用另一个专属库，避免改变已验证旧QA记录。原件/普通D不动。
+
+阶段正常候选`CurrentD/Nov16-Visual-d4ebddb1/D.app`；完整源`d4ebddb1949dd0580ae79eaf550c910f89e95891`，源/资源/签名门禁通过，运行不是XCTest。单次构建先因未提交DTests拒绝、后因输出父目录缺失拒绝；均未绕过门禁，提交对应测试及创建明确新目录后正常构建。当前平台探针不混入该普通包，最终交付另固定。
+
+## 2026-11-13 完整合并包施工与分级证据
+
+本节承接用户11月12日完整任务，替代未转交11月10日包；不是B10。实际起点/fetch远端`f7977b8ed385e7c36bf13e9b8f24af770f470156`、祖先0、初始索引/树干净，唯一Lead写入/桌面；其他角色固定SHA只读。下表保留11月13日当时状态，11月16日补验见本文顶部及CURRENT_ACTIONS；不能把下方11月6日截图算成本轮修后画面，也不能拿旧“待验”覆盖已完成增量。本节不是整体验收通过。
+
+| 范围 | 已实现及本轮证据 | 仍须区分/补验 |
+|---|---|---|
+| A 批准文案 | 4905759e落实194正式资源正文、中英5577键无重复/集合/占位差；精确移除7处实际说明视图、10项帮助条件；6个稳定原因摘要接真实消费者。21f7b074另修Viewer菜单守卫错误确实显示于Viewer，不只保存语言键。194处资源正文机械核对在copy-resource-audit.json（该文件明确resources only）；7处说明视图删除/10项帮助条件省略另核真实源码和WorkbenchAddendumTests，6条摘要另核消费者/23 UI+2备份错误方法及本轮普通App可达分支。不是217处全部原生通过 | 原始错误、身份、后台状态未改；正常App长按钮/中英文/语言切换尚待修后候选。其余可达文本只列待审，不翻译实装 |
+| B 整条添加所有权 | e1d66a22/181b4411使本地检查→复制/准备→登记全部由同一private UUID job持有槽；关闭shutdown等待实际作业、取消传播，公共idle不放宽。旧raw准备后register遇busy反例保留，修后排队不能抢槽。准备副本取消原误报unavailable，e88801aa保留CancellationError；成功已发布不因迟到取消撤回 | 小型CPU夹具证明同child冷读、源隔离、失败重试/取消，不是完整真权重GPU。真实新下载自动加入、恢复单项失败的正常App仍补 |
+| C 可读性 | 36e8170e修nativeGlass设置误禁用；复用原弱窗口背景可读性登记，仅启用且强度>0附透明局部补层，命中nil、不加第二层重型shader；一级/子菜单接同一真实背景摘要。5方法/9参数通过，含0/off字节一致、层级/命令/四主题保留 | 旧a9正常App已亲见设置禁用并贴图UI-C-01-r2；修后普通App两级弹层/强度/关闭冷开和连续交互尚待，不由组件宣称原生观感 |
+| D 请求持久化 | 4495d238/001bbd39在原TipStore账本增加有界请求，dispatch前保存、direct success先存准确key、凭据/账本失败不finish、未知不猜关联。31组件通过，含并发容量反例；非实施者只读未见新产品阻断。真实StoreKit存盘前失败零购买→恢复后显式一次购买通过 | 两宿主保留原pending/禁止重购已证；首次两组批准未自动落盘，第二组平台已验证history=1而journal=0。失败保留；第三宿主26072读取原25230已批准history，收据1/unfinished0/未重购通过，匿名pending不误解锁。即时通知路径仍未关闭。测试宿主不是正常包或正式账户；匿名pending不自动解除 |
+| H 打包/来源 | 5dba0adf Audio精确四provider闭包，16打包+12候选检查通过；重建资源仅删除13个无调用provider/测试文件，独立Pitch能力不变。9份精确源码/9份bottle/4 OpenSSL patch已取存校验，旧FFmpeg/VMAF/x264证据沿用 | 许可证及Store适用不由NOTICE/源码齐全自动通过；最终普通包/Archive、七引擎/零权重另核。旧a9包含DTests.xctest及dSYM，本轮prepared入口新增拒绝门禁，不修改旧包；6项身份/残留检查通过 |
+
+证据根：`AgentTrials/D-UI-CONSOLIDATED-01/run-20261113-approved-closeout`。模型队列旧失败`model-queue-before`、修后`local-add-owned-r1/r2`；取消`prepared-cancel-before/after`；可读性`readability-r2`；打赏`tip-durable-r4`及`storekit-*.log/xcresult`；资源/来源`audio-resource-diff.json/native-source-materials/evidence.json`。原始日志/大文件不进Git。
+
+构建受阻记录：首次StoreKit Release在DTests对象及Engines复制阶段ENOSPC，保留r1退出65。只将该次失败的可重建Engines输出改为同卷APFS独立克隆，r2编译签名通过；使用`EXCLUDED_SOURCE_FILE_NAMES=Engines`避免Xcode再次普通复制，但仍预置完整七引擎、运行现有资源验证。普通候选必须重新走最终身份/引擎/零权重/正常签名门禁，不把测试宿主升级交付。
+
+E/I012、F/I017及G普通App矩阵仍在本轮顺序中，不因上述部分完成停工；旧Binding A/B/A无收益及用户NODE/PAN/ZOOM改善评价原样保留。无新系统本人请求。
+
+### 剩余可达文案一次盘点：待审增量（未实施/未翻译）
+
+11月13日只读固定64e42b8扫描正式UI/App的151个Swift消费者及5577资源键；11月16日按510215d9并差分核对至37a59b9f，补用途筛选、标签、附件、语音、内部依赖和空间错误的实际消费者；这不是全App每个状态的正常界面遍历。下列仅是一次本轮调查增量，正文仍只在正式语言资源；不另建术语库或映射平台。建议均待用户，不能反写为已批准。本轮217位置已批准正文不受影响。
+
+| 实际入口与当前文字 | 最小待审建议/边界 |
+|---|---|
+| `WorkbenchBootstrap.prepareLibraryForTermination`：模型安装进度暂未保存／请恢复磁盘访问后再次退出；任意shutdown错误均进入 | “模型库状态尚未保存”“保存失败，请处理下方原因后再次退出。”原诊断保留，不把所有错误归因磁盘；继续使用按钮可复用app.quit.continue |
+| `Quick/QuickInputImport.swift:32,107,121,137`→QuickGenerationView：空剪贴板、类型不符；单项端口有多个兼容项 | “剪贴板中没有可用的本地文件或 PNG 图像。”“{名称}：内容已保留在当前项目，但类型不符合这个输入端口。”“此输入只接受一项，目前有{count}项可用内容。请选择其中一项；已导入的内容会保留。”空、类型、多项歧义、来源失效与绑定失败分开；不把导入等同保存到资产库 |
+| `WorkflowViewer.swift:197,213,461`：文字不是完整UTF-8；Audio format is unavailable／音频规格未登记 | “无法读取这份文字：内容不是有效的 UTF-8。”“缺少这份音频的格式信息，暂时无法播放。”编码/缺格式/来源失效/播放失败分流，不自动修正文；窗口上限等三条已批摘要不重开。缩略图可复用workflow.preview.invalidImage |
+| `SharedLibraryTagEditor`→SharedAssetMetadataPanel：Metadata target is no longer open／元数据所属项目实例或对象已改变。草稿未提交 | “这份资产当前无法编辑，本次修改未保存，草稿已保留。”包括只读/失效，不强套staleAnnotation；只读owner失效可复用本轮已批sourceUnavailable |
+| `DualWorkbenchView.openExternalLibraryCopy`：副本已保存，但外部应用未能打开；文件保留在… | “副本已保存，但未能在外部应用中打开。文件位置：{路径}”保留两阶段和原路径，不重新导出 |
+| `WorkflowModelPreparationState`：下载模型并登记／文件已校验并登记；执行适配另行检查；保留GenerationInspector“已登记，等待校验” | 下载动作可复用已批“下载模型”；复合句建议“文件已校验，模型已添加；运行前还需检查执行条件。”不能省掉等待校验/准入事实 |
+| `ModelLibraryView` stable-audio-small-music保留分支：此模型用于保留的声音创作页面…从已下载文件登记模型；不适用于当前节点 | “此模型用于声音创作页面，不适用于当前节点。”须先实核该保留入口取得路径，不把一般自动添加外推到旧页面 |
+| `SharedAssetMetadataPanel`：项目登记时间（实际createdAt）／未登记直接来源资产（parents为空） | “资产创建时间（本地时区）”“未记录直接来源资产”；不是资产库保存时间，技术实例ID继续折叠 |
+| `ChatErrorText`：文字附件缺少冻结快照／旧尝试缺少可重现的冻结参数或种子… | “缺少这份文字附件在本次请求中使用的内容副本。”“这次回答缺少已记录的参数或随机种子，无法按原设置重新生成。”仅措辞，不放宽历史证明 |
+| 保留`ModelNodeViews`：modelNode.owned.c004的32B CLI/普通工作台未验；c138音高/AP1/MIDI未接纳及权重许可未知 | 分别建议“此版本已有命令行测试记录；尚未验证普通 App 中的完整使用，也不保证当前 Mac 可以运行。”及“音高分析已接入；音符编辑和 MIDI 功能尚未纳入当前产品。模型权重的分发许可仍待核实。”先对最新准确型号/许可事实核对，不直接用旧资源改承诺 |
+| `SharedLibraryQueryEditor.swift:51`及`SharedLibraryProjection.swift:80–134`用途筛选：primary-model/separate-entry/program/workflow-tool、original/result/preview/thumbnail | 显示名候选“模型／独立入口／处理操作／自定义节点”“原始内容／生成内容／预览／缩略图”；仅展示层，保存查询的稳定值不变；独立入口不能假称可直接用于当前节点 |
+| `SharedLibraryTagEditor.swift:20`旧标签损坏双语正文；`SharedLibraryProjection.swift:126`来源索引失败 | “旧标签已损坏，原记录保留，暂时不能合并。”“暂时无法读取来源记录。”不声称已恢复；两个原因分别处理。pending标签删除AX已用现有metadata.tags.removePending修复，不是新文案 |
+| `QuickGenerationView.swift:791–792`→聊天/Quick附件预览：原始文档已保留，可加入聊天后读取文字；此素材不支持文本预览 | “原始文档已保留。可将其加入对话后读取文字。”“此内容暂不支持文字预览。”应作独立展示状态，不能改写文档正文或把提示充作内容 |
+| `DualWorkbenchView.swift:1162–1166`节点用于Quick：项目切换拒绝；连线输入拒绝 | “项目正在切换，当前快速生成草稿未改变。”“此节点使用连线输入。请先保存所需输出，再在快速生成中选择；原节点和连线未改变。”两个真实原因分开，不自动解绑、复制或执行 |
+| `DWorkbench/State/ProjectSession.swift:2284,2288,2305,3677`→`ChatSpeechPanel.swift:105`录音/转写原始错误 | “未能开始录音。”“转写未完成，原录音已保留。”权限、开始、收尾、转写失败仍按原因分流，原始诊断保留；不宣称转写已采用 |
+| `WorkflowToolRegistration.swift:94,96,109`→WorkflowRegistrationView内部依赖：超16层、缺失或预算、版本摘要/递归合并guard | “嵌套层数超过限制（16 层）。”“无法检查依赖：部分定义缺失，或数量超出限制。”“嵌套自定义节点版本无效，或存在循环引用。”未经分支拆开不能猜单一原因，失败不采用新版本 |
+| `ModelLibrary.swift:1565–1572`/`ModelLibraryTypes.swift:273–274`→`ModelLibraryModel.swift:759–765`空间不足：还需required字节 | “磁盘空间不足。此次操作至少需要{required}可用空间，目前有{available}。请选择空间足够的位置。”required为剩余文件量加64MiB安全量，不是差额；显示容量本地化但保留准确数值，其他存储错误不并入 |
+
+两处初筛已撤回：Viewer.reconcile的中英raw failure在关闭状态被正式sourceClosed摘要覆盖；WorkflowDataForms的英文字段异常由正式invalidEdit显示。均没有已证明的可见旁路，不为凑条数新增改稿。系统文件/权限面板、用户名称/路径/正文/历史原诊断不归D正文改写；动态格式、模型保留页和罕见故障的全部原生呈现未穷举，不能以资源5577键一致宣称全UI验收。
+
+## 2026-11-06 历史最终交付（a9dc46dd，待顾问审计/用户接纳）
+
+- 最终生产`a9dc46dd549072b03afeb2acfdd8ab109f52599a`，桌面“D 最新版”→`CurrentD/Nov6-Models-a9dc46dd/D.app`。正常Release -O/WMO、Apple Development hardened sandbox、七引擎/零第三方权重，主执行文件SHA256 `4349170635c930d916b2bcd15bfe10411347a4d5cbda452a9cca9ddb16aa281c`；产品输入`cbe8c320…`、资源清单`e66db1da…`。a7因只读发现主动取消未交付；a9使用同一正常构建入口和本轮私有缓存、独立APFS克隆发布，门禁未跳过。此段为11月6日交付结论，下文中间版失败/待验按当时状态保留。
 - **最终普通App**：真实Finder英文/中文两组，准确源/目标与新drag pasteboard会话→型号识别→原位/副本选择→真实点击添加。原位ID9DA63881…未新建副本；管理副本8533C86A…复用已完成文件，库存10→10，不重复复制。源目录临时改名隔离后，以真实滚轮移到可见按钮并重新校验管理副本，完成后源目录还原；源/副本/恢复项399114字节、相同SHA fa91bb45…、不同inode、非符号链接。没有物理卸载整个盘，也不是GPU运行。两次校验按钮屏外导致owner守卫拒发，原失败保留，不能当作已经点击；r3实际到达按钮。
 - 同版实际畸形预设导入，批准中英摘要随语言变化，原DecodingError不变。UI-Add-11-r1停在页面上部未见错误；r2滚到实际摘要取代其证据用途，旧图不覆盖。表单/菜单仍可正常关闭，当前规则和预设未修改。
 - 同版将明确合成的小备份恢复为`SwiftF0-Restored-a9dc46dd.dproject`，2文件/400KB；自动进入准确Models路径的同一添加表单，无第二次选文件夹。原位完成ID88FD42B5…，发起恢复的旧项目没有被改指向；小备份不是本轮真实模型生成。

@@ -1,10 +1,18 @@
 # 本地候选与发行复现材料
 
-2026-11-06 · 已批准12项文案、五档打赏及有限工程收口。唯一实际版本和启动入口见[当前行动](CURRENT_ACTIONS.zh-CN.md)，不是下方历史R16包。当前仅Apple Development签名的完整沙盒Release；不是Mac App Store分发、提审或发行通过。
+2026-11-16 · 11月12日集中任务续办中；旧候选证据按版本沿用。唯一实际版本和启动入口见[当前行动](CURRENT_ACTIONS.zh-CN.md)，不是下方历史R16包。当前仅Apple Development签名的完整沙盒Release；不是Mac App Store分发、提审或发行通过。
+
+### 2026-11-16 当前组合包与引擎导入补验
+
+- 当前生产825de3f83617e54e434d89883c7c48760bc47f2d；正常Release -O/WMO开发签名包已核七引擎、零第三方权重及无XCTest/诊断残留。签后摘要和资源身份见`run-20261116-resume-closeout/release-825de3f8-r1/build-report.json`；相对cd5七引擎/资源和Privacy不变。下条5d Archive是历史证据，825独立Archive已实际完成502.902秒，五项身份/七引擎/零权重/无测试残留/严格签名/Privacy/双架构dSYM通过；准确回执`H-Archive-825de3f8/{receipt,validation}.json`，不以旧归档替代。
+- 同5d本地Archive实际成功（约474秒），从归档Info定位Products/Applications/D.app；五项源码/资源身份及准确bundle匹配、七引擎库存相等、零权重扫描54,436文件/无测试残留、Apple Development 3V4T79WLQS及sandbox通过，PrivacyInfo与源码逐字节相同，arm64/x86_64两个UUID与归档dSYM匹配。使用正常Archive Action/Release/WMO，无DEBUG_DYLIB，不修改Team/证书、不exportArchive或上传。当时普通App为5d候选，归档不等于原生验收。证据`H-Archive-5d8ced39/receipt.json`和`validation.json`；首次检查脚本错误地向源Info读取由Xcode注入的bundle字段而KeyError，修正为与已固定配置比较后全门禁通过，未降低包检查。
+- Audio/Pitch受影响真实导入：复用既有沙盒父宿主方法，复制的是5d普通包未修改的签名解释器、provider和依赖（825同资源按身份沿用）。Audio实际导入四个provider、MLX、NumPy、SentencePiece并验证13项vendor；Pitch导入provider/ONNXRuntime并从包内swift_f0/core.py取得SwiftF0类，两者exit0。没有加载模型权重、没有推理；证据为 `H-sandbox-import-result.json` / `H-sandbox-import-identity.json`。
+- 首次直接从shell运行继承沙盒解释器在Python开始前被libsecinit拒绝（exit133）；保留资格失败，不称引擎业务失败，不修改entitlement绕过。后续既有签名沙盒父宿主对照成功。此导入不冒充普通App音频生成或正式Store安装。
+- 当前源码的Archive、正式分发签名/账号、许可/公开材料和实际安装升级仍各自分级，来源材料齐全不等于发行权利通过。
 
 ## 当前可复现路径与证据等级
 
-1. 使用桌面“D 最新版”，核对包内源码及交付回执。正式App不含第三方模型权重；本地资源来自用户明确选择的下载或原文件/副本路径。新用户选择目录时由系统授权，不预授全盘权限。
+1. 当前825独立候选在`D-Development/CurrentD/Nov16-Final-825de3f8/D.app`；桌面“D 最新版”仍是a9，待最后普通链/冷开结束后切换，不能用旧入口验新包。使用候选前核对包内源码及交付回执。正式App不含第三方模型权重；本地资源来自用户明确选择的下载或原文件/副本路径。新用户选择目录时由系统授权，不预授全盘权限。
 2. 无模型时仍可打开项目/查看已有资产；选择真实目录条目后取得/校验/登记与执行就绪分开显示。审核者需要自有可用资源及相应第三方资格，不能用固定回复冒充推理。
 3. 用独立项目验证Quick/工作流、输入/Undo、保存冷开。Qwen9B Q4停止前缀与准确步骤保存失败→只保存恢复已有正常App证据；沿用版本见任务归档，不外推全部模型/配置。
 4. 低内存方式保持同一准确权重，默认询问；拒绝不推理，同意一次不改默认，已记住选择可撤销。不同模型原始精度/变体的实模证据分别见矩阵。
@@ -21,6 +29,22 @@
 
 **最小推荐**：当前不部署外部服务，先完成正式沙盒账户下的同账户恢复验证。若未来必须由开发者集中识别/兑现回馈，再明确批准一个最小收据验证与记录服务：Apple签名校验、应用/环境/交易幂等、退款更新、加密数据库、保留/删除策略与单独认证；匿名appTransactionID及收据本身不能充当登录凭据。不先搭账号平台。托管地区、费用、域名、身份验证与隐私披露需该阶段明确，当前未采购/部署。
 
+### 2026-11-16 源码数据流事实（I028/I029；未填写正式商店问卷）
+
+下表由非实施者按固定af7只读核对、Lead接收，描述当前代码实际路径；不是本轮逐服务联网实测，也不代替外部服务隐私政策、正式主体/URL或商店适用判断。路径前缀为 `Packages/UI/Sources/DWorkbench/`，UI支持记录另列；取消本地任务不等于撤回已发出的请求。
+
+| 路径/触发及接收方 | 实际发送和本机保存 | 凭据、取消及事实边界 |
+|---|---|---|
+| 搜索：会话已允许且开启自动搜索，或本次明确工具调用；Brave/Bocha | 自动仅以捕获的本次草稿作query，不自动发送整段历史；Brave GET含q/count等，Bocha POST含query/count/freshness/summary。请求、状态和时间进入本地toolActivity；内存最多保留8组查询预览，每组900秒。自动路径取首个结果再发网页请求 | `Chat/ChatController.swift:1910–1949,1999–2076`、`Chat/ChatSearchProvider.swift:191–228`。Brave X-Subscription-Token/Bocha Bearer；`Chat/ChatSearchCredentials.swift:4–37`在偏好或临时内存保存用户选中文件的bookmark，凭据原文按需读取，不进项目/备份；不能笼统称全在Keychain。取消不证明服务商未收到查询，外部请求日志保留未知 |
+| 网页：获准GET指定页面及验证后的重定向；目标网站/DNS | URL移除fragment；固定系统curl、HTTPS/public-IP绑定和逐跳验证。网页JSON进入工具历史；明确采用或已获准自动搜索采用时才发布项目文字资产/附件 | `Chat/ChatWebPage.swift:61–110,197–206,445–503`；不带授权header/cookie配置、不继承用户curl配置或代理。私有临时body/metadata在自有进程结束后清理，取消终止该子进程；网站仍可能保留已收URL/请求元数据。`Chat/ChatController.swift:2108–2138`为采用边界 |
+| 模型下载/连接：固定目录repo、revision、file；HF/CDN或明确GitHub raw地址 | Range GET；分段、下载身份及进度存在既有模型库/index，校验/添加/准备分开。显式连接HF令牌会向whoami-v2发送Bearer；来源检查可能HEAD固定模型路径 | `Models/ModelLibrary.swift:491–554,1400–1425,1552–1580`、`Models/ModelRangeDownload.swift:20–97`。ephemeral无cookie/cache；Bearer仅准确授权HF path，跨边界重定向撤令牌。临时inline、用户选择的ThisDeviceOnly Keychain、旧凭据文件bookmark分别保留；移除连接不删用户凭据文件。`Models/ModelDownloadCredential.swift:119–176,199–218`；暂停/停止/清理按各动作，不承诺远端日志删除 |
+| MCP：用户许可的准确端点，再许可每次工具名/JSON参数；用户选定服务器 | 活动请求、结果、发送/取消状态写本地工具记录；当前会话、连接与mcpPermission同时核对 | `Chat/ChatMCPService.swift:146–166,239–250,382–435`、`Chat/ChatController.swift:2006–2011`。ephemeral无cookie/cache/凭据库/authorizer；有requestID才发建议取消，随后本地disconnect/drain，不发HTTP DELETE。已发送但服务端未确认时保留localStoppedServerUnknown，不能称远端停止或删除 |
+| 语音转写：用户选本地文件/录音并批准系统Speech；系统本机识别 | 检查supportsOnDevice，设置requiresOnDeviceRecognition=true；无本机能力则拒绝，不自动云端替代。原音频及待采用文字保留本地项目/草稿 | `Chat/ChatSpeechService.swift:325–349`。系统权限与采用动作分开；这段代码不证明系统组件全部诊断的外部保留行为 |
+| 本地Python/WASI：明确的程序和选中输入；包内解释器 | 将这些输入复制到私有临时目录；stdout/工具结果按既有工具历史保存；自有进程结束后清临时目录 | `Chat/ChatPython.swift:99–175`及`tools/chat-python/runner.c:294–307`。仅LC_ALL/LANG/TMPDIR、固定PYTHONHOME，两个只读/runtime、/inputs preopen；无凭据继承或guest网络能力。不将guest限制扩大成整个进程/所有依赖绝对无网络 |
+| 自愿打赏/支持记录：用户明确购买、平台更新或有限历史读取；Apple StoreKit | 本机attempt、商品、已验证真实交易/账户范围/退款记录与Keychain凭据分开；不进创作项目，无开发者账本服务 | `Packages/UI/Sources/UI/Support/TipStore.swift`及上文。精确关联/持久化后finish，未知请求不按SKU/time认领；正式账户/跨设备仍未验，不把本地测试记录当真实付款 |
+
+`D/PrivacyInfo.xcprivacy`的required-reason API与实际包在最终Archive单独核；该manifest不覆盖上述第三方请求、也不直接决定商店“收集数据”答案。公开主体、联络/支持/隐私URL、地区、年龄/内容及加密申报由实际事实和相应批准分别完成，本轮不写正式后台。
+
 ## 发行决定 D1—D5（2026-11-04 核对）
 
 | 决定及负责人 | 推荐和验证方法 | 备选、能力及成本/数据影响 | 未决定阻塞 |
@@ -33,11 +57,43 @@
 
 实包包含 7 个引擎。ExternalVideo 内的 FFmpeg/ffprobe 9.0.1 采用 shared、GPL、version3、x264、x265、OpenSSL 配方。19 个原生库中，FFmpeg 自有库为 avcodec、avdevice、avfilter、avformat、avutil、swresample、swscale，另外包括 SvtAv1Enc、dav1d、mp3lame、mpg123、opus、vmaf、libvpx、x264、x265、lzma、crypto、ssl。来源、配方、许可文本和签后摘要已登记。完整对应源码与商店分发取舍仍属 D1。[上游许可](https://ffmpeg.org/legal.html) · [Apple 审核 2.4.5 / 2.5.2](https://developer.apple.com/app-store/review/guidelines/)
 
-当前pending边界（I030）：StoreKit成功批准会通过Transaction.updates交付交易，但本客户端无法把缺少平台身份的pending请求与某条全局更新准确一一对应。交易可验证、落盘并finish，当前进程的unknownPaymentOutcome仍可能保持，Reload不解除未知请求保护，后续打赏仍被禁用。本轮不称继续购买闭环已通过，也不清标记、凭同SKU/时间猜关联或要求重启绕过。appAccountToken的公开语义为账户关联，不未经论证当逐单编号；若后续改关联须先审最小平台方案。服务端账本仅为未来额外识别/回馈承诺的条件项，不是当前首发必建服务。[Apple pending](https://developer.apple.com/documentation/storekit/product/purchaseresult/pending) · [账户关联](https://developer.apple.com/documentation/storekit/product/purchaseoption/appaccounttoken(_:))
+### 2026-11-13 I030持久化当前事实（非正式付款）
 
-I030下一步最小方案（本轮仅调查，未改付款代码）：沿用TipStore和现有私有账本，提交购买前先持久保存有限的请求记录（本机attemptID、商品、bundle/environment、已验证账户范围、dispatching）。保存失败不调用purchase；pending更新该原记录，冷开先恢复未决记录，再消费Transaction.updates。直接success回包才能把捕获的attempt与该已验证transaction.id关联；全局更新只按精确交易ID入账/finish，不能按同SKU、金额、时间或“只有一个未决”认领旧请求。现有unknownPaymentOutcome及两个未完成集合只是内存状态，**尚未完成跨进程未知请求保护**。appTransactionID是同账户/App的稳定范围，不是逐次请求ID；无账户/换账户时不能借别的交易解锁。Apple对pending成功交付updates的说明不能证明拒绝会发交易，空历史/超时也不能证明拒绝。appAccountToken继续为账户语义，不发明逐单用途。
+`TipStore.swift`现已落实原最小方案：购买前先保存prepared/dispatching请求；新文件保存失败不调用purchase。直接已验证success只关联捕获的attempt与精确receipt key；Keychain/账本失败保留关联、不finish，重试仅保存。现有私有账本兼容旧收据格式，容量2MiB/4096收据/1024请求；容量满阻止新购买、不清除旧记录。匿名pending/未知请求、未保存保护及精确未完成集合跨对象恢复，不按SKU、金额、时间、同账户猜归属；无服务器或新账户体系。
 
-拟议持久化先仅追加已有私有支持记录中的请求状态；交易凭据继续现有Keychain，项目与日志不存凭据。最小验证为提交前写失败、pending冷开、拒绝无事件、同商品异设备/异账户、直接成功与落盘失败、重复updates/finish中断；不重跑既有25组价格测试。当前公开API证据不足以让无身份pending自动解除；若允许用户明确发起另一笔打赏且旧请求仍可能完成，这是另待审的行为取舍。无服务器、无新账号、本轮无正式账户/真实付款。依据：[pending](https://developer.apple.com/documentation/storekit/product/purchaseresult/pending)、[updates](https://developer.apple.com/documentation/storekit/transaction/updates)、[appTransactionID](https://developer.apple.com/documentation/storekit/apptransaction/apptransactionid)、[Ask to Buy](https://developer.apple.com/documentation/storekit/testing-ask-to-buy-in-xcode)、[WWDC25账户token](https://developer.apple.com/videos/play/wwdc2025/249/)。
+31个定向组件方法通过，包含4095条期间其他全局更新填满容量、direct success仍先保存准确关联的反例。001bbd非实施者源码复核未发现新阻断。本轮真实本地StoreKit写失败→零API购买→恢复写条件→显式重试一笔、准确关联已通过；pending第一宿主24444→第二24485保留同请求/同范围且禁止重购已证实，但首次跨宿主批准未形成收据，不能将测试中失败后误打印的success摘要当通过。该失败保留；11月16日已补同host/跨host有区分力对照（见顶部），不再停在前置未校正；跨host即时无yield仍保留。64e42b8第三宿主26072沿原25230请求/原平台已批准交易读取history成功：收据1、确认后unfinished总数0、未重购，匿名pending仍受保护。此为历史恢复，不关闭即时通知未达问题；正式账户/跨设备/真实付款未验。
+
+**仍开放**：没有平台交易身份的pending不能被任意全局更新认领；即使收据已验证保存/finish，该请求仍可能保持保护，不能建议重启绕过。容量达到上限后的安全归档规则也未擅定。若允许用户明确发起另一笔且旧请求仍可能完成，须审阅这一行为取舍。`appAccountToken`仍为账户语义，不当逐单编号。服务端账本仅在未来另行承诺开发者识别/回馈时决定，不是首发必建服务。五档正式商品、地区、价格、协议与真实账户仍停在对应授权前。[Apple pending](https://developer.apple.com/documentation/storekit/product/purchaseresult/pending) · [updates](https://developer.apple.com/documentation/storekit/transaction/updates) · [账户范围](https://developer.apple.com/documentation/storekit/apptransaction/apptransactionid)
+
+### 2026-11-13 I026/I027来源及打包增量
+
+- 固定源码`5dba0adf`将Audio provider复制范围收紧为真实依赖闭包四项：`d_audio_backend.py`、`d_audio_access.py`、`d_audio_contract.py`、`d_audio_sa3.py`；四项均为required。16个音频打包检查及12个候选打包检查通过。独立PitchEngine不变，未改模型算法。
+- 本轮重新执行prepare生成Audio资源；相对已核输入仅删除13个无活跃消费者的provider/测试文件，零新增/零改写剩余文件。其余六引擎沿已核资源克隆，七引擎资源校验通过；**11月13日当时最终普通App包内核对未完成；11月16日5d普通包与Archive已完成，见顶部**。没有以手删签后包代替生成脚本修复。准确命令/差分在`run-20261113-approved-closeout/{audio-regenerate.json,audio-resource-diff.json}`。
+- 已从既有登记的精确URL取得并核对9份外部依赖源码（89,852,469字节），并保留本机构建配方、INSTALL_RECEIPT及9份缓存bottle输入。OpenSSL配方列出的4份精确patch也逐项摘要相等。登记路径为[原native来源](../Backends/Video/Packaging/Licenses/native/SOURCES.json)，原始材料在 `run-20261113-approved-closeout/native-source-materials/`，不放进App、不新建永久许可证台账。
+
+| 组件 | 本轮对应源码SHA256 | 修改/构建材料与缺口 |
+|---|---|---|
+| openssl@3/3.6.3 | `243a86649cf6f23eeb6a2ff2456e09e5d77dd9018a54d3d96b0c6bdd6ba6c7f1` | 精确源码归档、现有配方/安装回执/bottle；4份配方patch摘要已验；未声称重现历史编译或取得分发权利 |
+| svt-av1/4.2.0 | `512f2ea5649e3e76c2dddcc25c2556fb67a9582baaab207c9c96161c94659dad` | 精确源码归档、现有配方/安装回执/bottle；未声称重现历史编译或取得分发权利 |
+| dav1d/1.5.4 | `2abfb0c89212e6e4733a54e0ae509ec00a5b845a6360946f918806e14aedb011` | 精确源码归档、现有配方/安装回执/bottle；未声称重现历史编译或取得分发权利 |
+| xz/5.8.3 | `3d3a1b973af218114f4f889bbaa2f4c037deaae0c8e815eec381c3d546b974a0` | 精确源码归档、现有配方/安装回执/bottle；未声称重现历史编译或取得分发权利 |
+| lame/4.0 | `3df5124d5ad3a98312ffd7ba6a9b36230e4f8a3e66d3ce0f425e336c32d216eb` | 精确源码归档、现有配方/安装回执/bottle；未声称重现历史编译或取得分发权利 |
+| mpg123/1.33.7 | `31d0e35a4ca567ec9b5ebda6c3062bb4435d6d3eacd6ef0d95cadd7854dc03ee` | 精确源码归档、现有配方/安装回执/bottle；未声称重现历史编译或取得分发权利 |
+| opus/1.6.1 | `6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1` | 精确源码归档、现有配方/安装回执/bottle；未声称重现历史编译或取得分发权利 |
+| libvpx/1.16.0 | `7a479a3c66b9f5d5542a4c6a1b7d3768a983b1e5c14c60a9396edc9b649e015c` | 精确源码归档、现有配方/安装回执/bottle；未声称重现历史编译或取得分发权利 |
+| x265/4.2 | `40b1ea0453e0309f0eba934e0ddf533f8f6295966679e8894e8f1c1c8d5e1210` | 精确源码归档、现有配方/安装回执/bottle；未声称重现历史编译或取得分发权利 |
+
+FFmpeg/VMAF/x264的既有精确归档和x264分段比对沿用下表，不重下载/重建。WASI现成CPython3.14.8源码归档SHA `c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73`本轮重新读回；Wasmtime49.0.2 C API发布归档SHA `f7000ab1661495d09b9dc87a11b356941b4e6097f295434bcb30a8cf1393b0d5`是二进制发布物，不能称完整对应源码；wasi-sdk24固定工具链归档SHA `aeae999396d5f5caa5ce419f52e83c35869d5fd21d40af80acba2c80f51b0b3a`。实际调用边与商店适用/第三方权利仍分别判断；19库+2工具仅ExternalVideo，104条otool边不是动态加载证据。
+
+WASI补证：已取得官方Wasmtime49.0.2源码发布归档（201,447,265字节，SHA256 `8dbfaa56c576471e954e96e24e57acaab2457f68a194a97386ecc2c56f1faba2`），内含483份vendor Cargo清单；它与C API二进制输入分开。wasi-sdk24固定gitlink为wasi-libc `b9ef79d7dbd47c6c5bafdae760823467c2f60b70`、LLVM `26a1d6601d727a96f4301d0d8647b5a42760ae0c`。前者精确源码归档本机取得摘要 `9f557e81f7622cbf51b59eaf2d2ebceaa74eb745c4e557dbb5a01e9a36142040`，不冒称上游发布摘要。实际python.wasm（SHA `864f6f66…`）的定义函数及旧链接日志确认dlmalloc、cloudlibc/musl、四个compiler-rt builtins和libmpdec的静态输入。打包器补11份对应原文及来源表，实际准备包只增加notice、更新PROVENANCE/engine清单，runner/dylib/WASM所有旧执行字节不变；22资源+2固定notice组件通过。Expat/HACL为链接输入证据，不声称全部archive成员随包。材料在`run-20261113-approved-closeout/native-source-materials`；完整历史可重现构建与发行权利仍开放，不为取证重建运行时或下载整个LLVM。
+
+11月16日来源材料追加（不改变运行字节）：固定`python.wasm`的name section实际包含5个compiler-rt定义：`__muloti4/__multi3/__ashlti3/__udivmodti4/__udivti3`；原“四个”列举未包含除法helper，不应理解为全部。已从上述LLVM准确commit取得5份C源、5份直接include闭包、CMakeLists及LICENSE共12文件/68,779字节；逐文件URL/摘要在`run-20261116-resume-closeout/H-compiler-rt-26a1d660/evidence.json`。许可证摘要与已随包原文一致；这是对应源码材料，不是重建整个SDK或证明历史构建可重现。
+
+Audio/Pitch原安装链补证：`D-AUDIO-BACKEND-01/run-20260909T152406Z-h11-authorized`的环境和pip回执给出MLX/MLX-Metal0.32.2、NumPy2.3.5、SentencePiece0.2.2的准确wheel URL/摘要；`D-HUM-PITCH-01/run-20260914T152228Z`的下载/环境/prepare回执给出10份固定wheel及命令，原件仍在。11月13日`audio-python-input`是既有解释器的准备输入，非新下载安装；本轮Audio清单2156→2143仅删除已审13项、0新增/0改字节，Pitch相对Nov6资源未变。9份原始回执摘要集中在`run-20261116-resume-closeout/H-audio-pitch-source-index.json`。原解释器来自既有Codex Python3.12.14；当前runtime.json仅给新版bundle26.1111.10934，准确根与相邻metadata中没有九月分发归档/源码/构建配方，不能猜填。输入wheel、准备复制、重定位/签名及最终字节分开；完整wheel→源码commit构建及解释器上游来源仍缺，下一最小动作由Lead取得当时分发的来源材料，不靠重跑模型补证，也不以最新Python源码冒充。
+
+隐私事实增量：新增请求状态存现有本机私有支持账本，包含本机请求ID、商品、已验证账户范围、状态与精确交易关联；不入项目、不上传开发者服务、不记录付款凭据于日志，凭据继续既有Keychain。现有PrivacyInfo四类required-reason API未因该本地记录新增API种类；正式公开主体、URL、地区及声明仍需用户决定，不由工程资料代签。本轮只读签名资格：1个Apple Development可用身份；Apple Distribution/Mac App Distribution/Developer ID均0，两处标准profile目录文件0。未改钥匙串/Team/账户。11月16日已完成开发签名本地Archive及最终普通包核验；Store导出仍缺实际分发身份与profile，不能用开发签名替代。
+
+同轮再补准确native wheel的对应发布源：NumPy2.3.5/2.4.3、SentencePiece0.2.2、protobuf7.36.1四份官方sdist共50,043,627字节，大小/上游SHA逐项一致；MLX/MLX-Metal0.32.2固定commit `1f8e74e3f12f31365464a6867c6579f0e9b29d85`源码4,415,184字节、本机摘要 `cb988a5bdc38c798918d042b9b1c6edda3ccc5f23a2155138d3aa5c1b2acc301`，同树setup.py明确frontend/backend包分支及mlx-metal名称/精确版本依赖。ONNXRuntime1.22.1固定commit `89746dc19a0a1ae59ebf4b16df9acab8f99f3925`源码241,420,979字节、本机摘要 `38f8ffa28a5ea9040431816c6204e6fc36d1b8eab43b33dbee92fceeb181d151`。GitHub自动归档无上游发布SHA，故本机摘要不冒称官方摘要；首次150MiB边界中断保留，扩大已核空间后取得独立完整包。材料和精确URL在`run-20261116-resume-closeout/H-native-wheel-sources/{evidence,onnxruntime-r2-evidence}.json`，未解包执行、未改App。六个纯Python依赖直接复用原wheel内源码；SwiftF0源码/补丁沿旧准确证据，含ONNX的原wheel不放入App。以上补可取得来源，不证明wheel按该树可重现或全部传递编译依赖闭合；解释器上游缺口仍按前段保留。
 
 ### 2026-11-06 审计续办：当前包来源事实（I026/I027）
 

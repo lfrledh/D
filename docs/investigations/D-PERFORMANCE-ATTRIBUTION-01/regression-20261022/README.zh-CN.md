@@ -1,5 +1,28 @@
 # 2026-10-22 严重 UI 回归修补
 
+## 2026-11-16：隐藏Quick尺寸传播的有界修补
+
+本组承接I017，保护用户已报告的NODE/PAN改善及ZOOM多数满意，不重跑旧Binding/缓存矩阵。原失败结论保留。生产`5d8ced39bffea72f22ec2390795e22ba3ab17e83`相对d4只给Quick根RetainedContentHost开启隐藏尺寸保留；默认路径不变。root/environment仍更新，异步显示前同步最新bounds，不重建编辑器、不停业务刷新、不加计时器或缓存。
+
+判别先在同诊断包/同wrapper切换隐藏尺寸策略：匹配访问条件的A3/A4中隐藏Quick尺寸改变61/63次，B1/B2为0；嵌套inclusive布局累计约1949/1963ms→1580/1576ms，不能相加当独占CPU。早期访问过设置的A1/A2与后续状态不一致，保留但不用于单因素耗时结论。
+
+普通Release -O/WMO、无DEBUG_DYLIB/诊断设施再按B/B→A/A→B/B验证：同Fields四节点、1080×612pt、中文、100%、左栏开/右栏关、Quick预热、棋盘背景及readability off；每段241真实CGEvent边缘拖动、相同时钟记录计划/投递/81次CGWindow查询。起止均1080×612，没有丢弃慢事件。
+
+| 普通包段 | 平均宽度几何偏差pt | P95偏差pt | 平均投递迟延ms |
+|---|---:|---:|---:|
+| B1 5d | 11.53 | 16 | 3.20 |
+| B2 5d | 9.98 | 14 | 2.52 |
+| A1 d4 | 12.52 | 16 | 3.21 |
+| A2 d4 | 12.12 | 16 | 2.29 |
+| B3 5d | 10.64 | 14 | 3.21 |
+| B4 5d | 9.90 | 12 | 3.19 |
+
+方向在回到B后保留，收益有限；几何查询不等于D事件接收、最终呈现或FPS，I017仍未达标。没有据这一组解释全部剩余迟滞，也没有改变官方玻璃或显示精度。下一最小判别须能归到可见宿主/提交的新增证据；目前不重复同类缓存实验。
+
+4定向方法/6参数核隐藏几何、延迟显示、组字、同一编辑器/Undo和默认路径。较宽59方法组另有关键窗口前置1、缺媒体fixture2失败，原始保留，不能冒称全组通过。普通5d实际Quick→Canvas resize→Quick保持英文Undo/Redo及SCIM组字后Undo；节点、手形空白平移、实际滚轮与两侧栏收放取得位移/状态，节点Undo使用现有Cmd-Option-Z。它们是保护冒烟，不重新宣布四动作性能目标全过。
+
+原始证据仍在D-UI-CONSOLIDATED-01本run `run-20261116-resume-closeout`：`F-diagnostic-geometry-summary.json`、`F-normal-geometry-summary.json`及六段记录、`F-normal-protection.json`、`F-retained-targeted.log`。诊断全部撤净，非实施者只读实际差分与反证未发现阻断。后续交付状态见唯一CURRENT_ACTIONS及任务回执。
+
 ## 2026-10-23 指针正确性与平移setter续修
 
 接续667af交付/a9产品，用户已接受缩放体验；NODE/PAN仍不够顺滑（主观反馈，不换算FPS）。本轮中间组合cefaa05e，最终生产d47423a3；输入正确性dcf4b586独立提交。当前已有局部拖动、焦点轮廓、语言缓存、静态索引、缩放观察边界均保留，不恢复撤回实验。
@@ -482,3 +505,13 @@ Return后1.2秒发起焦点读取，AXFocusedUIElement返回-25204；截图仍sa
 已保存专属QA逐字节核对、准确进程身份/启动/路径及短sample保留后，按持续授权恢复75120；冷开75556重读同一文件/四项预设精确一致，另验正常Quit成功并从桌面冷开75798。恢复不算I012修复，原失败保留；旁白关、SCIM.ITABC恢复，音量未改。
 
 下一最小判别只需把即时query读回、提交和后续系统焦点/事务来源放在同一可靠时间入口，避免41.3秒资格间隙；有明确写入者/修补方案再提交具体差异范围和验证条件。不换渲染器/锚点、不重复无信息实验。原始I012-*.log、sample及前后图在run-20261106-audit-followup；非实施者只读复核指出上述间隙，未操作Mac。I012仍为工程缺陷，I017无稳定收益/未达标结论原样沿用。
+
+### 11月16日 E 采集资格控制（af7，非性能结论）
+
+安全Mixed页面一次侧栏操作的SwiftUI录制正常结束；time-sample 13487行、updates68684行（View Body184）、causes171303行，均有效非空。录制未结束时提前export曾exit10，结束后导出成功，两者分开保留。TOC12.716秒，CPU0.352–11.378秒、SwiftUI13.117–14.151秒，动作日志缺共同时间，不能强拼为动作因果。Layout Updates未包含，不能据此排除布局。下一目标采用公开`--notify-tracing-started`及`--recording-options`的enableLayoutTracing，记录发送前后wall/uptime；不重跑控制或旧锚点/Binding组。原始E-control-af7及导出留本run，不提交私有trace。
+
+### 11月16日825：I012转换期记录，未实施推测性补丁
+
+正常包/专属45行历史/英文1280×800，VO关闭。安全页面SwiftUI来源控制可采；目标公开layout追踪设备不支持。受支持目标录制准确覆盖CG下滚（ready+99.5ms），D挂起且ktrace收尾失败，三个来源表空；保留exit2，不归因权限或无更新。随后只一组前置5s sample：down400捕到实际scrollWheel后恢复等待；同过程反向up400再次99%CPU。4181主线程样本中3107为RunLoop observer→NSHostingView.beginTransaction→GraphHost.flushTransactions，另有CA提交→layout→render→flush；事件分发返回后不收敛，不支持滚轮函数自身持续递归。sample为聚合树，不能命名首个失效attribute；Python monotonic非Swift uptime同起点，按epoch墙钟关联。
+
+消费帧ChatMessageTools:127–136/155–201不等于触发源；ChatWorkbenchView:1275/1469只捕到阅读状态普通内存getter，内部taskState setter未归属D特定task。已排除variant写入与旧独立焦点改动的历史失败保持。删除阅读保存、task、hover或再试anchor/Binding没有充分依据；本轮不新增E产品改动。Lead需对这一最小QA复现取得具体失效属性/视图归属，公开来源工具在挂起时无法完成收尾，更多聚合sample不能补齐；当前不转用户排错。原始E-target-825-r2与E-transition-825-*受控本地，两个准确已保存QA恢复及22文件字节保持另记。I017局部稳定几何改善不被此缺陷抹去，仍无呈现FPS或用户达标结论。
