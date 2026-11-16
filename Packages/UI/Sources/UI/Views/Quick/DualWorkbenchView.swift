@@ -537,7 +537,7 @@ public struct DualWorkbenchView: View {
                     .preferredColorScheme(automaticQuickModel.chatDisplaySettings.preferences.preferredColorScheme)
                     .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences),
                     visible: entry == .quick, identifier: "quick-retained-surface",
-                    fallbackSize: CGSize(width: 760, height: 500), inheritsWindowSafeArea: false)
+                    fallbackSize: CGSize(width: 760, height: 500), inheritsWindowSafeArea: false, preservesHiddenSize: true)
                     .transaction { $0.animation = nil }
                     .accessibilityHidden(entry != .quick)
                 RetainedContentHost(content: WorkflowHostView(model: canvasModel, nodeTags: nodeTags, metadata: metadata, library: library, onQuickUse: useNode,

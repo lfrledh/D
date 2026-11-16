@@ -70,15 +70,15 @@ private struct MetadataHostProbe: NSViewRepresentable {
         #expect(initial.isHidden, "Initially inactive panes must never enter the native key loop")
     }
 
-    @Test func retainedSiblingSwitchReleasesFocusWithoutReplacingEditors() async throws {
+    @Test(arguments: [false, true]) func retainedSiblingSwitchReleasesFocusWithoutReplacingEditors(preserveSize: Bool) async throws {
         func pane(_ firstVisible: Bool) -> some View {
             ZStack {
                 RetainedContentHost(content: TextSourcesQuestionEditor(value: "first", editEpoch: 0,
                     isEditable: true, accessibilityIdentifier: "retained-first", onEdit: { _ in }),
-                    visible: firstVisible, identifier: "retained-first-host")
+                    visible: firstVisible, identifier: "retained-first-host", preservesHiddenSize: preserveSize)
                 RetainedContentHost(content: TextSourcesQuestionEditor(value: "second", editEpoch: 0,
                     isEditable: true, accessibilityIdentifier: "retained-second", onEdit: { _ in }),
-                    visible: !firstVisible, identifier: "retained-second-host")
+                    visible: !firstVisible, identifier: "retained-second-host", preservesHiddenSize: preserveSize)
             }
         }
         func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
@@ -111,13 +111,54 @@ private struct MetadataHostProbe: NSViewRepresentable {
         #expect(window.firstResponder !== first, "Reopening must not steal text focus")
     }
 
-    @Test func retainedNativeHostsForwardMetadataCloseGateWithoutReplacingEditor() async throws {
+    @Test func hiddenPageGeometryKeepsEditorAndResynchronizesBeforeShowing() async throws {
+        let host = RetainedNativeHostingView(rootView: Color.clear)
+        host.sizingOptions = []; host.setInitialVisibility(true)
+        let wrapper = RetainedGeometryView(host: host, visible: true)
+        wrapper.frame = .init(x: 0, y: 0, width: 320, height: 240)
+        let window = NSWindow(contentRect: wrapper.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = wrapper
+        defer { window.close() }
+        wrapper.layout()
+        #expect(host.frame.size == CGSize(width: 320, height: 240))
+        let editor = NSTextView(frame: .init(x: 20, y: 20, width: 180, height: 80))
+        editor.allowsUndo = true; editor.string = "draft"; host.addSubview(editor)
+        #expect(window.makeFirstResponder(editor))
+        editor.setSelectedRange(.init(location: 5, length: 0)); editor.insertText(" changed", replacementRange: .init(location: NSNotFound, length: 0))
+        #expect(editor.undoManager?.canUndo == true)
+        func drain() async { await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } } }
+        wrapper.updateVisibility(false)
+        #expect(wrapper.hitTest(.init(x: 40, y: 40)) == nil)
+        await drain()
+        for width in [400.0, 600, 450, 520] {
+            wrapper.frame.size = .init(width: width, height: 300)
+            wrapper.layout()
+            #expect(host.frame.size == CGSize(width: 320, height: 240))
+        }
+        // The parent can receive its final size after the show request, before
+        // the existing deferred native visibility operation is applied.
+        wrapper.updateVisibility(true)
+        wrapper.frame.size = .init(width: 560, height: 340)
+        await drain()
+        #expect(!host.isHidden && host.frame.size == CGSize(width: 560, height: 340))
+        #expect(editor.superview === host && editor.string == "draft changed")
+        #expect(window.firstResponder !== editor, "Showing a retained page must not steal focus")
+        #expect(wrapper.hitTest(.init(x: 40, y: 40)) != nil)
+        editor.undoManager?.undo(); #expect(editor.string == "draft")
+        wrapper.updateVisibility(false); wrapper.updateVisibility(true); wrapper.updateVisibility(false)
+        await drain(); #expect(host.isHidden)
+        wrapper.updateVisibility(true); host.invalidateVisibility()
+        await drain(); #expect(host.isHidden)
+        #expect(host.hitTest(.init(x: 40, y: 40)) == nil)
+    }
+
+    @Test(arguments: [false, true]) func retainedNativeHostsForwardMetadataCloseGateWithoutReplacingEditor(preserveSize: Bool) async throws {
         let state = MetadataHostProbeState()
         let lifecycle = MetadataEditorLifecycle(begin: { state.gateHits += 1 })
         func view(_ visible: Bool) -> some View {
             RetainedContentHost(content:
                 RetainedContentHost(content: MetadataHostProbe(state: state), visible: true, identifier: "inner"),
-                visible: visible, identifier: "outer")
+                visible: visible, identifier: "outer", preservesHiddenSize: preserveSize)
                 .environment(\.metadataEditorLifecycle, lifecycle)
         }
         let host = NSHostingView(rootView: view(true)); host.frame = CGRect(x: 0, y: 0, width: 300, height: 200)

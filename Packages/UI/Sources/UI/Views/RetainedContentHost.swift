@@ -12,27 +12,73 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
     // Full-window pages share the parent's measured safe navigation inset.
     // Native child hosts otherwise apply the title area's inset a second time.
     var inheritsWindowSafeArea = true
+    // Opt in only for full-window pages retained behind another workspace.
+    var preservesHiddenSize = false
 
-    func makeNSView(context: Context) -> RetainedNativeHostingView<RetainedContentRoot<Content>> {
+    func makeNSView(context: Context) -> NSView {
         let host = RetainedNativeHostingView(rootView: RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, preparation: context.environment.workflowModelPreparation, installations: context.environment.workflowModelInstallations, featureHelp: context.environment.workbenchHelpStore, contentVisible: visible && context.environment.workbenchContentVisible, childClose: context.environment.workbenchChildClose, tips: context.environment.workbenchTips, sidebars: context.environment.workbenchSidebars, navigationTop: context.environment.workbenchNavigationTop, navigationModeWidth: context.environment.workbenchNavigationModeWidth, windowControlSize: context.environment.workbenchWindowControlSize, visualContext: WorkbenchVisualContext(context.environment)))
         host.sizingOptions = []
         if !inheritsWindowSafeArea { host.safeAreaRegions = [] }
         host.setAccessibilityIdentifier(identifier)
         host.setInitialVisibility(visible)
+        if preservesHiddenSize { return RetainedGeometryView(host: host, visible: visible) }
         return host
     }
-    func updateNSView(_ host: RetainedNativeHostingView<RetainedContentRoot<Content>>, context: Context) {
+    func updateNSView(_ view: NSView, context: Context) {
+        let wrapper = view as? RetainedGeometryView<RetainedContentRoot<Content>>
+        let host = wrapper?.host ?? (view as! RetainedNativeHostingView<RetainedContentRoot<Content>>)
         #if DEBUG
         WorkbenchCategoryUpdateProbe.retainedUpdate?()
         #endif
         host.rootView = RetainedContentRoot(content: content, lifecycle: context.environment.metadataEditorLifecycle, background: context.environment.workbenchBackground, appearance: context.environment.workbenchAppearanceState, language: context.environment.dLanguageStore, widths: context.environment.workbenchPanelWidths, surfaceGroup: context.environment.workbenchSurfaceGroup, menuContext: context.environment.workbenchMenuContext, modelReadiness: context.environment.workbenchModelReadiness, preparation: context.environment.workflowModelPreparation, installations: context.environment.workflowModelInstallations, featureHelp: context.environment.workbenchHelpStore, contentVisible: visible && context.environment.workbenchContentVisible, childClose: context.environment.workbenchChildClose, tips: context.environment.workbenchTips, sidebars: context.environment.workbenchSidebars, navigationTop: context.environment.workbenchNavigationTop, navigationModeWidth: context.environment.workbenchNavigationModeWidth, windowControlSize: context.environment.workbenchWindowControlSize, visualContext: WorkbenchVisualContext(context.environment))
-        host.requestVisibility(visible)
+        if let wrapper { wrapper.updateVisibility(visible) }
+        else { host.requestVisibility(visible) }
     }
-    static func dismantleNSView(_ host: RetainedNativeHostingView<RetainedContentRoot<Content>>, coordinator: ()) {
+    static func dismantleNSView(_ view: NSView, coordinator: ()) {
+        let wrapper = view as? RetainedGeometryView<RetainedContentRoot<Content>>
+        let host = wrapper?.host ?? (view as! RetainedNativeHostingView<RetainedContentRoot<Content>>)
+        host.prepareToShow = nil
         host.invalidateVisibility()
     }
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: RetainedNativeHostingView<RetainedContentRoot<Content>>, context: Context) -> CGSize? {
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSView, context: Context) -> CGSize? {
         .init(width: proposal.width ?? fallbackSize.width, height: proposal.height ?? fallbackSize.height)
+    }
+}
+
+/// The visible layout container follows its parent while an inactive page keeps
+/// its last useful content size. The same native editor stays mounted and still
+/// receives content/environment changes; no snapshot or content cache is used.
+@MainActor final class RetainedGeometryView<Content: View>: NSView {
+    let host: RetainedNativeHostingView<Content>
+    private var visible: Bool
+
+    init(host: RetainedNativeHostingView<Content>, visible: Bool) {
+        self.host = host; self.visible = visible
+        super.init(frame: .zero)
+        setAccessibilityElement(false)
+        addSubview(host)
+        host.prepareToShow = { [weak self] in self?.syncGeometry() }
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    func updateVisibility(_ value: Bool) {
+        visible = value
+        if value { syncGeometry() }
+        host.requestVisibility(value)
+    }
+    private func syncGeometry() {
+        guard visible || host.bounds.isEmpty else { return }
+        let target = NSRect(origin: .zero, size: bounds.size)
+        if host.frame != target { host.frame = target }
+    }
+    override func layout() {
+        super.layout()
+        syncGeometry()
+    }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard visible else { return nil }
+        let hit = super.hitTest(point)
+        return hit === self ? nil : hit
     }
 }
 
@@ -44,6 +90,7 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
     private var desiredVisible = true
     private var visibilityQueued = false
     private var visibilityInvalidated = false
+    var prepareToShow: (() -> Void)?
 
     func setInitialVisibility(_ visible: Bool) {
         desiredVisible = visible
@@ -58,7 +105,10 @@ struct RetainedContentHost<Content: View>: NSViewRepresentable {
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.visibilityInvalidated else { return }
             self.visibilityQueued = false
-            if self.isHidden != !self.desiredVisible { self.isHidden = !self.desiredVisible }
+            if self.isHidden != !self.desiredVisible {
+                if self.desiredVisible { self.prepareToShow?() }
+                self.isHidden = !self.desiredVisible
+            }
         }
     }
 
