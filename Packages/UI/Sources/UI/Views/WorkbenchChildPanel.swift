@@ -549,6 +549,7 @@ private struct ChildPresentation: NSViewRepresentable {
         private var nextTitle = ""
         private var nextSize = WorkbenchChildPanelSize()
         private var environment = EnvironmentValues()
+        private weak var presentedBackground: WorkbenchBackgroundOwner?
         private var close: () -> Void = {}
         private var onDismiss: (() -> Void)?
         private var queued = false
@@ -572,8 +573,19 @@ private struct ChildPresentation: NSViewRepresentable {
             guard nextID != nil, let nextContent else { return }
             let gate = overlay?.gate ?? WorkbenchChildCloseGate()
             gate.commit = close
+            // Outer sheets can sit outside workbenchCanvas's environment. Resolve
+            // from this marker's captured window, never the key window. Retain only
+            // a weak owner while mounted; ordinary updates reuse it without walking
+            // the canvas tree or replacing the child/editor identity.
+            if let inherited = environment.workbenchBackground, inherited.root?.window === window {
+                presentedBackground = inherited
+            } else if presentedBackground?.root?.window !== window {
+                presentedBackground = WorkbenchBackgroundOwner.attachedCanvas(in: window)
+            }
+            var childEnvironment = environment
+            childEnvironment.workbenchBackground = presentedBackground
             let surface = AnyView(WorkbenchChildSurface(content: nextContent, gate: gate, title: nextTitle)
-                .environment(\.self, environment))
+                .environment(\.self, childEnvironment))
             if let overlay { overlay.host.rootView = surface; overlay.size = nextSize; overlay.needsLayout = true }
             else {
                 let panel = WorkbenchChildOverlay(content: surface, gate: gate, size: nextSize)
@@ -588,6 +600,7 @@ private struct ChildPresentation: NSViewRepresentable {
             }
         }
         private func remove() {
+            presentedBackground = nil
             guard let overlay else { return }
             let owner = overlay.window, responder = overlay.previousResponder, delegate = overlay.previousEditorDelegate
             overlay.gate.detach()

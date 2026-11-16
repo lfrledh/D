@@ -111,7 +111,12 @@ struct SharedLibraryTagEditor: View {
                         if let failure = target.legacyFailure { Text(failure).foregroundStyle(.orange) }
                     }
                     ForEach(names.indices, id: \.self) { index in
-                        HStack { Text(names[index]); Button { names.remove(at: index) } label: { Image(systemName: "minus.circle") } }
+                        HStack {
+                            Text(names[index])
+                            Button { names.remove(at: index) } label: { Image(systemName: "minus.circle") }
+                                .help(workflowText(language, "metadata.tags.removePending"))
+                                .accessibilityLabel(workflowText(language, "metadata.tags.removePending"))
+                        }
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }

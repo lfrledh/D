@@ -41,6 +41,39 @@ import Testing
     }
     private func settle() { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.15)) }
 
+    @Test(arguments: [false, true]) func outerDeclarativeChildResolvesOnlyItsOwnWindowCanvasAndKeepsEditor(inheritForeignOwner: Bool) async throws {
+        let (first, owner) = window(), (other, foreign) = window()
+        let state = ChatDisplayPreferencesState(), record = VisualRecord()
+        owner.presentationState = state
+        // This is the actual outer-sheet arrangement: its marker is outside
+        // the modifier that installs the canvas environment on workspace content.
+        let content = Color.clear.workbenchSheet(isPresented: .constant(true), title: "Outer child") {
+            VisualEditor(record: record)
+        }.environment(\.workbenchAppearanceState, state)
+            .environment(\.workbenchBackground, inheritForeignOwner ? foreign : nil)
+        let host = NSHostingView(rootView: AnyView(content.environment(\.colorScheme, .light)))
+        first.contentView?.addSubview(host); host.frame = .init(x: 0, y: 0, width: 400, height: 400)
+        defer { first.close(); other.close() }
+        other.makeKeyAndOrderFront(nil) // Never borrow the current key window's owner.
+        host.layoutSubtreeIfNeeded()
+        for _ in 0..<10 { await Task.yield() }
+        let panel = try #require(WorkbenchChildPanels.frontmostSurface(on: first))
+        panel.layoutSubtreeIfNeeded(); panel.subviews.forEach { $0.layoutSubtreeIfNeeded() }
+        settle()
+        #expect(record.firstBackground === owner && record.background === owner)
+        #expect(record.background !== foreign)
+        let editor = try #require(record.editor)
+        editor.string = "Keep this draft"; editor.setSelectedRange(.init(location: 2, length: 3))
+        host.frame.size.width = 480
+        host.rootView = AnyView(content.environment(\.colorScheme, .dark))
+        for _ in 0..<10 { await Task.yield() }
+        panel.layoutSubtreeIfNeeded(); panel.subviews.forEach { $0.layoutSubtreeIfNeeded() }
+        settle()
+        #expect(WorkbenchChildPanels.frontmostSurface(on: first) === panel)
+        #expect(record.background === owner && record.editor === editor)
+        #expect(editor.string == "Keep this draft" && editor.selectedRange() == .init(location: 2, length: 3))
+    }
+
     @Test func persistedGlassReachesFirstChildAndRetainedRenderWithoutPreferenceWrite() throws {
         let suite = "D.VisualBridge.Cold.\(UUID().uuidString)"
         let settings = try #require(UserDefaults(suiteName: suite))
