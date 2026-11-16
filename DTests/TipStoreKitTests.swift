@@ -308,6 +308,8 @@ private final class TipStoreKitBundle: NSObject { }
             Issue.record("A verified local StoreKit app is required before observing pending approval"); return
         }
         try #require(app.environment == .xcode && app.bundleID == Bundle.main.bundleIdentifier)
+        try #require(scope["accountID"] == app.appTransactionID,
+                     "Cross-host observation must use the same verified local account scope")
         func exactPending() -> Bool {
             session.allTransactions().contains {
                 $0.identifier == identifier && $0.productIdentifier == productID &&
@@ -315,7 +317,7 @@ private final class TipStoreKitBundle: NSObject { }
             }
         }
         try #require(exactPending(), "Cross-host pending identity must still exist")
-        var listening = false, events: [(UInt64, String, Double)] = [], unverified = 0
+        var listening = false, events: [(UInt64, String, Double)] = [], rejected = 0
         let observer = Task { @MainActor in
             listening = true
             print("TIP_PENDING_RAW_LISTEN uptime=\(ProcessInfo.processInfo.systemUptime)")
@@ -324,7 +326,7 @@ private final class TipStoreKitBundle: NSObject { }
                 switch result {
                 case .verified(let t) where t.environment == .xcode && t.appBundleID == app.bundleID:
                     events.append((t.id, t.productID, ProcessInfo.processInfo.systemUptime))
-                default: unverified += 1
+                default: rejected += 1
                 }
             }
         }
@@ -340,8 +342,8 @@ private final class TipStoreKitBundle: NSObject { }
             try await Task.sleep(for: .milliseconds(50))
         }
         // Freeze before history: no TipStore, Product load, all/unfinished or finish in this window.
-        let automatic = events, automaticUnverified = unverified
-        print("TIP_PENDING_RAW_FROZEN uptime=\(ProcessInfo.processInfo.systemUptime) events=\(automatic) unverified=\(automaticUnverified)")
+        let automatic = events, automaticRejected = rejected
+        print("TIP_PENDING_RAW_FROZEN uptime=\(ProcessInfo.processInfo.systemUptime) events=\(automatic) rejectedOrUnverified=\(automaticRejected)")
         observer.cancel()
         try #require(try Data(contentsOf: journal) == before, "Raw observation must not mutate D's pending record")
         var exactHistory = false
