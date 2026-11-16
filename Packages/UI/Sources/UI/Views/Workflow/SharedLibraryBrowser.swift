@@ -58,16 +58,20 @@ public struct SharedLibraryBrowserEntry: Identifiable, Equatable {
     public var legacyTags: [String]
     public var legacyFailure: String?
     public var metadataSnapshot: ProjectAssetMetadataSnapshot?
+    // An unbound catalog choice configures a draft, not an execution lease.
+    // Keep its explicit file-choice route reachable even with ambiguous copies.
+    var catalogSelection: Bool
     var runtimeValue: WorkflowLibraryValue? = nil
     var collected = true
     var collectionSource: WorkflowLibrarySource? = nil
 
-    public init(item: SharedLibraryItem, selection: SharedLibraryBrowserSelection, facts: [String] = [], activityID: String? = nil, legacyTags: [String] = [], legacyFailure: String? = nil, metadataSnapshot: ProjectAssetMetadataSnapshot? = nil) {
+    public init(item: SharedLibraryItem, selection: SharedLibraryBrowserSelection, facts: [String] = [], activityID: String? = nil, legacyTags: [String] = [], legacyFailure: String? = nil, metadataSnapshot: ProjectAssetMetadataSnapshot? = nil, catalogSelection: Bool = false) {
         self.item = item
         self.selection = selection
         self.facts = facts
         self.id = activityID ?? item.key
         self.legacyTags = legacyTags; self.legacyFailure = legacyFailure; self.metadataSnapshot = metadataSnapshot
+        self.catalogSelection = catalogSelection
     }
 }
 
@@ -314,7 +318,9 @@ struct SharedLibraryBrowserRenameDrafts {
             guard !operationID.isEmpty else { return false }
             let selectable = entry.item.readiness == .available
                 || (modelID?.isEmpty == false
-                    && (entry.item.readiness == .unprepared || entry.item.readiness == .unknown))
+                    && (entry.item.readiness == .unprepared || entry.item.readiness == .unknown
+                        || (entry.item.kind == .model && entry.catalogSelection
+                            && entry.item.readiness == .unavailable && (action == .use || action == .add))))
             return selectable && action != .preview
         case .asset, .assetInstance:
             let selectable = entry.item.readiness == .available || entry.item.readiness == .unknown

@@ -88,8 +88,8 @@ import Foundation
                 let identity = identity(descriptor, kind: kind)
                 result.append(.init(item: .init(key: descriptor.id, title: descriptor.title,
                     detail: WorkflowCanvasPresentation.operationTitle(definition, language: language), kind: .model, role: "primary-model",
-                    inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: .unprepared, facts: .init(concepts: SharedLibraryConcept.operation(definition.id).wireValues, producers: [descriptor.modelIdentity])),
-                    selection: .operation(id: definition.id, modelID: identity), facts: [descriptor.modelIdentity, descriptor.revision, descriptor.precision, descriptor.deploymentNote]))
+                    inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: readiness[identity] ?? .unprepared, facts: .init(concepts: SharedLibraryConcept.operation(definition.id).wireValues, producers: [descriptor.modelIdentity])),
+                    selection: .operation(id: definition.id, modelID: identity), facts: [descriptor.modelIdentity, descriptor.revision, descriptor.precision, descriptor.deploymentNote], catalogSelection: true))
             } else {
                 // Reviewed legacy adapters remain discoverable without claiming a new executable node route.
                 let legacyAudio = ["sm-music", "sm-sfx", "medium"].contains(descriptor.id)

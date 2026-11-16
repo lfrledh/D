@@ -156,6 +156,13 @@ struct SharedLibraryBrowserTests {
         let modelRow = try #require(first.first { $0.item.kind == .model && $0.item.readiness == .unprepared })
         guard case .operation(_, let id?) = modelRow.selection else { Issue.record("Expected exact model binding"); return }
         let descriptor = try #require(ModelNodeCatalog.entries.first { $0.id == modelRow.id })
+        // Library readiness can change before a model is selected in this workspace.
+        for value in [SharedLibraryReadiness.unknown, .available, .unavailable] {
+            readiness[id] = value; expectFresh()
+            #expect(choices.isEmpty)
+            #expect(read().first { $0.id == modelRow.id }?.item.readiness == value)
+            #expect(cache.selection(canvasMode: .nodes, family: nil).first { $0.id == modelRow.id }?.item.readiness == value)
+        }
         choices = [.init(id: id, kind: try #require(SharedLibraryProjection.modelKind(descriptor)), displayName: "User choice")]
         for value in [SharedLibraryReadiness.available, .unavailable] {
             readiness[id] = value; expectFresh()
@@ -637,6 +644,83 @@ struct SharedLibraryBrowserTests {
         let language = try #require(WorkflowRegistry.standard.operation("d.model.language")?.definition)
         #expect(!SharedLibraryProjection.outputs(language).contains(.video))
         #expect(SharedLibraryProjection.outputs(language).contains(.record))
+    }
+
+    @Test(arguments: SharedLibraryReadiness.allCases)
+    func unselectedCatalogueModelKeepsExactSharedReadiness(state: SharedLibraryReadiness) throws {
+        let profile = try #require(ExternalVideoExecutionProfile.allCases.first {
+            $0.rawValue == "ltx-2.5-dev-bf16-full-v1"
+        })
+        let identity = "video:" + profile.modelIdentity
+        let key = "video.model." + profile.rawValue
+        let readiness = [identity: state]
+        let unselected = SharedLibraryProjection.entries(models: [], readiness: readiness,
+            tools: [], projects: [], language: nil)
+        let model = try #require(unselected.first { $0.id == key })
+        #expect(model.item.readiness == state)
+        #expect(model.selection == .operation(id: WorkflowVideoRecipe(profile: profile).operationID,
+            modelID: identity))
+        #expect(SharedLibraryBrowserLogic.allows(.prepare, entry: model) == (state != .available))
+        // Choosing an unbound catalog model configures a draft. Even when more
+        // than one installed copy makes execution unavailable, the existing
+        // explicit copy picker must remain reachable. Unsupported is different.
+        #expect(SharedLibraryBrowserLogic.allows(.use, entry: model) == (state != .unsupported))
+        #expect(SharedLibraryBrowserLogic.allows(.add, entry: model) == (state != .unsupported))
+        let function = WorkflowVideoRecipe(profile: profile).operationID
+        let resolved = try #require(SharedModelLibraryCard.resolve(model, function: function, current: unselected))
+        #expect(SharedLibraryBrowserLogic.allows(.use, entry: resolved) == (state != .unsupported))
+        #expect(SharedLibraryBrowserLogic.allows(.add, entry: resolved) == (state != .unsupported))
+        let searched = SharedModelLibraryCard.searchEntry(model, language: nil)
+        #expect(searched.item.readiness == state)
+        #expect(SharedLibraryBrowserLogic.allows(.use, entry: searched) == (state != .unsupported))
+
+        let selected = SharedLibraryProjection.entries(models: [
+            .init(id: identity, kind: .video, displayName: "Chosen model")
+        ], readiness: readiness, tools: [], projects: [], language: nil)
+        #expect(selected.filter { $0.id == key }.count == 1)
+        #expect(selected.first { $0.id == key }?.item.readiness == state)
+        if state == .unavailable || state == .unsupported {
+            let bound = try #require(selected.first { $0.id == key })
+            #expect(!SharedLibraryBrowserLogic.allows(.use, entry: bound))
+            #expect(!SharedLibraryBrowserLogic.allows(.add, entry: bound))
+            #expect(SharedLibraryBrowserLogic.currentEntry(key: model.id, entries: selected, action: .use) == nil)
+            let rebound = try #require(SharedModelLibraryCard.resolve(model, function: function, current: selected))
+            #expect(!SharedLibraryBrowserLogic.allows(.use, entry: rebound))
+            #expect(!SharedLibraryBrowserLogic.allows(.add, entry: rebound))
+        }
+    }
+
+    @Test func catalogueReadinessDoesNotBorrowAnotherRevisionOrModel() throws {
+        let profile = try #require(ExternalVideoExecutionProfile.allCases.first {
+            $0.rawValue == "ltx-2.5-dev-bf16-full-v1"
+        })
+        let projected = SharedLibraryProjection.entries(models: [], readiness: [
+            "video:" + profile.modelIdentity + "-other-revision": .available,
+            "video:unrelated-model": .available
+        ], tools: [], projects: [], language: nil)
+        let model = try #require(projected.first { $0.id == "video.model." + profile.rawValue })
+        #expect(model.item.readiness == .unprepared)
+        #expect(SharedLibraryBrowserLogic.allows(.prepare, entry: model))
+    }
+
+    @Test func catalogueConfigurationDoesNotGrantUnsupportedOrIncompatibleActions() {
+        for invalid in [
+            entry("unsupported", title: "model", kind: .model, readiness: .unsupported,
+                selection: .operation(id: "d.image.generate", modelID: "image:exact")),
+            entry("incompatible", title: "model", kind: .model, readiness: .unavailable, compatible: false,
+                selection: .operation(id: "d.image.generate", modelID: "image:exact")),
+            entry("missing", title: "model", kind: .model, readiness: .unavailable,
+                selection: .operation(id: "d.image.generate", modelID: nil)),
+            entry("empty", title: "model", kind: .model, readiness: .unavailable,
+                selection: .operation(id: "d.image.generate", modelID: "")),
+            entry("program", title: "program", kind: .program, readiness: .unavailable,
+                selection: .operation(id: "d.image.generate", modelID: "image:exact"))
+        ] {
+            let model = SharedLibraryBrowserEntry(item: invalid.item, selection: invalid.selection, catalogSelection: true)
+            #expect(!SharedLibraryBrowserLogic.allows(.use, entry: model))
+            #expect(!SharedLibraryBrowserLogic.allows(.add, entry: model))
+            #expect(SharedLibraryBrowserLogic.canvasTransfer(for: model) == nil)
+        }
     }
 
     @Test

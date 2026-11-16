@@ -18,7 +18,7 @@ import SwiftUI
         guard let value = current.first(where: { $0.id == base.id }), value.selection == base.selection,
               functions(value).contains(where: { $0.id == function }), case .operation(_, let model) = value.selection else { return nil }
         return .init(item: value.item, selection: .operation(id: function, modelID: model), facts: value.facts,
-            activityID: value.id, legacyTags: value.legacyTags, legacyFailure: value.legacyFailure, metadataSnapshot: value.metadataSnapshot)
+            activityID: value.id, legacyTags: value.legacyTags, legacyFailure: value.legacyFailure, metadataSnapshot: value.metadataSnapshot, catalogSelection: value.catalogSelection)
     }
     static func searchEntry(_ entry: SharedLibraryBrowserEntry, language: UILanguageStore?) -> SharedLibraryBrowserEntry {
         let functions = functions(entry)
@@ -29,7 +29,7 @@ import SwiftUI
             kind: item.kind, role: item.role, inputs: item.inputs, outputs: item.outputs, contentKind: item.contentKind,
             readiness: item.readiness, compatible: item.compatible, assetFacts: item.assetFacts, facts: item.facts)
         return .init(item: search, selection: entry.selection, facts: entry.facts, activityID: entry.id,
-            legacyTags: entry.legacyTags, legacyFailure: entry.legacyFailure, metadataSnapshot: entry.metadataSnapshot)
+            legacyTags: entry.legacyTags, legacyFailure: entry.legacyFailure, metadataSnapshot: entry.metadataSnapshot, catalogSelection: entry.catalogSelection)
     }
 }
 
