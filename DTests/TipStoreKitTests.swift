@@ -295,6 +295,13 @@ private final class TipStoreKitBundle: NSObject { }
         let productID = try #require(checkpoint["productID"] as? String)
         let root = file.deletingPathExtension().appendingPathExtension("request")
         let journal = root.appendingPathComponent("tips.json"), before = try Data(contentsOf: journal)
+        let attemptID = try #require(checkpoint["attemptID"] as? String)
+        let attempts = try attemptRecords(journal), attempt = try #require(attempts[attemptID])
+        try #require(attempts.count == 1 && attempt["phase"] as? String == "pending" && attempt["receiptKey"] == nil)
+        try #require(attempt["productID"] as? String == productID && (try receiptRecords(journal)).isEmpty)
+        let scope = try #require(attempt["scope"] as? [String: String])
+        try #require(scope == checkpoint["scope"] as? [String: String])
+        try #require(scope["bundleID"] == Bundle.main.bundleIdentifier && scope["environment"] == AppStore.Environment.xcode.rawValue)
         let configuration = try #require(Bundle(for: TipStoreKitBundle.self).url(forResource: "Tips", withExtension: "storekit"))
         let session = try SKTestSession(contentsOf: configuration) // Never reset/clear or create a new purchase here.
         guard case .verified(let app) = try await AppTransaction.shared else {
@@ -315,9 +322,9 @@ private final class TipStoreKitBundle: NSObject { }
             for await result in Transaction.updates {
                 if Task.isCancelled { return }
                 switch result {
-                case .verified(let t):
+                case .verified(let t) where t.environment == .xcode && t.appBundleID == app.bundleID:
                     events.append((t.id, t.productID, ProcessInfo.processInfo.systemUptime))
-                case .unverified: unverified += 1
+                default: unverified += 1
                 }
             }
         }
@@ -329,7 +336,7 @@ private final class TipStoreKitBundle: NSObject { }
         print("TIP_PENDING_RAW_APPROVE uptime=\(approval) identifier=\(identifier)")
         try session.approveAskToBuyTransaction(identifier: identifier)
         for _ in 0..<100 {
-            if events.contains(where: { $0.0 == UInt64(identifier) && $0.1 == productID }) { break }
+            if events.contains(where: { $0.0 == UInt64(identifier) && $0.1 == productID && $0.2 >= approval }) { break }
             try await Task.sleep(for: .milliseconds(50))
         }
         // Freeze before history: no TipStore, Product load, all/unfinished or finish in this window.
@@ -343,7 +350,7 @@ private final class TipStoreKitBundle: NSObject { }
         }
         print("TIP_PENDING_RAW_HISTORY exact=\(exactHistory) oldPID=\(previousPID) pid=\(ProcessInfo.processInfo.processIdentifier)")
         #expect(exactHistory)
-        #expect(automatic.contains { $0.0 == UInt64(identifier) && $0.1 == productID },
+        #expect(automatic.contains { $0.0 == UInt64(identifier) && $0.1 == productID && $0.2 >= approval },
                 "Raw cross-host approval did not yield before history; preserve the checkpoint for exact recovery")
     }
 
