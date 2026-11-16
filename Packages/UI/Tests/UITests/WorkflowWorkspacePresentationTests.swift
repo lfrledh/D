@@ -577,6 +577,37 @@ extension WorkflowWorkspacePresentationTests {
 }
 
 extension WorkflowWorkspacePresentationTests {
+    @Test(arguments: [false, true])
+    func viewerAdmissionRejectsActualUnavailableOwnerOrClosedSource(registeredOwner: Bool) async throws {
+        let f = try await RenderingWorkspaceFixture.make()
+        let model = WorkbenchModel(projectSession: f.owner)
+        let coordinator = WorkflowViewerCoordinator()
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 800, height: 640),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = NSView(frame: window.contentLayoutRect)
+        defer { window.close() }
+        if registeredOwner {
+            WorkbenchChildPanels.registerOwner(window)
+            await f.owner.closeProject()
+            #expect(!f.owner.canEditLibraryMetadata && f.owner.currentStore == nil)
+        } else {
+            #expect(!WorkbenchChildPanels.isOwner(window) && f.owner.canEditLibraryMetadata)
+        }
+        let expected = registeredOwner ? "workflow.viewer.sourceUnavailable" : "workflow.viewer.ownerUnavailable"
+        let target = WorkflowViewerTarget(title: "Frozen original", subtitle: "", value: .data(.text("unchanged")))
+        do {
+            try coordinator.open(target, model: model, language: nil, ownerWindow: window)
+            Issue.record("Unavailable viewer admission unexpectedly succeeded")
+        } catch let issue as WorkflowIssue {
+            #expect(issue.code == expected)
+        }
+        #expect(coordinator.count == 0)
+        #expect(await f.engine.submissions == 0)
+        #expect(f.owner.errorMessage == nil)
+        try await f.close()
+    }
+
     @Test func viewerCommandFailureStaysWithVisibleViewerAndKeepsContent() async throws {
         let f = try await RenderingWorkspaceFixture.make()
         let viewer = f.viewer(.init(title: "Original", subtitle: "", value: .data(.text("frozen output"))))
