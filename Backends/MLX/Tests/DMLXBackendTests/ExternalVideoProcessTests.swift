@@ -5,6 +5,20 @@ import Testing
 
 @Suite("External video owned process group", .serialized)
 struct ExternalVideoProcessTests {
+    @Test("Video spawn preserves the same validated container context as the other providers")
+    func containerContext() async throws {
+        let root = try fixtureRoot()
+        let expected = LocalProviderProcess.childEnvironment([:])["CFFIXED_USER_HOME"] ?? "absent"
+        let result = try await process(root: root,
+            script: "import os;print(os.environ.get('CFFIXED_USER_HOME','absent'))").run()
+        #expect(result.exitCode == 0 && result.fullyDrained)
+        #expect(result.stdoutTail == expected + "\n")
+        // No fabricated home, secrets, or unrelated environment inheritance.
+        #expect(LocalProviderProcess.childEnvironment([:], parent: ["CFFIXED_USER_HOME": "/other", "TOKEN": "private"], home: root.path).isEmpty)
+        #expect(LocalProviderProcess.childEnvironment([:], parent: ["CFFIXED_USER_HOME": root.path, "TOKEN": "private"], home: root.path) == ["CFFIXED_USER_HOME": root.path])
+        #expect(LocalProviderProcess.childEnvironment(["CFFIXED_USER_HOME": "/explicit"], parent: ["CFFIXED_USER_HOME": root.path], home: root.path)["CFFIXED_USER_HOME"] == "/explicit")
+    }
+
     @Test("Both streams drain with bounded tails; cwd, Unicode argv and explicit environment survive")
     func successfulOutput() async throws {
         let root = try fixtureRoot()

@@ -88,7 +88,11 @@ struct ExternalVideoProcess: Sendable {
         // only through the synchronous posix_spawn call on this queue.
         var argv = try Self.cStrings([executable.path] + arguments)
         defer { Self.freeCStrings(argv) }
-        var env = try Self.cStrings(environment.keys.sorted().map { "\($0)=\(environment[$0]!)" })
+        // Match the other bundled providers: preserve only the parent's already
+        // validated container context. Fresh implicit bookmarks otherwise resolve
+        // as stale in the child. This grants no additional file access.
+        let childEnvironment = LocalProviderProcess.childEnvironment(environment)
+        var env = try Self.cStrings(childEnvironment.keys.sorted().map { "\($0)=\(childEnvironment[$0]!)" })
         defer { Self.freeCStrings(env) }
         if cancellation.isCancelled { return Self.preCancelled }
 
