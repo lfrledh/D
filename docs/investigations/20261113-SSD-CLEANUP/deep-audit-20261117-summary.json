@@ -1,0 +1,144 @@
+{
+  "measuredAt": "2026-11-17T01:35:46.561252+09:00",
+  "sourceHEAD": "e76555105e61cb5b61c7ce1b3ab7137ea4dcdbc3",
+  "productUnchanged": "781c211dbb2a1089bf1c2e10e754b453fc5ffbd3",
+  "mode": "read-only investigation; no deletion authorized or performed",
+  "units": "decimal GB=1e9; directory accounting is not exclusive storage",
+  "capacity": {
+    "total": 2000189177856,
+    "free": 39366385664,
+    "volumes": [
+      {
+        "Name": "CodexProjects",
+        "CapacityInUse": 1715477794816
+      },
+      {
+        "Name": "aroma",
+        "CapacityInUse": 245045055488
+      }
+    ]
+  },
+  "method": "du allocated directory accounting plus public getattrlist private-size/clone-ID on >=1MiB regular files; non-atomic, explicit unread ranges; excludes hard links from private totals; no file-content reads during inventory",
+  "regularFileCountReadable": 17431523,
+  "largeFiles": 94000,
+  "unread": [
+    ".DocumentRevisions-V100",
+    ".TemporaryItems",
+    "other inaccessible Trash users",
+    "97 read errors in current aroma backup view; not individually classified"
+  ],
+  "worktrees": {
+    "registered": 259,
+    "dirty": 8,
+    "cleanStatus": 251,
+    "ignoredFilesNotCertifiedRecoverable": true
+  },
+  "appBundles": {
+    "count": 354,
+    "allocated": 611662446592,
+    "privateLarge": 357694881792,
+    "sourceMarkedAncestor": 66,
+    "noSourceMarker": 288
+  },
+  "firstWave": {
+    "cacheRootCount": 847,
+    "cacheAllocated": 198621675520,
+    "cachePrivateLarge": 90675134464,
+    "trashAppCount": 27,
+    "trashAllocated": 79671250944,
+    "trashPrivateLarge": 57957572608,
+    "fdRecheckedFiles": 42674,
+    "fdErrors": 0,
+    "fdChanged": 0,
+    "protected": "current Nov16 run and actual reused Nov6 ba95 DerivedData; all source/projects/models/Logs/xcresult/trace/SourcePackages untouched",
+    "trashParentDirectoryAccounting": 79671259136
+  },
+  "secondModelWave": {
+    "old-klein-install": {
+      "largeFiles": 7,
+      "logicalLarge": 9426434417,
+      "allocatedLarge": 9426448384,
+      "privateLarge": 9426448384,
+      "scopeFragment": "/Validation/ModelLibrary-20260907/.d-model-library/Installations/1F9AB02E-EF7D-4D0B-96E0-91041515B930/"
+    },
+    "old-wan-1": {
+      "largeFiles": 522,
+      "logicalLarge": 14723742176,
+      "allocatedLarge": 14725824512,
+      "privateLarge": 14725824512,
+      "scopeFragment": "/run-20261001T040512Z-low-memory/lead/wan-original-real/prepared/"
+    },
+    "old-wan-2": {
+      "largeFiles": 522,
+      "logicalLarge": 14723742176,
+      "allocatedLarge": 14725824512,
+      "privateLarge": 14725824512,
+      "scopeFragment": "/run-20261001T040512Z-low-memory/lead/human-20261001T133601Z/wan-prepared/wan21-t2v-1.3b-bf16-95B5B171-560C-4675-988C-D99C9EE4E646/"
+    }
+  },
+  "cloneEvidence": {
+    "portable-models": {
+      "files": 294,
+      "logical": 418927405472,
+      "allocated": 418927910912,
+      "private": 0,
+      "sameContentStreamInModels": 294
+    },
+    "kit-usability-models": {
+      "files": 45,
+      "logical": 83049949150,
+      "allocated": 83050024960,
+      "private": 0,
+      "sameContentStreamInModels": 45
+    },
+    "R4-raw-ltx": {
+      "files": 10,
+      "logical": 70937133675,
+      "allocated": 70937153536,
+      "private": 0,
+      "sameContentStreamInModels": 10
+    },
+    "R4-dev": {
+      "files": 19,
+      "logical": 112822695281,
+      "allocated": 112822743040,
+      "private": 0,
+      "sameContentStreamInModels": 19
+    },
+    "R4-ltx-prepared": {
+      "files": 10,
+      "logical": 70937133675,
+      "allocated": 70937153536,
+      "private": 0,
+      "sameContentStreamInModels": 10
+    },
+    "H3-prepared": {
+      "files": 30,
+      "logical": 144023408839,
+      "allocated": 144023474176,
+      "private": 0,
+      "sameContentStreamInModels": 30
+    },
+    "Q8-prepared": {
+      "files": 11,
+      "logical": 36826648707,
+      "allocated": 36826664960,
+      "private": 0,
+      "sameContentStreamInModels": 11
+    }
+  },
+  "backupVolume": {
+    "steamAllocated": 89136934912,
+    "gameAllocated": 82332700000,
+    "workshopAllocated": 6804300000,
+    "snapshotsObserved": 25,
+    "periodSeconds": 3600,
+    "latestBackupSource": "internal Data UUID matched; external development backup not established",
+    "fullCurrentViewLogicalFromManifest": 144825100000,
+    "currentViewReadableLowerBound": 132386100000,
+    "notCleanupAuthorized": true,
+    "componentNumbersRounded": true
+  },
+  "ownEvidenceRoot": "D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261117-storage-audit",
+  "limits": "private values are observations, not guaranteed future free-space change; shared groups cannot be added as unique bytes; partial clones/small files/metadata not fully attributed"
+}
