@@ -44,5 +44,15 @@ public struct WorkflowCallActivity: Equatable, Sendable {
         }
         if value != current { current = value }
     }
+    /// A frozen adopted prefix does not execute again. Retire only its exact
+    /// settled waiting call; other calls and in-flight/releasing activity remain.
+    func reconcileWaiting(in run: WorkflowRun?) {
+        guard let value = current, value.finished, value.phase == "waiting",
+              let address = value.address, let run, run.id == address.runID,
+              let record = run.planCheckpoint?.records.first(where: {
+                  $0.address == address && $0.id == value.stepID && $0.step.node.id == value.nodeID
+              }), [.completed, .rejected].contains(record.step.status) else { return }
+        current = nil
+    }
     func end(phase: String) { update(phase: phase, progress: ""); current?.finished = true; started = nil }
 }

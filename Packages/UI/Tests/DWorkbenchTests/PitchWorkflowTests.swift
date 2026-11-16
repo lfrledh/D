@@ -8,6 +8,28 @@ import Testing
 
 @Suite("Pitch original ownership and durable decisions", .serialized)
 struct PitchWorkflowTests {
+    @Test func pitchReferencePreservesUnrenderedBytesForNativeReview() async throws {
+        try await withPitchFixture { root, store, document, _ in
+            let project = root.appendingPathComponent("Pitch.dproject")
+            let (_, asset) = try await pitchCandidate(store: store, documentID: document.id, project: project)
+            let before = try Data(contentsOf: project.appendingPathComponent(asset.relativePath))
+            let reference = try await store.pinWorkflowAsset(asset.id)
+            var node = try #require(WorkflowRegistry.standard.operation("d.asset.reference")).definition.makeNode()
+            node.assetReference = reference
+            let archive = try #require(try await store.workflowState().archive)
+            let graph = WorkflowGraph(name: "无正文渲染类型 / Pitch metadata fixture", nodes: [node], layout: [.init(nodeID: node.id, x: 120, y: 120)])
+            _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: archive.revision)
+            #expect(try Data(contentsOf: project.appendingPathComponent(asset.relativePath)) == before)
+            try await store.close()
+            let cold = try await ProjectStore.open(at: project)
+            #expect(try await cold.workflowState().archive?.graphs == [graph])
+            try await cold.close()
+            if let path = ProcessInfo.processInfo.environment["D_PITCH_CONTAINER_NATIVE_FIXTURE"] {
+                try FileManager.default.copyItem(at: project, to: URL(fileURLWithPath: path))
+            }
+        }
+    }
+
     @Test func bundledModelURLAllowsCompletionAndDurableDecision() async throws {
         try await withPitchFixture { root, store, document, original in
             let project = root.appendingPathComponent("Pitch.dproject"), id = UUID()

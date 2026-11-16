@@ -76,6 +76,9 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
     private func invalidateContainerRuns(_ old: [WorkflowRun]) {
         let previous = Dictionary(uniqueKeysWithValues: old.map { ($0.id, $0) })
         let current = Dictionary(uniqueKeysWithValues: runs.map { ($0.id, $0) })
+        if let address = services.activity.current?.address {
+            services.activity.reconcileWaiting(in: current[address.runID])
+        }
         var affected = Set<UUID>()
         for id in Set(previous.keys).union(current.keys) {
             let before = previous[id], after = current[id]
@@ -265,14 +268,17 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
                 capture(cp, runIndex: ri)
             }
             for si in batchStages.indices {
-                if batchStages[si].state == .running { batchStages[si].state = .paused }
-                for ai in batchStages[si].attempts.indices where [.dispatched, .savingBlocked].contains(batchStages[si].attempts[ai].state) {
-                    guard let run = runs.first(where: { $0.id == batchStages[si].attempts[ai].runID }) else { continue }
+                var stage = batchStages[si]
+                if stage.state == .running { stage.state = .paused }
+                for ai in stage.attempts.indices where [.dispatched, .savingBlocked].contains(stage.attempts[ai].state) {
+                    guard let run = runs.first(where: { $0.id == stage.attempts[ai].runID }) else { continue }
                     let state = batchAttemptState(run)
-                    batchStages[si].attempts[ai].state = state == .queued ? .interrupted : state
+                    stage.attempts[ai].state = state == .queued ? .interrupted : state
                 }
-                if batchStages[si].attempts.contains(where: { $0.state == .savingBlocked }), batchStages[si].state != .cancelled { batchStages[si].state = .savingBlocked }
-                else if !batchStages[si].attempts.contains(where: { [.queued, .dispatched, .interrupted].contains($0.state) }), batchStages[si].state != .cancelled { batchStages[si].state = .finished }
+                if stage.attempts.contains(where: { $0.state == .savingBlocked }), stage.state != .cancelled { stage.state = .savingBlocked }
+                else if !stage.attempts.contains(where: { [.queued, .dispatched, .interrupted].contains($0.state) }), stage.state != .cancelled { stage.state = .finished }
+                // Cold reads stay saved; actual interruption reconciliation is still an edit.
+                if stage != batchStages[si] { batchStages[si] = stage }
             }
             await refreshAssets()
             // Interrupted processes are never silently restarted. Waiting decisions remain valid.

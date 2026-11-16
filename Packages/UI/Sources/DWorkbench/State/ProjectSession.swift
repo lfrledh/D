@@ -1013,6 +1013,11 @@ public final class ProjectSession {
         // This is organization metadata only; frozen graphs and outputs are untouched.
         await controller.initializeAssetCollection()
         refreshWorkflowModels()
+        guard self.store === store, workflow === controller, !isChangingProject,
+              !closePending, !Task.isCancelled else { return }
+        // One demand check on opening the saved graph; no library window,
+        // asset refresh, or polling is required to establish current readiness.
+        await checkExplicitModelReadiness(for: openGraphModelIdentities)
     }
 
     public func selectWorkflowDestination(at url: URL) async {

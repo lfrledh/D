@@ -152,6 +152,34 @@ extension WorkflowLifecycleTests {
     }
 
     @Test(arguments: [false, true])
+    func finishedBatchLoadKeepsSavedState(waiting: Bool) async throws {
+        let (_, store, engine, c) = try await fixture()
+        var input = try #require(c.registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("preserved"))
+        let human = try #require(c.registry.operation("d.control.human")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: waiting ? [input, human] : [input],
+            connections: waiting ? [.init(sourceNode: input.id, targetNode: human.id)] : [])
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
+        await c.load()
+        let stage = try await c.createBatchStage(selection: .through(waiting ? human.id : input.id), pins: [],
+            repetitions: 1, expectedGraphID: graph.id, expectedRevision: graph.revision)
+        await c.runBatchStage(stage)
+        let saved = try #require(try await store.workflowState().archive)
+        try #require(saved.batchStages?.first?.state == .finished)
+        let manifest = try Data(contentsOf: store.rootURL.appendingPathComponent("project.json"))
+        c.deactivateAfterClose()
+        let cold = WorkflowController(services: c.services)
+        await cold.load()
+        #expect(cold.savePresentation == "saved")
+        #expect(cold.batchStages == saved.batchStages && cold.runs == saved.runs)
+        #expect(try await store.workflowState().archive == saved)
+        #expect(try Data(contentsOf: store.rootURL.appendingPathComponent("project.json")) == manifest)
+        #expect(await engine.requests.isEmpty)
+        try await cold.close(); try await store.close()
+    }
+
+    @Test(arguments: [false, true])
     func batchColdLoadReconcilesDurableCheckpointBeforeLedger(waiting: Bool) async throws {
         let (_, store, _, c) = try await fixture()
         var input = try #require(c.registry.operation("d.value.input")).definition.makeNode()
@@ -172,6 +200,7 @@ extension WorkflowLifecycleTests {
         #expect(next.readOnlyReason == nil)
         #expect(next.batchStages.first?.attempts.first?.state == (waiting ? .waiting : .completed))
         #expect(next.batchStages.first?.state == .finished && !next.isRunning)
+        #expect(next.savePresentation == "unsaved") // Actual recovery still needs persistence.
         try await next.close(); try await store.close()
     }
 
@@ -3405,6 +3434,7 @@ extension WorkflowLifecycleTests {
         let pending = try #require(c.containerSubmissions.first)
         let frozen = c.runs
         #expect(c.hasPendingSaves && c.runs.count == 4)
+        #expect(c.services.activity.current == nil, "Applied decisions show pending save, not the obsolete waiting call")
         #expect(try await store.workflowState().archive?.runs.count == 2)
         #expect(await engine.requests.isEmpty)
         c.beforeHistorySave = {}
@@ -3431,6 +3461,40 @@ extension WorkflowLifecycleTests {
         await controller.runBatchStage(stage)
         try #require(controller.errorMessage == nil, Comment(rawValue: controller.errorMessage ?? ""))
         return (store, engine, controller, a, b, stage)
+    }
+
+    @Test(arguments: [false, true]) func settledContainerRetiresOnlyItsExactWaitingActivity(accept: Bool) async throws {
+        let (store, engine, c, node, _, stage) = try await containerFixture()
+        let scope = WorkflowContainerScope(stageID: stage, path: [.node(node.id)])
+        let snapshot = try c.containerSnapshot(scope)
+        let activity = try #require(c.services.activity.current)
+        #expect(activity.finished && activity.phase == "waiting")
+        // Another run, even at the same node, cannot retire the current call.
+        c.services.activity.reconcileWaiting(in: c.runs.first { $0.id != activity.address?.runID })
+        #expect(c.services.activity.current == activity)
+        let call = try #require(snapshot.calls.first { $0.address == activity.address && $0.id == activity.stepID })
+        try c.editContainerSelection(call: .init(address: call.address, stepID: call.id), input: try #require(call.step.inputs["input"]), selectedIDs: [])
+        #expect(c.services.activity.current == activity, "Selection alone is not adoption")
+        let current = try c.containerSnapshot(scope)
+        let choices = current.calls.map { WorkflowContainerChoice(call: .init(address: $0.address, stepID: $0.id), selectedIDs: accept ? ["value"] : []) }
+        _ = try await c.submitContainer(current, choices: choices, endAll: !accept)
+        #expect(c.services.activity.current == nil)
+        #expect(await engine.requests.isEmpty)
+        #expect(c.runs.first { $0.id == call.address.runID }?.status == (accept ? .waiting : .rejected))
+        let settledRun = try #require(c.runs.first { $0.id == call.address.runID })
+        let leaf = c.services.activity
+        for (address, stepID) in [(call.address.appending(.iteration(1)), call.id), (call.address, UUID())] {
+            leaf.begin(.init(node: node, stepID: stepID, inputs: [:], address: address, graphID: activity.graphID))
+            leaf.end(phase: "waiting")
+            let other = leaf.current
+            leaf.reconcileWaiting(in: settledRun)
+            #expect(leaf.current == other, "Same node in another nested call or step remains distinct")
+        }
+        leaf.begin(.init(node: node, stepID: call.id, inputs: [:], address: call.address, graphID: activity.graphID))
+        leaf.update(phase: "releasing")
+        leaf.reconcileWaiting(in: settledRun)
+        #expect(leaf.current?.phase == "releasing" && leaf.current?.finished == false)
+        try await c.close(); try await store.close()
     }
 
     @Test(arguments: [false, true]) func containerCommitRejectsConcurrentDraftAndCancellation(cancel: Bool) async throws {
@@ -3633,6 +3697,39 @@ extension WorkflowLifecycleTests {
 }
 
 extension WorkflowLifecycleTests {
+    @Test func containerMixedFailurePreservesUnavailableCandidateForNativeReview() async throws {
+        let (_, store, engine, c) = try await fixture()
+        await engine.failSecond()
+        c.addExample("containerImages")
+        let generate = try #require(c.graph?.nodes.first { $0.operationID == "d.image.generate" })
+        c.setParameter(nodeID: generate.id, key: "count", value: .integer(3))
+        let graph = try #require(c.graph)
+        let gate = try #require(graph.nodes.first { $0.operationID == WorkflowAssetContainer.filterID })
+        let stage = try await c.createBatchStage(selection: .through(try #require(graph.nodes.last).id), pins: [], repetitions: 1,
+            expectedGraphID: graph.id, expectedRevision: graph.revision)
+        await c.runBatchStage(stage)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        let snapshot = try c.containerSnapshot(.init(stageID: stage, path: [.node(gate.id)]))
+        let call = try #require(snapshot.calls.first), value = try #require(call.step.inputs["input"])
+        let items = try WorkflowAssetContainer.items(in: value)
+        #expect(items.count == 3 && items.filter(\.selectable).count == 2)
+        let unavailable = try #require(items.first { !$0.selectable })
+        #expect(unavailable.failure != nil)
+        let frozen = c.runs
+        await #expect(throws: (any Error).self) {
+            try await c.submitContainer(snapshot, choices: [.init(call: .init(address: call.address, stepID: call.id), selectedIDs: [unavailable.id])])
+        }
+        #expect(c.runs == frozen && c.containerSubmissions.isEmpty)
+        #expect(await engine.requests.count == 3)
+        try await c.close(); try await store.close()
+        let cold = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await cold.workflowState().archive?.runs == frozen)
+        try await cold.close()
+        if let path = ProcessInfo.processInfo.environment["D_MIXED_CONTAINER_NATIVE_FIXTURE"] {
+            try FileManager.default.copyItem(at: store.rootURL, to: URL(fileURLWithPath: path))
+        }
+    }
+
     @Test func containerImageSubsetUsesVisibleMapAndRetainsOriginalCandidates() async throws {
         let (_, store, engine, c) = try await fixture()
         c.addExample("containerImages")

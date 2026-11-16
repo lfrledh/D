@@ -99,10 +99,16 @@ public struct DualWorkbenchView: View {
         let chatChoice: ChatProjectAttachmentChoice?
         var id: WorkflowAssetReference { reference }
     }
-    @State private var libraryProjection = SharedLibraryProjectionCache()
-    private var entries: [SharedLibraryBrowserEntry] {
-        libraryProjection.entries(models: quickModel.projectSession.explicitModelChoices,
-            readiness: quickModel.projectSession.explicitModelReadiness,
+    @State private var quickLibraryProjection = SharedLibraryProjectionCache()
+    @State private var canvasLibraryProjection = SharedLibraryProjectionCache()
+    private func libraryOwner(forCanvas: Bool) -> WorkbenchModel { forCanvas ? canvasModel : selectionModel }
+    private func libraryProjection(forCanvas: Bool) -> SharedLibraryProjectionCache {
+        forCanvas ? canvasLibraryProjection : quickLibraryProjection
+    }
+    private func libraryEntries(forCanvas: Bool) -> [SharedLibraryBrowserEntry] {
+        let owner = libraryOwner(forCanvas: forCanvas).projectSession
+        return libraryProjection(forCanvas: forCanvas).entries(models: owner.explicitModelChoices,
+            readiness: owner.explicitModelReadiness,
             tools: canvasModel.projectSession.workflow?.tools ?? [], projects: projects, language: language, metadata: libraryMetadata, tags: nodeTags)
     }
 
@@ -636,7 +642,7 @@ public struct DualWorkbenchView: View {
         .workbenchSheet(isPresented: $libraryVisible, title: modelPickerCategory == .audio ? workflowText(language, "quick.audio.chooseModel") : workflowText(language, "childPanel.name.library"),
             size: .init(width: expandedLibraryMode == .nodes ? 1160 : 840), onDismiss: finishLibraryDismissal) {
             VStack(spacing: 0) {
-                if !quickModel.projectSession.explicitModelChecking.isEmpty {
+                if !libraryOwner(forCanvas: expandedLibraryForCanvas).projectSession.explicitModelChecking.isEmpty {
                     Text(t("checkingModel"))
                         .font(.caption).foregroundStyle(.secondary).padding(.vertical, 5)
                 }
@@ -881,8 +887,8 @@ public struct DualWorkbenchView: View {
                 if forCanvas, let category = canvasMode?.resourceCategory {
                     return workspaceAssetEntries.filter { $0.item.kind == .asset && category.contains($0.item.contentKind) }
                 }
-                _ = entries // Refresh the complete semantic inputs before selecting.
-                let candidates = libraryProjection.selection(canvasMode: canvasMode, family: nil)
+                _ = libraryEntries(forCanvas: forCanvas) // Refresh this consumer's exact owner before selecting.
+                let candidates = libraryProjection(forCanvas: forCanvas).selection(canvasMode: canvasMode, family: nil)
                 guard !forCanvas, let family = modelPickerCategory else { return candidates }
                 return candidates.filter { value in
                     guard case .operation(let operation, let identity) = value.selection, let identity else { return false }
@@ -924,7 +930,7 @@ public struct DualWorkbenchView: View {
     }
     private var workspaceAssetEntries:[SharedLibraryBrowserEntry] {
         guard let controller = canvasModel.projectSession.workflow else { return [] }
-        let saved = entries.filter { $0.item.kind == .asset && $0.metadataSnapshot?.projectID == controller.projectID && $0.metadataSnapshot?.instanceID == controller.projectInstanceID }
+        let saved = libraryEntries(forCanvas: true).filter { $0.item.kind == .asset && $0.metadataSnapshot?.projectID == controller.projectID && $0.metadataSnapshot?.instanceID == controller.projectInstanceID }
         let references=Set(saved.compactMap { $0.metadataSnapshot?.record?.reference })
         let projected=WorkflowLibraryValue.entries(controller,language:language,excludingSaved:references,library:metadata,indexedSaved:saved.compactMap(\.metadataSnapshot))
         let regular = (saved + projected).map { entry in

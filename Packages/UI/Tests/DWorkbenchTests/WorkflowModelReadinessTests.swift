@@ -161,6 +161,29 @@ struct WorkflowModelReadinessTests {
         try await exercise(staleInspection: true)
     }
 
+    @Test func openingSavedGraphChecksItsExactModelsWithoutOpeningLibrary() async throws {
+        try await withColdFixture { fixture in
+            let first = await fixture.owner(at: "saved-graph")
+            await first.openWorkflow()
+            let controller = try #require(first.workflow)
+            controller.addNode(operationID: "d.image.generate", modelID: fixture.identity)
+            try await controller.saveExplicitEdits()
+            let graph = try #require(controller.rootGraph)
+            #expect(await first.requestClose())
+            let cold = await fixture.owner(at: "saved-graph", reopen: true)
+            #expect(cold.explicitModelReadiness[fixture.identity] == nil)
+            await cold.openWorkflow()
+            #expect(cold.workflow?.rootGraph == graph)
+            #expect(cold.explicitModelReadiness[fixture.identity] == .available)
+            #expect(cold.explicitModelReadiness.keys.sorted() == [fixture.identity])
+            #expect(await fixture.validator.calls == 1)
+            #expect(await fixture.engine.submissions == 0)
+            await cold.openWorkflow()
+            #expect(await fixture.validator.calls == 1)
+            #expect(await cold.requestClose())
+        }
+    }
+
     @Test func coldDemandChecksOnlyRequestedInstallationAndCoalescesAcrossOwners() async throws {
         try await withColdFixture { fixture in
             let quick = await fixture.owner(at: "quick")
@@ -442,13 +465,15 @@ struct WorkflowModelReadinessTests {
         let settings: UserDefaults
         let engine: ReadinessEngine
         let validator: ReadinessValidator
-        func owner(at name: String) async -> ProjectSession {
+        func owner(at name: String, reopen: Bool = false) async -> ProjectSession {
             let result = ProjectSession(sessionFactory: { _ in
                 WorkbenchSession(engine: engine, backendID: "fixture.image",
                     status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
                     shutdown: {}, cleanup: {}, validateModel: { _ in try await validator.validate() })
             }, settings: settings, modelLibrary: library)
-            await result.createProject(at: root.appendingPathComponent(name + ".dproject"))
+            let url = root.appendingPathComponent(name + ".dproject")
+            if reopen { await result.openProject(at: url) }
+            else { await result.createProject(at: url) }
             return result
         }
     }
