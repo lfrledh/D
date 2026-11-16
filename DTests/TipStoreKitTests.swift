@@ -186,6 +186,7 @@ private final class TipStoreKitBundle: NSObject { }
         try #require(attempts.count == 1 && request["phase"] as? String == "pending" && request["receiptKey"] == nil)
         try #require(try receiptRecords(journal).isEmpty)
         let pending = try #require(session.allTransactions().last)
+        try #require(pending.state == .deferred && pending.pendingAskToBuyConfirmation)
         let checkpoint: [String: Any] = ["pid": ProcessInfo.processInfo.processIdentifier,
             "bundleID": Bundle.main.bundleIdentifier ?? "", "created": Date().timeIntervalSince1970,
             "attemptID": id, "productID": try #require(store.selectedID),
@@ -213,6 +214,8 @@ private final class TipStoreKitBundle: NSObject { }
         try #require(retained, "Platform cross-host precondition failed; never substitute another transaction")
         if approvedHistory {
             try #require(session.allTransactions().contains { $0.identifier == identifier && $0.state == .purchased }, "History recovery requires the previously approved platform transaction")
+        } else {
+            try #require(session.allTransactions().contains { $0.identifier == identifier && $0.state == .deferred && $0.pendingAskToBuyConfirmation }, "Approval requires the retained pending platform request")
         }
         let store = owner(root), journal = root.appendingPathComponent("tips.json")
         try #require(store.status == .pending && !store.canPurchase)
@@ -229,7 +232,12 @@ private final class TipStoreKitBundle: NSObject { }
         try #require(store.localTest && !store.canPurchase)
         // The local test knows which platform request it approved. D's production
         // listener is deliberately not given that test-only association.
-        if !approvedHistory { try session.approveAskToBuyTransaction(identifier: identifier) }
+        if !approvedHistory {
+            try #require(session.allTransactions().contains { $0.identifier == identifier && $0.state == .deferred && $0.pendingAskToBuyConfirmation }, "Recheck the exact pending request immediately before approval")
+            print("TIP_PENDING_APPROVE_BEGIN uptime=\(ProcessInfo.processInfo.systemUptime) listenerStarted=true pendingQualified=true")
+            try session.approveAskToBuyTransaction(identifier: identifier)
+            print("TIP_PENDING_APPROVE_END uptime=\(ProcessInfo.processInfo.systemUptime)")
+        }
         for _ in 0..<100 {
             if (try? receiptRecords(journal))?.count == 1 { break }
             try await Task.sleep(for: .milliseconds(50))
