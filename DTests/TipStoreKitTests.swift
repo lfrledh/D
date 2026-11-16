@@ -242,6 +242,12 @@ private final class TipStoreKitBundle: NSObject { }
             if (try? receiptRecords(journal))?.count == 1 { break }
             try await Task.sleep(for: .milliseconds(50))
         }
+        // Freeze the automatic path before reading history: Transaction.all is
+        // an independent recovery observation and may itself synchronize StoreKit.
+        let automaticReceipts = try? receiptRecords(journal)
+        let automaticallyRecorded = automaticReceipts?.count == 1 &&
+            automaticReceipts?.values.first?["transactionID"] as? String == String(identifier)
+        print("TIP_PENDING_AUTOMATIC uptime=\(ProcessInfo.processInfo.systemUptime) exactRecorded=\(automaticallyRecorded) count=\(automaticReceipts?.count ?? -1) status=\(store.status) diagnostic=\(store.diagnostic != nil) recoveryDiagnostic=\(store.recoveryDiagnostic != nil)")
         var verifiedHistory = 0, unverifiedHistory = 0, exactHistory = false
         for await result in Transaction.all {
             switch result {
@@ -252,7 +258,7 @@ private final class TipStoreKitBundle: NSObject { }
             }
         }
         print("TIP_PENDING_PLATFORM approvedStates=\(session.allTransactions().map { $0.state.rawValue }) verifiedHistory=\(verifiedHistory) unverifiedHistory=\(unverifiedHistory) exactHistory=\(exactHistory) journalReceipts=\((try? receiptRecords(journal))?.count ?? -1)")
-        try #require((try? receiptRecords(journal))?.count == 1, "Approval did not reach D's journal; preserve the checkpoint, do not report success or reset the platform session")
+        try #require(automaticallyRecorded, "Approval did not reach D's journal before history inspection; preserve the checkpoint, do not report automatic success or reset the platform session")
         let receipts = try receiptRecords(journal), after = try attemptRecords(journal)
         try #require(receipts.values.first?["transactionID"] as? String == String(identifier))
         try #require(after[attemptID]?["phase"] as? String == "pending" && after[attemptID]?["receiptKey"] == nil)
