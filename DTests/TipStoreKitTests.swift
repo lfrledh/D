@@ -281,6 +281,43 @@ private final class TipStoreKitBundle: NSObject { }
         session.clearTransactions(); removeTestRecords(root); try FileManager.default.removeItem(at: file)
     }
 
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_STOREKIT_COLD_STAGE"] == "pending-same-host"))
+    func sameHostPendingApprovalHasIndependentListenerEvidence() async throws {
+        let session = try testSession(); session.askToBuyEnabled = true
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-Tip-same-host-" + UUID().uuidString)
+        var complete = false
+        defer { if complete { session.clearTransactions(); removeTestRecords(root) } }
+        let store = owner(root); store.start(); await store.loadProducts()
+        store.selectedID = try #require(store.products.first?.id)
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; defer { window.close() }
+        await store.purchase(confirmIn: window)
+        let journal = root.appendingPathComponent("tips.json")
+        try #require(store.status == .pending && !store.canPurchase)
+        let before = try attemptRecords(journal), attemptID = try #require(before.keys.first)
+        try #require(before.count == 1 && before[attemptID]?["phase"] as? String == "pending")
+        try #require(try receiptRecords(journal).isEmpty)
+        let pending = try #require(session.allTransactions().last)
+        try #require(pending.state == .deferred && pending.pendingAskToBuyConfirmation)
+        print("TIP_SAME_HOST_APPROVE_BEGIN uptime=\(ProcessInfo.processInfo.systemUptime) pendingQualified=true")
+        try session.approveAskToBuyTransaction(identifier: pending.identifier)
+        print("TIP_SAME_HOST_APPROVE_END uptime=\(ProcessInfo.processInfo.systemUptime)")
+        for _ in 0..<100 {
+            if (try? receiptRecords(journal))?.count == 1 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        // Do not enumerate Transaction.all before freezing listener evidence.
+        let automatic = try receiptRecords(journal)
+        let exact = automatic.count == 1 && automatic.values.first?["transactionID"] as? String == String(pending.identifier)
+        print("TIP_SAME_HOST_AUTOMATIC uptime=\(ProcessInfo.processInfo.systemUptime) exactRecorded=\(exact) count=\(automatic.count) status=\(store.status)")
+        try #require(exact, "No exact listener receipt before independent history access; retain the isolated test records")
+        let after = try attemptRecords(journal)
+        try #require(after[attemptID]?["phase"] as? String == "pending" && after[attemptID]?["receiptKey"] == nil)
+        try #require(!store.canPurchase && session.allTransactions().count == 1)
+        print("TIP_SAME_HOST protectedAnonymousRequest=true exactGlobalReceipt=true actualPurchaseCount=1")
+        complete = true
+    }
+
     private func testSession() throws -> SKTestSession {
         let file = try #require(Bundle(for: TipStoreKitBundle.self).url(forResource: "Tips", withExtension: "storekit"))
         let session = try SKTestSession(contentsOf: file)
