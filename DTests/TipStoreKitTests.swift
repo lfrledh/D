@@ -281,6 +281,72 @@ private final class TipStoreKitBundle: NSObject { }
         session.clearTransactions(); removeTestRecords(root); try FileManager.default.removeItem(at: file)
     }
 
+    /// Separates cross-host platform delivery from D's listener/history consumers.
+    /// Run once after pending-prepare, then use pending-refresh to recover the same record.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_STOREKIT_COLD_STAGE"] == "pending-raw-recover"))
+    func coldPendingRawListenerWithoutOwner() async throws {
+        let file = try coldCheckpoint(), checkpoint = try journalObject(file)
+        let previousPID = try #require(checkpoint["pid"] as? Int)
+        try #require(previousPID != Int(ProcessInfo.processInfo.processIdentifier))
+        try #require(checkpoint["bundleID"] as? String == Bundle.main.bundleIdentifier)
+        let created = try #require(checkpoint["created"] as? Double)
+        try #require((0...1_800).contains(Date().timeIntervalSince1970 - created))
+        let identifier = try #require((checkpoint["platformTestIdentifier"] as? NSNumber)?.uintValue)
+        let productID = try #require(checkpoint["productID"] as? String)
+        let root = file.deletingPathExtension().appendingPathExtension("request")
+        let journal = root.appendingPathComponent("tips.json"), before = try Data(contentsOf: journal)
+        let configuration = try #require(Bundle(for: TipStoreKitBundle.self).url(forResource: "Tips", withExtension: "storekit"))
+        let session = try SKTestSession(contentsOf: configuration) // Never reset/clear or create a new purchase here.
+        guard case .verified(let app) = try await AppTransaction.shared else {
+            Issue.record("A verified local StoreKit app is required before observing pending approval"); return
+        }
+        try #require(app.environment == .xcode && app.bundleID == Bundle.main.bundleIdentifier)
+        func exactPending() -> Bool {
+            session.allTransactions().contains {
+                $0.identifier == identifier && $0.productIdentifier == productID &&
+                    $0.state == .deferred && $0.pendingAskToBuyConfirmation
+            }
+        }
+        try #require(exactPending(), "Cross-host pending identity must still exist")
+        var listening = false, events: [(UInt64, String, Double)] = [], unverified = 0
+        let observer = Task { @MainActor in
+            listening = true
+            print("TIP_PENDING_RAW_LISTEN uptime=\(ProcessInfo.processInfo.systemUptime)")
+            for await result in Transaction.updates {
+                if Task.isCancelled { return }
+                switch result {
+                case .verified(let t):
+                    events.append((t.id, t.productID, ProcessInfo.processInfo.systemUptime))
+                case .unverified: unverified += 1
+                }
+            }
+        }
+        defer { observer.cancel() }
+        await Task.yield(); try #require(listening)
+        try await Task.sleep(for: .seconds(1))
+        try #require(exactPending(), "Recheck the exact request immediately before approval")
+        let approval = ProcessInfo.processInfo.systemUptime
+        print("TIP_PENDING_RAW_APPROVE uptime=\(approval) identifier=\(identifier)")
+        try session.approveAskToBuyTransaction(identifier: identifier)
+        for _ in 0..<100 {
+            if events.contains(where: { $0.0 == UInt64(identifier) && $0.1 == productID }) { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        // Freeze before history: no TipStore, Product load, all/unfinished or finish in this window.
+        let automatic = events, automaticUnverified = unverified
+        print("TIP_PENDING_RAW_FROZEN uptime=\(ProcessInfo.processInfo.systemUptime) events=\(automatic) unverified=\(automaticUnverified)")
+        observer.cancel()
+        try #require(try Data(contentsOf: journal) == before, "Raw observation must not mutate D's pending record")
+        var exactHistory = false
+        for await result in Transaction.all {
+            if case .verified(let t) = result, t.id == UInt64(identifier), t.productID == productID { exactHistory = true }
+        }
+        print("TIP_PENDING_RAW_HISTORY exact=\(exactHistory) oldPID=\(previousPID) pid=\(ProcessInfo.processInfo.processIdentifier)")
+        #expect(exactHistory)
+        #expect(automatic.contains { $0.0 == UInt64(identifier) && $0.1 == productID },
+                "Raw cross-host approval did not yield before history; preserve the checkpoint for exact recovery")
+    }
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["D_STOREKIT_COLD_STAGE"] == "pending-same-host"))
     func sameHostPendingApprovalHasIndependentListenerEvidence() async throws {
         let session = try testSession(); session.askToBuyEnabled = true
