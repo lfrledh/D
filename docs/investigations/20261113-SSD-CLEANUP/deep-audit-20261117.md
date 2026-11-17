@@ -217,7 +217,20 @@ Models只有1,901普通文件，但历史App/运行时产生数千万路径。�
 
 同一APFS容器分批实测净增加 **103.101816832 GB**；清理起点可用289.854365696 GB、最后一批结束389.323808768 GB，两时点差99.469443072 GB。两批之间新建组件测试缓存等写入，不能把目录计费、分批净和整段容量差混为一个数。最终交付容量另读回。17包中d1目录实际aeb、be151目录实际3b4、64e为ENOSPC不完整残留，未声称旧签名字节完全可复现。5d/825及另外3个历史Archive已退役App本体，剩余仅历史资料/符号，不再是完整可运行Archive。
 
-准确执行集合和每批容量回执在受控`D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261117-retirement-build-tips/`：`explicit-retirement-plan/result.json`、`model-byte-verification.jsonl`、`extra-retirement-plan/result.json`、`post-cleanup-protection.json`；汇总`cleanup-summary.json` SHA256 `b9e4eb1ed4c207c61cc7231b9d917408bf1271a6b75d2ce448ead9af2f392bba`。原始机器清单不上传。当前四份CurrentD、781完整Archive、实际ba95缓存、5889资源、八套历史资源、必要I012/I017反例、准确模型保留源、用户文件、个人scheme及桌面入口身份保护复核通过。
+各批均读取同一容器，GB按10^9 B：
+
+| 批次 | 实测净增加GB | 批后可用GB |
+|---|---:|---:|
+| 17个固定旧App | 38.292181 | 328.146547 |
+| 2个Archive内App＋3个一次性宿主 | 5.963592 | 334.110130 |
+| Klein 18文件 | 9.426637 | 343.536759 |
+| Wan准备数据第一套1,261文件 | 14.747079 | 358.283825 |
+| Wan准备数据第二套1,261文件 | 14.746907 | 373.030543 |
+| 5个另核旧Debug App | 14.587253 | 383.985656 |
+| 8份可重导出XML | 5.014917 | 389.000557 |
+| 3个干净旧工作树 | 0.323252 | 389.323809 |
+
+准确执行集合和每批容量回执在受控`D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261117-retirement-build-tips/`：`explicit-retirement-plan.json`、`explicit-retirement-result.json`、`model-byte-verification.jsonl`、`extra-retirement-plan.json`、`extra-retirement-result.json`、`post-cleanup-protection.json`；汇总`cleanup-summary.json` SHA256 `b9e4eb1ed4c207c61cc7231b9d917408bf1271a6b75d2ce448ead9af2f392bba`。原始机器清单不上传。当前四份CurrentD、781完整Archive、实际ba95缓存、5889资源、八套历史资源、必要I012/I017反例、准确模型保留源、用户文件、个人scheme及桌面入口身份保护复核通过。
 
 保留：Oct18左栏隐藏trace曾收尾超时，不能证明大型导出可重建；R16两份XML仍服务I012；其余无持续用途未核清的旧包/Products/engine、含不明改动的工作树不凭年龄删除；Wan2.2缺准确来源继续保留；Portable Kit低优先级模型闭包本轮未再扩大核定。仅这些对象暂停，不阻止已核集合和工程修补。未动Steam、ASMR、UE、Time Machine、系统或整盘废纸篓。
 
