@@ -20,7 +20,7 @@ private final class TipStoreKitBundle: NSObject { }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-Tip-additional-" + UUID().uuidString)
         defer { removeTestRecords(root) }
         let url = root.appendingPathComponent("tips.json")
-        let store = TipStore(productIDs: TipProducts.localTestIDs, bundleID: Bundle.main.bundleIdentifier ?? "",
+        let store = TipStore(productIDs: Set((1...5).map { "d.localtest.tip.tier\($0)" }), bundleID: Bundle.main.bundleIdentifier ?? "",
                              journalURL: url, localTest: true)
         store.start(); await store.loadProducts()
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable], backing: .buffered, defer: false)
@@ -49,7 +49,7 @@ private final class TipStoreKitBundle: NSObject { }
         #expect(store.hasConfirmedLatestPurchase && store.attempts.values.filter { $0.phase == .pending }.count == 1)
         #expect(store.attempts.values.filter { $0.phase == .completed }.count == 1)
         let records = try receiptRecords(url)
-        let cold = TipStore(productIDs: TipProducts.localTestIDs, bundleID: Bundle.main.bundleIdentifier ?? "", journalURL: url, localTest: true)
+        let cold = TipStore(productIDs: Set((1...5).map { "d.localtest.tip.tier\($0)" }), bundleID: Bundle.main.bundleIdentifier ?? "", journalURL: url, localTest: true)
         await cold.loadProducts()
         #expect(cold.attempts.count == 2 && cold.hasConfirmedLatestPurchase && cold.needsAdditionalConfirmation)
         #expect(try receiptRecords(url).keys.sorted() == records.keys.sorted())
