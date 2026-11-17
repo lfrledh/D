@@ -1,15 +1,24 @@
 # 当前行动与接手点
 
-更新：2026-11-17。用户批准的第一批空间清理已完成；11月12日A–I续办固定开发候选不变，停在顾问审计与用户接纳，未闭工程不写成通过。唯一当前入口。
+更新：2026-11-17。用户已明确授权main快进，累计组合0b23adff已正常推送并读回；本次仅同步决定与整合记录，固定开发App不变。未闭工程不写成通过。唯一当前入口。
 
 ## 准确对象与交付
 
-- 唯一施工树 `/Volumes/CodexProjects/Codex/D-Worktrees/D-UI-CONSOLIDATED-20261020`；仓库`lfrledh/D`，分支`codex/ui-consolidated-20261020`。实际起点`7c16154aaaa6bb2deb7747659f70878975f0e008`，祖先检查0。接续原4份dirty文档的已备份成果；没有迁树/合并。main仍`91bef7d720a8b6cb923207ef787230f36496f4cf`；主目录inference-foundation与个人scheme未改，后者摘要ca3635d8…。
+- 唯一施工树 `/Volumes/CodexProjects/Codex/D-Worktrees/D-UI-CONSOLIDATED-20261020`；仓库`lfrledh/D`，分支`codex/ui-consolidated-20261020`。11月16日产品续办起点`7c16154aaaa6bb2deb7747659f70878975f0e008`，祖先检查0，接续原4份dirty文档的已备份成果。本次整合起点`0b23adffbeeb5a7ba4bb3a4e6a71e1fb7a2d6208`，本地/远端一致；在既有干净main工作树`D-Worktrees/D-DISCUSSION-MAIN`执行快进，未迁移施工树。主目录inference-foundation与个人scheme未改，后者摘要ca3635d8…。
 - 最终生产 **`781c211dbb2a1089bf1c2e10e754b453fc5ffbd3`**；普通完整App **`/Volumes/CodexProjects/Codex/D-Development/CurrentD/Nov16-Final-781c211d/D.app`**。桌面 **“D 最新版”已准确指向此包并实际冷开**，不是旧a9。22:29:01 JST启动PID49028、窗口2549/1280×800pt；回执时只有这一个D实例，既有B6–B8测试对话和空草稿恢复，未改写其内容。
 - Release -O/WMO、Apple Development Team3V4T79WLQS/hardened sandbox、七引擎、零第三方权重、无XCTest/默认诊断。源码/包标记均781；资源摘要`5889c310193efc11cdff5ac8d9e3a7a7fdf6cf5967e7e9537a6f004240b0a514`。781本地Archive实际567.884秒成功并完成签后全部门禁；开发Archive不是Store分发/安装。
-- 完整交付为本轮最后的记录提交；远端完整SHA与桌面运行回执写入`D-Development/CurrentD/receipt.json`及最终消息，包内delivery标记保留实际构建源码781，不伪改成后来的文档提交。原始证据根`AgentTrials/D-UI-CONSOLIDATED-01/run-20261116-resume-closeout`，截图/trace/模型不推Git。
+- `D-Development/CurrentD/receipt.json`保留11月16日App交付`e76555105e61cb5b61c7ce1b3ab7137ea4dcdbc3`及桌面运行回执；包内delivery标记保留实际构建源码781。本次main/文档后继另写下述整合回执，不改旧App回执或已签包。原始产品证据根`AgentTrials/D-UI-CONSOLIDATED-01/run-20261116-resume-closeout`，截图/trace/模型不推Git。
 
-## 本轮实际结果
+## 11月17日main接纳与已定边界
+
+- **实际快进**：旧main `91bef7d720a8b6cb923207ef787230f36496f4cf`为组合`0b23adffbeeb5a7ba4bb3a4e6a71e1fb7a2d6208`祖先（退出0，累计500提交）；17:44 JST通过`git merge --ff-only`及正常push接纳该组合，远端main已精确读回0b23。随后本条决定/记录提交作为同线后继继续快进main；最终实际接纳SHA以远端读回和本机`integration-final.json`为准，不把本轮文档提交冒充生产源码。无merge commit、强推、squash、rebase或发行标签；全部工作分支保留。
+- **旧main恢复**：远端/本地`codex/release-freeze-01`仍为91bef7d7。在RepositoryBackups、桌面、Downloads及既有交接目录的有界检索中未找到顾问这份91bef备份，仅找到10月2日更早备份；按本次授权补`D-Development/RepositoryBackups/main-before-fast-forward-2026-11-17/`。`old-main.bundle`为完整Git历史、43,396,993B，SHA256 `c0f6da18382949640b6b00e8d29cd1333620a067847a40060ade8c631bbb2b97`；`old-main-source.tar.gz`为40,668,893B，SHA256 `4a5d6480bef70cb3051770b5becbc2a15148256b793afc4acfa0c406baf40422`，归档commit为准确91bef，4,166条目。bundle verify通过、无前置历史要求；未复制模型/App/项目。同盘恢复材料不冒充异盘灾备。
+- **权重边界（I020/I021/I027）**：D不分发模型权重，只提供适配与推理工具；模型权重授权不作为D开发或发行阻塞，不再重复要求用户审批。准确来源/身份/文件校验、真实平台强制本人访问步骤仍保留；随包代码、运行时及其实际分发材料继续单独核对，不与权重授权混淆。
+- **打赏决定（I030）**：支付由Apple支付系统处理，D等待、接收并展示真实结果；用户已允许明确另发一笔，不因此扩建支付后台。本次只记录决定，不改付款代码、旧pending/持久化保护或正式商品，不发生真实付款；既有测试局限和1024容量事项保留。
+- **名称、发行及清理（I005/I025/I029）**：main已获授权，不再请求相同许可；正式名称仍未定，D继续作为代号。第一批清理完成是历史已执行事实；新的清理仅完成用途评估，尚未批准执行，本次不扩大删除范围。商店配置/上传/提审/发布/部署及发行标签未随main接纳获准。
+- **保护与验证**：本机main/工作分支起始均无索引、未暂存或未跟踪修改；个人scheme在另一工作树保持。只读复核确认无根级Actions工作流，远端workflow为0、hooks为空、Pages未启用，本机无活动Git hook；未改远端设置。仅整合已核历史与相关文档，无产品修改/重构建/模型重跑，当前App和项目不动。原始备份、保护摘要与整合读回在上述备份目录，现有证据按影响沿用。
+
+## 既有产品结果（11月16日交付，沿用）
 
 - **产品**：模型冷开就绪及准确owner、完成批次冷读误dirty/历史等待结算、子面板弱画布owner、隐藏Quick尺寸隔离、准确模型规格/标题、视频子进程已授权容器home继承、容器具名AX选择。最后修未绑定目录卡误报Not Prepared，保留多副本配置与执行前校验。非实施者复核实际差分/反例并修正发现。
 - **A/B/C**：217已批位置不重做，正式中英资源相对起点未改；18项新文案仅集中待审。长移除确认/模型规格/typed可达异常/Viewer上限/系统面板取消/帮助/两级菜单与可读性已分级补验。SwiftF0真实网络→自动添加沿用Nov13、本轮冷开节点就绪；Q8完整36.83GB副本、关管理器继续、保存/正常Quit/冷开已验，后仅按用户许可删除该测试副本。未冒称Q8断源/GPU或LTX2.3 BF16已验。
@@ -24,7 +33,7 @@
 - **I017（Lead工程＋最终手感）**：隐藏布局已修，仍缺可见宿主提交到呈现的归因证据；几何收益不能宣布resize达标。保留用户NODE/PAN明显改善、ZOOM多数满意的反馈。
 - **模型局部**：LTX2.3 BF16准确源未齐；原约145GB源+独立副本的容量阻塞因本次清理已缓解，实际取得/完整副本仍未验证。Q8断源/GPU未验。准确原始模型不换小模型或低精度；本次清理不自动授权开始新的模型取得/复制。
 - **发行/来源**：九月Codex Python3.12.14分发/配方及全部wheel传递构建可重现仍缺；正式分发身份、真实另一台Mac/Intel、正式账户与许可/主体/URL/地区决定分别开放，开发签名不顶替。
-- **决定/接纳**：未知打赏请求再购买和1024容量处理、18项新中文、用户视觉/听感/手感；I018外部桌面染色为用户暂缓，非已解决。免费本体/既定五档/不做自定义金额保持。
+- **决定/接纳**：用户已确定允许明确另发一笔打赏，本次只记决定、不改付款代码；1024容量处理、18项新中文、用户视觉/听感/手感仍待相应处理。I018外部桌面染色为用户暂缓，非已解决。免费本体/既定五档/不做自定义金额保持。
 - 每项准确位置、已试方法、不能继续原因和下一责任见[任务最终增量](tasks/D-UI-CONSOLIDATED-01.md)；唯一31类清单见[集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)，不是31个bug。无当前必须立即本人点击的系统步骤。
 
 ## 空间、保护与证据入口
@@ -39,4 +48,4 @@
 
 ## 持续授权与停点
 
-Lead唯一写工程/文档及操作Mac，其他只读固定快照；构建/GPU/GUI串行。沿用[协作规程](MULTI_AGENT_WORKFLOW.zh-CN.md#持续开发验收授权与受阻处理)。只显式暂存本轮文件、推送原工作分支并读回；不合并main、不B10、不上传/提审/发布、不真实付款、不部署。正常App已交用户试用；等待顾问独立审计与最终接纳，不自动扩大实验或下一产品阶段。
+Lead唯一写工程/文档及操作Mac，其他只读固定快照；构建/GPU/GUI串行。沿用[协作规程](MULTI_AGENT_WORKFLOW.zh-CN.md#持续开发验收授权与受阻处理)。只显式暂存本轮相关文件；本次正常推送工作分支及获准main快进后读回，保留全部历史/分支。此授权不包含发行标签、B10、商店上传/提审/发布、真实付款或部署。正常App已交用户试用；等待顾问独立审计与最终接纳，不自动扩大实验或下一产品阶段。
