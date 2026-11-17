@@ -15,6 +15,8 @@ import re
 import shutil
 import stat
 import sys
+import subprocess
+import plistlib
 import tempfile
 from typing import Any
 
@@ -641,6 +643,73 @@ def validate_prepared(root: Path, expected_config_digest: str | None = None) -> 
     return manifest
 
 
+def tree_size(root: Path) -> dict[str, int]:
+    """Logical copy cost, not APFS exclusive/reclaimable bytes. Never follows links."""
+    if not root.is_dir() or root.is_symlink(): raise ResourceError("size requires a real directory: " + str(root))
+    size = files = directories = 0
+    def failed(error: OSError) -> None: raise error
+    for parent, dirs, names in os.walk(root, followlinks=False, onerror=failed):
+        directories += len(dirs)
+        for name in names:
+            item = Path(parent) / name
+            files += 1
+            if not item.is_symlink(): size += item.stat().st_size
+    return {"bytes": size, "entries": files + directories + 1}
+
+
+def space_identity(path: Path) -> tuple[str, int]:
+    """Use the destination, grouping APFS volumes that share one container."""
+    existing = path
+    while not existing.exists(): existing = existing.parent
+    free = shutil.disk_usage(existing).free
+    identity = "device:" + str(existing.stat().st_dev)
+    if sys.platform == "darwin":
+        device = subprocess.check_output(["/bin/df", "-P", str(existing)]).decode().splitlines()[-1].split()[0]
+        info = plistlib.loads(subprocess.check_output(["/usr/sbin/diskutil", "info", "-plist", device]))
+        container = info.get("APFSContainerReference")
+        if container:
+            identity = "apfs:" + container
+            containers = plistlib.loads(subprocess.check_output(["/usr/sbin/diskutil", "apfs", "list", "-plist"]))
+            current = next(c for c in containers["Containers"] if c["ContainerReference"] == container)
+            free = min(free, current["CapacityFree"])
+    return identity, free
+
+
+def require_space(allocations: list[tuple[Path, dict[str, int]]]) -> list[dict[str, Any]]:
+    """Add simultaneous peak allocations on the same physical APFS container."""
+    groups: dict[str, dict[str, Any]] = {}
+    for path, components in allocations:
+        if any(type(value) is not int or value < 0 for value in components.values()):
+            raise ResourceError("invalid operation space estimate")
+        identity, free = space_identity(path)
+        group = groups.setdefault(identity, {"container": identity, "availableBytes": free, "requiredBytes": 0, "allocations": []})
+        group["availableBytes"] = min(group["availableBytes"], free)
+        group["requiredBytes"] += sum(components.values())
+        group["allocations"].append({"target": str(path), "components": components})
+    for group in groups.values():
+        if group["availableBytes"] < group["requiredBytes"]:
+            raise ResourceError("insufficient destination capacity before large write: " + json.dumps(group, sort_keys=True))
+    return list(groups.values())
+
+
+def copy_tree_bounded(source: Path, destination: Path) -> dict[str, Any]:
+    """Clone only same-volume files; a failed/cross-volume clone pays full copy cost."""
+    if _lexists(destination) or source.is_symlink() or not source.is_dir():
+        raise ResourceError("copy needs an existing real source and a new destination")
+    usage = tree_size(source)
+    metadata = usage["entries"] * 8192
+    if sys.platform == "darwin" and source.stat().st_dev == destination.parent.stat().st_dev:
+        budget = require_space([(destination, {"cloneMetadata": metadata})])
+        result = subprocess.run(["/bin/cp", "-cRp", str(source), str(destination)], capture_output=True)
+        if result.returncode == 0: return {"method": "same-volume-clone", "budget": budget, "logicalBytes": usage["bytes"]}
+        # This function exclusively owns the new destination. No source/current
+        # candidate is removed; partial clones are not reused as successful copies.
+        if destination.exists(): shutil.rmtree(destination)
+    budget = require_space([(destination, {"fullCopy": usage["bytes"], "copyMetadata": metadata})])
+    shutil.copytree(source, destination, symlinks=True, copy_function=shutil.copy2)
+    return {"method": "full-copy", "budget": budget, "logicalBytes": usage["bytes"]}
+
+
 def prepare(config_path: Path, output: Path) -> str:
     engines, config_digest = _load_config(config_path)
     names = engine_names(engines)
@@ -654,13 +723,18 @@ def prepare(config_path: Path, output: Path) -> str:
             raise ResourceError("existing output belongs to changed engine inputs")
         return "reused"
 
+    # Check the full fallback peak before staging all seven engines. Subsequent
+    # per-engine clone checks do not assume the destination volume supports COW.
+    sizes = [tree_size(engines[name]) for name in names]
+    require_space([(output, {"engineCopies": sum(x["bytes"] for x in sizes),
+                             "metadataAndManifest": sum(x["entries"] for x in sizes) * 8192})])
     staging = Path(tempfile.mkdtemp(prefix=".d-development-resources-", dir=output.parent))
     published = False
     try:
         engine_destination = staging / ENGINE_DIRECTORY
         engine_destination.mkdir(mode=0o700)
         for name in names:
-            shutil.copytree(engines[name], engine_destination / name, symlinks=True, copy_function=shutil.copy2)
+            copy_tree_bounded(engines[name], engine_destination / name)
         copied_inventories = {
             name: inspect_engine(engine_destination / name, name) for name in names
         }

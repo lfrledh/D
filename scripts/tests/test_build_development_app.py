@@ -1187,5 +1187,78 @@ class PreparedIdentityTests(unittest.TestCase):
                 self.core._reject_test_artifacts(self.root / "candidate.app")
 
 
+class BuildCacheAndRetentionTests(unittest.TestCase):
+    def setUp(self):
+        self.core = _load_coordinator(TARGET, "d_cache_retention_fixture")
+        self.temporary = tempfile.TemporaryDirectory(); self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        self.source = self.root / "source"; self.source.mkdir()
+        self.cfg = {"buildCacheRoot": str(self.root / "caches"), "configuration": "Release", "bundleID": "D.fixture", "signingTeam": "1234567890"}
+
+    def outputs(self, argv, **kw):
+        if argv[0] == "git": return str(self.source / ".git").encode()
+        return b"fixed-toolchain"
+
+    def test_cache_lease_and_configuration_are_isolated(self):
+        with mock.patch.object(self.core.subprocess, "check_output", side_effect=self.outputs):
+            path, lease, report = self.core._ordinary_cache(self.source, self.cfg, self.root / "run1")
+            try:
+                with self.assertRaises(BlockingIOError): self.core._ordinary_cache(self.source, self.cfg, self.root / "run2")
+                changed = {**self.cfg, "configuration": "Debug"}
+                other, other_lease, _ = self.core._ordinary_cache(self.source, changed, self.root / "run3")
+                other_lease.close(); self.assertNotEqual(path, other)
+            finally: lease.close()
+            same, again, _ = self.core._ordinary_cache(self.source, self.cfg, self.root / "run4")
+            again.close(); self.assertEqual(path, same)
+            test = path / "Build/Products/Release/D.app/Contents/PlugIns/DTests.xctest"; test.mkdir(parents=True)
+            with self.assertRaisesRegex(self.core.BuildError, "test artifact"):
+                self.core._ordinary_cache(self.source, self.cfg, self.root / "run5")
+
+    def make_app(self, name):
+        import plistlib
+        app = self.root / "CurrentD" / name / "D.app"
+        (app / "Contents/MacOS").mkdir(parents=True)
+        (app / "Contents/MacOS/D").write_bytes(name.encode())
+        info = {"DSourceCommit": name, "DResourceManifestSHA256": "resource"}
+        (app / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
+        report = self.root / (name + "-report.json")
+        data = {"mode": "prepared-resources", "status": "packaged", "production": name,
+                "resourceManifestSHA256": "resource", "finalApp": str(app), "executableSHA256": self.core._sha256(app / "Contents/MacOS/D")}
+        report.write_text(json.dumps(data))
+        return app, report, {"report": str(report), "production": name, "executableSHA256": data["executableSHA256"]}
+
+    def test_acceptance_only_retires_owned_superseded_apps_not_unknown_or_counterexamples(self):
+        old, _, old_record = self.make_app("old")
+        fallback, _, fallback_record = self.make_app("prior-fallback")
+        named, _, named_record = self.make_app("named")
+        unknown, _, _ = self.make_app("manual")
+        new, report, _ = self.make_app("new")
+        receipt = self.root / "CurrentD/retention.json"
+        receipt.write_text(json.dumps({"version": 1, "current": str(old), "fallback": str(fallback), "protected": [str(named)],
+            "owned": {str(old): old_record, str(fallback): fallback_record, str(named): named_record}}))
+        def command(argv, **kw): return subprocess.CompletedProcess(argv, 1 if "lsof" in argv[0] else 0, b"", b"")
+        with mock.patch.object(self.core.subprocess, "run", side_effect=command):
+            result = self.core.accept_generated_candidate(report, receipt)
+        self.assertEqual(result["deleted"], [str(fallback)])
+        self.assertTrue(all(p.exists() for p in [old, named, unknown, new]))
+        self.assertEqual(json.loads(receipt.read_text())["fallback"], str(old))
+
+    def test_failed_candidate_and_busy_old_app_cannot_destroy_current(self):
+        old, _, old_record = self.make_app("old")
+        earlier, _, earlier_record = self.make_app("earlier")
+        new, report, _ = self.make_app("new")
+        receipt = self.root / "CurrentD/retention.json"
+        initial = {"version": 1, "current": str(old), "fallback": str(earlier), "protected": [], "owned": {str(old): old_record, str(earlier): earlier_record}}
+        receipt.write_text(json.dumps(initial)); before = receipt.read_bytes()
+        original = json.loads(report.read_text()); report.write_text(json.dumps({**original, "status": "failed"}))
+        with self.assertRaises(self.core.BuildError): self.core.accept_generated_candidate(report, receipt)
+        self.assertEqual(receipt.read_bytes(), before); self.assertTrue(old.exists())
+        report.write_text(json.dumps(original))
+        with mock.patch.object(self.core.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"123", b"")):
+            result = self.core.accept_generated_candidate(report, receipt)
+        self.assertEqual(result["deleted"], []); self.assertEqual(len(result["skipped"]), 1)
+        self.assertTrue(old.exists() and earlier.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

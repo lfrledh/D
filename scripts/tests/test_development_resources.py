@@ -591,5 +591,54 @@ class DevelopmentResourceTests(unittest.TestCase):
         self.assertFalse(output.exists())
 
 
+class CapacityAndCloneTests(unittest.TestCase):
+    def setUp(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("resource_capacity_fixture", PREPARE)
+        self.core = importlib.util.module_from_spec(spec); spec.loader.exec_module(self.core)
+        self.temporary = tempfile.TemporaryDirectory(); self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+
+    def test_shared_container_adds_peaks_before_any_write(self):
+        from unittest.mock import patch
+        with patch.object(self.core, "space_identity", return_value=("same-apfs", 100)):
+            with self.assertRaisesRegex(self.core.ResourceError, "insufficient"):
+                self.core.require_space([(self.root / "cache", {"compile": 60}), (self.root / "copy", {"publish": 50})])
+        self.assertEqual(list(self.root.iterdir()), [])
+        with patch.object(self.core, "space_identity", side_effect=[("external", 100), ("internal", 100)]):
+            self.assertEqual(len(self.core.require_space([(self.root / "a", {"compile": 60}), (self.root / "b", {"copy": 50})])), 2)
+
+    def test_failed_clone_rechecks_full_copy_cost_without_touching_source(self):
+        from unittest.mock import patch
+        source = self.root / "source"; source.mkdir(); (source / "data").write_bytes(b"a" * 20000)
+        target = self.root / "target"
+        budgets = []
+        def space(rows):
+            budgets.append(rows)
+            if "fullCopy" in rows[0][1]: raise self.core.ResourceError("full copy too large")
+            return []
+        def failed(argv, **kw):
+            target.mkdir(); (target / "partial").write_bytes(b"x")
+            return subprocess.CompletedProcess(argv, 1, b"", b"clone unavailable")
+        with patch.object(self.core.sys, "platform", "darwin"), patch.object(self.core, "require_space", side_effect=space), patch.object(self.core.subprocess, "run", side_effect=failed):
+            with self.assertRaisesRegex(self.core.ResourceError, "full copy"):
+                self.core.copy_tree_bounded(source, target)
+        self.assertFalse(target.exists()); self.assertEqual((source / "data").stat().st_size, 20000)
+        self.assertEqual(budgets[-1][0][1]["fullCopy"], 20000)
+
+    def test_portable_copy_is_independent_and_preserves_symlinks(self):
+        from unittest.mock import patch
+        source = self.root / "source"; source.mkdir(); (source / "data").write_bytes(b"original")
+        (source / "link").symlink_to("data")
+        target = self.root / "copy"
+        with patch.object(self.core.sys, "platform", "linux"):
+            result = self.core.copy_tree_bounded(source, target)
+        self.assertEqual(result["method"], "full-copy")
+        self.assertTrue((target / "link").is_symlink())
+        (source / "data").write_bytes(b"changed")
+        self.assertEqual((target / "data").read_bytes(), b"original")
+        with self.assertRaises(self.core.ResourceError): self.core.copy_tree_bounded(source, target)
+
+
 if __name__ == "__main__":
     unittest.main()

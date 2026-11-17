@@ -10,6 +10,7 @@ import argparse
 import ast
 import email.parser
 import hashlib
+import fcntl
 import json
 import importlib.util
 import plistlib
@@ -1353,12 +1354,48 @@ def _reject_test_artifacts(app: Path) -> None:
                 raise BuildError("test artifact in ordinary candidate: " + str(relative))
 
 
+def _ordinary_cache(root: Path, cfg: dict[str, str], run_root: Path) -> tuple[Path, Any, dict[str, Any]]:
+    """One exclusively leased cache per project/toolchain/configuration/purpose."""
+    if "buildCacheRoot" not in cfg:
+        return run_root / "DerivedData", None, {"mode": "isolated-legacy"}
+    cache_root = _absolute(cfg["buildCacheRoot"], "buildCacheRoot")
+    _reject_symlink_ancestors(cache_root, "build cache")
+    if _overlap(cache_root, root) or _overlap(cache_root, run_root):
+        raise BuildError("build cache must be outside source and receipt run")
+    toolchain = subprocess.check_output(["xcodebuild", "-version"]).decode().strip()
+    sdk = subprocess.check_output(["xcrun", "--sdk", "macosx", "--show-sdk-build-version"]).decode().strip()
+    common = subprocess.check_output(["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-common-dir"]).decode().strip()
+    identity = {"schemaVersion": 1, "project": common, "scheme": "D", "purpose": "ordinary-app",
+                "configuration": cfg["configuration"], "architecture": "arm64", "toolchain": toolchain,
+                "developerDirectory": os.environ.get("DEVELOPER_DIR") or subprocess.check_output(["xcode-select", "-p"]).decode().strip(),
+                "sdk": sdk, "bundleID": cfg["bundleID"], "signingTeam": cfg["signingTeam"]}
+    key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:24]
+    cache = cache_root / ("ordinary-" + cfg["configuration"].lower() + "-" + key)
+    _reject_symlink_ancestors(cache, "build cache")
+    cache.mkdir(parents=True, exist_ok=True)
+    lock = (cache / ".lease").open("a+")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        owner = cache / "owner.json"
+        if owner.exists():
+            if json.loads(owner.read_text()) != identity: raise BuildError("cache ownership differs")
+        else:
+            if set(p.name for p in cache.iterdir()) != {".lease"}: raise BuildError("refusing to adopt an unregistered cache")
+            with owner.open("x") as handle: json.dump(identity, handle, indent=2)
+        derived = cache / "DerivedData"
+        products = derived / "Build/Products"
+        if products.exists(): _reject_test_artifacts(products)
+        return derived, lock, {"mode": "owned-reusable", "identity": identity, "path": str(derived), "key": key}
+    except BaseException:
+        lock.close(); raise
+
+
 def _execute_prepared(config_path: Path, run_root: Path, timeout: float) -> tuple[dict[str, Any], Path]:
     """Current seven-engine path. Signed by Xcode, never mutate signed inputs."""
     cfg = _read_json(config_path, "prepared build configuration")
     keys = {"sourceRoot", "productionCommit", "deliveryCommit", "preparedResources", "signingConfig",
             "sourcePackages", "packageCache", "configuration", "bundleID", "outputApp", "signingTeam"}
-    if not isinstance(cfg, dict) or set(cfg) != keys:
+    if not isinstance(cfg, dict) or not keys.issubset(cfg) or set(cfg) - keys - {"buildCacheRoot", "buildBudgetReference", "archivePath"}:
         raise BuildError("prepared configuration fields differ from the fixed schema")
     if any(not isinstance(value, str) or not value for value in cfg.values()):
         raise BuildError("prepared configuration values must be non-empty strings")
@@ -1407,21 +1444,49 @@ def _execute_prepared(config_path: Path, run_root: Path, timeout: float) -> tupl
         if any(c in value for c in ['\n', '\r', '"', '$']): raise BuildError("unsafe xcconfig path")
     xcconfig.write_text(f'#include "{signing}"\nD_DEVELOPMENT_RESOURCES = {resources}\n'
                         f'PRODUCT_BUNDLE_IDENTIFIER = {cfg["bundleID"]}\nINFOPLIST_FILE = {info_path}\n')
-    derived = run_root / "DerivedData"
+    if "buildCacheRoot" in cfg:
+        cache_root = _absolute(cfg["buildCacheRoot"], "buildCacheRoot")
+        if any(_overlap(cache_root, path) for path in protected_paths + [output, run_root]):
+            raise BuildError("cache overlaps protected inputs or candidate output")
+    derived, cache_lease, cache_report = _ordinary_cache(root, cfg, run_root)
+    archive = _absolute(cfg["archivePath"], "archivePath") if "archivePath" in cfg else None
+    if archive is not None:
+        _reject_symlink_ancestors(archive, "archive")
+        if archive.exists() or not archive.parent.is_dir() or any(_overlap(archive, x) for x in protected_paths + [derived, output, run_root]):
+            if cache_lease: cache_lease.close()
+            raise BuildError("Archive must be a new, independent path with an existing parent")
     command = ["xcodebuild", "-workspace", str(root / "D.xcworkspace"), "-scheme", "D",
                "-configuration", cfg["configuration"], "-destination", "platform=macOS,arch=arm64",
                "-derivedDataPath", str(derived), "-clonedSourcePackagesDirPath", cfg["sourcePackages"],
                "-packageCachePath", cfg["packageCache"], "-disableAutomaticPackageResolution", "-skipPackageUpdates",
-               "-onlyUsePackageVersionsFromResolvedFile", "-xcconfig", str(xcconfig), "build"]
+               "-onlyUsePackageVersionsFromResolvedFile", "-xcconfig", str(xcconfig)]
+    command += ["-archivePath", str(archive), "archive"] if archive else ["build"]
     report = {"mode": "prepared-resources", **identity, "resourceManifestSHA256": resource_digest,
-              "configuration": cfg["configuration"], "bundleID": cfg["bundleID"], "runtimeVerification": "not-run", "stages": []}
+              "configuration": cfg["configuration"], "bundleID": cfg["bundleID"], "runtimeVerification": "not-run", "stages": [],
+              "cache": cache_report, "archive": str(archive) if archive else None}
     report_path = run_root / "build-report.json"
     try:
+        resource_size = core.tree_size(resources)
+        source_size = core.tree_size(root / "Packages")
+        package_size = core.tree_size(Path(cfg["sourcePackages"]))
+        existing_size = core.tree_size(derived)["bytes"] if derived.exists() else 0
+        reference_size = core.tree_size(_absolute(cfg["buildBudgetReference"], "buildBudgetReference"))["bytes"] if "buildBudgetReference" in cfg else 0
+        # Conservative peak: measured prior cache or a source-derived cold compile
+        # allowance, plus independently budgeted resource staging/publication.
+        # This is an estimate, not a promise that the compiler cannot exceed it.
+        compile_peak = max(existing_size, reference_size, 16 * (source_size["bytes"] + package_size["bytes"]))
+        app_estimate = resource_size["bytes"] + 4 * source_size["bytes"]
+        allocations = [(derived, {"compileAndLinkPeak": compile_peak, "resourceStaging": resource_size["bytes"]}),
+                       (output, {"publicationFallback": app_estimate, "metadata": resource_size["entries"] * 8192})]
+        if archive: allocations.append((archive, {"archiveApp": app_estimate, "symbols": max(source_size["bytes"] * 4, existing_size // 4)}))
+        report["capacityPreflight"] = core.require_space(allocations)
+        report["capacityBasis"] = {"measuredCacheBytes": existing_size, "referenceCacheBytes": reference_size,
+                                   "sourceBytes": source_size["bytes"], "packageBytes": package_size["bytes"], "compileFactor": 16}
         _run_stage("prepared-xcodebuild", command, dict(os.environ), run_root / "xcodebuild.log", timeout, report["stages"])
         if _prepared_source(root, identity["production"], identity["delivery"]) != identity or _sha256(signing) != signing_digest:
             raise BuildError("source or signing input changed during build")
         if core.validate_prepared(resources) != manifest: raise BuildError("prepared resources changed during build")
-        built = derived / "Build/Products" / cfg["configuration"] / "D.app"
+        built = archive / "Products/Applications/D.app" if archive else derived / "Build/Products" / cfg["configuration"] / "D.app"
         _reject_test_artifacts(built)
         actual_info = plistlib.loads((built / "Contents/Info.plist").read_bytes())
         for key in ["DSourceCommit", "DDeliveryCommit", "DProductInputSHA256", "DResourceManifestSHA256", "DBuildConfiguration"]:
@@ -1447,8 +1512,7 @@ def _execute_prepared(config_path: Path, run_root: Path, timeout: float) -> tupl
         stage_parent = Path(tempfile.mkdtemp(prefix=".d-candidate-", dir=output.parent))
         staged_app = stage_parent / "D.app"
         try:
-            _run_stage("copy-signed-app", ["/usr/bin/ditto", str(built), str(staged_app)], dict(os.environ),
-                       run_root / "copy.log", timeout, report["stages"])
+            report["publicationCopy"] = core.copy_tree_bounded(built, staged_app)
             _reject_test_artifacts(staged_app)
             subprocess.run(["codesign", "--verify", "--deep", "--strict", str(staged_app)], check=True)
             if (staged_app / "Contents/Info.plist").read_bytes() != (built / "Contents/Info.plist").read_bytes():
@@ -1471,6 +1535,8 @@ def _execute_prepared(config_path: Path, run_root: Path, timeout: float) -> tupl
         if report.get("retainedPublishedApp"): message += "; signed App retained at " + str(output)
         if isinstance(error, (Cancelled, KeyboardInterrupt)): raise Cancelled(message) from error
         raise BuildError(message) from error
+    finally:
+        if cache_lease: cache_lease.close()
     try:
         report_path.write_text(json.dumps(report, indent=2) + "\n")
     except OSError as error:
@@ -1478,13 +1544,95 @@ def _execute_prepared(config_path: Path, run_root: Path, timeout: float) -> tupl
     return report, report_path
 
 
+def _write_retention(path: Path, value: dict[str, Any]) -> None:
+    # Only the receipt is replaced; candidate publication remains exclusive.
+    descriptor, name = tempfile.mkstemp(prefix=".d-retention-", dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "w") as handle:
+            json.dump(value, handle, indent=2); handle.flush(); os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists(): temporary.unlink()
+
+
+def accept_generated_candidate(report_path: Path, retention_path: Path) -> dict[str, Any]:
+    """Explicit post-acceptance retirement, never run after build failure.
+
+    CurrentD keeps current/fallback/named counterexamples. Only Apps previously
+    registered by this entry point can retire; unknown/manual directories stay.
+    This does not change the desktop alias or quit an application.
+    """
+    _reject_symlink_ancestors(report_path, "candidate report")
+    _reject_symlink_ancestors(retention_path, "retention receipt")
+    report = _read_json(report_path, "candidate report")
+    if report.get("mode") != "prepared-resources" or report.get("status") != "packaged":
+        raise BuildError("only a successfully packaged candidate can be accepted")
+    app = _absolute(report["finalApp"], "candidate")
+    if not app.is_relative_to(retention_path.parent) or app.suffix != ".app":
+        raise BuildError("candidate must be under the retention receipt's CurrentD directory")
+    _reject_symlink_ancestors(app, "candidate")
+    info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
+    if (info.get("DSourceCommit") != report["production"] or info.get("DResourceManifestSHA256") != report["resourceManifestSHA256"]
+            or _sha256(app / "Contents/MacOS/D") != report["executableSHA256"]):
+        raise BuildError("candidate no longer matches its successful build receipt")
+    subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True)
+    value = _read_json(retention_path, "retention receipt") if retention_path.exists() else {
+        "version": 1, "current": None, "fallback": None, "protected": [], "owned": {}}
+    if set(value) != {"version", "current", "fallback", "protected", "owned"} or value["version"] != 1:
+        raise BuildError("invalid retention receipt schema")
+    if not isinstance(value["owned"], dict) or not isinstance(value["protected"], list):
+        raise BuildError("invalid retention receipt entries")
+    # Manual current/fallback references may be retained without granting ownership.
+    if value["current"] != str(app):
+        value["fallback"] = value["current"]; value["current"] = str(app)
+    value["owned"][str(app)] = {"report": str(report_path), "production": report["production"],
+                               "executableSHA256": report["executableSHA256"]}
+    keep = {value["current"], value["fallback"], *value["protected"]}
+    pending = [path for path in value["owned"] if path not in keep]
+    _write_retention(retention_path, value)  # Register the new candidate before retirement.
+    result: dict[str, Any] = {"current": value["current"], "fallback": value["fallback"], "deleted": [], "skipped": []}
+    for raw in pending:
+        old = Path(raw); identity = value["owned"][raw]
+        try:
+            if not old.is_relative_to(retention_path.parent) or old.suffix != ".app": raise BuildError("outside owned App scope")
+            _reject_symlink_ancestors(old, "retirement candidate")
+            if any(Path(protected).is_relative_to(old) or old.is_relative_to(Path(protected)) for protected in keep if protected):
+                raise BuildError("overlaps a protected candidate")
+            if not old.exists():
+                del value["owned"][raw]; continue
+            old_report = _read_json(Path(identity["report"]), "owned candidate report")
+            if old_report.get("status") != "packaged" or old_report.get("finalApp") != raw:
+                raise BuildError("owned report changed")
+            old_info = plistlib.loads((old / "Contents/Info.plist").read_bytes())
+            if old_info.get("DSourceCommit") != identity["production"] or _sha256(old / "Contents/MacOS/D") != identity["executableSHA256"]:
+                raise BuildError("owned App changed")
+            subprocess.run(["codesign", "--verify", "--deep", "--strict", str(old)], check=True, capture_output=True)
+            occupied = subprocess.run(["/usr/sbin/lsof", "-nP", "-t", "+D", str(old)], capture_output=True)
+            if occupied.returncode != 1 or occupied.stdout or occupied.stderr:
+                raise BuildError("App is open or occupancy could not be established")
+            shutil.rmtree(old)
+            del value["owned"][raw]; result["deleted"].append(raw)
+            _write_retention(retention_path, value)
+        except (OSError, ValueError, BuildError, subprocess.CalledProcessError) as error:
+            result["skipped"].append({"path": raw, "reason": str(error)})
+    _write_retention(retention_path, value)
+    _write_retention(report_path.parent / "candidate-acceptance.json", result)
+    return result
+
+
 def parse_arguments(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepared-resources", action="store_true", help="use the current guarded Xcode/prepared engine path")
-    parser.add_argument("--config", required=True, help="absolute path to a schemaVersion 1 local JSON config")
-    parser.add_argument("--run-root", required=True, help="absolute path that must not already exist")
+    parser.add_argument("--config", help="absolute path to a schemaVersion 1 local JSON config")
+    parser.add_argument("--run-root", help="absolute path that must not already exist")
     parser.add_argument("--timeout-per-stage", type=float, default=3600.0)
+    parser.add_argument("--accept-built-report", help="accept a verified candidate after native checks; retire only registered superseded Apps")
+    parser.add_argument("--retention-file", help="CurrentD receipt with current/fallback and explicit protected App paths")
     args = parser.parse_args(argv)
+    if args.accept_built_report:
+        if not args.retention_file or args.config or args.run_root: parser.error("acceptance requires only report and retention file")
+    elif not args.config or not args.run_root: parser.error("build requires --config and --run-root")
     if not (args.timeout_per_stage > 0 and args.timeout_per_stage <= 24 * 60 * 60):
         parser.error("--timeout-per-stage must be greater than 0 and no more than 86400 seconds")
     return args
@@ -1497,6 +1645,11 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, request_cancellation)
     try:
         args = parse_arguments(sys.argv[1:] if argv is None else argv)
+        if args.accept_built_report:
+            result = accept_generated_candidate(_absolute(args.accept_built_report, "--accept-built-report"),
+                                                _absolute(args.retention_file, "--retention-file"))
+            _safe_message(sys.stdout, result)
+            return 0
         config_path = _absolute(args.config, "--config")
         run_root = _absolute(args.run_root, "--run-root")
         if args.prepared_resources:
