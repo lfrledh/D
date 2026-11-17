@@ -23,7 +23,7 @@ public enum TipProducts {
     public private(set) var products: [Product] = []
     public private(set) var status: Status = .idle
     public private(set) var diagnostic: String?
-    public var selectedID: String?
+    public var selectedID: String? { didSet { if oldValue != selectedID { additionalConfirmation = nil } } }
     public var presented = false
     public private(set) var localTest = false
     public enum RecoveryFailure: String { case platform, verification, storage, credentials, capacity }
@@ -54,6 +54,14 @@ public enum TipProducts {
     @ObservationIgnored private var loading = false
     @ObservationIgnored private var purchasing = false
     @ObservationIgnored private var purchaseID: UUID?
+    @ObservationIgnored private var additionalConfirmation: AdditionalConfirmation?
+    struct AdditionalConfirmation: Equatable {
+        let id: UUID
+        let productID: String
+        let displayPrice: String
+        let scope: TipAccountScope
+        let generation: UInt64
+    }
     // Only in-flight verified handlers own entries; defer removes them after finish.
     @ObservationIgnored private var pendingAcknowledgments: Set<String> = []
     /// Stable tier identifiers are injected by the app; StoreKit owns prices and storefront.
@@ -134,6 +142,7 @@ public enum TipProducts {
     }
     /// Catalog refresh never acknowledges or clears an unresolved payment.
     func finishProductLoad(_ loaded: [Product], failure: String? = nil) {
+        additionalConfirmation = nil
         products = loaded.filter { allowedIDs.contains($0.id) && $0.type == .consumable }
             .sorted { $0.id < $1.id }
         if let selectedID, !products.contains(where: { $0.id == selectedID }) { self.selectedID = nil }
@@ -154,13 +163,56 @@ public enum TipProducts {
     }
     public var capacityLimitReached: Bool { journal.count >= 4096 || attempts.count >= 1024 }
     public var canRetrySave: Bool { needsRetrySave && !purchasing }
-    public var canPurchase: Bool { !capacityLimitReached && selectedProduct != nil && !purchasing && !loading && recoveryStatus == .ready && journalIssue == nil && !hasUnresolvedPayment && (!expectsLocalTest || localTest) }
-    public func purchase(confirmIn window: NSWindow) async {
-        guard canPurchase, let product = selectedProduct else { return }
+    /// Unknown outcomes can be acknowledged explicitly; persistence, verification,
+    /// ownership and in-flight API failures cannot be bypassed by that confirmation.
+    var canCreateRequest: Bool {
+        guard !capacityLimitReached, !purchasing, !loading, !needsRetrySave,
+              journalIssue == nil, !unknownPaymentOutcome, unresolvedReceiptKeys.isEmpty,
+              unmatchedPurchaseKey == nil, recoveryStatus == .ready, let scope = verifiedScope else { return false }
+        return attempts.values.filter { $0.phase.isUnresolved }.allSatisfy {
+            $0.scope == scope && [.pending, .unknown, .dispatching].contains($0.phase) && $0.verificationFailed != true
+        }
+    }
+    public var needsAdditionalConfirmation: Bool { hasUnresolvedPayment }
+    public var canPurchase: Bool { canCreateRequest && selectedProduct != nil && (!expectsLocalTest || localTest) }
+    public var hasConfirmedLatestPurchase: Bool {
+        guard recoveryStatus == .ready, let scope = verifiedScope,
+              let latest = attempts.values.filter({ $0.scope == scope }).max(by: { $0.created < $1.created }),
+              latest.phase == .completed, let key = latest.receiptKey,
+              let fact = verifiedHistory[key] else { return false }
+        return !fact.revoked && scope.contains(fact)
+    }
+    func additionalPurchaseConfirmation() -> AdditionalConfirmation? {
+        guard canPurchase, let product = selectedProduct else { return nil }
+        return makeAdditionalConfirmation(productID: product.id, displayPrice: product.displayPrice)
+    }
+    // Called with actual StoreKit product data above. Kept internal for bounded component tests.
+    func makeAdditionalConfirmation(productID: String, displayPrice: String) -> AdditionalConfirmation? {
+        guard canCreateRequest, hasUnresolvedPayment, allowedIDs.contains(productID),
+              !displayPrice.isEmpty, let scope = verifiedScope else { return nil }
+        let value = AdditionalConfirmation(id: UUID(), productID: productID, displayPrice: displayPrice,
+                                          scope: scope, generation: recoveryGeneration)
+        additionalConfirmation = value
+        return value
+    }
+    func canConfirmAdditionalPurchase(_ value: AdditionalConfirmation) -> Bool {
+        canPurchase && additionalConfirmation == value && value.scope == verifiedScope && value.generation == recoveryGeneration
+            && selectedProduct?.id == value.productID && selectedProduct?.displayPrice == value.displayPrice
+    }
+    func cancelAdditionalConfirmation(_ value: AdditionalConfirmation) {
+        if additionalConfirmation == value { additionalConfirmation = nil }
+    }
+    public func purchase(confirmIn window: NSWindow) async { await purchase(confirmIn: window, confirmation: nil) }
+    func purchase(confirmIn window: NSWindow, confirmation: AdditionalConfirmation?) async {
+        guard canPurchase, let product = selectedProduct,
+              !hasUnresolvedPayment || confirmation != nil else { return }
+        if let confirmation {
+            guard canConfirmAdditionalPurchase(confirmation) else { return }
+        }
         var attempt: UUID?
         defer { purchasing = false; if purchaseID == attempt { purchaseID = nil } }
         do {
-            let id = try preparePurchase(productID: product.id); attempt = id
+            let id = try preparePurchase(productID: product.id, confirmation: confirmation); attempt = id
             try dispatchPurchase(id)
             // No suspension between the durable dispatch marker and this API.
             // A crash in that narrow interval remains conservatively unknown.
@@ -186,6 +238,7 @@ public enum TipProducts {
             .sorted { ($0.purchaseDate ?? .distantPast, $0.key) < ($1.purchaseDate ?? .distantPast, $1.key) }
     }
     @discardableResult func beginRecovery() -> UInt64 {
+        additionalConfirmation = nil
         recoveryGeneration &+= 1; verifiedScope = nil; verifiedHistory.removeAll()
         recoveryStatus = .loading; recoveryFailure = nil; recoveryDiagnostic = nil; return recoveryGeneration
     }
@@ -276,10 +329,17 @@ public enum TipProducts {
     }
     /// A prepared record is known not to have reached StoreKit. A dispatch
     /// marker is conservative: the API may have received the request.
-    func preparePurchase(productID: String) throws -> UUID {
+    func preparePurchase(productID: String, confirmation: AdditionalConfirmation? = nil) throws -> UUID {
         guard !capacityLimitReached else { throw TipIssue.journalTooLarge }
-        guard !purchasing, !hasUnresolvedPayment, let scope = verifiedScope,
+        guard canCreateRequest, let scope = verifiedScope,
               allowedIDs.contains(productID), validEnvironment(scope.environment) else { throw TipIssue.invalidTransaction }
+        if hasUnresolvedPayment || confirmation != nil {
+            guard let confirmation, additionalConfirmation == confirmation,
+                  confirmation.scope == scope, confirmation.generation == recoveryGeneration,
+                  confirmation.productID == productID else { throw TipIssue.invalidTransaction }
+        }
+        // Consume before any write; a repeated click cannot dispatch another request.
+        additionalConfirmation = nil
         let id = UUID()
         var next = durableJournal
         next.attempts[id.uuidString] = .init(id: id, productID: productID, scope: scope,
@@ -344,7 +404,10 @@ public enum TipProducts {
     private func receive(_ result: VerificationResult<Transaction>, purchase: UUID? = nil) async {
         switch result {
         case .unverified(_, _):
-            if let purchase { completePurchase(purchase, phase: .unknown, reason: "StoreKit transaction verification failed") }
+            if let purchase {
+                attempts[purchase.uuidString]?.verificationFailed = true
+                completePurchase(purchase, phase: .unknown, reason: "StoreKit transaction verification failed")
+            }
             else { markUnverified("StoreKit transaction verification failed") }
         case .verified(let transaction):
             guard transaction.productType == .consumable else { markUnverified("Unexpected StoreKit product type"); return }
@@ -373,8 +436,9 @@ public enum TipProducts {
                 if active && !sameAccount { unmatchedPurchaseKey = fact.key }
                 else if unmatchedPurchaseKey == fact.key { unmatchedPurchaseKey = nil }
                 persistProtection()
-                status = protectedPaymentStatus ?? (active ? .thanked : .idle)
-                if protectedPaymentStatus == nil { diagnostic = nil }
+                status = sameAccount && !needsRetrySave && !unknownPaymentOutcome && unresolvedReceiptKeys.isEmpty
+                    ? (active ? .thanked : .idle) : protectedPaymentStatus ?? .recorded
+                if status == .thanked || protectedPaymentStatus == nil { diagnostic = nil }
                 eventRevision &+= 1
                 return
             }
@@ -470,6 +534,7 @@ struct TipAttempt: Codable, Equatable {
     let created: Date
     var phase: Phase
     var receiptKey: String?
+    var verificationFailed: Bool? = nil
 }
 struct TipJournal: Codable {
     let version: Int

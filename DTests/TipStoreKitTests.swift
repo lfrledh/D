@@ -5,7 +5,7 @@ import Security
 import StoreKit
 import StoreKitTest
 import Testing
-import UI
+@testable import UI
 import SwiftUI
 
 private typealias Transaction = StoreKit.Transaction
@@ -15,6 +15,47 @@ private final class TipStoreKitBundle: NSObject { }
 /// Actual StoreKit APIs under an explicit Xcode local configuration. No App Store account or charge.
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["D_STOREKIT_TESTS"] == "1"), .serialized)
 @MainActor struct TipStoreKitTests {
+    @Test func explicitAdditionalPurchaseKeepsPendingAndDisplaysNewVerifiedResult() async throws {
+        let session = try testSession(); defer { session.clearTransactions() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-Tip-additional-" + UUID().uuidString)
+        defer { removeTestRecords(root) }
+        let url = root.appendingPathComponent("tips.json")
+        let store = TipStore(productIDs: TipProducts.localTestIDs, bundleID: Bundle.main.bundleIdentifier ?? "",
+                             journalURL: url, localTest: true)
+        store.start(); await store.loadProducts()
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; defer { window.close() }
+        store.selectedID = "d.localtest.tip.tier1"
+        session.askToBuyEnabled = true
+        await store.purchase(confirmIn: window)
+        let old = try #require(session.allTransactions().first)
+        try #require(store.status == .pending && store.attempts.count == 1)
+        store.selectedID = "d.localtest.tip.tier2"
+        let cancelled = try #require(store.additionalPurchaseConfirmation())
+        store.cancelAdditionalConfirmation(cancelled)
+        await store.purchase(confirmIn: window, confirmation: cancelled)
+        #expect(session.allTransactions().count == 1 && store.attempts.count == 1)
+        let confirmed = try #require(store.additionalPurchaseConfirmation())
+        #expect(confirmed.displayPrice == store.selectedProduct?.displayPrice)
+        session.askToBuyEnabled = false
+        await store.purchase(confirmIn: window, confirmation: confirmed)
+        try #require(session.allTransactions().count == 2 && store.attempts.count == 2)
+        #expect(store.status == .thanked && store.hasConfirmedLatestPurchase && store.needsAdditionalConfirmation)
+        await store.purchase(confirmIn: window, confirmation: confirmed)
+        #expect(session.allTransactions().count == 2)
+        try session.approveAskToBuyTransaction(identifier: old.identifier)
+        try await wait("old pending verified update", store: store) { (try? receiptRecords(url))?.count == 2 }
+        await store.recoverHistory(recheckAccount: true)
+        #expect(store.hasConfirmedLatestPurchase && store.attempts.values.filter { $0.phase == .pending }.count == 1)
+        #expect(store.attempts.values.filter { $0.phase == .completed }.count == 1)
+        let records = try receiptRecords(url)
+        let cold = TipStore(productIDs: TipProducts.localTestIDs, bundleID: Bundle.main.bundleIdentifier ?? "", journalURL: url, localTest: true)
+        await cold.loadProducts()
+        #expect(cold.attempts.count == 2 && cold.hasConfirmedLatestPurchase && cold.needsAdditionalConfirmation)
+        #expect(try receiptRecords(url).keys.sorted() == records.keys.sorted())
+        #expect(session.allTransactions().count == 2)
+        print("TIP_ADDITIONAL_LOCAL cancelNewCalls=0 confirmNewCalls=1 attempts=2 receipts=2 coldNoRepurchase=true")
+    }
     @Test(arguments: ["USD", "EUR", "GBP", "JPY", "CNY"])
     func localStorefrontReturnsApprovedTierAmountsWithItsOwnFormatting(currency: String) async throws {
         // Local configuration values are placeholders, not a readback of formal
@@ -571,7 +612,7 @@ private final class TipStoreKitBundle: NSObject { }
         try await session.setSimulatedError(nil, forAPI: .purchase)
         session.askToBuyEnabled = true
         await store.purchase(confirmIn:window)
-        #expect(store.status == .pending && !store.canPurchase)
+        #expect(store.status == .pending && store.canPurchase && store.needsAdditionalConfirmation)
         #expect(try receiptRecords(root.appendingPathComponent("tips.json")).isEmpty)
         let pending = try #require(session.allTransactions().last)
         try session.approveAskToBuyTransaction(identifier:pending.identifier)

@@ -4,6 +4,72 @@ import Testing
 @testable import UI
 
 @Suite(.serialized) @MainActor struct TipStoreTests {
+    @Test func additionalRequestRequiresFreshExplicitConfirmationAndPreservesOldPending() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-additional-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("tips.json"), first = owner(url)
+        var gen = first.beginRecovery(); try first.acceptScope(scope("A"), generation: gen)
+        first.endRecovery(generation: gen, succeeded: true)
+        let old = try begin(first); first.completePurchase(old, phase: .pending)
+        let value = owner(url)
+        gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
+        #expect(value.canCreateRequest && value.needsAdditionalConfirmation)
+        let cancelled = try #require(value.makeAdditionalConfirmation(productID: "d.localtest.tip.small", displayPrice: "$1.00"))
+        value.cancelAdditionalConfirmation(cancelled)
+        #expect(throws: (any Error).self) { try value.preparePurchase(productID: cancelled.productID, confirmation: cancelled) }
+        #expect(value.attempts.count == 1 && value.attempts[old.uuidString]?.phase == .pending)
+        let confirmed = try #require(value.makeAdditionalConfirmation(productID: cancelled.productID, displayPrice: "$1.00"))
+        let next = try value.preparePurchase(productID: confirmed.productID, confirmation: confirmed)
+        try value.dispatchPurchase(next)
+        #expect(next != old && value.attempts.count == 2)
+        #expect(throws: (any Error).self) { try value.preparePurchase(productID: confirmed.productID, confirmation: confirmed) }
+        let paid = detailed("new-confirmed", account: "A")
+        var finishes = 0
+        await value.acceptVerified(paid, purchase: next) { finishes += 1 }
+        #expect(value.status == .thanked && value.hasConfirmedLatestPurchase && value.hasUnresolvedPayment)
+        // A global same-SKU update is real history, not a guessed association with the old request.
+        await value.acceptVerified(detailed("old-global", account: "A")) { finishes += 1 }
+        await value.acceptVerified(paid) { finishes += 1 }
+        #expect(value.hasConfirmedLatestPurchase && value.attempts[old.uuidString]?.receiptKey == nil)
+        let cold = owner(url); gen = cold.beginRecovery(); try cold.acceptScope(scope("A"), generation: gen)
+        try await cold.mergeHistory(paid, credential: nil, generation: gen)
+        cold.endRecovery(generation: gen, succeeded: true)
+        #expect(cold.hasConfirmedLatestPurchase && cold.attempts.count == 2)
+        let saved = try JSONDecoder().decode(TipJournal.self, from: Data(contentsOf: url))
+        #expect(saved.receipts.count == 2 && saved.attempts[old.uuidString]?.phase == .pending && finishes == 3)
+    }
+    @Test func additionalConfirmationDoesNotBypassAccountChangesVerificationOrSaveFailure() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-confirm-safety-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("tips.json"), first = owner(url)
+        var gen = first.beginRecovery(); try first.acceptScope(scope("A"), generation: gen)
+        first.endRecovery(generation: gen, succeeded: true)
+        let old = try begin(first); first.completePurchase(old, phase: .unknown)
+        let value = owner(url)
+        gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
+        let offer = try #require(value.makeAdditionalConfirmation(productID: "d.localtest.tip.small", displayPrice: "$1.00"))
+        gen = value.beginRecovery(); try value.acceptScope(scope("B"), generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
+        #expect(!value.canCreateRequest)
+        #expect(throws: (any Error).self) { try value.preparePurchase(productID: offer.productID, confirmation: offer) }
+        gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
+        #expect(throws: (any Error).self) { try value.preparePurchase(productID: offer.productID, confirmation: offer) }
+        let fresh = try #require(value.makeAdditionalConfirmation(productID: offer.productID, displayPrice: "$1.00"))
+        let held = root.appendingPathComponent("held.json")
+        try FileManager.default.moveItem(at: url, to: held)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+        #expect(throws: (any Error).self) { try value.preparePurchase(productID: fresh.productID, confirmation: fresh) }
+        #expect(value.attempts.count == 1)
+        try FileManager.default.removeItem(at: url); try FileManager.default.moveItem(at: held, to: url)
+        // The failed confirmation is consumed; recovery never silently resends it.
+        #expect(throws: (any Error).self) { try value.preparePurchase(productID: fresh.productID, confirmation: fresh) }
+        value.markUnverified("controlled verification failure")
+        #expect(!value.canCreateRequest && value.makeAdditionalConfirmation(productID: offer.productID, displayPrice: "$1.00") == nil)
+    }
+
     @Test func catalogReloadNeverClearsUnmatchedOrUnverifiedPayment() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-catalog-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -447,6 +513,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: root) }
         let value = owner(root.appendingPathComponent("journal.json"))
         let gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
         let purchase = try begin(value)
         try await value.mergeHistory(detailed("one"), credential: nil, generation: gen)
         value.endRecovery(generation: gen, succeeded: true)

@@ -21,6 +21,7 @@ struct TipPanel: View {
     let owner: TipStore
     @Environment(\.dLanguageStore) private var language
     @State private var window: NSWindow?
+    @State private var additionalConfirmation: TipStore.AdditionalConfirmation?
     private func text(_ key: String) -> String { workflowText(language, "tips." + key) }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -46,6 +47,10 @@ struct TipPanel: View {
             }
             if owner.capacityLimitReached { Text(text("records.capacity")).font(.callout) }
             if owner.status != .idle { Text(text(owner.status.rawValue)).font(.callout).accessibilityIdentifier("tip-status") }
+            if owner.hasConfirmedLatestPurchase && owner.status != .thanked { Text(text("thanked")).font(.callout) }
+            if owner.needsAdditionalConfirmation {
+                Text(text("additional.unconfirmed")).font(.callout).accessibilityIdentifier("tip-unconfirmed")
+            }
             if owner.recoveryStatus == .loading {
                 Text(text("records.loading")).font(.caption).accessibilityIdentifier("tip-record-sync")
             } else if owner.recoveryStatus == .failed {
@@ -73,14 +78,36 @@ struct TipPanel: View {
                 }
                 Spacer()
                 if let product = owner.selectedProduct {
-                    Button(text("purchase").replacingOccurrences(of: "{price}", with: product.displayPrice)) {
+                    Button(owner.needsAdditionalConfirmation ? text("additional.entry") : text("purchase").replacingOccurrences(of: "{price}", with: product.displayPrice)) {
                         guard let window else { return }
-                        Task { await owner.purchase(confirmIn: window) }
+                        if owner.needsAdditionalConfirmation { additionalConfirmation = owner.additionalPurchaseConfirmation() }
+                        else { Task { await owner.purchase(confirmIn: window) } }
                     }.disabled(!owner.canPurchase || window == nil).accessibilityIdentifier("tip-purchase")
                 }
             }.buttonStyle(WorkbenchGlassButtonStyle())
             WorkbenchRequestCloseButton(title: text("close"), fallback: { owner.presented = false })
         }.padding(20).background(TipWindowReader { window = $0 }).task { await owner.loadProducts() }
+            .workbenchSheet(isPresented: Binding(get: { additionalConfirmation != nil }, set: { shown in
+                if !shown, let value = additionalConfirmation { owner.cancelAdditionalConfirmation(value); additionalConfirmation = nil }
+            }), title: text("additional.title"), size: .init(width: 440, height: 240)) {
+                if let value = additionalConfirmation {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text(text("additional.body").replacingOccurrences(of: "{price}", with: value.displayPrice))
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack {
+                            Button(text("additional.cancel")) {
+                                owner.cancelAdditionalConfirmation(value); additionalConfirmation = nil
+                            }.accessibilityIdentifier("tip-additional-cancel")
+                            Spacer()
+                            Button(text("additional.confirm").replacingOccurrences(of: "{price}", with: value.displayPrice)) {
+                                guard let window else { return }
+                                additionalConfirmation = nil
+                                Task { await owner.purchase(confirmIn: window, confirmation: value) }
+                            }.disabled(!owner.canConfirmAdditionalPurchase(value) || window == nil).accessibilityIdentifier("tip-additional-confirm")
+                        }.buttonStyle(WorkbenchGlassButtonStyle())
+                    }.padding(20)
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 Task { await owner.recoverHistory(recheckAccount: true) }
             }
