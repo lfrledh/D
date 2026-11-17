@@ -70,6 +70,21 @@ import Testing
         #expect(!value.canCreateRequest && value.makeAdditionalConfirmation(productID: offer.productID, displayPrice: "$1.00") == nil)
     }
 
+    @Test func legacyUnknownWithoutVerificationClassificationRemainsProtected() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-legacy-unknown-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent("tips.json"), id = UUID()
+        let legacy = TipAttempt(id: id, productID: "d.localtest.tip.small", scope: scope("A"), created: Date(), phase: .unknown, receiptKey: nil)
+        try JSONEncoder().encode(TipJournal(receipts: [:], attempts: [id.uuidString: legacy])).write(to: url)
+        let value = owner(url), gen = value.beginRecovery(); try value.acceptScope(scope("A"), generation: gen)
+        value.endRecovery(generation: gen, succeeded: true)
+        #expect(value.hasUnresolvedPayment && !value.canCreateRequest)
+        #expect(value.makeAdditionalConfirmation(productID: legacy.productID, displayPrice: "$1.00") == nil)
+        #expect(value.attempts[id.uuidString]?.verificationFailed == nil)
+        #expect(throws: (any Error).self) { try value.preparePurchase(productID: legacy.productID) }
+    }
+
     @Test func catalogReloadNeverClearsUnmatchedOrUnverifiedPayment() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("D-tip-catalog-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

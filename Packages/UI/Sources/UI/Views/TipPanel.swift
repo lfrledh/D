@@ -46,7 +46,9 @@ struct TipPanel: View {
                 Text(text(owner.catalogStatus.rawValue)).font(.callout).accessibilityIdentifier("tip-catalog-status")
             }
             if owner.capacityLimitReached { Text(text("records.capacity")).font(.callout) }
-            if owner.status != .idle { Text(text(owner.status.rawValue)).font(.callout).accessibilityIdentifier("tip-status") }
+            if owner.status != .idle && !(owner.canCreateRequest && [.pending, .uncertain].contains(owner.status)) {
+                Text(text(owner.status.rawValue)).font(.callout).accessibilityIdentifier("tip-status")
+            }
             if owner.hasConfirmedLatestPurchase && owner.status != .thanked { Text(text("thanked")).font(.callout) }
             if owner.needsAdditionalConfirmation {
                 Text(text("additional.unconfirmed")).font(.callout).accessibilityIdentifier("tip-unconfirmed")

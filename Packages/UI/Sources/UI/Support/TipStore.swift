@@ -171,6 +171,7 @@ public enum TipProducts {
               unmatchedPurchaseKey == nil, recoveryStatus == .ready, let scope = verifiedScope else { return false }
         return attempts.values.filter { $0.phase.isUnresolved }.allSatisfy {
             $0.scope == scope && [.pending, .unknown, .dispatching].contains($0.phase) && $0.verificationFailed != true
+                && ($0.phase != .unknown || $0.verificationFailed == false)
         }
     }
     public var needsAdditionalConfirmation: Bool { hasUnresolvedPayment }
@@ -359,6 +360,11 @@ public enum TipProducts {
               [.dispatching, .pending, .unknown].contains(old.phase),
               [.cancelled, .pending, .unknown].contains(phase) else { return }
         attempts[id.uuidString]?.phase = phase
+        if phase == .unknown && attempts[id.uuidString]?.verificationFailed == nil {
+            // New ordinary API failures are explicitly distinguished from the
+            // unverified callback. Old unclassified unknown records stay blocked.
+            attempts[id.uuidString]?.verificationFailed = false
+        }
         if let reason { diagnostic = reason }
         persistProtection()
         status = protectedPaymentStatus ?? (phase == .cancelled ? .cancelled : .uncertain)
