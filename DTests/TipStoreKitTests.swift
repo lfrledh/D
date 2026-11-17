@@ -158,6 +158,14 @@ private final class TipStoreKitBundle: NSObject { }
         window.isReleasedWhenClosed = false; defer { store.presented = false; window.close() }
         window.contentView = NSHostingView(rootView: Text("StoreKit local test · no real charge").frame(maxWidth: .infinity, maxHeight: .infinity)
             .modifier(TipPresenter(owner: store)).environment(\.dLanguageStore, language))
+        let additional = ProcessInfo.processInfo.environment["D_STOREKIT_ADDITIONAL_CAPTURE"] == "1"
+        if additional {
+            store.start(); store.selectedID = "d.localtest.tip.tier1"
+            session.askToBuyEnabled = true
+            await store.purchase(confirmIn: window)
+            try #require(store.status == .pending && session.allTransactions().count == 1)
+            session.askToBuyEnabled = false
+        }
         for locale in ["zh-Hans", "en"] {
             try language.select(locale); window.title = "D Tip QA " + locale
             window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
@@ -165,9 +173,25 @@ private final class TipStoreKitBundle: NSObject { }
             try await Task.sleep(for: .seconds(1))
             print("TIP_PANEL_READY language=\(locale) pid=\(ProcessInfo.processInfo.processIdentifier) window=\(window.windowNumber)")
             fflush(stdout)
-            try await Task.sleep(for: .seconds(24))
+            if additional {
+                // Attended native actions: cancel in Chinese, confirm once in
+                // English, then close the panel. Never enabled in normal runs.
+                for _ in 0..<120 {
+                    if !store.presented { break }
+                    try await Task.sleep(for: .seconds(1))
+                }
+                #expect(!store.presented, "Attended capture must close the actual panel")
+                #expect(session.allTransactions().count == (locale == "zh-Hans" ? 1 : 2))
+                print("TIP_PANEL_ACTION language=\(locale) actualTransactions=\(session.allTransactions().count) attempts=\(store.attempts.count)")
+            } else {
+                try await Task.sleep(for: .seconds(24))
+            }
         }
-        #expect(session.allTransactions().isEmpty, "Visual capture never pays")
+        if additional {
+            #expect(store.hasConfirmedLatestPurchase && store.needsAdditionalConfirmation)
+        } else {
+            #expect(session.allTransactions().isEmpty, "Ordinary visual capture never pays")
+        }
     }
     private func journalObject(_ file: URL) throws -> [String: Any] {
         try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
