@@ -1214,6 +1214,26 @@ class BuildCacheAndRetentionTests(unittest.TestCase):
             with self.assertRaisesRegex(self.core.BuildError, "test artifact"):
                 self.core._ordinary_cache(self.source, self.cfg, self.root / "run5")
 
+    def test_publication_clone_and_fallback_share_bounded_stage_and_drain(self):
+        import sys
+        resource = _load_coordinator(TARGET.with_name("prepare-development-resources.py"), "d_copy_timeout_fixture")
+        source = self.root / "copy-source"; source.mkdir(); (source / "data").write_bytes(b"original")
+        original = self.core._run_stage
+        for fallback in [False, True]:
+            run_root = self.root / ("fallback" if fallback else "clone"); run_root.mkdir()
+            stages = []; target = run_root / "D.app"
+            def stage(name, argv, env, log, timeout, records):
+                code = "raise SystemExit(1)" if fallback and name.endswith("clone") else "import time; time.sleep(30)"
+                return original(name, [sys.executable, "-c", code], env, log, timeout, records)
+            with mock.patch.object(resource, "require_space", return_value=[]), mock.patch.object(self.core, "_run_stage", side_effect=stage):
+                with self.assertRaises(self.core.StageError):
+                    self.core._copy_prepared_app(resource, source, target, run_root, 0.25, stages)
+            self.assertEqual(len(stages), 2 if fallback else 1)
+            self.assertEqual(stages[-1]["status"], "timed-out")
+            self.assertFalse(stages[-1]["cleanupIncomplete"])
+            self.assertIn("durationSeconds", stages[-1]); self.assertFalse(target.exists())
+            self.assertEqual((source / "data").read_bytes(), b"original")
+
     def make_app(self, name):
         import plistlib
         app = self.root / "CurrentD" / name / "D.app"

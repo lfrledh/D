@@ -1354,6 +1354,26 @@ def _reject_test_artifacts(app: Path) -> None:
                 raise BuildError("test artifact in ordinary candidate: " + str(relative))
 
 
+def _copy_prepared_app(core: Any, source: Path, destination: Path, run_root: Path,
+                       timeout: float, stages: list[dict[str, Any]]) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    def run(kind: str, command: list[str]) -> bool:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0: raise StageError("candidate publication exhausted its stage deadline")
+        name = "copy-signed-app-" + kind
+        try:
+            _run_stage(name, command, dict(os.environ), run_root / (name + ".log"), remaining, stages)
+            return True
+        except StageError:
+            # Only an ordinary completed clone failure may try full copy. A
+            # timeout/cancel/undrained group must abort instead of duplicating it.
+            record = stages[-1]
+            if kind == "clone" and record.get("status") == "failed" and not record.get("cleanupIncomplete"):
+                return False
+            raise
+    return core.copy_tree_bounded(source, destination, runner=run)
+
+
 def _ordinary_cache(root: Path, cfg: dict[str, str], run_root: Path) -> tuple[Path, Any, dict[str, Any]]:
     """One exclusively leased cache per project/toolchain/configuration/purpose."""
     if "buildCacheRoot" not in cfg:
@@ -1512,7 +1532,7 @@ def _execute_prepared(config_path: Path, run_root: Path, timeout: float) -> tupl
         stage_parent = Path(tempfile.mkdtemp(prefix=".d-candidate-", dir=output.parent))
         staged_app = stage_parent / "D.app"
         try:
-            report["publicationCopy"] = core.copy_tree_bounded(built, staged_app)
+            report["publicationCopy"] = _copy_prepared_app(core, built, staged_app, run_root, timeout, report["stages"])
             _reject_test_artifacts(staged_app)
             subprocess.run(["codesign", "--verify", "--deep", "--strict", str(staged_app)], check=True)
             if (staged_app / "Contents/Info.plist").read_bytes() != (built / "Contents/Info.plist").read_bytes():
@@ -1521,8 +1541,11 @@ def _execute_prepared(config_path: Path, run_root: Path, timeout: float) -> tupl
             report["finalApp"] = str(output)
         finally:
             # Only this invocation's exclusively-created, unpublished staging.
-            if staged_app.exists(): shutil.rmtree(staged_app)
-            stage_parent.rmdir()
+            if any(stage.get("cleanupIncomplete") for stage in report["stages"] if stage["name"].startswith("copy-signed-app")):
+                report["retainedUnpublishedStage"] = str(stage_parent)
+            else:
+                if staged_app.exists(): shutil.rmtree(staged_app)
+                stage_parent.rmdir()
         report.update(status="packaged", finalApp=str(output), executableSHA256=_sha256(output / "Contents/MacOS/D"))
     except (Exception, KeyboardInterrupt) as error:
         report.update(status="cancelled" if isinstance(error, (Cancelled, KeyboardInterrupt)) else "failed", error=str(error))

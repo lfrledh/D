@@ -18,7 +18,7 @@ import sys
 import subprocess
 import plistlib
 import tempfile
-from typing import Any
+from typing import Any, Callable
 
 
 SCHEMA_VERSION = 1
@@ -692,7 +692,7 @@ def require_space(allocations: list[tuple[Path, dict[str, int]]]) -> list[dict[s
     return list(groups.values())
 
 
-def copy_tree_bounded(source: Path, destination: Path) -> dict[str, Any]:
+def copy_tree_bounded(source: Path, destination: Path, runner: Callable[[str, list[str]], bool] | None = None) -> dict[str, Any]:
     """Clone only same-volume files; a failed/cross-volume clone pays full copy cost."""
     if _lexists(destination) or source.is_symlink() or not source.is_dir():
         raise ResourceError("copy needs an existing real source and a new destination")
@@ -700,13 +700,18 @@ def copy_tree_bounded(source: Path, destination: Path) -> dict[str, Any]:
     metadata = usage["entries"] * 8192
     if sys.platform == "darwin" and source.stat().st_dev == destination.parent.stat().st_dev:
         budget = require_space([(destination, {"cloneMetadata": metadata})])
-        result = subprocess.run(["/bin/cp", "-cRp", str(source), str(destination)], capture_output=True)
-        if result.returncode == 0: return {"method": "same-volume-clone", "budget": budget, "logicalBytes": usage["bytes"]}
+        command = ["/bin/cp", "-cRp", str(source), str(destination)]
+        succeeded = runner("clone", command) if runner else subprocess.run(command, capture_output=True).returncode == 0
+        if succeeded: return {"method": "same-volume-clone", "budget": budget, "logicalBytes": usage["bytes"]}
         # This function exclusively owns the new destination. No source/current
         # candidate is removed; partial clones are not reused as successful copies.
         if destination.exists(): shutil.rmtree(destination)
     budget = require_space([(destination, {"fullCopy": usage["bytes"], "copyMetadata": metadata})])
-    shutil.copytree(source, destination, symlinks=True, copy_function=shutil.copy2)
+    if runner:
+        if not runner("full-copy", ["/usr/bin/ditto", str(source), str(destination)]):
+            raise ResourceError("full copy failed")
+    else:
+        shutil.copytree(source, destination, symlinks=True, copy_function=shutil.copy2)
     return {"method": "full-copy", "budget": budget, "logicalBytes": usage["bytes"]}
 
 
