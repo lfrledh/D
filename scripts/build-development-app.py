@@ -1386,7 +1386,7 @@ def _ordinary_cache(root: Path, cfg: dict[str, str], run_root: Path) -> tuple[Pa
     sdk = subprocess.check_output(["xcrun", "--sdk", "macosx", "--show-sdk-build-version"]).decode().strip()
     common = subprocess.check_output(["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-common-dir"]).decode().strip()
     identity = {"schemaVersion": 1, "project": common, "scheme": "D", "purpose": "ordinary-app",
-                "configuration": cfg["configuration"], "architecture": "arm64", "toolchain": toolchain,
+                "configuration": cfg["configuration"], "architecture": "macOS-default" if "archivePath" in cfg else "arm64", "toolchain": toolchain,
                 "developerDirectory": os.environ.get("DEVELOPER_DIR") or subprocess.check_output(["xcode-select", "-p"]).decode().strip(),
                 "sdk": sdk, "bundleID": cfg["bundleID"], "signingTeam": cfg["signingTeam"]}
     key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:24]
@@ -1476,7 +1476,7 @@ def _execute_prepared(config_path: Path, run_root: Path, timeout: float) -> tupl
             if cache_lease: cache_lease.close()
             raise BuildError("Archive must be a new, independent path with an existing parent")
     command = ["xcodebuild", "-workspace", str(root / "D.xcworkspace"), "-scheme", "D",
-               "-configuration", cfg["configuration"], "-destination", "platform=macOS,arch=arm64",
+               "-configuration", cfg["configuration"], "-destination", "generic/platform=macOS" if archive else "platform=macOS,arch=arm64",
                "-derivedDataPath", str(derived), "-clonedSourcePackagesDirPath", cfg["sourcePackages"],
                "-packageCachePath", cfg["packageCache"], "-disableAutomaticPackageResolution", "-skipPackageUpdates",
                "-onlyUsePackageVersionsFromResolvedFile", "-xcconfig", str(xcconfig)]
