@@ -210,3 +210,15 @@ Models只有1,901普通文件，但历史App/运行时产生数千万路径。�
 本轮只提交脱敏报告、计量摘要和候选列表；产品和桌面App未改，未开启下一产品轮。公开资料：[Apple APFS共享空间](https://support.apple.com/en-ie/guide/disk-utility/dskua9e6a110/mac)、[Apple APFS克隆](https://developer.apple.com/documentation/foundation/about-apple-file-system)、[Time Machine与其他文件](https://support.apple.com/en-gb/guide/mac-help/mh15139/mac)。
 
 机器摘要：[deep-audit-20261117-summary.json](deep-audit-20261117-summary.json)；准确候选路径：[deep-audit-20261117-candidates.json](deep-audit-20261117-candidates.json)。原始逐文件元数据、错误日志、源码计量脚本和同句柄复核保留本机，不上传私人全盘文件列表。
+
+## 9. 11月17日第二批已授权退役（18:00后；本轮产品工作继续）
+
+用户本轮明确批准后，从8bef865e接续。只读角色先核用途/恢复关系，Lead唯一执行；原候选JSON与first-wave-result历史字节保持。删除27个准确App本体（17固定集合、2中间Archive内App、3一次性宿主、5另核旧Debug宿主）、3个模型测试闭包的2,540个文件、8份重复trace XML及3个干净过期工作树。两个Wan各1,261张量逐文件path/shape/dtype/size/SHA与保留源核齐；Klein18文件/revision/摘要核齐；保留所有marker、项目、索引、原trace、符号与来源。三个工作树均无tracked/untracked/ignored独有内容、HEAD为当前祖先，通过Git worktree remove退出，分支不删。
+
+同一APFS容器分批实测净增加 **103.101816832 GB**；清理起点可用289.854365696 GB、最后一批结束389.323808768 GB，两时点差99.469443072 GB。两批之间新建组件测试缓存等写入，不能把目录计费、分批净和整段容量差混为一个数。最终交付容量另读回。17包中d1目录实际aeb、be151目录实际3b4、64e为ENOSPC不完整残留，未声称旧签名字节完全可复现。5d/825及另外3个历史Archive已退役App本体，剩余仅历史资料/符号，不再是完整可运行Archive。
+
+准确执行集合和每批容量回执在受控`D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261117-retirement-build-tips/`：`explicit-retirement-plan/result.json`、`model-byte-verification.jsonl`、`extra-retirement-plan/result.json`、`post-cleanup-protection.json`；汇总`cleanup-summary.json` SHA256 `b9e4eb1ed4c207c61cc7231b9d917408bf1271a6b75d2ce448ead9af2f392bba`。原始机器清单不上传。当前四份CurrentD、781完整Archive、实际ba95缓存、5889资源、八套历史资源、必要I012/I017反例、准确模型保留源、用户文件、个人scheme及桌面入口身份保护复核通过。
+
+保留：Oct18左栏隐藏trace曾收尾超时，不能证明大型导出可重建；R16两份XML仍服务I012；其余无持续用途未核清的旧包/Products/engine、含不明改动的工作树不凭年龄删除；Wan2.2缺准确来源继续保留；Portable Kit低优先级模型闭包本轮未再扩大核定。仅这些对象暂停，不阻止已核集合和工程修补。未动Steam、ASMR、UE、Time Machine、系统或整盘废纸篓。
+
+本轮最终构建/测试/普通App验收后，同容器可用**379,426,971,648B**；相对清理起点净增**89,572,605,952B**。此为整轮含新缓存/归档写入的容量变化，与各删除批次净释放103,101,816,832B分开。准确原始容器plist、保护回执为同run的`final-container.plist`、`final-protection-capacity.json`；源模型/既有反例未变。最终新App采用同卷克隆发布、实际正常Quit后切换桌面入口并冷开，不复制整套工程/模型备份。本轮两个开发脚本已落实容量预算、准确复用、用途隔离和验收后有限保留，细节/验证见现有任务本轮增量，不另建清理平台。

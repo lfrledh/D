@@ -1,5 +1,39 @@
 # D-UI-CONSOLIDATED-01
 
+
+### 2026-11-17 接续main：开发产物治理与明确另发打赏（固定候选已验；待顾问/用户接纳）
+
+真实起点main/施工分支均8bef865e6bbaabd94a79ce418cb47195e1d3a37d，已包含前轮main快进；施工树不迁移。原普通781/PID49028已核已保存QA状态并正常Quit，最终d1a已通过桌面冷开74710，个人scheme在原根保持ca3635d8。一个Lead写工程/文档/Mac，只读角色固定快照检查。第二批清理执行及回收量见现有SSD调查§9，原始回执留同一受控run；27App/2540数据文件/8导出/3工作树已退役，原件/符号/当前/必要对照保全。
+
+当前实现：正常构建容量预算、按工具链/配置/用途隔离缓存、同卷克隆/跨卷复制重检、明确验收后有限候选保留已定向复验；打赏旧未决与不可安全发起分开，新商品/价格/账户捕获确认、取消零新请求、一次确认一次派发，保留旧请求与真实验证结果，组件首轮33项中1项旧fixture缺ready前置，修正后通过；非实施者指出旧unknown未标明验证状态不安全，补守卫与反例后34通过。正式配置/真实支付不执行。最终正常App/Archive及桌面冷开已验，下列本地API与UI证据仍单独分级。
+
+定向证据（N=`run-20261117-retirement-build-tips`）：
+
+| 等级/范围 | 本轮实际结果与边界 |
+|---|---|
+| 工具 | `tool-regression-r3.log`54项通过；第一次TMP与第二次Python版本前置不符均保留。发布复制runner复核修正后`tool-review-fix-tests-r2.log`7项通过，覆盖真实子进程clone/完整fallback超时和drain；不弱化阶段取消。 |
+| 资源 | 正式中英各5583键，无重复/集合/占位符差异；6对`tips.additional.*`逐字与批准稿核对。总键数不是全UI审计完成率。 |
+| 组件 | `tip-review-fix.log`34项通过；取消、nonce一次消费、商品价格/账户代次过期、旧未知verification安全、重复交易、冷读、失败只保存。 |
+| 本地StoreKit | `storekit-run-r2.log`Swift Testing实际2项通过：取消0新增purchase，确认1，两个attempt/两笔精确receipt及冷读不重购；写入失败0实际购买，修复后明确派发1。首次无括号筛选0项，不计通过；iOS模拟器版本警告未影响本机macOS两项。未重复25币种矩阵。 |
+| 原生本地测试UI | d1a58d3e、PID71480/window2629、640×640内容区；实际按钮打开中文确认→暂不打赏→关闭父面板，平台交易/attempt仍1；英文打开确认→确认$50→Processing→Thank you与旧未确认并存→关闭，计数2。`panel-run.log`1实际用例通过，`panel-native-actions.json`记录路径。CUA初始绑定截图取到同PID主窗口，已按准确QA窗口Raise后截取，不改产品迎合工具。 |
+| 同版画面 | `TIP-01-r1-local-confirm-zh.png`、`TIP-02-r1-local-confirm-en.png`、`TIP-03-r1-local-new-success-old-pending.png`已直接在会话展示；均真实App的本地StoreKit宿主，非普通发行App/正式收费，不用它证明正式账户或连续性能。 |
+| 非实施者 | 固定6bb/d070/fdf/d1a只读审差分与原记录。两处有效发现修正；最后归档目标/缓存身份与截图测试增量无新阻断。未代Lead亲跑或称独立原生通过。 |
+
+
+开发入口用法：沿用`build-development-app.py --prepared-resources --config … --run-root …`，本轮配置增加`buildCacheRoot`（普通App专属根）和`buildBudgetReference`（只读已有缓存的实测峰值参考）；可选`archivePath`以同一次Xcode archive产生普通签名App和完整Archive，generic macOS与arm64 build的缓存身份分开。回执记录容量构成、真实目标APFS容器、缓存owner/toolchain/config、copy方法与受控阶段退出。现有资源目录复用仍全量核manifest/输入字节，不能仅看名称。冷缓存预算为实测参考/已有缓存与源大小估算的较大值，另加资源暂存、发布副本、归档与符号；是前置保守预算，不保证编译器永不超出。
+
+候选正常验收后才调用同一脚本`--accept-built-report … --retention-file CurrentD/retention.json`。该小回执保留current/fallback/protected具名反例，只有此前由该入口登记的owned App可退役；签名/身份变化或仍被打开即跳过，未知手工目录不纳入。构建失败不推进current、不删旧候选；App包独占发布，不覆盖运行包。桌面alias及用户保存/正常Quit仍由Lead明确完成；注册验收不代替原生验收。旧手工缓存/Archive符号与唯一输入不按年龄自动删，新工具链旧缓存另核用途。本轮不引入常驻清理器或新数据库。
+
+
+### 最终普通包、容量与剩余
+
+- 生产`d1a58d3e498b47f71da9b1696b850e07c4bd20e2`；CurrentD/Nov17-Final-d1a58d3e/D.app，与N/FinalArchive/D.xcarchive同一次正常Archive输出。566.372秒exit0；Release -O/WMO、Apple Development 3V4T79WLQS/hardened sandbox、无StoreKit测试标志/XCTest/默认诊断。资源5889c310…b0a514，产品输入0d13d3e5…932706，可执行SHA256 6ed00a359a1c98973f7a4893e45cf427aad87896c285902dadc071732ea5cfe6；两架构dSYM UUID精确匹配，Privacy及中英资源与源码相同。`normal-release/build-report.json`、`final-package-validation.json`。
+- 正常App PID74582/window2676：旧B6–B8测试历史和空草稿恢复，帮助→支持开发者进入实际面板，正式商品/账户不可用如实显示；Reload不出现购买、不用本地价格。关闭面板→实际应用菜单Quit→PID消失；更新桌面alias后冷开74710/window2711（1280×800中文），同session/message ID、0.820512阅读位置与空草稿保持。`native-switch.json`、`final-runtime.json`；TIP-04/05/06均同版正常App真实图已展示。首次CUA绑定timeout，精确PID激活后绑定恢复，未归因为锁屏或改产品绕工具。无模型重跑/用户编辑/丢弃/强退。
+- 真实构建入口按同容器预算20,422,733,022B，当时空闲386,815,713,280B；缓存12,174,809,229B参考＋暂存/复制后备/归档/符号各自计入。6.376秒同卷克隆发布成功。CurrentD/retention.json已用实际accept入口登记新current、781fallback及具名825/d4/5d保护；无已登记过期项故本次自动退役0，不凭manual旧目录数量删除。当前完整Archive为d1a；先前明确保护的781完整归档保留为本轮回退恢复材料，5d/825残余只称符号/历史资料。后续旧Archive、工具链缓存须在准确用途复核后定向退役，不能仅按日期自动删除。
+- 清理分批净释放103.102GB，清理两端差99.469GB，最终构建/测试后同容器可用379.427GB；相对本轮清理起点净增89.573GB，差额包括本轮新测试/普通缓存及归档写入，不将目录计费冒充实测释放。`final-protection-capacity.json`再次核原受保护根、个人scheme和两份历史JSON保持；旧App和原始模型没有被覆盖。
+- 实际未闭：I031仅顾问自己的私库D安装/非默认分支/固定文件/比较权限未证，Lead认证不足以替代，保留public。I030正式商品/账户/跨设备/真实付款未验，1024容量政策与旧无验证标记unknown继续保护；不造服务、不清旧请求。I012/I017与既有模型/发行/视觉接纳余项沿下文真实范围，不扩大本轮、不开B10。正常包商品不可用由正式配置条件解释，不写成支付成功。
+- 最终仅显式提交5份相关记录；工作分支与已授权main正常FF接纳，完整读回记N/integration-final.json及CurrentD/receipt.json，包内源码仍d1a、不伪改文档SHA。旧main91bef备份与回退分支保留；无标签、上传、提审、发布、部署或真实收费。
+
 ## 2026-11-17 第一批空间清理执行完成
 
 用户在深度盘点后明确批准第一批，其余留后续任务。从本地/远端`88ae60deb006bb9ae4857be791a305370f38650b`的准确清单，仅删除847个旧缓存根及27个D废纸篓包；874根全部核不存在、日志集合吻合、0失败。同容器15:26–15:31 JST可用35,664,257,024→290,076,708,864B，净增加254,412,451,840B；aroma同期不变。非实施者只读补核27包源码/配置/实际资源恢复依据；保留小回执、项目、运行时和全部原始证据，不承诺重建签名字节相同。当前781/桌面alias/运行PID49028及个人scheme未变，普通App deep/strict签名通过；未重建/操作UI/运行模型。其他批次、源码工作树、模型、备份、Steam及系统目录未动。详见[既有SSD记录](../investigations/20261113-SSD-CLEANUP/deep-audit-20261117.md)与[逐根回执](../investigations/20261113-SSD-CLEANUP/first-wave-result-20261117.json)。只提交去敏记录并推原分支；不以清理完成关闭产品余项，不自动启动下一批。
