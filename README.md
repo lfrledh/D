@@ -66,7 +66,7 @@ Compare candidates before deciding which to use. Completed content is retained w
 
 These three example titles demonstrate selection without a model generation. Check the items you want, then save them to the asset library or use the selected items to continue the workflow.
 
-Viewing a run leaves its original workflow unchanged. The first actual edit creates a working copy. To edit an asset in another application, explicitly open an independent copy.
+Viewing a run leaves its recorded workflow unchanged. While a workflow is running, the first actual edit creates a working copy. To edit an asset in another application, explicitly open an independent copy.
 
 The library helps you find and reuse content. The viewer lets you inspect images, play audio and video, or read text.
 
@@ -204,7 +204,7 @@ D 让你在 Mac 上使用文字、图像、视频和音频模型进行创作。�
 
 这里用三个示例标题展示筛选操作，没有调用模型生成。勾选要使用的内容后，可以保存到资产库，或使用已选内容继续工作流。
 
-查看运行结果不会改写运行原图；第一次实际编辑时会创建工作副本。需要在外部应用中编辑资产时，可明确打开独立副本。
+查看运行结果不会改写记录中的原流程；运行期间首次实际修改当前工作流时，D 会创建编辑副本。需要在外部应用中编辑资产时，可明确打开独立副本。
 
 资料库用于查找和复用素材，预览界面用于查看图片、播放音视频或阅读文字。
 

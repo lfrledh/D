@@ -27,6 +27,8 @@
 
 **文档验收。** 所有相对文件与锚点检查通过；GitHub Markdown API生成GFM HTML，本机Chrome以只读页面验证18处图片加载（两语各9）、全部锚点和无水平溢出，英文与中文阅读画面人工检查。预览只将API的user-content锚点前缀和图片路径映射为本地展示，README正文不变；不是HTML产品实现或原生证据。IAB不能连接本机地址、Chrome桥未提供，有限失败保留后用本机浏览器完成渲染；没有重复调用或改权限。渲染日志/图/链接报告留N18。英文/中文锚点实际click后分别回到相应标题（中文scrollY8957、标题top0.28125pt，英文scrollY40/top0）。headless深片段的两次截图为空，未计通过；中文同一GFM片段置顶后实图检查通过。普通App deep/strict签名、DSourceCommit、可执行摘要、桌面alias与原个人scheme摘要已核相同，`final-current-app-check.json`；最终完整交付SHA由N18/integration-final.json记录。
 
+**最终非实施者复核。** 固定8d5只读核14锚点/18图引用与九张原图摘要、目视隐私和事实边界，发现“首次编辑副本”未限定运行期间；已按 `DWorkbench/Workflow/WorkflowController.swift:556–588` 的真实条件收紧中英文，不改变行为。其余无阻断；不代Lead亲跑Mac。
+
 本轮完成后停在顾问审计与用户视觉接纳。I012/I017、模型/发行真实余项继续保持；没有新本人操作、正式付款、发布标签、上传、提审或部署。历史清理原始JSON不动；只显式暂存本轮README、九图、两个工具文件和三份现有状态文档。
 
 
