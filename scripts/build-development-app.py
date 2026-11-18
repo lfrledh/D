@@ -1579,6 +1579,34 @@ def _write_retention(path: Path, value: dict[str, Any]) -> None:
         if temporary.exists(): temporary.unlink()
 
 
+def _validate_retained_app(app: Path, identity: dict[str, Any] | None) -> None:
+    """Qualify a rollback without granting ownership of a manual App."""
+    if not app.is_absolute() or app.suffix != ".app":
+        raise BuildError("invalid retained App path")
+    _reject_symlink_ancestors(app, "retained App")
+    _directory(app, "retained App")
+    info_path = app / "Contents/Info.plist"
+    executable = app / "Contents/MacOS/D"
+    _regular(info_path, "retained App identity")
+    _regular(executable, "retained App executable")
+    info = plistlib.loads(info_path.read_bytes())
+    if not info.get("DSourceCommit") or not info.get("DResourceManifestSHA256"):
+        raise BuildError("retained App lacks source/resource identity")
+    if identity is not None:
+        report_path = _absolute(identity["report"], "retained App report")
+        _reject_symlink_ancestors(report_path, "retained App report")
+        report = _read_json(report_path, "retained App report")
+        if (report.get("mode") != "prepared-resources" or report.get("status") != "packaged"
+                or report.get("finalApp") != str(app) or report.get("production") != identity["production"]
+                or report.get("executableSHA256") != identity["executableSHA256"]):
+            raise BuildError("retained App report changed")
+        if (info.get("DSourceCommit") != identity["production"]
+                or info.get("DResourceManifestSHA256") != report.get("resourceManifestSHA256")
+                or _sha256(executable) != identity["executableSHA256"]):
+            raise BuildError("retained App changed")
+    subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True, capture_output=True)
+
+
 def accept_generated_candidate(report_path: Path, retention_path: Path) -> dict[str, Any]:
     """Explicit post-acceptance retirement, never run after build failure.
 
@@ -1606,16 +1634,32 @@ def accept_generated_candidate(report_path: Path, retention_path: Path) -> dict[
         raise BuildError("invalid retention receipt schema")
     if not isinstance(value["owned"], dict) or not isinstance(value["protected"], list):
         raise BuildError("invalid retention receipt entries")
-    # Manual current/fallback references may be retained without granting ownership.
-    if value["current"] != str(app):
-        value["fallback"] = value["current"]; value["current"] = str(app)
+    # An unavailable current must never displace the last usable rollback.
+    # Manual references are checked, but only previously owned Apps may retire.
+    candidates = [value["fallback"]] if value["current"] == str(app) else [value["current"], value["fallback"]]
+    validation_issues = []
+    fallback = None
+    for raw in dict.fromkeys(path for path in candidates if path and path != str(app)):
+        try:
+            _validate_retained_app(Path(raw), value["owned"].get(raw))
+            fallback = raw
+            break
+        except (OSError, ValueError, KeyError, TypeError, BuildError, subprocess.CalledProcessError) as error:
+            validation_issues.append({"path": raw, "reason": str(error)})
+    value["current"] = str(app)
+    value["fallback"] = fallback
+    retirement_paused = bool(validation_issues) or fallback is None
     value["owned"][str(app)] = {"report": str(report_path), "production": report["production"],
                                "executableSHA256": report["executableSHA256"]}
     keep = {value["current"], value["fallback"], *value["protected"]}
     pending = [path for path in value["owned"] if path not in keep]
     _write_retention(retention_path, value)  # Register the new candidate before retirement.
-    result: dict[str, Any] = {"current": value["current"], "fallback": value["fallback"], "deleted": [], "skipped": []}
+    result: dict[str, Any] = {"current": value["current"], "fallback": value["fallback"], "deleted": [], "skipped": [],
+                              "fallbackValidation": validation_issues, "retirementPaused": retirement_paused}
     for raw in pending:
+        if retirement_paused:
+            result["skipped"].append({"path": raw, "reason": "retirement paused until rollback protection is verified"})
+            continue
         old = Path(raw); identity = value["owned"][raw]
         try:
             if not old.is_relative_to(retention_path.parent) or old.suffix != ".app": raise BuildError("outside owned App scope")
@@ -1624,20 +1668,14 @@ def accept_generated_candidate(report_path: Path, retention_path: Path) -> dict[
                 raise BuildError("overlaps a protected candidate")
             if not old.exists():
                 del value["owned"][raw]; continue
-            old_report = _read_json(Path(identity["report"]), "owned candidate report")
-            if old_report.get("status") != "packaged" or old_report.get("finalApp") != raw:
-                raise BuildError("owned report changed")
-            old_info = plistlib.loads((old / "Contents/Info.plist").read_bytes())
-            if old_info.get("DSourceCommit") != identity["production"] or _sha256(old / "Contents/MacOS/D") != identity["executableSHA256"]:
-                raise BuildError("owned App changed")
-            subprocess.run(["codesign", "--verify", "--deep", "--strict", str(old)], check=True, capture_output=True)
+            _validate_retained_app(old, identity)
             occupied = subprocess.run(["/usr/sbin/lsof", "-nP", "-t", "+D", str(old)], capture_output=True)
             if occupied.returncode != 1 or occupied.stdout or occupied.stderr:
                 raise BuildError("App is open or occupancy could not be established")
             shutil.rmtree(old)
             del value["owned"][raw]; result["deleted"].append(raw)
             _write_retention(retention_path, value)
-        except (OSError, ValueError, BuildError, subprocess.CalledProcessError) as error:
+        except (OSError, ValueError, KeyError, TypeError, BuildError, subprocess.CalledProcessError) as error:
             result["skipped"].append({"path": raw, "reason": str(error)})
     _write_retention(retention_path, value)
     _write_retention(report_path.parent / "candidate-acceptance.json", result)

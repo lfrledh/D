@@ -1262,6 +1262,92 @@ class BuildCacheAndRetentionTests(unittest.TestCase):
         self.assertEqual(result["deleted"], [str(fallback)])
         self.assertTrue(all(p.exists() for p in [old, named, unknown, new]))
         self.assertEqual(json.loads(receipt.read_text())["fallback"], str(old))
+        with mock.patch.object(self.core.subprocess, "run", side_effect=command):
+            repeated = self.core.accept_generated_candidate(report, receipt)
+        self.assertEqual(repeated["fallback"], str(old))
+        self.assertEqual(repeated["deleted"], [])
+        self.assertTrue(old.exists())
+
+    def test_unavailable_current_preserves_valid_fallback_on_acceptance_and_repeat(self):
+        for damage in ["missing", "executable", "source", "resource"]:
+            with self.subTest(damage=damage):
+                old, _, old_record = self.make_app("old-" + damage)
+                fallback, _, fallback_record = self.make_app("fallback-" + damage)
+                new, report, _ = self.make_app("new-" + damage)
+                receipt = self.root / "CurrentD/retention.json"
+                receipt.write_text(json.dumps({"version": 1, "current": str(old), "fallback": str(fallback),
+                    "protected": [], "owned": {str(old): old_record, str(fallback): fallback_record}}))
+                if damage == "missing": shutil.rmtree(old)
+                elif damage == "executable": (old / "Contents/MacOS/D").write_bytes(b"changed")
+                else:
+                    import plistlib
+                    info_path = old / "Contents/Info.plist"
+                    info = plistlib.loads(info_path.read_bytes())
+                    info["DSourceCommit" if damage == "source" else "DResourceManifestSHA256"] = "changed"
+                    info_path.write_bytes(plistlib.dumps(info))
+                def command(argv, **kw): return subprocess.CompletedProcess(argv, 1 if "lsof" in argv[0] else 0, b"", b"")
+                with mock.patch.object(self.core.subprocess, "run", side_effect=command):
+                    result = self.core.accept_generated_candidate(report, receipt)
+                    self.assertTrue(fallback.exists(), "the usable rollback must not be retired")
+                    self.assertEqual(result["fallback"], str(fallback))
+                    self.assertEqual(result["deleted"], [])
+                    repeated = self.core.accept_generated_candidate(report, receipt)
+                self.assertTrue(fallback.exists())
+                self.assertEqual(repeated["fallback"], str(fallback))
+                self.assertEqual(json.loads(receipt.read_text())["current"], str(new))
+                if damage != "missing": self.assertTrue(old.exists(), "changed objects stay untouched")
+
+    def test_manual_fallback_is_validated_but_never_becomes_tool_owned(self):
+        old, _, old_record = self.make_app("missing-current")
+        fallback, _, _ = self.make_app("manual-fallback")
+        new, report, _ = self.make_app("candidate")
+        receipt = self.root / "CurrentD/retention.json"
+        receipt.write_text(json.dumps({"version": 1, "current": str(old), "fallback": str(fallback),
+            "protected": [], "owned": {str(old): old_record}}))
+        shutil.rmtree(old)
+        def command(argv, **kw): return subprocess.CompletedProcess(argv, 1 if "lsof" in argv[0] else 0, b"", b"")
+        with mock.patch.object(self.core.subprocess, "run", side_effect=command):
+            result = self.core.accept_generated_candidate(report, receipt)
+        self.assertEqual(result["fallback"], str(fallback))
+        self.assertTrue(new.exists() and fallback.exists())
+        self.assertNotIn(str(fallback), json.loads(receipt.read_text())["owned"])
+
+    def test_invalid_signature_keeps_existing_fallback(self):
+        old, _, old_record = self.make_app("invalid-signature")
+        fallback, _, fallback_record = self.make_app("signed-rollback")
+        new, report, _ = self.make_app("new-signed")
+        receipt = self.root / "CurrentD/retention.json"
+        receipt.write_text(json.dumps({"version": 1, "current": str(old), "fallback": str(fallback),
+            "protected": [], "owned": {str(old): old_record, str(fallback): fallback_record}}))
+        def command(argv, **kw):
+            if argv[0] == "codesign" and argv[-1] == str(old):
+                raise subprocess.CalledProcessError(1, argv)
+            return subprocess.CompletedProcess(argv, 1 if "lsof" in argv[0] else 0, b"", b"")
+        with mock.patch.object(self.core.subprocess, "run", side_effect=command):
+            result = self.core.accept_generated_candidate(report, receipt)
+        self.assertEqual(result["fallback"], str(fallback))
+        self.assertTrue(result["retirementPaused"])
+        self.assertTrue(old.exists() and fallback.exists() and new.exists())
+        self.assertEqual(result["deleted"], [])
+
+    def test_no_verified_rollback_pauses_retirement_but_accepts_candidate(self):
+        old, _, old_record = self.make_app("missing-both-current")
+        fallback, _, fallback_record = self.make_app("missing-both-fallback")
+        earlier, _, earlier_record = self.make_app("another-owned")
+        new, report, _ = self.make_app("new-without-rollback")
+        receipt = self.root / "CurrentD/retention.json"
+        receipt.write_text(json.dumps({"version": 1, "current": str(old), "fallback": str(fallback),
+            "protected": [], "owned": {str(old): old_record, str(fallback): fallback_record, str(earlier): earlier_record}}))
+        shutil.rmtree(old); shutil.rmtree(fallback)
+        def command(argv, **kw): return subprocess.CompletedProcess(argv, 1 if "lsof" in argv[0] else 0, b"", b"")
+        with mock.patch.object(self.core.subprocess, "run", side_effect=command):
+            for _ in range(2):
+                result = self.core.accept_generated_candidate(report, receipt)
+                self.assertIsNone(result["fallback"])
+                self.assertEqual(result["current"], str(new))
+                self.assertEqual(result["deleted"], [])
+                self.assertTrue(result["retirementPaused"])
+                self.assertTrue(earlier.exists())
 
     def test_failed_candidate_and_busy_old_app_cannot_destroy_current(self):
         old, _, old_record = self.make_app("old")
