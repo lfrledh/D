@@ -105,6 +105,40 @@ def _stdlib_excluded(relative: Path) -> bool:
     return _should_skip(relative) or (relative.parts and relative.parts[0] == "site-packages")
 
 
+def _install_known_runtime_notices(source: Path, destination: Path, *, notice_root: Path | None = None) -> bool:
+    """Carry the verified upstream notices with the matching stdlib build.
+
+    This selects license materials, not execution eligibility. Unknown builds
+    are never labelled as this distribution; normal runtime validation remains.
+    """
+    root = notice_root or Path(__file__).parent / "Licenses/python-3.12.14-20260825"
+    record = json.loads((root / "SOURCE.json").read_text(encoding="utf-8"))
+    for relative, expected in record["stdlibBuildFingerprints"].items():
+        path = source / relative
+        if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            if _lexists(source / "_D_runtime_notices") or _lexists(destination / "_D_runtime_notices"):
+                raise PackagingError("runtime notices belong to an unrecognized or changed stdlib build")
+            return False
+    target = destination / "_D_runtime_notices"
+    if target.is_symlink() or (_lexists(target) and not target.is_dir()):
+        raise PackagingError("runtime notices destination is not a regular directory")
+    materials = [(root / "SOURCE.json", None)] + [(root / item["name"], item["sha256"]) for item in record["notices"]]
+    # Validate every byte and any existing copy before writing a single notice.
+    for path, expected in materials:
+        if path.is_symlink() or not path.is_file():
+            raise PackagingError(f"runtime notice is not a regular file: {path.name}")
+        data = path.read_bytes()
+        if expected and hashlib.sha256(data).hexdigest() != expected:
+            raise PackagingError(f"runtime notice checksum differs: {path.name}")
+        existing = target / path.name
+        if _lexists(existing) and (existing.is_symlink() or not existing.is_file() or existing.read_bytes() != data):
+            raise PackagingError(f"runtime notice conflicts with existing input: {path.name}")
+    target.mkdir(parents=True, exist_ok=True)
+    for path, _ in materials:
+        shutil.copy2(path, target / path.name)
+    return True
+
+
 def _copy_tree(source: Path, destination: Path, *, exclude_site_packages: bool = False) -> None:
     for current, directories, files in os.walk(source, followlinks=False):
         current_path = Path(current)
@@ -122,6 +156,8 @@ def _copy_tree(source: Path, destination: Path, *, exclude_site_packages: bool =
             target = destination / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(current_path / filename, target)
+    if exclude_site_packages:
+        _install_known_runtime_notices(source, destination)
 
 
 def _dist_info_matches(entry: str, package: str) -> bool:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,7 @@ import tempfile
 import time
 import tokenize
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -82,6 +84,53 @@ class EnginePackagingTests(unittest.TestCase):
         with tokenize.open(TARGET) as handle:
             source = handle.read()
         compile(source, str(TARGET), "exec", dont_inherit=True)
+
+    def test_known_runtime_notices_are_verified_and_idempotent(self) -> None:
+        spec = importlib.util.spec_from_file_location("d_packaging_notices", TARGET)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        notices = self.base / "notices"
+        notices.mkdir()
+        (notices / "LICENSE.txt").write_text("exact upstream notice")
+        source = self.python_root / "lib/python3.12"
+        fingerprint = hashlib.sha256((source / "os.py").read_bytes()).hexdigest()
+        record = {"stdlibBuildFingerprints": {"os.py": fingerprint}, "notices": [{"name": "LICENSE.txt", "sha256": hashlib.sha256((notices / "LICENSE.txt").read_bytes()).hexdigest()}]}
+        (notices / "SOURCE.json").write_text(json.dumps(record))
+        output = self.base / "stdlib-copy"
+        self.assertTrue(module._install_known_runtime_notices(source, output, notice_root=notices))
+        before = digest_tree(output)
+        self.assertTrue(module._install_known_runtime_notices(source, output, notice_root=notices))
+        self.assertEqual(before, digest_tree(output))
+        (source / "os.py").write_text("different runtime")
+        self.assertFalse(module._install_known_runtime_notices(source, self.base / "unknown", notice_root=notices))
+        self.assertFalse((self.base / "unknown").exists())
+        with self.assertRaisesRegex(module.PackagingError, "changed stdlib"):
+            module._install_known_runtime_notices(source, output, notice_root=notices)
+        shutil.copytree(output / "_D_runtime_notices", source / "_D_runtime_notices")
+        with self.assertRaisesRegex(module.PackagingError, "changed stdlib"):
+            module._install_known_runtime_notices(source, self.base / "unknown-with-inherited-notices", notice_root=notices)
+        self.assertEqual((source / "_D_runtime_notices/LICENSE.txt").read_text(), "exact upstream notice")
+        (source / "os.py").write_text("stdlib")
+        (notices / "LICENSE.txt").write_text("corrupted notice")
+        with self.assertRaisesRegex(module.PackagingError, "checksum"):
+            module._install_known_runtime_notices(source, self.base / "bad", notice_root=notices)
+        self.assertFalse((self.base / "bad").exists())
+        (notices / "LICENSE.txt").write_text("exact upstream notice")
+        (output / "_D_runtime_notices/LICENSE.txt").write_text("conflicting original")
+        with self.assertRaisesRegex(module.PackagingError, "conflicts"):
+            module._install_known_runtime_notices(source, output, notice_root=notices)
+        self.assertEqual((output / "_D_runtime_notices/LICENSE.txt").read_text(), "conflicting original")
+
+    def test_stdlib_copy_invokes_notice_installation_but_other_trees_do_not(self) -> None:
+        spec = importlib.util.spec_from_file_location("d_packaging_notices", TARGET)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with patch.object(module, "_install_known_runtime_notices") as install:
+            module._copy_tree(self.provider, self.base / "provider-copy")
+            install.assert_not_called()
+            source = self.python_root / "lib/python3.12"
+            module._copy_tree(source, self.base / "stdlib-copy", exclude_site_packages=True)
+            install.assert_called_once_with(source, self.base / "stdlib-copy")
 
     def test_normal_layout_manifest_unicode_and_determinism(self) -> None:
         source_roots = (self.python_root, self.site, self.provider, self.vendor, self.models)
