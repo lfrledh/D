@@ -33,6 +33,10 @@ public enum SharedLibraryConcept: Sendable, Hashable {
         }
     }
     public static let operationWireValues: [String: String] = [
+        // Added after the legacy wire set; never derive identity from a translated title.
+        "d.asset.group": "d.concept.operation.d.asset.group",
+        "d.asset.filter": "d.concept.operation.d.asset.filter",
+        "d.asset.preview": "d.concept.operation.d.asset.preview",
         "d.asset.choose": "选择候选",
         "d.asset.export": "导出",
         "d.asset.reference": "项目素材",

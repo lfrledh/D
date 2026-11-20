@@ -444,7 +444,7 @@ extension UILocalizationTests {
                 let text = language.text(key, fallback: "MISSING")
                 #expect(text != "MISSING" && text != key && !text.isEmpty)
             }
-            #expect(language.text("container.library.undoCollection", fallback: "MISSING") == (locale == "en" ? "Undo Asset Library Saving Change" : "撤销保存到资产库的变更"))
+            #expect(language.text("container.library.undoCollection", fallback: "MISSING") == (locale == "en" ? "Undo saving to Asset Library" : "撤销保存到资产库的变更"))
         }
     }
 }

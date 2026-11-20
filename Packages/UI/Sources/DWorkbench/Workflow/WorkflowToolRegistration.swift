@@ -91,9 +91,9 @@ public struct WorkflowDefinitionDependency: Sendable, Identifiable {
     public static func inspect(_ graph: WorkflowGraph, tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard) throws -> [Self] {
         var rows: [Self] = []
         func visit(_ graph: WorkflowGraph, path: String, depth: Int, stack: Set<WorkflowToolReference>) throws {
-            guard depth <= 16 else { throw WorkflowIssue("登记依赖超过 16 层。") }
+            guard depth <= 16 else { throw WorkflowIssue("登记依赖超过 16 层。", code: "workflow.language.tools.dependencyDepth") }
             for node in graph.nodes {
-                guard rows.count < 4096, let definition = registry.definition(for: node, tools: tools) else { throw WorkflowIssue("登记依赖缺失或超过预算。") }
+                guard rows.count < 4096, let definition = registry.definition(for: node, tools: tools) else { throw WorkflowIssue("登记依赖缺失或超过预算。", code: "workflow.language.tools.dependencyUnavailable") }
                 let key = path + "/" + node.id.uuidString
                 rows.append(.init(id: key, title: node.title, operationID: node.operationID,
                     modelID: node.parameters["modelID"]?.string, requiresModel: definition.modelKind != nil,
@@ -106,7 +106,7 @@ public struct WorkflowDefinitionDependency: Sendable, Identifiable {
                     try visit(body, path: key + "/body", depth: depth + 1, stack: stack)
                 case .invoke(let ref):
                     guard !stack.contains(ref), let exact = tools.first(where: { $0.id == ref.id && $0.version == ref.version }),
-                          try WorkflowPlanCompiler.digest(exact) == ref.digest else { throw WorkflowIssue("嵌套工具版本、摘要无效或形成递归。") }
+                          try WorkflowPlanCompiler.digest(exact) == ref.digest else { throw WorkflowIssue("嵌套工具版本、摘要无效或形成递归。", code: "workflow.language.tools.dependencyInvalid") }
                     try visit(exact.graph, path: key + "/tool", depth: depth + 1, stack: stack.union([ref]))
                 case nil: break
                 }

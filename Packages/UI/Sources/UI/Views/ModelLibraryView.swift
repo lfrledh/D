@@ -76,7 +76,7 @@ public struct ModelLibraryView: View {
     public var body: some View {
         VStack(spacing: 0) {
             if let error = model.errorMessage ?? model.snapshot?.queueError {
-                HStack { Image(systemName: "exclamationmark.triangle"); WorkbenchIssueText(raw: error, key: model.errorMessage != nil ? model.errorCode : nil).textSelection(.enabled); Spacer(); Button(text("dismiss", "收起")) { model.clearError() } }
+                HStack { Image(systemName: "exclamationmark.triangle"); WorkbenchIssueText(raw: error, key: model.errorMessage != nil ? model.errorCode : nil, arguments: model.errorArguments).textSelection(.enabled); Spacer(); Button(text("dismiss", "收起")) { model.clearError() } }
                     .font(.callout).padding(12).background(.orange.opacity(0.1))
             }
             if let notice = model.preparationNotice { Text(notice).font(.callout).padding(8) }
@@ -361,7 +361,7 @@ public struct ModelLibraryView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
             if let reason = record.locationIssue { Text(text(reason.rawValue)).foregroundStyle(.orange) }
-            if let error = record.error { WorkflowTechnicalDetails(value: error) }
+            if let error = record.error { ModelLibraryFailureText(raw: error, space: record.spaceFailure) }
             VStack(alignment: .leading, spacing: 10) {
                 if resource.control.requiresTokenizerUpgrade == true, resource.control.role != .execution, record.storage == .managed {
                     Button(text("completeTokenizer", "")) { Task { await model.continueResource(resource) } }
@@ -451,8 +451,12 @@ public struct ModelLibraryView: View {
             }
             field("postAction", "下载完成后", task.postAction == .filesOnly ? text("filesOnly", "仅下载文件") : text("downloadRegister", "下载后登记"))
             if let deadline = task.earliestRetry { field("earliest", "最早重试", deadline.formatted()) }
-            if let first = task.firstError { field("firstError", "最初错误", first) }
-            if let error = task.error { field("latestError", "最近错误", error) }
+            if let first = task.firstError {
+                Text(text("firstError")); ModelLibraryFailureText(raw: first, space: task.firstSpaceFailure)
+            }
+            if let error = task.error {
+                Text(text("latestError")); ModelLibraryFailureText(raw: error, space: task.spaceFailure)
+            }
             if let error = task.postActionError { field("postError", "文件已完成，后续动作待处理", error) }
             field("location", "来源与目标", taskLocation(task))
             if task.state == .failed || task.state == .waitingRetry {
@@ -580,7 +584,7 @@ public struct ModelLibraryView: View {
             Text(text("deleteTaskHelp", "不会删除已完成的模型文件。"))
             if !task.state.isTerminal { Text(text("deleteActiveHelp", "此任务会先停止，正在写入的内容处理结束后再删除记录。")) }
             if canCleanPartial(task) { Toggle(text("cleanupPartial", "同时删除这项任务未完成的下载文件"), isOn: $cleanupPartial) }
-            if let error = model.errorMessage { WorkbenchIssueText(raw: error, key: model.errorCode).foregroundStyle(.orange).textSelection(.enabled) }
+            if let error = model.errorMessage { WorkbenchIssueText(raw: error, key: model.errorCode, arguments: model.errorArguments).foregroundStyle(.orange).textSelection(.enabled) }
             HStack {
                 Button(text("cancel", "取消")) { deletingTask = nil }
                 Spacer()
@@ -682,8 +686,20 @@ struct ModelStorageDownloadSettings: View {
             Button(text("credentialRemove")) { Task { await model.removeDownloadCredential() } }
                 .disabled(!model.canChangeDownloadCredential).accessibilityIdentifier("model-credential-remove")
             Text(text("credentialHelp")).font(.caption).foregroundStyle(.secondary)
-            if let error = model.errorMessage { WorkbenchIssueText(raw: error, key: model.errorCode).foregroundStyle(.orange).textSelection(.enabled) }
+            if let error = model.errorMessage { WorkbenchIssueText(raw: error, key: model.errorCode, arguments: model.errorArguments).foregroundStyle(.orange).textSelection(.enabled) }
         }.buttonStyle(WorkbenchGlassButtonStyle()).frame(maxWidth: .infinity, alignment: .leading)
         .workbenchSheet(isPresented: $tokenVisible, title: text("accessToken"), size: .init(width: 600, height: 380)) { ModelAccessTokenEditor(model: model) }
+    }
+}
+
+private struct ModelLibraryFailureText: View {
+    let raw: String
+    let space: ModelSpaceFailure?
+    var body: some View {
+        if let space {
+            WorkbenchIssueText(raw: raw, key: "modelManagement.insufficientSpace",
+                arguments: ["required": ModelLibraryModel.formatBytes(space.required),
+                            "available": ModelLibraryModel.formatBytes(space.available)])
+        } else { WorkflowTechnicalDetails(value: raw) }
     }
 }

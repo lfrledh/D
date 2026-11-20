@@ -362,7 +362,7 @@ public enum ModelNodeCatalog {
         device: "CPU",
         precision: "FP32 输入；宿主派生 16 kHz mono Float32",
         availability: .workbench,
-        deploymentNote: "源码内部工作台音高分析已接入；AP1 音符编辑／MIDI 候选未接纳。独立权重分发许可仍未知。",
+        deploymentNote: "源码内部工作台音高分析已接入；AP1 音符编辑／MIDI 候选未接纳。",
         operations: [
             ModelNodeOperation(
                 id: "audio.pitch.analyze",
@@ -398,7 +398,7 @@ public enum ModelNodeCatalog {
             "不修改或归一化原始音频；只分析宿主派生输入。",
             "unvoiced 的精确含义仍有限，confidence 不是校准概率。",
             "不提供 ASR、TTS、多声音高、音频生成或模型 MIDI 输出。",
-            "独立权重的分发许可未知，不能把源码适配写成可随 App 分发。"
+            "D 不附带模型权重。"
         ],
         evidencePaths: [
             "Sources/DInference/PitchAnalysis.swift",

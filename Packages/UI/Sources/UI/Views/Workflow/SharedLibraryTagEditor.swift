@@ -41,7 +41,7 @@ struct SharedLibraryTagSection: View {
                 if !store.metadata.importedLegacyKeys.contains(target.key), !target.legacy.isEmpty {
                     Text(text("legacy", "旧标签（尚未整合）") + ": " + target.legacy.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
                 }
-                if let failure = target.legacyFailure { Text(failure).font(.caption).foregroundStyle(.orange) }
+                if target.legacyFailure != nil { Text(workflowText(language, "metadata.tags.legacyCorrupt")).font(.caption).foregroundStyle(.orange) }
                 Button(text("edit", "编辑标签…")) { editing = true }
                     .accessibilityIdentifier("organization-tags-edit")
                     .workbenchSheet(isPresented: $editing, title: workflowText(language, "childPanel.name.tags")) { SharedLibraryTagEditor(store: store, targets: [target], validateTarget: validateTarget) }
@@ -108,7 +108,7 @@ struct SharedLibraryTagEditor: View {
                                 }))
                             }
                         }
-                        if let failure = target.legacyFailure { Text(failure).foregroundStyle(.orange) }
+                        if target.legacyFailure != nil { Text(workflowText(language, "metadata.tags.legacyCorrupt")).foregroundStyle(.orange) }
                     }
                     ForEach(names.indices, id: \.self) { index in
                         HStack {
@@ -131,7 +131,7 @@ struct SharedLibraryTagEditor: View {
                 }
             }
             if invalidName { Text(text("invalidName", "")).foregroundStyle(.red).font(.caption) }
-            if let error { Text(sharedLibraryErrorText(error, language: language)).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
+            if let error { SharedLibraryIssueText(error: error).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
             HStack {
                 Button(text("cancel", "取消")) { dismiss() }
                 Spacer()
@@ -242,10 +242,13 @@ struct WorkflowAssetMetadataHost: View {
     static func validation(controller: WorkflowController, assetID: UUID? = nil) -> () throws -> Void {
         let project = controller.projectID, instance = controller.projectInstanceID
         return {
-            guard controller.canEditLibraryMetadata, controller.projectID == project,
+            guard controller.canReadLibraryMetadata, controller.projectID == project,
                   controller.projectInstanceID == instance,
                   assetID.map({ id in controller.availableAssets.contains { $0.id == id } }) ?? true else {
-                throw WorkflowIssue("Metadata target is no longer open / 元数据所属项目实例或对象已改变。草稿未提交。")
+                throw WorkflowIssue("Metadata target is no longer open / 元数据所属项目实例或对象已改变。草稿未提交。", code: "metadata.error.targetUnavailable")
+            }
+            guard controller.canEditLibraryMetadata else {
+                throw WorkflowIssue("Metadata editing is temporarily busy.", code: "container.issue.busy")
             }
         }
     }
@@ -268,5 +271,15 @@ private struct SharedLibrarySystemTags: View {
     private func row(_ key: String, _ kinds: Set<WorkflowDataKind>) -> some View {
         Text(workflowText(language, key) + ": " + kinds.sorted { $0.rawValue < $1.rawValue }
             .map { WorkflowCanvasPresentation.kind($0, language: language) }.joined(separator: " · "))
+    }
+}
+
+struct SharedLibraryIssueText: View {
+    let error: any Error
+    @Environment(\.dLanguageStore) private var language
+    var body: some View {
+        if let issue = error as? WorkflowIssue, let code = issue.code {
+            WorkbenchIssueText(raw: issue.localizedDescription, key: code)
+        } else { Text(sharedLibraryErrorText(error, language: language)) }
     }
 }

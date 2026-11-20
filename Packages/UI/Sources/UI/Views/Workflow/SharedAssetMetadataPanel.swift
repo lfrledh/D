@@ -216,7 +216,7 @@ struct AssetAnnotationEditor: View {
             TextField(t("resultNote"), text: $note, axis: .vertical).lineLimit(4...10).textFieldStyle(WorkbenchGlassTextFieldStyle()).accessibilityIdentifier("asset-annotation-note").workbenchHelp("ANNOTATION-NOTE")
             Toggle(t("favorite"), isOn: $favorite)
             Text(metadataText(language, ownershipKey, "", "")).font(.caption)
-            if let failure { Text(sharedLibraryErrorText(failure, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+            if let failure { SharedLibraryIssueText(error: failure).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
                 Spacer()
                 Button(t("cancel")) { if let closeGate { closeGate.requestClose() } else { dismiss() } }.workbenchHelp("ANNOTATION-CANCEL").keyboardShortcut(.cancelAction)

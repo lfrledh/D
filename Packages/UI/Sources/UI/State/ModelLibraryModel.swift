@@ -154,8 +154,9 @@ public final class ModelLibraryModel {
         return localInspectionID
     }
     func isCurrentLocalInspection(_ intent: UUID) -> Bool { localInspectionID == intent }
-    public var errorMessage: String? { didSet { errorCode = nil } }
+    public var errorMessage: String? { didSet { errorCode = nil; errorArguments = [:] } }
     public private(set) var errorCode: String?
+    public private(set) var errorArguments: [String: String] = [:]
     public private(set) var preparationNotice: String?
     public private(set) var snapshot: ModelLibrarySnapshot?
     public private(set) var isChoosingLocation = false
@@ -552,7 +553,7 @@ public final class ModelLibraryModel {
         }
         isChoosingLocation = true
         let panel = NSOpenPanel()
-        panel.title = managementText("importPrefix", "登记已有模型") + ": " + entry.title
+        panel.title = managementText("importPrefix", "添加模型") + ": " + entry.title
         panel.message = storage == .external
             ? managementText("importExternalMessage", "选择此模型的准确文件夹；校验必要文件并保留原位置。")
             : managementText("importCopyMessage", "选择此模型的准确文件夹；校验后复制到模型库，保留原件。")
@@ -721,7 +722,7 @@ public final class ModelLibraryModel {
         if record.availability == .needsAuthorization { return managementText("recordStatus.authorization", "需要重新授权") }
         if record.availability == .unavailable { return managementText("recordStatus.unavailable", "存放位置不可用") }
         switch record.state {
-        case .registered: return managementText("recordStatus.registered", "已登记，等待校验")
+        case .registered: return managementText("recordStatus.registered", "已添加，等待校验")
         case .queued: return managementText("recordStatus.queued", "等待下载")
         case .downloading: return managementText("recordStatus.downloading", "正在下载")
         case .pausing: return managementText("recordStatus.pausing", "正在暂停，等待写入结束")
@@ -756,8 +757,12 @@ public final class ModelLibraryModel {
         let message = managementText("accessError." + issue.localizationKey)
         return issue.statusCode.map { message.replacingOccurrences(of: "{code}", with: String($0)) } ?? message
     }
-    private func report(_ error: Error, context: String) {
-        if case ModelLibraryError.unsupportedLocalFiles = error {
+    func report(_ error: Error, context: String) {
+        if case ModelLibraryError.insufficientSpace(let required, let available) = error {
+            errorMessage = error.localizedDescription
+            errorCode = "modelManagement.insufficientSpace"
+            errorArguments = ["required": Self.formatBytes(required), "available": Self.formatBytes(available)]
+        } else if case ModelLibraryError.unsupportedLocalFiles = error {
             errorMessage = error.localizedDescription
             errorCode = "modelManagement.local.noSupportedModel"
         } else {
@@ -822,7 +827,7 @@ extension ModelLibraryModel {
         guard !isChoosingLocation, globalOperation == nil, let register = explicitRegistration else { return }
         isChoosingLocation = true
         let panel = NSOpenPanel()
-        panel.title = managementText("importExact", "登记已有精确配置…")
+        panel.title = managementText("importExact", "添加本地模型…")
         panel.message = managementText("importExactHelp", "沿用现有引擎的精确校验。保留原位置，不自动选用，不创建下载任务。")
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
         let response = await panel.begin(); isChoosingLocation = false

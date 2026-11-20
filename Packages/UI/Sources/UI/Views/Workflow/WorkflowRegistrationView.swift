@@ -61,7 +61,7 @@ struct WorkflowDependencySummary: View {
     let controller: WorkflowController
     @Environment(\.dLanguageStore) private var language
     @State private var rows: [WorkflowDefinitionDependency] = []
-    @State private var issue: String?
+    @State private var issue: WorkflowIssue?
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(rows) { row in
@@ -77,10 +77,10 @@ struct WorkflowDependencySummary: View {
                     if row.effect == .assetPublication { Text(workspaceText(language, "publishesAsset")) }
                 }.font(.caption).textSelection(.enabled)
             }
-            if let issue { Text(issue).foregroundStyle(.orange) }
+            if let issue { WorkbenchIssueText(raw: issue.reason, key: issue.code).foregroundStyle(.orange) }
         }.task(id: graph.revision.uuidString + graph.nodes.map { $0.id.uuidString }.joined()) {
             do { rows = try WorkflowDefinitionDependency.inspect(graph, tools: controller.tools, registry: controller.registry); issue = nil }
-            catch { rows = []; issue = error.localizedDescription }
+            catch { rows = []; issue = error as? WorkflowIssue ?? WorkflowIssue(error.localizedDescription) }
         }
     }
 }

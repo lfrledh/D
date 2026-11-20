@@ -638,7 +638,7 @@ extension WorkflowWorkspacePresentationTests {
             })
         #expect(SharedLibraryBrowserLogic.insertionIssue(for: entry, controller: f.controller, language: language) == nil)
         #expect(language.text("workflow.node.prepare.notReady", fallback: "missing").contains(locale == "en" ? "not ready" : "未就绪"))
-        #expect(language.text("workflow.node.prepare.download", fallback: "missing").contains(locale == "en" ? "Register" : "登记"))
+        #expect(language.text("workflow.node.prepare.download", fallback: "missing") == (locale == "en" ? "Download Model" : "下载模型"))
         #expect(WorkbenchOwnedIssue.summary("此模型身份与操作不匹配，且不是受支持的目录草稿。", language: language)?.contains(locale == "en" ? "does not match" : "不匹配") == true)
         try await f.close()
     }

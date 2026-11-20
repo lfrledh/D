@@ -99,7 +99,8 @@ public final class ProjectSession {
                 && ($0.id == activeDocument?.sourceAssetID || $0.id == referenceImageAssetID || $0.jobID.map(jobs.contains) == true)
         }
     }
-    public var errorMessage: String?
+    public var errorMessage: String? { didSet { errorCode = nil } }
+    public private(set) var errorCode: String?
     public private(set) var isChangingProject = false
     public private(set) var phases: [UUID: String] = [:]
     public private(set) var phaseCodes: [UUID: String] = [:]
@@ -2285,11 +2286,12 @@ public final class ProjectSession {
             chatCapture?.identity = identity
         } catch {
             if chatCapture?.id == id { chatCapture = nil; chatRecordingSessionID = nil }
-            report(error, context: "聊天录音未开始")
+            report(error, context: "聊天录音未开始", code: "chat.recording.notStarted")
         }
     }
     public func finishChatRecording() async {
         guard let capture = chatCapture, let owner = chatRecordingSessionID else { return }
+        var recordingSaved = false
         do {
             guard let identity = capture.identity else {
                 _ = await capture.audio.finishRecording()
@@ -2297,12 +2299,16 @@ public final class ProjectSession {
                 return
             }
             let assetID = try await capture.audio.finishRecordingAsset(identity)
+            recordingSaved = true
             guard chatCapture?.id == capture.id else { return }
             chatCapture = nil; chatRecordingSessionID = nil
             guard chat === capture.chat, store === capture.store else { return }
             let reference = try await capture.store.pinWorkflowAsset(assetID)
             try await capture.chat.transcribeSpeech(reference, sessionID: owner, locale: capture.locale, transcriptName: capture.transcriptName, draftName: capture.draftName)
-        } catch { report(error, context: "原录音已保留；聊天转写未完成") }
+        } catch {
+            report(error, context: recordingSaved ? "原录音已保留；聊天转写未完成" : "录音尚未完成保存",
+                code: recordingSaved ? "chat.recording.transcriptionIncomplete" : "chat.recording.saveIncomplete")
+        }
     }
 
     public func startWorkflowRecording(nodeID: UUID, controller: WorkflowController) async {
@@ -3673,8 +3679,9 @@ public final class ProjectSession {
         }
     }
 
-    private func report(_ error: Error, context: String) {
+    private func report(_ error: Error, context: String, code: String? = nil) {
         errorMessage = "\(context)。\n\(error.localizedDescription)"
+        errorCode = code
     }
 }
 

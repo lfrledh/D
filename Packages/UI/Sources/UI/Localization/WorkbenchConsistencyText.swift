@@ -18,6 +18,9 @@ import DWorkbench
 /// Known metadata failures use semantic keys; foreign and historical diagnostics
 /// remain verbatim. Neither the localized sentence nor the raw diagnostic is an ID.
 @MainActor func sharedLibraryErrorText(_ error: any Error, language: UILanguageStore?) -> String {
+    if let issue = error as? WorkflowIssue, let key = issue.code {
+        return workflowText(language, key, fallback: issue.reason)
+    }
     guard let error = error as? SharedLibraryError else { return error.localizedDescription }
     let code: String
     var arguments: [String: String] = [:]

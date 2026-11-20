@@ -5,6 +5,23 @@ import Testing
 
 @Suite @MainActor
 struct SharedLibraryConceptCompatibilityTests {
+    @Test func localizedRolesAndCatalogNotesPreserveQueryIdentity() throws {
+        let zh = UILanguageStore(preferredLanguages: ["zh-Hans"]), en = UILanguageStore(preferredLanguages: ["en"])
+        let a = SharedLibraryProjection.entries(models: [], readiness: [:], tools: [], projects: [], language: zh).map(\.item)
+        let b = SharedLibraryProjection.entries(models: [], readiness: [:], tools: [], projects: [], language: en).map(\.item)
+        let store = try SharedLibraryStore()
+        for role in ["primary-model", "separate-entry", "program", "workflow-tool", "original", "result", "preview", "thumbnail", "run-value"] {
+            #expect(SharedLibraryRolePresentation.label(role, language: en) != role)
+            let query = SharedLibraryQuery(roles: [role])
+            #expect(store.filter(a, query: query).map(\.key) == store.filter(b, query: query).map(\.key))
+            #expect(try JSONDecoder().decode(SharedLibraryQuery.self, from: JSONEncoder().encode(query)) == query)
+        }
+        #expect(SharedLibraryRolePresentation.label("用户自定义角色", language: en) == "用户自定义角色")
+        #expect(en.text("baseline02.library.conditions", fallback: "missing") == "Filters")
+        #expect(a.map(\.key) == b.map(\.key))
+        #expect(a.map(\.role) == b.map(\.role))
+    }
+
     @Test func fixedLegacyResultSets() throws {
         let entries = SharedLibraryProjection.entries(models: [], readiness: [:], tools: [], projects: [], language: nil)
         let concepts = Set(entries.flatMap { $0.item.facts.concepts })
@@ -13,7 +30,13 @@ struct SharedLibraryConceptCompatibilityTests {
         })
         // Captured from the real 2d8 projection before identity changes. Exact
         // result keys include all variants sharing one old purpose condition.
-        let expected = try JSONDecoder().decode([String: [String]].self, from: Data(Self.legacy.utf8))
+        var expected = try JSONDecoder().decode([String: [String]].self, from: Data(Self.legacy.utf8))
+        for id in ["d.asset.filter", "d.asset.preview"] {
+            expected["d.concept.operation." + id] = ["operation:" + id]
+            #expect(SharedLibraryConcept(wireValue: "d.concept.operation." + id) == .operation(id))
+        }
+        // The group node is an internal container, not a library row.
+        #expect(SharedLibraryConcept(wireValue: "d.concept.operation.d.asset.group") == .operation("d.asset.group"))
         #expect(sets == expected)
         #expect(Set(SharedLibraryConcept.operationWireValues.keys) == Set(WorkflowRegistry.standard.definitions.map(\.id)))
 

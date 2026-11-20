@@ -32,6 +32,24 @@ import UniformTypeIdentifiers
 
 @Suite("Quick explicit attachment import", .serialized) @MainActor
 struct QuickInputImportTests {
+    @Test func failurePresentationChangesLanguageWithoutChangingCapturedObjectOrDiagnostic() throws {
+        let zh = UILanguageStore(preferredLanguages: ["zh-Hans"])
+        let en = UILanguageStore(preferredLanguages: ["en"])
+        let raw = "只接受本地文件URL。"
+        let failure = QuickInputImport.Failure(WorkflowIssue(raw, code: "quick.input.issue.localFileOnly"), label: "用户原名.png")
+        let result = QuickInputImport.Result(published: 1, bound: 0, failures: [failure])
+        #expect(result.display(zh)?.contains("用户原名.png") == true)
+        #expect(result.display(en)?.contains("用户原名.png") == true)
+        #expect(result.display(zh) != result.display(en))
+        #expect(result.message == raw && result.failures[0].raw == raw)
+        #expect(result.published == 1 && result.bound == 0 && !result.cancelled)
+        let unknown = QuickInputImport.Failure(WorkflowIssue("backend原始诊断 0x37"))
+        #expect(unknown.display(en) == "backend原始诊断 0x37")
+        let cancelled = QuickInputImport.Result(published: 1, cancelled: true)
+        #expect(cancelled.display(en) == en.text("quick.input.cancelled", fallback: "missing"))
+        #expect(cancelled.published == 1)
+    }
+
     private func folder() throws -> URL {
         let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
         let url = URL(fileURLWithPath: base, isDirectory: true)
@@ -86,7 +104,7 @@ struct QuickInputImportTests {
         let result = await QuickInputImport.run([.file(first), .file(bad), .file(last)],
                                                 quick: quick, draft: draft, port: port)
         #expect(result.published == 2 && result.bound == 2)
-        #expect(result.failures.count == 1 && result.failures[0].contains("bad.png"))
+        #expect(result.failures.count == 1 && result.failures[0].display(UILanguageStore(preferredLanguages: ["en"])).contains("bad.png"))
         let bound = try port.resolveAssets(#require(quick.draft?.inputs[port.id]))
         let manifest = await store.snapshot()
         #expect(bound.compactMap { ref in manifest.assets.first { $0.id == ref.assetID }?.name } == ["first.png", "last.png"])

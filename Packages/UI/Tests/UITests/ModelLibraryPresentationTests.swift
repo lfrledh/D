@@ -10,6 +10,25 @@ import Testing
 
 @Suite @MainActor
 struct ModelLibraryPresentationTests {
+    @Test func insufficientSpaceReportsTotalRequirementAndPreservesRawDiagnostic() async throws {
+        let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+        let root = URL(fileURLWithPath: base).appendingPathComponent("SpacePresentation-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = try await ModelLibrary(stateDirectory: root)
+        let model = ModelLibraryModel(library: library)
+        let failure = ModelLibraryError.insufficientSpace(required: 4096, available: 1024)
+        model.report(failure, context: "context must not be used as identity")
+        #expect(model.errorMessage == failure.localizedDescription)
+        #expect(model.errorCode == "modelManagement.insufficientSpace")
+        #expect(model.errorArguments == ["required": ModelLibraryModel.formatBytes(4096), "available": ModelLibraryModel.formatBytes(1024)])
+        let zh = UILanguageStore(preferredLanguages: ["zh-Hans"]), en = UILanguageStore(preferredLanguages: ["en"])
+        let key = try #require(model.errorCode)
+        #expect(workflowText(zh, key, arguments: model.errorArguments) != workflowText(en, key, arguments: model.errorArguments))
+        model.errorMessage = "unrelated diagnostic"
+        #expect(model.errorCode == nil && model.errorArguments.isEmpty)
+        try await library.shutdown()
+    }
+
     @Test func unsupportedLocalFolderKeepsTypedReasonAcrossLanguageChanges() async throws {
         let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
         let root = URL(fileURLWithPath: base).appendingPathComponent("UnsupportedLocal-" + UUID().uuidString)
@@ -694,7 +713,7 @@ extension ModelLibraryPresentationTests {
         var prepared = false
         await model.prepareVideo(id) { _, _ in prepared = true }
         #expect(!prepared && !model.isChoosingLocation)
-        #expect(model.errorMessage?.contains(locale == "en" ? "complete preparation engine" : "完整准备引擎") == true)
+        #expect(model.errorMessage?.contains(language.text("modelManagement.prepareEngineUnavailable", fallback: "MISSING")) == true)
         #expect(try Data(contentsOf: source.appendingPathComponent("payload.bin")) == bytes)
         try await library.shutdown()
     }

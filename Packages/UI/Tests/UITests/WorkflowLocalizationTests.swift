@@ -93,7 +93,8 @@ struct WorkflowLocalizationTests {
         for locale in ["en", "zh-Hans"] {
             let store = UILanguageStore(preferredLanguages: [locale]); try store.select(locale)
             for value in ["resident", "staged", "ssdLayered"] {
-                let expected = store.text("workflow.loading." + value, fallback: "__missing__")
+                let key = value == "resident" ? "memory.resident" : value == "ssdLayered" ? "memory.layered" : "workflow.loading." + value
+                let expected = store.text(key, fallback: "__missing__")
                 #expect(expected != "__missing__" && expected != value)
                 #expect(WorkflowCanvasPresentation.choiceTitle(fieldID: "loadingStrategy", value: value, language: store) == expected)
                 #expect(WorkflowCanvasPresentation.choiceTitle(fieldID: "userChoice", value: value, language: store) == value)

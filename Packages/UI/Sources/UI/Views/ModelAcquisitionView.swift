@@ -99,7 +99,7 @@ struct ModelAcquisitionView: View {
                         if available.count != selected.count {
                             Text(t("available", ["selected": String(selected.count), "available": String(available.count)])).font(.caption)
                         }
-                        if let error = model.errorMessage { WorkbenchIssueText(raw: error, key: model.errorCode).foregroundStyle(.orange).textSelection(.enabled) }
+                        if let error = model.errorMessage { WorkbenchIssueText(raw: error, key: model.errorCode, arguments: model.errorArguments).foregroundStyle(.orange).textSelection(.enabled) }
                     }.padding(20)
                 }
             }

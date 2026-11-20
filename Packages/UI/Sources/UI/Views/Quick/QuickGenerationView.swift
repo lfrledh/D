@@ -42,7 +42,12 @@ struct QuickGenerationView: View {
     @State private var history = false
     @State private var commandScope = WorkbenchCommandScope()
     @Environment(\.workbenchContentVisible) private var contentVisible
-    @State private var inputIssue: String?
+    @State private var inputIssueRaw: String?
+    @State private var inputImportResult: QuickInputImport.Result?
+    private var inputIssue: String? {
+        get { inputImportResult?.message ?? inputIssueRaw }
+        nonmutating set { inputImportResult = nil; inputIssueRaw = newValue }
+    }
     @State private var inputIssueCode: String?
     @State private var inputNotice: String?
     @State private var inputNoticeKey: String?
@@ -122,7 +127,9 @@ struct QuickGenerationView: View {
                             }
                         }.frame(maxHeight: min(180, geometry.size.height * 0.28))
                     }
-                    if let issue = inputIssue ?? (quick.category == .audio && quick.inputIssueCode == "quick.audio.complex" ? nil : quick.inputIssue) ?? quick.saveIssue ?? quick.error {
+                    if let result = inputImportResult, result.display(language) != nil {
+                        QuickInputImportIssueText(result: result).font(.caption).foregroundStyle(.red)
+                    } else if let issue = inputIssue ?? (quick.category == .audio && quick.inputIssueCode == "quick.audio.complex" ? nil : quick.inputIssue) ?? quick.saveIssue ?? quick.error {
                         WorkbenchIssueText(raw: issue, key: inputIssue != nil ? inputIssueCode : (quick.inputIssue == issue ? quick.inputIssueCode : (quick.error == issue ? quick.errorCode : nil))).font(.caption).foregroundStyle(.red).lineLimit(3).textSelection(.enabled)
                     }
                     generationBar
@@ -381,7 +388,9 @@ struct QuickGenerationView: View {
                             Text(baselineText(language, "label.3238f75ca285"))
                                 .font(.caption).foregroundStyle(.secondary)
                             }
-                            if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error { WorkbenchIssueText(raw: issue, key: inputIssue == nil && quick.inputIssue == issue ? quick.inputIssueCode : (quick.error == issue ? quick.errorCode : nil)).foregroundStyle(.red).textSelection(.enabled) }
+                            if let result = inputImportResult, result.display(language) != nil {
+                                QuickInputImportIssueText(result: result).foregroundStyle(.red)
+                            } else if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error { WorkbenchIssueText(raw: issue, key: inputIssue != nil ? inputIssueCode : (quick.inputIssue == issue ? quick.inputIssueCode : (quick.error == issue ? quick.errorCode : nil))).foregroundStyle(.red).textSelection(.enabled) }
                             if let notice = displayedInputNotice { Text(notice).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                         } else {
                             if let error = quick.error { WorkbenchIssueText(raw: error, key: quick.errorCode).foregroundStyle(.red).textSelection(.enabled) }
@@ -636,7 +645,7 @@ struct QuickGenerationView: View {
                             draft: QuickDraft, ticket: UUID) async {
         let controller = quick, store = quick.store
         let result = await QuickInputImport.run(items, quick: controller, draft: draft, port: port,
-                                                resolveSharedAsset: onResolveSharedAsset)
+                                                resolveSharedAsset: onResolveSharedAsset, language: language)
         if result.published > 0 { onAssetsChanged() }
         guard canShowInputFeedback(ticket, draft: draft, controller: controller, store: store) else { return }
         inputIssueCode = nil
@@ -644,6 +653,7 @@ struct QuickGenerationView: View {
             ? inputLabel("cancelled", english: "Import cancelled. Already saved assets remain in the library; the current input was not changed.",
                          chinese: "导入已取消；已保存的素材仍在资料库，当前输入未修改。")
             : result.message
+        inputImportResult = result
         inputNoticeKey = nil
         inputNotice = result.copied > 0
             ? inputLabel("copied", english: "Assets from another project were copied into this project; the originals are unchanged.",
@@ -763,18 +773,20 @@ struct QuickAssetPreview: View {
     @State private var image: NSImage?
     @State private var player: AVPlayer?
     @State private var text: String?
+    @State private var noticeKey: String?
     @State private var issue: String?
     var body: some View {
         Group {
             if let image { Image(nsImage: image).resizable().scaledToFit().frame(maxHeight: compact ? 260 : 550) }
             else if let player { VideoPlayer(player: player).frame(height: reference.kind == .audio ? 90 : (compact ? 240 : 400)) }
             else if let text { Text(text).textSelection(.enabled).lineLimit(compact ? 8 : nil) }
+            else if let noticeKey { Text(workflowText(language, noticeKey)).foregroundStyle(.secondary) }
             else if let issue { Text(issue).foregroundStyle(.red) }
             else { ProgressView(baselineText(language, "label.0dee08a39132")) }
         }
         .task(id: identity) {
             let generation = UUID(); requestGeneration = generation
-            player?.pause(); player = nil; image = nil; text = nil; issue = nil
+            player?.pause(); player = nil; image = nil; text = nil; noticeKey = nil; issue = nil
             @MainActor func current() -> Bool { !Task.isCancelled && requestGeneration == generation }
             do {
                 if [.audio, .video].contains(reference.kind) {
@@ -788,11 +800,32 @@ struct QuickAssetPreview: View {
                     let data = try await store.workflowData(reference)
                     guard current() else { return }
                     if reference.kind == .image { image = NSImage(data: data) }
-                    else if reference.kind == .document { text = "原始文档已保留；可加入聊天后读取文字。 / Original document preserved; add it to chat to read its text." }
-                    else { text = String(data: data, encoding: .utf8) ?? "此素材不支持文本预览" }
+                    else if reference.kind == .document { noticeKey = "quick.preview.document" }
+                    else { text = String(data: data, encoding: .utf8); if text == nil { noticeKey = "quick.preview.unsupportedText" } }
                 }
             } catch { if current() { issue = error.localizedDescription } }
         }
         .onDisappear { requestGeneration = nil; player?.pause(); player = nil }
+    }
+}
+
+/// Keeps captured import diagnostics separate from the language-dependent summary.
+private struct QuickInputImportIssueText: View {
+    let result: QuickInputImport.Result
+    @Environment(\.dLanguageStore) private var language
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if result.cancelled { Text(workflowText(language, "quick.input.cancelled")) }
+            else {
+                ForEach(Array(result.failures.enumerated()), id: \.offset) { _, failure in
+                    Text(failure.display(language)).textSelection(.enabled)
+                    if failure.key != nil {
+                        DisclosureGroup(consistencyText(language, "error.original")) {
+                            Text(failure.raw).textSelection(.enabled)
+                        }
+                    }
+                }
+            }
+        }
     }
 }

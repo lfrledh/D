@@ -434,9 +434,9 @@ final class WorkbenchBootstrap {
         } catch {
             isTerminating = false
             let alert = NSAlert()
-            alert.messageText = "模型安装进度暂未保存"
-            alert.informativeText = "\(error.localizedDescription)\n请恢复磁盘访问后再次退出。"
-            alert.addButton(withTitle: "继续使用 D")
+            alert.messageText = languageStore.text("modelManagement.operationFailed", fallback: "")
+            alert.informativeText = error.localizedDescription
+            alert.addButton(withTitle: languageStore.text("app.quit.continue", fallback: ""))
             _ = await WorkbenchConfirmation.present(alert, owner: NSApp.keyWindow ?? NSApp.mainWindow, cancelResponse: .alertFirstButtonReturn)
             return false
         }

@@ -1084,7 +1084,7 @@ public struct SharedLibraryBrowser: View {
                     ForEach(WorkflowResultQueryState.tagConditions(query.allTagIDs, store: store, missingLabel: metadataText(language, "deletedTagCondition")), id: \.id) { tag in token(word("allTags", "同时包含标签") + ": " + state.tagPresentation.title(tag.id, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition"))) { query.allTagIDs.remove(tag.id) } }
                     ForEach(WorkflowResultQueryState.tagConditions(query.anyTagIDs, store: store, missingLabel: metadataText(language, "deletedTagCondition")), id: \.id) { tag in token(word("anyTags", "至少一个标签") + ": " + state.tagPresentation.title(tag.id, tags: store.metadata.tags, missing: metadataText(language, "deletedTagCondition"))) { query.anyTagIDs.remove(tag.id) } }
                     dimensionTokens(query.kinds, path: \.kinds, label: kindName)
-                    dimensionTokens(query.roles, path: \.roles, label: { $0 })
+                    dimensionTokens(query.roles, path: \.roles, label: { SharedLibraryRolePresentation.label($0, language: language) })
                     dimensionTokens(query.inputs, path: \.inputs, label: { word("inputs", "输入能力") + ": " + dataName($0) })
                     dimensionTokens(query.outputs, path: \.outputs, label: { word("outputs", "输出能力") + ": " + dataName($0) })
                     dimensionTokens(query.contentKinds, path: \.contentKinds, label: dataName)
@@ -1347,7 +1347,7 @@ public struct SharedLibraryBrowser: View {
             detailLine(word("kind", "类别"), kindName(entry.item.kind))
             detailLine(word("readiness", "就绪状态"), readinessName(entry.item.readiness))
             detailLine(word("compatibility", "兼容性"), compatibilityName(entry.item.compatible))
-            if !entry.item.role.isEmpty { detailLine(word("role", "用途"), entry.item.role) }
+            if !entry.item.role.isEmpty { detailLine(word("role", "用途"), SharedLibraryRolePresentation.label(entry.item.role, language: language)) }
             detailLine(word("inputs", "输入能力"), kindList(entry.item.inputs))
             detailLine(word("outputs", "输出能力"), kindList(entry.item.outputs))
             if let kind = entry.item.contentKind { detailLine(word("content", "内容类型"), dataName(kind)) }

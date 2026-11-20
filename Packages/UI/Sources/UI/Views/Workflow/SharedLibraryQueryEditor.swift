@@ -48,7 +48,7 @@ struct SharedLibraryFilterEditor: View {
                 tagsGroup(t("allTags"), \.allTagIDs)
                 tagsGroup(t("anyTags"), \.anyTagIDs)
                 group(t("kind"), SharedLibraryItemKind.allCases, \.kinds) { t("kind." + $0.rawValue, ["model":"模型", "component":"组件", "program":"程序", "asset":"素材", "tool":"工具"][$0.rawValue] ?? $0.rawValue, $0.rawValue.capitalized) }
-                group(t("roles"), Array(Set(items.map(\.role).filter { !$0.isEmpty })).sorted(), \.roles) { $0 }
+                group(t("roles"), Array(Set(items.map(\.role).filter { !$0.isEmpty })).sorted(), \.roles) { SharedLibraryRolePresentation.label($0, language: language) }
                 group(t("inputs"), WorkflowDataKind.allCases, \.inputs) { WorkflowCanvasPresentation.kind($0, language: language) }
                 group(t("outputs"), WorkflowDataKind.allCases, \.outputs) { WorkflowCanvasPresentation.kind($0, language: language) }
                 group(t("content"), WorkflowDataKind.allCases, \.contentKinds) { WorkflowCanvasPresentation.kind($0, language: language) }
@@ -156,7 +156,7 @@ struct SharedLibraryQuerySummary: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             dimensions(query.kinds, path: \.kinds, title: t("kind")) { workflowText(language, "baseline02.library.kind." + $0.rawValue, fallback: $0.rawValue) }
-            dimensions(query.roles, path: \.roles, title: t("roles")) { $0 }
+            dimensions(query.roles, path: \.roles, title: t("roles")) { SharedLibraryRolePresentation.label($0, language: language) }
             dimensions(query.inputs, path: \.inputs, title: t("inputs")) { WorkflowCanvasPresentation.kind($0, language: language) }
             dimensions(query.outputs, path: \.outputs, title: t("outputs")) { WorkflowCanvasPresentation.kind($0, language: language) }
             dimensions(query.contentKinds, path: \.contentKinds, title: t("content")) { WorkflowCanvasPresentation.kind($0, language: language) }

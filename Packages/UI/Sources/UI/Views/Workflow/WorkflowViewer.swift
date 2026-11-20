@@ -48,6 +48,7 @@ struct WorkflowViewerCallIdentity:Hashable {
     private(set) var displayedValue: WorkflowValue?
     private(set) var provenance: String?
     private(set) var failure: String?
+    private(set) var failureCode: String?
     private(set) var commandIssue: WorkflowIssue?
     func performViewerCommand(_ command: () throws -> Void) {
         commandIssue = nil
@@ -129,7 +130,7 @@ struct WorkflowViewerCallIdentity:Hashable {
     @discardableResult func load() -> Task<Void,Never>? {
         guard !editingAnnotations else { return nil }
         guard canRead else { suspend();return nil }
-        stop(); suspended=false;loading=true;text=nil;image=nil;mediaURL=nil;audioFormat=nil;metadata=nil;provenance=nil;failure=nil
+        stop(); suspended=false;loading=true;text=nil;image=nil;mediaURL=nil;audioFormat=nil;metadata=nil;provenance=nil;failure=nil;failureCode=nil
         consumers = []; concept = nil; displayedValue = target.value
         if let value = target.value { inspectCompatibility(value) }
         let request=generation, target=self.target
@@ -188,13 +189,13 @@ struct WorkflowViewerCallIdentity:Hashable {
         } catch {
             guard current(request) else { return }
             text=nil;image=nil;mediaURL=nil;audioFormat=nil;metadata=nil;provenance=nil
-            video.stopAndClear();audio.shutdown();failure=error.localizedDescription;loading=false
+            video.stopAndClear();audio.shutdown();failure=error.localizedDescription;failureCode=(error as? WorkflowIssue)?.code;loading=false
         }
     }
     private func readContent(_ content: ProjectReadOnlyContent, request: UUID) async throws {
         switch content.token.kind {
         case .text:
-            guard let value = content.text else { throw WorkflowIssue("文字不是完整 UTF-8。") }; text = value
+            guard let value = content.text else { throw WorkflowIssue("文字不是完整 UTF-8。", code: "workflow.preview.invalidText") }; text = value
         case .image:
             let image = try await WorkflowReadOnlyImageDecoder.shared.decode(content.data)
             guard current(request) else { return }; self.image = image
@@ -210,7 +211,7 @@ struct WorkflowViewerCallIdentity:Hashable {
             else {
                 let policy = try await store.readOnlyAudioPolicy(content.token)
                 guard current(request) else { return }
-                guard let format = content.metadata.asset.metadata.audio?.format else { throw WorkflowIssue("音频规格未登记。") }
+                guard let format = content.metadata.asset.metadata.audio?.format else { throw WorkflowIssue("音频规格未登记。", code: "workflow.viewer.audioFormatMissing") }
                 try audio.preparePlayback(url: file, format: format, policy: policy); audioFormat = format
             }
         default:
@@ -256,7 +257,7 @@ struct WorkflowViewerCallIdentity:Hashable {
 
     func audioAction(_ action:() throws -> Void) {
         guard canRead,!suspended else { suspend();return }
-        do { try action() } catch { failure=error.localizedDescription }
+        do { try action() } catch { failure=error.localizedDescription;failureCode=(error as? WorkflowIssue)?.code }
     }
     func stop() {
         generation=UUID();task?.cancel();task=nil;video.stopAndClear();audio.shutdown();loading=false
@@ -372,7 +373,7 @@ extension EnvironmentValues {
             if !session.canRead || session.suspended {
                 ContentUnavailableView(text("sourceClosed"),systemImage:"externaldrive.badge.exclamationmark")
                 if session.canRead { Button(text("reload")) { session.load() } }
-            } else if let error=session.failure { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+            } else if let error=session.failure { WorkbenchIssueText(raw: error, key: session.failureCode).foregroundStyle(.red).textSelection(.enabled) }
             else if session.loading { ProgressView(text("loading")) }
             else { content.frame(maxWidth:.infinity,maxHeight:.infinity) }
             if session.exactRecord?.step.status == .waiting {

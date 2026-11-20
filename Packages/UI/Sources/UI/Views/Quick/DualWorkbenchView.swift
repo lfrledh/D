@@ -179,7 +179,8 @@ public struct DualWorkbenchView: View {
     }
     @State private var settingsContext: SettingsContext?
     @State private var openToolsRequest: ChatToolsNavigationRequest?
-    @State private var issueValue: WorkflowIssue?
+    @State private var issueValue: WorkflowIssue? { didSet { issueArguments = [:] } }
+    @State private var issueArguments: [String: String] = [:]
     private var issue: String? {
         get { issueValue?.reason }
         nonmutating set { issueValue = newValue.map { WorkflowIssue($0) } }
@@ -778,7 +779,7 @@ public struct DualWorkbenchView: View {
                     else { filesRoute = failedAssetRoute }
                 }
             }
-        } message: { WorkbenchIssueText(raw: issue ?? "", key: issueValue?.code) }
+        } message: { WorkbenchIssueText(raw: issue ?? "", key: issueValue?.code, arguments: issueArguments) }
         .task {
             if quick.state.drafts.isEmpty && quick.state.navigation == nil { quick.select(operationID: "d.model.language", modelID: "") }
             await refreshLibrary(checkModels: false)
@@ -1131,7 +1132,7 @@ public struct DualWorkbenchView: View {
         quick.select(operationID: operation, modelID: identity); applySelectedModelToChat()
     }
     private func useLibraryEntry(_ value: SharedLibraryBrowserEntry) {
-        guard !quickOwnerIsChanging else { issue = "项目正在切换，当前快速草稿未改变。"; return }
+        guard !quickOwnerIsChanging else { issueValue = WorkflowIssue("项目正在切换，当前快速草稿未改变。", code: "refinement.shell.quickProjectChanging"); return }
         guard case .operation(let operation, let id) = value.selection,
               let id, WorkflowRegistry.standard.operation(operation)?.definition.modelKind != nil else { presentLibraryDestination(.info(value)); return }
         if let family = modelPickerCategory,
@@ -1159,11 +1160,11 @@ public struct DualWorkbenchView: View {
         } else { libraryVisible = false }
     }
     private func useNode(_ node: WorkflowNode) {
-        guard !quickOwnerIsChanging else { issue = "项目正在切换，当前快速草稿未改变。"; return }
+        guard !quickOwnerIsChanging else { issueValue = WorkflowIssue("项目正在切换，当前快速草稿未改变。", code: "refinement.shell.quickProjectChanging"); return }
         guard let controller = canvasModel.projectSession.workflow else { return }
         // Connected values are not silently guessed from stale history; the graph is untouched.
         guard controller.graph?.connections.contains(where: { $0.targetNode == node.id }) != true else {
-            issue = "此节点包含连线输入。请先把所需结果存为素材，再在快速界面显式选择；未忽略连线或修改原节点。"; return
+            issueValue = WorkflowIssue("此节点包含连线输入。请先把所需结果存为素材，再在快速界面显式选择；未忽略连线或修改原节点。", code: "refinement.shell.connectedInput"); return
         }
         quick.useSettings(node); applySelectedModelToChat(); navigate(to: .quick)
     }
@@ -1278,7 +1279,12 @@ public struct DualWorkbenchView: View {
             guard await panel.begin() == .OK, let destination = panel.url else { return }
             _ = try await store(for: content.token.projectID, instanceID: content.token.instanceID)
             try await source.exportReadOnlyCopy(content.token, to: destination)
-            guard NSWorkspace.shared.open(destination) else { throw WorkflowIssue("副本已保存，但外部应用未能打开；文件保留在：" + destination.path) }
+            guard NSWorkspace.shared.open(destination) else {
+                issueValue = WorkflowIssue("The independent copy was saved, but NSWorkspace could not open it: " + destination.path,
+                    code: "refinement.shell.externalCopyOpenFailed")
+                issueArguments = ["path": destination.path]
+                return
+            }
         } catch { issue = error.localizedDescription }
     }
     private func showAssetLocation(_ value: SharedLibraryBrowserEntry) async {

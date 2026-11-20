@@ -191,6 +191,16 @@ public enum ModelAvailability: String, Codable, Sendable { case available, unava
 public enum ModelLocationIssue: String, Codable, Sendable { case missingFiles, offlineDrive, fileAuthorization, recordChanged }
 public enum ModelStorageKind: String, Codable, Sendable { case managed, external }
 
+/// Numeric context for the existing space failure; the original diagnostic stays intact.
+public struct ModelSpaceFailure: Codable, Sendable, Equatable {
+    public let required: UInt64
+    public let available: UInt64
+    public init?(error: any Error) {
+        guard case ModelLibraryError.insufficientSpace(let required, let available) = error else { return nil }
+        self.required = required; self.available = available
+    }
+}
+
 public struct ModelRecord: Identifiable, Codable, Sendable, Equatable {
     public let id: ModelID
     public let catalogID: String
@@ -200,7 +210,8 @@ public struct ModelRecord: Identifiable, Codable, Sendable, Equatable {
     public var availability: ModelAvailability
     public var downloadedBytes: UInt64
     public private(set) var totalBytes: UInt64
-    public var error: String?
+    public var error: String? { didSet { spaceFailure = nil } }
+    public var spaceFailure: ModelSpaceFailure?
     public var locationIssue: ModelLocationIssue?
     public var directory: URL?
     public var activeLeaseCount: Int
@@ -216,7 +227,7 @@ public struct ModelRecord: Identifiable, Codable, Sendable, Equatable {
         self.activeLeaseCount = activeLeaseCount; self.registrationState = registrationState
     }
     private enum CodingKeys: String, CodingKey {
-        case id, catalogID, revision, storage, state, availability, downloadedBytes, totalBytes, error, directory, activeLeaseCount, registrationState, locationIssue
+        case id, catalogID, revision, storage, state, availability, downloadedBytes, totalBytes, error, directory, activeLeaseCount, registrationState, locationIssue, spaceFailure
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -229,6 +240,7 @@ public struct ModelRecord: Identifiable, Codable, Sendable, Equatable {
             activeLeaseCount: try c.decode(Int.self, forKey: .activeLeaseCount),
             registrationState: try c.decodeIfPresent(ModelRegistrationState.self, forKey: .registrationState) ?? (state == .installed ? .registered : .unregistered))
         locationIssue = try c.decodeIfPresent(ModelLocationIssue.self, forKey: .locationIssue)
+        spaceFailure = try c.decodeIfPresent(ModelSpaceFailure.self, forKey: .spaceFailure)
     }
 }
 
@@ -271,7 +283,7 @@ public enum ModelLibraryError: Error, LocalizedError, Sendable {
         case .operationPaused: "操作已暂停，可稍后继续。"
         case .fileAccess(let reason, _): reason
         case .insufficientSpace(let required, let available):
-            "模型安装空间不足：还需 \(required) 字节，可用 \(available) 字节。请选择空间足够的磁盘。"
+            "Insufficient model storage: required free bytes \(required), available bytes \(available)."
         }
     }
 }
@@ -351,8 +363,10 @@ public struct ModelDownloadTask: Identifiable, Codable, Sendable, Equatable {
     public var attempts: Int
     public var automaticRetries: Int
     public var earliestRetry: Date?
-    public var error: String?
-    public var firstError: String?
+    public var error: String? { didSet { spaceFailure = nil } }
+    public var spaceFailure: ModelSpaceFailure?
+    public var firstError: String? { didSet { firstSpaceFailure = nil } }
+    public var firstSpaceFailure: ModelSpaceFailure?
     public var postActionError: String?
     public let createdAt: Date?
     public let acquisitionSnapshot: ModelAcquisitionSnapshot?

@@ -102,7 +102,7 @@ struct ChatSpeechPanel: View {
                     if chat.speechPlaybackState != .idle { Button(workflowText(language, "chat.speechPanel.stopReading")) { chat.speech.stopSpeech() } }
                 }
                 if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
-                if let message = project.errorMessage { Text(message).foregroundStyle(.red).font(.caption) }
+                if let message = project.errorMessage { WorkbenchIssueText(raw: message, key: project.errorCode).foregroundStyle(.red).font(.caption) }
             }
         }.onChange(of: contentVisible, initial: true) { _, visible in
             if visible { refreshCapability() }

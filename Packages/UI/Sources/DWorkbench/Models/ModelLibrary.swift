@@ -1247,7 +1247,7 @@ public actor ModelLibrary {
         if let error {
             if error is CancellationError { cancelledOperations.insert(id) }
             setState(id, error is CancellationError ? .paused : .failed)
-            mutate(id) { $0.record.error = error is CancellationError ? nil : error.localizedDescription }
+            mutate(id) { $0.record.error = error is CancellationError ? nil : error.localizedDescription; $0.record.spaceFailure = ModelSpaceFailure(error: error) }
         }
         do { try persist() }
         catch { mutate(id) { $0.record.error = [$0.record.error, "状态保存失败：" + error.localizedDescription].compactMap { $0 }.joined(separator: "\n") } }
@@ -2141,7 +2141,11 @@ extension ModelLibrary {
             } else {
                 let message = error.localizedDescription
                 disk.downloads![index].error = message
-                if disk.downloads![index].firstError == nil { disk.downloads![index].firstError = message }
+                disk.downloads![index].spaceFailure = ModelSpaceFailure(error: error)
+                if disk.downloads![index].firstError == nil {
+                    disk.downloads![index].firstError = message
+                    disk.downloads![index].firstSpaceFailure = ModelSpaceFailure(error: error)
+                }
                 disk.downloads![index].state = .failed
                 if let deadline = (error as? ModelTransientDownloadError)?.retryAfter {
                     disk.downloads![index].earliestRetry = deadline
@@ -2160,7 +2164,7 @@ extension ModelLibrary {
                     }
                 }
                 setState(id, .failed)
-                mutate(id) { $0.record.error = message }
+                mutate(id) { $0.record.error = message; $0.record.spaceFailure = ModelSpaceFailure(error: error) }
             }
         } else {
             disk.downloads![index].state = .completed; disk.downloads![index].completedAt = now()

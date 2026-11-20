@@ -573,6 +573,36 @@ struct ModelLibraryTests {
         try await library.shutdown()
     }
 
+    @Test func resumedDownloadKeepsTypedSpaceFailureAcrossColdRead() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        var library: ModelLibrary? = try await fixture.library()
+        try await library!.configureRoot(at: fixture.destination)
+        let task = try await library!.enqueueDownloads([fixture.entry.id], startIfIdle: false)[0]
+        try await library!.shutdown(); library = nil
+        library = try await fixture.library(availableBytes: 1)
+        try await library!.resumeQueue()
+        let failed = try await waitRecord(library!, id: task.resourceID.modelID) { $0.state == .failed }
+        let snapshot = await library!.snapshot()
+        let saved = try #require(snapshot.downloads.first)
+        let failure = try #require(saved.spaceFailure)
+        #expect(failure.required == fixture.entry.totalBytes + 64 * 1024 * 1024 && failure.available == 1)
+        #expect(saved.firstSpaceFailure == failure && failed.spaceFailure == failure)
+        #expect(saved.error == saved.firstError && saved.error == failed.error)
+        #expect(failed.downloadedBytes == 0 && saved.state == .failed)
+        try await library!.shutdown(); library = nil
+        let reopened = try await fixture.library()
+        let cold = try #require(await reopened.snapshot().downloads.first)
+        #expect(cold.id == saved.id && cold.error == saved.error && cold.spaceFailure == failure && cold.firstSpaceFailure == failure)
+        var cleared = cold; cleared.error = nil
+        #expect(cleared.spaceFailure == nil && cleared.firstSpaceFailure == failure)
+        let bytes = try JSONEncoder().encode(cold)
+        var legacy = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        legacy.removeValue(forKey: "spaceFailure"); legacy.removeValue(forKey: "firstSpaceFailure")
+        let old = try JSONDecoder().decode(ModelDownloadTask.self, from: JSONSerialization.data(withJSONObject: legacy))
+        #expect(old.spaceFailure == nil && old.firstSpaceFailure == nil && old.error == cold.error)
+        try await reopened.shutdown()
+    }
+
     @Test func secondStateOwnerRejected() async throws {
         let fixture = try LibraryFixture(); defer { fixture.clean() }
         let library = try await fixture.library()

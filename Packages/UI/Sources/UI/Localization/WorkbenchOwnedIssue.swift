@@ -63,10 +63,11 @@ import DWorkbench
 struct WorkbenchIssueText: View {
     let raw: String
     var key: String? = nil
+    var arguments: [String: String] = [:]
     @Environment(\.dLanguageStore) private var language
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(key.map { workflowText(language, $0, fallback: raw) } ?? WorkbenchOwnedIssue.summary(raw, language: language) ?? ChatErrorText.display(raw, language: language))
+            Text(key.map { workflowText(language, $0, fallback: raw, arguments: arguments) } ?? WorkbenchOwnedIssue.summary(raw, language: language) ?? ChatErrorText.display(raw, language: language))
             if key != nil || WorkbenchOwnedIssue.summary(raw, language: language).map({ $0 != raw }) == true {
                 DisclosureGroup(consistencyText(language, "error.original")) { Text(raw).textSelection(.enabled) }
             }

@@ -80,7 +80,7 @@ import Foundation
                 detail: WorkflowCanvasPresentation.operationTitle(definition, language: language), kind: .model, role: "primary-model",
                 inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: readiness[choice.id] ?? .unknown, facts: .init(concepts: SharedLibraryConcept.operation(definition.id).wireValues, producers: descriptor.map { [$0.modelIdentity] } ?? [])),
                 selection: .operation(id: definition.id, modelID: choice.id),
-                facts: [choice.id, descriptor?.precision ?? "", descriptor?.engine ?? "", consistencyText(language, "copy.verifyBeforeRun")].filter { !$0.isEmpty }))
+                facts: [choice.id, descriptor.map { ModelNodeUILocalization.owned($0.precision, language: language) } ?? "", descriptor.map { ModelNodeUILocalization.owned($0.engine, language: language) } ?? "", consistencyText(language, "copy.verifyBeforeRun")].filter { !$0.isEmpty }))
         }
         for descriptor in ModelNodeCatalog.entries {
             guard !result.contains(where: { $0.item.key == descriptor.id }) else { continue }
@@ -89,7 +89,7 @@ import Foundation
                 result.append(.init(item: .init(key: descriptor.id, title: descriptor.title,
                     detail: WorkflowCanvasPresentation.operationTitle(definition, language: language), kind: .model, role: "primary-model",
                     inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: readiness[identity] ?? .unprepared, facts: .init(concepts: SharedLibraryConcept.operation(definition.id).wireValues, producers: [descriptor.modelIdentity])),
-                    selection: .operation(id: definition.id, modelID: identity), facts: [descriptor.modelIdentity, descriptor.revision, descriptor.precision, descriptor.deploymentNote], catalogSelection: true))
+                    selection: .operation(id: definition.id, modelID: identity), facts: [descriptor.modelIdentity, descriptor.revision, ModelNodeUILocalization.owned(descriptor.precision, language: language), ModelNodeUILocalization.owned(descriptor.deploymentNote, language: language)], catalogSelection: true))
             } else {
                 // Reviewed legacy adapters remain discoverable without claiming a new executable node route.
                 let legacyAudio = ["sm-music", "sm-sfx", "medium"].contains(descriptor.id)
@@ -123,7 +123,7 @@ import Foundation
                 let kind = asset.workflowContentKind
                 let activityID = "asset-instance:" + project.effectiveInstanceID.uuidString + ":" + asset.id.uuidString
                 let snapshot = metadata[activityID] ?? ProjectAssetMetadataSnapshot(project: project, asset: asset, record: nil,
-                    job: nil, occurrences: nil, sourceIssue: "Source index unavailable / 来源尚未索引。")
+                    job: nil, occurrences: nil, sourceIssue: workflowText(language, "metadata.panel.sourceNotIndexed"))
                 let receivers = Set(registry.definitions.filter { definition in
                     guard let kind else { return false }
                     return definition.inputs.contains { $0.kinds.contains(kind) }
@@ -221,5 +221,25 @@ import Foundation
         case .content(let kind): return WorkflowCanvasPresentation.kind(kind, language: language)
         case .structured(let kind): return workflowText(language, "workflow.concept." + kind.rawValue)
         }
+    }
+}
+
+/// Display labels only: queries and persisted metadata keep the original role.
+@MainActor enum SharedLibraryRolePresentation {
+    static func label(_ role: String, language: UILanguageStore?) -> String {
+        let key: String
+        switch role {
+        case "primary-model": key = "baseline02.library.kind.model"
+        case "separate-entry": key = "consistency.copy.separateAdapter"
+        case "program": key = "baseline02.library.kind.program"
+        case "workflow-tool": key = "childPanel.name.tools"
+        case "original": key = "modelManagement.role.original"
+        case "result": key = "canvas.assets.generated"
+        case "preview": key = "baseline02.library.preview"
+        case "thumbnail": key = "baseline02.library.role.thumbnail"
+        case "run-value": key = "metadata.panel.workspace.runValue"
+        default: return role
+        }
+        return workflowText(language, key, fallback: role)
     }
 }

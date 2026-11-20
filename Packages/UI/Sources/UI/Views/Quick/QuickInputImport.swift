@@ -12,15 +12,39 @@ import Foundation
         case managed(WorkflowCanvasTransfer)
     }
 
+    struct Failure {
+        let raw: String
+        var key: String? = nil
+        var arguments: [String: String] = [:]
+        var label: String? = nil
+        var binding = false
+        init(_ error: any Error, label: String? = nil, binding: Bool = false) {
+            raw = error.localizedDescription; key = (error as? WorkflowIssue)?.code
+            self.label = label; self.binding = binding
+        }
+        init(raw: String, key: String, arguments: [String: String]) {
+            self.raw = raw; self.key = key; self.arguments = arguments
+        }
+        @MainActor func display(_ language: UILanguageStore?) -> String {
+            let summary = key.map { workflowText(language, $0, fallback: raw, arguments: arguments) } ?? raw
+            if binding { return workflowText(language, "quick.input.issue.binding", arguments: ["detail": summary]) }
+            return label.map { $0 + ": " + summary } ?? summary
+        }
+    }
+
     struct Result {
         var published = 0
         var bound = 0
         var copied = 0
         var cancelled = false
-        var failures: [String] = []
+        var failures: [Failure] = []
+        @MainActor func display(_ language: UILanguageStore?) -> String? {
+            if cancelled { return workflowText(language, "quick.input.cancelled") }
+            return failures.isEmpty ? nil : failures.map { $0.display(language) }.joined(separator: "\n")
+        }
         var message: String? {
             if cancelled { return "导入已取消；已保存的素材仍在资料库，当前输入未修改。" }
-            return failures.isEmpty ? nil : failures.joined(separator: "\n")
+            return failures.isEmpty ? nil : failures.map(\.raw).joined(separator: "\n")
         }
     }
 
@@ -29,28 +53,28 @@ import Foundation
             return urls.map(Item.file)
         }
         if let png = pasteboard.data(forType: .png) { return [.png(png)] }
-        throw WorkflowIssue("剪贴板没有本地文件或PNG图像。")
+        throw WorkflowIssue("剪贴板没有本地文件或PNG图像。", code: "quick.input.issue.emptyClipboard")
     }
 
     static func run(_ items: [Item], quick: QuickGenerationController, draft: QuickDraft,
-                    port: WorkflowPortDefinition, resolveSharedAsset: SharedAssetResolver? = nil) async -> Result {
+                    port: WorkflowPortDefinition, resolveSharedAsset: SharedAssetResolver? = nil, language: UILanguageStore? = nil) async -> Result {
         var result = Result()
         let activity: UUID
         do { activity = try quick.beginInputActivity() }
         catch is CancellationError { result.cancelled = true; return result }
-        catch { result.failures = [error.localizedDescription]; return result }
+        catch { result.failures = [.init(error)]; return result }
         defer { quick.endInputActivity(activity) }
         let destination = quick.store
         var compatible: [WorkflowAssetReference] = []
         for (index, item) in items.enumerated() {
             let label: String
             switch item {
-            case .file(let url): label = url.lastPathComponent.isEmpty ? "文件 \(index + 1)" : url.lastPathComponent
+            case .file(let url): label = url.lastPathComponent.isEmpty ? workflowText(language, "quick.input.issue.file", arguments: ["index": String(index + 1)]) : url.lastPathComponent
             case .png: label = "PNG \(index + 1)"
             case .managed(let transfer):
                 switch transfer {
-                case .asset(_, let id), .assetInstance(_, _, let id): label = "素材 " + String(id.uuidString.prefix(8))
-                default: label = "拖入项 \(index + 1)"
+                case .asset(_, let id), .assetInstance(_, _, let id): label = workflowText(language, "quick.input.issue.asset", arguments: ["id": String(id.uuidString.prefix(8))])
+                default: label = workflowText(language, "quick.input.issue.dropped", arguments: ["index": String(index + 1)])
                 }
             }
             do {
@@ -58,7 +82,7 @@ import Foundation
                 let reference: WorkflowAssetReference
                 switch item {
                 case .file(let url):
-                    guard url.isFileURL else { throw WorkflowIssue("只接受本地文件URL。") }
+                    guard url.isFileURL else { throw WorkflowIssue("只接受本地文件URL。", code: "quick.input.issue.localFileOnly") }
                     let scoped = url.startAccessingSecurityScopedResource()
                     defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                     reference = try await destination.importWorkflowMediaFile(at: url).record.reference
@@ -74,7 +98,7 @@ import Foundation
                     case .asset(let project, let asset): (projectID, instanceID, assetID) = (project, nil, asset)
                     case .assetInstance(let project, let instance, let asset):
                         (projectID, instanceID, assetID) = (project, instance, asset)
-                    default: throw WorkflowIssue("只能拖入项目素材。")
+                    default: throw WorkflowIssue("只能拖入项目素材。", code: "quick.input.issue.projectAssetOnly")
                     }
                     let manifest = await destination.snapshot()
                     try quick.checkInputActivity(activity)
@@ -84,7 +108,7 @@ import Foundation
                         result.published += 1
                         try quick.checkInputActivity(activity)
                     } else {
-                        guard let resolveSharedAsset else { throw WorkflowIssue("请先打开来源项目，再拖入该素材。") }
+                        guard let resolveSharedAsset else { throw WorkflowIssue("请先打开来源项目，再拖入该素材。", code: "quick.input.issue.openSource") }
                         let (source, pinned, _) = try await resolveSharedAsset(projectID, instanceID, assetID)
                         try quick.checkInputActivity(activity)
                         let sourceManifest = await source.snapshot()
@@ -92,7 +116,7 @@ import Foundation
                         guard sourceManifest.id == projectID,
                               (instanceID == nil || sourceManifest.effectiveInstanceID == instanceID),
                               pinned.assetID == assetID, pinned.projectID == projectID else {
-                            throw WorkflowIssue("来源项目或素材身份已改变。")
+                            throw WorkflowIssue("来源项目或素材身份已改变。", code: "quick.input.issue.sourceChanged")
                         }
                         if source === destination { reference = pinned }
                         else { reference = try await destination.copyWorkflowAsset(pinned, from: source) }
@@ -104,28 +128,28 @@ import Foundation
                 if port.assetListKind.map({ $0 == reference.kind }) ?? port.kinds.contains(reference.kind) {
                     compatible.append(reference)
                 } else {
-                    result.failures.append(label + "：素材已保留在资料库，但类型不符合此端口。")
+                    result.failures.append(.init(raw: label + "：素材已保留在资料库，但类型不符合此端口。", key: "quick.input.issue.incompatible", arguments: ["name": label]))
                 }
             } catch is CancellationError {
                 result.cancelled = true
                 return result
             } catch {
                 if Task.isCancelled { result.cancelled = true; return result }
-                result.failures.append(label + "：" + error.localizedDescription)
+                result.failures.append(.init(error, label: label))
             }
         }
         do { try quick.checkInputActivity(activity) }
         catch { result.cancelled = true; return result }
         guard !compatible.isEmpty else { return result }
         if port.assetListKind == nil && compatible.count > 1 {
-            result.failures.append("此端口一次只能绑定一个素材；有 \(compatible.count) 个兼容项，均已保留在资料库，请明确选择一个。")
+            result.failures.append(.init(raw: "此端口一次只能绑定一个素材；有 \(compatible.count) 个兼容项，均已保留在资料库，请明确选择一个。", key: "quick.input.issue.multiple", arguments: ["count": String(compatible.count)]))
             return result
         }
         do {
             try quick.checkInputActivity(activity)
             // A corrupt saved input needs an explicit user action, never an implicit repair.
             if let saved = draft.inputs[port.id] { _ = try port.resolveAssets(saved) }
-            guard quick.store === destination else { throw WorkflowIssue("项目已改变；素材已保留在资料库，未修改当前输入。") }
+            guard quick.store === destination else { throw WorkflowIssue("项目已改变；素材已保留在资料库，未修改当前输入。", code: "quick.input.issue.projectChanged") }
             try quick.checkInputActivity(activity)
             try quick.commitImportedAssets(compatible, port: port, draftID: draft.id,
                                            expectedNode: draft.node, expectedInputs: draft.inputs, admittedActivity: activity)
@@ -134,7 +158,7 @@ import Foundation
             result.cancelled = true
         } catch {
             if Task.isCancelled { result.cancelled = true; return result }
-            result.failures.append("绑定：" + error.localizedDescription)
+            result.failures.append(.init(error, binding: true))
         }
         return result
     }
