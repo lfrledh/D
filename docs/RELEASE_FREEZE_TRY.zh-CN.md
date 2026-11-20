@@ -71,6 +71,17 @@ D不分发第三方权重，模型权重许可不再是开发/发行阻塞；随
 
 **仍开放**：没有平台交易身份的pending不能被任意全局更新认领；即使收据已验证保存/finish，该请求仍可能保持保护，不能建议重启绕过。容量达到上限后的安全归档规则也未擅定。若允许用户明确发起另一笔且旧请求仍可能完成，须审阅这一行为取舍。`appAccountToken`仍为账户语义，不当逐单编号。服务端账本仅在未来另行承诺开发者识别/回馈时决定，不是首发必建服务。五档正式商品、地区、价格、协议与真实账户仍停在对应授权前。[Apple pending](https://developer.apple.com/documentation/storekit/product/purchaseresult/pending) · [updates](https://developer.apple.com/documentation/storekit/transaction/updates) · [账户范围](https://developer.apple.com/documentation/storekit/apptransaction/apptransactionid)
 
+### 2026-11-20 I026/I027：旧解释器对应来源补证
+
+11月21日补齐产品打包：`prepare_engine._install_known_runtime_notices` 仅在3项stdlib构建指纹全部匹配时附对应9许可证及SOURCE.json；未知构建不贴此来源，若带冲突旧notice则拒绝。现有6个Python引擎各新增10文件，旧清单文件SHA/大小/可执行位全部不变；ChatPython/WASI未变。现资源65efd77e…4546265，N20/review/runtime-notices-resource-integration.json列逐项比对。18项打包测试通过，含未知/变更构建、符号链接、旧notice冲突及消费者接线；不是给未知解释器补猜测来源。正常最终App/Archive门禁与源材料分级记录。原Codex输入的strip/repackage确切命令仍缺，现有节、stdlib及构建文件匹配只证明已列对应范围，不能声称逐字节重建或自行决定许可。
+
+
+本轮从准确日期继续查证，取得 Astral [python-build-standalone 20260825](https://github.com/astral-sh/python-build-standalone/releases/tag/20260825) 的 CPython 3.12.14 arm64 `install_only` 与 `pgo+lto-full` 发布物；其发布API摘要分别为 `62eef3fcf48fa4f792d0d6d267c140b81aaea0edca4ae0641d8021854314f966`、`bce7da43c65a574be0185c9cf8ae8305c44afb53f746a05e8c51415c8c621bf7`，取得后逐字节核对。固定配方提交 `c0aa3bbdc2fff56a77ad1ecec68b1e47794d8779` 的源码/patch归档已保全；配方指定的 CPython 3.12.14 原始源码20,820,300字节、SHA256 `5c8462af5790baf43a321a1559dbe0db06d1be4300fb85fb53c40060668e548a`。`audio-python-input` 的sysconfig、Makefile、Setup.local、许可证均与官方发布归档相等；标准库743个普通文件字节相等，另外3个Mach-O扩展的具名数据段相等。解释器18个具名段在上游→原输入→当前4d普通App Audio解释器中相等；差异位于符号表、LINKEDIT及签名（原输入符号数量已经减少），**不称整个二进制字节相等或已经重现原始strip命令**。未执行取得的解释器、不替换运行时。
+
+`PYTHON.json` 对应的静态输入为bzip2 1.0.8、Expat 2.8.3、libffi 3.4.8、mpdecimal 4.0.0、OpenSSL 3.5.8、SQLite 3.53.1.0、libuuid 1.0.3、xz 5.8.3；八项精确源码均按该配方长度/摘要取得，其中xz复用既有归档。系统库与静态库按该发布物清单分开。以上为来源和静态对应证据，不是所有库动态调用、历史编译重现或分发许可结论。
+
+N20受控证据：`python-provenance/`保存原始发布物/源码/配方；`review/python-source-facts.json`、`python-upstream-comparison.json`、`python-stdlib-comparison.json`、`python-stripped-sections.json`、`python-load-command-comparison.json`、`python-extension-links.json`及`python-static-source-acquisition.json`保存摘要与对应。旧“无准确归档指针”的停点被本轮事实接续；仍需核清原提供者去符号/重签过程及全部随包第三方材料适用性，不能用本次来源匹配代替用户的许可证或商店判断。
+
 ### 2026-11-13 I026/I027来源及打包增量
 
 - 固定源码`5dba0adf`将Audio provider复制范围收紧为真实依赖闭包四项：`d_audio_backend.py`、`d_audio_access.py`、`d_audio_contract.py`、`d_audio_sa3.py`；四项均为required。16个音频打包检查及12个候选打包检查通过。独立PitchEngine不变，未改模型算法。

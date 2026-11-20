@@ -10,7 +10,7 @@ D is currently a **development preview**, with no public installer available yet
 
 [Create](#en-create) · [Choose and reuse results](#en-results) · [Add models](#en-models) · [Get started](#en-start) · [Requirements](#en-progress) · [Support and development](#en-support)
 
-The screenshots below show the current development preview in Simplified Chinese. Saved outputs remain available to view even when their model files need attention; the left panel shows the model's current state.
+The screenshots below show the current development preview in English.
 
 <a id="en-create"></a>
 
@@ -20,31 +20,31 @@ The screenshots below show the current development preview in Simplified Chinese
 
 Choose a local text model to ask questions, organize ideas or revise a draft. Models that support images and files can use attachments. Save frequently used settings as **chat presets** to use again later.
 
-![Chat with a local text model](docs/images/readme-chat.png)
+![Chat with a local text model](docs/images/readme-chat-en.png)
 
-Choose a model and chat preset on the left, then write in the input area below the conversation. This saved answer can be copied or used in a workflow from the results panel on the right.
+Choose a model and chat preset on the left, then write in the input area below the conversation. Use the message tools to copy an answer. Use the Sources panel to inspect source materials or open “View sent content and settings” for that answer.
 
-### Quick generation
+### Quick Generation
 
 Switch between image, video and audio, choose a model, enter your creative brief and add supported inputs or adjust settings. View, play, save and export results from the same workspace.
 
 **Images.** Supported models can generate images from text and reference pictures.
 
-![Image generation with a saved boat image](docs/images/readme-image.png)
+![Image generation with a saved boat image](docs/images/readme-image-en.png)
 
-Choose the model and settings on the left and describe the image below the preview. The center shows a saved generated image; its output and export controls are on the right.
+Choose the model and settings on the left and describe the image below the preview. The center shows a saved generated image. Choose a result on the right and use the controls below the preview to export it or continue in a workflow.
 
 **Video.** Depending on the model, start from text, a first frame, or first and last frames.
 
-![Video generation and playback](docs/images/readme-video.png)
+![Video generation and playback](docs/images/readme-video-en.png)
 
 The video workspace brings the supported inputs and settings together with a central player. Select a saved output on the right to preview or export it.
 
-**Audio.** In Quick generation, MRT2 creates music from text, while ACE offers instrumental music or music with lyrics. Reference audio and more complex audio inputs remain available in node workflows for models that support them.
+**Audio.** In Quick Generation, MRT2 creates music from text, while ACE offers instrumental music or music with lyrics. Reference audio and more complex audio inputs remain available in node workflows for models that support them.
 
-![Music generation with a central player and audio candidates](docs/images/readme-audio.png)
+![Music generation with a central player and audio candidates](docs/images/readme-audio-en.png)
 
-Set up the model on the left and enter a music description, plus lyrics when applicable, below the player. Select an audio candidate on the right to listen to it; playback, generation and saving are separate actions.
+Set up the model on the left and enter a music description, plus lyrics when applicable, below the player. Select an audio candidate on the right to listen to it or save it for later.
 
 ### Node workflows
 
@@ -52,9 +52,9 @@ When a creation needs several steps, switch to the node workspace. Add models an
 
 You can inspect candidates along the way, choose what to use and continue with the next steps. Save a useful workflow to use again later.
 
-![A connected text-to-image workflow](docs/images/readme-workflow.png)
+![A connected text-to-image workflow](docs/images/readme-workflow-en.png)
 
-This unrun example connects a text input to an image model and then to a selection step. Open a node's properties to configure it; select the run target and start from the bar below the canvas.
+Connect a text input to an image model and then to a selection step. Open a node's properties to configure it; select the run target and start from the bar below the canvas.
 
 <a id="en-results"></a>
 
@@ -62,17 +62,17 @@ This unrun example connects a text input to an image model and then to a selecti
 
 Compare candidates before deciding which to use. Completed content is retained when a later step fails.
 
-![Selecting a title before continuing a workflow](docs/images/readme-results.png)
+![Selecting a title before continuing a workflow](docs/images/readme-results-en.png)
 
-These three example titles demonstrate selection without a model generation. Check the items you want, then save them to the asset library or use the selected items to continue the workflow.
+Compare the available titles before choosing which to use. Check the items you want, then save them to the asset library or use the selected items to continue the workflow.
 
 Viewing a run leaves its recorded workflow unchanged. While a workflow is running, the first actual edit creates a working copy. To edit an asset in another application, explicitly open an independent copy.
 
 The library helps you find and reuse content. The viewer lets you inspect images, play audio and video, or read text.
 
-![Finding and inspecting an image in the library](docs/images/readme-library.png)
+![Finding and inspecting an image in the library](docs/images/readme-library-en.png)
 
-Search or filter the library, then select an item to inspect its details. This image was imported from the saved generation shown above; the available controls let you preview it or add it to the canvas.
+Search or filter the library, then select an item to inspect its details. Use the available controls to preview the item or add it to the canvas.
 
 Projects organize related workflows, settings and content. Save a project to reopen it and continue. Project file tools show file locations and provide backup and restore options, including choices for external files and models.
 
@@ -82,7 +82,7 @@ Projects organize related workflows, settings and content. Save a project to reo
 
 D includes **no model weights**. Open **Model Manager** to add supported models, and use **Download Manager** to follow downloads. Both are available from the Window menu.
 
-![Model management and the local model entry point](docs/images/readme-models.png)
+![Model management and the local model entry point](docs/images/readme-models-en.png)
 
 Use the local model entry to add files you already have, or start a download. The list shows the models and their current availability; preparation may still be needed before a model can run.
 
@@ -91,7 +91,7 @@ When adding local files, choose from the options offered for that model:
 - **Use the original files directly:** keep the model in its existing location, where D reads it.
 - **Copy to model library:** use an independent copy while retaining the original files.
 
-D checks the files and shows download or preparation progress. Once a model is ready, you can select it for chat, Quick generation or a workflow.
+D checks the files and shows download or preparation progress. Once a model is ready, you can select it for chat, Quick Generation or a workflow.
 
 For models that support a low-memory mode, D can offer that approach before starting. It takes longer and requires your agreement unless you have chosen to remember the preference. D keeps the exact model and precision you selected.
 
@@ -100,7 +100,7 @@ For models that support a low-memory mode, D can offer that approach before star
 ## Your first creation
 
 1. Open Model Manager and download or add a supported model. Follow downloads in Download Manager.
-2. Enter chat, or choose image, video or audio in Quick generation.
+2. Enter chat, or choose image, video or audio in Quick Generation.
 3. Select the model, provide the inputs and start generating.
 4. Inspect the result, then save, export or use it in a later workflow.
 
@@ -108,11 +108,11 @@ For models that support a low-memory mode, D can offer that approach before star
 
 ## Requirements and current progress
 
-D is designed for **Apple silicon Macs**. The current development deployment target is **macOS 26.2**. Model availability and generation speed depend on model size, memory and disk space. Model files need additional storage; check the displayed download size before starting.
+D is designed for **Apple silicon Macs**. The current development version requires **macOS 26.2 or later**. Model availability and generation speed depend on model size, memory and disk space. Model files need additional storage; check the displayed download size before starting.
 
-Chat, Quick generation, node workflows, model management, and project and result saving and recovery are already implemented. Work continues on remaining issues, interface checks and release preparation.
+Chat, Quick Generation, node workflows, model management, and project and result saving and recovery are already implemented. Work continues on remaining issues, interface checks and release preparation.
 
-![Settings categories and appearance controls](docs/images/readme-settings.png)
+![Settings categories and appearance controls](docs/images/readme-settings-en.png)
 
 Open Settings to adjust appearance, language and other application preferences. Categories on the left keep these choices separate from the settings of an individual conversation or workflow.
 
@@ -148,7 +148,7 @@ D 让你在 Mac 上使用文字、图像、视频和音频模型进行创作。�
 
 [开始创作](#zh-create) · [选择与复用结果](#zh-results) · [添加模型](#zh-models) · [第一次开始](#zh-start) · [运行环境](#zh-progress) · [支持与开发](#zh-support)
 
-以下截图来自当前开发版，使用简体中文界面。已保存的输出可以继续查看，左侧显示模型当前的文件与准备状态。
+以下截图来自当前开发版，使用简体中文界面。
 
 <a id="zh-create"></a>
 
@@ -158,9 +158,9 @@ D 让你在 Mac 上使用文字、图像、视频和音频模型进行创作。�
 
 选择本地文字模型，通过对话提问、整理内容或修改文稿。需要结合图片和文件时，可在支持相应输入的模型中添加附件。常用设置可以保存为**聊天预设**，之后再次使用。
 
-![本地文字模型的聊天界面](docs/images/readme-chat.png)
+![本地文字模型的聊天界面](docs/images/readme-chat-zh-Hans.png)
 
-从左侧选择模型和聊天预设，在对话下方输入消息。图中已保存的回答可以复制，也可以从右侧结果区用于工作流。
+从左侧选择模型和聊天预设，在对话下方输入消息。通过消息工具复制回答；右侧结果页可查看已保存内容，来源页可查看来源材料，并通过“查看这次发送的内容与设置”打开这次回答的请求详情。
 
 ### 快速生成
 
@@ -168,21 +168,21 @@ D 让你在 Mac 上使用文字、图像、视频和音频模型进行创作。�
 
 **图像。** 支持相应输入的模型可以根据文字和参考图生成图片。
 
-![图像快速生成与已保存的小船图片](docs/images/readme-image.png)
+![图像快速生成与已保存的小船图片](docs/images/readme-image-zh-Hans.png)
 
-在左侧选择模型和参数，在预览下方描述想生成的图像。中央展示已保存的生成结果，右侧提供结果和导出入口。
+在左侧选择模型和参数，在预览下方描述想生成的图像。中央展示已保存的生成结果。在右侧选择结果，通过预览下方的操作导出或继续用于工作流。
 
 **视频。** 根据所选模型，可以使用文字、首帧或首尾帧生成视频。
 
-![视频快速生成与播放界面](docs/images/readme-video.png)
+![视频快速生成与播放界面](docs/images/readme-video-zh-Hans.png)
 
 视频工作区将可用输入、参数和中央播放器放在一起。从右侧选择已保存的输出，即可预览或导出。
 
-**音频。** Quick 中的 MRT2 提供文字生成音乐，ACE 提供纯音乐或含歌词的生成方式。参考音频及复杂音频输入保留在支持这些能力的节点工作流中。
+**音频。** 快速生成中的 MRT2 提供文字生成音乐，ACE 提供纯音乐或含歌词的生成方式。参考音频及复杂音频输入保留在支持这些能力的节点工作流中。
 
-![音乐生成、中央播放器与音频候选](docs/images/readme-audio.png)
+![音乐生成、中央播放器与音频候选](docs/images/readme-audio-zh-Hans.png)
 
-在左侧设置模型，在播放器下方填写音乐描述，并在适用时填写歌词。从右侧选择音频候选进行试听；播放、生成和保存分别操作。
+在左侧设置模型，在播放器下方填写音乐描述，并在适用时填写歌词。从右侧选择音频候选，试听或保存需要的内容。
 
 ### 节点工作流
 
@@ -190,9 +190,9 @@ D 让你在 Mac 上使用文字、图像、视频和音频模型进行创作。�
 
 你可以在中间查看生成的候选结果，选择要采用的内容，再继续后面的步骤。常用流程可以保存，以后再次使用。
 
-![文字输入、图像模型与筛选步骤组成的工作流](docs/images/readme-workflow.png)
+![文字输入、图像模型与筛选步骤组成的工作流](docs/images/readme-workflow-zh-Hans.png)
 
-这是一份尚未运行的图像工作流示例：文字输入连接图像模型，再连接筛选步骤。打开节点属性进行配置，在画布下方选择运行目标并开始运行。
+将文字输入连接到图像模型，再连接筛选步骤。打开节点属性进行配置，在画布下方选择运行目标并开始运行。
 
 <a id="zh-results"></a>
 
@@ -200,17 +200,17 @@ D 让你在 Mac 上使用文字、图像、视频和音频模型进行创作。�
 
 生成多个候选后，可以先比较内容，再决定采用哪些结果。已经完成的内容会保留，后续步骤失败不会让前面的结果一起消失。
 
-![选择标题后继续工作流](docs/images/readme-results.png)
+![选择标题后继续工作流](docs/images/readme-results-zh-Hans.png)
 
-这里用三个示例标题展示筛选操作，没有调用模型生成。勾选要使用的内容后，可以保存到资产库，或使用已选内容继续工作流。
+比较可选的标题，决定采用哪些内容。勾选要使用的内容后，可以保存到资产库，或使用已选内容继续工作流。
 
 查看运行结果不会改写记录中的原流程；运行期间首次实际修改当前工作流时，D 会创建编辑副本。需要在外部应用中编辑资产时，可明确打开独立副本。
 
 资料库用于查找和复用素材，预览界面用于查看图片、播放音视频或阅读文字。
 
-![资料库中查找和查看图像](docs/images/readme-library.png)
+![资料库中查找和查看图像](docs/images/readme-library-zh-Hans.png)
 
-先搜索或筛选，再选择条目查看详情。图中的图片来自上方已保存的生成结果，通过导入加入资料库；可继续预览或添加到画布。
+先搜索或筛选，再选择条目查看详情。通过相应操作预览内容，或将它添加到画布。
 
 项目将相关工作流、设置和内容组织在一起。保存项目后，可以重新打开继续处理，也可以通过项目文件与备份功能查看文件位置、备份和恢复，并选择如何处理外部文件和模型。
 
@@ -220,7 +220,7 @@ D 让你在 Mac 上使用文字、图像、视频和音频模型进行创作。�
 
 D **不附带模型权重**。可以从“窗口”菜单打开“模型管理”，添加 D 支持的模型；“下载管理器”用于查看下载进度。
 
-![模型管理与添加本地模型入口](docs/images/readme-models.png)
+![模型管理与添加本地模型入口](docs/images/readme-models-zh-Hans.png)
 
 从添加本地模型入口选择已有文件，或发起新的下载。列表显示模型及其当前状态，需要准备的模型会继续显示相应步骤。
 
@@ -246,11 +246,11 @@ D **不附带模型权重**。可以从“窗口”菜单打开“模型管理�
 
 ## 运行环境与当前进展
 
-D 面向搭载 **Apple 芯片的 Mac**，当前开发版的系统部署目标为 **macOS 26.2**。实际可用模型和生成速度取决于模型规模、Mac 内存和磁盘条件；模型文件需要额外空间，下载前可查看所需容量。
+D 面向搭载 **Apple 芯片的 Mac**，当前开发版需要 **macOS 26.2 或更新版本**。实际可用模型和生成速度取决于模型规模、Mac 内存和磁盘条件；模型文件需要额外空间，下载前可查看所需容量。
 
 当前已经具备聊天、快速生成、节点工作流、模型管理，以及项目和结果的保存与恢复能力。项目正在完成剩余问题修正、界面体验检查和发行准备。
 
-![设置分类与外观选项](docs/images/readme-settings.png)
+![设置分类与外观选项](docs/images/readme-settings-zh-Hans.png)
 
 打开设置，可调整外观、语言及其他应用偏好。左侧分类将这些选项与某个对话或工作流自身的设置分开。
 
