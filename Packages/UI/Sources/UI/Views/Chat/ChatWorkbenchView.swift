@@ -1430,6 +1430,10 @@ ScrollViewReader { proxy in
                 && chat.selectedPath.contains { $0.id == jump.messageID }
         }
         guard isCurrent() else { return }
+        // A retained marker can still describe the old, offscreen version.
+        // Ask the lazy stack to materialize the target before using its native
+        // geometry; a non-nil marker alone does not establish current layout.
+        proxy.scrollTo(jump.messageID, anchor: .top)
         // Leaving bottom-follow and moving a tall lazy message can each change
         // layout after the first correction. Confirm the measured edge across
         // two separate layouts, only for this explicit, cancellable navigation.
