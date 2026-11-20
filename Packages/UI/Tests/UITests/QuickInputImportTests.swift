@@ -50,6 +50,24 @@ struct QuickInputImportTests {
         #expect(cancelled.published == 1)
     }
 
+    @Test func ownedFailureLabelsResolveAtDisplayTime() throws {
+        let zh = UILanguageStore(preferredLanguages: ["zh-Hans"])
+        let en = UILanguageStore(preferredLanguages: ["en"])
+        for (key, args) in [("quick.input.issue.file", ["index": "2"]),
+                            ("quick.input.issue.asset", ["id": "12345678"]),
+                            ("quick.input.issue.dropped", ["index": "3"])] {
+            var failure = QuickInputImport.Failure(WorkflowIssue("原始诊断", code: "quick.input.issue.localFileOnly"))
+            failure.label = .owned(key, args)
+            #expect(failure.display(en).hasPrefix(en.text(key, fallback: "missing", arguments: args)))
+            #expect(failure.display(zh).hasPrefix(zh.text(key, fallback: "missing", arguments: args)))
+            #expect(failure.raw == "原始诊断")
+            failure.key = "quick.input.issue.incompatible"
+            failure.labelIsNameArgument = true
+            #expect(failure.display(en) == en.text("quick.input.issue.incompatible", fallback: "missing", arguments: ["name": en.text(key, fallback: "missing", arguments: args)]))
+            #expect(failure.display(zh) != failure.display(en))
+        }
+    }
+
     private func folder() throws -> URL {
         let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
         let url = URL(fileURLWithPath: base, isDirectory: true)

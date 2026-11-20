@@ -12,23 +12,38 @@ import Foundation
         case managed(WorkflowCanvasTransfer)
     }
 
+    enum ItemLabel {
+        case original(String)
+        case owned(String, [String: String])
+        @MainActor func display(_ language: UILanguageStore?) -> String {
+            switch self {
+            case .original(let value): return value
+            case .owned(let key, let arguments): return workflowText(language, key, arguments: arguments)
+            }
+        }
+    }
+
     struct Failure {
         let raw: String
         var key: String? = nil
         var arguments: [String: String] = [:]
-        var label: String? = nil
+        var label: ItemLabel? = nil
+        var labelIsNameArgument = false
         var binding = false
         init(_ error: any Error, label: String? = nil, binding: Bool = false) {
             raw = error.localizedDescription; key = (error as? WorkflowIssue)?.code
-            self.label = label; self.binding = binding
+            self.label = label.map(ItemLabel.original); self.binding = binding
         }
         init(raw: String, key: String, arguments: [String: String]) {
             self.raw = raw; self.key = key; self.arguments = arguments
         }
         @MainActor func display(_ language: UILanguageStore?) -> String {
+            var arguments = arguments
+            if labelIsNameArgument { arguments["name"] = label?.display(language) }
             let summary = key.map { workflowText(language, $0, fallback: raw, arguments: arguments) } ?? raw
             if binding { return workflowText(language, "quick.input.issue.binding", arguments: ["detail": summary]) }
-            return label.map { $0 + ": " + summary } ?? summary
+            if labelIsNameArgument { return summary }
+            return label.map { $0.display(language) + ": " + summary } ?? summary
         }
     }
 
@@ -67,14 +82,14 @@ import Foundation
         let destination = quick.store
         var compatible: [WorkflowAssetReference] = []
         for (index, item) in items.enumerated() {
-            let label: String
+            let label: ItemLabel
             switch item {
-            case .file(let url): label = url.lastPathComponent.isEmpty ? workflowText(language, "quick.input.issue.file", arguments: ["index": String(index + 1)]) : url.lastPathComponent
-            case .png: label = "PNG \(index + 1)"
+            case .file(let url): label = url.lastPathComponent.isEmpty ? .owned("quick.input.issue.file", ["index": String(index + 1)]) : .original(url.lastPathComponent)
+            case .png: label = .original("PNG \(index + 1)")
             case .managed(let transfer):
                 switch transfer {
-                case .asset(_, let id), .assetInstance(_, _, let id): label = workflowText(language, "quick.input.issue.asset", arguments: ["id": String(id.uuidString.prefix(8))])
-                default: label = workflowText(language, "quick.input.issue.dropped", arguments: ["index": String(index + 1)])
+                case .asset(_, let id), .assetInstance(_, _, let id): label = .owned("quick.input.issue.asset", ["id": String(id.uuidString.prefix(8))])
+                default: label = .owned("quick.input.issue.dropped", ["index": String(index + 1)])
                 }
             }
             do {
@@ -128,14 +143,19 @@ import Foundation
                 if port.assetListKind.map({ $0 == reference.kind }) ?? port.kinds.contains(reference.kind) {
                     compatible.append(reference)
                 } else {
-                    result.failures.append(.init(raw: label + "：素材已保留在资料库，但类型不符合此端口。", key: "quick.input.issue.incompatible", arguments: ["name": label]))
+                    var failure = Failure(raw: label.display(language) + "：素材已保留在资料库，但类型不符合此端口。", key: "quick.input.issue.incompatible", arguments: [:])
+                    failure.label = label
+                    failure.labelIsNameArgument = true
+                    result.failures.append(failure)
                 }
             } catch is CancellationError {
                 result.cancelled = true
                 return result
             } catch {
                 if Task.isCancelled { result.cancelled = true; return result }
-                result.failures.append(.init(error, label: label))
+                var failure = Failure(error)
+                failure.label = label
+                result.failures.append(failure)
             }
         }
         do { try quick.checkInputActivity(activity) }
