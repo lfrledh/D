@@ -325,8 +325,14 @@ struct ModelLibraryTests {
     @Test func copiedInstallationIsIndependentAndSurvivesReopen() async throws {
         let fixture = try LibraryFixture(); defer { fixture.clean() }
         var library: ModelLibrary? = try await fixture.library()
-        try await library!.configureRoot(at: fixture.destination)
         let sourceID = try await library!.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        do {
+            _ = try await library!.copyExistingToLibrary(sourceID)
+            Issue.record("A missing library location must stop before copying")
+        } catch ModelLibraryError.libraryLocationRequired { }
+        #expect(await library!.snapshot().records.map(\.id) == [sourceID])
+        #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.destination.path).isEmpty)
+        try await library!.configureRoot(at: fixture.destination)
         let copyID = try await library!.copyExistingToLibrary(sourceID)
         #expect(copyID != sourceID)
         let copied = try await library!.resolve(copyID)

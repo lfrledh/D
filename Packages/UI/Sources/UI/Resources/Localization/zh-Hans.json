@@ -5584,6 +5584,7 @@
     "workflow.viewer.sourceUnavailable": "这份内容所属的项目暂时不可用，请检查项目状态后重试。",
     "workflow.viewer.windowLimit": "查看窗口已达到上限（4 个）。请先关闭一个，再打开新窗口。",
     "modelManagement.local.noSupportedModel": "未找到受支持的完整模型，请检查模型版本和文件是否齐全。",
+    "modelManagement.local.libraryLocationRequired": "复制前请先选择模型库位置。",
     "files.restore.modelMismatch": "恢复的模型文件不完整或与备份记录不一致。",
     "files.restore.modelAmbiguous": "备份中有多个相同的模型副本，请在“添加本地模型”中选择要使用的副本。",
     "baseline02.library.conditions": "筛选条件",

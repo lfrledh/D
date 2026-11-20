@@ -720,7 +720,7 @@ public actor ModelLibrary {
             return existing.record.id
         }
         let entry = try entry(for: sourceID)
-        guard let root = libraryRoot else { throw ModelLibraryError.unavailable("复制前请先选择模型库位置。") }
+        guard let root = libraryRoot else { throw ModelLibraryError.libraryLocationRequired }
         try root.validateLocation()
         let source = try resolved(original)
         let copyFiles = try original.control?.role == .execution ? Self.preparedFiles(in: source, entry: entry) : entry.files

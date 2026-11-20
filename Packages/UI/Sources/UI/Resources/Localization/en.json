@@ -5584,6 +5584,7 @@
     "workflow.viewer.sourceUnavailable": "The project containing this content is currently unavailable. Check the project’s status and try again.",
     "workflow.viewer.windowLimit": "The viewer limit (4 windows) has been reached. Close one before opening another.",
     "modelManagement.local.noSupportedModel": "No complete supported model was found. Check the model version and that all files are present.",
+    "modelManagement.local.libraryLocationRequired": "Choose a model library location before copying.",
     "files.restore.modelMismatch": "The restored model files are incomplete or do not match the backup record.",
     "files.restore.modelAmbiguous": "The backup contains multiple copies of the same model. Choose the copy to use in “Add local model”.",
     "baseline02.library.conditions": "Filters",

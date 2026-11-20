@@ -179,7 +179,8 @@ public struct WorkbenchSettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(Section.allCases, id: \.self) { section in
                         Button { visited.insert(section); selected = section } label: {
-                            Text(title(section)).frame(maxWidth: .infinity, alignment: .leading).padding(10)
+                            Text(title(section)).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading).padding(10)
                                 .background(selected == section ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 10))
                         }.buttonStyle(WorkbenchRowButtonStyle(cornerRadius: 10)).accessibilityIdentifier("settings-" + section.rawValue)
                             .accessibilityAddTraits(selected == section ? .isSelected : [])

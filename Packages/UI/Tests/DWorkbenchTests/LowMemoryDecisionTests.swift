@@ -72,4 +72,26 @@ struct LowMemoryDecisionTests {
         #expect(history.mergingExecutionRecords([accepted]) == history)
         #expect(try JSONDecoder().decode([InferenceExecutionRecord].self, from: JSONEncoder().encode(history)) == history)
     }
+
+    @Test func failedAdmissionUsesSavedReasonWithoutReclassifyingExecutionFailures() throws {
+        let p = try proposal()
+        var record = InferenceExecutionRecord(request: p.original, backend: p.backend, budget: p.budget)
+        record.state = .failed
+        record.failureDiagnostic = "unchanged raw diagnostic"
+        for (reason, key) in [("noSupportedPlan", "memory.unsupported"),
+                              ("noSupportedPlanWithinBudget", "memory.allOverBudget"),
+                              ("fixedOverBudget", "memory.fixedOverBudget")] {
+            record.reason = reason
+            #expect(LowMemoryExecutionPresentation.nonExecutionCode([record]) == key)
+            #expect(record.failureDiagnostic == "unchanged raw diagnostic")
+        }
+        record.executionStarted = true
+        #expect(LowMemoryExecutionPresentation.nonExecutionCode([record]) == nil)
+        record.executionStarted = nil
+        #expect(LowMemoryExecutionPresentation.nonExecutionCode([record]) == nil)
+        record.executionStarted = false; record.reason = "unrecognized"
+        #expect(LowMemoryExecutionPresentation.nonExecutionCode([record]) == nil)
+        record.reason = "noSupportedPlanWithinBudget"; record.state = .completed
+        #expect(LowMemoryExecutionPresentation.nonExecutionCode([record]) == nil)
+    }
 }

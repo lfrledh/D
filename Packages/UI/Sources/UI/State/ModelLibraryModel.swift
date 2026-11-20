@@ -765,6 +765,9 @@ public final class ModelLibraryModel {
         } else if case ModelLibraryError.unsupportedLocalFiles = error {
             errorMessage = error.localizedDescription
             errorCode = "modelManagement.local.noSupportedModel"
+        } else if case ModelLibraryError.libraryLocationRequired = error {
+            errorMessage = error.localizedDescription
+            errorCode = "modelManagement.local.libraryLocationRequired"
         } else {
             errorMessage = "\(context)。\n\(credentialMessage(error))"
         }

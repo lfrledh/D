@@ -76,7 +76,16 @@ import Synchronization
 /// Presentation derives from the saved decision; old cancellation diagnostics stay intact.
 public enum LowMemoryExecutionPresentation {
     public static func nonExecutionCode(_ records: [InferenceExecutionRecord]?) -> String? {
-        guard let record = records?.last, record.executionStarted == false, record.state == .stopped else { return nil }
+        guard let record = records?.last, record.executionStarted == false else { return nil }
+        if record.state == .failed {
+            switch record.reason {
+            case "noSupportedPlan": return "memory.unsupported"
+            case "noSupportedPlanWithinBudget": return "memory.allOverBudget"
+            case "fixedOverBudget": return "memory.fixedOverBudget"
+            default: return nil
+            }
+        }
+        guard record.state == .stopped else { return nil }
         switch record.decision {
         case .userStopped: return "memory.stopped"
         case .denyByPreference: return "memory.denied"

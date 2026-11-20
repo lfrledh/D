@@ -273,6 +273,7 @@ public enum ModelLibraryError: Error, LocalizedError, Sendable {
     case invalidCatalog(String), unavailable(String), busy(String), unsafePath(String)
     case operationPaused
     case unsupportedLocalFiles
+    case libraryLocationRequired
     case fileAccess(reason: String, code: Int32)
     case integrity(String), download(String), accessDenied(String), storage(String), insufficientSpace(required: UInt64, available: UInt64)
     public var errorDescription: String? {
@@ -280,6 +281,7 @@ public enum ModelLibraryError: Error, LocalizedError, Sendable {
         case .invalidCatalog(let reason), .unavailable(let reason), .busy(let reason), .unsafePath(let reason),
              .integrity(let reason), .download(let reason), .accessDenied(let reason), .storage(let reason): reason
         case .unsupportedLocalFiles: "No complete supported model recipe matches this folder. Check the exact model, components and file sizes."
+        case .libraryLocationRequired: "Choose a model library location before copying."
         case .operationPaused: "操作已暂停，可稍后继续。"
         case .fileAccess(let reason, _): reason
         case .insufficientSpace(let required, let available):

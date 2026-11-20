@@ -10,6 +10,25 @@ import Testing
 
 @Suite @MainActor
 struct ModelLibraryPresentationTests {
+    @Test func missingCopyLocationKeepsTypedReasonAcrossLanguageChanges() async throws {
+        let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+        let root = URL(fileURLWithPath: base).appendingPathComponent("CopyLocation-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = try await ModelLibrary(stateDirectory: root)
+        let model = ModelLibraryModel(library: library)
+        let failure = ModelLibraryError.libraryLocationRequired
+        model.report(failure, context: "not a persistent translated identity")
+        let key = try #require(model.errorCode)
+        #expect(key == "modelManagement.local.libraryLocationRequired")
+        let zh = UILanguageStore(preferredLanguages: ["zh-Hans"]), en = UILanguageStore(preferredLanguages: ["en"])
+        #expect(zh.text(key, fallback: "") == "复制前请先选择模型库位置。")
+        #expect(en.text(key, fallback: "") == "Choose a model library location before copying.")
+        #expect(model.errorMessage == failure.localizedDescription)
+        #expect(await library.snapshot().records.isEmpty)
+        model.clearError()
+        #expect(model.errorCode == nil && model.errorMessage == nil)
+        try await library.shutdown()
+    }
     @Test func insufficientSpaceReportsTotalRequirementAndPreservesRawDiagnostic() async throws {
         let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
         let root = URL(fileURLWithPath: base).appendingPathComponent("SpacePresentation-" + UUID().uuidString)
