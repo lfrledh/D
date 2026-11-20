@@ -189,15 +189,20 @@ enum ChatContextSessionList {
         return !(attempt.response?.finalText ?? attempt.rawText).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    static func selectVersion(_ revisionID: UUID?, messageID: UUID, sessionID: UUID,
-                              in chat: ChatController) throws {
+    @discardableResult static func selectVersion(_ revisionID: UUID?, messageID: UUID, sessionID: UUID,
+                              in chat: ChatController) throws -> ChatSearchJump? {
         guard chat.state.selectedSessionID == sessionID,
               let session = chat.selectedSession,
               let attemptID = session.messages.first(where: { $0.id == messageID && $0.role == .assistant })?.attemptID,
               canAdopt(session.attempts.first(where: { $0.id == attemptID }), in: chat) else {
             throw WorkflowIssue("请等待回答完成并返回原对话后再选择版本。")
         }
+        let previous = session.selectedAnswer(messageID: messageID)?.revisionID
         try chat.selectAnswerRevision(revisionID, messageID: messageID, sessionID: sessionID)
+        // An explicit version change invalidates an offset inside the former
+        // text. Reuse the bounded, owner-checked message navigation; ordinary
+        // scrolling, page restoration and selecting the same version stay put.
+        return previous == revisionID ? nil : .init(sessionID: sessionID, messageID: messageID)
     }
 }
 
@@ -1597,8 +1602,8 @@ ScrollViewReader { proxy in
                         if question.attachments.isEmpty, (question.knowledgeExcerpts ?? []).isEmpty {
                             Text(newLabel("noQuestionMaterials", english: "No materials recorded for this question.", chinese: "这次问题没有已记录的材料。")).foregroundStyle(.secondary)
                         }
-                        Text(newLabel("sourceHistoryNote", english: "Earlier context and recorded memory sources are available in the frozen request.", chinese: "更早的上下文与已记录的记忆来源可在冻结请求中查看。")).font(.caption).foregroundStyle(.secondary)
-                        Button(newLabel("inspectRequest", english: "Inspect frozen request", chinese: "检查冻结请求")) {
+                        Text(newLabel("sourceHistoryNote", english: "For more conversation context and memory source information, choose “View sent content and settings”.", chinese: "更多对话上下文和记忆来源信息，请查看“这次发送的内容与设置”。")).font(.caption).foregroundStyle(.secondary)
+                        Button(newLabel("inspectRequest", english: "View sent content and settings", chinese: "这次发送的内容与设置")) {
                             guard let current = chat.selectedSession, let recorded = sourceProjection(selection, in: current)?.attempt else { return }
                             present(.request(recorded))
                         }
@@ -1867,7 +1872,7 @@ ScrollViewReader { proxy in
             })
             if let attempt {
                 result += [
-                    .init(id: "inspect", title: newLabel("inspectRequest", english: "Inspect frozen request", chinese: "检查冻结请求")) { openDataInspector(attemptID: attempt.id) },
+                    .init(id: "inspect", title: newLabel("inspectRequest", english: "View sent content and settings", chinese: "这次发送的内容与设置")) { openDataInspector(attemptID: attempt.id) },
                     .init(id: "compare", title: newLabel("compareAnswers", english: "Compare answers…", chinese: "比较回答…")) { present(.comparison(session.id, attempt.id)) },
                     .init(id: "reproduce", title: clarity("reproduce"), enabled: ChatRunAdmission.allowsReplay(session, attempt: attempt, isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil), help: clarity("reproduceHelp")) {
                         Task { guard stillCurrent(true) else { return }; await run(sessionID: session.id) { try await chat.reproduce(attempt.id, sessionID: session.id) } }
@@ -1897,11 +1902,11 @@ ScrollViewReader { proxy in
             }
             if !revisions.isEmpty {
                 var versions: [ChatActionMenuItem] = [.init(id: "original", title: newLabel("originalOutput", english: "Original model output", chinese: "原始模型输出"), selected: adoptedID == nil) {
-                    perform(sessionID: session.id) { try ChatContextCommands.selectVersion(nil, messageID: message.id, sessionID: session.id, in: chat) }
+                    perform(sessionID: session.id) { searchJump = try ChatContextCommands.selectVersion(nil, messageID: message.id, sessionID: session.id, in: chat) }
                 }]
                 versions += revisions.enumerated().map { index, revision in
                     .init(id: revision.id.uuidString, title: workflowText(language, "chat.textVersion", arguments: ["index": String(index + 1)]) + " · " + String(revision.text.prefix(28)), selected: adoptedID == revision.id) {
-                        perform(sessionID: session.id) { try ChatContextCommands.selectVersion(revision.id, messageID: message.id, sessionID: session.id, in: chat) }
+                        perform(sessionID: session.id) { searchJump = try ChatContextCommands.selectVersion(revision.id, messageID: message.id, sessionID: session.id, in: chat) }
                     }
                 }
                 result.append(.init(id: "versions", title: newLabel("answerVersions", english: "Answer versions", chinese: "回答版本"), enabled: canAdopt, children: versions))

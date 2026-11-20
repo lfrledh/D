@@ -244,10 +244,15 @@ private final class ContextPresentationSettings: UserDefaults, @unchecked Sendab
         }
         #expect(chat.selectedSession?.draft == draft)
         let revision = try #require(chat.selectedSession?.contextChoices?.revisions.first)
-        try ChatContextCommands.selectVersion(nil, messageID: assistant.id, sessionID: session.id, in: chat)
+        let originalJump = try #require(try ChatContextCommands.selectVersion(nil, messageID: assistant.id, sessionID: session.id, in: chat))
+        #expect(originalJump.sessionID == session.id && originalJump.messageID == assistant.id)
         #expect(chat.selectedSession?.contextChoices?.adopted[assistant.id] == nil)
-        try ChatContextCommands.selectVersion(revision.id, messageID: assistant.id, sessionID: session.id, in: chat)
+        #expect(try ChatContextCommands.selectVersion(nil, messageID: assistant.id, sessionID: session.id, in: chat) == nil)
+        let editedJump = try #require(try ChatContextCommands.selectVersion(revision.id, messageID: assistant.id, sessionID: session.id, in: chat))
+        #expect(editedJump.sessionID == session.id && editedJump.messageID == assistant.id && editedJump.ticket != originalJump.ticket)
+        #expect(try ChatContextCommands.selectVersion(revision.id, messageID: assistant.id, sessionID: session.id, in: chat) == nil)
         #expect(chat.selectedSession?.contextChoices?.adopted[assistant.id] == edited)
+        #expect(chat.selectedSession?.attempts.first == before)
         let inspection = ChatRequestInspection(attempt: before)
         #expect(inspection.sections.first(where: { $0.id == "input" })?.fields.contains {
             $0.id == "system" && $0.value == "old system"
