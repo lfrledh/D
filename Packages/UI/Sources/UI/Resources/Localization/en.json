@@ -5055,7 +5055,7 @@
     "container.collectionDefaultDestination": "Save without adding tags",
     "container.library.add.help": "Save these assets to the asset library for browsing and reuse. This does not copy files or continue the workflow.",
     "container.collected": "Saved to the asset library.",
-    "container.runCount": "{inputs} inputs × {repetitions} repetitions each = {total} downstream runs",
+    "container.runCount": "Inputs: {inputs} × repetitions per input: {repetitions} = downstream runs: {total}",
     "container.perInput.help": "How many times to continue each accepted input. An asset group counts as one input and is not automatically split.",
     "container.otherGates.pending": "Other steps still need confirmation.",
     "container.otherGates.saved": "Selection saved. Other steps still need confirmation.",

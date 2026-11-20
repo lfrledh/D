@@ -463,7 +463,7 @@ struct ContainerProjectionIdentity: Equatable {
         let index = (scopes.firstIndex(of: scope) ?? 0) + 1
         let date = controller.batchStages.first { $0.id == scope.stageID }?.createdAt
             ?? controller.runs.first { $0.id == scope.runID }?.createdAt
-        return t("batch", ["index": String(index)]) + (date.map { " · " + $0.formatted(date: .abbreviated, time: .shortened) } ?? "")
+        return t("batch", ["index": String(index)]) + (date.map { " · " + WorkflowHumanPresentation.date($0, language: language) } ?? "")
     }
     private var arrivalSummary: String {
         guard let snapshot else { return t("arrived", ["count": String(rows.count)]) }
@@ -613,7 +613,7 @@ struct ContainerProjectionIdentity: Equatable {
         guard let model, let value = item.value, model.projectSession.workflow === controller else { return }
         do {
             if case .runtime(let source) = item.source { guard try source.resolve(in: controller.runs) == value else { throw WorkflowIssue("Container source changed.", code: "container.stale") } }
-            try model.viewers.open(.init(title: name(item), subtitle: snapshot?.runs.first?.createdAt.formatted() ?? "", value: value, call: { if case .runtime(let source) = item.source { return source.call }; return item.record.map { .init(address: $0.address, stepID: $0.id) } }(), runtimeSource: { if case .runtime(let source) = item.source { return source }; return nil }()), model: model, language: language)
+            try model.viewers.open(.init(title: name(item), subtitle: snapshot?.runs.first.map { WorkflowHumanPresentation.date($0.createdAt, language: language, seconds: true) } ?? "", value: value, call: { if case .runtime(let source) = item.source { return source.call }; return item.record.map { .init(address: $0.address, stepID: $0.id) } }(), runtimeSource: { if case .runtime(let source) = item.source { return source }; return nil }()), model: model, language: language)
         } catch { self.error = .init(presenting: error, fallbackCode: "container.issue.actionFailed") }
     }
 }

@@ -5,6 +5,11 @@ import SwiftUI
 /// Local presentation aliases are derived from the complete owning collection,
 /// never from a search result or visible row. They are not persisted identities.
 enum WorkflowHumanPresentation {
+    @MainActor static func date(_ value: Date, language: UILanguageStore?, seconds: Bool = false) -> String {
+        value.formatted(Date.FormatStyle(date: .abbreviated, time: seconds ? .standard : .shortened)
+            .locale(Locale(identifier: language?.effectiveLanguageIdentifier ?? Locale.current.identifier)))
+    }
+
     @MainActor static func name(_ node: WorkflowNode, in nodes: [WorkflowNode], language: UILanguageStore? = nil) -> String {
         func base(_ value: WorkflowNode) -> String {
             if !value.title.isEmpty { return value.title }
@@ -47,13 +52,13 @@ enum WorkflowHumanPresentation {
         return (run.graph.nodes + WorkflowWorkspacePanels.records(in: run).map(\.step.node)).filter { seen.insert($0.id).inserted }
     }
     @MainActor static func run(_ run: WorkflowRun, in runs: [WorkflowRun], stages: [WorkflowBatchStage] = [], language: UILanguageStore?) -> String {
-        let title = run.graph.name + " · " + run.createdAt.formatted(date: .abbreviated, time: .standard)
+        let title = run.graph.name + " · " + date(run.createdAt, language: language, seconds: true)
         if let attempt = stages.lazy.flatMap({ $0.attempts }).first(where: { $0.runID == run.id }) {
             return title + " · " + metadataText(language, "attemptNumber")
                 .replacingOccurrences(of: "{number}", with: String(attempt.ordinal))
                 + " · " + WorkflowHumanPresentation.runStatus(run, language: language)
         }
-        let peers = runs.filter { $0.graph.name == run.graph.name && $0.createdAt.formatted(date: .abbreviated, time: .standard) == run.createdAt.formatted(date: .abbreviated, time: .standard) }
+        let peers = runs.filter { $0.graph.name == run.graph.name && date($0.createdAt, language: language, seconds: true) == date(run.createdAt, language: language, seconds: true) }
             .sorted { $0.id.uuidString < $1.id.uuidString }
         let alias = peers.count > 1 ? " · " + metadataText(language, "runNumber").replacingOccurrences(of: "{number}", with: String((peers.firstIndex { $0.id == run.id } ?? 0) + 1)) : ""
         return title + alias + " · " + WorkflowHumanPresentation.runStatus(run, language: language)

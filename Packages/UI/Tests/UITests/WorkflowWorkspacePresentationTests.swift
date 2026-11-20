@@ -34,6 +34,20 @@ private struct MetadataHostProbe: NSViewRepresentable {
 }
 
 @Suite(.serialized) @MainActor struct WorkflowWorkspacePresentationTests {
+    @Test func recordedDatesFollowSelectedInterfaceLanguageWithoutChangingTimestamp() throws {
+        let language = UILanguageStore(preferredLanguages: ["zh-Hans"])
+        let value = Date(timeIntervalSince1970: 1794972900)
+        try language.select("en")
+        let english = WorkflowHumanPresentation.date(value, language: language)
+        #expect(english.contains("Nov"))
+        #expect(!english.contains("年"))
+        try language.select("zh-Hans")
+        let chinese = WorkflowHumanPresentation.date(value, language: language)
+        #expect(chinese.contains("年"))
+        #expect(english != chinese)
+        #expect(value.timeIntervalSince1970 == 1794972900)
+    }
+
     @Test func retainedVisibilityDefersKeyLoopWorkAndCoalescesLatestRequest() async throws {
         let host = RetainedNativeHostingView(rootView: Color.clear)
         host.setInitialVisibility(true)
