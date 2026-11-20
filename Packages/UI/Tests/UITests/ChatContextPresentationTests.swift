@@ -248,6 +248,10 @@ private final class ContextPresentationSettings: UserDefaults, @unchecked Sendab
         #expect(originalJump.sessionID == session.id && originalJump.messageID == assistant.id)
         #expect(chat.selectedSession?.contextChoices?.adopted[assistant.id] == nil)
         #expect(try ChatContextCommands.selectVersion(nil, messageID: assistant.id, sessionID: session.id, in: chat) == nil)
+        #expect(throws: (any Error).self) {
+            try ChatContextCommands.selectVersion(UUID(), messageID: assistant.id, sessionID: session.id, in: chat)
+        }
+        #expect(chat.selectedSession?.selectedAnswer(messageID: assistant.id)?.revisionID == nil)
         let editedJump = try #require(try ChatContextCommands.selectVersion(revision.id, messageID: assistant.id, sessionID: session.id, in: chat))
         #expect(editedJump.sessionID == session.id && editedJump.messageID == assistant.id && editedJump.ticket != originalJump.ticket)
         #expect(try ChatContextCommands.selectVersion(revision.id, messageID: assistant.id, sessionID: session.id, in: chat) == nil)

@@ -1622,6 +1622,13 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         XCTAssertTrue(aligned.isAligned)
         XCTAssertEqual(aligned.messageSize, marker.frame.size)
         XCTAssertEqual(aligned.viewportSize, scroll.contentView.bounds.size)
+        // A selected version can reveal its existing row before the shorter
+        // SwiftUI layout virtualizes it; the later pass still confirms geometry.
+        scroll.contentView.scroll(to: .init(x: 0, y: 1200))
+        XCTAssertFalse(try XCTUnwrap(owner.alignTop(messageID: messageID, sessionID: sessionID,
+                                                   layoutIfNeeded: false)).isAligned)
+        XCTAssertEqual(scroll.contentView.bounds.origin.y, 80, accuracy: 0.5)
+        XCTAssertNil(owner.alignTop(messageID: messageID, sessionID: UUID(), layoutIfNeeded: false))
         // A subsequent layout shift must be observed, not assumed already aligned.
         marker.frame.origin.y += 100
         XCTAssertFalse(try XCTUnwrap(owner.alignTop(messageID: messageID, sessionID: sessionID)).isAligned)
@@ -1632,6 +1639,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         // Do not move the clip or declare success using its stale coordinates.
         scroll.contentView.scroll(to: .init(x: 0, y: 500))
         marker.isHidden = true
+        XCTAssertNil(owner.alignTop(messageID: messageID, sessionID: sessionID, layoutIfNeeded: false))
         XCTAssertNil(owner.alignTop(messageID: messageID, sessionID: sessionID))
         XCTAssertEqual(scroll.contentView.bounds.origin.y, 500, accuracy: 0.5)
         marker.isHidden = false

@@ -390,11 +390,11 @@ struct ChatReadingPoint {
 
     /// Reports geometry before correction so a later layout can confirm that the
     /// explicit search stayed aligned, rather than treating a scroll call as success.
-    func alignTop(messageID: UUID, sessionID: UUID) -> TopAlignment? {
+    func alignTop(messageID: UUID, sessionID: UUID, layoutIfNeeded: Bool = true) -> TopAlignment? {
         guard let view = entries[Key(sessionID: sessionID, messageID: messageID)]?.view,
               view.window != nil, !view.isHiddenOrHasHiddenAncestor,
               let scroll = view.enclosingScrollView else { return nil }
-        scroll.layoutSubtreeIfNeeded()
+        if layoutIfNeeded { scroll.layoutSubtreeIfNeeded() }
         // Lazy content may retain the former version's hidden native marker.
         // Its coordinates cannot establish that the selected answer is visible.
         guard view.window != nil, !view.isHiddenOrHasHiddenAncestor,
@@ -1429,6 +1429,17 @@ ScrollViewReader { proxy in
         }
     }
 
+    private func selectDisplayedVersion(_ revisionID: UUID?, messageID: UUID, sessionID: UUID) throws {
+        guard let jump = try ChatContextCommands.selectVersion(revisionID, messageID: messageID,
+                                                              sessionID: sessionID, in: chat) else { return }
+        searchJump = jump
+        // The choice has passed the controller's validation. Before SwiftUI applies
+        // the shorter row, reveal this same visible message in its existing layout.
+        // Forcing layout here can already virtualize the target out of the viewport.
+        // The normal bounded navigation still verifies the new version afterwards.
+        _ = readingMarkers.alignTop(messageID: messageID, sessionID: sessionID, layoutIfNeeded: false)
+    }
+
     private func alignSearchResult(_ jump: ChatSearchJump, using proxy: ScrollViewProxy) async {
         func isCurrent() -> Bool {
             searchJump == jump && chat.state.selectedSessionID == jump.sessionID
@@ -1913,11 +1924,11 @@ ScrollViewReader { proxy in
             }
             if !revisions.isEmpty {
                 var versions: [ChatActionMenuItem] = [.init(id: "original", title: newLabel("originalOutput", english: "Original model output", chinese: "原始模型输出"), selected: adoptedID == nil) {
-                    perform(sessionID: session.id) { searchJump = try ChatContextCommands.selectVersion(nil, messageID: message.id, sessionID: session.id, in: chat) }
+                    perform(sessionID: session.id) { try selectDisplayedVersion(nil, messageID: message.id, sessionID: session.id) }
                 }]
                 versions += revisions.enumerated().map { index, revision in
                     .init(id: revision.id.uuidString, title: workflowText(language, "chat.textVersion", arguments: ["index": String(index + 1)]) + " · " + String(revision.text.prefix(28)), selected: adoptedID == revision.id) {
-                        perform(sessionID: session.id) { searchJump = try ChatContextCommands.selectVersion(revision.id, messageID: message.id, sessionID: session.id, in: chat) }
+                        perform(sessionID: session.id) { try selectDisplayedVersion(revision.id, messageID: message.id, sessionID: session.id) }
                     }
                 }
                 result.append(.init(id: "versions", title: newLabel("answerVersions", english: "Answer versions", chinese: "回答版本"), enabled: canAdopt, children: versions))
