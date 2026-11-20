@@ -392,8 +392,13 @@ struct ChatReadingPoint {
     /// explicit search stayed aligned, rather than treating a scroll call as success.
     func alignTop(messageID: UUID, sessionID: UUID) -> TopAlignment? {
         guard let view = entries[Key(sessionID: sessionID, messageID: messageID)]?.view,
-              view.window != nil, let scroll = view.enclosingScrollView else { return nil }
+              view.window != nil, !view.isHiddenOrHasHiddenAncestor,
+              let scroll = view.enclosingScrollView else { return nil }
         scroll.layoutSubtreeIfNeeded()
+        // Lazy content may retain the former version's hidden native marker.
+        // Its coordinates cannot establish that the selected answer is visible.
+        guard view.window != nil, !view.isHiddenOrHasHiddenAncestor,
+              view.enclosingScrollView === scroll else { return nil }
         let rect = view.convert(view.bounds, to: nil)
         let viewport = scroll.contentView.convert(scroll.contentView.bounds, to: nil)
         guard !rect.isEmpty, !viewport.isEmpty, rect.minY.isFinite, rect.maxY.isFinite,
@@ -1430,10 +1435,6 @@ ScrollViewReader { proxy in
                 && chat.selectedPath.contains { $0.id == jump.messageID }
         }
         guard isCurrent() else { return }
-        // A retained marker can still describe the old, offscreen version.
-        // Ask the lazy stack to materialize the target before using its native
-        // geometry; a non-nil marker alone does not establish current layout.
-        proxy.scrollTo(jump.messageID, anchor: .top)
         // Leaving bottom-follow and moving a tall lazy message can each change
         // layout after the first correction. Confirm the measured edge across
         // two separate layouts, only for this explicit, cancellable navigation.
@@ -1458,6 +1459,12 @@ ScrollViewReader { proxy in
             traceScroll("search:alignment-incomplete", session: current, target: jump.messageID.uuidString)
         }
         guard isCurrent() else { return }
+        guard aligned else {
+            // End only this bounded request; do not commit a hidden target as
+            // the user's reading position. Version checks invalidate old points.
+            searchJump = nil
+            return
+        }
         visibleMessageID = jump.messageID
         // Do not retain the reading point from before this explicit navigation.
         scrollStates[jump.sessionID]?.readingPoint = nil

@@ -1628,6 +1628,18 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         XCTAssertEqual(scroll.contentView.bounds.origin.y, 180, accuracy: 0.5)
         XCTAssertTrue(try XCTUnwrap(owner.alignTop(messageID: messageID, sessionID: sessionID)).isAligned)
         XCTAssertNil(owner.alignTop(messageID: UUID(), sessionID: sessionID))
+        // A retained, hidden short-version marker is not an actual scroll target.
+        // Do not move the clip or declare success using its stale coordinates.
+        scroll.contentView.scroll(to: .init(x: 0, y: 500))
+        marker.isHidden = true
+        XCTAssertNil(owner.alignTop(messageID: messageID, sessionID: sessionID))
+        XCTAssertEqual(scroll.contentView.bounds.origin.y, 500, accuracy: 0.5)
+        marker.isHidden = false
+        document.isHidden = true
+        XCTAssertNil(owner.alignTop(messageID: messageID, sessionID: sessionID))
+        XCTAssertEqual(scroll.contentView.bounds.origin.y, 500, accuracy: 0.5)
+        document.isHidden = false
+        XCTAssertNotNil(owner.alignTop(messageID: messageID, sessionID: sessionID))
         marker.frame.size.height = 0
         let unavailable = ChatReadingPoint(messageID: messageID, offset: 500, width: 600, height: 3600)
         XCTAssertFalse(owner.restore(unavailable, sessionID: sessionID), "Unlaid-out markers must not consume restoration")
