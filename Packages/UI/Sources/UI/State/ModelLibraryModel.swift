@@ -503,12 +503,27 @@ public final class ModelLibraryModel {
             if choices.count == 1 { localFileSelection = choices[0] }
         } catch { if localInspectionID == intent, !Task.isCancelled, acceptsResult() { report(error, context: managementText("importFailed")) } }
     }
+    public func chooseLocalTextEncoder(acceptsResult: @MainActor () -> Bool = { true }) async {
+        guard !isChoosingLocation, globalOperation == nil, let selection = localFileSelection, selection.splitVideoSource else { return }
+        let intent = localInspectionID
+        isChoosingLocation = true
+        defer { isChoosingLocation = false }
+        let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false; panel.title = managementText("local.chooseTextEncoder")
+        guard await panel.begin() == .OK, let url = panel.url, acceptsResult(),
+              localInspectionID == intent, localFileSelection == selection else { return }
+        do {
+            let updated = try await library.selectLocalTextEncoder(selection, at: url)
+            guard acceptsResult(), localInspectionID == intent, localFileSelection == selection else { return }
+            localFileSelection = updated; errorMessage = nil
+        } catch { if acceptsResult(), localInspectionID == intent { report(error, context: managementText("importFailed")) } }
+    }
     struct LocalSubmission {
         let selection: ModelLocalFileSelection
         let inspectionID: UUID
     }
     func captureLocalSubmission(matching source: ProjectRestoredModel? = nil) -> LocalSubmission? {
-        guard let selection = localFileSelection else { return nil }
+        guard let selection = localFileSelection, !selection.needsTextEncoder else { return nil }
         if let source {
             guard source.directory?.standardizedFileURL == selection.directory.standardizedFileURL,
                   source.catalogID == selection.catalogID, source.revision == selection.revision else { return nil }
@@ -758,7 +773,9 @@ public final class ModelLibraryModel {
         return issue.statusCode.map { message.replacingOccurrences(of: "{code}", with: String($0)) } ?? message
     }
     func report(_ error: Error, context: String) {
-        if case ModelLibraryError.insufficientSpace(let required, let available) = error {
+        if let issue = error as? WorkflowIssue, let code = issue.code {
+            errorMessage = issue.reason; errorCode = code; errorArguments = [:]
+        } else if case ModelLibraryError.insufficientSpace(let required, let available) = error {
             errorMessage = error.localizedDescription
             errorCode = "modelManagement.insufficientSpace"
             errorArguments = ["required": Self.formatBytes(required), "available": Self.formatBytes(available)]

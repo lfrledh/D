@@ -416,6 +416,11 @@ public struct ModelLocalFileSelection: Sendable, Equatable {
     public let supportsOriginal: Bool
     public let estimatedBytes: UInt64?
     let rootIdentity: ModelFileIdentity
+    /// Raw LTX model/encoder folders have no application-owned pack marker.
+    public var splitVideoSource = false
+    public var textEncoderDirectory: URL? = nil
+    var textEncoderRootIdentity: ModelFileIdentity? = nil
+    public var needsTextEncoder: Bool { splitVideoSource && textEncoderDirectory == nil }
 }
 
 extension ModelLibrarySnapshot {

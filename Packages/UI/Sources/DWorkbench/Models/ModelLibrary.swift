@@ -2,6 +2,7 @@ import CryptoKit
 import Darwin
 import DInference
 import Foundation
+import Synchronization
 
 public actor ModelLibrary {
     private struct FileProgress: Codable, Sendable {
@@ -18,6 +19,7 @@ public actor ModelLibrary {
         var verifiedFiles: [String: ModelFileIdentity] = [:]
         var verifiedDirectories: [String: ModelFileIdentity]?
         var verifiedRoot: ModelFileIdentity?
+        var localSourceRoots: [ModelFileIdentity]?
         var publicationRoot: ModelFileIdentity?
         var control: ModelResourceControl?
         var deletion: DeletionIntent?
@@ -89,6 +91,7 @@ public actor ModelLibrary {
     private var localAddition: (id: UUID, job: Task<ModelID, any Error>)?
     private var currentCopy: ModelCopyProgress? { didSet { stateDidChange() } }
     private var copyKnownFiles: [String: ModelFileIdentity] = [:]
+    private var copyKnownDirectories: [String: ModelFileIdentity] = [:]
     private static let chunkBytes: UInt64 = 16 * 1024 * 1024
 
     public init(stateDirectory: URL, wanPreparation: (@Sendable (URL, URL) async throws -> Void)? = nil) async throws {
@@ -859,9 +862,19 @@ public actor ModelLibrary {
     }
 
     private func cleanupCopyStage(stage: ModelDirectory, staging: ModelDirectory, marker: Data,
-                                  content: ModelDirectory?) throws {
+                                  content: ModelDirectory?, knownDirectories: [String: ModelFileIdentity] = [:]) throws {
         guard try stage.read("owner") == marker else { throw ModelLibraryError.unsafePath("复制暂存所有权已改变，保留文件。") }
         if let content {
+            // A cancelled split copy may have created its second empty directory
+            // before writing its first leaf. Only our exact still-empty directory
+            // may be removed; unknown entries still make the normal guard fail.
+            for (name, identity) in knownDirectories {
+                let child = try content.child(name)
+                guard child.identity.sameNode(identity) else { throw ModelLibraryError.unsafePath("Copy staging directory changed; files retained.") }
+                if (try? child.entries(expectedPaths: []).isEmpty) == true {
+                    guard unlinkat(content.descriptor, name, AT_REMOVEDIR) == 0 else { throw ModelDirectory.failure("Remove owned empty copy directory") }
+                }
+            }
             let actual = try content.entries(expectedPaths: Set(copyKnownFiles.keys))
             guard actual == copyKnownFiles else { throw ModelLibraryError.unsafePath("复制暂存文件已改变，保留文件。") }
             try content.removeKnownFiles(actual)
@@ -2350,13 +2363,19 @@ extension ModelLibrary {
         let lease = ModelUsageLease(id: UUID(), modelID: id, reference: .init(directory: directory.url, revision: original.record.revision))
         leases[lease.id] = lease
         // Keep the heavy-operation slot until adapter validation and persistence finish.
+        // Keep a typed D-owned reason across the existing worker's persisted
+        // raw diagnostic. The result belongs only to this awaited registration.
+        let typedFailure = Mutex<WorkflowIssue?>(nil)
         workers[id] = Task { [weak self] in
             guard let self else { return }
             do {
                 let reference = try await validate(directory.url)
                 try Task.checkCancellation()
                 try await self.commitPreparedRegistration(id, reference: reference, original: original)
-            } catch { await self.preparedRegistrationFailed(id, error: error) }
+            } catch {
+                if let issue = error as? WorkflowIssue { typedFailure.withLock { $0 = issue } }
+                await self.preparedRegistrationFailed(id, error: error)
+            }
             await self.release(lease)
             await self.preparedRegistrationEnded(id)
         }
@@ -2366,6 +2385,7 @@ extension ModelLibrary {
             // Preserve cancellation only on failure. A committed registration
             // must not turn into a cancellation because its caller stopped late.
             try Task.checkCancellation()
+            if let issue = typedFailure.withLock({ $0 }) { throw issue }
             throw ModelLibraryError.unavailable(error)
         }
     }
@@ -2495,6 +2515,8 @@ extension ModelLibrary {
                 guard files.allSatisfy({ tree.files[$0.path]?.size == Int64($0.size) }) else { continue }
                 matches.append(.init(directory: directory.url, catalogID: entry.id, revision: entry.revision, prepared: true,
                     supportsOriginal: true, estimatedBytes: files.reduce(0) { $0 + $1.size }, rootIdentity: directory.identity))
+            } else if Self.localVideoProfile(entry) != nil {
+                if let selection = try? Self.inspectRawVideo(directory, entry: entry) { matches.append(selection) }
             } else if !entry.localPreparedOnly,
                       let tree = try? directory.requiredTree(paths: Set(entry.files.map(\.path))),
                       entry.files.allSatisfy({ tree.files[$0.path]?.size == Int64($0.size) }) {
@@ -2522,7 +2544,8 @@ extension ModelLibrary {
             return .init(directory: directory.url, catalogID: entry.id, revision: entry.revision, prepared: true, supportsOriginal: true,
                          estimatedBytes: nil, rootIdentity: directory.identity)
         }
-        guard !entry.localPreparedOnly else { throw ModelLibraryError.integrity("This model requires its complete prepared pack, including the text encoder and identity manifest.") }
+        if Self.localVideoProfile(entry) != nil { return try Self.inspectRawVideo(directory, entry: entry) }
+        guard !entry.localPreparedOnly else { throw ModelLibraryError.unsupportedLocalFiles }
         // Validate the selected layout before offering a file-use promise; full
         // content verification remains part of the accepted operation.
         _ = try directory.requiredTree(paths: Set(entry.files.map(\.path)))
@@ -2549,13 +2572,18 @@ extension ModelLibrary {
         try requireAdmission(); try Task.checkCancellation()
         try recoverLocalPublication()
         let scope = try ModelScopedLocation(selection.directory), directory = try ModelDirectory(scope.url)
+        defer { withExtendedLifetime(scope) {} }
         guard directory.identity == selection.rootIdentity else { throw ModelLibraryError.integrity("Selected model folder changed. Choose it again.") }
         let entry = try catalogEntry(selection.catalogID)
         guard entry.revision == selection.revision else { throw ModelLibraryError.integrity("Selected model revision changed.") }
-        guard storage == .managed || selection.supportsOriginal else { throw ModelLibraryError.unavailable("This format requires a model copy.") }
+        guard storage == .managed || selection.supportsOriginal else { throw WorkflowIssue("This format requires a model copy.", code: "modelManagement.local.originalUnsupported") }
         if selection.prepared {
             guard let validatePrepared else { throw ModelLibraryError.unavailable("Prepared model validation is unavailable.") }
             return try await registerPreparedLocal(at: directory.url, entry: entry, storage: storage, additionOwner: owner, validate: validatePrepared)
+        }
+        if Self.localVideoProfile(entry) != nil {
+            guard storage == .managed, let validatePrepared else { throw WorkflowIssue("This format requires a model copy.", code: "modelManagement.local.originalUnsupported") }
+            return try await addRawVideo(selection, entry: entry, source: directory, owner: owner, validate: validatePrepared)
         }
         let prior = Dictionary(uniqueKeysWithValues: disk.records.map { ($0.record.id, $0.record.registrationState) })
         let source = try await registerExternal(at: directory.url, catalogID: entry.id, additionOwner: owner)
@@ -2611,7 +2639,7 @@ extension ModelLibrary {
                     guard entry.workflowIdentity == "video:" + (reference.revision ?? ""),
                           reference.directory.standardizedFileURL == source.url.standardizedFileURL,
                           try source.requiredTree(paths: Set(tree.files.keys)) == tree else {
-                        throw ModelLibraryError.integrity("Prepared model identity changed; files retained.")
+                        throw WorkflowIssue("Prepared model identity changed; files retained.", code: "modelManagement.local.filesChanged")
                     }
                     try await self.recordExternalPrepared(id, entry: entry, source: source, scope: scope, tree: tree, reference: reference)
                 } catch { await self.setLocalRegistrationFailure(id, error: error) }
@@ -2631,6 +2659,163 @@ extension ModelLibrary {
         let result = try await copyExistingToLibrary(sourceID, checkpoint: { _ in }, additionOwner: additionOwner)
         try await registerPreparedResource(.init(rawValue: result.rawValue), additionOwner: additionOwner, validate: validate)
         return result
+    }
+    private static func localVideoProfile(_ entry: ModelCatalogEntry) -> ExternalVideoExecutionProfile? {
+        guard entry.localPreparedOnly else { return nil }
+        return [ExternalVideoExecutionProfile.ltx23BF16Full, .ltx23Q8GemmaQ4].first {
+            entry.workflowIdentity == "video:" + $0.modelIdentity && entry.revision == $0.modelRevision
+        }
+    }
+    private static func videoSourceFiles(_ entry: ModelCatalogEntry, prefix: String) -> [ModelFile] {
+        entry.files.filter { $0.path.hasPrefix(prefix) }.map {
+            ModelFile(path: String($0.path.dropFirst(prefix.count)), size: $0.size,
+                      sha256: $0.sha256, digestAlgorithm: $0.digestAlgorithm)
+        }
+    }
+    private static func inspectRawVideo(_ directory: ModelDirectory, entry: ModelCatalogEntry) throws -> ModelLocalFileSelection {
+        func matches(_ files: [ModelFile]) -> Bool {
+            guard !files.isEmpty, let tree = try? directory.requiredTree(paths: Set(files.map(\.path))) else { return false }
+            return files.allSatisfy { tree.files[$0.path]?.size == Int64($0.size) }
+        }
+        let combined = matches(entry.files)
+        guard combined || matches(videoSourceFiles(entry, prefix: "model/")) else { throw ModelLibraryError.unsupportedLocalFiles }
+        return .init(directory: directory.url, catalogID: entry.id, revision: entry.revision, prepared: false,
+            supportsOriginal: false, estimatedBytes: entry.totalBytes, rootIdentity: directory.identity, splitVideoSource: !combined)
+    }
+    /// The companion is selected explicitly; no sibling-directory or whole-disk search.
+    public func selectLocalTextEncoder(_ selection: ModelLocalFileSelection, at url: URL) throws -> ModelLocalFileSelection {
+        guard selection.splitVideoSource, !selection.prepared else { throw ModelLibraryError.unsupportedLocalFiles }
+        let entry = try catalogEntry(selection.catalogID)
+        guard Self.localVideoProfile(entry) != nil, entry.revision == selection.revision else { throw ModelLibraryError.unsupportedLocalFiles }
+        let scope = try ModelScopedLocation(url), directory = try ModelDirectory(scope.url)
+        let files = Self.videoSourceFiles(entry, prefix: "text_encoder/")
+        let tree = try directory.requiredTree(paths: Set(files.map(\.path)))
+        guard !files.isEmpty, files.allSatisfy({ tree.files[$0.path]?.size == Int64($0.size) }) else { throw ModelLibraryError.unsupportedLocalFiles }
+        var result = selection; result.textEncoderDirectory = directory.url; result.textEncoderRootIdentity = directory.identity
+        return result
+    }
+    private func noteCopyDirectory(_ path: String, identity: ModelFileIdentity) {
+        copyKnownDirectories[path] = identity
+    }
+    private func addRawVideo(_ selection: ModelLocalFileSelection, entry: ModelCatalogEntry, source: ModelDirectory,
+        owner: UUID, validate: @escaping @Sendable (URL) async throws -> ModelReference) async throws -> ModelID {
+        guard let profile = Self.localVideoProfile(entry), let root = libraryRoot else { throw ModelLibraryError.libraryLocationRequired }
+        let exactValidator: @Sendable (URL) async throws -> ModelReference = { url in
+            let reference = try await validate(url)
+            guard reference.revision == profile.modelIdentity, reference.directory.standardizedFileURL == url.standardizedFileURL else {
+                throw WorkflowIssue("Prepared model identity changed; files retained.", code: "modelManagement.local.filesChanged")
+            }
+            return reference
+        }
+        let companionScope = try selection.textEncoderDirectory.map(ModelScopedLocation.init)
+        let companion = try companionScope.map { try ModelDirectory($0.url) }
+        guard !selection.needsTextEncoder,
+              !selection.splitVideoSource || companion?.identity == selection.textEncoderRootIdentity else {
+            throw ModelLibraryError.unsupportedLocalFiles
+        }
+        try root.validateLocation()
+        let sourceRoots = [source.identity] + (companion.map { [$0.identity] } ?? [])
+        let modelFiles = selection.splitVideoSource ? Self.videoSourceFiles(entry, prefix: "model/") : entry.files
+        let encoderFiles = selection.splitVideoSource ? Self.videoSourceFiles(entry, prefix: "text_encoder/") : []
+        let verification = Task.detached { () throws -> (ModelRequiredTree, ModelRequiredTree?) in
+            let first = try source.verifyRequired(modelFiles)
+            let second = try companion.map { try $0.verifyRequired(encoderFiles) }
+            return (first, second)
+        }
+        let (modelTree, encoderTree) = try await withTaskCancellationHandler { try await verification.value } onCancel: { verification.cancel() }
+        try Task.checkCancellation()
+        // A completed copy or post-publication save retry uses the already durable
+        // exact installation. It never recopies weights or re-enables a removed one.
+        if let prior = disk.records.first(where: { $0.record.catalogID == entry.id && $0.record.revision == entry.revision &&
+            $0.record.storage == .managed && $0.localSourceRoots?.count == sourceRoots.count &&
+            zip($0.localSourceRoots ?? [], sourceRoots).allSatisfy({ $0.sameNode($1) }) &&
+            $0.control?.role == .execution && $0.control?.fileState == .verified && $0.control?.automaticRegistrationRevoked != true }) {
+            try await registerPreparedResource(.init(rawValue: prior.record.id.rawValue), additionOwner: owner, validate: exactValidator)
+            return prior.record.id
+        }
+        try requireSpace(entry.totalBytes + 65_536)
+        let id = ModelID(), staging = try root.child("Staging")
+        let stage = try staging.child(id.description, create: true)
+        let marker = Data((disk.libraryID.uuidString + "\n" + id.description + "\n" + entry.revision).utf8)
+        try stage.atomicWrite(marker, to: "owner", replace: false)
+        let content = try stage.child("Content", create: true)
+        copyKnownFiles = [:]; copyKnownDirectories = [:]
+        var journaled = false
+        defer { copyJob = nil; currentCopy = nil; copyKnownFiles = [:]; copyKnownDirectories = [:]; withExtendedLifetime(companionScope) {} }
+        do {
+        let descriptor = try JSONEncoder().encode(ExternalVideoModelManifest(profile: profile))
+        let markerFile = ModelFile(path: ExternalVideoModelManifest.filename, size: UInt64(descriptor.count),
+            sha256: SHA256.hash(data: descriptor).map { String(format: "%02x", $0) }.joined())
+        let required = entry.files + [markerFile]
+        // The existing serialized local-addition task owns this bounded copy.
+        // Failure retains only this owned stage; originals are read-only.
+        let copyCheckpoint = checkpoint
+        let job = Task.detached { [self] in
+            if selection.splitVideoSource {
+                let modelTarget = try content.child("model", create: true)
+                await self.noteCopyDirectory("model", identity: modelTarget.identity)
+                try await modelTarget.copyRequired(modelFiles, from: source, expected: modelTree) { path, bytes, identity in
+                    await self.noteCopy(path: "model/" + path, bytes: bytes, identity: identity, sourceID: id, total: entry.totalBytes)
+                    try copyCheckpoint("localVideo.copy")
+                }
+                guard let companion, let encoderTree else { throw ModelLibraryError.unsupportedLocalFiles }
+                let encoderTarget = try content.child("text_encoder", create: true)
+                await self.noteCopyDirectory("text_encoder", identity: encoderTarget.identity)
+                try copyCheckpoint("localVideo.encoderCreated")
+                let offset = modelFiles.reduce(UInt64(0)) { $0 + $1.size }
+                try await encoderTarget.copyRequired(encoderFiles, from: companion, expected: encoderTree) { path, bytes, identity in
+                    await self.noteCopy(path: "text_encoder/" + path, bytes: bytes + offset, identity: identity, sourceID: id, total: entry.totalBytes)
+                    try copyCheckpoint("localVideo.copy")
+                }
+            } else {
+                try await content.copyRequired(entry.files, from: source, expected: modelTree) { path, bytes, identity in
+                    await self.noteCopy(path: path, bytes: bytes, identity: identity, sourceID: id, total: entry.totalBytes)
+                    try copyCheckpoint("localVideo.copy")
+                }
+            }
+            try content.atomicWrite(descriptor, to: ExternalVideoModelManifest.filename, replace: false)
+            await self.noteCopy(path: ExternalVideoModelManifest.filename, bytes: entry.totalBytes, identity: try content.fileIdentity(ExternalVideoModelManifest.filename), sourceID: id, total: entry.totalBytes)
+            let verified = try content.verify(required)
+            guard try source.requiredTree(paths: Set(modelFiles.map(\.path))) == modelTree,
+                  try companion.map({ try $0.requiredTree(paths: Set(encoderFiles.map(\.path))) }) == encoderTree else {
+                throw WorkflowIssue("Selected model files changed during preparation.", code: "modelManagement.local.filesChanged")
+            }
+            return verified
+        }
+        copyJob = job
+        let verified = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
+        copyJob = nil // Completed bytes no longer occupy the copy worker; localAddition still owns the transaction.
+        try Task.checkCancellation()
+        guard try content.entries(expectedPaths: Set(required.map(\.path))) == verified else {
+            throw WorkflowIssue("Prepared model identity changed; files retained.", code: "modelManagement.local.filesChanged")
+        }
+        try source.validateLocation(); try companion?.validateLocation(); try root.validateLocation()
+        let installations = try root.child("Installations")
+        var control = ModelResourceControl(fileState: .verified, origin: .local)
+        control.role = .execution; control.executionRevision = profile.modelIdentity; control.lastVerified = now()
+        control.requiredPaths = required.map(\.path).sorted()
+        let record = StoredRecord(record: .init(id: id, catalogID: entry.id, revision: entry.revision, storage: .managed,
+            state: .installed, availability: .available, downloadedBytes: entry.totalBytes + markerFile.size,
+            totalBytes: entry.totalBytes + markerFile.size, error: nil, directory: installations.url.appendingPathComponent(id.description),
+            activeLeaseCount: 0, registrationState: .unregistered), recipeIdentity: try Self.recipeIdentity(entry),
+            verifiedFiles: verified, verifiedRoot: content.identity, localSourceRoots: sourceRoots, publicationRoot: content.identity, control: control)
+        try stageLocalPublication(record, stagePath: "Staging/" + id.description + "/Content", afterRename: { try copyCheckpoint("localVideo.journalPublished") })
+        journaled = true
+        guard renameatx_np(stage.descriptor, "Content", installations.descriptor, id.description, UInt32(RENAME_EXCL)) == 0,
+              fsync(stage.descriptor) == 0, fsync(installations.descriptor) == 0 else { throw ModelDirectory.failure("Publish prepared model") }
+        try commitLocalPublication(record)
+        try? cleanupCopyStage(stage: stage, staging: staging, marker: marker, content: nil)
+        try await registerPreparedResource(.init(rawValue: id.rawValue), additionOwner: owner, validate: exactValidator)
+        return id
+        } catch {
+            if !journaled && (try? Self.exists("local-publication.json", in: stateDirectory)) == false {
+                // Only files observed as this copy's own writes may be removed.
+                // Changed/unknown entries cause cleanup to refuse, never guessed deletion.
+                do { try cleanupCopyStage(stage: stage, staging: staging, marker: marker, content: content, knownDirectories: copyKnownDirectories) }
+                catch { throw WorkflowIssue("Preparation stopped; changed staging files retained at \(stage.url.path): \(error.localizedDescription)", code: "modelManagement.local.stagingRetained") }
+            }
+            throw error
+        }
     }
     private static func preparedFiles(in directory: ModelDirectory, entry: ModelCatalogEntry) throws -> [ModelFile] {
         if entry.localPreparedOnly {
@@ -2667,10 +2852,10 @@ extension ModelLibrary {
 extension ModelLibrary {
     /// Capacity one, serialized with local copy/preparation. The intent precedes
     /// publication, carries exact root/leaves, and is retired only after durable index.
-    private func stageLocalPublication(_ record: StoredRecord, stagePath: String) throws {
+    private func stageLocalPublication(_ record: StoredRecord, stagePath: String, afterRename: (@Sendable () throws -> Void)? = nil) throws {
         try recoverLocalPublication()
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        try stateDirectory.atomicWrite(encoder.encode(LocalPublication(record: record, stagePath: stagePath)), to: "local-publication.json", replace: false)
+        try stateDirectory.atomicWrite(encoder.encode(LocalPublication(record: record, stagePath: stagePath)), to: "local-publication.json", replace: false, afterRename: afterRename)
     }
     private func recoverLocalPublication() throws {
         guard try Self.exists("local-publication.json", in: stateDirectory), let root = libraryRoot else { return }

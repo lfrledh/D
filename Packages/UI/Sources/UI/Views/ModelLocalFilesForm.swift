@@ -28,6 +28,12 @@ struct ModelLocalFilesForm: View {
             if let selection = model.localFileSelection, let entry {
                 Text(entry.title).font(.headline)
                 Text(selection.directory.path).font(.caption).textSelection(.enabled)
+                if selection.splitVideoSource {
+                    Text(t("local.textEncoderRequired"))
+                    if let location = selection.textEncoderDirectory { Text(location.path).font(.caption).textSelection(.enabled) }
+                    Button(t("local.chooseTextEncoder")) { Task { await model.chooseLocalTextEncoder(acceptsResult: { surfaceActive }) } }
+                        .disabled(model.isChoosingLocation || model.globalOperation != nil)
+                }
                 Picker(t("local.usage"), selection: $storage) {
                     Text(t("local.original")).tag(ModelStorageKind.external).disabled(!selection.supportsOriginal)
                     Text(t("local.copy")).tag(ModelStorageKind.managed)
@@ -51,7 +57,7 @@ struct ModelLocalFilesForm: View {
                     }
                 }
                     .buttonStyle(WorkbenchPrimaryButtonStyle())
-                    .disabled(model.globalOperation != nil || model.hasActiveWork || (storage == .external && !selection.supportsOriginal) || (storage == .managed && model.rootURL == nil))
+                    .disabled(selection.needsTextEncoder || model.isChoosingLocation || model.globalOperation != nil || model.hasActiveWork || (storage == .external && !selection.supportsOriginal) || (storage == .managed && model.rootURL == nil))
                     .accessibilityIdentifier("model-local-submit")
             }
             if model.globalOperation != nil { ProgressView(); Button(t("cancel")) { model.cancelImport() } }

@@ -764,3 +764,126 @@ extension ModelVideoPreparationTests {
         try await cold.shutdown()
     }
 }
+
+extension ModelVideoPreparationTests {
+    @Test(arguments: [false, true], [ExternalVideoExecutionProfile.ltx23BF16Full, .ltx23Q8GemmaQ4])
+    func rawLTXFoldersAddOnceWithoutUserManifestAndKeepExactCopy(split: Bool, profile: ExternalVideoExecutionProfile) async throws {
+        let f = try LibraryFixture(); defer { f.clean() }
+        let pack = f.root.appendingPathComponent("raw-layout")
+        var files = [ModelFile]()
+        for prefix in ["model", "text_encoder"] {
+            for file in f.entry.files {
+                let path = prefix + "/" + file.path, target = pack.appendingPathComponent(path)
+                try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try f.contents[file.path]!.write(to: target)
+                files.append(.init(path: path, size: file.size, sha256: file.sha256))
+            }
+        }
+        let entry = ModelCatalogEntry(id: "local-" + profile.rawValue, title: "Raw LTX fixture", repository: "fixture/raw",
+            revision: profile.modelRevision, files: files, workflowProfileID: "d.video." + profile.rawValue,
+            workflowIdentity: "video:" + profile.modelIdentity, preparation: .required, localPreparedOnly: true)
+        let failSave = Mutex(false), failCopy = Mutex(false), failBoundary = Mutex(false), failJournal = Mutex(false)
+        var library: ModelLibrary! = try await ModelLibrary(stateDirectory: f.state, catalog: [entry], checkpoint: { point in
+            if point == "localVideo.encoderCreated", failBoundary.withLock({ $0 }) { throw CancellationError() }
+            if point == "localVideo.journalPublished", failJournal.withLock({ $0 }) { throw ModelLibraryError.storage("Controlled journal directory sync failure") }
+            if point == "localVideo.copy", failCopy.withLock({ $0 }) { throw CancellationError() }
+            if point == "registration.beforeWrite", failSave.withLock({ $0 }) { throw ModelLibraryError.storage("Controlled registration write failure") }
+        })
+        try await library.configureRoot(at: f.destination)
+        let source = split ? pack.appendingPathComponent("model") : pack
+        var selection = try #require(await library.inspectLocalCandidates(at: source, validatePrepared: nil).first)
+        #expect(!selection.prepared && !selection.supportsOriginal && selection.needsTextEncoder == split)
+        if split {
+            await #expect(throws: (any Error).self) { try await library.registerLocalFiles(selection, storage: .managed, validatePrepared: { .init(directory: $0, revision: profile.modelIdentity) }) }
+            selection = try await library.selectLocalTextEncoder(selection, at: pack.appendingPathComponent("text_encoder"))
+        }
+        var before = try ModelDirectory(pack).entries()
+        let exactFiles = files
+        let validate: @Sendable (URL) async throws -> ModelReference = { url in
+            let manifest = try JSONDecoder().decode(ExternalVideoModelManifest.self, from: Data(contentsOf: url.appendingPathComponent(ExternalVideoModelManifest.filename)))
+            try manifest.validate()
+            #expect(manifest.profile == profile)
+            _ = try ModelDirectory(url).verifyRequired(exactFiles)
+            return .init(directory: url, revision: manifest.profile.modelIdentity)
+        }
+        await #expect(throws: (any Error).self) { try await library.registerLocalFiles(selection, storage: .external, validatePrepared: validate) }
+        // Layout/size inspection is not acceptance: a wrong encoder with the
+        // same size must fail digest verification without publishing anything.
+        let encoderLeaf = pack.appendingPathComponent("text_encoder/" + f.entry.files[0].path)
+        let originalEncoder = try Data(contentsOf: encoderLeaf)
+        try Data(repeating: 0x7F, count: originalEncoder.count).write(to: encoderLeaf)
+        await #expect(throws: (any Error).self) { try await library.registerLocalFiles(selection, storage: .managed, validatePrepared: validate) }
+        #expect(await library.snapshot().records.isEmpty)
+        try originalEncoder.write(to: encoderLeaf)
+        before = try ModelDirectory(pack).entries()
+        failCopy.withLock { $0 = true }
+        await #expect(throws: (any Error).self) { try await library.registerLocalFiles(selection, storage: .managed, validatePrepared: validate) }
+        failCopy.withLock { $0 = false }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: f.destination.appendingPathComponent(".d-model-library/Staging").path).isEmpty)
+        #expect(await library.snapshot().records.isEmpty)
+        if split {
+            failBoundary.withLock { $0 = true }
+            await #expect(throws: (any Error).self) { try await library.registerLocalFiles(selection, storage: .managed, validatePrepared: validate) }
+            failBoundary.withLock { $0 = false }
+            #expect(try FileManager.default.contentsOfDirectory(atPath: f.destination.appendingPathComponent(".d-model-library/Staging").path).isEmpty)
+        }
+        // Journal rename can succeed even when its directory sync fails. Keep
+        // the completed bytes and let the existing publication recovery finish.
+        failJournal.withLock { $0 = true }
+        await #expect(throws: (any Error).self) { try await library.registerLocalFiles(selection, storage: .managed, validatePrepared: validate) }
+        failJournal.withLock { $0 = false }
+        #expect(FileManager.default.fileExists(atPath: f.state.appendingPathComponent("local-publication.json").path))
+        let stagedID = try #require(FileManager.default.contentsOfDirectory(atPath: f.destination.appendingPathComponent(".d-model-library/Staging").path).first)
+        #expect(FileManager.default.fileExists(atPath: f.destination.appendingPathComponent(".d-model-library/Staging/" + stagedID + "/Content/D-VIDEO-PACK.json").path))
+        // First acceptance must finish registration, not require a second attempt
+        // to escape a completed copy worker's busy gate.
+        let id = try await library.registerLocalFiles(selection, storage: .managed, validatePrepared: validate)
+        let record = try #require(await library.snapshot().records.first)
+        #expect(record.id == id && record.registrationState == .registered)
+        #expect(id.description == stagedID)
+        #expect(try ModelDirectory(pack).entries() == before)
+        let output = try #require(record.directory), copied = try ModelDirectory(output).entries()
+        failSave.withLock { $0 = true }
+        await #expect(throws: (any Error).self) { try await library.registerLocalFiles(selection, storage: .managed, validatePrepared: validate) }
+        failSave.withLock { $0 = false }
+        #expect(try await library.registerLocalFiles(selection, storage: .managed, validatePrepared: validate) == id)
+        #expect(await library.snapshot().records.count == 1)
+        #expect(try ModelDirectory(output).entries() == copied)
+        do {
+            _ = try await library.registerLocalFiles(selection, storage: .managed, validatePrepared: { .init(directory: $0, revision: "wrong-exact-identity") })
+            Issue.record("A different validated model identity must be rejected")
+        } catch let issue as WorkflowIssue {
+            #expect(issue.code == "modelManagement.local.filesChanged")
+        }
+        #expect(try await library.registerLocalFiles(selection, storage: .managed, validatePrepared: validate) == id)
+        // A second selected source is a separate addition, not an arbitrary first
+        // same-catalog installation. It keeps its own exact source identity.
+        let otherPack = f.root.appendingPathComponent("other-raw-layout")
+        try FileManager.default.copyItem(at: pack, to: otherPack)
+        let otherSelection = try #require(await library.inspectLocalCandidates(at: otherPack, validatePrepared: nil).first)
+        let otherID = try await library.registerLocalFiles(otherSelection, storage: .managed, validatePrepared: validate)
+        #expect(otherID != id)
+        #expect(await library.snapshot().records.count == 2)
+        try await library.shutdown(); library = nil
+        // Registration retry needs no new copy budget, including after cold read.
+        var lowSpace: ModelLibrary! = try await ModelLibrary(stateDirectory: f.state, catalog: [entry], availableBytesOverride: 0)
+        #expect(try await lowSpace.registerLocalFiles(selection, storage: .managed, validatePrepared: validate) == id)
+        try Data("Unrelated source notes".utf8).write(to: source.appendingPathComponent("README.local.txt"))
+        var inspectedAgain = try #require(await lowSpace.inspectLocalCandidates(at: source, validatePrepared: nil).first)
+        if split { inspectedAgain = try await lowSpace.selectLocalTextEncoder(inspectedAgain, at: pack.appendingPathComponent("text_encoder")) }
+        #expect(try await lowSpace.registerLocalFiles(inspectedAgain, storage: .managed, validatePrepared: validate) == id)
+        await #expect(throws: (any Error).self) {
+            let third = f.root.appendingPathComponent("third-raw-layout")
+            try FileManager.default.copyItem(at: pack, to: third)
+            let fresh = try #require(await lowSpace.inspectLocalCandidates(at: third, validatePrepared: nil).first)
+            _ = try await lowSpace.registerLocalFiles(fresh, storage: .managed, validatePrepared: validate)
+        }
+        try await lowSpace.shutdown(); lowSpace = nil
+        try FileManager.default.moveItem(at: pack, to: pack.appendingPathExtension("disconnected"))
+        _ = try await validate(output)
+        let cold = try await ModelLibrary(stateDirectory: f.state, catalog: [entry])
+        #expect(await cold.snapshot().records.first?.id == id)
+        #expect(await cold.snapshot().records.first?.registrationState == .registered)
+        try await cold.shutdown()
+    }
+}
