@@ -20,6 +20,7 @@ struct WorkbenchModelCard: View {
     let modelID: String?
     let choices: [WorkflowModelChoice]
     let status: String
+    var statusProject: ProjectSession? = nil
     var change: (() -> Void)? = nil
     var canChange = true
     var changeUnavailableReason: String? = nil
@@ -54,7 +55,13 @@ struct WorkbenchModelCard: View {
             }.workbenchHelp("MODEL-IO").font(.caption).fixedSize(horizontal: false, vertical: true)
             }
             if usingDefault && definition.modelKind != nil { Text(consistencyText(language, "copy.usingDefault")).font(.caption) }
-            if definition.modelKind != nil { Text(status).workbenchHelp("MODEL-STATUS").font(.callout).foregroundStyle(.secondary) }
+            if definition.modelKind != nil {
+                Group {
+                    if let statusProject, let modelID {
+                        WorkbenchModelStatusText(identity: modelID, project: statusProject, fallback: status)
+                    } else { Text(status) }
+                }.workbenchHelp("MODEL-STATUS").font(.callout).foregroundStyle(.secondary)
+            }
             HStack {
                 if let change { Button(consistencyText(language, "MODEL-CHANGE"), action: change).workbenchHelp("MODEL-CHANGE", unavailableReason: canChange ? nil : changeUnavailableReason).disabled(!canChange) }
                 Button(consistencyText(language, "MODEL-DETAILS")) { details = true }.workbenchHelp("MODEL-DETAILS")

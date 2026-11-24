@@ -17,6 +17,9 @@ struct WorkflowModelPreparation: Equatable {
         if ready && (phase == "registered" || (!hasExplicitInstallation && phase == "ambiguousCopies")) { return "ready" }
         return phase
     }
+    func isAddedAwaitingAdmission(readiness: SharedLibraryReadiness, hasIssue: Bool) -> Bool {
+        readiness == .unknown && phase == "registered" && issue == nil && !hasIssue
+    }
     static func make(record: ModelRecord, control: ModelResourceControl, task: ModelDownloadTask?, requiresPreparation: Bool) -> Self {
         let phase: String
         if record.availability == .unavailable { phase = record.locationIssue?.rawValue ?? "unavailable" }
@@ -104,15 +107,59 @@ struct WorkflowModelPreparationView: View {
     }
 }
 
+/// A compact status observes only the exact selected installation. Added is a
+/// file/library fact, not execution admission or a promise of runtime readiness.
+struct WorkbenchModelStatusText: View {
+    let identity: String
+    let project: ProjectSession
+    let fallback: String
+    var prefix = ""
+    @Environment(\.workflowModelPreparation) private var state
+    var body: some View {
+        WorkbenchModelStatusCellText(cell: state?.cell(identity: identity,
+            installation: project.workflowInstallationID(for: identity)), identity: identity,
+            project: project, fallback: fallback, prefix: prefix)
+    }
+}
+private struct WorkbenchModelStatusCellText: View {
+    let cell: WorkflowModelPreparationCell?
+    let identity: String
+    let project: ProjectSession
+    let fallback: String
+    let prefix: String
+    @Environment(\.dLanguageStore) private var language
+    var body: some View {
+        let added = cell?.value?.isAddedAwaitingAdmission(
+            readiness: project.explicitModelReadiness[identity] ?? .unknown,
+            hasIssue: project.explicitModelIssues[identity] != nil) == true
+        Text(prefix + (added ? workflowText(language, "modelManagement.registered") : fallback))
+    }
+}
+
 /// Chat and single generation share the same installation facts and recovery
 /// destination. This presentation never admits execution or rewrites a binding.
 struct WorkbenchModelRecoveryView: View {
     let identity: String
     let project: ProjectSession
     let onRecover: () -> Void
+    @Environment(\.workflowModelPreparation) private var state
+    var body: some View {
+        WorkbenchModelRecoveryCellView(cell: state?.cell(identity: identity,
+            installation: project.workflowInstallationID(for: identity)), identity: identity,
+            project: project, onRecover: onRecover)
+    }
+}
+private struct WorkbenchModelRecoveryCellView: View {
+    let cell: WorkflowModelPreparationCell?
+    let identity: String
+    let project: ProjectSession
+    let onRecover: () -> Void
     @Environment(\.dLanguageStore) private var language
     var body: some View {
-        if !identity.isEmpty, project.explicitModelReadiness[identity] != .available {
+        let readiness = project.explicitModelReadiness[identity] ?? .unknown
+        let added = cell?.value?.isAddedAwaitingAdmission(readiness: readiness,
+            hasIssue: project.explicitModelIssues[identity] != nil) == true
+        if !identity.isEmpty, readiness != .available, !added {
             VStack(alignment: .leading, spacing: 6) {
                 WorkflowModelPreparationView(identity: identity)
                 if let issue = project.explicitModelIssues[identity] {

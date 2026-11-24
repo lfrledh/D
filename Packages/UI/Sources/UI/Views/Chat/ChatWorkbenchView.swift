@@ -947,6 +947,7 @@ ScrollViewReader { proxy in
                            let definition = WorkflowRegistry.standard.operation(node.operationID)?.definition {
                             WorkbenchModelCard(definition: definition, modelID: node.parameters["modelID"]?.string,
                                 choices: model.projectSession.explicitModelChoices, status: readiness(node.parameters["modelID"]?.string ?? ""),
+                                statusProject: model.projectSession,
                                 change: onChooseModel, canChange: chat.isLoaded && session.contextChoices?.deletedAt == nil,
                                 changeUnavailableReason: consistencyText(language, !chat.isLoaded ? "help.reason.loading" : "help.reason.deleted"))
                                 .accessibilityIdentifier("chat-model-picker").chatMeasured("change-model", probe: layoutProbe)
@@ -1149,8 +1150,9 @@ ScrollViewReader { proxy in
                     }
                     if let node = session.configuration {
                         let id = node.parameters["modelID"]?.string ?? ""
-                        Text((model.projectSession.explicitModelChoices.first(where: { $0.id == id })?.displayName ??
-                             (id.isEmpty ? label("chooseModel", "选择模型") : id)) + " · " + readiness(id))
+                        WorkbenchModelStatusText(identity: id, project: model.projectSession, fallback: readiness(id),
+                            prefix: (model.projectSession.explicitModelChoices.first(where: { $0.id == id })?.displayName ??
+                             (id.isEmpty ? label("chooseModel", "选择模型") : id)) + " · ")
                             .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     } else {
                         Text(refinement("nextModel", "Choose a model for your next message", "为下一条消息选择模型")).font(.caption).foregroundStyle(.secondary)

@@ -261,7 +261,7 @@ struct QuickGenerationView: View {
                 if let definition {
                     WorkbenchModelCard(definition: definition, modelID: quick.draft?.node.parameters["modelID"]?.string,
                         choices: model.projectSession.explicitModelChoices,
-                        status: readinessTitle(quick.draft?.node.parameters["modelID"]?.string ?? ""), change: onChooseModel, compact: quick.category == .audio)
+                        status: readinessTitle(quick.draft?.node.parameters["modelID"]?.string ?? ""), statusProject: model.projectSession, change: onChooseModel, compact: quick.category == .audio)
                     WorkbenchModelRecoveryView(identity: quick.draft?.node.parameters["modelID"]?.string ?? "",
                         project: model.projectSession, onRecover: onRecoverModel ?? onChooseModel)
                 } else { Button(quick.category == .audio ? audioText("chooseModel") : consistencyText(language, "MODEL-CHANGE"), action: onChooseModel) }
@@ -592,7 +592,7 @@ struct QuickGenerationView: View {
     }
     private func readinessTitle(_ id: String) -> String {
         switch model.projectSession.explicitModelReadiness[id] ?? .unknown {
-        case .available: baselineText(language, "readiness.ready")
+        case .available: workflowText(language, "workflow.preparation.ready")
         case .unprepared: baselineText(language, "readiness.unprepared")
         case .unavailable: baselineText(language, "readiness.unavailable")
         case .unsupported: baselineText(language, "readiness.unsupported")

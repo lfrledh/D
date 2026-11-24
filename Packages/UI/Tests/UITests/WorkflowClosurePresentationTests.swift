@@ -235,6 +235,34 @@ extension WorkflowClosurePresentationTests {
         #expect(state.cell(identity: "model", installation: selected).value?.phase == "registered")
         #expect(state.cell(identity: "model", installation: ModelID()).value == nil)
     }
+    @Test func addedStatusDoesNotHideFailureOrBorrowAnotherInstallation() {
+        let state = WorkflowModelPreparationState(), selected = ModelID(), other = ModelID()
+        let registered = WorkflowModelPreparation(resource: .init(rawValue: selected.rawValue),
+            taskID: nil, attemptID: nil, phase: "registered", completed: nil, total: nil, issue: nil)
+        state.replace(["model": registered], resources: [other: registered])
+        let cell = state.cell(identity: "model", installation: selected)
+        #expect(cell.value == nil) // Same model's other copy cannot stand in for this selection.
+        state.replace(["model": registered], resources: [selected: registered])
+        #expect(cell.value?.isAddedAwaitingAdmission(readiness: .unknown, hasIssue: false) == true)
+        #expect(cell.value?.isAddedAwaitingAdmission(readiness: .unknown, hasIssue: true) == false)
+        for readiness: SharedLibraryReadiness in [.available, .unavailable, .unsupported, .unprepared] {
+            #expect(cell.value?.isAddedAwaitingAdmission(readiness: readiness, hasIssue: false) == false)
+        }
+        let changes = Mutex(0)
+        withObservationTracking { _ = cell.value } onChange: { changes.withLock { $0 += 1 } }
+        let failed = WorkflowModelPreparation(resource: registered.resource, taskID: nil, attemptID: nil,
+            phase: "failedModel", completed: nil, total: nil, issue: "fixture")
+        state.replace(["model": registered], resources: [selected: failed])
+        #expect(changes.withLock { $0 } == 1)
+        #expect(cell.value?.isAddedAwaitingAdmission(readiness: .unknown, hasIssue: false) == false)
+        let issue = WorkflowModelPreparation(resource: registered.resource, taskID: nil, attemptID: nil,
+            phase: "registered", completed: nil, total: nil, issue: "fixture")
+        #expect(!issue.isAddedAwaitingAdmission(readiness: .unknown, hasIssue: false))
+        let ambiguous = WorkflowModelPreparation(resource: nil, taskID: nil, attemptID: nil,
+            phase: "ambiguousCopies", completed: nil, total: nil, issue: nil)
+        #expect(!ambiguous.isAddedAwaitingAdmission(readiness: .unknown, hasIssue: false))
+    }
+
     @Test func modelProgressCellsShareExactIdentityWithoutWakingOtherModel() {
         let state = WorkflowModelPreparationState(), record = ModelID()
         let a = state.cell(identity: "A", installation: nil)
