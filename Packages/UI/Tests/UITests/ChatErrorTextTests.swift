@@ -21,6 +21,22 @@ import Testing
                 == "Chat is generating or has a result awaiting save.")
     }
 
+    @Test func modelRecoveryDiagnosticsUseExistingLocalizedMeanings() throws {
+        let (store, suite) = try language("en")
+        defer { suite.cleanup() }
+        let raw = "模型文件已改变或位置不符，请重新校验。"
+        #expect(ChatErrorText.display(raw, language: store) == store.text("modelManagement.local.filesChanged", fallback: "missing"))
+        #expect(ChatErrorText.display("模型安装已不可用，请在模型库检查。", language: store)
+                == store.text("modelManagement.prepareEngineUnavailable", fallback: "missing"))
+        #expect(ChatErrorText.display("模型原始文件已校验，仍需准备执行引擎。", language: store)
+                == store.text("modelManagement.recordStatus.preparationRequired", fallback: "missing"))
+        try store.select("zh-Hans")
+        #expect(ChatErrorText.display(raw, language: store) == "模型文件或其记录已改变。请重新选择并检查文件。")
+        // Only the exact D-owned error is mapped, never a user's or backend's suffix.
+        #expect(ChatErrorText.display(raw + " user details", language: store).hasSuffix(raw + " user details"))
+        #expect(raw == "模型文件已改变或位置不符，请重新校验。")
+    }
+
     @Test func externalPackOverridesTheSameStableKey() throws {
         let (store, suite) = try language("en")
         defer { suite.cleanup() }
