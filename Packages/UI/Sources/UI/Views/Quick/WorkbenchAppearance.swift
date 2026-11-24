@@ -622,6 +622,22 @@ struct WorkbenchPrimaryButtonStyle: ButtonStyle {
     }
 }
 
+/// The composer keeps one fixed circular action in both send and stop states.
+struct ChatComposerButtonStyle: ButtonStyle {
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var isEnabled
+    func makeBody(configuration: Configuration) -> some View {
+        let palette = preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? scheme)
+        configuration.label.frame(width: 36, height: 36)
+            .foregroundStyle(palette.canvasColor)
+            .background(palette.accentColor, in: Circle())
+            .contentShape(Circle())
+            .modifier(WorkbenchButtonFeedback(shape: Circle(), isPressed: configuration.isPressed, ink: palette.canvasColor))
+            .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
 /// The complete visible plate belongs to the label. Its geometry never changes
 /// while pressing or hovering, so feedback cannot move an edge out from under the pointer.
 struct WorkbenchIconButtonStyle: ButtonStyle {

@@ -5,6 +5,22 @@ import Testing
 
 @Suite("Workflow language examples r1") @MainActor
 struct WorkflowLanguageExamplesTests {
+    @Test func creationLanguageCoversNestedNamesBeforeToolDigests() throws {
+        for example in WorkflowLanguageExample.allCases {
+            let bundle = try WorkflowLanguageExamples.make(example) { key, _ in "EN:" + key }
+            _ = try WorkflowPlanCompiler().compile(bundle.graph, tools: bundle.tools)
+            #expect(bundle.graph.name.hasPrefix("EN:"))
+            #expect(bundle.tools.allSatisfy { $0.name.hasPrefix("EN:") })
+            #expect(allNodes(in: bundle).allSatisfy { $0.title.hasPrefix("EN:") })
+            // A saved title is data; decoding or creating another language never rewrites it.
+            var saved = bundle.graph; saved.name = "我的自定义名称"
+            saved.nodes[0].title = "User title 中文"
+            let reopened = try JSONDecoder().decode(WorkflowGraph.self, from: JSONEncoder().encode(saved))
+            #expect(reopened == saved)
+        }
+        let image = try WorkflowExamples.imageContainerReview { key, _ in "EN:" + key }
+        #expect(recursiveNodes(in: image).allSatisfy { $0.title.hasPrefix("EN:") })
+    }
     @Test func everyExampleCompilesWithUniqueEditableIdentities() throws {
         for example in WorkflowLanguageExample.allCases {
             let bundle = try WorkflowLanguageExamples.make(example)

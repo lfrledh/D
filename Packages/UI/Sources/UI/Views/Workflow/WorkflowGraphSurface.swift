@@ -1169,7 +1169,7 @@ private struct WorkflowNodeCard: View {
                 } else { Image(systemName: collapsed ? "chevron.right" : "chevron.down").font(.system(size: 9 * scale)).allowsHitTesting(false) }
                 Text(WorkflowHumanPresentation.name(node, in: graph.nodes, language: languageStore))
                     .font(.system(size: 13 * scale, weight: .semibold)).lineLimit(1)
-                    .help(node.title).allowsHitTesting(false)
+                    .help(WorkflowHumanPresentation.name(node, in: graph.nodes, language: languageStore)).allowsHitTesting(false)
                 Spacer(minLength: 0)
                 if let status = controller.presentationStatus(for: node.id) {
                     WorkflowStatusBadge(status: status.status, comparison: .matching, scale: scale)

@@ -20,6 +20,8 @@ public enum ProjectCloseDecision: Sendable {
 @MainActor @Observable
 public final class ProjectSession {
     isolated deinit { modelObservation?.cancel() }
+    /// Supplied by the UI for new system-owned names only; persisted names are untouched.
+    @ObservationIgnored public var creationText: @MainActor (String, String) -> String = { _, fallback in fallback }
     public private(set) var manifest: ProjectManifest?
     public private(set) var projectURL: URL?
     /// Quick records restored with a named project keep that project instance as owner.
@@ -826,6 +828,7 @@ public final class ProjectSession {
                 }
                 return try self.makeExplicitOperationServices(allowDrainingQuick: self.projectQuick?.isRunning == true)
             }
+            restoredQuick.creationText = { [weak self] key, fallback in self?.creationText(key, fallback) ?? fallback }
             await restoredQuick.load()
             if restoredQuick.error != nil || !restoredQuick.state.drafts.isEmpty || !restoredQuick.state.runs.isEmpty
                 || restoredChat.error != nil || !restoredChat.state.sessions.isEmpty {
@@ -921,12 +924,13 @@ public final class ProjectSession {
         let child = ProjectSession(sessionFactory: { _ in borrowed }, settings: settings,
             modelLibrary: modelLibrary, audioEnabled: audioEnabled, audioRecordingEnabled: audioRecordingEnabled,
             closeDecision: { .cancel })
+        child.creationText = creationText
         child.isTemporaryChatWorkspace = true
         child.temporaryChatStorage = owned
         temporaryChatSession = child // Retain cleanup ownership even if activation fails.
         try await child.activateInternalWorkspace(owned.store)
         guard let chat = child.chat, chat.isLoaded else { throw WorkflowIssue(child.chat?.error ?? "临时会话未打开。") }
-        _ = try chat.newSession(title: "Temporary chat")
+        _ = try chat.newSession(title: creationText("refinement.shell.temporary", "Temporary chat"))
         child.refreshWorkflowModels()
         return child
     }
@@ -945,13 +949,15 @@ public final class ProjectSession {
 
     public var personalChatOwner: (@MainActor () -> ChatController?)?
     private func makeChatController(store candidate: ProjectStore) -> ChatController {
-        ChatController(store: candidate, settings: settings, allowsSubmission: { [weak self] in
+        let controller = ChatController(store: candidate, settings: settings, allowsSubmission: { [weak self] in
             guard let self else { return false }
             return self.store === candidate && !self.closePending && !self.isChangingProject
         }, ownsPersonalMemory: isInternalWorkspace && !isTemporaryChatWorkspace, isTemporary: isTemporaryChatWorkspace, personalMemoryProvider: { [weak self] in self?.personalChatOwner?() }) { [weak self] in
             guard let self, self.store === candidate else { throw WorkflowIssue("聊天所属项目已关闭或切换。") }
             return try self.makeExplicitOperationServices(allowDrainingQuick: self.chat?.isRunning == true)
         }
+        controller.creationText = { [weak self] key, fallback in self?.creationText(key, fallback) ?? fallback }
+        return controller
     }
 
     public func enableProjectQuick() async {
@@ -963,6 +969,7 @@ public final class ProjectSession {
             guard let self, self.store === candidate else { throw WorkflowIssue("快速草稿所属项目已关闭或切换。") }
             return try self.makeExplicitOperationServices(allowDrainingQuick: self.projectQuick?.isRunning == true)
         }
+        controller.creationText = { [weak self] key, fallback in self?.creationText(key, fallback) ?? fallback }
         await controller.load()
         guard store === candidate, !isChangingProject, !closePending else { return }
         projectQuick = controller
@@ -1001,6 +1008,7 @@ public final class ProjectSession {
                 return try await self.resolveWorkflowModel(kind, identity: identity, session: session)
             })
         let controller = WorkflowController(services: services)
+        controller.creationText = { [weak self] key, fallback in self?.creationText(key, fallback) ?? fallback }
         controller.externalOperationBusy = { [weak self] in self?.audio?.isBusy == true || self?.workflowRecordingNodeID != nil }
         controller.onChange = { [weak self] in
             guard let self, self.store === store else { return }

@@ -775,8 +775,7 @@ struct SharedLibraryBrowserTests {
             #expect(SharedLibraryBrowserLogic.allows(.location, entry: asset))
             #expect(SharedLibraryBrowserLogic.currentEntry(key: asset.id, entries: [asset], action: .location) == asset)
             #expect(SharedLibraryBrowserLogic.allows(.add, entry: asset) == expected)
-            #expect(SharedLibraryBrowserLogic.allows(.prepare, entry: asset)
-                == (readiness != .available))
+            #expect(!SharedLibraryBrowserLogic.allows(.prepare, entry: asset))
             #expect((SharedLibraryBrowserLogic.canvasTransfer(for: asset) != nil) == expected)
         }
         let instanceAsset = entry("asset:instance", title: "恢复实例素材", kind: .asset,

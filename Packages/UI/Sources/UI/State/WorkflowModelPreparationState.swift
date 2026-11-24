@@ -103,6 +103,27 @@ struct WorkflowModelPreparationView: View {
         }
     }
 }
+
+/// Chat and single generation share the same installation facts and recovery
+/// destination. This presentation never admits execution or rewrites a binding.
+struct WorkbenchModelRecoveryView: View {
+    let identity: String
+    let project: ProjectSession
+    let onRecover: () -> Void
+    @Environment(\.dLanguageStore) private var language
+    var body: some View {
+        if !identity.isEmpty, project.explicitModelReadiness[identity] != .available {
+            VStack(alignment: .leading, spacing: 6) {
+                WorkflowModelPreparationView(identity: identity)
+                if let issue = project.explicitModelIssues[identity] {
+                    WorkbenchIssueText(raw: issue).font(.caption).textSelection(.enabled)
+                }
+                Button(workflowText(language, "modelManagement.title"), action: onRecover)
+                    .accessibilityIdentifier("model-recovery")
+            }
+        }
+    }
+}
 private struct WorkflowModelPreparationCellView: View {
     let cell: WorkflowModelPreparationCell
     let hasExplicitInstallation: Bool

@@ -134,6 +134,11 @@ public struct DualWorkbenchView: View {
     @State private var expandedContainerNavigation: WorkflowContainerNavigation?
     @State private var expandedLibraryContext: WorkflowLibraryContext?
     @State private var clearExpandedContext: () -> Void = {}
+    private func workspaceDisplayName(_ owner: WorkbenchModel) -> String {
+        if owner === automaticQuickModel { return t("quickMode") }
+        if owner === automaticQuickModel.temporaryChatModel { return t("temporary") }
+        return owner.manifest?.name ?? t("workspace")
+    }
     private var quickImportTitle: String { quickModel === automaticQuickModel ? layoutText(language, "independent") : (quickModel.manifest?.name ?? "—") }
     private var displayedOwner: WorkbenchModel { entry == .workflow ? canvasModel : chatModel }
     private var displayedTitle: String {
@@ -234,7 +239,7 @@ public struct DualWorkbenchView: View {
         let target = searchOwner.projectSession.chat
         settingsContext = .init(owner: owner, files: files, searchOwner: searchOwner, search: target,
             searchSessionID: target?.state.selectedSessionID,
-            searchTitle: target.map { (searchOwner.manifest?.name ?? t("workspace")) + " · " + ($0.selectedSession?.title ?? t("newConversation")) })
+            searchTitle: target.map { workspaceDisplayName(searchOwner) + " · " + ($0.selectedSession?.title ?? t("newConversation")) })
         settingsSection = section
         settingsVisible = true
     }
@@ -261,7 +266,8 @@ public struct DualWorkbenchView: View {
         captureChatReading(); navigationIntent = UUID()
         entry = destination
     }
-    private func presentQuickModelSelection(expectedIdentity: String? = nil) {
+    private func presentQuickModelSelection(expectedIdentity: String? = nil, preservingConfiguration: Bool = false) {
+        guard !preservingConfiguration || (expectedIdentity != nil && expectedIdentity == quickModelIdentity) else { return }
         let owner = selectionModel.projectSession, temporary = usesTemporaryChat, controller = quick
         let store = owner.currentStore
         let selectedDraftID = controller.draft?.id, selectedChatID = chat?.state.selectedSessionID
@@ -296,12 +302,12 @@ public struct DualWorkbenchView: View {
                     throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。"))
                 }
                 guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue(library.managementText("noRoute", "此配置没有可用的共享操作。")) }
-                try selectModel(operation: operation, identity: choice.id)
+                if !preservingConfiguration { try selectModel(operation: operation, identity: choice.id); navigate(to: .quick) }
                 returnToLibrary = false; library.isPresented = false
                 await refreshLibrary(checkModels: false)
             } catch is CancellationError { } catch { library.errorMessage = error.localizedDescription }
         }
-        let targetTitle = (selectionModel.manifest?.name ?? "D") + " · " + t("quickMode") + " · " + (controller.draft?.node.title ?? t("chat"))
+        let targetTitle = workspaceDisplayName(selectionModel) + " · " + t("quickMode") + " · " + (controller.draft?.node.title ?? t("chat"))
         library.captureSelectionPresentation(targetTitle) {
             !quickOwnerIsChanging && selectionModel.projectSession === owner && owner.currentStore === store
                 && temporary == usesTemporaryChat && quick === controller
@@ -322,7 +328,7 @@ public struct DualWorkbenchView: View {
                       let kind = WorkflowModelKind(rawValue: String(prefix)) else { throw WorkflowIssue(library.managementText("targetChanged", "选用目标或配置已改变，资源保留。")) }
                 let choice = WorkflowModelChoice(id: item.identity, kind: kind, displayName: item.title)
                 guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue(library.managementText("noRoute", "此配置没有可用的共享操作。")) }
-                try selectModel(operation: operation, identity: choice.id)
+                if !preservingConfiguration { try selectModel(operation: operation, identity: choice.id); navigate(to: .quick) }
                 returnToLibrary = false; library.isPresented = false
                 await refreshLibrary(checkModels: false)
             } catch { library.errorMessage = error.localizedDescription }
@@ -372,7 +378,7 @@ public struct DualWorkbenchView: View {
                       !quickOwnerIsChanging, !temporaryChatChanging, !destination.projectSession.isChangingProject,
                       target.isLoaded, !target.isDiscarding, target.saveIssue == nil else { return }
                 do {
-                    try target.newSession()
+                    try target.newSession(title: workflowText(language, "quick.textWorkspace.newConversation"))
                     owner.selectTextPresentation(.chat)
                 } catch { issue = error.localizedDescription }
             }.labelStyle(.iconOnly)
@@ -488,6 +494,7 @@ public struct DualWorkbenchView: View {
                                 if quick.textPresentation == .chat {
                                     ChatWorkbenchView(chat: chat, model: chatModel,
                                         onChooseModel: { openModelChoices(.text) },
+                                        onRecoverModel: { presentQuickModelSelection(expectedIdentity: quickModelIdentity, preservingConfiguration: true) },
                                         onOpenLibrary: { openLibrary(.assets, forCanvas: false) },
                                         onImportAsset: { beginLibraryImport(forCanvas: false) },
                     importTargetTitle: quickImportTitle,
@@ -529,6 +536,10 @@ public struct DualWorkbenchView: View {
                                             let reference = try await source.pinWorkflowAsset(assetID)
                                             return (source, reference, asset.name)
                                         }, textWorkspaceActions: AnyView(textWorkspaceMenu))
+                                        .environment(\.workflowModelPreparation, library.nodePreparationPresentation)
+                                        .environment(\.workflowModelInstallations, quickModelIdentity.flatMap { identity in
+                                            selectionModel.projectSession.workflowInstallationID(for: identity).map { [identity: $0] }
+                                        } ?? [:])
                                         .id(chat.store.rootURL.standardizedFileURL.path)
                                         .disabled(quickOwnerIsChanging || chat.isDiscarding || chatModel.projectSession.isChangingProject)
                                 } else { quickSurface }
@@ -1069,6 +1080,7 @@ public struct DualWorkbenchView: View {
                     onSettingsToCanvas: { draft in let source = quick.store; Task { await settingsToCanvas(draft, from: source) } },
                     onResultToCanvas: { ref in let source = quick.store; Task { await resultToCanvas(ref, from: source) } },
                     onValueToCanvas: { value in let source = quick.store; Task { await valueToCanvas(value, from: source) } },
+                    onRecoverModel: { presentQuickModelSelection(expectedIdentity: quickModelIdentity, preservingConfiguration: true) },
                     onOpenLibrary: { openLibrary(.assets, forCanvas: false) },
                     onImportAsset: { beginLibraryImport(forCanvas: false) },
                     importTargetTitle: quickImportTitle,
@@ -1112,7 +1124,7 @@ public struct DualWorkbenchView: View {
         }
         guard quick.textPresentation == .chat, let chat else { return }
         do {
-            let sessionID = try chat.state.selectedSessionID ?? chat.newSession()
+            let sessionID = try chat.state.selectedSessionID ?? chat.newSession(title: workflowText(language, "quick.textWorkspace.newConversation"))
             try chat.selectModelConfiguration(node, sessionID: sessionID)
         } catch { issue = error.localizedDescription }
     }
@@ -1124,8 +1136,11 @@ public struct DualWorkbenchView: View {
                   var node = WorkflowRegistry.standard.operation(operation)?.definition.makeNode() else {
                 throw WorkflowIssue("临时聊天需要支持有序消息的文字模型；其他能力请返回普通快速生成。")
             }
+            if let definition = WorkflowRegistry.standard.operation(operation)?.definition {
+                node.title = WorkflowCanvasPresentation.operationTitle(definition, language: language)
+            }
             node.parameters["modelID"] = .text(identity); node.parameters["outputMode"] = .text("text")
-            try chat.selectModelConfiguration(node, sessionID: try chat.state.selectedSessionID ?? chat.newSession())
+            try chat.selectModelConfiguration(node, sessionID: try chat.state.selectedSessionID ?? chat.newSession(title: workflowText(language, "quick.textWorkspace.newConversation")))
             return
         }
         captureChatReading()
@@ -1138,26 +1153,27 @@ public struct DualWorkbenchView: View {
         if let family = modelPickerCategory,
            !selectionModel.projectSession.supportsQuick(operationID: operation, identity: id, category: family,
                 conversation: family == .text && quick.textPresentation == .chat) { issue = workflowText(language, "quick.incompatibleTask"); return }
-        do { try selectModel(operation: operation, identity: id) }
-        catch { issue = error.localizedDescription; return }
-        navigate(to: .quick)
         let owner = selectionModel.projectSession
         if owner.explicitModelReadiness[id] != .available || (library.snapshot?.runnableResources(identity: id).count ?? 0) > 1 {
-            // A catalog identity chooses a draft, not an installed copy. Keep the
-            // explicit copy picker reachable from ordinary Chat/Quick selection.
-            // Capture before the catalog closes; never retarget during dismissal.
+            // The catalog is an intent, not a committed selection. Keep the old
+            // configuration/input intact until the exact installation is accepted.
             let store = owner.currentStore, controller = quick, draftID = quick.draft?.id
             let sessionID = chat?.state.selectedSessionID, temporary = usesTemporaryChat, intent = navigationIntent
+            let identity = quickModelIdentity, configuration = chat?.selectedSession?.configuration
             presentLibraryDestination(.modelSelection {
                 guard !quickOwnerIsChanging, navigationIntent == intent,
                       selectionModel.projectSession === owner, owner.currentStore === store,
                       quick === controller, quick.draft?.id == draftID,
                       chat?.state.selectedSessionID == sessionID, usesTemporaryChat == temporary,
-                      quickModelIdentity == id else { issue = t("targetChanged"); return }
+                      quickModelIdentity == identity, chat?.selectedSession?.configuration == configuration else { issue = t("targetChanged"); return }
                 presentQuickModelSelection(expectedIdentity: id)
             })
             returnToLibrary = false
-        } else { libraryVisible = false }
+        } else {
+            do { try selectModel(operation: operation, identity: id) }
+            catch { issue = error.localizedDescription; return }
+            navigate(to: .quick); libraryVisible = false
+        }
     }
     private func useNode(_ node: WorkflowNode) {
         guard !quickOwnerIsChanging else { issueValue = WorkflowIssue("项目正在切换，当前快速草稿未改变。", code: "refinement.shell.quickProjectChanging"); return }
@@ -1348,26 +1364,25 @@ public struct DualWorkbenchView: View {
             })
             return
         }
-        guard !usesTemporaryChat else {
-            issue = t("temporaryModelUnavailable")
-            return
-        }
-        let owner = quickModel.projectSession, controller = quick
-        let draftID = controller.draft?.id
-        let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
-        panel.message = t("registerMessage")
-        guard await panel.begin() == .OK, let url = panel.url else { return }
-        do {
-            guard !quickOwnerIsChanging, quickModel.projectSession === owner,
-                  quick === controller, controller.draft?.id == draftID else { throw WorkflowIssue("快速草稿已切换，未登记模型。") }
-            let choice = try await owner.registerExplicitModel(at: url, kind: kind)
-            guard !quickOwnerIsChanging, quickModel.projectSession === owner,
-                  quick === controller, controller.draft?.id == draftID else { throw WorkflowIssue("快速草稿已切换，已登记的模型未替换当前草稿。") }
-            controller.select(operationID: id, modelID: choice.id)
-            applySelectedModelToChat()
-            await refreshLibrary(checkModels: true)
-        } catch { issue = error.localizedDescription }
+        // Compatibility configurations use the same owner-checked picker as
+        // ordinary model selection. A file panel must not bind into a later chat.
+        let owner = selectionModel.projectSession, store = selectionModel.projectSession.currentStore, controller = quick
+        let draft = controller.draft?.id, session = chat?.state.selectedSessionID, configuration = chat?.selectedSession?.configuration
+        let identity = quickModelIdentity, temporary = usesTemporaryChat, intent = navigationIntent, sourceEntry = entry
+        let category = controller.category, presentation = controller.textPresentation
+        let recoverCurrent = modelID != nil && modelID == identity
+        presentLibraryDestination(.modelSelection {
+            guard !quickOwnerIsChanging, !temporaryChatChanging, selectionModel.projectSession === owner,
+                  owner.currentStore === store, quick === controller, controller.draft?.id == draft,
+                  chat?.state.selectedSessionID == session, chat?.selectedSession?.configuration == configuration,
+                  quickModelIdentity == identity, usesTemporaryChat == temporary, navigationIntent == intent,
+                  entry == sourceEntry, controller.category == category, controller.textPresentation == presentation else {
+                issue = t("targetChanged"); return
+            }
+            presentQuickModelSelection(expectedIdentity: modelID, preservingConfiguration: recoverCurrent)
+        })
     }
+
     /// Capture at the command boundary, before any file-panel suspension.
     private func beginLibraryImport(forCanvas: Bool) {
         guard let command = captureLibraryImport(forCanvas: forCanvas) else { return }

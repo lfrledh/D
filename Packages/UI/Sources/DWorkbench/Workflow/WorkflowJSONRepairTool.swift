@@ -5,6 +5,7 @@ public enum WorkflowJSONRepairTool {
     public static func make(
         schema: WorkflowDataSchema,
         task: String,
+        text: (String, String) -> String = { _, fallback in fallback },
         exampleJSON: String,
         maximumRepairs: Int = 2,
         expectedItemCount: Int? = nil
@@ -29,28 +30,28 @@ public enum WorkflowJSONRepairTool {
         ]
         let stateSchema = WorkflowDataSchema.record(stateFields)
 
-        let content = try publicInput("content", schema: .text, fallback: .text(""), title: "Content to structure")
-        let taskValue = try valueInput("Requested task", value: .text(task))
-        let schemaValue = try valueInput("Complete target schema", value: .text(schemaText))
-        let exampleValue = try valueInput("Valid shape example", value: .text(exampleJSON))
+        let content = try publicInput("content", schema: .text, fallback: .text(""), title: text("workflow.example.json.contentToStructure", "Content to structure"))
+        let taskValue = try valueInput(text("workflow.example.json.requestedTask", "Requested task"), value: .text(task))
+        let schemaValue = try valueInput(text("workflow.example.json.completeTargetSchema", "Complete target schema"), value: .text(schemaText))
+        let exampleValue = try valueInput(text("workflow.example.json.validShapeExample", "Valid shape example"), value: .text(exampleJSON))
 
         let promptFields: [WorkflowRecordField] = [
             .init("task", .text),
             .init("schema", .text),
             .init("exampleJSON", .text),
         ]
-        var initialPromptFields = try node("d.value.record", title: "Collect initial JSON instructions")
+        var initialPromptFields = try node("d.value.record", title: text("workflow.example.json.collectInitialJSONInstructions", "Collect initial JSON instructions"))
         initialPromptFields.dataConfiguration = .init(fields: promptFields)
 
-        var initialPrompt = try node("d.value.template", title: "Describe the complete JSON target")
+        var initialPrompt = try node("d.value.template", title: text("workflow.example.json.describeTheCompleteJSONTarget", "Describe the complete JSON target"))
         initialPrompt.parameters["template"] = .text(initialPromptTemplate)
 
-        let initialLanguage = try languageNode(title: "Generate candidate JSON")
+        let initialLanguage = try languageNode(title: text("workflow.example.json.generateCandidateJSON", "Generate candidate JSON"))
         let initialCheck = try validationNode(
-            title: "Check candidate JSON", schema: schema, strict: false, expectedItemCount: expectedItemCount
+            title: text("workflow.example.json.checkCandidateJSON", "Check candidate JSON"), schema: schema, strict: false, expectedItemCount: expectedItemCount
         )
 
-        var initialState = try node("d.value.record", title: "Keep candidate and validation report")
+        var initialState = try node("d.value.record", title: text("workflow.example.json.keepCandidateAndValidationReport", "Keep candidate and validation report"))
         initialState.dataConfiguration = .init(fields: stateFields)
 
         let sharedFields: [WorkflowRecordField] = [
@@ -59,25 +60,25 @@ public enum WorkflowJSONRepairTool {
             .init("exampleJSON", .text),
             .init("originalContent", .text),
         ]
-        var shared = try node("d.value.record", title: "Keep explicit repair context")
+        var shared = try node("d.value.record", title: text("workflow.example.json.keepExplicitRepairContext", "Keep explicit repair context"))
         shared.dataConfiguration = .init(fields: sharedFields)
 
-        var loop = try node("d.control.loop", title: "Repair invalid JSON a bounded number of times")
+        var loop = try node("d.control.loop", title: text("workflow.example.json.repairInvalidJSONABoundedNumberOfTimes", "Repair invalid JSON a bounded number of times"))
         loop.control = .loop(
-            body: try repairBody(stateSchema: stateSchema, reportSchema: reportSchema, targetSchema: schema, expectedItemCount: expectedItemCount),
+            body: try repairBody(text: text, stateSchema: stateSchema, reportSchema: reportSchema, targetSchema: schema, expectedItemCount: expectedItemCount),
             stateSchema: stateSchema,
             maximumIterations: maximumRepairs,
             until: .init(path: ["check", "valid"], comparison: .equals, value: .boolean(true))
         )
 
-        var finalText = try node("d.value.field", title: "Read final candidate text")
+        var finalText = try node("d.value.field", title: text("workflow.example.json.readFinalCandidateText", "Read final candidate text"))
         finalText.dataConfiguration = .init(schema: .text, path: ["text"])
         let strictCheck = try validationNode(
-            title: "Strictly validate final JSON", schema: schema, strict: true, expectedItemCount: expectedItemCount
+            title: text("workflow.example.json.strictlyValidateFinalJSON", "Strictly validate final JSON"), schema: schema, strict: true, expectedItemCount: expectedItemCount
         )
-        var finalData = try node("d.value.field", title: "Read validated JSON data")
+        var finalData = try node("d.value.field", title: text("workflow.example.json.readValidatedJSONData", "Read validated JSON data"))
         finalData.dataConfiguration = .init(schema: .optional(schema), path: ["data"])
-        var output = try node("d.value.return", title: "Return validated structured data")
+        var output = try node("d.value.return", title: text("workflow.example.json.returnValidatedStructuredData", "Return validated structured data"))
         output.parameters["name"] = .text("output")
 
         let nodes = [
@@ -85,7 +86,7 @@ public enum WorkflowJSONRepairTool {
             initialLanguage, initialCheck, initialState, shared, loop, finalText, strictCheck, finalData, output,
         ]
         var graph = WorkflowGraph(
-            name: "Bounded JSON repair",
+            name: text("workflow.example.json.boundedJSONRepair", "Bounded JSON repair"),
             nodes: nodes,
             connections: [
                 connect(taskValue, initialPromptFields, targetPort: "task"),
@@ -114,31 +115,32 @@ public enum WorkflowJSONRepairTool {
             inputs: [.init("content", .text)],
             outputs: [.init(name: "output", nodeID: output.id, schema: schema)]
         )
-        return WorkflowToolDefinition(name: "Bounded JSON repair", graph: graph)
+        return WorkflowToolDefinition(name: text("workflow.example.json.boundedJSONRepair", "Bounded JSON repair"), graph: graph)
     }
 
     private static func repairBody(
+        text: (String, String) -> String,
         stateSchema: WorkflowDataSchema,
         reportSchema: WorkflowDataSchema,
         targetSchema: WorkflowDataSchema,
         expectedItemCount: Int?
     ) throws -> WorkflowGraph {
-        let state = try requiredPublicInput("state", schema: stateSchema, title: "Current repair state")
+        let state = try requiredPublicInput("state", schema: stateSchema, title: text("workflow.example.json.currentRepairState", "Current repair state"))
         let iteration = try requiredPublicInput(
-            "iteration", schema: .number(unit: nil), title: "Repair iteration"
+            "iteration", schema: .number(unit: nil), title: text("workflow.example.json.repairIteration", "Repair iteration")
         )
-        let task = try requiredPublicInput("task", schema: .text, title: "Original task")
-        let schema = try requiredPublicInput("schema", schema: .text, title: "Complete target schema")
-        let example = try requiredPublicInput("exampleJSON", schema: .text, title: "Valid shape example")
+        let task = try requiredPublicInput("task", schema: .text, title: text("workflow.example.json.originalTask", "Original task"))
+        let schema = try requiredPublicInput("schema", schema: .text, title: text("workflow.example.json.completeTargetSchema", "Complete target schema"))
+        let example = try requiredPublicInput("exampleJSON", schema: .text, title: text("workflow.example.json.validShapeExample", "Valid shape example"))
         let originalContent = try requiredPublicInput(
-            "originalContent", schema: .text, title: "Original content"
+            "originalContent", schema: .text, title: text("workflow.example.json.originalContent", "Original content")
         )
 
-        var previousText = try node("d.value.field", title: "Read previous invalid JSON")
+        var previousText = try node("d.value.field", title: text("workflow.example.json.readPreviousInvalidJSON", "Read previous invalid JSON"))
         previousText.dataConfiguration = .init(schema: .text, path: ["text"])
-        var issues = try node("d.value.field", title: "Read validation issues")
+        var issues = try node("d.value.field", title: text("workflow.example.json.readValidationIssues", "Read validation issues"))
         issues.dataConfiguration = .init(schema: .list(.text), path: ["check", "issues"])
-        var firstIssue = try node("d.value.select", title: "Read first validation issue")
+        var firstIssue = try node("d.value.select", title: text("workflow.example.json.readFirstValidationIssue", "Read first validation issue"))
         firstIssue.parameters["method"] = .text("index")
         firstIssue.parameters["index"] = .integer(1)
 
@@ -151,22 +153,22 @@ public enum WorkflowJSONRepairTool {
             .init("firstIssue", .text),
             .init("iteration", .number(unit: nil)),
         ]
-        var repairPromptFieldsNode = try node("d.value.record", title: "Collect complete repair instructions")
+        var repairPromptFieldsNode = try node("d.value.record", title: text("workflow.example.json.collectCompleteRepairInstructions", "Collect complete repair instructions"))
         repairPromptFieldsNode.dataConfiguration = .init(fields: repairPromptFields)
-        var repairPrompt = try node("d.value.template", title: "Describe one bounded repair")
+        var repairPrompt = try node("d.value.template", title: text("workflow.example.json.describeOneBoundedRepair", "Describe one bounded repair"))
         repairPrompt.parameters["template"] = .text(repairPromptTemplate)
 
-        let repairLanguage = try languageNode(title: "Repair candidate JSON")
+        let repairLanguage = try languageNode(title: text("workflow.example.json.repairCandidateJSON", "Repair candidate JSON"))
         let repairedCheck = try validationNode(
-            title: "Check repaired JSON", schema: targetSchema, strict: false, expectedItemCount: expectedItemCount
+            title: text("workflow.example.json.checkRepairedJSON", "Check repaired JSON"), schema: targetSchema, strict: false, expectedItemCount: expectedItemCount
         )
         let nextStateFields: [WorkflowRecordField] = [
             .init("text", .text),
             .init("check", reportSchema),
         ]
-        var nextState = try node("d.value.record", title: "Keep repaired candidate and report")
+        var nextState = try node("d.value.record", title: text("workflow.example.json.keepRepairedCandidateAndReport", "Keep repaired candidate and report"))
         nextState.dataConfiguration = .init(fields: nextStateFields)
-        var result = try node("d.value.return", title: "Return next repair state")
+        var result = try node("d.value.return", title: text("workflow.example.json.returnNextRepairState", "Return next repair state"))
         result.parameters["name"] = .text("state")
 
         let nodes = [
@@ -174,7 +176,7 @@ public enum WorkflowJSONRepairTool {
             repairPromptFieldsNode, repairPrompt, repairLanguage, repairedCheck, nextState, result,
         ]
         var graph = WorkflowGraph(
-            name: "Repair one invalid JSON candidate",
+            name: text("workflow.example.json.repairOneInvalidJSONCandidate", "Repair one invalid JSON candidate"),
             nodes: nodes,
             connections: [
                 connect(state, previousText),

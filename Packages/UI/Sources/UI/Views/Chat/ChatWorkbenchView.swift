@@ -62,7 +62,8 @@ struct ChatComposerShape: InsettableShape {
 
     func path(in rect: CGRect) -> Path {
         if multiline {
-            return RoundedRectangle(cornerRadius: 20, style: .continuous)
+            // The 18-point send/stop radius plus its 8-point outer inset.
+            return RoundedRectangle(cornerRadius: 26, style: .continuous)
                 .inset(by: insetAmount).path(in: rect)
         }
         return Capsule().inset(by: insetAmount).path(in: rect)
@@ -524,6 +525,7 @@ struct ChatWorkbenchView: View {
     @Bindable var chat: ChatController
     let model: WorkbenchModel
     let onChooseModel: () -> Void
+    let onRecoverModel: () -> Void
     let onOpenLibrary: () -> Void
     let onImportAsset: () -> Void
     let importTargetTitle: String
@@ -601,6 +603,7 @@ struct ChatWorkbenchView: View {
 
     init(chat: ChatController, model: WorkbenchModel,
          onChooseModel: @escaping () -> Void,
+         onRecoverModel: (() -> Void)? = nil,
          onOpenLibrary: @escaping () -> Void = {},
          onImportAsset: @escaping () -> Void = {},
          importTargetTitle: String = "",
@@ -623,6 +626,7 @@ struct ChatWorkbenchView: View {
         self.openToolsRequest = openToolsRequest
         self.onToolsOpened = onToolsOpened
         self.chat = chat; self.model = model; self.onChooseModel = onChooseModel
+        self.onRecoverModel = onRecoverModel ?? onChooseModel
         self.onOpenLibrary = onOpenLibrary; self.onImportAsset = onImportAsset; self.importTargetTitle = importTargetTitle
         self.scrollStates = model.readingState(for: chat)
         self.onSavedAsset = onSavedAsset; self.onRetainTemporary = onRetainTemporary; self.onAssetsChanged = onAssetsChanged; self.onSavedValue = onSavedValue
@@ -946,6 +950,9 @@ ScrollViewReader { proxy in
                                 change: onChooseModel, canChange: chat.isLoaded && session.contextChoices?.deletedAt == nil,
                                 changeUnavailableReason: consistencyText(language, !chat.isLoaded ? "help.reason.loading" : "help.reason.deleted"))
                                 .accessibilityIdentifier("chat-model-picker").chatMeasured("change-model", probe: layoutProbe)
+                            WorkbenchModelRecoveryView(identity: node.parameters["modelID"]?.string ?? "",
+                                project: model.projectSession, onRecover: onRecoverModel)
+                                .disabled(chat.isRunning || !chat.isLoaded || session.contextChoices?.deletedAt != nil)
                         } else { Button(label("changeModel", "更换模型"), action: onChooseModel).disabled(!chat.isLoaded || session?.contextChoices?.deletedAt != nil) }
                         if let session {
                             DisclosureGroup(newLabel("commonPresets", english: "Common presets", chinese: "常用预设")) {
@@ -2276,7 +2283,7 @@ ScrollViewReader { proxy in
                     if speechExpanded { Color.clear.workbenchPanel(in: extensionShape) }
                 }
                 .workbenchMotion(value: speechExpanded)
-            HStack(spacing: 12) {
+            HStack(alignment: .bottom, spacing: 8) {
                 TextSourcesQuestionEditor(value: session.draft, editEpoch: 0,
                     isEditable: !session.archived && session.contextChoices?.deletedAt == nil && chat.saveIssue == nil,
                     accessibilityIdentifier: "chat-draft-\(session.id.uuidString)",
@@ -2308,7 +2315,7 @@ ScrollViewReader { proxy in
                         : refinement("commandHint", "Command–Return sends; Return adds a line. Drop files here to attach them.", "Command–回车发送，回车换行。拖入文件即可添加附件。"))
                 composerSubmitButton(session)
             }
-            .padding(.horizontal, 16).padding(.vertical, 8)
+            .padding(.leading, 10).padding(.trailing, 8).padding(.vertical, 8)
             .background {
                 Color.clear.contentShape(shape).onTapGesture { composerFocusRequest = UUID() }
                     .accessibilityHidden(true)
@@ -2373,7 +2380,7 @@ ScrollViewReader { proxy in
         case .current(let id): return id
         case .empty:
             guard creating else { return nil }
-            return try chat.newSession(id: emptyDraftSession.id)
+            return try chat.newSession(title: workflowText(language, "quick.textWorkspace.newConversation"), id: emptyDraftSession.id)
         case .stale: return nil
         }
     }
@@ -2386,7 +2393,7 @@ ScrollViewReader { proxy in
             if ChatComposerIdentity.resolve(captured: captured, empty: emptyDraftSession.id,
                 created: nil, selected: chat.state.selectedSessionID) == .empty {
                 guard !value.isEmpty else { return }
-                try chat.newSession(id: emptyDraftSession.id, initialDraft: value)
+                try chat.newSession(title: workflowText(language, "quick.textWorkspace.newConversation"), id: emptyDraftSession.id, initialDraft: value)
             } else if let id = try composerOwner(captured, creating: false) {
                 try chat.updateDraft(value, sessionID: id)
             }
@@ -2395,21 +2402,28 @@ ScrollViewReader { proxy in
 
     @ViewBuilder private func composerSubmitButton(_ session: ChatSession) -> some View {
         if chat.canStopGeneration {
-            Button(chat.isCancelling
-                ? newLabel("stopping", english: "Stopping…", chinese: "正在停止…")
-                : label("stop", "停止当前生成"), systemImage: "stop.fill") {
+            Button {
                 Task { await chat.cancel() }
+            } label: {
+                Image(systemName: "stop.fill").font(.system(size: 15, weight: .semibold))
             }
-            .buttonStyle(WorkbenchPrimaryButtonStyle())
+            .buttonStyle(ChatComposerButtonStyle())
             .disabled(chat.isCancelling)
+            .accessibilityLabel(chat.isCancelling
+                ? newLabel("stopping", english: "Stopping…", chinese: "正在停止…")
+                : label("stop", "停止当前生成"))
             .accessibilityIdentifier("chat-stop")
             .help(newLabel("stopHelp", english: "Stop generation and keep received text. Resources are released before the next request.",
                 chinese: "停止生成并保留已接收文字；资源释放后才能开始下一次。"))
             .chatMeasured("composer-stop", probe: layoutProbe)
             .transition(.identity)
         } else {
-            Button(label("send", "发送"), systemImage: "arrow.up") { submitFromComposer(session.id) }
-                .buttonStyle(WorkbenchPrimaryButtonStyle())
+            Button { submitFromComposer(session.id) } label: {
+                Image(systemName: "arrow.up").font(.system(size: 17, weight: .semibold))
+            }
+                .buttonStyle(ChatComposerButtonStyle())
+                .accessibilityLabel(label("send", "发送"))
+                .help(label("send", "发送"))
                 .disabled(!ChatRunAdmission.allowsSend(session, isRunning: chat.isRunning,
                     hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
                     invalidFields: chat.invalidParameterFields))
@@ -2490,7 +2504,7 @@ ScrollViewReader { proxy in
 
     private func readiness(_ id: String) -> String {
         switch model.projectSession.explicitModelReadiness[id] ?? .unknown {
-        case .available: label("ready", "文件已核验 · 运行时仍需检查")
+        case .available: workflowText(language, "workflow.preparation.ready")
         case .unprepared: label("unprepared", "需要准备模型文件")
         case .unavailable: label("unavailable", "文件或授权暂不可用")
         case .unsupported: label("unsupported", "当前入口未适配")
@@ -2914,7 +2928,7 @@ ScrollViewReader { proxy in
         do {
             if let currentID = chat.state.selectedSessionID { saveScrollState(for: currentID, captureReadingPoint: true) }
             searchJump = nil
-            _ = try chat.newSession()
+            _ = try chat.newSession(title: workflowText(language, "quick.textWorkspace.newConversation"))
             closeNarrowPanel()
         } catch { report(error.localizedDescription, for: chat.state.selectedSessionID) }
     }

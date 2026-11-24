@@ -132,7 +132,7 @@ public struct ChatSession: Codable, Sendable, Equatable, Identifiable {
     public var knowledgeReranks: [ChatKnowledgeRerank]?
     public var knowledgeScope: [UUID]?
     public var knowledgeExcerpts: [ChatKnowledgeExcerpt]?
-    public init(id: UUID = UUID(), title: String = "新对话") { self.id = id; self.title = title }
+    public init(id: UUID = UUID(), title: String = "New conversation") { self.id = id; self.title = title }
 
     public func path(to leaf: UUID?) throws -> [ChatMessage] {
         guard let leaf else { return [] }

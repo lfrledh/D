@@ -228,6 +228,8 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
     @ObservationIgnored var afterTextPublication: () async throws -> Void = {}
     @ObservationIgnored public var onChange: @MainActor () async -> Void = {}
 
+    @ObservationIgnored public var creationText: @MainActor (String, String) -> String = { _, fallback in fallback }
+
     public init(services: WorkflowServices, registry: WorkflowRegistry = .standard) {
         self.services = services; self.registry = registry
         services.progress = { [weak self] in self?.progressMessage = $0 }
@@ -742,7 +744,7 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
               let definition = registry.operation("d.control.invoke")?.definition else { return }
         do {
             guard tools.contains(tool), let interface = tool.graph.interface else { throw WorkflowIssue("工具版本不在项目中。") }
-            var node = definition.makeNode(); node.title = tool.name
+            var node = makeNewNode(definition); node.title = tool.name
             node.control = .invoke(.init(id: tool.id, version: tool.version, digest: try WorkflowPlanCompiler.digest(tool)))
             node.dataConfiguration = .init(fields: interface.inputs)
             let createdGraph = graph == nil
@@ -773,11 +775,16 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
             undoStack.append(editSnapshot); redoStack = []; tools.append(tool); setProgress(.init("toolAdded"))
         } catch { errorMessage = error.localizedDescription }
     }
-    public func addBlankGraph(name: String = "新流程") {
+    public func addBlankGraph(name: String? = nil) {
         guard canEditCanvas else { return }
-        let next = WorkflowGraph(name: name)
+        let next = WorkflowGraph(name: name ?? creationText("workspace.blankFlow", "New workflow"))
         undoStack.append(editSnapshot); redoStack = []; graphs.append(next)
         selectedGraphID = next.id; selectedNodeID = nil
+    }
+    private func makeNewNode(_ definition: WorkflowOperationDefinition) -> WorkflowNode {
+        var node = definition.makeNode()
+        node.title = creationText("workflow.operation." + definition.id + ".title", definition.title)
+        return node
     }
     public func addNode(operationID: String, modelID: String? = nil, x: Double? = nil, y: Double? = nil) {
         guard canEditCanvas else { return }
@@ -792,7 +799,7 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
         guard x?.isFinite != false, y?.isFinite != false else { return }
         let createdGraph = graph == nil
         if createdGraph { addBlankGraph() }
-        var node = op.definition.makeNode()
+        var node = makeNewNode(op.definition)
         if WorkflowModelRoutes.isLanguage(operationID) { node.dataConfiguration = .init(schema: .text) }
         if let modelID { node.parameters["modelID"] = .text(modelID) }
         edit { graph in
@@ -818,7 +825,7 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
             guard let datum = value.datum, let definition = registry.operation("d.value.input")?.definition else {
                 throw WorkflowIssue("此输入必须先选择单项结果，不能隐式转换。")
             }
-            var node = definition.makeNode(); node.title = port
+            var node = makeNewNode(definition); node.title = port
             node.dataConfiguration = .init(value: datum)
             inputs.append((node, port))
         }
@@ -872,10 +879,10 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
         var source: WorkflowNode
         if sources.count == 1, case .asset(let ref) = sources[0] {
             guard let definition = registry.operation("d.asset.reference")?.definition else { throw WorkflowIssue("Asset reference operation is unavailable.", code: "container.issue.operationUnavailable") }
-            source = definition.makeNode(); source.assetReference = ref
+            source = makeNewNode(definition); source.assetReference = ref
         } else {
             guard let definition = registry.operation(WorkflowAssetContainer.sourceID)?.definition else { throw WorkflowIssue("Source container operation is unavailable.", code: "container.issue.operationUnavailable") }
-            source = definition.makeNode(); source.librarySources = sources
+            source = makeNewNode(definition); source.librarySources = sources
             source.parameters["kind"] = .text(output?.kind.rawValue ?? "mixed")
             source.dataConfiguration = .init(schema: output?.datum?.schema)
         }
@@ -890,7 +897,7 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
         } else if inputNode != nil || inputPort != nil { throw WorkflowIssue("Incomplete input drop target.", code: "container.issue.targetChanged") }
         if target.rootID == nil {
             guard connection == nil else { throw WorkflowIssue("Input destination disappeared.", code: "container.issue.targetChanged") }
-            let next = WorkflowGraph(name: "新流程", nodes: [source], layout: [.init(nodeID: source.id, x: x, y: y)])
+            let next = WorkflowGraph(name: creationText("workspace.blankFlow", "New workflow"), nodes: [source], layout: [.init(nodeID: source.id, x: x, y: y)])
             try registry.validate(next, tools: tools)
             undoStack.append(editSnapshot); redoStack = []; graphs.append(next); selectedGraphID = next.id
         } else {
@@ -908,7 +915,7 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
               let output = registry.definition(for: source, tools: tools)?.outputs.first(where: { $0.id == port }), output.kinds.count == 1,
               let kind = output.kinds.first, kind != .receipt else { throw WorkflowIssue("Choose a concrete output for the preview container.") }
         guard let definition = registry.operation(WorkflowAssetContainer.previewID)?.definition else { throw WorkflowIssue("Preview container operation is unavailable.") }
-        var preview = definition.makeNode()
+        var preview = makeNewNode(definition)
         preview.parameters["kind"] = .text(kind.rawValue)
         let origin = graph.layout.first { $0.nodeID == nodeID }
         guard edit({ graph in
@@ -923,12 +930,12 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
         _ = try await services.store.workflowData(reference)
         try Task.checkCancellation()
         guard isCurrent(target) else { throw WorkflowIssue("读取期间流程已改变。") }
-        var node = definition.makeNode(); node.assetReference = reference
+        var node = makeNewNode(definition); node.assetReference = reference
         if let title { node.title = title }
         if target.rootID == nil {
             // Do not create an empty graph before the asynchronous copy/read succeeds.
             // First graph and first asset are a single user insertion and undo step.
-            let next = WorkflowGraph(name: "新流程", nodes: [node],
+            let next = WorkflowGraph(name: creationText("workspace.blankFlow", "New workflow"), nodes: [node],
                 layout: [.init(nodeID: node.id, x: x, y: y)])
             try registry.validate(next, tools: tools)
             undoStack.append(editSnapshot); redoStack = []; graphs.append(next)
@@ -949,7 +956,7 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
         for reference in value.assetReferences { _ = try await services.store.workflowData(reference) }
         try Task.checkCancellation()
         guard isCurrent(target) else { throw WorkflowIssue("读取期间流程已改变。") }
-        var node = definition.makeNode(); node.dataConfiguration = .init(value: value)
+        var node = makeNewNode(definition); node.dataConfiguration = .init(value: value)
         edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: 80, y: 100)) }
         guard graph?.nodes.contains(where: { $0.id == node.id }) == true else { throw WorkflowIssue("没有插入结果节点。") }
         selectedNodeID = node.id
@@ -1128,15 +1135,15 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
         let next: WorkflowGraph
         switch name {
         case "containerImages":
-            do { next = try WorkflowExamples.imageContainerReview() } catch { errorMessage = error.localizedDescription; return }
-        case "container": next = WorkflowExamples.assetReview(); case "image": next = WorkflowExamples.image(); case "file": next = WorkflowExamples.file()
-        case "template": next = WorkflowExamples.template(); default: next = WorkflowExamples.text() }
+            do { next = try WorkflowExamples.imageContainerReview(text: creationText) } catch { errorMessage = error.localizedDescription; return }
+        case "container": next = WorkflowExamples.assetReview(text: creationText); case "image": next = WorkflowExamples.image(text: creationText); case "file": next = WorkflowExamples.file(text: creationText)
+        case "template": next = WorkflowExamples.template(text: creationText); default: next = WorkflowExamples.text(text: creationText) }
         undoStack.append(editSnapshot); redoStack = []; graphs.append(next); selectedGraphID = next.id; selectedNodeID = next.nodes.first?.id
     }
     public func addLanguageExample(_ choice: WorkflowLanguageExample) {
         guard canEditCanvas else { return }
         do {
-            let bundle = try WorkflowLanguageExamples.make(choice)
+            let bundle = try WorkflowLanguageExamples.make(choice, text: creationText)
             // Every addition is an independent editable copy. Tool identity and
             // digest remain fixed for existing instances; never overwrite them.
             let combined = tools + bundle.tools
@@ -1170,7 +1177,7 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
         do {
             try Task.checkCancellation()
             let asset = try await services.store.publishWorkflowAsset(data: Data(text.utf8), mediaType: "text/plain",
-                name: "已发布文稿", operationID: "d.text.publish", details: ["origin": origin])
+                name: creationText("workflow.creation.publishedText", "Published Text"), operationID: "d.text.publish", details: ["origin": origin])
             published = true
             try await afterTextPublication()
             try Task.checkCancellation()
@@ -1182,7 +1189,7 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
             // originally empty project may take this path, never a changed selection.
             if target.rootID == nil { addExample("text") }
             guard let operation = registry.operation("d.asset.reference") else { throw WorkflowIssue("文稿素材已保存，但素材节点不可用。") }
-            var node = operation.definition.makeNode(); node.assetReference = asset.record.reference; node.title = "已发布文稿"
+            var node = makeNewNode(operation.definition); node.assetReference = asset.record.reference; node.title = creationText("workflow.creation.publishedText", "Published Text")
             edit { g in g.nodes.append(node); g.layout.append(.init(nodeID: node.id, x: 40, y: 360)) }
             guard graph?.nodes.contains(where: { $0.id == node.id }) == true else {
                 throw WorkflowIssue("文稿素材已保存，但节点未加入流程。")

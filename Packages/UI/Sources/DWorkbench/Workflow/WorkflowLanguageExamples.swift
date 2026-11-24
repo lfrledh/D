@@ -21,18 +21,18 @@ public struct WorkflowLanguageExampleBundle: Sendable {
 /// Model identities deliberately remain empty; the controller freezes the user's
 /// selected registered models when a run is submitted.
 public enum WorkflowLanguageExamples {
-    public static func make(_ example: WorkflowLanguageExample) throws -> WorkflowLanguageExampleBundle {
+    public static func make(_ example: WorkflowLanguageExample, text: (String, String) -> String = { _, fallback in fallback }) throws -> WorkflowLanguageExampleBundle {
         switch example {
-        case .data: try dataExample()
-        case .images: try imageExample()
-        case .music: try musicExample()
-        case .multimodal: try multimodalExample()
+        case .data: try dataExample(text: text)
+        case .images: try imageExample(text: text)
+        case .music: try musicExample(text: text)
+        case .multimodal: try multimodalExample(text: text)
         }
     }
 
     // MARK: - E01: deterministic data language
 
-    private static func dataExample() throws -> WorkflowLanguageExampleBundle {
+    private static func dataExample(text: (String, String) -> String = { _, fallback in fallback }) throws -> WorkflowLanguageExampleBundle {
         let itemFields = dataItemFields
         let tagFields = dataTagFields
         let itemSchema = WorkflowDataSchema.record(itemFields)
@@ -42,25 +42,25 @@ public enum WorkflowLanguageExamples {
         var itemScore = try valueInput("分数", value: .number(0.92, unit: nil))
         var itemKeep = try valueInput("保留", value: .boolean(true))
         var itemOptions = try valueInput("候选文字", value: textList(["重点版本"]))
-        itemIndex.title = "输入编号"
-        itemTitle.title = "输入标题"
-        itemScore.title = "输入分数"
-        itemKeep.title = "输入保留标记"
-        itemOptions.title = "输入候选文字列表"
+        itemIndex.title = text("workflow.example.language.inputIndex", "输入编号")
+        itemTitle.title = text("workflow.example.language.inputTitle", "输入标题")
+        itemScore.title = text("workflow.example.language.inputScore", "输入分数")
+        itemKeep.title = text("workflow.example.language.inputKeepFlag", "输入保留标记")
+        itemOptions.title = text("workflow.example.language.inputTextCandidates", "输入候选文字列表")
 
-        var record = try node("d.value.record", title: "组合字段")
+        var record = try node("d.value.record", title: text("workflow.example.language.combineFields", "组合字段"))
         record.dataConfiguration = .init(fields: itemFields)
 
         let first = dataItem(id: 1, title: "第一项", score: 0.80, keep: true, options: ["基础版本"])
         let third = dataItem(id: 3, title: "可编辑失败反例", score: 0.99, keep: false, options: [])
-        var list = try node("d.value.list", title: "组成列表")
+        var list = try node("d.value.list", title: text("workflow.example.language.buildAList", "组成列表"))
         list.dataConfiguration = .init(
             schema: itemSchema,
             fields: [.init("featured", itemSchema)],
             items: [.init(id: "item-1", value: first), .init(id: "item-3", value: third)]
         )
 
-        var filter = try node("d.value.filter", title: "筛选并稳定排序")
+        var filter = try node("d.value.filter", title: text("workflow.example.language.filterAndSort", "筛选并稳定排序"))
         filter.parameters["ascending"] = .flag(false)
         filter.parameters["limit"] = .integer(16)
         filter.dataConfiguration = .init(
@@ -68,11 +68,11 @@ public enum WorkflowLanguageExamples {
             rules: [.init(path: ["keep"], comparison: .equals, value: .boolean(true))]
         )
 
-        var select = try node("d.value.select", title: "明确取第一项")
+        var select = try node("d.value.select", title: text("workflow.example.language.selectTheFirstItem", "明确取第一项"))
         select.parameters["method"] = .text("index")
         select.parameters["index"] = .integer(1)
 
-        var titleField = try node("d.value.field", title: "读取标题字段")
+        var titleField = try node("d.value.field", title: text("workflow.example.language.readTheTitleField", "读取标题字段"))
         titleField.dataConfiguration = .init(schema: .text, path: ["title"])
 
         let rightTags = WorkflowDatum.list(element: .record(tagFields), items: [
@@ -81,34 +81,34 @@ public enum WorkflowLanguageExamples {
             .init(id: "tag-4", value: dataTag(id: 4, category: "未匹配")),
         ])
         var tagInput = try valueInput("标签列表", value: rightTags)
-        tagInput.title = "输入标签列表"
+        tagInput.title = text("workflow.example.language.inputTags", "输入标签列表")
 
-        var pair = try node("d.value.pair", title: "按编号配对")
+        var pair = try node("d.value.pair", title: text("workflow.example.language.pairByIndex", "按编号配对"))
         pair.dataConfiguration = .init(path: ["index"])
 
-        var validate = try node("d.value.validate", title: "报告数据检查")
+        var validate = try node("d.value.validate", title: text("workflow.example.language.checkData", "报告数据检查"))
         validate.parameters["strict"] = .flag(false)
         validate.dataConfiguration = .init(schema: itemSchema)
         let validationSchema = validationReportSchema(for: itemSchema)
 
-        var validField = try node("d.value.field", title: "读取检查结果")
+        var validField = try node("d.value.field", title: text("workflow.example.language.readTheCheckResult", "读取检查结果"))
         validField.dataConfiguration = .init(schema: .boolean, path: ["valid"])
 
-        var branch = try node("d.control.branch", title: "按检查结果选择")
+        var branch = try node("d.control.branch", title: text("workflow.example.language.chooseByCheckResult", "按检查结果选择"))
         branch.control = .branch(
             predicate: .init(comparison: .equals, value: .boolean(true)),
-            then: try passthroughGraph(name: "检查通过", inputName: "input", schema: .boolean, fallback: .boolean(true)),
-            otherwise: try passthroughGraph(name: "检查未通过", inputName: "input", schema: .boolean, fallback: .boolean(false))
+            then: try passthroughGraph(text: text, name: text("workflow.example.language.checkPassed", "检查通过"), inputName: "input", schema: .boolean, fallback: .boolean(true)),
+            otherwise: try passthroughGraph(text: text, name: text("workflow.example.language.checkFailed", "检查未通过"), inputName: "input", schema: .boolean, fallback: .boolean(false))
         )
 
-        var map = try node("d.control.map", title: "逐项保留身份")
-        map.control = .map(body: try fallibleItemMapBody(schema: itemSchema, fallback: first), continueOnFailure: true)
+        var map = try node("d.control.map", title: text("workflow.example.language.keepEachItemSIdentity", "逐项保留身份"))
+        map.control = .map(body: try fallibleItemMapBody(text: text, schema: itemSchema, fallback: first), continueOnFailure: true)
 
         var initialState = try valueInput("循环初始状态", value: .number(0, unit: nil))
-        initialState.title = "输入循环状态"
-        var loop = try node("d.control.loop", title: "有限状态循环")
+        initialState.title = text("workflow.example.language.inputLoopState", "输入循环状态")
+        var loop = try node("d.control.loop", title: text("workflow.example.language.boundedStateLoop", "有限状态循环"))
         loop.control = .loop(
-            body: try incrementingLoopBody(),
+            body: try incrementingLoopBody(text: text),
             stateSchema: .number(unit: nil),
             maximumIterations: 4,
             until: .init(comparison: .equals, value: .number(3, unit: nil))
@@ -125,12 +125,12 @@ public enum WorkflowLanguageExamples {
             .init("mapped", .list(.result(.text))),
             .init("loopState", .number(unit: nil)),
         ]
-        var summary = try node("d.value.record", title: "组合运行摘要")
+        var summary = try node("d.value.record", title: text("workflow.example.language.combineRunSummary", "组合运行摘要"))
         summary.dataConfiguration = .init(fields: summaryFields)
 
-        var result = try node("d.value.return", title: "返回数据结果")
+        var result = try node("d.value.return", title: text("workflow.example.language.returnDataResults", "返回数据结果"))
         result.parameters["name"] = .text("dataExample")
-        var export = try node("d.value.export", title: "按用户目标导出")
+        var export = try node("d.value.export", title: text("workflow.example.language.exportToSelectedLocation", "按用户目标导出"))
         export.parameters["fileName"] = .text("data-example")
         export.parameters["format"] = .text("json")
 
@@ -165,7 +165,7 @@ public enum WorkflowLanguageExamples {
             connect(result, export),
         ]
         let graph = WorkflowGraph(
-            name: "E01 数据整理与控制",
+            name: text("workflow.example.language.e01DataAndControl", "E01 数据整理与控制"),
             nodes: nodes,
             connections: connections,
             layout: gridLayout(nodes)
@@ -175,28 +175,28 @@ public enum WorkflowLanguageExamples {
 
     // MARK: - E02: planned image sets
 
-    private static func imageExample() throws -> WorkflowLanguageExampleBundle {
-        let imageTool = try makeImageSetTool()
+    private static func imageExample(text: (String, String) -> String = { _, fallback in fallback }) throws -> WorkflowLanguageExampleBundle {
+        let imageTool = try makeImageSetTool(text: text)
         var subject = try valueInput("创作主题", value: .text("城市公共花园与夜间阅读空间"))
-        subject.title = "输入总体主题"
+        subject.title = text("workflow.example.language.inputOverallTheme", "输入总体主题")
 
         let planningTool = try WorkflowJSONRepairTool.make(
             schema: .list(.record(themeFields)),
             task: "Create exactly two different visual themes from the supplied content. Each theme has a unique nonempty themeID, a nonempty title, and a detailed image prompt. Use only these three string fields. Return only the JSON array, with no Markdown or explanation.",
-            exampleJSON: #"[{"themeID":"theme-1","title":"Example title A","prompt":"Describe the first distinct image"},{"themeID":"theme-2","title":"Example title B","prompt":"Describe the second distinct image"}]"#, expectedItemCount: 2)
-        var planner = try node("d.control.invoke", title: "一次规划全部主题")
+            text: text, exampleJSON: #"[{"themeID":"theme-1","title":"Example title A","prompt":"Describe the first distinct image"},{"themeID":"theme-2","title":"Example title B","prompt":"Describe the second distinct image"}]"#, expectedItemCount: 2)
+        var planner = try node("d.control.invoke", title: text("workflow.example.language.planAllThemes", "一次规划全部主题"))
         planner.control = .invoke(.init(id: planningTool.id, version: planningTool.version, digest: try WorkflowPlanCompiler.digest(planningTool)))
         planner.dataConfiguration = .init(fields: planningTool.graph.interface?.inputs ?? [])
 
-        var map = try node("d.control.map", title: "按运行时主题逐项生成")
-        map.control = .map(body: try themeImageMapBody(tool: imageTool), continueOnFailure: true)
+        var map = try node("d.control.map", title: text("workflow.example.language.generateForEachTheme", "按运行时主题逐项生成"))
+        map.control = .map(body: try themeImageMapBody(text: text, tool: imageTool), continueOnFailure: true)
 
-        var result = try node("d.value.return", title: "返回主题图组")
+        var result = try node("d.value.return", title: text("workflow.example.language.returnThemeImages", "返回主题图组"))
         result.parameters["name"] = .text("imageSets")
 
         let nodes = [subject, planner, map, result]
         let graph = WorkflowGraph(
-            name: "E02 两主题三图",
+            name: text("workflow.example.language.e02TwoThemesThreeImagesEach", "E02 两主题三图"),
             nodes: nodes,
             connections: [
                 connect(subject, planner, targetPort: "content"),
@@ -208,37 +208,37 @@ public enum WorkflowLanguageExamples {
         return .init(graph: graph, tools: [imageTool, planningTool])
     }
 
-    private static func makeImageSetTool() throws -> WorkflowToolDefinition {
+    private static func makeImageSetTool(text: (String, String) -> String = { _, fallback in fallback }) throws -> WorkflowToolDefinition {
         let fallbackTheme = theme(id: "theme-example", title: "示例主题", prompt: "A calm reading garden at dusk")
         let themeSchema = WorkflowDataSchema.record(themeFields)
-        let themeInput = try publicInput("theme", schema: themeSchema, fallback: fallbackTheme, title: "工具输入主题")
+        let themeInput = try publicInput("theme", schema: themeSchema, fallback: fallbackTheme, title: text("workflow.example.language.toolThemeInput", "工具输入主题"))
 
-        var themeID = try node("d.value.field", title: "读取主题身份")
+        var themeID = try node("d.value.field", title: text("workflow.example.language.readThemeIdentity", "读取主题身份"))
         themeID.dataConfiguration = .init(schema: .text, path: ["themeID"])
-        var prompt = try node("d.value.field", title: "读取图像提示")
+        var prompt = try node("d.value.field", title: text("workflow.example.language.readImagePrompt", "读取图像提示"))
         prompt.dataConfiguration = .init(schema: .text, path: ["prompt"])
 
-        var generate = try node("d.image.generate", title: "每主题生成三图")
+        var generate = try node("d.image.generate", title: text("workflow.example.language.generateThreeImagesPerTheme", "每主题生成三图"))
         generate.parameters["count"] = .integer(3)
         generate.parameters["modelID"] = .text("")
-        var candidates = try node("d.value.candidates", title: "保留全部候选状态")
+        var candidates = try node("d.value.candidates", title: text("workflow.example.language.keepAllCandidateStates", "保留全部候选状态"))
 
-        var process = try node("d.control.map", title: "只处理成功图片")
-        process.control = .map(body: try imageProcessingBody(), continueOnFailure: true)
+        var process = try node("d.control.map", title: text("workflow.example.language.processSuccessfulImages", "只处理成功图片"))
+        process.control = .map(body: try imageProcessingBody(text: text), continueOnFailure: true)
 
         let groupFields: [WorkflowRecordField] = [
             .init("themeID", .text),
             .init("candidates", .list(.record(candidateFields))),
             .init("processed", .list(.result(.asset(.image)))),
         ]
-        var group = try node("d.value.record", title: "组合主题候选与处理结果")
+        var group = try node("d.value.record", title: text("workflow.example.language.combineCandidatesAndProcessedImages", "组合主题候选与处理结果"))
         group.dataConfiguration = .init(fields: groupFields)
-        var output = try node("d.value.return", title: "返回主题图组")
+        var output = try node("d.value.return", title: text("workflow.example.language.returnThemeImages", "返回主题图组"))
         output.parameters["name"] = .text("output")
 
         let nodes = [themeInput, themeID, prompt, generate, candidates, process, group, output]
         var graph = WorkflowGraph(
-            name: "工具：单主题图组",
+            name: text("workflow.example.language.toolImagesForOneTheme", "工具：单主题图组"),
             nodes: nodes,
             connections: [
                 connect(themeInput, themeID),
@@ -257,22 +257,22 @@ public enum WorkflowLanguageExamples {
             inputs: [.init("theme", themeSchema)],
             outputs: [.init(name: "output", nodeID: output.id, schema: .record(groupFields))]
         )
-        return .init(name: "生成单主题三图并处理成功项", graph: graph)
+        return .init(name: text("workflow.example.language.generateAndProcessThreeThemeImages", "生成单主题三图并处理成功项"), graph: graph)
     }
 
-    static func imageProcessingBody() throws -> WorkflowGraph {
-        let input = try requiredPublicInput("item", schema: .asset(.image), title: "成功图片")
-        var resize = try node("d.image.resize", title: "明确调整尺寸")
+    static func imageProcessingBody(text: (String, String) -> String = { _, fallback in fallback }) throws -> WorkflowGraph {
+        let input = try requiredPublicInput("item", schema: .asset(.image), title: text("workflow.example.language.successfulImage", "成功图片"))
+        var resize = try node("d.image.resize", title: text("workflow.example.language.resizeImage", "明确调整尺寸"))
         resize.parameters["width"] = .integer(768)
         resize.parameters["height"] = .integer(768)
         resize.parameters["mode"] = .text("fit")
-        var convert = try node("d.image.convert", title: "明确转换 PNG")
+        var convert = try node("d.image.convert", title: text("workflow.example.language.convertToPNG", "明确转换 PNG"))
         convert.parameters["format"] = .text("png")
-        var output = try node("d.value.return", title: "返回处理图片")
+        var output = try node("d.value.return", title: text("workflow.example.language.returnProcessedImage", "返回处理图片"))
         output.parameters["name"] = .text("output")
         let nodes = [input, resize, convert, output]
         var graph = WorkflowGraph(
-            name: "成功图片尺寸与格式",
+            name: text("workflow.example.language.successfulImageSizeAndFormat", "成功图片尺寸与格式"),
             nodes: nodes,
             connections: [connect(input, resize), connect(resize, convert), connect(convert, output)],
             layout: gridLayout(nodes)
@@ -284,13 +284,13 @@ public enum WorkflowLanguageExamples {
         return graph
     }
 
-    private static func themeImageMapBody(tool: WorkflowToolDefinition) throws -> WorkflowGraph {
+    private static func themeImageMapBody(text: (String, String) -> String, tool: WorkflowToolDefinition) throws -> WorkflowGraph {
         let fallback = theme(id: "theme-map", title: "可编辑主题", prompt: "A small creative studio")
-        let input = try publicInput("item", schema: .record(themeFields), fallback: fallback, title: "当前主题")
-        var invoke = try invocation(of: tool, title: "调用单主题图组工具")
+        let input = try publicInput("item", schema: .record(themeFields), fallback: fallback, title: text("workflow.example.language.currentTheme", "当前主题"))
+        var invoke = try invocation(of: tool, title: text("workflow.example.language.runThemeImageTool", "调用单主题图组工具"))
         let nodes = [input, invoke]
         var graph = WorkflowGraph(
-            name: "逐主题调用图像工具",
+            name: text("workflow.example.language.runImageToolForEachTheme", "逐主题调用图像工具"),
             nodes: nodes,
             connections: [connect(input, invoke, targetPort: "theme")],
             layout: gridLayout(nodes, tools: [tool])
@@ -304,64 +304,64 @@ public enum WorkflowLanguageExamples {
 
     // MARK: - E03: humming to controlled music candidates
 
-    private static func musicExample() throws -> WorkflowLanguageExampleBundle {
-        let musicTool = try makeMusicCandidateTool()
-        var source = try node("d.asset.reference", title: "导入或录音资产")
+    private static func musicExample(text: (String, String) -> String = { _, fallback in fallback }) throws -> WorkflowLanguageExampleBundle {
+        let musicTool = try makeMusicCandidateTool(text: text)
+        var source = try node("d.asset.reference", title: text("workflow.example.language.importedOrRecordedAudio", "导入或录音资产"))
         source.assetReference = nil
 
-        var convert = try node("d.audio.convert", title: "转换为 16k 单声道")
+        var convert = try node("d.audio.convert", title: text("workflow.example.language.convertTo16KHzMono", "转换为 16k 单声道"))
         convert.parameters["sampleRate"] = .integer(16_000)
         convert.parameters["channels"] = .integer(1)
-        var trim = try node("d.audio.trim", title: "截取默认四秒")
+        var trim = try node("d.audio.trim", title: text("workflow.example.language.trimToFourSeconds", "截取默认四秒"))
         trim.parameters["whole"] = .flag(false)
         trim.parameters["startFrame"] = .integer(0)
         trim.parameters["endFrame"] = .integer(64_000)
 
-        var pitch = try node("d.music.pitch", title: "SwiftF0 识别旋律")
+        var pitch = try node("d.music.pitch", title: text("workflow.example.language.detectMelodyWithSwiftF0", "SwiftF0 识别旋律"))
         pitch.parameters["modelID"] = .text("")
-        var editMelody = try node("d.control.human", title: "人工采用或编辑旋律")
+        var editMelody = try node("d.control.human", title: text("workflow.example.language.reviewOrEditMelody", "人工采用或编辑旋律"))
         editMelody.parameters["kind"] = .text("editMusic")
         editMelody.parameters["instruction"] = .text("检查识别音符，明确提交采用版本。")
         editMelody.dataConfiguration = .init(schema: WorkflowNoteSequence.schema(clock: .seconds))
 
-        var align = try node("d.music.align", title: "按固定速度对齐")
+        var align = try node("d.music.align", title: text("workflow.example.language.alignToFixedTempo", "按固定速度对齐"))
         align.parameters["bpm"] = .decimal(120)
         align.parameters["firstBeatSeconds"] = .decimal(0)
         align.parameters["numerator"] = .integer(4)
         align.parameters["denominator"] = .integer(4)
         align.parameters["snap"] = .text("eighth")
-        let keys = try node("d.music.keys", title: "查看调性候选")
+        let keys = try node("d.music.keys", title: text("workflow.example.language.viewKeyCandidates", "查看调性候选"))
 
         let chordValue = try defaultChordTrack().datum()
         var chordInput = try valueInput("和弦草稿", value: chordValue)
-        chordInput.title = "输入明确和弦"
+        chordInput.title = text("workflow.example.language.inputChords", "输入明确和弦")
         var proposeChords = try valueInput("和弦提案开关", value: .boolean(false))
-        proposeChords.title = "可选语言模型和弦提案"
+        proposeChords.title = text("workflow.example.language.optionalModelChordProposal", "可选语言模型和弦提案")
         let proposalFields: [WorkflowRecordField] = [
             .init("flag", .boolean),
             .init("chords", WorkflowChordTrack.schema),
         ]
-        var proposalInput = try node("d.value.record", title: "组合和弦提案条件")
+        var proposalInput = try node("d.value.record", title: text("workflow.example.language.combineChordProposalInputs", "组合和弦提案条件"))
         proposalInput.dataConfiguration = .init(fields: proposalFields)
-        var proposal = try node("d.control.branch", title: "按开关选择和弦来源")
+        var proposal = try node("d.control.branch", title: text("workflow.example.language.chooseChordSource", "按开关选择和弦来源"))
         proposal.control = .branch(
             predicate: .init(path: ["flag"], comparison: .equals, value: .boolean(true)),
-            then: try harmonyProposalBody(),
-            otherwise: try passthroughGraph(
-                name: "保留提供的和弦",
+            then: try harmonyProposalBody(text: text),
+            otherwise: try passthroughGraph(text: text,
+                name: text("workflow.example.language.keepProvidedChords", "保留提供的和弦"),
                 inputName: "chords",
                 schema: WorkflowChordTrack.schema,
                 fallback: chordValue
             )
         )
-        var editChords = try node("d.control.human", title: "人工编辑并采用和弦")
+        var editChords = try node("d.control.human", title: text("workflow.example.language.editAndAcceptChords", "人工编辑并采用和弦"))
         editChords.parameters["kind"] = .text("editMusic")
         editChords.parameters["instruction"] = .text("明确检查和弦根音、性质、转位与时间。")
         editChords.dataConfiguration = .init(schema: WorkflowChordTrack.schema)
 
-        var chordNotes = try node("d.music.chords", title: "和弦转成音符")
+        var chordNotes = try node("d.music.chords", title: text("workflow.example.language.convertChordsToNotes", "和弦转成音符"))
         chordNotes.parameters["pattern"] = .text("sustained")
-        let preview = try node("d.music.render", title: "确定性合成试听")
+        let preview = try node("d.music.render", title: text("workflow.example.language.synthesizedPreview", "确定性合成试听"))
 
         let styles = WorkflowDatum.list(element: .text, items: [
             .init(id: "candidate-1", value: .text("Solo piano, preserve the hummed melody.")),
@@ -369,20 +369,20 @@ public enum WorkflowLanguageExamples {
             .init(id: "candidate-3", value: .text("Warm electric piano, preserve melody and chords.")),
         ])
         var styleInput = try valueInput("三条候选意图", value: styles)
-        styleInput.title = "输入三种可编辑风格"
-        var optimizeStyle = try valueInput("风格优化开关", value: .boolean(false))
-        optimizeStyle.title = "可选逐项风格文字优化"
+        styleInput.title = text("workflow.example.language.inputThreeEditableStyles", "输入三种可编辑风格")
+        var optimizeStyle = try valueInput(text("workflow.example.language.styleRefinementSwitch", "风格优化开关"), value: .boolean(false))
+        optimizeStyle.title = text("workflow.example.language.optionalStylePromptRefinement", "可选逐项风格文字优化")
 
         let sharedFields: [WorkflowRecordField] = [
             .init("notes", WorkflowNoteSequence.schema(clock: .quarterNotes)),
             .init("chords", WorkflowChordTrack.schema),
             .init("optimizeStyle", .boolean),
         ]
-        var shared = try node("d.value.record", title: "共享真实音符与和弦")
+        var shared = try node("d.value.record", title: text("workflow.example.language.shareNotesAndChords", "共享真实音符与和弦"))
         shared.dataConfiguration = .init(fields: sharedFields)
 
-        var map = try node("d.control.map", title: "生成三条音乐候选")
-        map.control = .map(body: try musicCandidateMapBody(tool: musicTool), continueOnFailure: true)
+        var map = try node("d.control.map", title: text("workflow.example.language.generateThreeMusicCandidates", "生成三条音乐候选"))
+        map.control = .map(body: try musicCandidateMapBody(text: text, tool: musicTool), continueOnFailure: true)
         let keyFields: [WorkflowRecordField] = [
             .init("root", .number(unit: nil)),
             .init("mode", .text),
@@ -396,9 +396,9 @@ public enum WorkflowLanguageExamples {
             .init("melody", WorkflowNoteSequence.schema(clock: .quarterNotes)),
             .init("chords", WorkflowChordTrack.schema),
         ]
-        var delivery = try node("d.value.record", title: "组合候选、调性与试听版本")
+        var delivery = try node("d.value.record", title: text("workflow.example.language.combineCandidatesKeysAndPreview", "组合候选、调性与试听版本"))
         delivery.dataConfiguration = .init(fields: deliveryFields)
-        var result = try node("d.value.return", title: "返回音乐候选")
+        var result = try node("d.value.return", title: text("workflow.example.language.returnMusicCandidates", "返回音乐候选"))
         result.parameters["name"] = .text("musicCandidates")
 
         let nodes = [
@@ -407,7 +407,7 @@ public enum WorkflowLanguageExamples {
             shared, map, delivery, result,
         ]
         let graph = WorkflowGraph(
-            name: "E03 哼唱和声与三候选",
+            name: text("workflow.example.language.e03HummingHarmonyAndThreeCandidates", "E03 哼唱和声与三候选"),
             nodes: nodes,
             connections: [
                 connect(source, convert),
@@ -439,22 +439,22 @@ public enum WorkflowLanguageExamples {
         return .init(graph: graph, tools: [musicTool])
     }
 
-    private static func makeMusicCandidateTool() throws -> WorkflowToolDefinition {
+    private static func makeMusicCandidateTool(text: (String, String) -> String = { _, fallback in fallback }) throws -> WorkflowToolDefinition {
         let noteValue = try defaultNoteSequence(clock: .quarterNotes).datum()
         let chordValue = try defaultChordTrack().datum()
-        let prompt = try publicInput("prompt", schema: .text, fallback: .text("Solo piano."), title: "候选意图")
+        let prompt = try publicInput("prompt", schema: .text, fallback: .text("Solo piano."), title: text("workflow.example.language.candidatePrompt", "候选意图"))
         let notes = try publicInput(
-            "notes", schema: WorkflowNoteSequence.schema(clock: .quarterNotes), fallback: noteValue, title: "旋律条件"
+            "notes", schema: WorkflowNoteSequence.schema(clock: .quarterNotes), fallback: noteValue, title: text("workflow.example.language.melodyInput", "旋律条件")
         )
-        let chords = try publicInput("chords", schema: WorkflowChordTrack.schema, fallback: chordValue, title: "和弦条件")
-        var generate = try node("d.music.generate", title: "MRT2 受控生成")
+        let chords = try publicInput("chords", schema: WorkflowChordTrack.schema, fallback: chordValue, title: text("workflow.example.language.chordInput", "和弦条件"))
+        var generate = try node("d.music.generate", title: text("workflow.example.language.generateWithMRT2", "MRT2 受控生成"))
         generate.parameters["modelID"] = .text("")
         generate.parameters["durationFrames"] = .integer(100)
-        var output = try node("d.value.return", title: "返回音乐资产")
+        var output = try node("d.value.return", title: text("workflow.example.language.returnMusicAsset", "返回音乐资产"))
         output.parameters["name"] = .text("output")
         let nodes = [prompt, notes, chords, generate, output]
         var graph = WorkflowGraph(
-            name: "工具：真实音符和弦音乐生成",
+            name: text("workflow.example.language.toolMusicFromNotesAndChords", "工具：真实音符和弦音乐生成"),
             nodes: nodes,
             connections: [
                 connect(prompt, generate, targetPort: "prompt"),
@@ -472,38 +472,38 @@ public enum WorkflowLanguageExamples {
             ],
             outputs: [.init(name: "output", nodeID: output.id, schema: .asset(.audio))]
         )
-        return .init(name: "按真实音符和弦生成音乐", graph: graph)
+        return .init(name: text("workflow.example.language.generateMusicFromNotesAndChords", "按真实音符和弦生成音乐"), graph: graph)
     }
 
-    private static func musicCandidateMapBody(tool: WorkflowToolDefinition) throws -> WorkflowGraph {
+    private static func musicCandidateMapBody(text: (String, String) -> String, tool: WorkflowToolDefinition) throws -> WorkflowGraph {
         let noteValue = try defaultNoteSequence(clock: .quarterNotes).datum()
         let chordValue = try defaultChordTrack().datum()
-        let prompt = try publicInput("item", schema: .text, fallback: .text("Solo piano."), title: "当前风格")
+        let prompt = try publicInput("item", schema: .text, fallback: .text("Solo piano."), title: text("workflow.example.language.currentStyle", "当前风格"))
         let notes = try publicInput(
-            "notes", schema: WorkflowNoteSequence.schema(clock: .quarterNotes), fallback: noteValue, title: "共享旋律"
+            "notes", schema: WorkflowNoteSequence.schema(clock: .quarterNotes), fallback: noteValue, title: text("workflow.example.language.sharedMelody", "共享旋律")
         )
-        let chords = try publicInput("chords", schema: WorkflowChordTrack.schema, fallback: chordValue, title: "共享和弦")
+        let chords = try publicInput("chords", schema: WorkflowChordTrack.schema, fallback: chordValue, title: text("workflow.example.language.sharedChords", "共享和弦"))
         let optimizeStyle = try publicInput(
-            "optimizeStyle", schema: .boolean, fallback: .boolean(false), title: "风格优化开关"
+            "optimizeStyle", schema: .boolean, fallback: .boolean(false), title: text("workflow.example.language.styleRefinementSwitch", "风格优化开关")
         )
         let styleFields: [WorkflowRecordField] = [
             .init("flag", .boolean),
             .init("style", .text),
         ]
-        var styleInput = try node("d.value.record", title: "组合逐项风格优化条件")
+        var styleInput = try node("d.value.record", title: text("workflow.example.language.combineStyleRefinementInputs", "组合逐项风格优化条件"))
         styleInput.dataConfiguration = .init(fields: styleFields)
-        var style = try node("d.control.branch", title: "按开关优化当前风格文字")
+        var style = try node("d.control.branch", title: text("workflow.example.language.optionallyRefineStylePrompt", "按开关优化当前风格文字"))
         style.control = .branch(
             predicate: .init(path: ["flag"], comparison: .equals, value: .boolean(true)),
-            then: try styleOptimizationBody(),
-            otherwise: try passthroughGraph(
-                name: "保留当前风格文字", inputName: "style", schema: .text, fallback: .text("Solo piano.")
+            then: try styleOptimizationBody(text: text),
+            otherwise: try passthroughGraph(text: text,
+                name: text("workflow.example.language.keepCurrentStylePrompt", "保留当前风格文字"), inputName: "style", schema: .text, fallback: .text("Solo piano.")
             )
         )
-        var invoke = try invocation(of: tool, title: "调用音乐候选工具")
+        var invoke = try invocation(of: tool, title: text("workflow.example.language.runMusicCandidateTool", "调用音乐候选工具"))
         let nodes = [prompt, notes, chords, optimizeStyle, styleInput, style, invoke]
         var graph = WorkflowGraph(
-            name: "逐风格生成音乐候选",
+            name: text("workflow.example.language.generateMusicForEachStyle", "逐风格生成音乐候选"),
             nodes: nodes,
             connections: [
                 connect(optimizeStyle, styleInput, targetPort: "flag"),
@@ -527,8 +527,8 @@ public enum WorkflowLanguageExamples {
         return graph
     }
 
-    private static func harmonyProposalBody() throws -> WorkflowGraph {
-        var language = try node("d.model.language", title: "可选和弦结构提案")
+    private static func harmonyProposalBody(text: (String, String) -> String = { _, fallback in fallback }) throws -> WorkflowGraph {
+        var language = try node("d.model.language", title: text("workflow.example.language.optionalStructuredChordProposal", "可选和弦结构提案"))
         language.parameters["task"] = .text(
             """
             提出一个8拍的和弦轨。只返回一个原始 JSON 对象，不要 Markdown、解释或额外字段。
@@ -544,7 +544,7 @@ public enum WorkflowLanguageExamples {
         language.parameters["modelID"] = .text("")
         language.dataConfiguration = .init(schema: WorkflowChordTrack.schema)
         var graph = WorkflowGraph(
-            name: "语言模型和弦提案",
+            name: text("workflow.example.language.modelChordProposal", "语言模型和弦提案"),
             nodes: [language],
             layout: gridLayout([language])
         )
@@ -554,11 +554,11 @@ public enum WorkflowLanguageExamples {
         return graph
     }
 
-    private static func styleOptimizationBody() throws -> WorkflowGraph {
+    private static func styleOptimizationBody(text: (String, String) -> String = { _, fallback in fallback }) throws -> WorkflowGraph {
         let input = try publicInput(
-            "style", schema: .text, fallback: .text("Solo piano."), title: "待优化风格文字"
+            "style", schema: .text, fallback: .text("Solo piano."), title: text("workflow.example.language.stylePromptToRefine", "待优化风格文字")
         )
-        var language = try node("d.model.language", title: "可选风格文字优化")
+        var language = try node("d.model.language", title: text("workflow.example.language.optionalStylePromptRefinementOption", "可选风格文字优化"))
         language.parameters["task"] = .text(
             "只优化提供的音乐风格文字，返回纯文字；不要描述、修改或推断旋律、音符、和弦、时长。"
         )
@@ -567,7 +567,7 @@ public enum WorkflowLanguageExamples {
         language.parameters["modelID"] = .text("")
         let nodes = [input, language]
         var graph = WorkflowGraph(
-            name: "逐项风格文字优化",
+            name: text("workflow.example.language.refineEachStylePrompt", "逐项风格文字优化"),
             nodes: nodes,
             connections: [connect(input, language, targetPort: "content")],
             layout: gridLayout(nodes)
@@ -581,30 +581,30 @@ public enum WorkflowLanguageExamples {
 
     // MARK: - E04: one published text, four model modalities
 
-    private static func multimodalExample() throws -> WorkflowLanguageExampleBundle {
-        var published = try node("d.text.input", title: "同一发布文字输入")
+    private static func multimodalExample(text: (String, String) -> String = { _, fallback in fallback }) throws -> WorkflowLanguageExampleBundle {
+        var published = try node("d.text.input", title: text("workflow.example.language.sharedTextInput", "同一发布文字输入"))
         published.parameters["text"] = .text("A lantern-lit garden where students exchange handmade books.")
 
         var themeID = try valueInput("主题身份", value: .text("theme-garden-books"))
-        themeID.title = "输入主题身份"
+        themeID.title = text("workflow.example.language.inputThemeIdentity", "输入主题身份")
 
-        var language = try node("d.model.language", title: "文字分支")
+        var language = try node("d.model.language", title: text("workflow.example.language.textBranch", "文字分支"))
         language.parameters["task"] = .text("Write a concise exhibition caption from the supplied theme.")
         language.parameters["outputMode"] = .text("text")
         language.parameters["modelID"] = .text("")
 
-        var image = try node("d.image.generate", title: "图像分支")
+        var image = try node("d.image.generate", title: text("workflow.example.language.imageBranch", "图像分支"))
         image.parameters["count"] = .integer(2)
         image.parameters["modelID"] = .text("")
-        let candidateList = try node("d.value.candidates", title: "完整图像候选记录")
+        let candidateList = try node("d.value.candidates", title: text("workflow.example.language.completeImageCandidateRecord", "完整图像候选记录"))
 
         var notes = try valueInput("受控音乐音符", value: try defaultNoteSequence(clock: .quarterNotes).datum())
-        notes.title = "输入受控音符"
-        var music = try node("d.music.generate", title: "受控音乐分支")
+        notes.title = text("workflow.example.language.inputNotes", "输入受控音符")
+        var music = try node("d.music.generate", title: text("workflow.example.language.musicBranch", "受控音乐分支"))
         music.parameters["modelID"] = .text("")
         music.parameters["durationFrames"] = .integer(100)
 
-        var video = try node("d.video.generate", title: "纯文字视频分支")
+        var video = try node("d.video.generate", title: text("workflow.example.language.textToVideoBranch", "纯文字视频分支"))
         video.parameters["modelID"] = .text("")
         guard let previewVideo = WorkflowVideoPresets.fullPreview.applying(to: video) else {
             throw WorkflowIssue("E04 视频节点无法应用完整短预览参数。")
@@ -618,14 +618,14 @@ public enum WorkflowLanguageExamples {
             .init("music", .asset(.audio)),
             .init("video", .asset(.video)),
         ]
-        var record = try node("d.value.record", title: "组合四模态资产记录")
+        var record = try node("d.value.record", title: text("workflow.example.language.combineMultimodalAssetRecords", "组合四模态资产记录"))
         record.dataConfiguration = .init(fields: resultFields)
-        var result = try node("d.value.return", title: "返回四模态结果")
+        var result = try node("d.value.return", title: text("workflow.example.language.returnMultimodalResults", "返回四模态结果"))
         result.parameters["name"] = .text("multimodal")
 
         let nodes = [published, themeID, language, image, candidateList, notes, music, video, record, result]
         let graph = WorkflowGraph(
-            name: "E04 同主题四模态",
+            name: text("workflow.example.language.e04OneThemeFourMediaTypes", "E04 同主题四模态"),
             nodes: nodes,
             connections: [
                 connect(published, language, targetPort: "content"),
@@ -649,13 +649,14 @@ public enum WorkflowLanguageExamples {
     // MARK: - Structured body helpers
 
     private static func passthroughGraph(
+        text: (String, String) -> String,
         name: String,
         inputName: String,
         schema: WorkflowDataSchema,
         fallback: WorkflowDatum
     ) throws -> WorkflowGraph {
-        let input = try publicInput(inputName, schema: schema, fallback: fallback, title: name + "输入")
-        var output = try node("d.value.return", title: name + "返回")
+        let input = try publicInput(inputName, schema: schema, fallback: fallback, title: text("workflow.example.language.inputTitle", "{name}输入").replacingOccurrences(of: "{name}", with: name))
+        var output = try node("d.value.return", title: text("workflow.example.language.returnTitle", "{name}返回").replacingOccurrences(of: "{name}", with: name))
         output.parameters["name"] = .text("output")
         var graph = WorkflowGraph(
             name: name,
@@ -671,20 +672,21 @@ public enum WorkflowLanguageExamples {
     }
 
     private static func fallibleItemMapBody(
+        text: (String, String) -> String,
         schema: WorkflowDataSchema,
         fallback: WorkflowDatum
     ) throws -> WorkflowGraph {
-        let input = try publicInput("item", schema: schema, fallback: fallback, title: "当前同构条目")
-        var options = try node("d.value.field", title: "读取条目候选文字")
+        let input = try publicInput("item", schema: schema, fallback: fallback, title: text("workflow.example.language.currentItem", "当前同构条目"))
+        var options = try node("d.value.field", title: text("workflow.example.language.readTextCandidates", "读取条目候选文字"))
         options.dataConfiguration = .init(schema: .list(.text), path: ["options"])
-        var first = try node("d.value.select", title: "明确取第一条候选文字")
+        var first = try node("d.value.select", title: text("workflow.example.language.selectFirstTextCandidate", "明确取第一条候选文字"))
         first.parameters["method"] = .text("index")
         first.parameters["index"] = .integer(1)
-        var output = try node("d.value.return", title: "返回逐项文字")
+        var output = try node("d.value.return", title: text("workflow.example.language.returnItemText", "返回逐项文字"))
         output.parameters["name"] = .text("output")
         let nodes = [input, options, first, output]
         var graph = WorkflowGraph(
-            name: "逐项读取可编辑候选",
+            name: text("workflow.example.language.readEditableCandidatesByItem", "逐项读取可编辑候选"),
             nodes: nodes,
             connections: [connect(input, options), connect(options, first), connect(first, output)],
             layout: gridLayout(nodes)
@@ -696,18 +698,18 @@ public enum WorkflowLanguageExamples {
         return graph
     }
 
-    private static func incrementingLoopBody() throws -> WorkflowGraph {
+    private static func incrementingLoopBody(text: (String, String) -> String = { _, fallback in fallback }) throws -> WorkflowGraph {
         let state = try publicInput(
-            "state", schema: .number(unit: nil), fallback: .number(0, unit: nil), title: "当前状态"
+            "state", schema: .number(unit: nil), fallback: .number(0, unit: nil), title: text("workflow.example.language.currentState", "当前状态")
         )
         let iteration = try publicInput(
-            "iteration", schema: .number(unit: nil), fallback: .number(1, unit: nil), title: "本轮编号"
+            "iteration", schema: .number(unit: nil), fallback: .number(1, unit: nil), title: text("workflow.example.language.iterationNumber", "本轮编号")
         )
-        var output = try node("d.value.return", title: "将轮次作为下一状态")
+        var output = try node("d.value.return", title: text("workflow.example.language.useIterationAsNextState", "将轮次作为下一状态"))
         output.parameters["name"] = .text("state")
         let nodes = [state, iteration, output]
         var graph = WorkflowGraph(
-            name: "状态随轮次递增",
+            name: text("workflow.example.language.incrementStateWithIterations", "状态随轮次递增"),
             nodes: nodes,
             connections: [connect(iteration, output)],
             layout: gridLayout(nodes)

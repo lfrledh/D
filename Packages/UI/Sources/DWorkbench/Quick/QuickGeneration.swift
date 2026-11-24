@@ -81,6 +81,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
 }
 
 @MainActor @Observable public final class QuickGenerationController {
+    @ObservationIgnored public var creationText: @MainActor (String, String) -> String = { _, fallback in fallback }
     public private(set) var state = QuickCreationState()
     public private(set) var error: String? { didSet { errorCode = nil } }
     public private(set) var errorCode: String?
@@ -256,6 +257,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         if !state.drafts.contains(where: { $0.id == key }) {
             guard preserveHistorical || operation.definition.quickCategory != .audio || operation.definition.quickAudio != nil else { return }
             var node = operation.definition.makeNode()
+            node.title = creationText("workflow.operation." + operationID + ".title", operation.definition.title)
             node.parameters["modelID"] = .text(modelID)
             if operation.definition.quickAudio != nil { node.parameters["promptText"] = .text("") }
             // The text field remains editable; no output from a previous model is reused.

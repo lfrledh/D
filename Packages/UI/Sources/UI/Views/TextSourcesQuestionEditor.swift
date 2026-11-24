@@ -57,6 +57,12 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.hasHorizontalScroller = false
         scroll.autohidesScrollers = true
+        if contentHeight != nil {
+            // AppKit owns overlay fade-out and follows changes to the user's
+            // scrollbar preference. Never force overlay over “Always”.
+            scroll.scrollerStyle = NSScroller.preferredScrollerStyle
+            scroll.verticalScroller?.controlSize = .small
+        }
         scroll.documentView = editor
         (scroll as? ComposerTextScrollView)?.acceptsWhitespaceInput = context.environment.isEnabled && isEditable
         context.coordinator.update(editor, value: liveValue?.wrappedValue ?? value, isEditable: isEditable, onEdit: onEdit,

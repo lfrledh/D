@@ -189,6 +189,8 @@ public enum ChatGenerationPhase: String, Sendable {
     @ObservationIgnored private var knowledgeIndex: ChatKnowledgeIndex?
     @ObservationIgnored private var indexedKnowledge: [UUID: ChatKnowledgeDocument] = [:]
 
+    @ObservationIgnored public var creationText: @MainActor (String, String) -> String = { _, fallback in fallback }
+
     public init(store: ProjectStore, settings: UserDefaults? = nil, allowsSubmission: @escaping @MainActor () -> Bool = { true },
                 ownsPersonalMemory: Bool = false, isTemporary: Bool = false, webClient: ChatWebSearchClient = .init(), mcpService: any ChatMCPServing = ChatMCPService(),
                 searchClient: ChatSearchClient = .init(), pageClient: ChatWebPageClient = .init(), pythonClient: ChatPythonClient = .init(),
@@ -271,7 +273,7 @@ public enum ChatGenerationPhase: String, Sendable {
         guard let i = state.sessions.firstIndex(where: { $0.id == id }) else { throw WorkflowIssue("对话不存在。") }
         return i
     }
-    private static func derivedTitle(_ source: String, characterLimit: Int = .max, suffix: String = "") -> String {
+    private static func derivedTitle(_ source: String, characterLimit: Int = .max, suffix: String = "", fallback: String = "New conversation") -> String {
         let byteLimit = 512 - suffix.utf8.count
         var title = "", byteCount = 0
         for character in source.prefix(characterLimit) {
@@ -280,7 +282,7 @@ public enum ChatGenerationPhase: String, Sendable {
             title.append(character)
             byteCount += characterBytes
         }
-        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { title = "新对话" }
+        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { title = fallback }
         return title + suffix
     }
     private func changed(checkpoint: Bool = false) {
@@ -336,8 +338,9 @@ public enum ChatGenerationPhase: String, Sendable {
     }
     /// Admit a first editor draft as one state publication. Publishing an empty
     /// selected session first would make its native editor discard valid Undo.
-    @discardableResult public func newSession(title: String = "新对话", id: UUID = UUID(), initialDraft: String = "") throws -> UUID {
+    @discardableResult public func newSession(title: String? = nil, id: UUID = UUID(), initialDraft: String = "") throws -> UUID {
         try requireLoaded()
+        let title = title ?? creationText("quick.textWorkspace.newConversation", "New conversation")
         guard state.sessions.count < 512, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               title.utf8.count <= 512 else { throw WorkflowIssue("会话标题无效或数量已达上限。") }
         guard !state.sessions.contains(where: { $0.id == id }) else {
@@ -1588,7 +1591,7 @@ public enum ChatGenerationPhase: String, Sendable {
         try validateMemoryUses(prepared.3, session: state.sessions[i])
         try Self.validatePreparedSummaries(prepared.4, session: state.sessions[i], parentID: user.parentID)
         let firstMessageTitle = clearDraft && state.sessions[i].contextChoices?.manuallyNamed != true && !state.sessions[i].messages.contains(where: { $0.role == .user })
-            ? Self.derivedTitle(user.text, characterLimit: 80) : nil
+            ? Self.derivedTitle(user.text, characterLimit: 80, fallback: creationText("quick.textWorkspace.newConversation", "New conversation")) : nil
         let attemptID = UUID(), assistantID = UUID()
         let assistant = ChatMessage(id: assistantID, parentID: user.id, role: .assistant, text: "", attemptID: attemptID)
         var attempt = ChatAttempt(id: attemptID, sessionID: sessionID, userMessageID: user.id,

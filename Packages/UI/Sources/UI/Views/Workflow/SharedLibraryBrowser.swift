@@ -308,6 +308,9 @@ struct SharedLibraryBrowserRenameDrafts {
             switch entry.selection { case .asset, .assetInstance: return true; default: return false }
         }
         if action == .prepare {
+            // Unknown asset metadata is not a model preparation request. Preview
+            // and location retain their own file access/recovery checks.
+            guard entry.item.kind == .model else { return false }
             if entry.item.readiness != .available || entry.item.compatible == false { return true }
             if case .unavailable = entry.selection { return true }
             return false
@@ -1322,23 +1325,18 @@ public struct SharedLibraryBrowser: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            if !selectingQuickModel, functions.count <= 1, SharedLibraryBrowserLogic.allows(.add, entry: entry) {
-                Button(word("addCanvas", "添加画布")) { dispatch(.add, key: entry.id) }
-                    .accessibilityIdentifier("shared-library-add").workbenchHelp("LIB-ENTRY-ADD", target: "entry:\(entry.id):\(entry.selection):\(entry.metadataSnapshot?.instanceID)")
-                    .disabled(!canAdd(entry))
-                if let reason = insertionIssue(entry) { Text(reason).font(.caption).foregroundStyle(.secondary) }
+            LibraryDetailActionsLayout {
+                primaryDetailActions(entry, functions: functions.count)
             }
-            if canPreview(entry) {
-                Button(word("preview", "预览")) { dispatch(.preview, key: entry.id) }
-                    .accessibilityIdentifier("shared-library-preview").workbenchHelp("LIB-ENTRY-INFO", target: "entry:\(entry.id):\(entry.selection):\(entry.metadataSnapshot?.instanceID)")
-            }
+            if !selectingQuickModel, let reason = insertionIssue(entry) { Text(reason).font(.caption).foregroundStyle(.secondary) }
             if case .runtime(let source) = entry.collectionSource, let navigation = containerNavigation {
                 Button(workflowText(language, "container.locateSource")) { navigation.source(source.call) }
                     .accessibilityIdentifier("shared-library-locate-source")
             }
             if SharedLibraryBrowserLogic.allows(.location, entry: entry) {
-                Button(word("location", "查看文件位置…")) { dispatch(.location, key: entry.id) }
-                    .accessibilityIdentifier("shared-library-location")
+                WorkbenchMenu(word("more", "更多")) {
+                    WorkbenchMenuAction(word("location", "查看文件位置…")) { dispatch(.location, key: entry.id) }
+                }.accessibilityIdentifier("shared-library-more")
             }
             if SharedLibraryBrowserLogic.allows(.prepare, entry: entry) {
                 Button(prepareLabel(for: entry)) { dispatch(.prepare, key: entry.id) }
@@ -1375,6 +1373,26 @@ public struct SharedLibraryBrowser: View {
                 Text(reason).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private func primaryDetailActions(_ entry: SharedLibraryBrowserEntry, functions: Int) -> some View {
+        if !selectingQuickModel, functions <= 1, SharedLibraryBrowserLogic.allows(.add, entry: entry) {
+            Button { dispatch(.add, key: entry.id) } label: {
+                Text(word("addCanvas", "添加画布")).fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, minHeight: 32, maxHeight: .infinity)
+            }.buttonStyle(WorkbenchPrimaryButtonStyle())
+                .accessibilityIdentifier("shared-library-add")
+                .workbenchHelp("LIB-ENTRY-ADD", target: "entry:\(entry.id):\(entry.selection):\(entry.metadataSnapshot?.instanceID)")
+                .disabled(!canAdd(entry))
+        }
+        if canPreview(entry) {
+            Button { dispatch(.preview, key: entry.id) } label: {
+                Text(word("preview", "预览")).fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, minHeight: 32, maxHeight: .infinity)
+            }.buttonStyle(WorkbenchGlassButtonStyle())
+                .accessibilityIdentifier("shared-library-preview")
+                .workbenchHelp("LIB-ENTRY-INFO", target: "entry:\(entry.id):\(entry.selection):\(entry.metadataSnapshot?.instanceID)")
+        }
     }
 
     private func detailLine(_ title: String, _ value: String) -> some View {
@@ -1988,5 +2006,36 @@ private struct LibraryPanelSurface: ViewModifier {
     let enabled: Bool
     @ViewBuilder func body(content: Content) -> some View {
         if enabled { content.workbenchPanel(cornerRadius: 12) } else { content }
+    }
+}
+
+/// These two detail actions share a size. A row is used only when both full
+/// labels fit at that size; otherwise they form an equally sized vertical pair.
+private struct LibraryDetailActionsLayout: Layout {
+    private let spacing: CGFloat = 8
+    private func metrics(_ proposal: ProposedViewSize, _ subviews: Subviews)
+        -> (size: CGSize, item: CGSize, horizontal: Bool) {
+        guard !subviews.isEmpty else { return (.zero, .zero, false) }
+        let count = CGFloat(subviews.count)
+        let naturalWidth = subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+        let rowWidth = naturalWidth * count + spacing * (count - 1)
+        let width = max(0, proposal.width ?? rowWidth)
+        let horizontal = width >= rowWidth
+        let itemWidth = horizontal ? max(0, (width - spacing * (count - 1)) / count) : width
+        let height = subviews.map { $0.sizeThatFits(.init(width: itemWidth, height: nil)).height }.max() ?? 0
+        return (.init(width: width, height: horizontal ? height : height * count + spacing * (count - 1)),
+                .init(width: itemWidth, height: height), horizontal)
+    }
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        metrics(proposal, subviews).size
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let value = metrics(.init(width: bounds.width, height: nil), subviews)
+        for (index, view) in subviews.enumerated() {
+            let offset = CGFloat(index)
+            view.place(at: .init(x: bounds.minX + (value.horizontal ? offset * (value.item.width + spacing) : 0),
+                                 y: bounds.minY + (value.horizontal ? 0 : offset * (value.item.height + spacing))),
+                       anchor: .topLeading, proposal: .init(value.item))
+        }
     }
 }

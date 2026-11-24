@@ -500,6 +500,7 @@ public final class WorkbenchModel {
                                         audioTransport: audioTransport,
                                         textSourcesEnabled: textSourcesEnabled,
                                         closeDecision: { await Self.chooseCloseDecision(language: language) })
+        projectSession.creationText = { [weak language] key, fallback in language?.text(key, fallback: fallback) ?? fallback }
     }
 
     public private(set) var temporaryChatModel: WorkbenchModel?
@@ -518,6 +519,7 @@ public final class WorkbenchModel {
     public init(projectSession: ProjectSession, audioRecordingEnabled: Bool = false,
                 audioPanels: (any AudioWorkbenchPanelProviding)? = nil, language: UILanguageStore? = nil) {
         self.projectSession = projectSession
+        projectSession.creationText = { [weak language] key, fallback in language?.text(key, fallback: fallback) ?? fallback }
         self.audioRecordingEnabled = audioRecordingEnabled
         self.language = language
         self.audioPanels = audioPanels ?? NativeAudioWorkbenchPanels(language: language)

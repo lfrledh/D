@@ -236,7 +236,7 @@ final class WorkbenchBootstrap {
             let quickStore: ProjectStore
             do {
                 if FileManager.default.fileExists(atPath: quickURL.path) { quickStore = try await ProjectStore.open(at: quickURL) }
-                else { quickStore = try await ProjectStore.create(at: quickURL, name: "快速创作") }
+                else { quickStore = try await ProjectStore.create(at: quickURL, name: languageStore.text("refinement.shell.quickMode", fallback: "Quick Generation")) }
             } catch {
                 // A damaged automatic record never becomes an empty replacement or blocks existing named projects.
                 startupError = "快速创作记录暂不可用，原件保留；仍可打开已有项目。\n" + error.localizedDescription
@@ -279,6 +279,7 @@ final class WorkbenchBootstrap {
                 guard let quickModel else { throw WorkflowIssue("快速工作区已关闭。") }
                 return try quickModel.projectSession.makeExplicitOperationServices()
             }
+            quick.creationText = { [weak quickModel] key, fallback in quickModel?.projectSession.creationText(key, fallback) ?? fallback }
             await quick.load()
             let model = WorkbenchModel(sessionFactory: { _ in borrowed }, settings: settings,
                 modelLibrary: library, displaySettingsOwner: quickModel, audioEnabled: true, audioRecordingEnabled: true, language: languageStore)

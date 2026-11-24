@@ -136,6 +136,21 @@ struct ChatImportControllerTests {
         try await restored.close(); try await store.close()
     }
 
+    @Test func defaultConversationUsesCreationLanguageWithoutRewritingSavedTitles() async throws {
+        let (store, chat) = try await fixture()
+        chat.creationText = { _, _ in "New conversation" }
+        let first = try chat.newSession()
+        #expect(chat.selectedSession?.title == "New conversation")
+        try chat.rename(first, title: "我的标题 My title")
+        chat.creationText = { _, _ in "新对话" }
+        _ = try chat.newSession()
+        #expect(chat.selectedSession?.title == "新对话")
+        try await chat.flush()
+        let reopened = ChatController(store: store) { throw WorkflowIssue("No model request") }
+        await reopened.load()
+        #expect(reopened.state.sessions.first { $0.id == first }?.title == "我的标题 My title")
+    }
+
     private func fixture() async throws -> (ProjectStore, ChatController) {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("ChatImport-" + UUID().uuidString)

@@ -18,6 +18,18 @@ private actor QuickFixtureEngine: InferenceEngine {
 
 @Suite("Quick generation ownership", .serialized) @MainActor
 struct QuickGenerationTests {
+    @Test func newDraftUsesCreationLanguageButExistingDraftKeepsItsTitle() async throws {
+        let (_, _, quick, _) = try await fixture()
+        quick.creationText = { _, _ in "New model draft" }
+        quick.select(operationID: WorkflowModelRoutes.qwen35, modelID: "first")
+        let first = try #require(quick.draft)
+        #expect(first.node.title == "New model draft")
+        quick.creationText = { _, _ in "新模型草稿" }
+        quick.select(operationID: WorkflowModelRoutes.qwen35, modelID: "second")
+        #expect(quick.draft?.node.title == "新模型草稿")
+        quick.select(operationID: WorkflowModelRoutes.qwen35, modelID: "first")
+        #expect(quick.draft?.node == first.node)
+    }
     @Test func inputActivityBlocksCloseAndLateCommitAfterOwnerStopsAdmitting() async throws {
         let (store, _, _, canvas) = try await fixture()
         var allowed = true

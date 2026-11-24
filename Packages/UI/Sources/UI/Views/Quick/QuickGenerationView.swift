@@ -21,6 +21,7 @@ struct QuickGenerationView: View {
     let onSettingsToCanvas: (QuickDraft) -> Void
     let onResultToCanvas: (WorkflowAssetReference) -> Void
     let onValueToCanvas: (WorkflowDatum) -> Void
+    var onRecoverModel: (() -> Void)? = nil
     var onOpenLibrary: () -> Void = {}
     var onImportAsset: () -> Void = {}
     var importTargetTitle: String = ""
@@ -261,8 +262,8 @@ struct QuickGenerationView: View {
                     WorkbenchModelCard(definition: definition, modelID: quick.draft?.node.parameters["modelID"]?.string,
                         choices: model.projectSession.explicitModelChoices,
                         status: readinessTitle(quick.draft?.node.parameters["modelID"]?.string ?? ""), change: onChooseModel, compact: quick.category == .audio)
-                    WorkflowModelPreparationView(identity: quick.draft?.node.parameters["modelID"]?.string ?? "",
-                        fallbackReady: model.projectSession.explicitModelReadiness[quick.draft?.node.parameters["modelID"]?.string ?? ""] == .available)
+                    WorkbenchModelRecoveryView(identity: quick.draft?.node.parameters["modelID"]?.string ?? "",
+                        project: model.projectSession, onRecover: onRecoverModel ?? onChooseModel)
                 } else { Button(quick.category == .audio ? audioText("chooseModel") : consistencyText(language, "MODEL-CHANGE"), action: onChooseModel) }
                 if let draft = quick.draft {
                     if quick.category == .audio {

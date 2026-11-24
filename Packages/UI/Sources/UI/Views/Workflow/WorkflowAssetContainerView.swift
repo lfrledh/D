@@ -163,11 +163,23 @@ struct ContainerProjectionIdentity: Equatable {
         self._presentation = State(initialValue: presentation ?? WorkflowContainerPresentation())
         self.headerActions = headerActions; self.expandedPresentation = expandedPresentation
     }
+    private var displayTitle: String {
+        let peers: [WorkflowNode]
+        if let forcedStepID,
+           let records = controller.runs.first(where: { $0.planCheckpoint?.records.contains(where: { $0.id == forcedStepID }) == true })?.planCheckpoint?.records,
+           let record = records.first(where: { $0.id == forcedStepID }) {
+            let bodyPath = record.address.path.dropLast()
+            var seen = Set<UUID>()
+            peers = records.filter { $0.address.path.dropLast() == bodyPath && seen.insert($0.step.node.id).inserted }.map(\.step.node)
+        } else if forcedStepID == nil { peers = controller.graph?.nodes ?? [node] }
+        else { peers = [node] }
+        return WorkflowHumanPresentation.name(node, in: peers, language: language)
+    }
     var enlargeControl: some View {
         Button { presentation.expanded = true } label: {
             Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 16 * scale)).frame(width: 28 * scale, height: 28 * scale)
         }.buttonStyle(.plain).accessibilityLabel(t("enlarge")).help(t("enlarge.help")).workflowNodeControl(node.id)
-            .workbenchSheet(isPresented: $presentation.expanded, title: node.title) {
+            .workbenchSheet(isPresented: $presentation.expanded, title: displayTitle) {
                 WorkflowAssetContainerView(controller: controller, node: node, forcedStepID: forcedStepID, height: 560, presentation: presentation, expandedPresentation: true).frame(width: 720)
             }
     }
@@ -239,7 +251,7 @@ struct ContainerProjectionIdentity: Equatable {
             VStack(spacing: 0) {
                 if expandedPresentation || forcedStepID != nil {
                     HStack {
-                        Text(node.title).font(.headline); Spacer()
+                        Text(displayTitle).font(.headline); Spacer()
                         WorkbenchMenu { menuActions } label: { Image(systemName: "ellipsis").frame(width: 28, height: 28) }
                             .buttonStyle(.plain).accessibilityLabel(t("more"))
                     }.padding([.top, .horizontal], 12)
@@ -456,7 +468,7 @@ struct ContainerProjectionIdentity: Equatable {
     private func showInLibrary(_ items: [ContainerItem]) {
         let sources = items.compactMap(\.source)
         guard !sources.isEmpty else { return }
-        navigation?.reveal(.init(controller: controller, source: .sources(sources), name: node.title))
+        navigation?.reveal(.init(controller: controller, source: .sources(sources), name: displayTitle))
     }
     private func batchTitle(_ scope: WorkflowContainerScope?) -> String {
         guard let scope else { return "" }
@@ -605,7 +617,7 @@ struct ContainerProjectionIdentity: Equatable {
         guard let owner = controller.assetLibraryOwner else { return }
         var seen = Set<String>()
         let sources = items.compactMap(\.source).filter { seen.insert($0.key).inserted }
-        let location = WorkflowLibraryContext(controller: controller, source: .sources(sources), name: node.title)
+        let location = WorkflowLibraryContext(controller: controller, source: .sources(sources), name: displayTitle)
         presentation.collectionLocation = nil; error = nil
         Task { do { try await controller.setCollected(sources, collected: true, owner: owner); presentation.collectionLocation = location } catch { self.error = .init(presenting: error, fallbackCode: "container.issue.actionFailed") } }
     }
