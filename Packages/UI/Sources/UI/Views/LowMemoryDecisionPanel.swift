@@ -35,8 +35,24 @@ struct LowMemoryDecisionPanel: View {
     @Environment(\.dLanguageStore) private var language
     private func text(_ key: String) -> String { workflowText(language, "memory." + key) }
     private var descriptor: ModelNodeDescriptor? {
-        let matches = ModelNodeCatalog.entries.filter { $0.revision == proposal.original.model.revision }
-        return matches.count == 1 ? matches.first : nil
+        Self.descriptor(revision: proposal.original.model.revision, capability: proposal.original.input.capability)
+    }
+    // The resolved reference carries the execution identity, which can include a
+    // prepared profile. Reuse the same exact descriptive route as the model card;
+    // an installation directory name is never evidence of model or precision.
+    static func descriptor(revision: String?, capability: InferenceCapability) -> ModelNodeDescriptor? {
+        guard let revision else { return nil }
+        let kind: WorkflowModelKind
+        switch capability {
+        case .textGeneration: kind = .text
+        case .imageGeneration: kind = .image
+        case .audioGeneration: kind = .music
+        case .videoGeneration: kind = .video
+        case .audioPitchAnalysis: kind = .pitch
+        case .audioSingingGeneration: return nil
+        }
+        return SharedLibraryProjection.descriptor(for: .init(id: kind.rawValue + ":" + revision,
+            kind: kind, displayName: ""))
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

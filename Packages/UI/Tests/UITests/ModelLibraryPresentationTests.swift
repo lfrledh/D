@@ -10,6 +10,31 @@ import Testing
 
 @Suite @MainActor
 struct ModelLibraryPresentationTests {
+    @Test func lowMemoryConfirmationUsesExactPreparedModelIdentity() throws {
+        for profile in ExternalVideoExecutionProfile.allCases {
+            let descriptor = try #require(LowMemoryDecisionPanel.descriptor(
+                revision: profile.modelIdentity, capability: .videoGeneration))
+            #expect(descriptor.id == "video.model." + profile.rawValue)
+            #expect(LowMemoryDecisionPanel.descriptor(revision: profile.modelIdentity,
+                capability: .textGeneration) == nil)
+            #expect(LowMemoryDecisionPanel.descriptor(revision: profile.modelIdentity + "-changed",
+                capability: .videoGeneration) == nil)
+        }
+        #expect(LowMemoryDecisionPanel.descriptor(revision: nil, capability: .videoGeneration) == nil)
+        let qwen = try #require(ModelNodeCatalog.entries.first { $0.title.contains("Qwen3.5-9B") && $0.precision.contains("4") })
+        #expect(LowMemoryDecisionPanel.descriptor(revision: qwen.revision,
+            capability: .textGeneration)?.id == qwen.id)
+        for (id, capability) in [("flux2-klein-4b-bf16", InferenceCapability.imageGeneration),
+                                 ("flux2-dev-bf16", .imageGeneration),
+                                 ("ace-step-1.5-xl-sft-f32-no-lm", .audioGeneration)] {
+            let descriptor = try #require(ModelNodeCatalog.entries.first { $0.id == id })
+            #expect(LowMemoryDecisionPanel.descriptor(revision: descriptor.revision,
+                capability: capability)?.id == id)
+            #expect(LowMemoryDecisionPanel.descriptor(revision: descriptor.revision,
+                capability: .textGeneration) == nil)
+        }
+    }
+
     @Test func missingCopyLocationKeepsTypedReasonAcrossLanguageChanges() async throws {
         let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
         let root = URL(fileURLWithPath: base).appendingPathComponent("CopyLocation-" + UUID().uuidString)
