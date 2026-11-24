@@ -1980,28 +1980,7 @@ public struct SharedLibraryBrowser: View {
         }
     }
     private func dataName(_ kind: WorkflowDataKind) -> String {
-        let fallback: String
-        switch kind {
-        case .text: fallback = "文字"
-        case .document: fallback = "文档 / Document"
-        case .image: fallback = "图像"
-        case .images: fallback = "图像组"
-        case .receipt: fallback = "记录"
-        case .number: fallback = "数字"
-        case .boolean: fallback = "布尔"
-        case .enumeration: fallback = "选项"
-        case .record: fallback = "结构记录"
-        case .list: fallback = "列表"
-        case .optional: fallback = "可选值"
-        case .result: fallback = "结果"
-        case .audio: fallback = "音频"
-        case .video: fallback = "视频"
-        case .notes: fallback = "音符"
-        case .chords: fallback = "和弦"
-        case .tempo: fallback = "速度"
-        case .pitch: fallback = "音高"
-        }
-        return word("data." + kind.rawValue, fallback)
+        workflowText(language, "workflow.kind." + kind.rawValue, fallback: kind.rawValue)
     }
 }
 
