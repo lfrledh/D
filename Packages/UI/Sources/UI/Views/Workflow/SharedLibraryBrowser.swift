@@ -322,8 +322,11 @@ struct SharedLibraryBrowserRenameDrafts {
             let selectable = entry.item.readiness == .available
                 || (modelID?.isEmpty == false
                     && (entry.item.readiness == .unprepared || entry.item.readiness == .unknown
-                        || (entry.item.kind == .model && entry.catalogSelection
-                            && entry.item.readiness == .unavailable && (action == .use || action == .add))))
+                        || (entry.item.kind == .model && entry.item.readiness == .unavailable
+                            // Choosing a model opens the exact-file recovery
+                            // picker, including when its old binding is stale.
+                            // It does not grant execution or change that binding.
+                            && (action == .use || (entry.catalogSelection && action == .add)))))
             return selectable && action != .preview
         case .asset, .assetInstance:
             let selectable = entry.item.readiness == .available || entry.item.readiness == .unknown

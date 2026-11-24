@@ -681,11 +681,13 @@ struct SharedLibraryBrowserTests {
         #expect(selected.first { $0.id == key }?.item.readiness == state)
         if state == .unavailable || state == .unsupported {
             let bound = try #require(selected.first { $0.id == key })
-            #expect(!SharedLibraryBrowserLogic.allows(.use, entry: bound))
+            // A stale installation must not block choosing another exact copy.
+            // Canvas insertion and unsupported models keep their existing gates.
+            #expect(SharedLibraryBrowserLogic.allows(.use, entry: bound) == (state == .unavailable))
             #expect(!SharedLibraryBrowserLogic.allows(.add, entry: bound))
-            #expect(SharedLibraryBrowserLogic.currentEntry(key: model.id, entries: selected, action: .use) == nil)
+            #expect((SharedLibraryBrowserLogic.currentEntry(key: model.id, entries: selected, action: .use) != nil) == (state == .unavailable))
             let rebound = try #require(SharedModelLibraryCard.resolve(model, function: function, current: selected))
-            #expect(!SharedLibraryBrowserLogic.allows(.use, entry: rebound))
+            #expect(SharedLibraryBrowserLogic.allows(.use, entry: rebound) == (state == .unavailable))
             #expect(!SharedLibraryBrowserLogic.allows(.add, entry: rebound))
         }
     }
@@ -745,7 +747,7 @@ struct SharedLibraryBrowserTests {
                 "model:exact", title: "模型", kind: .model,
                 readiness: readiness, selection: modelSelection
             )
-            #expect(!SharedLibraryBrowserLogic.allows(.use, entry: model))
+            #expect(SharedLibraryBrowserLogic.allows(.use, entry: model) == (readiness == .unavailable))
             #expect(!SharedLibraryBrowserLogic.allows(.add, entry: model))
             #expect(SharedLibraryBrowserLogic.allows(.prepare, entry: model))
             #expect(SharedLibraryBrowserLogic.canvasTransfer(for: model) == nil)
