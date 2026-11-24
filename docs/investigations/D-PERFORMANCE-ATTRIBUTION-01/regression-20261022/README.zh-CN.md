@@ -528,3 +528,23 @@ Return后1.2秒发起焦点读取，AXFocusedUIElement返回-25204；截图仍sa
 消费帧ChatMessageTools:127–136/155–201不等于触发源；ChatWorkbenchView:1275/1469只捕到阅读状态普通内存getter，内部taskState setter未归属D特定task。已排除variant写入与旧独立焦点改动的历史失败保持。删除阅读保存、task、hover或再试anchor/Binding没有充分依据；本轮不新增E产品改动。Lead需对这一最小QA复现取得具体失效属性/视图归属，公开来源工具在挂起时无法完成收尾，更多聚合sample不能补齐；当前不转用户排错。原始E-target-825-r2与E-transition-825-*受控本地，两个准确已保存QA恢复及22文件字节保持另记。I017局部稳定几何改善不被此缺陷抹去，仍无呈现FPS或用户达标结论。
 
 最终781c211d保留5d隐藏Quick尺寸隔离及825 E取证后的原产品路径；最后差分只修模型目录就绪投影/配置选择边界，未重做resize/旁白实验。原生LTX播放与模型卡、容器/正常Quit不是新的性能测量，I012/I017不因此关闭。
+
+
+## 2026-11-24：实际D属性来源与单因素反证
+
+本轮沿6db继续，原始N24=`AgentTrials/D-UI-CONSOLIDATED-01/run-20261124-model-first-use`；普通5607、诊断以0810为基线，资源65efd。均Release -O/WMO/DEBUG_DYLIB=NO，准确包/启动/窗口回执在各目录；没有用旧PID绑定。构建、GPU、截图与输入采样串行，VO关闭。
+
+I012资格为既有45行合成历史、英文1280×800pt、1×，真实CG滚动命中转录区。普通包仍在事件返回后进入事务挂起。有限`_printChanges`记录只前7及2幂次、每View上限2048，不写用户内容：向上动作之后尾部assistant/user工具反复出现`@identity/_accessibleItem`，外层没有同类持续记录。它标出动态属性失效，不证明值发生变化，更不是写入来源。
+
+| 单因素/因果问题 | 实际结果 | 处置 |
+|---|---|---|
+| 保留宿主不继承完整EnvironmentValues，显式环境保留 | 原QA仍挂；另会丢失父级命令/环境，不能作产品方案 | 精确撤回 |
+| 行内共享AX焦点改为每按钮局部所有者 | 原QA仍挂 | 精确撤回 |
+| 仅去原生accessibilityFocused绑定，保留未连接属性 | 原QA仍挂 | 精确撤回 |
+| 在上一对照上仅把未连接AccessibilityFocusState改为同类型State | 首次准确down后挂；随后up/down目标0未投递，不能说完成三动作对照 | 精确撤回，停止此族变体 |
+
+四项都不支持删除旁白/阅读保护或继续无证据提升所有者。正常Quit失败后只恢复准确已保存专属实例，project/quick-chat/quick-creation摘要相同。最后短sample仅8个主线程样本，能确认事务栈，不能用于累计比例归因。尚缺重复布局事务的上游失效创建者或保留故障的精简D组合；Lead后续需要该证据才能安全修，不能交由用户排错、不能把独立SDK负样例当D通过。所有临时差分/探针均未进入70af产品。
+
+I017复用同0810仅属性记录诊断，短聊天1段及3节点2边工作流2段，每段4秒241个固定60Hz计划事件，真实1280→1518/1520→1280；固定52观测宽差中位/P95分别10/14、8/10、9/12pt。记录含发送/几何查询共同uptime，**非D接收/提交/呈现链，非FPS，非优化前后**。该段没有打印根body原因；由于限量策略不能解释为零更新。相比历史可见页冻结及Binding无收益结论，没有出现可据以修补的新约束/偏好写入源，故不堆新缓存。旧隐藏Quick边界修补保持，resize未达标及用户NODE/PAN明显改善、ZOOM多数满意分别记录。
+
+精确证据：N24/diagnostic-property-reasons/{reason-summary,resize-result,resize-normal-quit}.json、四诊断目录result.json与patch/输入/回执；原始内容和sample受控本地，不上传。来源取证与普通候选验收分开；70af状态提示修补不改变布局算法，不能当性能通过。

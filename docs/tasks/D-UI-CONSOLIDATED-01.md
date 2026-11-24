@@ -1,6 +1,68 @@
 # D-UI-CONSOLIDATED-01
 
+## 2026-11-24 模型首用、默认名称及局部交互修补
+
+本轮正常候选与可执行验收已完成，停在用户试用与顾问独立审计。真实接续6dbdcf99，无远端分歧、无抢写；唯一Lead实施与操作Mac，nov24_readonly_review只读固定快照。原始证据N24=`AgentTrials/D-UI-CONSOLIDATED-01/run-20261124-model-first-use`。旧试用仅查当前自动聊天及上一交付专属QA，不能唯一对应用户未保存窗口，结论为“此次旧失败原因无法恢复”；未阻塞当前修复，不公开正文和私有路径。
+
+### 已固定的产品差分
+
+| 提交/范围 | 实际变化与保护 |
+|---|---|
+| 3e4b5e74 / 两条LTX2.3旧兼容入口 | 本地添加识别准确BF16 Full、Q8/Gemma3 Q4原始文件及分离编码器；缺编码器通过正常文件选择补齐，由App创建内部执行清单。沿既有复制/发布/登记/准备所有者，不要求用户制作内部包，不改精度。精确完整文件校验、复制后验证、取消、重试journal、发布成功而保存失败的结果保全；当前无原位可执行结构时明确只能选择含必要准备的独立副本。70af普通App已从原始文件完成两条完整添加，后续选用/运行证据分别见下文，不以旧内部包导入成功替代。 |
+| e8f7abcd / 选择、恢复、名称、输入与资料库 | 取得具体文件前不先覆盖会话型号；回调核项目/Store/草稿/会话/配置/导航意图，取消保持旧选择。聊天和单次生成就地使用已有模型恢复流程，不新增手动加载或缓存禁发。新建对话、普通节点、内置图/节点、自动工作区由创建语言命名，用户旧名称不批改。正式中英5793对、增175键；批准示例名Text Prompt Input/Select Images仅用于对应示例用途。保留原生编辑器，按系统preferredScrollerStyle/小号滚动条；36pt发送/停止同位。资料库普通PNG不再出现伪准备入口，常用操作等宽，文件位置进更多。 |
+| 5607c312、0810bb6e / 原生反例修正 | 已失效旧绑定仍允许进入准确安装选择器；新空聊天不再借旧Quick草稿型号。同一准确安装只在明确恢复意图允许重选，普通选择仍保留重复选择及失效目标守门；目标标题取实际聊天/Quick对象。 |
+| 70af731a / 冷开状态 | 准确逐安装cell为registered、执行状态unknown且无具体问题时显示已有“已添加”，隐藏重复恢复段；不把unknown改成ready。失联、未准备、不支持、错误、缺失和歧义仍显示恢复。没有轮询、普通资产查盘或全库观察。 |
+| 37f940e7 / 普通App暴露的准备包选择路由 | 70af普通App已从原始model与text_encoder目录完成Q8/BF16独立复制、完整校验及添加，但“用于此处”实际报noRoute。根因是operation(for:)误按下载revision匹配，准备包是profile@revision；修为目录准确workflowIdentity，保持类型/SwiftF0检查，裸revision不冒充执行身份。11项目录测试通过（新增反例修前11失败），只读复核通过；37f普通包已成功选用新Q8准确安装。 |
+
+949ce258补充普通失联反例暴露的3条自有诊断映射，复用已有正式语言键；4条历史英文fallback同步既有en正文。没有改变错误分类、原始诊断存储或执行门禁。ChatErrorTextTests 6项通过；初次测试调用缺fallback及随后4项历史正文断言失败均保留，已修正实际来源。只读复核无阻断发现。
+
+37f普通受控恢复：仅暂移本轮新Q8安装的D-VIDEO-PACK清单，未动源权重；Generate准确拒绝，输入、参数、准确型号和旧成果保持。原字节恢复后，在当前位置进入模型管理→重新校验→同一ED2D安装“用于此处”，模型恢复ready且没有自动生成。N24/native/q8-recovery-*及37f-q8-recovery-complete.json。此为正常App实操，不是直接调用gate；英文诊断已在949补正，最终包再检查。
+
+非实施者已核实际差分，修正发布后sync失败、未知journal不得猜无、迟到选择对象、精确源重试和encoder目录清理等发现；最终五文件状态差分无阻断发现。定向检查覆盖原始BF16/Q8组合/分离、小型完整闭包、取消/错编码器/发布后重试、状态精确cell、默认语言及选择归属。最后状态套件13项通过；CPU夹具不是完整模型/GPU。早期宿主测试未取得key-window及玻璃证据目录的资格失败保留，补正目录后的相关测试通过，不把未发事件算通过。详细日志与复核N24/tests、review。
+
+70af原始文件普通添加：Q8 26原文件＋App生成清单（36,826,797,226B）、BF16 28原文件＋清单（72.58GB）均完成；新准确安装分别ED2D448A…与B0AD8B5A…。通过正常两次系统文件选择及明确“复制到模型库”，未选旧D-VIDEO-PACK根、未脚本预写模型绑定。源inode/size/mtime保持、目标无符号链接且inode独立；完整源/目标摘要由App真实校验。BF16 GPU仍受硬件限制。N24/native/raw-{q8,bf16}-*。70af模型添加后正常保存Quit10162消失；不是37路由修后的选用通过。
+
+### 普通App阶段证据（不冒称最终包重跑）
+
+本轮普通链从UI新建First Use项目、无聊天模型绑定开始；e8f7经NSOpenPanel完成首次Qwen添加，遇失效旧绑定禁选后由5607修正并完成准确选用、生成与冷开；同一Mac账户原库存保留，不冒称干净Mac或Store首次安装。通过普通NSOpenPanel添加Qwen3.5-9B Q4和FLUX.2 Klein4B Q8原文件，取消具体选择保持未选状态；选好后直接发送/生成，无手动预加载。Qwen默认思考在256/1024/4096内只有思考前缀，均保留；显式在UI关闭思考后的新候选/新请求完成两轮上下文对话，未把它冒称原请求完成。保存文件中的配置与回答核对见N24/native/two-turns-result.json；未确认D模板/stop-token缺陷，默认思考这一观察仍单列，不以增加上限再试代替判断。
+
+FLUX真实512×512、4步图像生成、预览与正常导出成功，PNG完整解码。Cmd-S、正常Quit、Finder同包冷开后两轮回答、图像、准确选择与运行身份保持。证据native/first-image-result.json、first-use-{normal-quit,cold-reopen}.json。949冷开后既有两轮回答和图像仍保留；e937包已正常退出，最终5a包及Archive已核，桌面已更新；准确层级见本节末的最终交付。
+
+### 最终候选前的新增原生结果
+
+949普通App从新ED2D Q8独立副本完成真实GPU请求`57B4AD14-8D10-40CD-9CE4-18607712504D`：256×256、9帧/24fps、2步、CFG1、seed42，用户界面明确同意本次低内存streaming，记住选择关闭；没有替换型号或精度。新视频资产`1DF8AF75…`、74,180B，SHA256 `01dc30f145a3aac082d02809d38cef216dce4f707283a7702bd1fe5a78734f4c`，执行记录指向本轮新安装。固定seed输出与旧测试字节相同，但本轮有独立执行开始/完成和新运行记录，不是旧图复用。独立shell调用包内ffmpeg退出-5且无stderr，具体原因未证实，未当作可播放证据；e937正常播放器实际播放时间推进到0.375秒；现有独立ffmpeg完整解码H264的9帧及AAC 48kHz音频退出0，见final-q8-playback.json、949-q8-independent-decode.json，不把早期-5改写为通过。完整记录N24/native/949-q8-run.json。
+
+949另从UI选用新B0AD BF16副本，准确型号/精度恢复；未发起超硬件预算的GPU请求。新建聊天明确显示New conversation、没有借用Quick型号；新建内置图像示例显示Text Prompt Input/Select Images，旧用户名称不重写。真实拼音`ni hao`组字→`你好`、Undo/Redo、Quick/节点往返后Undo/Redo通过；原生overlay滚动条在长草稿滚动时可见、闲置后隐藏，系统未显式设常显，未改系统偏好。发送按钮普通/1080宽度均36×36pt。均为正常包证据，非组件替身；操作、截图在N24/native/949-*及captures。
+
+本组发现低内存确认框按原始revision匹配会显示安装UUID，无法显示准备模型规格。e9375391局部复用既有准确类型与执行身份解析；不改确认、remember、请求或准入。一个覆盖全部ExternalVideo档案及Qwen/FLUX/ACE正确/错误capability的定向测试通过，非实施者只读复核无阻断。e937正常App已确认准确Q8/GemmaQ4名称、参数量及精度，本次记住选择关闭；点停止本次运行后没有开始推理。949的GPU请求按仅展示差分沿用，不声称在e937重跑。
+
+### I012/I017有界调查与保留边界
+
+I012普通5607在原45行合成代码历史、英文1280×800、VO关闭下真实滚动仍挂。新有界属性日志首次确认尾部两消息工具在事务期间重复报告`@identity/_accessibleItem`失效，外层没有同样的无限记录；这是失效属性，不能推定真实值写入源或唯一根因。完整EnvironmentValues不继承、按钮局部焦点所有者、只去原生focus绑定、再去未连接AX属性四项受控诊断均仍挂，已撤净。最后一项仅首次down送达，之后目标0的up/down未发，不算完整动作对照。正常Quit失败后仅定向恢复已保存专属QA，同三文件摘要保持。缺口仍是上游失效来源/保故障精简组合；删阅读/旁白保护没有因果依据。下一步由Lead定位该来源，不要求用户复现或排错。定位入口为`ChatMessageTools.swift:122–176`的accessibleItem/工具焦点、`ChatWorkbenchView.swift:359–449、1224、1498–1521`的原生marker/阅读恢复，以及`RetainedContentHost.swift:89`的宿主；这些是待关联位置，不是已判根因。证据diagnostic-*/result.json及property-reasons/reason-summary.json，源中无探针。
+
+I017同0810诊断（仅有界body原因记录、无行为干预）新采实际4秒/241事件横向resize：短聊天1段及3节点2连线工作流2段，1280→1518/1520→1280；固定52观测宽差P95为14、10、12pt。仅窗口几何，不是最终呈现/FPS，也不是修前修后收益。根/消息body原因在操作区间未打印，但探针只首7及2幂次，不能据此说零更新。尚未取得外层约束/偏好首个创建者或最终呈现关联，未叠加旧无收益缓存/可见页冻结；隐藏Quick有效修补保留。候选入口`DualWorkbenchView.swift:484、494–558`的外层几何/保留宿主及`RetainedContentHost.swift:51–76`尺寸协调；尚未证明哪个消费者为热点，不能据文件出现就删边界。证据diagnostic-property-reasons/resize-result.json。原NODE/PAN改善及ZOOM多数满意用户反馈不改。
+
+
+### 同轮e937普通App补验及最终显示修正
+
+e937正常App未绑定的新聊天经普通模型选择器选Qwen3.5-9B Q4、UI明确关闭思考后，直接发送两轮：首答给出Blue Lantern标语，第二轮准确恢复项目名称；Cmd-Return发送，无手动预加载。独立First Use项目另一次真实FLUX Klein Q8图像运行`3F607EC9…`完成，正常导出到新.dexport包；新建Visual Studio并正常启用本项目Quick后，新增草稿自动名为Generate Images，真实图像运行`7CAADD48…`完成。旧项目中文草稿名保留，不按字符串批改。native/final-two-turns.json、final-image-run.json、final-new-project-image.json、final-new-quick-name.json记录准确配置/身份；不是预写绑定或用历史成果代替新请求。
+
+正常e937英文资料库PNG详情暴露“Content Type: 图像”：SharedLibraryBrowser.dataName引用的18个baseline02.library.data.*键均不存在。5a409bdd最小改接既有workflow.kind.*正式资源，18种中英覆盖均核对；查询枚举、保存及资产身份不变，非实施者只读复核无阻断。该图不能作为最终通过，最终5a所有README图片重拍。e937经正常Cmd-Q结束，PID24613消失，未强退。
+
+演示副本首次打开失败也保留：准备脚本排除旧Tasks时误漏必需空Tasks根，ProjectStore.open要求该根。只在无jobs的独立副本补空目录，正常UI重开确认；原项目、冻结运行和模型输出未改，无产品补丁。原媒体摘要不变，current示例名及人工标题列表只用于演示，不冒称模型生成。
+
+### 最终同版交付与边界
+
+- 生产 **5a409bdd7f5f28efa5c6e2f14a68e69701ef75f2**；正常App `CurrentD/Nov24-Final-5a409bdd/D.app`、完整Archive `N24/Archive-Final-5a409bdd/D.xcarchive`。资源65efd77e…46265沿用，Release -O/WMO、DEBUG_DYLIB=NO、Apple Development 3V4T79WLQS/hardened sandbox；deep/strict签名、App/Archive执行字节及dSYM UUID相符，七引擎、54,496文件零第三方权重门禁与无XCTest/诊断宏通过。可执行SHA256 `f727a08bb587701bb24a44294a732439de5ce6d9586bf4650959849578f1e8ab`。build-report及review/release-package-independent.json保留；开发签名不是Store分发通过。
+- 5a由Finder正常打开28533，正常保存Cmd-Q后PID消失；再次Finder同包28954冷开。UI重新打开First Use，e937两轮完整回答/所选模型保留；LTX QA的949新Q8记录仍在，普通播放器再次从0播放至0.375秒。最终未重复GPU：e937→5a只改资料库内容类型显示，真实两轮与图像/导出沿用同轮e937，Q8 GPU沿用949，原始添加沿用70af及37f路由/恢复反例。不得将这些写成5a重新推理。
+- 最终5a真实拼音nihao组字→你好，Undo空/Redo恢复，切Node Workflow再回Quick后的Undo/Redo保持；最后撤销测试草稿并保存。1080×612英文窄窗36pt发送按钮和原生输入区位置可见，1280×800恢复。原系统日文输入源已还原、旁白保持关闭。正常Cmd-Q后28954消失，不强退、不留测试对话窗口给用户；CurrentD现场D进程为0。
+- README中英各9图全部来自5a正常包，1280×800pt、1×，源图/仓库SHA逐一相同。聊天/灯笼图使用本轮e937真实成果；杯子视频与ACE音乐为此前真实结果；图像工作流仅展示结构，不宣称该图已推理；标题选择在5a实际运行人工英文列表并选一项，旧冻结中文历史保留。英文项目/当前示例名为独立演示内容，没有翻译/篡改模型原输出。所有18图完整前景、背景和窗口边界均核，资料库Content Type实际读回Image/图像。系统捕获共享指示出现的r1保留为原始尝试；正常Quit/冷开后用已授权原生窗口通道重拍相应r2，未修图遮挡。精选图来源N24/readme-captures.json。
+- Markdown用GitHub GFM产物在独立Chrome本地实际加载：18图成功、18锚点引用/14显式锚点、双向语言跳转及无水平溢出，英文/中文渲染人工查看。非实施者只读全部18图摘要、英文9图/中文代表4图、README链接及实际差分，没有新增阻断；其不操作Mac、不冒称独立原生通过。复核纠正首次Qwen添加e8f/生成5607版本归属、发行文档旧“当前”候选和ffmpeg -5未知原因。
+- 既有accept-built-report核最终和有效1c回退身份/签名后接纳；仅退役已登记且无占用的旧d1a App本体，原回执/Archive不改；825/d4/5d及新增5607长历史反例均保护。未扩大清理、未删模型/用户项目，个人scheme字节和索引不动。桌面别名准确读回5a；剩余外盘容量现场22.949GB，不用旧不足结论阻止已经完成的构建。证据final-protection.json、normal-final-5a409bdd/candidate-acceptance.json及CurrentD/receipt.json。
+- 最终源码之后仅文档/README精选图交付，完整提交和main/施工远端准确读回见N24/integration-final.json及CurrentD/receipt.json，不伪改包内生产标记。未上传商店/付款/变更可见性/发布。I012、I017、BF16 GPU和正式发行的具体停止理由/下一条件见当前行动；它们没有因截图、正常Quit或归档而关闭。
+
 <a id="2026-11-20-英文对齐与工程续办"></a>
+
 ## 2026-11-20/21 英文对齐与工程续办（固定候选交审）
 
 从 `1fa5ce1659fc27964f3715c73755e521c931ae0b` 原施工树接续，main/施工远端开工相同。唯一 Lead 写工程/文档及操作 Mac；非实施者只读固定基线及差分。N20=`D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261120-language-engineering`。最终生产 **1c6720a3f91d645cf3720a8c7e7f3d95e3a6563b**，普通候选 `CurrentD/Nov21-Final-1c6720a3/D.app`；完整Archive `N20/Archive-Final-1c6720a3/D.xcarchive`，桌面“D 最新版”指向此包。包内生产/构建交付标记均为1c，最后文档提交及main精确读回另存N20/integration-final.json，不伪改App身份。个人scheme摘要ca3635d8…206c及原项目/模型/具名对照保持。

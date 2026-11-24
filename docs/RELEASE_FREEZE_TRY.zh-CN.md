@@ -18,7 +18,7 @@ D不分发第三方权重，模型权重许可不再是开发/发行阻塞；随
 
 ## 当前可复现路径与证据等级
 
-1. 当前正常候选为`D-Development/CurrentD/Nov17-Final-d1a58d3e/D.app`，生产d1a58d3e498b47f71da9b1696b850e07c4bd20e2；桌面“D 最新版”已更新并正常冷开74710，旧普通测试历史保留。源码/资源/签名/七引擎/零权重/无测试残留/隐私/双架构dSYM通过，完整Archive与普通包同次输出，证据N=`run-20261117-retirement-build-tips`的build-report/final-package-validation。产品输入/资源与App身份见当前行动，不用后续文档SHA代替。新打赏本地StoreKit与正常App各自分级：本地可确认另一笔；普通App正式商品尚不可用，不显示测试价格。本轮没有真实付款/正式商品/上传/分发操作。
+1. 当前候选及交付状态以[当前行动](CURRENT_ACTIONS.zh-CN.md)为准；Nov24普通包为`CurrentD/Nov24-Final-5a409bdd/D.app`，完整Archive为N24/Archive-Final-5a409bdd/D.xcarchive，独立签名/可执行摘要/dSYM对应核验见N24/review/release-package-independent.json。以下Nov17为未受影响的支付与打包历史证据：当时正常候选为`D-Development/CurrentD/Nov17-Final-d1a58d3e/D.app`，生产d1a58d3e498b47f71da9b1696b850e07c4bd20e2；当时桌面“D 最新版”已更新并正常冷开74710，旧普通测试历史保留。源码/资源/签名/七引擎/零权重/无测试残留/隐私/双架构dSYM通过，完整Archive与普通包同次输出，证据N=`run-20261117-retirement-build-tips`的build-report/final-package-validation。产品输入/资源与App身份见当前行动，不用后续文档SHA代替。新打赏本地StoreKit与正常App各自分级：本地可确认另一笔；普通App正式商品尚不可用，不显示测试价格。本轮没有真实付款/正式商品/上传/分发操作。
 2. 无模型时仍可打开项目/查看已有资产；选择真实目录条目后取得/校验/登记与执行就绪分开显示。审核者按实际操作选择适配的准确模型资源，不能用固定回复冒充推理；模型权重授权不再列为D开发/发行审批阻塞。
 3. 用独立项目验证Quick/工作流、输入/Undo、保存冷开。Qwen9B Q4停止前缀与准确步骤保存失败→只保存恢复已有正常App证据；沿用版本见任务归档，不外推全部模型/配置。
 4. 低内存方式保持同一准确权重，默认询问；拒绝不推理，同意一次不改默认，已记住选择可撤销。不同模型原始精度/变体的实模证据分别见矩阵。

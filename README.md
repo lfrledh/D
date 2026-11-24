@@ -22,7 +22,7 @@ Choose a local text model to ask questions, organize ideas or revise a draft. Mo
 
 ![Chat with a local text model](docs/images/readme-chat-en.png)
 
-Choose a model and chat preset on the left, then write in the input area below the conversation. Use the message tools to copy an answer. Use the Sources panel to inspect source materials or open “View sent content and settings” for that answer.
+Choose a model and chat preset on the left, then write in the input area below the conversation. Use the message tools to copy an answer, and the Results panel to find saved content. Use the Sources panel to inspect source materials or open “View sent content and settings” for that answer.
 
 ### Quick Generation
 
@@ -30,7 +30,7 @@ Switch between image, video and audio, choose a model, enter your creative brief
 
 **Images.** Supported models can generate images from text and reference pictures.
 
-![Image generation with a saved boat image](docs/images/readme-image-en.png)
+![Image generation with a saved lantern image](docs/images/readme-image-en.png)
 
 Choose the model and settings on the left and describe the image below the preview. The center shows a saved generated image. Choose a result on the right and use the controls below the preview to export it or continue in a workflow.
 
@@ -168,7 +168,7 @@ D 让你在 Mac 上使用文字、图像、视频和音频模型进行创作。�
 
 **图像。** 支持相应输入的模型可以根据文字和参考图生成图片。
 
-![图像快速生成与已保存的小船图片](docs/images/readme-image-zh-Hans.png)
+![图像快速生成与已保存的灯笼图片](docs/images/readme-image-zh-Hans.png)
 
 在左侧选择模型和参数，在预览下方描述想生成的图像。中央展示已保存的生成结果。在右侧选择结果，通过预览下方的操作导出或继续用于工作流。
 
