@@ -54,6 +54,22 @@ struct ReleaseModelCatalogTests {
         #expect(!ModelLibrarySelection.canUse(notInstalled, entry: legacy, hasPendingAction: false))
     }
 
+    @Test func installationChoicesUseExactCatalogExecutionIdentity() throws {
+        for entry in try ModelCatalog.entries() {
+            guard let identity = entry.workflowIdentity, let operation = entry.workflowProfileID,
+                  let kind = WorkflowRegistry.standard.operation(operation)?.definition.modelKind else { continue }
+            let choice = WorkflowModelChoice(id: identity, kind: kind, displayName: entry.title)
+            #expect(WorkflowModelRoutes.operation(for: choice) == operation, "\(entry.id)")
+            #expect(WorkflowModelRoutes.operation(for: .init(id: identity + "-changed", kind: kind, displayName: entry.title)) == nil)
+            let wrongKind: WorkflowModelKind = kind == .text ? .video : .text
+            #expect(WorkflowModelRoutes.operation(for: .init(id: identity, kind: wrongKind, displayName: entry.title)) == nil)
+            if identity != kind.rawValue + ":" + entry.revision {
+                #expect(WorkflowModelRoutes.operation(for: .init(id: kind.rawValue + ":" + entry.revision,
+                    kind: kind, displayName: entry.title)) == nil, "A raw revision must not stand in for an exact execution identity")
+            }
+        }
+    }
+
     @Test func allFrozenProfilesAndPinsArePresent() throws {
         let entries = try ModelCatalog.entries()
         #expect(entries.count == 20)
