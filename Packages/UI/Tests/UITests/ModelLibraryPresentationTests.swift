@@ -1113,3 +1113,33 @@ extension ModelLibraryPresentationTests {
         try await library.shutdown()
     }
 }
+
+
+extension ModelLibraryPresentationTests {
+    @Test func sameInstallationRecoveryPreservesTargetGuardAndClearsIntent() async throws {
+        let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+        let root = URL(fileURLWithPath: base).appendingPathComponent("RecoverySelection-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = try await ModelLibrary(stateDirectory: root)
+        let model = ModelLibraryModel(library: library)
+        let id = ModelID(), other = ModelID()
+        var current = true
+        model.presentSelection(selected: id, identity: "exact:model") { _ in }
+        model.captureSelectionPresentation("Current conversation") { current }
+        #expect(model.selectionDisabled(for: id))
+        #expect(!model.selectionDisabled(for: other))
+        model.presentSelection(selected: id, identity: "exact:model", allowsReselectingCurrent: true) { _ in }
+        model.captureSelectionPresentation("Current conversation") { current }
+        #expect(model.selectionID == id && model.selectionIdentity == "exact:model")
+        #expect(!model.selectionDisabled(for: id))
+        current = false
+        #expect(model.selectionDisabled(for: id) && model.selectionDisabled(for: other))
+        model.presentManagement()
+        #expect(!model.allowsReselectingCurrent && model.selectionID == nil && model.selectionAction == nil)
+        model.presentSelection(selected: id) { _ in }
+        model.captureSelectionPresentation("New target") { true }
+        #expect(model.selectionDisabled(for: id))
+        try await library.shutdown()
+    }
+}

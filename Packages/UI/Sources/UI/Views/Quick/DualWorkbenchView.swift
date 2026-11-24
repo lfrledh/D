@@ -197,8 +197,8 @@ public struct DualWorkbenchView: View {
         library.installationStates
     }
     private var quickModelIdentity: String? {
-        if quick.category == .text, quick.textPresentation == .chat, let modelID = chat?.selectedSession?.configuration?.parameters["modelID"]?.string {
-            return modelID
+        if quick.category == .text, quick.textPresentation == .chat {
+            return chat?.selectedSession?.configuration?.parameters["modelID"]?.string
         }
         return quick.draft?.node.parameters["modelID"]?.string
     }
@@ -273,7 +273,7 @@ public struct DualWorkbenchView: View {
         let selectedDraftID = controller.draft?.id, selectedChatID = chat?.state.selectedSessionID
         let selectedIdentity = quickModelIdentity, selectedConfiguration = chat?.selectedSession?.configuration
         let intent = navigationIntent, sourceEntry = entry
-        library.presentSelection(selected: owner.workflowInstallationID(for: quickModelIdentity), identity: expectedIdentity) { id in
+        library.presentSelection(selected: owner.workflowInstallationID(for: quickModelIdentity), identity: expectedIdentity, allowsReselectingCurrent: preservingConfiguration) { id in
             do {
                 guard !quickOwnerIsChanging, selectionModel.projectSession === owner, owner.currentStore === store,
                       temporary == usesTemporaryChat, quick === controller,
@@ -307,7 +307,10 @@ public struct DualWorkbenchView: View {
                 await refreshLibrary(checkModels: false)
             } catch is CancellationError { } catch { library.errorMessage = error.localizedDescription }
         }
-        let targetTitle = workspaceDisplayName(selectionModel) + " · " + t("quickMode") + " · " + (controller.draft?.node.title ?? t("chat"))
+        let targetName = controller.category == .text && controller.textPresentation == .chat
+            ? (chat?.selectedSession.map { $0.title.isEmpty ? workflowText(language, "quick.textWorkspace.newConversation") : $0.title } ?? t("chat"))
+            : workflowText(language, "quick.category.\(controller.category.rawValue)")
+        let targetTitle = workspaceDisplayName(selectionModel) + " · " + t("quickMode") + " · " + targetName
         library.captureSelectionPresentation(targetTitle) {
             !quickOwnerIsChanging && selectionModel.projectSession === owner && owner.currentStore === store
                 && temporary == usesTemporaryChat && quick === controller

@@ -125,6 +125,11 @@ public final class ModelLibraryModel {
         catalog.first { $0.id == record.catalogID && $0.revision == record.revision }
     }
     public var selectionID: ModelID?
+    public private(set) var allowsReselectingCurrent = false
+    func selectionDisabled(for id: ModelID, fallback: ModelID? = nil) -> Bool {
+        (id == (selectionID ?? fallback) && !allowsReselectingCurrent)
+            || (selectionAction != nil && currentSelectionTitle == nil)
+    }
     public private(set) var selectionIdentity: String?
     func permitsSelection(identity: String?) -> Bool {
         selectionIdentity == nil || selectionIdentity == identity
@@ -792,7 +797,7 @@ public final class ModelLibraryModel {
 }
 
 extension ModelLibraryModel {
-    public func clearSelectionContext() { selectionGeneration = UUID(); selectionTitle = nil; selectionIsCurrent = nil; selectionAction = nil; configurationSelectionAction = nil; selectionID = nil; selectionIdentity = nil }
+    public func clearSelectionContext() { selectionGeneration = UUID(); selectionTitle = nil; selectionIsCurrent = nil; selectionAction = nil; configurationSelectionAction = nil; selectionID = nil; selectionIdentity = nil; allowsReselectingCurrent = false }
     /// Moving from acquisition to existing files keeps the captured object, not
     /// whichever node or Quick draft happens to be selected later.
     func showExistingAcquisition(requestID: UUID, entry: ModelCatalogEntry, resource: ModelResource? = nil) {
@@ -839,9 +844,10 @@ extension ModelLibraryModel {
     public func loadInventory() {
         do { readOnlyConfigurations = try inventoryProvider?() ?? [] } catch { errorMessage = error.localizedDescription }
     }
-    public func presentSelection(selected: ModelID? = nil, identity: String? = nil, action: @escaping @MainActor (ModelID) async -> Void) {
+    public func presentSelection(selected: ModelID? = nil, identity: String? = nil, allowsReselectingCurrent: Bool = false, action: @escaping @MainActor (ModelID) async -> Void) {
         clearSelectionContext(); workspace = "resources"; loadInventory()
-        selectionAction = action; selectionID = selected; selectionIdentity = identity; isPresented = true
+        selectionAction = action; selectionID = selected; selectionIdentity = identity
+        self.allowsReselectingCurrent = allowsReselectingCurrent; isPresented = true
     }
     public func importConfiguration(kind: WorkflowModelKind) async {
         guard !isChoosingLocation, globalOperation == nil, let register = explicitRegistration else { return }

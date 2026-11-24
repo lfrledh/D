@@ -396,7 +396,7 @@ public struct ModelLibraryView: View {
                    (resource.control.role == .execution || ModelLibrarySelection.canUse(record, entry: entry, hasPendingAction: model.pendingActions[record.id] != nil)),
                    record.registrationState == .registered, record.state == .installed, record.availability == .available {
                     Button(model.selectionAction == nil ? text("selectResource", "选择此资源") : text("useTarget", "用于：") + (model.currentSelectionTitle ?? text("targetUnavailable", "目标已改变，请重新选择"))) { Task { if let action = model.selectionAction { await action(record.id) } else { await onSelect(record.id) } } }
-                        .disabled(record.id == (model.selectionID ?? selectedModelID) || (model.selectionAction != nil && model.currentSelectionTitle == nil))
+                        .disabled(model.selectionDisabled(for: record.id, fallback: selectedModelID))
                 }
                 WorkbenchMenu(consistencyText(language, "copy.more"), systemImage: "ellipsis.circle") {
                     WorkbenchMenuAction(consistencyText(language, "menu.model.locate")) { model.reveal(resource) }.featureHelp("MENU-MODEL-LOCATE", language: language).disabled(record.directory == nil || record.availability != .available)
