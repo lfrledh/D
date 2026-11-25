@@ -121,26 +121,33 @@ public struct TextRewriteCandidate: Sendable, Equatable {
     public let replacement: String
     public let request: InferenceRequest
     public let result: InferenceResult
+    public let executionRecord: InferenceExecutionRecord?
 
     public init(runID: UUID, selection: TextRewriteSelection, replacement: String,
-                request: InferenceRequest, result: InferenceResult, backendID: String = "unknown") {
+                request: InferenceRequest, result: InferenceResult, backendID: String = "unknown",
+                executionRecord: InferenceExecutionRecord? = nil) {
         self.backendID = backendID
         self.runID = runID
         self.selection = selection
         self.replacement = replacement
         self.request = request
         self.result = result
+        self.executionRecord = executionRecord
     }
 
     /// Shared provenance for the document and graph entrances. It describes the generated
     /// replacement, not a claim that later human edits or the whole document were generated.
-    public func executionDetails() -> [String: String] {
-        result.metadata.merging([
+    public func executionDetails() throws -> [String: String] {
+        var details = result.metadata.merging([
             "backend": backendID, "operation": "TextDraftSession.requestRewrite",
             "runID": runID.uuidString, "documentID": selection.documentID.uuidString,
             "documentRevision": selection.documentRevision.uuidString,
             "selectionUTF16Location": String(selection.utf16Location),
             "selectionUTF16Length": String(selection.utf16Length)
         ]) { _, actual in actual }
+        if let executionRecord {
+            details["executionRecord"] = String(decoding: try JSONEncoder().encode(executionRecord), as: UTF8.self)
+        }
+        return details
     }
 }

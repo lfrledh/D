@@ -1048,7 +1048,8 @@ struct WorkflowLifecycleTests {
         #expect(archive.graphs.isEmpty && archive.runs.isEmpty) // a shared asset is not a hidden graph
         let record = try #require(archive.assets.first { $0.reference.assetID == candidate.runID })
         #expect(record.request == candidate.request)
-        #expect(record.metadata == candidate.executionDetails())
+        let expectedDetails = try candidate.executionDetails()
+        #expect(record.metadata == expectedDetails)
         #expect(try await c.services.readText(record.reference) == candidate.replacement)
         c.addExample("text"); let graph = try #require(c.graph)
         c.setParameter(nodeID: graph.nodes[0].id, key: "text", value: .text(input))
@@ -1077,7 +1078,7 @@ struct WorkflowLifecycleTests {
                 if failure.fails { throw WorkflowIssue("controlled unavailable output") }
                 _ = try await store.publishWorkflowAsset(data: Data(candidate.replacement.utf8), mediaType: "text/plain",
                     name: "candidate", operationID: "d.text.rewrite", request: candidate.request,
-                    details: candidate.executionDetails(), assetID: candidate.runID)
+                    details: try candidate.executionDetails(), assetID: candidate.runID)
             }, persist: { _, _ in })
         editor.select(.init(location: 0, length: document.text.utf16.count), documentID: document.id)
         editor.instruction = "Polish"; await editor.rewrite(using: .init(directory: root))

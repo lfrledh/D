@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import DInference
 
 public struct WorkflowRegistry: Sendable {
     private static let maximumNodes = 1_024
@@ -97,6 +98,13 @@ public struct WorkflowRegistry: Sendable {
                 if node.operationID == "d.value.validate", field.id == "expectedItemCount" { continue }
                 if WorkflowModelRoutes.isImage(node.operationID), ["loadingStrategy", "memoryBudgetGiB"].contains(field.id) { continue }
                 if node.operationID == WorkflowModelRoutes.ace, ["loadingStrategy", "memoryBudgetGiB"].contains(field.id) { continue }
+                // N25 defaults affect only newly created nodes. Missing stored
+                // fields retain the old fixed request; no history is rewritten.
+                if ["d.model.language", "d.text.rewrite"].contains(node.operationID),
+                   ["loadingStrategy", "memoryBudgetGiB"].contains(field.id) { continue }
+                if ["d.video.generate", "d.music.generate"].contains(node.operationID), field.id == "loadingStrategy" { continue }
+                if field.id == "memoryStrategySelection",
+                   ExternalVideoExecutionProfile.allCases.contains(where: { "d.video." + $0.rawValue == node.operationID }) { continue }
                 if [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(node.operationID),
                    WorkflowLanguageMessageForm.optionalFields.contains(field.id) { continue }
                 throw WorkflowIssue("缺少字段：\(field.id)。", nodeID: node.id)

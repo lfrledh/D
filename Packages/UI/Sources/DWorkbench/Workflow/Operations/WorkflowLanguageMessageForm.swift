@@ -15,6 +15,7 @@ enum WorkflowLanguageMessageForm {
         .init("preserveThinking", "保留历史思考（27B）", .choice(["model", "on", "off"]), .text("model")),
         .init("seed", "文字随机种子（留空随机）", .text(multiline: false), .text("")),
     ]
+    static let loadingFields = fields.filter { ["memoryBudgetGiB", "loadingStrategy"].contains($0.id) }
     static func loadingStrategy(_ parameters: [String: WorkflowScalar]) throws -> TextLoadingStrategy? {
         guard let value = parameters["loadingStrategy"] else { return nil }
         if value == .text("automatic") { return .resident }

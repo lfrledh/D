@@ -1,19 +1,23 @@
 import Foundation
 
+public enum AudioDiffusionLoadingStrategy: String, Codable, Sendable { case resident, ssdLayered }
+
 public struct AudioDiffusionParameters: Codable, Sendable, Equatable {
     public let steps: Int
     public let guidanceScale: Float
     public let strength: Float
-    public init(steps: Int, guidanceScale: Float = 1, strength: Float = 1) {
-        self.steps = steps; self.guidanceScale = guidanceScale; self.strength = strength
+    public internal(set) var loadingStrategy: AudioDiffusionLoadingStrategy?
+    public init(steps: Int, guidanceScale: Float = 1, strength: Float = 1, loadingStrategy: AudioDiffusionLoadingStrategy? = nil) {
+        self.steps = steps; self.guidanceScale = guidanceScale; self.strength = strength; self.loadingStrategy = loadingStrategy
     }
-    private enum CodingKeys: String, CodingKey { case steps, guidanceScale, strength }
+    private enum CodingKeys: String, CodingKey { case steps, guidanceScale, strength, loadingStrategy }
     public init(from decoder: Decoder) throws {
-        try requireAudioKeys(decoder, allowed: ["steps", "guidanceScale", "strength"])
+        try requireAudioKeys(decoder, allowed: ["steps", "guidanceScale", "strength", "loadingStrategy"])
         let c = try decoder.container(keyedBy: CodingKeys.self)
         steps = try c.decode(Int.self, forKey: .steps)
         guidanceScale = try c.decode(Float.self, forKey: .guidanceScale)
         strength = try c.decode(Float.self, forKey: .strength)
+        loadingStrategy = try c.decodeIfPresent(AudioDiffusionLoadingStrategy.self, forKey: .loadingStrategy)
     }
 }
 

@@ -19,8 +19,9 @@ public struct VideoExecutionCapability: Sendable, Equatable {
         guard value.firstFrame == nil, value.lastFrame == nil else {
             throw InferenceFailure.invalidRequest("Wan does not accept frame conditions.")
         }
-        guard value.adapterOptions == nil else {
-            throw InferenceFailure.invalidRequest("Wan does not accept H3 or LTX adapter options.")
+        switch value.adapterOptions {
+        case nil, .wan: break
+        default: throw InferenceFailure.invalidRequest("Wan does not accept H3 or LTX adapter options.")
         }
         guard value.executionProfile == profile,
               value.width % dimensionMultiple == 0, value.height % dimensionMultiple == 0,

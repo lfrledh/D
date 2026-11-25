@@ -14,6 +14,7 @@ struct WorkflowExternalVideoRecipeTests {
             var node = definition.makeNode()
             try registry.validate(node)
             let prompt = "原文 👩🏽‍🎨 e\u{301} — unchanged"
+            node.parameters["memoryStrategySelection"] = .text("fixed")
             let streamed = try recipe.request(node: node, prompt: prompt, seed: 42)
             node.parameters["streamWeights"] = .flag(false)
             let resident = try recipe.request(node: node, prompt: prompt, seed: 42)
@@ -34,6 +35,34 @@ struct WorkflowExternalVideoRecipeTests {
             #expect(identities.insert(profile.modelIdentity).inserted)
             #expect(definition.fields.contains { $0.id == "streamWeights" })
             #expect(definition.outputs.map(\.kinds) == [[.video]])
+        }
+    }
+
+    @Test func newVideoRecipesFollowGlobalChoiceButFrozenLegacyValuesRemainExplicit() throws {
+        for profile in ExternalVideoExecutionProfile.allCases {
+            let recipe = WorkflowVideoRecipe(profile: profile)
+            let definition = try #require(WorkflowRegistry.standard.operation(recipe.operationID)?.definition)
+            var node = definition.makeNode()
+            #expect(node.parameters["memoryStrategySelection"]?.string == "automatic")
+            let normal = try recipe.request(node: node, prompt: "same prompt", seed: 42)
+            let model = ModelReference(directory: URL(fileURLWithPath: "/fixture"), revision: profile.modelIdentity)
+            let request = InferenceRequest(model: model, input: .video(normal), loadingSelection: .automatic)
+            #expect(request.explicitLowMemoryMethod == nil)
+            let low = try request.lowMemoryRequest(method: .streaming)
+            #expect(low.explicitLowMemoryMethod == .streaming)
+            // A saved node without the newer selector retains its original boolean.
+            // We cannot infer whether that boolean was a historical default or a user edit.
+            node.parameters["memoryStrategySelection"] = nil
+            try WorkflowRegistry.standard.validate(node)
+            let legacy = try recipe.request(node: node, prompt: "same prompt", seed: 42)
+            #expect(InferenceRequest(model: model, input: .video(legacy)).explicitLowMemoryMethod == .streaming)
+            node.parameters["memoryStrategySelection"] = .text("fixed")
+            #expect(try recipe.request(node: node, prompt: "same prompt", seed: 42) == legacy)
+            node.parameters["streamWeights"] = .flag(false)
+            #expect(try recipe.request(node: node, prompt: "same prompt", seed: 42) == normal)
+            node.parameters["memoryStrategySelection"] = nil
+            try WorkflowRegistry.standard.validate(node)
+            #expect(try recipe.request(node: node, prompt: "same prompt", seed: 42) == normal)
         }
     }
 
@@ -209,6 +238,7 @@ struct WorkflowExternalVideoServicesTests {
         for stream in [true, false] {
             var node = definition.makeNode()
             node.parameters["modelID"] = .text("video:" + selected.modelIdentity)
+            node.parameters["memoryStrategySelection"] = .text("fixed")
             node.parameters["streamWeights"] = .flag(stream)
             node.parameters["promptText"] = .text("冻结原文 👩🏽‍🎨")
             try service.beginPlan()

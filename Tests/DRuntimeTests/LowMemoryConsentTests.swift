@@ -40,6 +40,27 @@ private actor PlanningBackend: InferenceExecutionPlanning {
 
 @Suite("Explicit low-memory permission", .timeLimit(.minutes(1)))
 struct LowMemoryConsentTests {
+    @Test func wanAndSA3PlansPreserveEverySemanticFieldAndRoundTrip() throws {
+        let model = ModelReference(directory: URL(fileURLWithPath: "/exact-original"), revision: "fixed")
+        let audio = AudioRequest(operation: .generate, prompt: "unchanged", durationSeconds: 8,
+            seed: 42, steps: 8, guidanceScale: 3)
+        let video = VideoRequest(prompt: "unchanged", negativePrompt: "negative", width: 512, height: 320,
+            frameCount: 25, frameRate: .init(numerator: 24), steps: 30, guidanceScale: 3,
+            scheduleShift: 8, seed: 42, executionProfile: VideoExecutionCapability.wan21.profile)
+        for (input, method): (InferenceInput, LowMemoryMethod) in [(.audio(audio), .layered), (.video(video), .streaming)] {
+            let original = InferenceRequest(model: model, input: input, loadingSelection: .automatic)
+            let selected = try original.lowMemoryRequest(method: method)
+            let plan = InferenceExecutionPlan(request: selected, method: method, strategyVersion: 1, modelIdentityToken: "sealed")
+            try plan.validateSemantics(original: original)
+            #expect(selected.explicitLowMemoryMethod == method)
+            #expect(try JSONDecoder().decode(InferenceRequest.self, from: JSONEncoder().encode(selected)) == selected)
+            #expect(original.explicitLowMemoryMethod == nil)
+        }
+        let legacy = try JSONEncoder().encode(audio)
+        #expect(!String(decoding: legacy, as: UTF8.self).contains("loadingStrategy"))
+        #expect(try JSONDecoder().decode(AudioRequest.self, from: legacy).diffusion?.loadingStrategy == nil)
+    }
+
     private func request(automatic: Bool = true, layered: Bool = false, id: UUID = UUID()) -> InferenceRequest {
         .init(id: id, model: .init(directory: URL(fileURLWithPath: "/exact-q4"), revision: "checkpoint"),
               input: .text(.init(prompt: "unchanged input", loadingStrategy: layered ? .ssdLayered : .resident)),

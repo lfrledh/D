@@ -20,6 +20,7 @@ private actor MemoryRecordBackend: InferenceExecutionPlanning {
     }
     func execute(_ request: InferenceRequest, emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         calls += 1; try await action?()
+        try await emit(.textDelta("fixture output"))
         return .init(textResponse: .init(rawText: "fixture output", finalText: "fixture output", finishReason: .stop))
     }
     func release() {}
@@ -27,6 +28,30 @@ private actor MemoryRecordBackend: InferenceExecutionPlanning {
 
 @Suite("Low-memory record through service, checkpoint and project reopen") @MainActor
 struct LowMemoryWorkflowTests {
+    @Test func rewriteRetainsBothDeniedAndAllowedDecisionRecords() async throws {
+        for preference in [LowMemoryDecisionStore.Preference.deny, .allow] {
+            let url = try root(), store = try await ProjectStore.create(at: url, name: "Rewrite decision")
+            let settings = try #require(UserDefaults(suiteName: "D.Memory.Rewrite." + UUID().uuidString))
+            let owner = LowMemoryDecisionStore(settings: settings); owner.setPreference(preference)
+            let backend = MemoryRecordBackend()
+            let runtime = try InferenceRuntime(backends: [backend], configuration: .init(memoryBudgetBytes: 50), decideLowMemory: { try await owner.decide($0) })
+            let service = service(store: store, runtime: runtime)
+            var node = try #require(WorkflowRegistry.standard.operation("d.text.rewrite")).definition.makeNode()
+            node.parameters["modelID"] = .text("text:fixture"); node.parameters["fallbackText"] = .text("original")
+            let context = WorkflowExecutionContext(node: node, stepID: UUID(), inputs: [:])
+            try service.beginPlan()
+            if preference == .deny {
+                await #expect(throws: CancellationError.self) { _ = try await service.executeCall(context) }
+            } else { _ = try await service.executeCall(context) }
+            let records = service.executionRecords(for: context.stepID)
+            #expect(records.count == 1)
+            let record = try #require(records.first)
+            #expect(record.decision == (preference == .deny ? .denyByPreference : .allowedByPreference))
+            #expect(record.executionStarted == (preference == .allow))
+            #expect(await backend.calls == (preference == .allow ? 1 : 0))
+            try await store.close(); await runtime.shutdown()
+        }
+    }
     @Test func runtimeCancellationDismissesPendingAndNextRequestGetsItsOwnDecision() async throws {
         let settings = try #require(UserDefaults(suiteName: "D.B5.Queue." + UUID().uuidString))
         let owner = LowMemoryDecisionStore(settings: settings), backend = MemoryRecordBackend()

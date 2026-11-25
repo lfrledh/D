@@ -24,7 +24,7 @@ enum WorkflowLanguageOperations {
             .init("outputMode", "输出", .choice(visual ? ["text", "json", "response"] : ["text", "json"]), .text("text")),
             .init("maximumPromptTokens", "输入 token 上限", .integer, .integer(2048)),
             .init("maximumOutputTokens", "输出 token 上限", .integer, .integer(256)),
-            .init("temperature", "温度", .decimal, .decimal(0.7)), .init("topP", "Top P", .decimal, .decimal(0.95)), modelField] + visualFields + (visual ? WorkflowLanguageMessageForm.fields : []), modelKind: .text, quickCategory: .text),
+            .init("temperature", "温度", .decimal, .decimal(0.7)), .init("topP", "Top P", .decimal, .decimal(0.95)), modelField] + visualFields + (visual ? WorkflowLanguageMessageForm.fields : WorkflowLanguageMessageForm.loadingFields), modelKind: .text, quickCategory: .text),
         validate: { node in
             guard (1...(visual ? 262144 : 32768)).contains(try WorkflowScalarReader.integer("maximumPromptTokens", in: node)),
                   (1...(visual ? 262144 : 8192)).contains(try WorkflowScalarReader.integer("maximumOutputTokens", in: node)) else { throw WorkflowIssue("文字 token 范围无效。") }
@@ -36,14 +36,14 @@ enum WorkflowLanguageOperations {
             }
             let p = try WorkflowScalarReader.decimal("topP", in: node)
             guard p > 0 && p <= 1 else { throw WorkflowIssue("Top P 必须大于0且不超过1。") }
+            _ = try WorkflowLanguageMessageForm.loadingStrategy(node.parameters)
+            _ = try WorkflowLanguageMessageForm.memoryBudgetBytes(node.parameters)
             if visual {
                 if let template = node.parameters["chatTemplateOverride"] {
                     guard case .text(let source) = template, source.utf8.count <= 65_536 else {
                         throw WorkflowIssue("聊天模板必须是至多64KiB的文字。")
                     }
                 }
-                _ = try WorkflowLanguageMessageForm.loadingStrategy(node.parameters)
-                _ = try WorkflowLanguageMessageForm.memoryBudgetBytes(node.parameters)
                 _ = try WorkflowLanguageMessageForm.thinking(node.parameters)
                 _ = try WorkflowLanguageMessageForm.seed(node.parameters)
                 _ = try WorkflowLanguageMessageForm.tools(node.parameters["toolsJSON"]?.string ?? "")
@@ -114,7 +114,8 @@ enum WorkflowLanguageOperations {
     }
     static let video = WorkflowOperation(definition: .init(id: "d.video.generate", title: "Wan2.1-T2V-1.3B", detail: "Wan2.1 T2V；不支持首尾帧或图像条件。",
         inputs: [.init("prompt", "提示", kinds: [.text], required: false)], outputs: [.init("output", "视频", kinds: [.video])],
-        fields: [.init("promptText", "提示", .text(multiline: true), .text("A small boat on a calm lake.")),
+        fields: [.init("loadingStrategy", "加载方式（精度不变）", .choice(["automatic", "resident", "ssdLayered"]), .text("automatic")),
+            .init("promptText", "提示", .text(multiline: true), .text("A small boat on a calm lake.")),
             .init("negativePrompt", "负向提示", .text(multiline: true), .text("")),
             .init("width", "宽", .integer, .integer(WorkflowVideoPresets.fullPreview.width)),
             .init("height", "高", .integer, .integer(WorkflowVideoPresets.fullPreview.height)),

@@ -1066,7 +1066,7 @@
     "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.field.seed": "Seed",
     "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.field.steps": "Steps",
     "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.field.stg": "STG guidance",
-    "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.field.streamWeights": "Stream diffusion weights",
+    "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.field.streamWeights": "Low-memory execution",
     "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.field.width": "Width (multiple of 32)",
     "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.input.firstFrame": "First frame PNG",
     "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.input.prompt": "Prompt",
@@ -1084,7 +1084,7 @@
     "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.field.seed": "Seed",
     "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.field.steps": "Steps",
     "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.field.stg": "STG guidance",
-    "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.field.streamWeights": "Stream diffusion weights",
+    "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.field.streamWeights": "Low-memory execution",
     "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.field.width": "Width (multiple of 32)",
     "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.input.firstFrame": "First frame PNG",
     "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.input.prompt": "Prompt",
@@ -1102,7 +1102,7 @@
     "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.field.seed": "Seed",
     "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.field.steps": "Steps",
     "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.field.stg": "STG guidance",
-    "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.field.streamWeights": "Stream diffusion weights",
+    "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.field.streamWeights": "Low-memory execution",
     "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.field.width": "Width (multiple of 32)",
     "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.input.firstFrame": "First frame PNG",
     "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.input.prompt": "Prompt",
@@ -1118,7 +1118,7 @@
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.field.promptText": "Prompt",
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.field.seed": "Seed",
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.field.steps": "Steps",
-    "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.field.streamWeights": "Stream diffusion weights",
+    "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.field.streamWeights": "Low-memory execution",
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.field.width": "Width (multiple of 32)",
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.input.firstFrame": "First frame PNG",
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.input.lastFrame": "Last frame PNG",
@@ -5795,6 +5795,8 @@
     "workflow.example.json.repairOneInvalidJSONCandidate": "Repair one invalid JSON candidate",
     "modelManagement.local.filesChanged": "The model files or their record changed. Select and check the files again.",
     "modelManagement.local.stagingRetained": "Adding the model did not finish. D kept the staging files because they changed. The originals are unchanged.",
-    "workflow.creation.publishedText": "Published Text"
+    "workflow.creation.publishedText": "Published Text",
+    "workflow.operation.d.model.language.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)",
+    "workflow.operation.d.text.rewrite.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)"
   }
 }

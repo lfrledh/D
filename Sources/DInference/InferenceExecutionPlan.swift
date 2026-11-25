@@ -34,17 +34,25 @@ public extension InferenceRequest {
         case (.image(var value), .layered):
             value.loadingStrategy = .ssdLayered; changed = .image(value)
         case (.audio(var value), .layered):
-            guard var ace = value.ace else {
-                throw InferenceFailure.invalidRequest("This audio operation has no layered strategy.")
-            }
-            ace.loadingStrategy = .ssdLayered
-            value.parameters = .aceStep15(ace); changed = .audio(value)
+            if var ace = value.ace {
+                ace.loadingStrategy = .ssdLayered
+                value.parameters = .aceStep15(ace)
+            } else if var diffusion = value.diffusion {
+                diffusion.loadingStrategy = .ssdLayered
+                value.parameters = .diffusion(diffusion)
+            } else { throw InferenceFailure.invalidRequest("This audio operation has no layered strategy.") }
+            changed = .audio(value)
         case (.video(var value), .streaming):
             switch value.adapterOptions {
+            case .wan: value.adapterOptions = .wan(streamWeights: true)
             case .h3: value.adapterOptions = .h3(streamWeights: true)
             case .ltx(_, let guidance):
                 value.adapterOptions = .ltx(streamWeights: true, spatiotemporalGuidance: guidance)
-            case nil: throw InferenceFailure.invalidRequest("This video request has no streaming strategy.")
+            case nil:
+                guard value.executionProfile == VideoExecutionCapability.wan21.profile else {
+                    throw InferenceFailure.invalidRequest("This video request has no streaming strategy.")
+                }
+                value.adapterOptions = .wan(streamWeights: true)
             }
             changed = .video(value)
         default: throw InferenceFailure.invalidRequest("Unsupported execution organization.")
@@ -57,10 +65,10 @@ public extension InferenceRequest {
         switch input {
         case .text(let v): return v.loadingStrategy == .ssdLayered ? .layered : nil
         case .image(let v): return v.loadingStrategy == .ssdLayered ? .layered : nil
-        case .audio(let v): return v.ace?.loadingStrategy == .ssdLayered ? .layered : nil
+        case .audio(let v): return v.ace?.loadingStrategy == .ssdLayered || v.diffusion?.loadingStrategy == .ssdLayered ? .layered : nil
         case .video(let v):
             switch v.adapterOptions {
-            case .h3(true), .ltx(true, _): return .streaming
+            case .wan(true), .h3(true), .ltx(true, _): return .streaming
             default: return nil
             }
         default: return nil
@@ -142,7 +150,7 @@ public struct InferenceExecutionRecord: Sendable, Codable, Equatable {
         switch request.input {
         case .text(let input): preferredMode = input.loadingStrategy?.rawValue ?? "resident"
         case .image(let input): preferredMode = input.loadingStrategy?.rawValue ?? "staged"
-        case .audio(let input): preferredMode = input.ace?.loadingStrategy.rawValue ?? "resident"
+        case .audio(let input): preferredMode = input.ace?.loadingStrategy.rawValue ?? input.diffusion?.loadingStrategy?.rawValue ?? "resident"
         case .video: preferredMode = request.explicitLowMemoryMethod == .streaming ? "streaming" : "resident"
         default: preferredMode = "resident"
         }

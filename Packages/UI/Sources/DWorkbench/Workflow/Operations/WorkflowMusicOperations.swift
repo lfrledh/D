@@ -68,7 +68,8 @@ enum WorkflowMusicOperations {
         inputs: [.init("prompt", "创作意图", kinds: [.text], required: false),
             .init("notes", "音符条件（可选；可显式为空）", kinds: [.record, .notes], required: false),
             .init("chords", "和声", kinds: [.record, .chords], required: false)], outputs: [.init("output", "音乐", kinds: [.audio])],
-        fields: [.init("promptText", "意图", .text(multiline: true), .text("Solo piano, clear melody.")),
+        fields: [.init("loadingStrategy", "加载方式（精度不变）", .choice(["automatic", "resident"]), .text("automatic")),
+            .init("promptText", "意图", .text(multiline: true), .text("Solo piano, clear melody.")),
             .init("durationFrames", "时长（25Hz帧）", .integer, .integer(100)),
             .init("seed", "种子", .text(multiline: false), .text("42")), WorkflowLanguageOperations.modelField], modelKind: .music, quickCategory: .audio, quickAudio: .mrt2Text), execute: { c, s in
             let prompt = try await WorkflowLanguageOperations.text(c.inputs["prompt"], fallback: c.node.parameters["promptText"]?.string ?? "", services: s)

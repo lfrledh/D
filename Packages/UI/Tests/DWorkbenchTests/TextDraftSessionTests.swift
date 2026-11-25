@@ -26,24 +26,28 @@ private actor TextDraftGate {
 private actor ImmediateTextDraftEngine: InferenceEngine {
     let outputs: [InferenceOutput]
     let outcome: RunOutcome
+    let recordGate: TextDraftGate?
     private(set) var requests: [InferenceRequest] = []
     private(set) var cancellationCount = 0
 
-    init(outputs: [InferenceOutput], outcome: RunOutcome = .completed(.init(metadata: ["fixture": "yes"]))) {
+    init(outputs: [InferenceOutput], outcome: RunOutcome = .completed(.init(metadata: ["fixture": "yes"])), recordGate: TextDraftGate? = nil) {
         self.outputs = outputs
         self.outcome = outcome
+        self.recordGate = recordGate
     }
 
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
         requests.append(request)
         let outputs = self.outputs
         let outcome = self.outcome
+        let recordGate = self.recordGate
         let stream = AsyncThrowingStream<InferenceOutput, Error> { continuation in
             outputs.forEach { continuation.yield($0) }
             continuation.finish()
         }
         return InferenceRun(id: request.id, events: stream,
-                            cancel: { await self.recordCancellation() }, outcome: { outcome })
+                            cancel: { await self.recordCancellation() }, outcome: { outcome },
+                            executionRecord: { await recordGate?.arrive(); return nil })
     }
 
     private func recordCancellation() { cancellationCount += 1 }
@@ -66,16 +70,18 @@ private actor AdmissionBlockingTextDraftEngine: InferenceEngine {
 
 private actor OutcomeGatedTextDraftEngine: InferenceEngine {
     let gate: TextDraftGate
+    let outcome: RunOutcome
     private(set) var cancellationCount = 0
 
-    init(gate: TextDraftGate) { self.gate = gate }
+    init(gate: TextDraftGate, outcome: RunOutcome = .cancelled) { self.gate = gate; self.outcome = outcome }
 
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
         let gate = self.gate
+        let outcome = self.outcome
         return InferenceRun(id: request.id, events: AsyncThrowingStream { $0.finish() },
                             cancel: { await self.recordCancellation() }, outcome: {
                                 await gate.arrive()
-                                return .cancelled
+                                return outcome
                             })
     }
 
@@ -101,6 +107,74 @@ private actor MidstreamTextDraftEngine: InferenceEngine {
 @Suite("Text draft session", .serialized) @MainActor
 struct TextDraftSessionTests {
     private let model = ModelReference(directory: URL(fileURLWithPath: "/tmp/text-draft-model", isDirectory: true))
+
+    @Test func rewriteServiceKeepsAutomaticExplicitAndLegacyExecutionChoices() async throws {
+        for choice: String? in ["automatic", "resident", "ssdLayered", nil] {
+            let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+                .appendingPathComponent("rewrite-plan-" + UUID().uuidString + ".dproject")
+            let store = try await ProjectStore.create(at: root, name: "Rewrite fixture")
+            let engine = ImmediateTextDraftEngine(outputs: [.textDelta("replacement")])
+            let session = WorkbenchSession(engine: engine, backendID: "fixture",
+                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+            let service = WorkflowServices(store: store, session: session) { _, identity in
+                .init(identity: identity, reference: model, backendID: "fixture")
+            }
+            var node = try #require(WorkflowRegistry.standard.operation("d.text.rewrite")).definition.makeNode()
+            node.parameters["modelID"] = .text("text:fixture")
+            node.parameters["fallbackText"] = .text("original")
+            node.parameters["loadingStrategy"] = choice.map(WorkflowScalar.text)
+            node.parameters["memoryBudgetGiB"] = choice == nil ? nil : .integer(3)
+            try service.beginPlan()
+            _ = try await service.executeCall(.init(node: node, stepID: UUID(), inputs: [:]))
+            let request = try #require(await engine.requests.first)
+            #expect(await engine.requests.count == 1)
+            let expectedSelection: InferenceLoadingSelection? = choice == "automatic" ? .automatic : nil
+            let expectedBudget: UInt64? = choice == nil ? nil : 3 * 1_073_741_824
+            #expect(request.loadingSelection == expectedSelection)
+            #expect(request.memoryBudgetBytes == expectedBudget)
+            guard case .text(let text) = request.input else { Issue.record("Expected text"); return }
+            let expectedStrategy: TextLoadingStrategy? = choice == "ssdLayered" ? .ssdLayered : choice == nil ? nil : .resident
+            #expect(text.loadingStrategy == expectedStrategy)
+            try await store.close()
+            try FileManager.default.removeItem(at: root)
+        }
+    }
+
+    @Test func authoritativeFailureSurvivesCancellationAfterDrain() async throws {
+        for failure in [InferenceFailure.inputIntegrityChanged("changed"), .resourceCleanupUnconfirmed("not released")] {
+            let gate = TextDraftGate(), engine = OutcomeGatedTextDraftEngine(gate: gate, outcome: .failed(failure))
+            let subject = TextDraftSession(document: try TextDraftDocument(text: "original"), engine: engine, backendID: "fixture")
+            let selection = try subject.selection(inUTF16: NSRange(location: 0, length: 8))
+            let task = Task { try await subject.requestRewrite(selection: selection, instruction: "Change", model: model) }
+            try await waitUntil { await gate.hasReached() }
+            task.cancel()
+            #expect(subject.isRunning)
+            await gate.release()
+            do { try await task.value; Issue.record("Expected authoritative failure") }
+            catch let actual as InferenceFailure { #expect(actual == failure) }
+            #expect(!subject.isRunning && subject.document.text == "original" && subject.candidate == nil)
+            #expect(await engine.cancellationCount == 1)
+        }
+    }
+
+    @Test func cancellationDuringFinalRecordReadCannotPublishCandidate() async throws {
+        for parentCancellation in [false, true] {
+            let gate = TextDraftGate()
+            let engine = ImmediateTextDraftEngine(outputs: [.textDelta("replacement")], recordGate: gate)
+            let subject = TextDraftSession(document: try TextDraftDocument(text: "original"), engine: engine, backendID: "fixture")
+            let selection = try subject.selection(inUTF16: NSRange(location: 0, length: 8))
+            let task = Task { try await subject.requestRewrite(selection: selection, instruction: "Change", model: model) }
+            try await waitUntil { await gate.hasReached() }
+            var cancellation: Task<Void, Never>?
+            if parentCancellation { task.cancel() }
+            else { cancellation = Task { await subject.cancel() }; try await waitUntil { subject.isCancelling } }
+            #expect(subject.isRunning)
+            await gate.release()
+            await #expect(throws: CancellationError.self) { try await task.value }
+            await cancellation?.value
+            #expect(!subject.isRunning && subject.document.text == "original" && subject.candidate == nil)
+        }
+    }
 
     private func waitUntil(_ condition: @MainActor () async -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(2)

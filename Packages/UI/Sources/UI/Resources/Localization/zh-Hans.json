@@ -1068,7 +1068,7 @@
     "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.field.seed": "种子",
     "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.field.steps": "步数",
     "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.field.stg": "STG 引导",
-    "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.field.streamWeights": "流式加载扩散权重",
+    "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.field.streamWeights": "低内存运行",
     "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.field.width": "宽（32 的倍数）",
     "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.input.firstFrame": "首帧 PNG",
     "workflow.operation.d.video.ltx-2.3-dev-bf16-full-v1.input.prompt": "提示",
@@ -1086,7 +1086,7 @@
     "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.field.seed": "种子",
     "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.field.steps": "步数",
     "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.field.stg": "STG 引导",
-    "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.field.streamWeights": "流式加载扩散权重",
+    "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.field.streamWeights": "低内存运行",
     "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.field.width": "宽（32 的倍数）",
     "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.input.firstFrame": "首帧 PNG",
     "workflow.operation.d.video.ltx-2.3-dev-q8-gemma3-q4-test-v1.input.prompt": "提示",
@@ -1104,7 +1104,7 @@
     "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.field.seed": "种子",
     "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.field.steps": "步数",
     "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.field.stg": "STG 引导",
-    "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.field.streamWeights": "流式加载扩散权重",
+    "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.field.streamWeights": "低内存运行",
     "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.field.width": "宽（32 的倍数）",
     "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.input.firstFrame": "首帧 PNG",
     "workflow.operation.d.video.ltx-2.5-dev-bf16-full-v1.input.prompt": "提示",
@@ -1120,7 +1120,7 @@
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.field.promptText": "提示",
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.field.seed": "种子",
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.field.steps": "步数",
-    "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.field.streamWeights": "流式加载扩散权重",
+    "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.field.streamWeights": "低内存运行",
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.field.width": "宽（32 的倍数）",
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.input.firstFrame": "首帧 PNG",
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.input.lastFrame": "尾帧 PNG",
@@ -5795,6 +5795,8 @@
     "workflow.example.json.repairOneInvalidJSONCandidate": "修正一个无效 JSON 候选",
     "modelManagement.local.filesChanged": "模型文件或其记录已改变。请重新选择并检查文件。",
     "modelManagement.local.stagingRetained": "添加未完成。暂存文件已改变，D 已保留这些文件；原文件未修改。",
-    "workflow.creation.publishedText": "已发布文稿"
+    "workflow.creation.publishedText": "已发布文稿",
+    "workflow.operation.d.model.language.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）",
+    "workflow.operation.d.text.rewrite.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）"
   }
 }

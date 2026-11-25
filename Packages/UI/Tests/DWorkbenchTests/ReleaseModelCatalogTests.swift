@@ -6,6 +6,39 @@ import Testing
 
 @Suite(.serialized)
 struct ReleaseModelCatalogTests {
+    @Test func newCatalogModelNodesDoNotEncodeDefaultAsUserFixedLoading() throws {
+        for entry in try ModelCatalog.entries() {
+            // SA3 is the existing separate audio entry; SwiftF0 has one bounded
+            // CPU working set. Neither invents a redundant node loading choice.
+            if entry.id == "stable-audio-small-music" {
+                #expect(entry.workflowProfileID == nil)
+                continue
+            }
+            let route = try #require(entry.workflowProfileID)
+            let definition = try #require(WorkflowRegistry.standard.operation(route)?.definition)
+            if entry.id == "swift-f0-0.1.2-cpu-v1" { continue }
+            let node = definition.makeNode()
+            #expect(node.parameters["loadingStrategy"] == .text("automatic")
+                || node.parameters["memoryStrategySelection"] == .text("automatic"),
+                "New catalog entry must defer to the global decision: \(entry.id)")
+        }
+    }
+
+    @Test func legacyLoadingFieldsStayAbsentAndExplicitChoicesStayFixed() throws {
+        for route in ["d.model.language", "d.text.rewrite", "d.video.generate", "d.music.generate"] {
+            var node = try #require(WorkflowRegistry.standard.operation(route)?.definition).makeNode()
+            #expect(node.parameters["loadingStrategy"] == .text("automatic"))
+            node.parameters.removeValue(forKey: "loadingStrategy")
+            if ["d.model.language", "d.text.rewrite"].contains(route) { node.parameters.removeValue(forKey: "memoryBudgetGiB") }
+            let stored = node
+            try WorkflowRegistry.standard.validate(node)
+            #expect(node == stored && node.parameters["loadingStrategy"] == nil)
+            node.parameters["loadingStrategy"] = .text("resident")
+            try WorkflowRegistry.standard.validate(node)
+            #expect(node.parameters["loadingStrategy"] == .text("resident"))
+        }
+    }
+
     @Test func normalizedCatalogUsesProcessedResourcePath() throws {
         let here = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         let repo = here.deletingLastPathComponent().deletingLastPathComponent()

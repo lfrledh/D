@@ -22,11 +22,9 @@ struct TextExecutionCapabilityTests {
         try capability.validate(legacy)
     }
 
-    @Test func legacyBackendDoesNotSilentlyIgnoreSSDSelection() throws {
+    @Test func legacyQwenProfileAdmitsImplementedLayeredSelection() throws {
         try capability.validate(TextRequest(prompt: "old", loadingStrategy: .resident))
-        #expect(throws: InferenceFailure.self) {
-            try capability.validate(TextRequest(prompt: "invalid", loadingStrategy: .ssdLayered))
-        }
+        try capability.validate(TextRequest(prompt: "same Q4 model", loadingStrategy: .ssdLayered))
         let vlm = TextExecutionCapability(maximumPromptTokens: 2048, maximumOutputTokens: 256,
             profile: TextExecutionCapability.qwen35VLMProfile)
         try vlm.validate(TextRequest(prompt: "new", loadingStrategy: .ssdLayered))

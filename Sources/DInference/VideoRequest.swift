@@ -20,6 +20,7 @@ public struct VideoFrameRate: Sendable, Codable, Equatable {
 /// Adapter-specific request values. The selected execution profile determines which
 /// case is valid; nil preserves video requests recorded before these adapters existed.
 public enum VideoAdapterOptions: Sendable, Codable, Equatable {
+    case wan(streamWeights: Bool)
     case h3(streamWeights: Bool)
     case ltx(streamWeights: Bool, spatiotemporalGuidance: Float)
 }

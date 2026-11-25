@@ -603,7 +603,8 @@ struct WorkflowImageHistoryFailure: LocalizedError {
             width: p["width"]?.integer ?? 256, height: p["height"]?.integer ?? 256, frameCount: p["frameCount"]?.integer ?? 17,
             frameRate: .init(numerator: numerator), steps: p["steps"]?.integer ?? 4,
             guidanceScale: Float(p["guidance"]?.decimal ?? 5), scheduleShift: Float(p["scheduleShift"]?.decimal ?? 5),
-            seed: seed, executionProfile: capability.profile)
+            seed: seed, executionProfile: capability.profile,
+            adapterOptions: p["loadingStrategy"]?.string == "ssdLayered" ? .wan(streamWeights: true) : nil)
             try capability.validate(input)
         }
         return try await generateMedia(.video(input), mediaType: "video/mp4", parents: context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] },
@@ -717,17 +718,25 @@ struct WorkflowImageHistoryFailure: LocalizedError {
         let editor = TextDraftSession(document: try TextDraftDocument(text: text, generationSettings: settings),
                                       engine: session.engine, backendID: binding.backendID)
         textSession = editor
-        defer { textSession = nil }
+        defer {
+            if let record = editor.executionRecord {
+                recordedExecutions = recordedExecutions.mergingExecutionRecords([record])
+            }
+            textSession = nil
+        }
         let selection = try editor.selection(inUTF16: NSRange(location: 0, length: text.utf16.count))
         try checkCancellation()
         reportProgress(.init("rewritingPreview"))
         try await editor.requestRewrite(selection: selection, instruction: p["instruction"]?.string ?? "",
-            model: binding.reference, temperature: Float(p["temperature"]?.decimal ?? 0.7), topP: Float(p["topP"]?.decimal ?? 0.95))
+            model: binding.reference, temperature: Float(p["temperature"]?.decimal ?? 0.7), topP: Float(p["topP"]?.decimal ?? 0.95),
+            loadingStrategy: try WorkflowLanguageMessageForm.loadingStrategy(p),
+            memoryBudgetBytes: try WorkflowLanguageMessageForm.memoryBudgetBytes(p),
+            loadingSelection: p["loadingStrategy"] == .text("automatic") ? .automatic : nil)
         try checkCancellation()
         guard let candidate = editor.candidate else { throw WorkflowIssue("后端没有返回可发布文字。") }
         pending[context.stepID] = Publication(id: UUID(), data: Data(candidate.replacement.utf8), mediaType: "text/plain",
             metadata: .init(), parents: parents, request: candidate.request,
-            details: candidate.executionDetails()
+            details: try candidate.executionDetails()
                 .merging(["modelIdentity": binding.identity]) { _, actual in actual })
         return try await publish(context)
     }

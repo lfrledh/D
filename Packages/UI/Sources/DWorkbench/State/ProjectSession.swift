@@ -570,7 +570,7 @@ public final class ProjectSession {
                         // automatic publication into a user's workflow, acceptance, or downstream run.
                         _ = try await currentStore.publishWorkflowAsset(data: Data(candidate.replacement.utf8),
                             mediaType: "text/plain", name: "文字改写候选", operationID: "d.text.rewrite",
-                            request: candidate.request, details: candidate.executionDetails(),
+                            request: candidate.request, details: try candidate.executionDetails(),
                             assetID: candidate.runID)
                         guard self.textContextID == identity else { return }
                         self.applyManifest(await currentStore.snapshot()); await self.refreshAssets()
@@ -3347,7 +3347,7 @@ public final class ProjectSession {
                 }
                 try Task.checkCancellation()
                 let input = try value.makeRequest(source: source)
-                let request = InferenceRequest(id: id, model: reference, input: .audio(input))
+                let request = InferenceRequest(id: id, model: reference, input: .audio(input), loadingSelection: .automatic)
                 await admit(request, documentID: documentID, savedDraft: saved, store: store,
                             session: session, backendID: backendID)
             } catch {

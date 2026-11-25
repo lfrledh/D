@@ -6,6 +6,7 @@ import Observation
 public final class TextDraftSession {
     public private(set) var document: TextDraftDocument
     public private(set) var candidate: TextRewriteCandidate?
+    public private(set) var executionRecord: InferenceExecutionRecord?
     public private(set) var partialText = ""
     public private(set) var isRunning = false
     /// Immutable admitted selection shared by every presentation of this session.
@@ -68,7 +69,10 @@ public final class TextDraftSession {
 
     public func requestRewrite(selection: TextRewriteSelection, instruction: String,
                                model: ModelReference, maxTokens: Int? = nil,
-                               temperature: Float = 0.7, topP: Float = 0.95) async throws {
+                               temperature: Float = 0.7, topP: Float = 0.95,
+                               loadingStrategy: TextLoadingStrategy? = nil,
+                               memoryBudgetBytes: UInt64? = nil,
+                               loadingSelection: InferenceLoadingSelection? = .automatic) async throws {
         guard !isRunning else { throw TextDraftError.alreadyRunning }
         guard selection.documentID == document.id,
               selection.documentRevision == document.revision,
@@ -83,11 +87,14 @@ public final class TextDraftSession {
             temperature: temperature,
             topP: topP,
             execution: TextExecutionSelection(profile: settings.profile,
-                                              maximumPromptTokens: settings.maximumPromptTokens))
-        let request = InferenceRequest(model: model, input: .text(textRequest))
+                                              maximumPromptTokens: settings.maximumPromptTokens),
+            loadingStrategy: loadingStrategy)
+        let request = InferenceRequest(model: model, input: .text(textRequest),
+            memoryBudgetBytes: memoryBudgetBytes, loadingSelection: loadingSelection)
         try request.validate()
 
         candidate = nil
+        executionRecord = nil
         partialText = ""
         errorMessage = nil
         runningSelection = selection
@@ -105,6 +112,7 @@ public final class TextDraftSession {
 
             var replacement = ""
             var localError: TextDraftError?
+            var streamCancelled = false
             do {
                 for try await output in run.events {
                     if cancellationRequested || Task.isCancelled {
@@ -130,7 +138,9 @@ public final class TextDraftSession {
                     partialText = replacement
                 }
             } catch {
-                if !cancellationRequested && !Task.isCancelled {
+                if error is CancellationError {
+                    streamCancelled = true
+                } else if !cancellationRequested && !Task.isCancelled {
                     localError = .inferenceFailed(error.localizedDescription)
                     await cancelRunIfNeeded(run, operationID: request.id)
                 }
@@ -145,17 +155,25 @@ public final class TextDraftSession {
                     await self?.requestCancellation(operationID: request.id)
                 }
             })
+            executionRecord = await run.executionRecord()
             let wasCancelled = cancellationRequested || Task.isCancelled
             activeRun = nil
             finishRun(operationID: request.id)
 
-            if wasCancelled { throw CancellationError() }
+            if case .failed(let failure) = outcome {
+                switch failure {
+                case .inputIntegrityChanged, .resourceCleanupUnconfirmed: throw failure
+                default: break
+                }
+            }
+            if wasCancelled || streamCancelled { throw CancellationError() }
             if let localError { throw localError }
             switch outcome {
             case .completed(let result):
                 guard !replacement.isEmpty else { throw TextDraftError.emptyReplacement }
                 candidate = TextRewriteCandidate(runID: run.id, selection: selection,
-                                                 replacement: replacement, request: request, result: result, backendID: backendID)
+                                                 replacement: replacement, request: request, result: result, backendID: backendID,
+                                                 executionRecord: executionRecord)
             case .cancelled:
                 throw CancellationError()
             case .failed(let failure):

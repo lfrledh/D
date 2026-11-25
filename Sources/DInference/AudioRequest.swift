@@ -40,9 +40,10 @@ public struct AudioRequest: Codable, Sendable, Equatable {
 
     public init(operation: AudioOperation, prompt: String, durationSeconds: Double,
                 seed: UInt64, steps: Int, guidanceScale: Float = 1, strength: Float = 1,
-                source: AudioSourceReference? = nil, editRegion: AudioEditRegion? = nil) {
+                source: AudioSourceReference? = nil, editRegion: AudioEditRegion? = nil,
+                loadingStrategy: AudioDiffusionLoadingStrategy? = nil) {
         self.operation = operation; self.prompt = prompt; self.durationSeconds = durationSeconds
-        self.seed = seed; self.parameters = .diffusion(.init(steps: steps, guidanceScale: guidanceScale, strength: strength))
+        self.seed = seed; self.parameters = .diffusion(.init(steps: steps, guidanceScale: guidanceScale, strength: strength, loadingStrategy: loadingStrategy))
         self.source = source; self.editRegion = editRegion
     }
 
@@ -72,7 +73,7 @@ public struct AudioRequest: Codable, Sendable, Equatable {
     public var outputSampleRate: Int { diffusion == nil ? 48_000 : 44_100 }
 
     private enum CodingKeys: String, CodingKey {
-        case operation, prompt, durationSeconds, seed, steps, guidanceScale, strength, source, editRegion, parameters
+        case operation, prompt, durationSeconds, seed, steps, guidanceScale, strength, source, editRegion, parameters, loadingStrategy
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -87,10 +88,11 @@ public struct AudioRequest: Codable, Sendable, Equatable {
             parameters = try c.decode(AudioSynthesisParameters.self, forKey: .parameters)
         } else {
             // Old project snapshots retain their exact flat diffusion representation.
-            try requireAudioKeys(decoder, allowed: ["operation", "prompt", "durationSeconds", "seed", "source", "editRegion", "steps", "guidanceScale", "strength"])
+            try requireAudioKeys(decoder, allowed: ["operation", "prompt", "durationSeconds", "seed", "source", "editRegion", "steps", "guidanceScale", "strength", "loadingStrategy"])
             parameters = .diffusion(.init(steps: try c.decode(Int.self, forKey: .steps),
                 guidanceScale: try c.decode(Float.self, forKey: .guidanceScale),
-                strength: try c.decode(Float.self, forKey: .strength)))
+                strength: try c.decode(Float.self, forKey: .strength),
+                loadingStrategy: try c.decodeIfPresent(AudioDiffusionLoadingStrategy.self, forKey: .loadingStrategy)))
         }
         try validate()
     }
@@ -103,6 +105,7 @@ public struct AudioRequest: Codable, Sendable, Equatable {
         case .diffusion(let value):
             try c.encode(value.steps, forKey: .steps); try c.encode(value.guidanceScale, forKey: .guidanceScale)
             try c.encode(value.strength, forKey: .strength)
+            try c.encodeIfPresent(value.loadingStrategy, forKey: .loadingStrategy)
         case .mrt2FixedV1, .aceStep15:
             try c.encode(parameters, forKey: .parameters)
         }
