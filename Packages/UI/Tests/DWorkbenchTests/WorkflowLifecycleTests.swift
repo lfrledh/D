@@ -1062,6 +1062,8 @@ struct WorkflowLifecycleTests {
         let graphRecord = try #require(try await c.services.store.workflowState().archive?.assets.first { $0.reference == output })
         #expect(graphRecord.request?.model == record.request?.model)
         #expect(graphRecord.request?.input == record.request?.input)
+        #expect(record.request?.loadingSelection == .automatic)
+        #expect(graphRecord.request?.loadingSelection == record.request?.loadingSelection)
         #expect(graphRecord.metadata["backend"] == record.metadata["backend"])
         #expect(graphRecord.metadata["operation"] == record.metadata["operation"])
         #expect(graphRecord.metadata["runID"] != record.metadata["runID"])

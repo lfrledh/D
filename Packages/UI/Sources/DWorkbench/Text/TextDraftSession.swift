@@ -70,7 +70,7 @@ public final class TextDraftSession {
     public func requestRewrite(selection: TextRewriteSelection, instruction: String,
                                model: ModelReference, maxTokens: Int? = nil,
                                temperature: Float = 0.7, topP: Float = 0.95,
-                               loadingStrategy: TextLoadingStrategy? = nil,
+                               loadingStrategy: TextLoadingStrategy? = .resident,
                                memoryBudgetBytes: UInt64? = nil,
                                loadingSelection: InferenceLoadingSelection? = .automatic) async throws {
         guard !isRunning else { throw TextDraftError.alreadyRunning }
