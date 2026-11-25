@@ -2,9 +2,29 @@ import Foundation
 import MLXLMCommon
 import Testing
 @testable import DMLXBackend
+@testable import MLXVLM
 
 @Suite("Fixed local Qwen file projection")
 struct LocalModelFileSetTests {
+    @Test func denseQwenNestedEOSKeepsExplicitOverridesAndRejectsMalformedFallback() throws {
+        func resolve(_ body: String, generation: String? = nil) throws -> Set<Int> {
+            let data = Data(body.utf8)
+            let base = try JSONDecoder().decode(BaseConfiguration.self, from: data)
+            let config = try generation.map { try JSONDecoder().decode(GenerationConfigFile.self, from: Data($0.utf8)) }
+            return try resolveVLMEOSTokenIds(configData: data, base: base, generation: config)
+        }
+        let nested = #"{"model_type":"qwen3_5","text_config":{"eos_token_id":248044}}"#
+        #expect(try resolve(nested) == [248044])
+        #expect(try resolve(#"{"model_type":"qwen3_5","text_config":{"eos_token_id":[248044,248046]}}"#) == [248044,248046])
+        #expect(try resolve(#"{"model_type":"qwen3_5","eos_token_id":248046,"text_config":{"eos_token_id":248044}}"#) == [248046])
+        #expect(try resolve(nested, generation: #"{"eos_token_id":[248046]}"#) == [248046])
+        #expect(try resolve(nested, generation: #"{"eos_token_id":[]}"#).isEmpty)
+        let badNested = #"{"model_type":"qwen3_5","text_config":{"eos_token_id":"bad"}}"#
+        #expect(throws: DecodingError.self) { try resolve(badNested) }
+        #expect(try resolve(badNested, generation: #"{"eos_token_id":248046}"#) == [248046])
+        #expect(try resolve(#"{"model_type":"qwen3_5","eos_token_id":[],"text_config":{"eos_token_id":"bad"}}"#).isEmpty)
+        #expect(try resolve(#"{"model_type":"qwen2_vl","text_config":{"eos_token_id":"bad"}}"#).isEmpty)
+    }
     @Test func catalogMatchesEightWorkbenchManifests() throws {
         let source = URL(fileURLWithPath: #filePath)
         let root = (0..<5).reduce(source) { url, _ in url.deletingLastPathComponent() }

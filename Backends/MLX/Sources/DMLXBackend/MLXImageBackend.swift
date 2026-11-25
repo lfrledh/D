@@ -79,7 +79,7 @@ public actor MLXImageBackend: InferenceExecutionPlanning {
         return try ModelExecutionSeal.capture(request.model, backend: descriptor, names: inventory.admittedPaths)
     }
     public func lowMemoryPlans(for request: InferenceRequest) async throws -> [InferenceExecutionPlan] {
-        guard request.model.revision == LocalImageModelInventory.fullRevision else { return [] }
+        guard [LocalImageModelInventory.fullRevision, LocalImageModelInventory.revision].contains(request.model.revision ?? LocalImageModelInventory.revision) else { return [] }
         let seal = try planSeal(request)
         return [.init(request: try request.lowMemoryRequest(method: .layered), method: .layered,
             strategyVersion: 1, modelIdentityToken: seal.token)]

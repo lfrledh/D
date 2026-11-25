@@ -70,7 +70,19 @@ struct AudioModelInventory: Sendable {
             weights.append(Weight(path: file.path, size: file.size,
                                   sha256: file.sha256, identity: identity))
         }
-        let peak = try estimate(largestWeight: weights.map(\.size).max() ?? 0,
+        let largest: UInt64
+        if diffusion.loadingStrategy == .ssdLayered {
+            guard supplied.profile == .smMusic else {
+                throw InferenceFailure.invalidRequest("Only the fixed SA3 small music profile has a layered route.")
+            }
+            // Exact original f16 NPZ shapes: 256000x768 embedding + norms/RoPE,
+            // one of 12 T5 blocks, or DiT shared + one of 20 blocks. Codec stays F32.
+            let text = UInt64(393_217_664 + 14_161_920)
+            let dit = UInt64(26_894_368 + 44_608_000)
+            let codec = weights.filter { $0.path.contains("same_s_") }.map(\.size).max() ?? 0
+            largest = max(text, dit, codec)
+        } else { largest = weights.map(\.size).max() ?? 0 }
+        let peak = try estimate(largestWeight: largest,
                                 durationSeconds: audio.durationSeconds)
         return Self(directory: request.model.directory.standardizedFileURL, profile: supplied.profile,
                     weights: weights, estimatedPeakBytes: peak, configuration: config)

@@ -112,7 +112,7 @@ struct PitchBackendLifecycleTests {
         #expect(admission.pythonResolvedURL
                 == fixture.configuration.pythonExecutable.resolvingSymlinksInPath().standardizedFileURL)
         let estimate = try await backend.estimate(fixture.request)
-        #expect(estimate == ResourceEstimate(peakBytes: 256 * 1024 * 1024))
+        #expect(estimate == ResourceEstimate(peakBytes: 256 * 1024 * 1024 + 256 * 256))
         #expect(!FileManager.default.fileExists(atPath: fixture.marker.path))
     }
 

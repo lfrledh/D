@@ -428,7 +428,8 @@ def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Pat
     plan = build_plan(plan_request, engine=sys.executable, model=model, text_encoder=text_encoder, output=output,
                       first_frame=str(frames["first"][0]) if "first" in frames else None)
     upstream = _confirm_tokenizer_patch(Path(sys.executable),
-        streaming_gemma4=profile == LTX_25 and plan_request["stream_weights"])
+        streaming_gemma4=profile == LTX_25 and plan_request["stream_weights"],
+        streaming_gemma3=profile != LTX_25 and plan_request["stream_weights"])
     previous = sys.argv
     try:
         _unchanged_frames(frames)

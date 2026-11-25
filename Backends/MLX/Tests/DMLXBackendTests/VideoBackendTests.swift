@@ -14,6 +14,18 @@ struct VideoBackendTests {
             scheduleShift: 8, seed: seed, executionProfile: VideoBackendConfiguration.profile)
     }
 
+    @Test("Layered estimate rejects overflow across individually valid tensor groups")
+    func layeredEstimateOverflow() throws {
+        var rows: [[String: Any]] = (0..<1261).map { index in
+            ["role": "text", "name": "blocks.0.w\(index)", "shape": [1], "dtype": "BF16"]
+        }
+        rows[0] = ["role": "text", "name": "shared", "shape": [UInt64.max / 2], "dtype": "BF16"]
+        let data = try JSONSerialization.data(withJSONObject: ["tensors": rows])
+        #expect(throws: InferenceFailure.invalidResourceEstimate) {
+            try MLXVideoBackend.streamingPeak(video(), manifest: data)
+        }
+    }
+
     @Test("Adapter checks model constraints, not the development Mac memory ceiling")
     func explicitScaleAndRejection() throws {
         for value in [video(), video(width: 1920, height: 1088, frames: 81)] {

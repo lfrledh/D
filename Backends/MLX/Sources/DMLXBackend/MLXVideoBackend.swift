@@ -5,7 +5,7 @@ import Foundation
 
 /// Thin local-process adapter. The runtime owns admission; this actor owns the
 /// shared heavy-compute lease until the child, readers and media writer drain.
-public actor MLXVideoBackend: InferenceBackend {
+public actor MLXVideoBackend: InferenceExecutionPlanning {
     public nonisolated let descriptor = BackendDescriptor(
         id: "mlx.video.wan21", version: "1", capabilities: [.videoGeneration])
     public nonisolated let executionCapability = VideoExecutionCapability.wan21
@@ -24,8 +24,91 @@ public actor MLXVideoBackend: InferenceBackend {
     }
 
     public func estimate(_ request: InferenceRequest) async throws -> ResourceEstimate {
-        let (video, _) = try inspect(request)
+        let (video, manifest) = try inspect(request)
+        if video.adapterOptions == .wan(streamWeights: true) {
+            return ResourceEstimate(peakBytes: try Self.streamingPeak(video, manifest: manifest))
+        }
         return ResourceEstimate(peakBytes: try VideoBackendConfiguration.estimate(video))
+    }
+
+    private func planSeal(_ request: InferenceRequest) throws -> ModelExecutionSeal {
+        let (_, data) = try inspect(request)
+        guard let manifest = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = manifest["tensors"] as? [[String: Any]], rows.count == 1261 else {
+            throw InferenceFailure.invalidRequest("Wan preparation must contain the exact tensor inventory.")
+        }
+        let names = try rows.map { row -> String in
+            guard let path = row["path"] as? String else { throw InferenceFailure.invalidResourceEstimate }
+            return path
+        }
+        return try ModelExecutionSeal.capture(request.model, backend: descriptor,
+            names: names + ["D-VIDEO-PREPARED.json"] + WanTokenizerResource.files.map(\.preparedPath))
+    }
+
+    public func lowMemoryPlans(for request: InferenceRequest) async throws -> [InferenceExecutionPlan] {
+        let seal = try planSeal(request)
+        return [.init(request: try request.lowMemoryRequest(method: .streaming), method: .streaming,
+            strategyVersion: 1, modelIdentityToken: seal.token)]
+    }
+    public func validate(_ plan: InferenceExecutionPlan, for original: InferenceRequest) async throws {
+        try plan.validateSemantics(original: original)
+        guard plan.method == .streaming, plan.strategyVersion == 1,
+              try planSeal(original).token == plan.modelIdentityToken else {
+            throw InferenceFailure.inputIntegrityChanged("Approved Wan model files changed.")
+        }
+    }
+    public func execute(_ plan: InferenceExecutionPlan, for original: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await validate(plan, for: original)
+        return try await execute(plan.request, expectedPlan: plan, emit: emit)
+    }
+
+    /// Exact stored shared/block bytes plus bounded activation workspaces. VAE
+    /// retains its existing chunked route; frame count still contributes to DiT.
+    static func streamingPeak(_ video: VideoRequest, manifest: Data) throws -> UInt64 {
+        guard let object = try JSONSerialization.jsonObject(with: manifest) as? [String: Any],
+              let rows = object["tensors"] as? [[String: Any]], rows.count == 1261 else {
+            throw InferenceFailure.invalidResourceEstimate
+        }
+        var groups: [String: [String: UInt64]] = [:]
+        for row in rows {
+            guard let role = row["role"] as? String, ["text", "diffusion", "vae"].contains(role),
+                  let name = row["name"] as? String, let shape = row["shape"] as? [UInt64], !shape.isEmpty,
+                  let dtype = row["dtype"] as? String, ["BF16", "F32"].contains(dtype) else {
+                throw InferenceFailure.invalidResourceEstimate
+            }
+            var bytes: UInt64 = dtype == "F32" ? 4 : 2
+            for dimension in shape {
+                let next = bytes.multipliedReportingOverflow(by: dimension)
+                guard dimension > 0, !next.overflow else { throw InferenceFailure.invalidResourceEstimate }
+                bytes = next.partialValue
+            }
+            let group = name.hasPrefix("blocks.") ? name.split(separator: ".").prefix(2).joined(separator: ".") : "shared"
+            let next = (groups[role]?[group] ?? 0).addingReportingOverflow(bytes)
+            guard !next.overflow else { throw InferenceFailure.invalidResourceEstimate }
+            groups[role, default: [:]][group] = next.partialValue
+        }
+        func sum(_ values: UInt64...) throws -> UInt64 {
+            try values.reduce(0) { value, next in
+                let result = value.addingReportingOverflow(next)
+                guard !result.overflow else { throw InferenceFailure.invalidResourceEstimate }
+                return result.partialValue
+            }
+        }
+        func peak(_ role: String) throws -> UInt64 {
+            let entries = groups[role] ?? [:]
+            return try sum(entries["shared"] ?? 0, entries.filter { $0.key != "shared" }.values.max() ?? 0)
+        }
+        let gib: UInt64 = 1_073_741_824
+        // Original T5 attention materializes 64 full 512x512 score matrices;
+        // allow its FP32 softmax, residual/FFN intermediates and allocator margin.
+        let text = try sum(peak("text"), gib)
+        let tokens = UInt64((video.frameCount - 1) / 4 + 1) * UInt64(video.width / 16) * UInt64(video.height / 16)
+        let work = tokens.multipliedReportingOverflow(by: 1536 * 4 * 32)
+        guard !work.overflow else { throw InferenceFailure.invalidResourceEstimate }
+        let diffusion = try sum(peak("diffusion"), work.partialValue, gib)
+        let decoderWork = UInt64(video.width) * UInt64(video.height) * (4 * 384 * 4 * 8)
+        return max(text, diffusion, try sum(decoderWork, gib))
     }
 
     private func inspect(_ request: InferenceRequest) throws -> (VideoRequest, Data) {
@@ -73,6 +156,10 @@ public actor MLXVideoBackend: InferenceBackend {
 
     public func execute(_ request: InferenceRequest,
                         emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await execute(request, expectedPlan: nil, emit: emit)
+    }
+    private func execute(_ request: InferenceRequest, expectedPlan: InferenceExecutionPlan?,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         guard !executing, !releasing, lease == nil else {
             throw InferenceFailure.backendFailed("Video run requires release of the previous execution.")
         }
@@ -80,9 +167,15 @@ public actor MLXVideoBackend: InferenceBackend {
         defer { executing = false }
         try Task.checkCancellation()
         let (video, manifestData) = try inspect(request)
+        if let expectedPlan, try planSeal(request).token != expectedPlan.modelIdentityToken {
+            throw InferenceFailure.inputIntegrityChanged("Approved Wan files changed before execution.")
+        }
         let token = UUID()
         try await MLXExecutionLease.shared.acquire(token)
         lease = token
+        if let expectedPlan, try planSeal(request).token != expectedPlan.modelIdentityToken {
+            throw InferenceFailure.inputIntegrityChanged("Approved Wan files changed while queued.")
+        }
         let run = try Self.makeRunDirectory(root: configuration.artifactDirectory, id: request.id)
         let output = run.appendingPathComponent("frames", isDirectory: true)
         let requestURL = run.appendingPathComponent("request.json")
@@ -137,6 +230,9 @@ public actor MLXVideoBackend: InferenceBackend {
         let (currentRequest, _) = try AudioFileSystem.readRegularFile(requestURL, label: "video request", maximumBytes: 1_048_576)
         guard currentManifest == manifestData, currentRequest == data else {
             throw InferenceFailure.backendFailed("Video request or model manifest changed during execution.")
+        }
+        if let expectedPlan, try planSeal(request).token != expectedPlan.modelIdentityToken {
+            throw InferenceFailure.inputIntegrityChanged("Approved Wan files changed during execution.")
         }
         let sequence = try VideoProviderProtocol.validate(snapshot, requestData: data, manifestData: manifestData,
             video: video, rawURL: output.appendingPathComponent("frames.rgb"))

@@ -14,9 +14,9 @@
   "snapshot": {
     "fileCount": 206,
     "upstreamBytes": 41852259,
-    "patchedBytes": 41922843,
+    "patchedBytes": 41924454,
     "manifest": "flux2-swift.files.json",
-    "manifestSHA256": "f4c52d9e14da1ab720ce1578c580e54630a847273bfaf50857adebef9c646a08",
+    "manifestSHA256": "28b1ca3064aa6b5a4ccfbbe0bffb2af02f1abc5bad9c2f17b64221995746c2c0",
     "selection": "All 206 tracked upstream blobs; no trimming or expanded gitlinks."
   },
   "patches": [
@@ -99,29 +99,29 @@
     },
     {
       "file": "patches/flux2-klein-ssd-layered.patch",
-      "sha256": "5f86e4b6ce11c5215530ebd3c1b078c5006c9a4bde0a8ddd71efe2670564913f",
-      "description": "Original Klein and Dev block streaming, same numerical kernels; strict identity and parity controls; B5 validates the same admission snapshot before each layered encoder read.",
+      "sha256": "0c89a47b2b7cb27dff1f5d93532ec04ddd8a59cd6bb422fa6c043537e5076c00",
+      "description": "Original Klein and Dev block streaming, same numerical kernels; strict identity and parity controls; B5 validates the same admission snapshot before each layered encoder read. Preserve original packed Q8 weights and scale/bias dtypes in layer-wise reads.",
       "modifiedFiles": [
         {
           "path": "Sources/Flux2/IO/SafeTensorsReader.swift",
           "upstreamSHA256": "3025da02f505a34962861cb2a84854e53e87c3ce0b778679269897066321ddde",
-          "sha256": "a897785391bc51cedfd908cf2085d7c2a99f497d6651e67f90c4c5d159c05ba5",
+          "sha256": "6ad041910d7311d6f101073d9a8623964e1f9f31d6142fa090de4a73682b72a7",
           "upstreamSize": 8481,
-          "size": 15262
+          "size": 15382
         },
         {
           "path": "Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift",
           "upstreamSHA256": "56942a7d37c32a44565fee71b697a1f5e6b15f58fc0263258fb41cdb7374c3be",
-          "sha256": "8b109f2de0d007f15f1410c6ea0626cd147c877363b7e2c8f7018ed010bc0c84",
+          "sha256": "a438ca467929f64a77e309c445fe973fd9bfe3939e97b5738bdd62405b194d67",
           "upstreamSize": 10148,
-          "size": 13774
+          "size": 13723
         },
         {
           "path": "Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift",
           "upstreamSHA256": "72533cafb7de8d269bde25178388598a7083499fadf7a31ee87d620b28bf9641",
-          "sha256": "44e05b5b278b1cf6e1e787abacf3cff1d01c45a1ff4bd9793b99283aa49b09d3",
+          "sha256": "86f1ef62ea4b1ec2d678340e218a90e6ca0eef1cac483318b77400abf18a5779",
           "upstreamSize": 7455,
-          "size": 13841
+          "size": 14396
         },
         {
           "path": "Sources/Flux2/Pipeline/Flux2Denoiser.swift",
@@ -190,15 +190,15 @@
     },
     {
       "file": "patches/flux2-fixed-file-selection.patch",
-      "sha256": "4f72b7d9ba1d1acd4e55cbc1a994c18eeb442e9e93ac50e64fdaaf21006662a3",
+      "sha256": "bafac132a4bb3a3315298f352927f82faaddefa66700113affc36c2f736454be",
       "purpose": "Per-load verified file selection, no optional directory discovery; legacy default retained.",
       "modifiedFiles": [
         {
           "path": "Sources/Flux2/IO/Flux2Quantization.swift",
           "upstreamSHA256": "c90032742fcce459453c295079382618a871d0e5bc32325c04f5a4cf9aa38b7c",
-          "sha256": "d7685de1cea86749b35ed4200e5f941893d51d60e2a59e42db3aa22f35d84d7c",
+          "sha256": "98688b009f6a0158cd67c07cf2c493000c6999ff525079d7d3446757204a4e7b",
           "upstreamSize": 15023,
-          "size": 15200
+          "size": 16187
         },
         {
           "path": "Sources/Flux2/Models/VAE/Flux2AutoencoderKL.swift",
@@ -214,7 +214,8 @@
           "upstreamSize": 14851,
           "size": 14983
         }
-      ]
+      ],
+      "description": "Per-load verified file selection, no optional directory discovery; legacy default retained. Preserve original packed Q8 weights and scale/bias dtypes in layer-wise reads."
     }
   ]
 }

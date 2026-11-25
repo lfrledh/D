@@ -36,7 +36,7 @@ public actor ExternalVideoBackend: InferenceExecutionPlanning {
         switch video.adapterOptions {
         case .h3(let value)?: stream = value
         case .ltx(let value, _)?: stream = value
-        case nil: throw InferenceFailure.invalidRequest("Missing video loading strategy.")
+        case nil, .wan: throw InferenceFailure.invalidRequest("Missing video loading strategy.")
         }
         // Stage-based planning estimates, not a physical-RAM prohibition. Users
         // can explicitly raise the runtime budget; actual peaks are run evidence.
@@ -47,14 +47,25 @@ public actor ExternalVideoBackend: InferenceExecutionPlanning {
         let (workspace, overflow) = units.multipliedReportingOverflow(by: 96)
         let (total, overflow2) = (baseGiB * 1_073_741_824).addingReportingOverflow(workspace)
         guard !overflow, !overflow2 else { throw InferenceFailure.invalidRequest("Video estimate overflows.") }
-        // LTX 2.3 streams diffusion only; its Gemma3 text tower remains resident.
-        // Exact checkpoint bytes: Adapters/Resources/gemma3-{bf16,q4-test}.json.
-        // Keep an explicit 2 GiB estimated activation/loading allowance for the
-        // fixed 1024-token encoder. This is an estimate, not measured process RSS.
+        // Resident requests retain the original whole-tower bound. Streaming
+        // now evaluates all 49 Gemma3 states before releasing its weights, then
+        // loads the connector. These stages do not overlap. The largest BF16
+        // embedding is 2,013,757,440 bytes; the connector tensors total
+        // 6,344,455,168 bytes. Keep all 49 * 1024 * 3840 BF16 states and a
+        // conservative 2 GiB connector activation/read allowance. Nov25 real
+        // 1024-token BF16 stage: MLX peak 8,075,320,348 bytes (not App/RSS).
         let textStage: UInt64
         switch configuration.profile {
-        case .ltx23BF16Full: textStage = 26_388_550_536 + 2 * 1_073_741_824
-        case .ltx23Q8GemmaQ4: textStage = 8_028_675_248 + 2 * 1_073_741_824
+        case .ltx23BF16Full, .ltx23Q8GemmaQ4:
+            if stream {
+                let states: UInt64 = 49 * 1024 * 3840 * 2
+                let encoder: UInt64 = 2_013_757_440 + states + 1_073_741_824
+                let connector: UInt64 = 6_344_455_168 + states + 2 * 1_073_741_824
+                textStage = max(encoder, connector)
+            } else {
+                textStage = (configuration.profile == .ltx23BF16Full ? 26_388_550_536 : 8_028_675_248)
+                    + 2 * 1_073_741_824
+            }
         default: textStage = 0
         }
         return ResourceEstimate(peakBytes: max(total, textStage), confidence: .estimated)
@@ -116,11 +127,17 @@ public actor ExternalVideoBackend: InferenceExecutionPlanning {
     public func lowMemoryPlans(for request: InferenceRequest) async throws -> [InferenceExecutionPlan] {
         let seal = try planSeal(request)
         return [.init(request: try request.lowMemoryRequest(method: .streaming), method: .streaming,
-            strategyVersion: 1, modelIdentityToken: seal.token)]
+            strategyVersion: streamingStrategyVersion, modelIdentityToken: seal.token)]
+    }
+    private var streamingStrategyVersion: Int {
+        switch configuration.profile {
+        case .ltx23BF16Full, .ltx23Q8GemmaQ4: 2
+        default: 1
+        }
     }
     public func validate(_ plan: InferenceExecutionPlan, for original: InferenceRequest) async throws {
         try plan.validateSemantics(original: original)
-        guard plan.method == .streaming, plan.strategyVersion == 1,
+        guard plan.method == .streaming, plan.strategyVersion == streamingStrategyVersion,
               try planSeal(original).token == plan.modelIdentityToken else {
             throw InferenceFailure.inputIntegrityChanged("Approved video weights or execution plan changed.")
         }
@@ -462,7 +479,7 @@ struct ExternalVideoWireRequest: Encodable {
         switch video.adapterOptions {
         case .h3(let value)?: stream = value; stg = 0
         case .ltx(let value, let guidance)?: stream = value; stg = guidance
-        case nil: throw InferenceFailure.invalidRequest("Missing video adapter options.")
+        case nil, .wan: throw InferenceFailure.invalidRequest("Missing video adapter options.")
         }
         request = .init(profile: profile.rawValue, prompt: video.prompt, negative_prompt: video.negativePrompt,
             width: video.width, height: video.height, frames: video.frameCount, steps: video.steps,

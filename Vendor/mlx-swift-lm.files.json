@@ -282,8 +282,8 @@
     {
       "path": "Libraries/MLXLLM/LLMModelFactory.swift",
       "upstreamSHA256": "7185ddfe5847fbbdd5b44b682c645d269ddfc3c33f18e405f6ad00e97e167bd0",
-      "sha256": "cfb0a935fcbc0f1a073284737c07dbdac535aeed52bbe33ffb4e6979e9d859ee",
-      "size": 26516
+      "sha256": "9767e0a6b96ca6dc52eb4e6c46efb74d88973a9a91d30c36e13c93f764be8832",
+      "size": 27530
     },
     {
       "path": "Libraries/MLXLLM/Lora+Data.swift",
@@ -576,8 +576,8 @@
     {
       "path": "Libraries/MLXLLM/Models/Qwen2.swift",
       "upstreamSHA256": "e14a31a0fb6b39cc725c2e8094aea44003660cd7c70dba31ef5605084bed5279",
-      "sha256": "e14a31a0fb6b39cc725c2e8094aea44003660cd7c70dba31ef5605084bed5279",
-      "size": 9458
+      "sha256": "bb1b1b4a6fdd35a7413dc7346ff425127e2111d93cea57e027c7c9eb10558652",
+      "size": 17801
     },
     {
       "path": "Libraries/MLXLLM/Models/Qwen3.swift",
@@ -1213,8 +1213,8 @@
     {
       "path": "Libraries/MLXVLM/VLMModelFactory.swift",
       "upstreamSHA256": "f754278a81c182a60dfdbab4871fbbf09ddb4bc77307272f310b9a5a1c24d292",
-      "sha256": "276ed1c8f317285f698111ff007bd36e739e139efc9f946e2ffc2c4995ce6477",
-      "size": 23483
+      "sha256": "d3f2a20a762ed39fa53ae859546e0457d63d49b243c0d46446585551268e1cd1",
+      "size": 24164
     },
     {
       "path": "Package.swift",

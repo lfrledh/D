@@ -36,20 +36,26 @@ def _digest(path):
         return h.hexdigest()
 
 
-def _confirm_tokenizer_patch(engine, *, streaming_gemma4=False):
+def _confirm_tokenizer_patch(engine, *, streaming_gemma4=False, streaming_gemma3=False):
     # This entry targets a prepared CPython 3.12 local runtime. No model imports
     # or site discovery from the caller's current environment.
     root=engine.parent.parent/'lib/python3.12/site-packages'
     names=['ltx-reject-token-truncation.json']
-    if streaming_gemma4: names.append('ltx25-gemma4-streaming.json')
+    if streaming_gemma4 or streaming_gemma3:
+        names.extend(['ltx25-gemma4-streaming.json', 'ltx23-gemma3-streaming.json'])
+    expected = {}
     for name in names:
         record=json.loads((Path(__file__).parent/'Patches'/name).read_bytes())
         if record['commit'] != '1724ca673d59f023a8a95efee06e5d36d61c2765':
             raise ValueError('LTX source patch revision differs')
         for row in record['files']:
-            path=root/row['path'].split('/src/',1)[1]
-            if path.is_symlink() or _digest(path)!=row['after_sha256']:
-                raise ValueError('LTX source patch is missing or changed: '+str(path))
+            if row['path'] in expected and expected[row['path']] != row['before_sha256']:
+                raise ValueError('LTX ordered source patch baseline differs')
+            expected[row['path']] = row['after_sha256']
+    for relative, digest in expected.items():
+        path=root/relative.split('/src/',1)[1]
+        if path.is_symlink() or _digest(path)!=digest:
+            raise ValueError('LTX source patch is missing or changed: '+str(path))
     return record['commit']
 
 
@@ -118,7 +124,7 @@ def execute(request, *, engine, model, text_encoder, run_directory, ffmpeg, ffpr
     # Hash and inspect pinned packs before any GPU/model code. May be slow on SSD.
     admission=admit_ltx23(request['profile'],model=model,text_encoder=text_encoder,cancelled=cancel_event.is_set)
     if cancel_event.is_set():raise InterruptedError('Cancelled after resource admission')
-    upstream=_confirm_tokenizer_patch(engine)
+    upstream=_confirm_tokenizer_patch(engine, streaming_gemma3=request['stream_weights'])
     run_directory.mkdir(mode=0o700,exist_ok=False)
     for name in ['cache','tmp','engine-log','probe-log','decode-log']:(run_directory/name).mkdir(mode=0o700)
     output=run_directory/'candidate.mp4'

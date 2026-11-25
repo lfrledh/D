@@ -44,8 +44,10 @@ def validate_request(value: dict) -> dict:
     keys = {"schemaVersion", "runID", "profile", "revision", "prompt", "negativePrompt",
             "width", "height", "frameCount", "fpsNumerator", "fpsDenominator", "steps",
             "guidanceScale", "shift", "seed", "memoryLimitBytes"}
-    if not isinstance(value, dict) or set(value) != keys:
+    if not isinstance(value, dict) or set(value) not in (keys, keys | {"streamWeights"}):
         raise ValueError("Video request fields must exactly match the versioned contract")
+    if "streamWeights" in value and type(value["streamWeights"]) is not bool:
+        raise ValueError("streamWeights must be a boolean")
     if type(value["schemaVersion"]) is not int or value["schemaVersion"] != 1:
         raise ValueError("Unsupported request version")
     if value["profile"] != PROFILE or value["revision"] != REVISION:
@@ -137,8 +139,9 @@ def run(request_path: Path, model_path: Path, tokenizer_path: Path, output: Path
     import mlx.core as mx
     import numpy as np
     from wan21.config import WanModelConfig
-    from wan21.text_encoder import T5Encoder
+    from wan21.text_encoder import T5Encoder, T5SelfAttentionBlock
     from wan21.wan_2 import WanModel
+    from wan21.transformer import WanAttentionBlock
     from wan21.vae import WanVAE
     from wan21.scheduler import FlowUniPCScheduler
 
@@ -164,7 +167,10 @@ def run(request_path: Path, model_path: Path, tokenizer_path: Path, output: Path
 
     config = WanModelConfig.wan21_t2v_1_3b()
     observe("load-text")
-    encoder = model.load("text", T5Encoder(), loading("text"))
+    streaming = request.get("streamWeights", False)
+    encoder = (model.layered("text", T5Encoder(),
+        lambda: T5SelfAttentionBlock(4096, 4096, 10240, 64, 32, False), loading("text"))
+        if streaming else model.load("text", T5Encoder(), loading("text")))
     contexts = []
     for index, (tokens, count, cleaned) in enumerate(conditions):
         observe("encode-text", index, 2)
@@ -179,7 +185,11 @@ def run(request_path: Path, model_path: Path, tokenizer_path: Path, output: Path
     gc.collect(); mx.clear_cache()
     observe("release-text", 2, 2)
 
-    backbone = model.load("diffusion", WanModel(config), loading("diffusion"))
+    backbone = (model.layered("diffusion", WanModel(config),
+        lambda: WanAttentionBlock(dim=config.dim, ffn_dim=config.ffn_dim,
+            num_heads=config.num_heads, window_size=config.window_size, qk_norm=config.qk_norm,
+            cross_attn_norm=config.cross_attn_norm, eps=config.eps), loading("diffusion"))
+        if streaming else model.load("diffusion", WanModel(config), loading("diffusion")))
     positive = backbone.embed_text([contexts[0]])
     negative = backbone.embed_text([contexts[1]])
     mx.eval(positive, negative)
@@ -242,6 +252,7 @@ def run(request_path: Path, model_path: Path, tokenizer_path: Path, output: Path
     observe("released", count, request["frameCount"])
     if count != request["frameCount"]:
         raise ValueError("Decoded frame count differs; no cropping or padding is allowed")
+    model.verify_loaded()
     if identity(request_path) != request_identity or digest(request_path) != request_digest:
         raise ValueError("Submitted request changed during execution")
     if identity(model.manifest_path) != model.manifest_identity or digest(model.manifest_path) != model.manifest_digest:

@@ -2,6 +2,13 @@ import DInference
 import DMLXBackend
 import DRuntime
 import Foundation
+import MLX
+import MLXRandom
+import MLXNN
+import MLXLLM
+import MLXLMCommon
+import Synchronization
+@testable import DMLXBackend
 import Testing
 
 /// Intentionally opt-in: the acceptance script sets this variable in the XCTest process.
@@ -10,6 +17,111 @@ extension MLXHardwareTests {
 @Suite("Real local MLX model", .serialized,
        .enabled(if: ProcessInfo.processInfo.environment["D_TEST_MODEL_DIR"] != nil))
 struct MLXRealModelTests {
+    @available(macOS 15.0, *)
+    @Test("Small Q4 fixture keeps an independent head and layers split across two shards",
+          .enabled(if: ProcessInfo.processInfo.environment["D_RUN_QWEN2_LAYERED_PARITY"] == "1"))
+    func qwen2SplitShardFixture() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("qwen2-shards-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let data = Data(#"{"model_type":"qwen2","hidden_size":64,"num_hidden_layers":3,"intermediate_size":128,"num_attention_heads":4,"num_key_value_heads":2,"vocab_size":128,"rms_norm_eps":0.000001,"tie_word_embeddings":false,"quantization":{"group_size":64,"bits":4}}"#.utf8)
+        let config = try JSONDecoder().decode(Qwen2Configuration.self, from: data)
+        let base = try JSONDecoder().decode(BaseConfiguration.self, from: data)
+        let token = UUID(); try await MLXExecutionLease.shared.acquire(token)
+        do {
+            try autoreleasepool {
+                let resident = Qwen2Model(config)
+                let bf16 = Dictionary(uniqueKeysWithValues: resident.parameters().flattened().map { ($0.0, $0.1.asType(.bfloat16)) })
+                try resident.update(parameters: ModuleParameters.unflattened(bf16), verify: [.all])
+                quantize(model: resident, groupSize: 64, bits: 4)
+                try checkedEval(resident)
+                let weights = resident.parameters().flattened().sorted { $0.0 < $1.0 }
+                var shards = [[String: MLXArray](), [String: MLXArray]()], index = [String: String]()
+                for (i, pair) in weights.enumerated() {
+                    shards[i % 2][pair.0] = pair.1; index[pair.0] = "part-\(i % 2).safetensors"
+                }
+                for i in 0..<2 { try save(arrays: shards[i], url: root.appendingPathComponent("part-\(i).safetensors")) }
+                try JSONSerialization.data(withJSONObject: ["weight_map": index]).write(to: root.appendingPathComponent("model.safetensors.index.json"))
+                let selection = ModelFileSelection(paths: ["model.safetensors.index.json", "part-0.safetensors", "part-1.safetensors"])
+                let valid = Mutex(true)
+                let layered = Qwen2Model(config, layered: true)
+                try layered.loadLayeredWeights(from: root, fileSelection: selection, quantization: base.perLayerQuantization) {
+                    guard valid.withLock({ $0 }) else { throw InferenceFailure.inputIntegrityChanged("fixture seal changed") }
+                }
+                let firstCache = resident.newCache(parameters: nil), secondCache = layered.newCache(parameters: nil)
+                for ids: [Int32] in [[1, 12, 31, 42, 7], [11], [13]] {
+                    let input = LMInput.Text(tokens: MLXArray(ids).reshaped(1, ids.count))
+                    let expected = try resident.callThrowing(input, cache: firstCache, state: nil).logits
+                    let actual = try layered.callThrowing(input, cache: secondCache, state: nil).logits
+                    try checkedEval(expected, actual)
+                    #expect(expected.dtype == actual.dtype)
+                    #expect(expected.asType(.float32).asArray(Float.self) == actual.asType(.float32).asArray(Float.self))
+                }
+                valid.withLock { $0 = false }
+                #expect(throws: InferenceFailure.self) {
+                    _ = try layered.callThrowing(.init(tokens: MLXArray([Int32(2)]).reshaped(1, 1)), cache: secondCache, state: nil)
+                }
+            }
+        } catch { Memory.clearCache(); await MLXExecutionLease.shared.relinquish(token); throw error }
+        Memory.clearCache(); await MLXExecutionLease.shared.relinquish(token)
+    }
+
+    @Test("Original Qwen2.5 Q4 prefill and cached decode match layered computation",
+          .enabled(if: ProcessInfo.processInfo.environment["D_RUN_QWEN2_LAYERED_PARITY"] == "1"))
+    func qwen2LayeredParity() async throws {
+        let directory = try realModelDirectory()
+        let revision = ProcessInfo.processInfo.environment["D_QWEN2_REVISION"] ?? "a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3"
+        let files = try #require(try LocalModelFileSet.resolve(revision))
+        try files.validateRequired(in: directory)
+        let token = UUID()
+        try await MLXExecutionLease.shared.acquire(token)
+        do {
+            let data = try Data(contentsOf: directory.appendingPathComponent("config.json"))
+            let config = try JSONDecoder().decode(Qwen2Configuration.self, from: data)
+            let base = try JSONDecoder().decode(BaseConfiguration.self, from: data)
+            func run(_ layered: Bool) throws -> [[Float]] {
+                let random = MLXRandom.RandomState(seed: 0)
+                return try withRandomState(random) {
+                    let model = Qwen2Model(config, layered: layered)
+                    if layered {
+                        try model.loadLayeredWeights(from: directory, fileSelection: files.selection,
+                            quantization: base.perLayerQuantization, validate: {})
+                    } else {
+                        try loadWeights(modelDirectory: directory, model: model,
+                            perLayerQuantization: base.perLayerQuantization, fileSelection: files.selection)
+                    }
+                    let cache = model.newCache(parameters: nil)
+                    let rngBefore = random.innerState()[0].asArray(UInt32.self)
+                    let prepared = try model.prepareThrowing(.init(tokens: MLXArray([Int32(1), 12, 900, 22, 61])),
+                        cache: cache, windowSize: 2)
+                    guard case .tokens(let suffix) = prepared else { throw InferenceFailure.invalidResourceEstimate }
+                    var result: [[Float]] = []
+                    for ids: [Int32] in [suffix.tokens.asArray(Int32.self), [11], [43]] {
+                        let output = try model.callThrowing(.init(tokens: MLXArray(ids).reshaped(1, ids.count)), cache: cache, state: nil)
+                        try checkedEval(output.logits)
+                        result.append(output.logits.asType(.float32).asArray(Float.self))
+                    }
+                    #expect(random.innerState()[0].asArray(UInt32.self) == rngBefore)
+                    return result
+                }
+            }
+            let resident = try autoreleasepool { try run(false) }; Memory.clearCache()
+            let layered = try autoreleasepool { try run(true) }; Memory.clearCache()
+            #expect(resident == layered)
+            let finite = layered.flatMap { $0 }.allSatisfy { $0.isFinite }
+            #expect(finite)
+            print("D_QWEN2_Q4_LAYERED_PARITY logits=\(layered.map(\.count))")
+            MLX.Stream.gpu.synchronize(); Memory.clearCache()
+            #expect(Memory.activeMemory == 0)
+            await MLXExecutionLease.shared.relinquish(token)
+        } catch {
+            MLX.Stream.gpu.synchronize(); Memory.clearCache()
+            await MLXExecutionLease.shared.relinquish(token)
+            throw error
+        }
+    }
+
     @Test("Greedy generation streams text with bounded token count and provenance")
     func greedyGeneration() async throws {
         let directory = try realModelDirectory()

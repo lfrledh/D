@@ -214,7 +214,7 @@ def build_plan(request, *, engine, model, output, text_encoder=None,
         "video_decoder": video_decoder,
         "stream_weights": checked["stream_weights"],
         "weight_loading": (("gemma4-two-flavor-block-streaming+staged-connectors+transformer-block-streaming"
-                            if checked["profile"] == "ltx-2.5-dev-bf16-full-v1" else "transformer-block-streaming")
+                            if checked["profile"] == "ltx-2.5-dev-bf16-full-v1" else "gemma3-sharded-layer-streaming+staged-connectors+transformer-block-streaming")
                            if checked["stream_weights"] else "eager"),
         "quantized_test_profile": checked["profile"].endswith("-test-v1"),
         "request": checked,

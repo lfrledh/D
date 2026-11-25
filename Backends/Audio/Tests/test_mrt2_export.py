@@ -7,6 +7,7 @@ import sys
 import tempfile
 import types
 import unittest
+import weakref
 from unittest import mock
 
 import numpy as np
@@ -188,6 +189,32 @@ class MRT2ExportTests(unittest.TestCase):
         self.assertNotIn("import librosa", source)
         self.assertNotIn("_mx", {key for key in vars(export) if key == "mx"})
 
+    def test_conditioning_interpreters_do_not_overlap_each_other_or_graph(self):
+        live = weakref.WeakValueDictionary()
+        peaks = []
+        runtime = FakeRuntime()
+        original_init = FakeInterpreter.__init__
+        original_import = runtime.mx.import_function
+        def initialize(interpreter, **kwargs):
+            original_init(interpreter, **kwargs)
+            peaks.append(len(live))
+        def import_graph(path):
+            self.assertEqual(len(live), 0, "conditioning must be released before graph import")
+            return original_import(path)
+        FakeInterpreter.instances = live
+        runtime.mx.import_function = import_graph
+        with mock.patch.object(FakeInterpreter, "__init__", initialize):
+            subject, _ = self.make_subject(runtime=runtime)
+        self.assertEqual(peaks, [1, 1, 1])
+        self.assertIsNone(subject._initial_state)
+        self.assertIsNone(subject._vocab)
+        self.assertIsNone(subject._text_encoder)
+        self.assertIsNone(subject._mapper)
+        self.assertIsNone(subject._quantizer)
+        subject.generate_frame(None)
+        np.testing.assert_array_equal(runtime.graph.calls[5][11], [[0, 7]])
+        np.testing.assert_array_equal(runtime.graph.calls[5][0][0, 0, :12], np.arange(12) + 7)
+
     def test_fixed_arguments_seed_guard_and_cross_frame_state(self):
         subject, runtime = self.make_subject(seed=99)
         self.assertEqual(len(runtime.graph.calls), 5)
@@ -306,14 +333,14 @@ class MRT2ExportTests(unittest.TestCase):
         self.assertEqual(subject.close(), {"released": True})
         self.assertEqual(subject.close(), {"released": True})
         self.assertEqual(runtime.sync_calls, 1)
-        self.assertEqual(runtime.clear_calls, 1)
+        self.assertEqual(runtime.clear_calls, 2)  # warmup release, then close; second close is inert
         self.assertTrue(subject.identity()["released"])
         with self.assertRaisesRegex(export.MRT2ExportError, "closed"):
             subject.generate_frame(None)
 
         failing_runtime = FakeRuntime()
-        failing_runtime.clear_error = RuntimeError("cache busy")
         failing, _ = self.make_subject(runtime=failing_runtime)
+        failing_runtime.clear_error = RuntimeError("cache busy")
         result = failing.close()
         self.assertFalse(result["released"])
         self.assertIn("cache busy", result["error"])

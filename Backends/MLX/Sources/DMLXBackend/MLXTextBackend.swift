@@ -6,7 +6,7 @@ import MLXLMCommon
 
 /// A local-only, per-run Qwen2 backend. One instance belongs to one InferenceRuntime.
 /// The runtime owns cancellation and calls release after execute has completely drained.
-public actor MLXTextBackend: InferenceBackend {
+public actor MLXTextBackend: InferenceExecutionPlanning {
     public nonisolated let descriptor = BackendDescriptor(
         id: "mlx.text", version: "0.1.3+mlx-0.31.4.d1.lm-3.31.4", capabilities: [.textGeneration])
     public nonisolated let executionCapability: TextExecutionCapability
@@ -41,7 +41,36 @@ public actor MLXTextBackend: InferenceBackend {
             cacheLimitBytes: configuration.cacheLimitBytes).estimatedPeakBytes)
     }
 
+    private func planSeal(_ request: InferenceRequest) throws -> ModelExecutionSeal {
+        let inventory = try LocalModelInventory.inspect(request, capability: executionCapability,
+            cacheLimitBytes: configuration.cacheLimitBytes)
+        guard let files = inventory.fileSet else {
+            throw InferenceFailure.invalidRequest("Layered Qwen2 requires an exact supported revision.")
+        }
+        return try ModelExecutionSeal.capture(request.model, backend: descriptor, names: Array(files.files.keys))
+    }
+    public func lowMemoryPlans(for request: InferenceRequest) async throws -> [InferenceExecutionPlan] {
+        let seal = try planSeal(request)
+        return [.init(request: try request.lowMemoryRequest(method: .layered), method: .layered,
+            strategyVersion: 1, modelIdentityToken: seal.token)]
+    }
+    public func validate(_ plan: InferenceExecutionPlan, for original: InferenceRequest) async throws {
+        try plan.validateSemantics(original: original)
+        guard plan.method == .layered, plan.strategyVersion == 1,
+              try planSeal(original).token == plan.modelIdentityToken else {
+            throw InferenceFailure.inputIntegrityChanged("Approved Qwen2 model files changed.")
+        }
+    }
+    public func execute(_ plan: InferenceExecutionPlan, for original: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await validate(plan, for: original)
+        return try await execute(plan.request, expectedPlan: plan, emit: emit)
+    }
     public func execute(_ request: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await execute(request, expectedPlan: nil, emit: emit)
+    }
+    private func execute(_ request: InferenceRequest, expectedPlan: InferenceExecutionPlan?,
                         emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         guard !executing, lease == nil else {
             throw InferenceFailure.backendFailed("Backend execution requires release of the preceding run.")
@@ -54,6 +83,19 @@ public actor MLXTextBackend: InferenceBackend {
             cacheLimitBytes: configuration.cacheLimitBytes)
         guard case .text(let input) = request.input else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
+        }
+        let layered = input.loadingStrategy == .ssdLayered
+        let admitted = layered ? try planSeal(request) : nil
+        if let expectedPlan, admitted?.token != expectedPlan.modelIdentityToken {
+            throw InferenceFailure.inputIntegrityChanged("Approved Qwen2 model changed before execution.")
+        }
+        let selectedModel = request.model, selectedBackend = descriptor
+        let selectedNames = inventory.fileSet.map { Array($0.files.keys) } ?? []
+        let confirm: @Sendable () throws -> Void = {
+            if let admitted, try ModelExecutionSeal.capture(selectedModel, backend: selectedBackend,
+                names: selectedNames).token != admitted.token {
+                throw InferenceFailure.inputIntegrityChanged("Qwen2 files changed during layered execution.")
+            }
         }
         let token = UUID()
         try await MLXExecutionLease.shared.acquire(token)
@@ -76,7 +118,7 @@ public actor MLXTextBackend: InferenceBackend {
             let randomState = MLXRandom.RandomState(seed: randomSeed)
             let factory = inventory.fileSet.map {
                 LLMModelFactory(typeRegistry: LLMTypeRegistry.shared, modelRegistry: LLMRegistry.shared,
-                                fileSelection: $0.selection)
+                                fileSelection: $0.selection, layeredQwen2: layered, admissionValidator: confirm)
             } ?? LLMModelFactory.shared
             let loaded = try await withRandomState(randomState) {
                 try await factory.loadContainer(
@@ -101,10 +143,13 @@ public actor MLXTextBackend: InferenceBackend {
                     try Task.checkCancellation()
                     // This initializer can synchronously prefill. Cancellation is cooperative;
                     // bounded context and measurement are necessary, not a promise of instant interruption.
-                    let iterator = try TokenIterator(input: prepared, model: context.model, parameters: parameters)
+                    guard let throwingModel = context.model as? any ThrowingLanguageModel else {
+                        throw InferenceFailure.backendFailed("Qwen2 model lacks throwing execution support.")
+                    }
+                    let iterator = try TokenIterator(throwingInput: prepared, model: throwingModel, parameters: parameters)
                     // Keep the upstream token loop/task ownership, but avoid its Character-count
                     // detokenizer (2.30.6), which drops combining scalars and ZWJ sequences.
-                    let (stream, generationTask) = MLXLMCommon.generateTokenTask(
+                    let (stream, generationTask) = MLXLMCommon.generateThrowingTokenTask(
                         promptTokenCount: promptTokens, modelConfiguration: context.configuration,
                         tokenizer: context.tokenizer, iterator: iterator)
                     return try await withTaskCancellationHandler {
@@ -113,7 +158,7 @@ public actor MLXTextBackend: InferenceBackend {
                             var tokens = [Int]()
                             var decoder = IncrementalTextDecoder()
                             let toolCalls = ToolCallProcessor(format: context.configuration.toolCallFormat ?? .json)
-                            for await item in stream {
+                            for try await item in stream {
                                 try Task.checkCancellation()
                                 switch item {
                                 case .token(let token):
@@ -156,6 +201,7 @@ public actor MLXTextBackend: InferenceBackend {
                                 "modelRevision": request.model.revision ?? "unrecorded",
                                 "randomSeed": String(randomSeed),
                                 "weightBytes": String(inventory.weightBytes),
+                                "loadingStrategy": layered ? "ssdLayered" : "resident",
                                 "estimatedPeakBytes": String(inventory.estimatedPeakBytes),
                                 "executionProfileIdentifier": inventory.profile.identifier,
                                 "executionProfileRevision": String(inventory.profile.revision),

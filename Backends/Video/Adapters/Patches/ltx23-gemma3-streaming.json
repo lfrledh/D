@@ -1,0 +1,13 @@
+{
+  "upstream": "https://github.com/dgrauet/ltx-2-mlx",
+  "commit": "1724ca673d59f023a8a95efee06e5d36d61c2765",
+  "license": "MIT",
+  "scope": "Apply after ltx25-gemma4-streaming: original Gemma3 BF16/Q4 shard loading and encoder/connector stage separation; resident path preserved.",
+  "files": [
+    {
+      "path": "packages/ltx-pipelines-mlx/src/ltx_pipelines_mlx/utils/blocks.py",
+      "before_sha256": "54cb0bdbda2a4fc99b3c4f2d27d1d1763feb2b7ae60ca49b60577cb1fa7b0042",
+      "after_sha256": "65aedcd9aee32cc2355a897189e5ee521757c00a8ebae9b2b7315b665ee5701a"
+    }
+  ]
+}

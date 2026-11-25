@@ -525,11 +525,14 @@ public final class LLMModelFactory: GenericModelFactory {
 
     public init(
         typeRegistry: ModelTypeRegistry<LanguageModel>, modelRegistry: AbstractModelRegistry,
-        fileSelection: ModelFileSelection? = nil
+        fileSelection: ModelFileSelection? = nil, layeredQwen2: Bool = false,
+        admissionValidator: @escaping @Sendable () throws -> Void = {}
     ) {
         self.typeRegistry = typeRegistry
         self.modelRegistry = modelRegistry
         self.fileSelection = fileSelection
+        self.layeredQwen2 = layeredQwen2
+        self.admissionValidator = admissionValidator
     }
 
     /// Shared instance with default behavior.
@@ -542,11 +545,14 @@ public final class LLMModelFactory: GenericModelFactory {
     /// registry of model id to configuration, e.g. `mlx-community/Llama-3.2-3B-Instruct-4bit`
     public let modelRegistry: AbstractModelRegistry
     private let fileSelection: ModelFileSelection?
+    private let layeredQwen2: Bool
+    private let admissionValidator: @Sendable () throws -> Void
 
     public func _load(
         configuration: ResolvedModelConfiguration,
         tokenizerLoader: any TokenizerLoader
     ) async throws -> ModelContext {
+        try admissionValidator()
         let modelDirectory = configuration.modelDirectory
 
         // Load config.json once and decode for both base config and model-specific config
@@ -568,8 +574,14 @@ public final class LLMModelFactory: GenericModelFactory {
 
         let model: LanguageModel
         do {
-            model = try await typeRegistry.createModel(
-                configuration: configData, modelType: baseConfig.modelType)
+            if layeredQwen2 {
+                guard baseConfig.modelType == "qwen2", fileSelection != nil else {
+                    throw Qwen2LayeredWeights.invalid("layered Qwen2 needs an admitted file selection")
+                }
+                model = Qwen2Model(try JSONDecoder.json5().decode(Qwen2Configuration.self, from: configData), layered: true)
+            } else {
+                model = try await typeRegistry.createModel(configuration: configData, modelType: baseConfig.modelType)
+            }
         } catch let error as DecodingError {
             throw ModelFactoryError.configurationDecodingError(
                 configurationURL.lastPathComponent, configuration.name, error)
@@ -605,10 +617,14 @@ public final class LLMModelFactory: GenericModelFactory {
         async let tokenizerTask = tokenizerLoader.load(
             from: configuration.tokenizerDirectory)
 
-        try loadWeights(
-            modelDirectory: modelDirectory, model: model,
-            perLayerQuantization: baseConfig.perLayerQuantization,
-            fileSelection: fileSelection)
+        if layeredQwen2, let qwen = model as? Qwen2Model, let fileSelection {
+            try qwen.loadLayeredWeights(from: modelDirectory, fileSelection: fileSelection,
+                quantization: baseConfig.perLayerQuantization, validate: admissionValidator)
+        } else {
+            try loadWeights(modelDirectory: modelDirectory, model: model,
+                perLayerQuantization: baseConfig.perLayerQuantization, fileSelection: fileSelection)
+        }
+        try admissionValidator()
 
         let tokenizer = try await tokenizerTask
 

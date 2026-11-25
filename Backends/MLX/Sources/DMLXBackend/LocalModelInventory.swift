@@ -1,5 +1,6 @@
 import DInference
 import Foundation
+import Flux2
 
 /// Reads metadata and sizes only. No MLX allocation or network access is permitted here.
 struct LocalModelInventory: Sendable {
@@ -169,7 +170,29 @@ struct LocalModelInventory: Sendable {
         // This is an admission estimate, not a hard protection against process/system OOM.
         let kvBytes = UInt64(context) * UInt64(config.num_hidden_layers)
             * UInt64(config.num_key_value_heads) * UInt64(config.hidden_size / config.num_attention_heads) * 2 * 4
-        let estimate = weightBytes * 2 + kvBytes + 512 * 1024 * 1024 + UInt64(cacheLimitBytes)
+        let estimate: UInt64
+        if input.loadingStrategy == .ssdLayered {
+            guard fileSet != nil else { throw InferenceFailure.invalidRequest("Layered Qwen2 requires a fixed supported revision.") }
+            var shared: UInt64 = 0, layers: [String: UInt64] = [:]
+            for file in weightURLs {
+                let reader = try SafeTensorsReader(fileURL: file)
+                for metadata in reader.allMetadata() {
+                    let bytes = UInt64(metadata.byteCount)
+                    if metadata.name.hasPrefix("model.layers.") {
+                        let key = metadata.name.split(separator: ".").prefix(3).joined(separator: ".")
+                        layers[key, default: 0] += bytes
+                    } else if !metadata.name.contains("self_attn.rotary_emb.inv_freq") { shared += bytes }
+                }
+            }
+            guard layers.count == config.num_hidden_layers else { throw InferenceFailure.invalidResourceEstimate }
+            let prefill = UInt64(min(512, maximumPromptTokens))
+            let workspace = prefill * UInt64(config.vocab_size) * 4
+                + prefill * UInt64(config.intermediate_size) * 4 * 4
+            estimate = 2 * (shared + (layers.values.max() ?? 0)) + 2 * kvBytes + workspace
+                + 512 * 1024 * 1024 + UInt64(cacheLimitBytes)
+        } else {
+            estimate = weightBytes * 2 + kvBytes + 512 * 1024 * 1024 + UInt64(cacheLimitBytes)
+        }
         return Self(directory: directory, weightBytes: weightBytes,
                     estimatedPeakBytes: estimate, contextLimit: config.max_position_embeddings,
                     profile: capability.profile, maximumPromptTokens: maximumPromptTokens,

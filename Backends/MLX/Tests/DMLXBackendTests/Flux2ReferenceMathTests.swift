@@ -21,6 +21,70 @@ struct Flux2ReferenceMathTests {
         var exact: Bool { self == .outputIDs || self == .referenceIDs }
     }
 
+    @Test func pinnedQ8NullMetadataKeepsTensorValidation() throws {
+        let parent = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+        let file = URL(fileURLWithPath: parent).appendingPathComponent(UUID().uuidString + ".safetensors")
+        defer { try? FileManager.default.removeItem(at: file) }
+        for metadata in ["null", "{}", "42", "{\"format\":true}"] {
+            let header = "{\"__metadata__\":\(metadata),\"x\":{\"dtype\":\"U32\",\"shape\":[1],\"data_offsets\":[0,4]}}"
+            var length = UInt64(header.utf8.count).littleEndian
+            var data = withUnsafeBytes(of: &length) { Data($0) }
+            data.append(contentsOf: header.utf8); data.append(Data(repeating: 0, count: 4))
+            try data.write(to: file)
+            if metadata == "null" || metadata == "{}" {
+                let reader = try SafeTensorsReader(fileURL: file)
+                #expect(reader.metadata(for: "x")?.dtype == .uint32)
+                #expect(reader.fileMetadata.isEmpty)
+            } else { #expect(throws: (any Error).self) { try SafeTensorsReader(fileURL: file) } }
+        }
+    }
+
+    @Test("Exact Q8 text and transformer layers match resident computation",
+          .enabled(if: ProcessInfo.processInfo.environment["D_RUN_KLEIN_LAYERED_PARITY"] == "1"))
+    func realQ8LayeredParity() async throws {
+        let root = try Self.realImageModelDirectory()
+        try await Self.withExecutionLease {
+            try Self.withFixtureRandomState {
+            func text(_ layered: Bool) throws -> (DType, [Float]) {
+                let model = try layered ? Flux2Qwen3TextEncoder.loadLayered(from: root)
+                                        : Flux2Qwen3TextEncoder.load(from: root)
+                let ids = MLXArray([Int32(0), 0, 11, 42, 15, 87, 2, 1]).reshaped(1, 8)
+                let mask = MLXArray([Int32(0), 0, 1, 1, 1, 1, 1, 1]).reshaped(1, 8)
+                let value = try model.promptEmbeds(inputIds: ids, attentionMask: mask,
+                    hiddenStateLayers: Array(0...model.configuration.hiddenLayers), evaluationPolicy: .aggressive)
+                MLX.eval(value)
+                return (value.dtype, value.asType(.float32).asArray(Float.self))
+            }
+            let residentText = try autoreleasepool { try text(false) }; Memory.clearCache()
+            let layeredText = try autoreleasepool { try text(true) }; Memory.clearCache()
+            #expect(!residentText.1.isEmpty && residentText.1.allSatisfy(\.isFinite))
+            #expect(layeredText.0 == residentText.0 && layeredText.1 == residentText.1)
+            func diffusion(_ layered: Bool) throws -> (DType, [Float]) {
+                let model = try layered ? Flux2Transformer2DModel.loadLayered(from: root)
+                                        : Flux2Transformer2DModel.load(from: root)
+                let config = model.configuration
+                let hidden = (MLXArray(0..<(4 * config.inChannels)).asType(.float32) / 1000).reshaped(1, 4, config.inChannels).asType(.bfloat16)
+                let encoder = (MLXArray(0..<(4 * config.jointAttentionDim)).asType(.float32) / 10000).reshaped(1, 4, config.jointAttentionDim).asType(.bfloat16)
+                let time = MLXArray([Float(0.5)]).asType(.bfloat16)
+                let imageIDs = try Flux2PositionIds.prepareLatentIds(MLX.zeros([1, 1, 2, 2]))
+                let textIDs = try Flux2PositionIds.prepareTextIds(encoder)
+                let value = try layered
+                    ? model.callLayered(hidden, encoderHiddenStates: encoder, timestep: time,
+                        imgIds: imageIDs, txtIds: textIDs)
+                    : model(hidden, encoderHiddenStates: encoder, timestep: time,
+                        imgIds: imageIDs, txtIds: textIDs, evaluationPolicy: .aggressive)
+                MLX.eval(value)
+                return (value.dtype, value.asType(.float32).asArray(Float.self))
+            }
+            let residentDiffusion = try autoreleasepool { try diffusion(false) }; Memory.clearCache()
+            let layeredDiffusion = try autoreleasepool { try diffusion(true) }; Memory.clearCache()
+            #expect(!residentDiffusion.1.isEmpty && residentDiffusion.1.allSatisfy(\.isFinite))
+            #expect(layeredDiffusion.0 == residentDiffusion.0 && layeredDiffusion.1 == residentDiffusion.1)
+            print("D_KLEIN_Q8_LAYERED_PARITY text=\(layeredText.1.count) diffusion=\(layeredDiffusion.1.count)")
+            }
+        }
+    }
+
     @Test("Production reference encode and denoise match fixed FP32 tensors",
           arguments: Reference.allCases)
     func fixedReferenceParity(reference: Reference) async throws {

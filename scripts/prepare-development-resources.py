@@ -88,6 +88,8 @@ ENGINE_CONTRACTS["ExternalVideoEngine.dengine"] = {
         "provider/Resources/ltx23-bf16.json", "provider/Resources/ltx23-q8-test.json",
         "provider/Resources/ltx25-bf16.json", "model-manifests/ltx25-bf16.json",
         "provider/Patches/ltx25-gemma4-streaming.json", "provider/Patches/ltx25-gemma4-streaming.patch",
+        "provider/d_ltx_gemma3.py", "provider/Patches/ltx23-gemma3-streaming.json",
+        "provider/Patches/ltx23-gemma3-streaming.patch",
     ),
 }
 

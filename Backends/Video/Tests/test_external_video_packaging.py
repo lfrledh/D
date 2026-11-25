@@ -30,6 +30,7 @@ class ExternalPackagingTests(unittest.TestCase):
         patch.parent.mkdir(parents=True)
         patch.write_text(json.dumps({"files": []}))
         (patch.parent / "ltx25-gemma4-streaming.json").write_text(json.dumps({"files": []}))
+        (patch.parent / "ltx23-gemma3-streaming.json").write_text(json.dumps({"files": []}))
         archive = self.root / "fixture.tar.gz"
         with tarfile.open(archive, "w:gz") as bundle:
             for number in range(50):

@@ -339,7 +339,11 @@ def validate_request(value: dict[str, Any], *, profile: str) -> AudioRequest:
     if profile not in PROFILES:
         raise ContractError(f"unsupported profile {profile!r}", "configuration")
     required = {"schemaVersion", "runID", "operation", "prompt", "durationSeconds", "seed", "steps", "guidanceScale", "strength"}
-    _exact_keys(value, required, {"source", "editRegion"}, "request")
+    _exact_keys(value, required, {"source", "editRegion", "loadingStrategy"}, "request")
+    if "loadingStrategy" in value and value["loadingStrategy"] not in ("resident", "ssdLayered"):
+        raise ContractError("invalid SA3 loading strategy")
+    if value.get("loadingStrategy") == "ssdLayered" and profile != "sm-music":
+        raise ContractError("layered strategy requires the fixed small music profile")
     if not _is_int(value["schemaVersion"]) or value["schemaVersion"] != SCHEMA_VERSION:
         raise ContractError("request schemaVersion must be integer 1")
     run_id = value["runID"]
@@ -469,8 +473,14 @@ def verify_manifest_weights(manifest: WeightManifest, model: Path) -> None:
             raise ContractError(f"weight digest mismatch: {entry.relative_path}", "configuration")
 
 
-def estimate_peak_bytes(manifest: WeightManifest, duration: float) -> int:
-    return 2 * max(item.size for item in manifest.entries) + (1 << 30) + math.ceil(duration) * (64 << 20)
+def estimate_peak_bytes(manifest: WeightManifest, duration: float, loading_strategy: str | None = None) -> int:
+    largest = max(item.size for item in manifest.entries)
+    if loading_strategy == "ssdLayered":
+        if manifest.entries[0].relative_path != "MLX/dit_sm-music_f16.npz":
+            raise ContractError("layered strategy requires the fixed small music weights")
+        codec = max(item.size for item in manifest.entries if "same_s_" in item.relative_path)
+        largest = max(393_217_664 + 14_161_920, 26_894_368 + 44_608_000, codec)
+    return 2 * largest + (1 << 30) + math.ceil(duration) * (64 << 20)
 
 
 def read_source_wave(spec: SourceSpec) -> WaveData:

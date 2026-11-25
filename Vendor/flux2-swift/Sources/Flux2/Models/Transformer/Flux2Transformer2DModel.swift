@@ -30,6 +30,7 @@ public final class Flux2Transformer2DModel: Module {
   @ModuleInfo(key: "norm_out") private var normOut: Flux2AdaLayerNormContinuous
   @ModuleInfo(key: "proj_out") private var projOut: Linear
   private var layeredSource: Flux2PinnedWeightSelection? = nil
+  private var layeredQuantization: Flux2QuantizationManifest?
 
   public var isLayered: Bool { layeredSource != nil }
 
@@ -129,9 +130,7 @@ public final class Flux2Transformer2DModel: Module {
   public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil,
                                  admissionValidator: (() throws -> Void)? = nil) throws -> Flux2Transformer2DModel {
     try admissionValidator?()
-    if let _ = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
-      throw Flux2Transformer2DModelError.unsupportedLayeredQuantization
-    }
+    let quantization = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet)
     try admissionValidator?()
     try fileSet?.require("transformer/config.json")
     let configURL = snapshot.appendingPathComponent("transformer/config.json")
@@ -147,11 +146,13 @@ public final class Flux2Transformer2DModel: Module {
     try admissionValidator?()
     let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .transformer, fileSet: fileSet,
                                                  admissionValidator: admissionValidator) {
-      _, actual in actual == dtype
+      name, actual in Flux2Quantizer.permitsLayeredDType(name: name, dtype: actual, component: .transformer,
+        manifest: quantization, floatingDType: dtype)
     }
     let weights = try source.load {
       !$0.hasPrefix("transformer_blocks.") && !$0.hasPrefix("single_transformer_blocks.")
     }
+    if let quantization { Flux2Quantizer.applyQuantization(to: model, manifest: quantization, weights: weights) }
     let expected = Set(model.parameters().flattened().map { $0.0 }.filter {
       !$0.hasPrefix("transformer_blocks.") && !$0.hasPrefix("single_transformer_blocks.")
     })
@@ -162,6 +163,7 @@ public final class Flux2Transformer2DModel: Module {
     MLX.eval(Array(weights.values))
     try source.verifyFileIdentities()
     model.layeredSource = source
+    model.layeredQuantization = quantization
     return model
   }
 
@@ -175,6 +177,9 @@ public final class Flux2Transformer2DModel: Module {
     let block = Flux2TransformerBlock(dim: innerDim, numAttentionHeads: configuration.numAttentionHeads,
       attentionHeadDim: configuration.attentionHeadDim, mlpRatio: configuration.mlpRatio,
       eps: configuration.eps, bias: false)
+    if let layeredQuantization {
+      Flux2Quantizer.applyQuantization(to: block, manifest: layeredQuantization, weights: stripped)
+    }
     let expected = Set(block.parameters().flattened().map { $0.0 })
     guard !expected.isEmpty, Set(stripped.keys) == expected else {
       throw Flux2Transformer2DModelError.incompleteLayer(prefix)
@@ -193,6 +198,9 @@ public final class Flux2Transformer2DModel: Module {
     let block = Flux2SingleTransformerBlock(dim: innerDim, numAttentionHeads: configuration.numAttentionHeads,
       attentionHeadDim: configuration.attentionHeadDim, mlpRatio: configuration.mlpRatio,
       eps: configuration.eps, bias: false)
+    if let layeredQuantization {
+      Flux2Quantizer.applyQuantization(to: block, manifest: layeredQuantization, weights: stripped)
+    }
     let expected = Set(block.parameters().flattened().map { $0.0 })
     guard !expected.isEmpty, Set(stripped.keys) == expected else {
       throw Flux2Transformer2DModelError.incompleteLayer(prefix)

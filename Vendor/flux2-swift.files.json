@@ -98,8 +98,8 @@
       "upstreamGitBlob": "95f45f4b70848330d4b191d82581b558efa85d02",
       "upstreamSize": 15023,
       "upstreamSHA256": "c90032742fcce459453c295079382618a871d0e5bc32325c04f5a4cf9aa38b7c",
-      "size": 15200,
-      "sha256": "d7685de1cea86749b35ed4200e5f941893d51d60e2a59e42db3aa22f35d84d7c"
+      "size": 16187,
+      "sha256": "98688b009f6a0158cd67c07cf2c493000c6999ff525079d7d3446757204a4e7b"
     },
     {
       "path": "Sources/Flux2/IO/SafeTensorsReader.swift",
@@ -107,8 +107,8 @@
       "upstreamGitBlob": "561edc5153a7faaef80492c7f54f2157e25ad411",
       "upstreamSize": 8481,
       "upstreamSHA256": "3025da02f505a34962861cb2a84854e53e87c3ce0b778679269897066321ddde",
-      "size": 15262,
-      "sha256": "a897785391bc51cedfd908cf2085d7c2a99f497d6651e67f90c4c5d159c05ba5"
+      "size": 15382,
+      "sha256": "6ad041910d7311d6f101073d9a8623964e1f9f31d6142fa090de4a73682b72a7"
     },
     {
       "path": "Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift",
@@ -206,8 +206,8 @@
       "upstreamGitBlob": "b956f7e5a29932c8e6c624b9b3692db52cfc345b",
       "upstreamSize": 10148,
       "upstreamSHA256": "56942a7d37c32a44565fee71b697a1f5e6b15f58fc0263258fb41cdb7374c3be",
-      "size": 13774,
-      "sha256": "8b109f2de0d007f15f1410c6ea0626cd147c877363b7e2c8f7018ed010bc0c84"
+      "size": 13723,
+      "sha256": "a438ca467929f64a77e309c445fe973fd9bfe3939e97b5738bdd62405b194d67"
     },
     {
       "path": "Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift",
@@ -296,8 +296,8 @@
       "upstreamGitBlob": "c1fa1e3a4df11b0f0b5f7167cf2c0a3cdb034120",
       "upstreamSize": 7455,
       "upstreamSHA256": "72533cafb7de8d269bde25178388598a7083499fadf7a31ee87d620b28bf9641",
-      "size": 13841,
-      "sha256": "44e05b5b278b1cf6e1e787abacf3cff1d01c45a1ff4bd9793b99283aa49b09d3"
+      "size": 14396,
+      "sha256": "86f1ef62ea4b1ec2d678340e218a90e6ca0eef1cac483318b77400abf18a5779"
     },
     {
       "path": "Sources/Flux2/Models/Transformer/Flux2TransformerBlocks.swift",

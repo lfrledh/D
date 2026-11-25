@@ -183,17 +183,14 @@ class ExportedMRT2:
             )
         if any(isinstance(token, bool) or not isinstance(token, int) for token in labels):
             raise MRT2ExportError("SentencePiece returned non-integer token IDs")
-        self._vocab = vocab
+        # Only the token IDs survive tokenization; the vocabulary is not used by the graph.
+        del vocab
 
         interpreter_type = litert.Interpreter
         self._text_encoder = _make_interpreter(
             interpreter_type, self._paths["text_encoder"]
         )
-        self._mapper = _make_interpreter(interpreter_type, self._paths["mapper"])
-        self._quantizer = _make_interpreter(
-            interpreter_type, self._paths["quantizer"]
-        )
-        style_tokens = self._encode_style(labels)
+        style_tokens = self._encode_style(labels, interpreter_type)
 
         self._fn = mx.import_function(str(self._paths["graph"]))
         state_dict = mx.load(str(self._paths["state"]))
@@ -206,7 +203,6 @@ class ExportedMRT2:
         initial_state = [state_dict[f"state_{index}"] for index in range(STATE_LEAF_COUNT)]
         self._validate_sampling_key(initial_state, expected=DEFAULT_SAMPLING_KEY)
         mx.eval(initial_state)
-        self._initial_state = initial_state
 
         warmup_args = self._build_graph_args(
             [-1] * MUSICCOCA_WIDTH, [-1] * NOTES_WIDTH
@@ -217,12 +213,17 @@ class ExportedMRT2:
             mx.eval(outputs)
             warmup_state = self._validated_output_state(outputs)
 
+        # Warmup state is never the initial task state. Drop it before generation.
+        del outputs, warmup_state, warmup_args, state_dict
         task_state = list(initial_state)
         task_state[SAMPLING_KEY_STATE_INDEX] = mx.array(
             np.array([[0, self._seed]], dtype=np.uint32), dtype=mx.uint32
         )
         self._validate_sampling_key(task_state, expected=(0, self._seed))
         self._state = task_state
+        del initial_state
+        gc.collect()
+        mx.clear_cache()
         self._style_tokens = tuple(int(value) for value in style_tokens)
 
         self._identity = {
@@ -268,7 +269,7 @@ class ExportedMRT2:
             },
         }
 
-    def _encode_style(self, labels: list[int]) -> Any:
+    def _encode_style(self, labels: list[int], interpreter_type: Any) -> Any:
         np = self._np
         text_inputs = self._text_encoder.get_input_details()
         text_outputs = self._text_encoder.get_output_details()
@@ -296,6 +297,9 @@ class ExportedMRT2:
         if embedding.shape != (768,) or not np.isfinite(embedding).all():
             raise MRT2ExportError("text encoder returned an invalid 768-value embedding")
 
+        self._text_encoder = None
+        gc.collect()
+        self._mapper = _make_interpreter(interpreter_type, self._paths["mapper"])
         mapper_inputs = self._mapper.get_input_details()
         mapper_outputs = self._mapper.get_output_details()
         if len(mapper_inputs) != 2 or not mapper_outputs:
@@ -319,6 +323,9 @@ class ExportedMRT2:
             raise MRT2ExportError("mapper returned an invalid 768-value embedding")
         embedding = embedding / norm
 
+        self._mapper = None
+        gc.collect()
+        self._quantizer = _make_interpreter(interpreter_type, self._paths["quantizer"])
         quantizer_inputs = self._quantizer.get_input_details()
         quantizer_outputs = self._quantizer.get_output_details()
         if len(quantizer_inputs) != 1 or not quantizer_outputs:
@@ -335,7 +342,10 @@ class ExportedMRT2:
             raise MRT2ExportError("RVQ returned an invalid 12-token result")
         if ((tokens < 0) | (tokens >= 1024)).any():
             raise MRT2ExportError("RVQ returned an out-of-range token")
-        return tokens.astype(np.int32)
+        tokens = tokens.astype(np.int32)
+        self._quantizer = None
+        gc.collect()
+        return tokens
 
     def _build_graph_args(self, style_tokens: list[int], note_tokens: list[int]) -> list[Any]:
         np = self._np

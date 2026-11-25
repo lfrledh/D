@@ -53,8 +53,14 @@ public actor PitchAnalysisBackend: InferenceBackend {
     }
 
     public func estimate(_ request: InferenceRequest) async throws -> ResourceEstimate {
-        _ = try PitchAdmission.inspect(request, configuration: configuration)
-        return ResourceEstimate(peakBytes: 256 * 1024 * 1024, confidence: .estimated)
+        let admission = try PitchAdmission.inspect(request, configuration: configuration)
+        // The 399,114-byte weights are small, but ONNX activations grow with
+        // input length. At the fixed 120-second maximum, Nov25's real CPU
+        // provider peaked at 641,695,744 RSS bytes. Reserve the interpreter and
+        // session plus 256 bytes per admitted sample (including scratch space).
+        // This remains an estimate, not a measured total App peak.
+        return ResourceEstimate(peakBytes: 256 * 1024 * 1024 + UInt64(admission.pitch.sampleCount) * 256,
+                                confidence: .estimated)
     }
 
     public func execute(

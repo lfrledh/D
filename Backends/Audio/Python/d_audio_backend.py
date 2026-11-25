@@ -234,7 +234,7 @@ def _run(
         verify_manifest_weights(manifest, model)
         verify_vendor(vendor)
         writer.progress(run_id, "validating", 1, 1)
-        estimated = estimate_peak_bytes(manifest, request.duration_seconds)
+        estimated = estimate_peak_bytes(manifest, request.duration_seconds, request.raw.get("loadingStrategy"))
         if arguments.inspect:
             writer.emit({
                 "schemaVersion": 1,

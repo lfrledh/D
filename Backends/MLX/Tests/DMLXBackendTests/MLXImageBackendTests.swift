@@ -144,21 +144,14 @@ struct MLXImageBackendTests {
         #expect(conditioned.estimatedPeakBytes > large.estimatedPeakBytes)
         #expect(conditioned.estimatedPeakBytes > 16 * 1024 * 1024 * 1024)
     }
-    @Test("SSD layering rejects the pinned q8 installation before opening weights")
-    func layeredRequiresOriginalBF16() throws {
+    @Test("Q8 layer planning still requires the exact installed files")
+    func layeredQ8CannotBypassFileAdmission() throws {
         let image = ImageRequest(prompt: "A test", width: 512, height: 512,
             steps: 4, guidanceScale: 1, seed: 42,
             executionProfile: ImageExecutionCapability.verified512.profile,
             loadingStrategy: .ssdLayered)
         let request = InferenceRequest(model: .init(directory: URL(fileURLWithPath: "/nonexistent/klein"),
             revision: LocalImageModelInventory.revision), input: .image(image))
-        do {
-            _ = try LocalImageModelInventory.inspect(request)
-            Issue.record("Expected the pinned q8 revision to reject SSD layering")
-        } catch InferenceFailure.invalidRequest(let message) {
-            #expect(message == "SSD layered image loading requires the original pinned Klein BF16 installation.")
-        } catch {
-            Issue.record("Expected the precision admission error, got \(error)")
-        }
+        #expect(throws: (any Error).self) { try LocalImageModelInventory.inspect(request) }
     }
 }

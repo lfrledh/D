@@ -107,6 +107,8 @@ public final class SafeTensorsReader {
     for (key, value) in headerDict {
       try Task.checkCancellation()
       if key == "__metadata__" {
+        // The pinned MLX Q8 exporter encodes absent optional metadata as null.
+        if value is NSNull { continue }
         guard let dict = value as? [String: String] else {
           throw SafeTensorsReaderError.malformedHeader(fileURL)
         }

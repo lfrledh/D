@@ -7,6 +7,37 @@ import Testing
 
 @Suite("AUDIO1 inventory and owned provider process", .serialized)
 struct AudioBackendTests {
+    @Test("Post-provider integrity and cleanup failures keep their runtime classification")
+    func terminalFailuresKeepClassification() async throws {
+        for expected in [InferenceFailure.inputIntegrityChanged("changed selection"), .resourceCleanupUnconfirmed("unconfirmed cleanup")] {
+            let fixture = try AudioFixture()
+            defer { fixture.remove() }
+            let artifactRoot = fixture.artifacts
+            let finished: @Sendable () -> Bool = {
+                ((try? FileManager.default.contentsOfDirectory(at: artifactRoot, includingPropertiesForKeys: nil)) ?? [])
+                    .contains { FileManager.default.fileExists(atPath: $0.appendingPathComponent("job/provider-finished").path) }
+            }
+            let script = try String(contentsOf: fixture.script, encoding: .utf8)
+                + "\nfrom pathlib import Path\n(Path(a.job_directory)/'provider-finished').write_text('done')\n"
+            try script.write(to: fixture.script, atomically: false, encoding: .utf8)
+            let backend = try MLXAudioBackend(configuration: fixture.configuration(deployment: {
+                if finished() { throw expected }
+            }))
+            do {
+                _ = try await backend.execute(fixture.request()) { _ in }
+                Issue.record("Post-provider failure was discarded")
+            } catch let actual as InferenceFailure {
+                switch (expected, actual) {
+                case (.inputIntegrityChanged, .inputIntegrityChanged), (.resourceCleanupUnconfirmed, .resourceCleanupUnconfirmed):
+                    #expect(actual.localizedDescription.contains(expected.localizedDescription))
+                    #expect(actual.localizedDescription.contains("Audio diagnostics"))
+                default: Issue.record("Failure classification changed: \(actual)")
+                }
+            }
+            #expect(finished())
+            await backend.release()
+        }
+    }
     @Test("Explicit 48 kHz output must decode while the legacy default remains 44.1 kHz")
     func outputClockIsExplicitAndNegativeFramesThrow() throws {
         let fixture = try AudioFixture()
@@ -549,12 +580,14 @@ private struct AudioFixture {
 
     func configuration(profile: AudioBackendProfile = .smMusic,
                        artifactDirectory: URL? = nil, timeout: Double = 10,
-                       grace: Double = 0.2) -> AudioBackendConfiguration {
+                       grace: Double = 0.2,
+                       deployment: (@Sendable () throws -> Void)? = nil) -> AudioBackendConfiguration {
         AudioBackendConfiguration(
             pythonExecutable: URL(fileURLWithPath: "/usr/bin/python3"), providerScript: script,
             vendorDirectory: vendor, modelManifest: manifest,
             artifactDirectory: artifactDirectory ?? artifacts, profile: profile,
-            licenseAcknowledged: true, timeoutSeconds: timeout, cancellationGraceSeconds: grace)
+            licenseAcknowledged: true, timeoutSeconds: timeout, cancellationGraceSeconds: grace,
+            confirmDeployment: deployment)
     }
 
     func accessConfiguration(root: URL, timeout: Double = 5, acknowledged: Bool = true,

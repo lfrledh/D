@@ -67,7 +67,7 @@ def admit_ltx23(profile, *, model, text_encoder, cancelled=lambda: False):
         'text_encoder': {'repository': text_inventory['repository'], 'revision': text_inventory['revision'], 'verification': text_verified},
         'inference_verified': False,
         'tokenizer_limit': 1024,
-        'streaming_scope': 'all transformer blocks; text encoder and VAE are separate stages, not streamed by this switch',
+        'streaming_scope': 'all transformer blocks and original Gemma3 BF16/Q4 layers; all 49 hidden states materialized before connector; VAE remains a separate chunked stage',
     }
 
 

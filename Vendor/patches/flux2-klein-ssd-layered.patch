@@ -100,7 +100,7 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
  
      guard let headerDict = headerJSON as? [String: Any] else {
        throw SafeTensorsReaderError.malformedHeader(fileURL)
-@@ -60,24 +100,22 @@
+@@ -60,24 +100,24 @@
  
      var tensorMetadata: [String: SafeTensorMetadata] = [:]
      var metadataValues: [String: String] = [:]
@@ -120,6 +120,8 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
 -            }
 -          }
 -        }
++        // The pinned MLX Q8 exporter encodes absent optional metadata as null.
++        if value is NSNull { continue }
 +        guard let dict = value as? [String: String] else {
 +          throw SafeTensorsReaderError.malformedHeader(fileURL)
 +        }
@@ -133,7 +135,7 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
          throw SafeTensorsReaderError.tensorMetadataMissing(key)
        }
  
-@@ -91,15 +129,7 @@
+@@ -91,15 +131,7 @@
          throw SafeTensorsReaderError.tensorMetadataMissing(key)
        }
  
@@ -150,7 +152,7 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
  
        guard let offsetsAny = tensorInfo["data_offsets"] as? [Any], offsetsAny.count == 2 else {
          throw SafeTensorsReaderError.tensorMetadataMissing(key)
-@@ -108,18 +138,18 @@
+@@ -108,18 +140,18 @@
        let startOffset = try SafeTensorsReader.parseOffset(offsetsAny[0], tensorName: key)
        let endOffset = try SafeTensorsReader.parseOffset(offsetsAny[1], tensorName: key)
  
@@ -173,7 +175,7 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
          throw SafeTensorsReaderError.invalidOffsets(name: key)
        }
  
-@@ -130,10 +160,25 @@
+@@ -130,10 +162,25 @@
          dataOffset: absoluteOffset,
          byteCount: byteCount
        )
@@ -201,7 +203,7 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
    }
  
    public var tensorNames: [String] {
-@@ -169,16 +214,8 @@
+@@ -169,16 +216,8 @@
        throw SafeTensorsReaderError.tensorNotFound(name)
      }
  
@@ -220,7 +222,7 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
    }
  
    public func intScalar(named name: String) throws -> Int {
-@@ -189,12 +226,9 @@
+@@ -189,12 +228,9 @@
        throw SafeTensorsReaderError.invalidShape(name: name)
      }
  
@@ -236,7 +238,7 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
        switch metadata.dtype {
        case .int32:
          var value: Int32 = 0
-@@ -222,7 +256,10 @@
+@@ -222,7 +258,10 @@
          withUnsafeMutableBytes(of: &value) { dst in
            dst.copyBytes(from: UnsafeRawBufferPointer(start: valuePtr, count: MemoryLayout<UInt64>.size))
          }
@@ -248,7 +250,7 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
  
        default:
          throw SafeTensorsReaderError.unsupportedScalarDType(name: name, dtype: String(describing: metadata.dtype))
-@@ -231,18 +268,133 @@
+@@ -231,18 +270,133 @@
    }
  
    private static func parseOffset(_ value: Any, tensorName: String) throws -> Int {
@@ -397,25 +399,28 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
 diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift b/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift
 --- a/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift
 +++ b/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift
-@@ -6,6 +6,9 @@
+@@ -6,13 +6,19 @@
    case configNotFound(URL)
    case invalidInputShape
    case missingHiddenState(Int)
+-}
 +  case incompleteLayer(Int)
 +  case unsupportedLayeredQuantization
 +  case unsupportedLayeredPrecision
- }
++}
++
++private typealias LayeredTextSource = (weights: Flux2PinnedWeightSelection, quantization: Flux2QuantizationManifest?)
  
  public final class Flux2Qwen3TextEncoder: Module {
-@@ -13,6 +16,7 @@
+   public let configuration: Flux2Qwen3Configuration
  
    @ModuleInfo(key: "model") private var model: Flux2Qwen3Model
    @ModuleInfo(key: "lm_head") private var lmHead: Linear?
-+  private var layeredSource: (snapshot: URL, dtype: DType, fileSet: Flux2FileSet?, admissionValidator: @Sendable () throws -> Void)? = nil
++  private var layeredSource: LayeredTextSource? = nil
  
    public init(configuration: Flux2Qwen3Configuration) {
      self.configuration = configuration
-@@ -25,7 +29,8 @@
+@@ -25,7 +31,8 @@
      super.init()
    }
  
@@ -425,7 +430,7 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift b/Sour
      let configURL = snapshot
        .appendingPathComponent("text_encoder")
        .appendingPathComponent("config.json")
-@@ -38,13 +43,49 @@
+@@ -38,13 +45,44 @@
      let configuration = try JSONDecoder().decode(Flux2Qwen3Configuration.self, from: configData)
      let encoder = Flux2Qwen3TextEncoder(configuration: configuration)
  
@@ -446,9 +451,7 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift b/Sour
 +  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil,
 +      admissionValidator: @escaping @Sendable () throws -> Void = {}) throws -> Flux2Qwen3TextEncoder {
 +    try admissionValidator()
-+    if let _ = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
-+      throw Flux2Qwen3TextEncoderError.unsupportedLayeredQuantization
-+    }
++    let quantization = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet)
 +    try fileSet?.require("text_encoder/config.json")
 +    let configURL = snapshot.appendingPathComponent("text_encoder/config.json")
 +    guard FileManager.default.fileExists(atPath: configURL.path) else {
@@ -456,16 +459,13 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift b/Sour
 +    }
 +    let configuration = try JSONDecoder().decode(Flux2Qwen3Configuration.self, from: Data(contentsOf: configURL))
 +    let encoder = Flux2Qwen3TextEncoder(configuration: configuration)
-+    let loader = Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet)
-+    for file in try loader.listSafetensors(component: .textEncoder) {
-+      try Task.checkCancellation()
-+      guard try SafeTensorsReader(fileURL: file).allMetadata().allSatisfy({ $0.dtype == dtype }) else {
-+        throw Flux2Qwen3TextEncoderError.unsupportedLayeredPrecision
++    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .textEncoder,
++      fileSet: fileSet, admissionValidator: admissionValidator) { name, actual in
++        Flux2Quantizer.permitsLayeredDType(name: name, dtype: actual, component: .textEncoder,
++          manifest: quantization, floatingDType: dtype)
 +      }
-+    }
-+    let weights = try loader.load(component: .textEncoder, dtype: dtype) {
-+      !$0.hasPrefix("model.layers.")
-+    }
++    let weights = try source.load { !$0.hasPrefix("model.layers.") }
++    if let quantization { Flux2Quantizer.applyQuantization(to: encoder, manifest: quantization, weights: weights) }
 +    guard weights["model.embed_tokens.weight"] != nil, weights["model.norm.weight"] != nil,
 +          configuration.tieWordEmbeddings || weights["lm_head.weight"] != nil else {
 +      throw Flux2Qwen3TextEncoderError.incompleteLayer(-1)
@@ -473,11 +473,11 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift b/Sour
 +    try encoder.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
 +    MLX.eval(Array(weights.values))
 +    try admissionValidator()
-+    encoder.layeredSource = (snapshot, dtype, fileSet, admissionValidator)
++    encoder.layeredSource = (source, quantization)
      return encoder
    }
  
-@@ -61,11 +102,12 @@
+@@ -61,11 +99,12 @@
        throw Flux2Qwen3TextEncoderError.invalidInputShape
      }
  
@@ -492,19 +492,19 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift b/Sour
      )
  
      var selected: [MLXArray] = []
-@@ -131,8 +173,9 @@
+@@ -131,8 +170,9 @@
      inputIds: MLXArray,
      attentionMask: MLXArray,
      outputLayerIndices: [Int],
 -    evaluationPolicy: Flux2EvaluationPolicy
 -  ) -> [Int: MLXArray] {
 +    evaluationPolicy: Flux2EvaluationPolicy,
-+    layeredSource: (snapshot: URL, dtype: DType, fileSet: Flux2FileSet?, admissionValidator: @Sendable () throws -> Void)? = nil
++    layeredSource: LayeredTextSource? = nil
 +  ) throws -> [Int: MLXArray] {
      let wanted = Set(outputLayerIndices)
      var results: [Int: MLXArray] = [:]
  
-@@ -149,9 +192,27 @@
+@@ -149,9 +189,29 @@
  
      let mask = Flux2Qwen3AttentionMask.make(hiddenStates: hidden, attentionMask: attentionMask)
  
@@ -513,12 +513,14 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift b/Sour
 +      if layeredSource != nil { try Task.checkCancellation(); Memory.clearCache() }
 +      let layer: Flux2Qwen3TransformerBlock
 +      if let layeredSource {
-+        try layeredSource.admissionValidator()
++        try layeredSource.weights.verifyFileIdentities()
 +        let prefix = "model.layers.\(index)."
-+        let loaded = try Flux2WeightsLoader(snapshot: layeredSource.snapshot, fileSet: layeredSource.fileSet).load(
-+          component: .textEncoder, dtype: layeredSource.dtype) { $0.hasPrefix(prefix) }
++        let loaded = try layeredSource.weights.load { $0.hasPrefix(prefix) }
 +        let stripped = Dictionary(uniqueKeysWithValues: loaded.map { (String($0.key.dropFirst(prefix.count)), $0.value) })
 +        layer = Flux2Qwen3TransformerBlock(configuration)
++        if let quantization = layeredSource.quantization {
++          Flux2Quantizer.applyQuantization(to: layer, manifest: quantization, weights: stripped)
++        }
 +        let expected = Set(layer.parameters().flattened().map { $0.0 })
 +        guard !expected.isEmpty, Set(stripped.keys) == expected else {
 +          throw Flux2Qwen3TextEncoderError.incompleteLayer(index)
@@ -529,7 +531,7 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift b/Sour
 +      }
        hidden = layer(hidden, attentionMask: mask)
 -      evaluationPolicy.evalIfNeeded(hidden)
-+      if let layeredSource { MLX.eval(hidden); try layeredSource.admissionValidator() }
++      if let layeredSource { MLX.eval(hidden); try layeredSource.weights.verifyFileIdentities() }
 +      else { evaluationPolicy.evalIfNeeded(hidden) }
        let hiddenIndex = index + 1
        if wanted.contains(hiddenIndex) {
@@ -547,17 +549,18 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
  }
  
  public final class Flux2Transformer2DModel: Module {
-@@ -26,6 +29,9 @@
+@@ -26,6 +29,10 @@
  
    @ModuleInfo(key: "norm_out") private var normOut: Flux2AdaLayerNormContinuous
    @ModuleInfo(key: "proj_out") private var projOut: Linear
 +  private var layeredSource: Flux2PinnedWeightSelection? = nil
++  private var layeredQuantization: Flux2QuantizationManifest?
 +
 +  public var isLayered: Bool { layeredSource != nil }
  
    public init(configuration: Flux2TransformerConfiguration) {
      self.configuration = configuration
-@@ -96,7 +102,8 @@
+@@ -96,7 +103,8 @@
      super.init()
    }
  
@@ -567,7 +570,7 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
      let configURL = snapshot
        .appendingPathComponent("transformer")
        .appendingPathComponent("config.json")
-@@ -109,14 +116,89 @@
+@@ -109,14 +117,96 @@
      let configuration = try JSONDecoder().decode(Flux2TransformerConfiguration.self, from: configData)
      let model = Flux2Transformer2DModel(configuration: configuration)
  
@@ -586,9 +589,7 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
 +  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil,
 +                                 admissionValidator: (() throws -> Void)? = nil) throws -> Flux2Transformer2DModel {
 +    try admissionValidator?()
-+    if let _ = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
-+      throw Flux2Transformer2DModelError.unsupportedLayeredQuantization
-+    }
++    let quantization = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet)
 +    try admissionValidator?()
 +    try fileSet?.require("transformer/config.json")
 +    let configURL = snapshot.appendingPathComponent("transformer/config.json")
@@ -604,11 +605,13 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
 +    try admissionValidator?()
 +    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .transformer, fileSet: fileSet,
 +                                                 admissionValidator: admissionValidator) {
-+      _, actual in actual == dtype
++      name, actual in Flux2Quantizer.permitsLayeredDType(name: name, dtype: actual, component: .transformer,
++        manifest: quantization, floatingDType: dtype)
 +    }
 +    let weights = try source.load {
 +      !$0.hasPrefix("transformer_blocks.") && !$0.hasPrefix("single_transformer_blocks.")
 +    }
++    if let quantization { Flux2Quantizer.applyQuantization(to: model, manifest: quantization, weights: weights) }
 +    let expected = Set(model.parameters().flattened().map { $0.0 }.filter {
 +      !$0.hasPrefix("transformer_blocks.") && !$0.hasPrefix("single_transformer_blocks.")
 +    })
@@ -619,6 +622,7 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
 +    MLX.eval(Array(weights.values))
 +    try source.verifyFileIdentities()
 +    model.layeredSource = source
++    model.layeredQuantization = quantization
 +    return model
 +  }
 +
@@ -632,6 +636,9 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
 +    let block = Flux2TransformerBlock(dim: innerDim, numAttentionHeads: configuration.numAttentionHeads,
 +      attentionHeadDim: configuration.attentionHeadDim, mlpRatio: configuration.mlpRatio,
 +      eps: configuration.eps, bias: false)
++    if let layeredQuantization {
++      Flux2Quantizer.applyQuantization(to: block, manifest: layeredQuantization, weights: stripped)
++    }
 +    let expected = Set(block.parameters().flattened().map { $0.0 })
 +    guard !expected.isEmpty, Set(stripped.keys) == expected else {
 +      throw Flux2Transformer2DModelError.incompleteLayer(prefix)
@@ -650,6 +657,9 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
 +    let block = Flux2SingleTransformerBlock(dim: innerDim, numAttentionHeads: configuration.numAttentionHeads,
 +      attentionHeadDim: configuration.attentionHeadDim, mlpRatio: configuration.mlpRatio,
 +      eps: configuration.eps, bias: false)
++    if let layeredQuantization {
++      Flux2Quantizer.applyQuantization(to: block, manifest: layeredQuantization, weights: stripped)
++    }
 +    let expected = Set(block.parameters().flattened().map { $0.0 })
 +    guard !expected.isEmpty, Set(stripped.keys) == expected else {
 +      throw Flux2Transformer2DModelError.incompleteLayer(prefix)
@@ -659,7 +669,7 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
    }
  
    public func callAsFunction(
-@@ -126,8 +208,34 @@
+@@ -126,8 +216,34 @@
      imgIds: MLXArray,
      txtIds: MLXArray,
      guidance: MLXArray? = nil,
@@ -695,7 +705,7 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
      let numTxtTokens = encoderHiddenStates.dim(1)
      let targetDtype = hiddenStates.dtype
      let scale = MLXArray(1000.0).asType(targetDtype)
-@@ -167,7 +275,9 @@
+@@ -167,7 +283,9 @@
        sin: MLX.concatenated([textRotary.sin, imageRotary.sin], axis: 1)
      )
  
@@ -706,7 +716,7 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
        let outputs = block(
          hiddenStates: hidden,
          encoderHiddenStates: encoder,
-@@ -178,11 +288,15 @@
+@@ -178,11 +296,15 @@
        )
        encoder = outputs.encoderHiddenStates
        hidden = outputs.hiddenStates
@@ -723,7 +733,7 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
        let outputs = block(
          hiddenStates: hidden,
          tembModParams: singleStreamMod,
-@@ -190,12 +304,19 @@
+@@ -190,12 +312,19 @@
          attentionMask: attentionMask
        )
        hidden = outputs.hiddenStates

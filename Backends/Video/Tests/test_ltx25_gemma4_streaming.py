@@ -117,6 +117,19 @@ class LTX25Gemma4StreamingPatchTests(unittest.TestCase):
                 _confirm_tokenizer_patch(engine, streaming_gemma4=True)
             for entry in self.manifest["files"]:
                 shutil.copyfile(self.root / entry["path"], site / entry["path"].split("/src/", 1)[1])
+            # The subsequent Gemma3 patch intentionally shares PromptEncoder;
+            # validation requires the composed source, not an intermediate tree.
+            patch_root = Path(directory) / "ordered"
+            gemma3 = json.loads((MANIFEST.parent / "ltx23-gemma3-streaming.json").read_text())
+            for row in gemma3["files"]:
+                target = patch_root / row["path"]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(site / row["path"].split("/src/", 1)[1], target)
+            subprocess.run(["patch", "-p1", "--batch", "--forward", "-i",
+                            str(MANIFEST.parent / "ltx23-gemma3-streaming.patch"), "-d", str(patch_root)], check=True,
+                           capture_output=True)
+            for row in gemma3["files"]:
+                shutil.copyfile(patch_root / row["path"], site / row["path"].split("/src/", 1)[1])
             self.assertEqual(_confirm_tokenizer_patch(engine, streaming_gemma4=True), self.manifest["commit"])
             first = site / self.manifest["files"][0]["path"].split("/src/", 1)[1]
             first.write_bytes(first.read_bytes() + b"\nCHANGED=True\n")

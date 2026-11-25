@@ -11,12 +11,14 @@ public enum Flux2Qwen3TextEncoderError: Error {
   case unsupportedLayeredPrecision
 }
 
+private typealias LayeredTextSource = (weights: Flux2PinnedWeightSelection, quantization: Flux2QuantizationManifest?)
+
 public final class Flux2Qwen3TextEncoder: Module {
   public let configuration: Flux2Qwen3Configuration
 
   @ModuleInfo(key: "model") private var model: Flux2Qwen3Model
   @ModuleInfo(key: "lm_head") private var lmHead: Linear?
-  private var layeredSource: (snapshot: URL, dtype: DType, fileSet: Flux2FileSet?, admissionValidator: @Sendable () throws -> Void)? = nil
+  private var layeredSource: LayeredTextSource? = nil
 
   public init(configuration: Flux2Qwen3Configuration) {
     self.configuration = configuration
@@ -58,9 +60,7 @@ public final class Flux2Qwen3TextEncoder: Module {
   public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil,
       admissionValidator: @escaping @Sendable () throws -> Void = {}) throws -> Flux2Qwen3TextEncoder {
     try admissionValidator()
-    if let _ = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
-      throw Flux2Qwen3TextEncoderError.unsupportedLayeredQuantization
-    }
+    let quantization = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet)
     try fileSet?.require("text_encoder/config.json")
     let configURL = snapshot.appendingPathComponent("text_encoder/config.json")
     guard FileManager.default.fileExists(atPath: configURL.path) else {
@@ -68,16 +68,13 @@ public final class Flux2Qwen3TextEncoder: Module {
     }
     let configuration = try JSONDecoder().decode(Flux2Qwen3Configuration.self, from: Data(contentsOf: configURL))
     let encoder = Flux2Qwen3TextEncoder(configuration: configuration)
-    let loader = Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet)
-    for file in try loader.listSafetensors(component: .textEncoder) {
-      try Task.checkCancellation()
-      guard try SafeTensorsReader(fileURL: file).allMetadata().allSatisfy({ $0.dtype == dtype }) else {
-        throw Flux2Qwen3TextEncoderError.unsupportedLayeredPrecision
+    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .textEncoder,
+      fileSet: fileSet, admissionValidator: admissionValidator) { name, actual in
+        Flux2Quantizer.permitsLayeredDType(name: name, dtype: actual, component: .textEncoder,
+          manifest: quantization, floatingDType: dtype)
       }
-    }
-    let weights = try loader.load(component: .textEncoder, dtype: dtype) {
-      !$0.hasPrefix("model.layers.")
-    }
+    let weights = try source.load { !$0.hasPrefix("model.layers.") }
+    if let quantization { Flux2Quantizer.applyQuantization(to: encoder, manifest: quantization, weights: weights) }
     guard weights["model.embed_tokens.weight"] != nil, weights["model.norm.weight"] != nil,
           configuration.tieWordEmbeddings || weights["lm_head.weight"] != nil else {
       throw Flux2Qwen3TextEncoderError.incompleteLayer(-1)
@@ -85,7 +82,7 @@ public final class Flux2Qwen3TextEncoder: Module {
     try encoder.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
     MLX.eval(Array(weights.values))
     try admissionValidator()
-    encoder.layeredSource = (snapshot, dtype, fileSet, admissionValidator)
+    encoder.layeredSource = (source, quantization)
     return encoder
   }
 
@@ -174,7 +171,7 @@ private final class Flux2Qwen3Model: Module {
     attentionMask: MLXArray,
     outputLayerIndices: [Int],
     evaluationPolicy: Flux2EvaluationPolicy,
-    layeredSource: (snapshot: URL, dtype: DType, fileSet: Flux2FileSet?, admissionValidator: @Sendable () throws -> Void)? = nil
+    layeredSource: LayeredTextSource? = nil
   ) throws -> [Int: MLXArray] {
     let wanted = Set(outputLayerIndices)
     var results: [Int: MLXArray] = [:]
@@ -196,12 +193,14 @@ private final class Flux2Qwen3Model: Module {
       if layeredSource != nil { try Task.checkCancellation(); Memory.clearCache() }
       let layer: Flux2Qwen3TransformerBlock
       if let layeredSource {
-        try layeredSource.admissionValidator()
+        try layeredSource.weights.verifyFileIdentities()
         let prefix = "model.layers.\(index)."
-        let loaded = try Flux2WeightsLoader(snapshot: layeredSource.snapshot, fileSet: layeredSource.fileSet).load(
-          component: .textEncoder, dtype: layeredSource.dtype) { $0.hasPrefix(prefix) }
+        let loaded = try layeredSource.weights.load { $0.hasPrefix(prefix) }
         let stripped = Dictionary(uniqueKeysWithValues: loaded.map { (String($0.key.dropFirst(prefix.count)), $0.value) })
         layer = Flux2Qwen3TransformerBlock(configuration)
+        if let quantization = layeredSource.quantization {
+          Flux2Quantizer.applyQuantization(to: layer, manifest: quantization, weights: stripped)
+        }
         let expected = Set(layer.parameters().flattened().map { $0.0 })
         guard !expected.isEmpty, Set(stripped.keys) == expected else {
           throw Flux2Qwen3TextEncoderError.incompleteLayer(index)
@@ -211,7 +210,7 @@ private final class Flux2Qwen3Model: Module {
         layer = layers[index]
       }
       hidden = layer(hidden, attentionMask: mask)
-      if let layeredSource { MLX.eval(hidden); try layeredSource.admissionValidator() }
+      if let layeredSource { MLX.eval(hidden); try layeredSource.weights.verifyFileIdentities() }
       else { evaluationPolicy.evalIfNeeded(hidden) }
       let hiddenIndex = index + 1
       if wanted.contains(hiddenIndex) {

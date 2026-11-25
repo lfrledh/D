@@ -1,0 +1,68 @@
+--- a/packages/ltx-pipelines-mlx/src/ltx_pipelines_mlx/utils/blocks.py
++++ b/packages/ltx-pipelines-mlx/src/ltx_pipelines_mlx/utils/blocks.py
+@@ -185,11 +185,15 @@
+                     self._text_encoder = Gemma4TextEncoder()
+                     self._text_encoder.load(self.model_dir)
+             else:
+-                self._text_encoder = GemmaLanguageModel()
++                if self.low_ram_streaming:
++                    from d_ltx_gemma3 import StreamingGemma3LanguageModel
++                    self._text_encoder = StreamingGemma3LanguageModel()
++                else:
++                    self._text_encoder = GemmaLanguageModel()
+                 self._text_encoder.load(self.gemma_model_id)
+             aggressive_cleanup()
+ 
+-        if self._feature_extractor is None and not (self.low_ram_streaming and self._encoder_kind == "gemma4"):
++        if self._feature_extractor is None and not self.low_ram_streaming:
+             self._load_feature_extractor()
+ 
+     def _load_feature_extractor(self) -> None:
+@@ -226,6 +230,8 @@
+             if tower is not None:
+                 tower.close()
+                 self._text_encoder._tower = None
++        if self._encoder_kind == "gemma3" and self.low_ram_streaming and self._text_encoder is not None:
++            self._text_encoder.close()
+         self._text_encoder = None
+         self._feature_extractor = None
+         aggressive_cleanup()
+@@ -249,10 +255,38 @@
+                 self.free()
+                 raise
+ 
++        if self.low_ram_streaming and self._encoder_kind == "gemma3":
++            try:
++                return self._encode_gemma3_streaming(prompt, max_length)
++            except BaseException:
++                self.free()
++                raise
++
+         assert self._feature_extractor is not None
+         all_hidden_states, attention_mask = self._text_encoder.encode_all_layers(prompt, max_length=max_length)
+         video_embeds, audio_embeds = self._feature_extractor(all_hidden_states, attention_mask=attention_mask)
+         return video_embeds, audio_embeds
++
++    def _encode_gemma3_streaming(self, prompt: str, max_length: int) -> tuple[mx.array, mx.array]:
++        encoder = self._text_encoder
++        assert encoder is not None
++        try:
++            all_hidden_states, attention_mask = encoder.encode_all_layers(prompt, max_length=max_length)
++            _materialize(*all_hidden_states, attention_mask)
++        finally:
++            encoder.close()
++            self._text_encoder = None
++            encoder = None
++            aggressive_cleanup()
++        try:
++            self._load_feature_extractor()
++            assert self._feature_extractor is not None
++            video_embeds, audio_embeds = self._feature_extractor(all_hidden_states, attention_mask=attention_mask)
++            _materialize(video_embeds, audio_embeds)
++            return video_embeds, audio_embeds
++        finally:
++            self._feature_extractor = None
++            aggressive_cleanup()
+ 
+     def _encode_gemma4_streaming(self, prompt: str, max_length: int) -> tuple[mx.array, mx.array]:
+         from ltx_core_mlx.text_encoders.gemma.gemma4 import StreamingGemma4TextModel

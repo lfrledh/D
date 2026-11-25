@@ -52,6 +52,7 @@ struct VideoWireRequest: Encodable {
     let shift: Float
     let seed: UInt64
     let memoryLimitBytes: UInt64
+    let streamWeights: Bool?
 
     init(id: UUID, video: VideoRequest, memoryLimitBytes: UInt64) {
         runID = id.uuidString.lowercased(); prompt = video.prompt; negativePrompt = video.negativePrompt
@@ -59,5 +60,6 @@ struct VideoWireRequest: Encodable {
         fpsNumerator = video.frameRate.numerator; fpsDenominator = video.frameRate.denominator
         steps = video.steps; guidanceScale = video.guidanceScale; shift = video.scheduleShift
         seed = video.seed; self.memoryLimitBytes = memoryLimitBytes
+        streamWeights = video.adapterOptions == .wan(streamWeights: true) ? true : nil
     }
 }

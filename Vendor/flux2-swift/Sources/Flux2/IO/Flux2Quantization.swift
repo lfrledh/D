@@ -125,6 +125,23 @@ public struct Flux2Quantizer {
     return try Flux2QuantizationManifest.load(from: manifestURL)
   }
 
+  /// Stored packed values and their original scales/biases are loaded as-is.
+  /// This does not quantize floating model weights or change computation dtype.
+  public static func permitsLayeredDType(name: String, dtype: DType, component: Flux2WeightComponent,
+                                        manifest: Flux2QuantizationManifest?, floatingDType: DType) -> Bool {
+    guard let manifest else { return dtype == floatingDType }
+    guard supportedBits.contains(manifest.bits), supportedGroupSizes.contains(manifest.groupSize),
+          manifest.mode == "affine" else { return false }
+    let suffix = [".weight", ".scales", ".biases"].first { name.hasSuffix($0) }
+    if let suffix {
+      let layerName = component.rawValue + "." + name.dropLast(suffix.count)
+      if manifest.layers.contains(where: { $0.name == layerName }) {
+        return suffix == ".weight" ? dtype == .uint32 : (dtype == .float32 || dtype == .bfloat16)
+      }
+    }
+    return dtype == floatingDType
+  }
+
   public static func applyQuantization(
     to model: Module,
     manifest: Flux2QuantizationManifest,

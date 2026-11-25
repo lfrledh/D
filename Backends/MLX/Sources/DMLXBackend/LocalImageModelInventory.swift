@@ -106,9 +106,6 @@ struct LocalImageModelInventory: Sendable {
         }
         let resolvedCapability = try profile.resolvedCapability(for: image)
         let estimatedPeakBytes = try resolvedCapability.estimatedPeakBytes(for: image)
-        guard image.loadingStrategy != .ssdLayered || manifest.revision == fullRevision else {
-            throw InferenceFailure.invalidRequest("SSD layered image loading requires the original pinned Klein BF16 installation.")
-        }
         guard image.prompt.utf8.count <= 1_048_576,
               !image.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw InferenceFailure.invalidRequest("Image prompt must be nonempty and no larger than 1 MiB of UTF-8.")
@@ -163,14 +160,13 @@ struct LocalImageModelInventory: Sendable {
                     manifest: manifest, identities: identities)
     }
 
-    /// Safetensors headers provide exact stored BF16 tensor bytes without loading arrays.
+    /// Safetensors headers provide exact stored BF16/Q8 tensor bytes without loading arrays.
     /// A stage retains its shared weights and at most one decoder/transformer block.
     private static func layeredStageWeightBytes(directory: URL, manifest: Manifest,
                                                 identities: [String: FileIdentity]) throws ->
         (bytes: UInt64, transformerWidth: UInt64, textWidth: UInt64) {
-        guard manifest.revision == fullRevision else {
-            throw InferenceFailure.invalidRequest("Layered Klein loading requires original BF16 weights.")
-        }
+        let quantization = try Flux2Quantizer.loadManifest(from: directory,
+            fileSet: Flux2FileSet(paths: Set(manifest.files.map(\.path))))
         var textBase: UInt64 = 0
         var transformerBase: UInt64 = 0
         var vae: UInt64 = 0
@@ -204,9 +200,13 @@ struct LocalImageModelInventory: Sendable {
             let metadata = reader.allMetadata()
             let firstDataOffset = metadata.map(\.dataOffset).min() ?? 0
             for tensor in metadata {
-                guard validLayeredTensor(tensor, component: file.path,
-                                         firstDataOffset: firstDataOffset) else {
-                    throw InferenceFailure.invalidRequest("Layered Klein requires original BF16 tensors: \(file.path)/\(tensor.name)")
+                let component: Flux2WeightComponent = file.path.hasPrefix("text_encoder/") ? .textEncoder : .transformer
+                let packed = quantization != nil && !file.path.hasPrefix("vae/") &&
+                    Flux2Quantizer.permitsLayeredDType(name: tensor.name, dtype: tensor.dtype, component: component,
+                        manifest: quantization, floatingDType: .bfloat16)
+                guard packed || validLayeredTensor(tensor, component: file.path,
+                                                  firstDataOffset: firstDataOffset) else {
+                    throw InferenceFailure.invalidRequest("Layered Klein tensor precision differs: \(file.path)/\(tensor.name)")
                 }
                 let bytes = UInt64(tensor.byteCount)
                 if file.path.hasPrefix("text_encoder/") {

@@ -48,8 +48,8 @@ struct ChatTemplateOverrideTests {
         let upstream = try await AutoTokenizer.from(modelFolder: directory)
         let local = try await LocalTokenizerLoader().loadLocal(from: directory)
         let exact = try await LocalTokenizerLoader(chatTemplateOverride: local.sourceTemplate).loadLocal(from: directory)
-        for thinking in [true, false] {
-            let context: [String: any Sendable] = ["enable_thinking": thinking]
+        for thinking: Bool? in [nil, true, false] {
+            let context: [String: any Sendable] = thinking.map { ["enable_thinking": $0] } ?? [:]
             let baseline = try upstream.applyChatTemplate(messages: messages, tools: nil, additionalContext: context)
             let preview = try local.preview(messages: messages, tools: nil, additionalContext: context)
             let overridden = try exact.preview(messages: messages, tools: nil, additionalContext: context)
@@ -62,6 +62,27 @@ struct ChatTemplateOverrideTests {
             let independent = try upstream.applyChatTemplate(messages: messages, chatTemplate: .literal(source),
                 addGenerationPrompt: true, truncation: false, maxLength: nil, tools: nil, additionalContext: context)
             #expect(editedPreview.2 == independent)
+        }
+    }
+
+    @Test("Saved default-thinking QA inputs retain the recorded prompt token counts",
+          .enabled(if: ProcessInfo.processInfo.environment["D_DEFAULT_THINKING_QA_DIR"] != nil))
+    func savedDefaultThinkingPrompts() async throws {
+        let directory = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_DEFAULT_THINKING_QA_DIR"]))
+        let model = ModelReference(directory: directory, revision: "8b2b98c00a6b4d291155e4890773ca8f769aee53")
+        let upstream = try await AutoTokenizer.from(modelFolder: directory)
+        for (text, count) in [
+            ("Remember the phrase blue lantern. Reply with one short sentence.", 22),
+            ("My project is called Blue Lantern. Suggest one short tagline for it.", 26)
+        ] {
+            let request = TextRequest(prompt: "", maxTokens: 4096, temperature: 0.7,
+                messages: [.init(role: .user, parts: [.text(text)])])
+            let preview = try await ChatTemplatePreviewProvider.preview(model: model, request: request)
+            let baseline = try upstream.applyChatTemplate(messages: QwenMessageMapping.messages(request),
+                tools: nil, additionalContext: [:])
+            #expect(preview.templateTokenIDs == baseline && baseline.count == count)
+            #expect(preview.renderedTemplate.hasSuffix("<think>\n"))
+            #expect(!preview.renderedTemplate.contains("</think>"))
         }
     }
 

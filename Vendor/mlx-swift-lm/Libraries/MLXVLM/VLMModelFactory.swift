@@ -401,7 +401,6 @@ public final class VLMModelFactory: GenericModelFactory {
         }
 
         // Load EOS token IDs from config.json, with optional override from generation_config.json
-        var eosTokenIds = Set(baseConfig.eosTokenIds?.values ?? [])
         let generationConfigURL = modelDirectory.appending(component: "generation_config.json")
         let generationConfig: GenerationConfigFile?
         if let fileSelection {
@@ -420,9 +419,8 @@ public final class VLMModelFactory: GenericModelFactory {
         } else {
             generationConfig = nil
         }
-        if let genEosIds = generationConfig?.eosTokenIds?.values {
-            eosTokenIds = Set(genEosIds)  // Override per Python mlx-lm behavior
-        }
+        let eosTokenIds = try resolveVLMEOSTokenIds(
+            configData: configData, base: baseConfig, generation: generationConfig)
 
         var mutableConfiguration = configuration
         mutableConfiguration.eosTokenIds = eosTokenIds
@@ -534,6 +532,24 @@ private func loadProcessorConfig(from modelDirectory: URL,
     } catch {
         throw ProcessorConfigError(filename: url.lastPathComponent, underlying: error)
     }
+}
+
+/// Dense Qwen3.5 stores its text EOS in text_config. Explicit sidecar/top-level
+/// values (including an empty list) retain their existing precedence.
+func resolveVLMEOSTokenIds(
+    configData: Data, base: BaseConfiguration, generation: GenerationConfigFile?
+) throws -> Set<Int> {
+    if let values = generation?.eosTokenIds?.values { return Set(values) }
+    if let values = base.eosTokenIds?.values { return Set(values) }
+    guard base.modelType == "qwen3_5" else { return [] }
+    struct Nested: Decodable {
+        struct Text: Decodable {
+            let eos_token_id: IntOrIntArray?
+        }
+        let text_config: Text?
+    }
+    return Set(try JSONDecoder.json5().decode(Nested.self, from: configData)
+        .text_config?.eos_token_id?.values ?? [])
 }
 
 public class TrampolineModelFactory: NSObject, ModelFactoryTrampoline {

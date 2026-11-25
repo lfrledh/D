@@ -28,12 +28,17 @@ struct ExternalVideoBackendTests {
         await #expect(throws: (any Error).self) { _ = try await backend.lowMemoryPlans(for: request) }
     }
 
-    @Test func ltx23StreamingStillAccountsForItsResidentTextTower() async throws {
+    @Test func ltx23StreamingStagesFitDefaultBudgetWithoutAdmittingWholeTower() async throws {
         for profile in [ExternalVideoExecutionProfile.ltx23BF16Full, .ltx23Q8GemmaQ4] {
             let fixture = try Fixture(profile: profile), backend = try fixture.backend(mode: "success")
-            let estimate = try await backend.estimate(fixture.request())
-            let weights: UInt64 = profile == .ltx23BF16Full ? 26_388_550_536 : 8_028_675_248
-            #expect(estimate.peakBytes >= weights + 2 * 1_073_741_824)
+            let request = fixture.request()
+            let streaming = try await backend.estimate(request)
+            // Covers the measured 1024-token BF16 stage with planning headroom.
+            #expect(streaming.peakBytes > 8_075_320_348)
+            #expect(streaming.peakBytes < 12 * 1_073_741_824)
+            let resident = try await backend.estimate(fixture.request(streamWeights: false))
+            #expect(resident.peakBytes > 12 * 1_073_741_824)
+            #expect(resident.peakBytes > streaming.peakBytes)
         }
     }
     @Test func independentPublicationAndFrozenDigest() throws {
@@ -262,12 +267,12 @@ private struct Fixture {
         return .init(url: source, width: 2, height: 2, byteCount: UInt64(data.count),
                      contentSHA256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())
     }
-    func request(firstFrame: VideoFrameReference? = nil) -> InferenceRequest {
+    func request(firstFrame: VideoFrameReference? = nil, streamWeights: Bool = true) -> InferenceRequest {
         .init(model: .init(directory: model, revision: profile.modelIdentity),
             input: .video(.init(prompt: "CPU fixture", negativePrompt: "", width: 64, height: 64,
                 frameCount: 9, frameRate: .init(numerator: 24), steps: 2,
                 guidanceScale: 1, scheduleShift: 1, seed: 42, executionProfile: profile.reference,
-                adapterOptions: .ltx(streamWeights: true, spatiotemporalGuidance: 0),
+                adapterOptions: .ltx(streamWeights: streamWeights, spatiotemporalGuidance: 0),
                 firstFrame: firstFrame)))
     }
 }

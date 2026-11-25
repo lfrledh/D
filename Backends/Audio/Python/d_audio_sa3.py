@@ -236,6 +236,140 @@ def _vendor_import(name: str, vendor_directory: Path, checked: dict[str, str]) -
         loader.close()
 
 
+class _SA3LayerWeights:
+    """The admitted NPZ, original tensors, one layer at a time; no derived copy."""
+    def __init__(self, path, cancelled):
+        import numpy as np
+        self.path, self.cancelled = path, cancelled
+        self.identity = self.current()
+        with np.load(path, allow_pickle=False) as arrays:
+            self.keys = tuple(arrays.files)
+        if len(set(self.keys)) != len(self.keys):
+            raise ContractError("duplicate NPZ tensors", "configuration")
+        self.verify()
+
+    def current(self):
+        info = os.stat(self.path, follow_symlinks=False)
+        return (info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+    def verify(self):
+        _check_cancel(self.cancelled)
+        if self.current() != self.identity:
+            raise ContractError("SA3 weights changed during execution", "configuration")
+
+    def read(self, include):
+        import numpy as np
+        import mlx.core as mx
+        self.verify()
+        values = {}
+        with np.load(self.path, allow_pickle=False) as arrays:
+            for key in self.keys:
+                if include(key):
+                    self.verify()
+                    value = arrays[key]
+                    if value.dtype not in (np.float16, np.float32):
+                        raise ContractError("unexpected SA3 tensor dtype", "configuration")
+                    values[key] = mx.array(value)
+        self.verify()
+        return values
+
+    def install(self, module, values):
+        import mlx.core as mx
+        from mlx.utils import tree_flatten
+        expected = dict(tree_flatten(module.parameters()))
+        if set(values) != set(expected) or any(values[k].shape != expected[k].shape for k in expected):
+            raise ContractError("SA3 layer differs from the fixed architecture", "configuration")
+        module.load_weights(list(values.items()), strict=True)
+        mx.eval(module.parameters())
+        self.verify()
+
+
+def _layered_text(path, t5, cancelled):
+    import mlx.core as mx
+    import mlx.nn as nn
+    import numpy as np
+    import sentencepiece as spm
+    weights = _SA3LayerWeights(path, cancelled)
+    with np.load(path, allow_pickle=False) as arrays:
+        cfg = t5.T5GemmaConfig.from_json_bytes(arrays["META"].tobytes())
+        tokenizer = spm.SentencePieceProcessor()
+        tokenizer.LoadFromSerializedProto(arrays["TOKENIZER_MODEL"].tobytes())
+    encoder = t5._Encoder(cfg)
+    shared = weights.read(lambda key: key not in ("META", "TOKENIZER_MODEL") and not key.startswith("layers."))
+    encoder.embed_tokens.weight = shared["embed_tokens.weight"]
+    encoder.norm = shared["norm.weight"]
+    if "rope_inv_freq" in shared:
+        encoder.rope_inv_freq = shared["rope_inv_freq"].astype(mx.float32)
+    norms = ("pre_self_attn_layernorm", "post_self_attn_layernorm", "pre_feedforward_layernorm", "post_feedforward_layernorm")
+    class Layer(nn.Module):
+        def __init__(self, index):
+            super().__init__(); self.index = index
+        def __call__(self, *args):
+            weights.verify()
+            rng = list(mx.random.state); mx.eval(rng)
+            layer = None
+            try:
+                layer = t5._EncoderLayer(cfg)
+                prefix = f"layers.{self.index}."
+                values = {key[len(prefix):]: value for key, value in weights.read(lambda k: k.startswith(prefix)).items()}
+                for name in norms:
+                    values[name] = values.pop(name + ".weight")
+                weights.install(layer, values)
+                result = layer(*args); mx.eval(result); weights.verify()
+                return result
+            finally:
+                mx.random.state = rng; layer = None
+                mx.clear_cache()
+    encoder.layers = [Layer(index) for index in range(cfg.num_hidden_layers)]
+    mx.eval(encoder.parameters()); weights.verify()
+    return t5.T5Gemma(encoder, cfg, tokenizer)
+
+
+def _layered_dit(path, dit_module, latent_count, cancelled):
+    import mlx.core as mx
+    import mlx.nn as nn
+    weights = _SA3LayerWeights(path, cancelled)
+    model = dit_module.DiT(T_lat=latent_count)
+    # Keep the vendor ContinuousTransformer loop unchanged, including local
+    # conditioning before each block. The proxy owns one block between its two calls.
+    class Layer(nn.Module):
+        def __init__(self, index):
+            super().__init__(); self.index = index; self._loaded = None
+        def to_local_embed(self, local):
+            weights.verify()
+            rng = list(mx.random.state); mx.eval(rng)
+            try:
+                self._loaded = dit_module.TransformerBlock()
+                prefix = f"transformer.layers.{self.index}."
+                values = {key[len(prefix):]: value.astype(mx.float16)
+                    for key, value in weights.read(lambda k: k.startswith(prefix)).items()}
+                weights.install(self._loaded, values)
+                result = self._loaded.to_local_embed(local); mx.eval(result); weights.verify()
+                return result
+            except BaseException:
+                self._loaded = None; mx.clear_cache(); raise
+            finally:
+                mx.random.state = rng
+        def __call__(self, *args):
+            try:
+                weights.verify()
+                if self._loaded is None:
+                    raise ContractError("SA3 block conditioning was not evaluated", "configuration")
+                result = self._loaded(*args); mx.eval(result); weights.verify()
+                return result
+            finally:
+                self._loaded = None; mx.clear_cache()
+    model.transformer.layers = [Layer(index) for index in range(dit_module.DEPTH)]
+    shared = {key: value.astype(mx.float16) for key, value in weights.read(
+        lambda k: not k.startswith(("transformer.layers.", "cond."))).items()}
+    # The pinned resident loader ignores this unused serialized rotary tensor;
+    # DiT uses its original fixed RoPE kernel and generated Fourier frequencies.
+    shared.pop("transformer.rotary_pos_emb.inv_freq", None)
+    shared["timestep_features.freqs"] = model.timestep_features.freqs
+    weights.install(model, shared)
+    return model
+
+
 def run_inference(
     request: AudioRequest,
     manifest: WeightManifest,
@@ -290,7 +424,11 @@ def run_inference(
 
         progress("encodingText", 0, 1)
         started = time.monotonic()
-        text_encoder = t5_module.T5Gemma.from_npz(str(text_path))
+        layered = request.raw.get("loadingStrategy") == "ssdLayered"
+        if layered and codec != "same_s":
+            raise ContractError("layered SA3 requires the fixed small architecture", "configuration")
+        text_encoder = (_layered_text(text_path, t5_module, cancelled) if layered
+                        else t5_module.T5Gemma.from_npz(str(text_path)))
         tokens = text_encoder.tokenizer.Encode(request.prompt)
         if len(tokens) > 256:
             raise ContractError("prompt exceeds the SA3 tokenizer limit of 256 tokens")
@@ -342,8 +480,9 @@ def run_inference(
 
         progress("denoising", 0, request.steps)
         started = time.monotonic()
-        dit = dit_module.load_dit(str(dit_path), T_lat=request.latent_count, dtype=dtype,
-                                  compile_=False, lora_specs=None, num_steps=request.steps)
+        dit = (_layered_dit(dit_path, dit_module, request.latent_count, cancelled) if layered
+               else dit_module.load_dit(str(dit_path), T_lat=request.latent_count, dtype=dtype,
+                                      compile_=False, lora_specs=None, num_steps=request.steps))
         sigmas = pipeline.build_pingpong_schedule(request.steps, sigma_max=request.strength, use_logsnr_shift=True)
         key = mx.random.key(request.seed)
         pure_noise = mx.random.normal((1, 256, request.latent_count), dtype=dtype, key=key)

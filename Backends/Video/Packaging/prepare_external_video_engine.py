@@ -243,13 +243,14 @@ def verify_ltx_source(archive, site, video):
     if core._sha256(archive) != "99a789280172bfc51c4e4b455e29f55c8b467ac2305131bcf9fe5750a3b03d0e":
         raise core.PackagingError("Pinned LTX source archive differs")
     expected, before = {}, {}
-    for name in ("ltx-reject-token-truncation.json", "ltx25-gemma4-streaming.json"):
+    for name in ("ltx-reject-token-truncation.json", "ltx25-gemma4-streaming.json", "ltx23-gemma3-streaming.json"):
         patches = json.loads((video / "Adapters/Patches" / name).read_text())
         for entry in patches["files"]:
             relative = entry["path"].split("/src/", 1)[1]
-            if relative in expected:
-                raise core.PackagingError("Overlapping LTX patches require an explicit ordered migration")
-            expected[relative], before[relative] = entry["after_sha256"], entry["before_sha256"]
+            if relative in expected and expected[relative] != entry["before_sha256"]:
+                raise core.PackagingError("Ordered LTX patch baseline differs")
+            before.setdefault(relative, entry["before_sha256"])
+            expected[relative] = entry["after_sha256"]
     checked = set()
     with tarfile.open(archive, "r:gz") as bundle:
         for member in bundle.getmembers():
@@ -348,7 +349,7 @@ def prepare(args):
             "schemaVersion": 1, "h3Commit": "8974cc055ea9c02fcd14cc27dfda3e1027c05153",
             "ltxCommit": "1724ca673d59f023a8a95efee06e5d36d61c2765",
             "ltxSourceFilesVerified": ltx_checked,
-            "ltxPatches": ["ltx-reject-token-truncation.json", "ltx25-gemma4-streaming.json"],
+            "ltxPatches": ["ltx-reject-token-truncation.json", "ltx25-gemma4-streaming.json", "ltx23-gemma3-streaming.json"],
             "nativeLibraries": libraries, "weightsBundled": False,
             "ffmpegSource": "Licenses/ffmpeg-9.0.1-SOURCE.json",
             "ffmpegSourceArchiveSHA256": ffmpeg_origin["sourceSHA256"],

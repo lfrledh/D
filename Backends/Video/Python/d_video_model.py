@@ -62,6 +62,7 @@ class PreparedModel:
         tensors = m.get("tensors")
         if not isinstance(tensors, list) or len(tensors) != 1261:
             raise ValueError("Prepared checkpoint must describe exactly 1261 original tensors")
+        self._verified = {}
         self.rows = {r: [] for r in ("text", "diffusion", "vae")}
         names, paths = set(), set()
         for row in tensors:
@@ -92,13 +93,15 @@ class PreparedModel:
         if {role: len(rows) for role, rows in self.rows.items()} != {"text": 242, "diffusion": 825, "vae": 194}:
             raise ValueError("Checkpoint component counts differ")
 
-    def load(self, role: str, module, checkpoint=None):
+    def load(self, role: str, module, checkpoint=None, *, prefix="", shared_only=False):
         import mlx.core as mx
         from mlx.utils import tree_flatten
 
         generated = {"freqs"} if role == "diffusion" else ({"mean", "std", "inv_std"} if role == "vae" else set())
         expected = dict(tree_flatten(module.parameters()))
         learned = set(expected) - generated
+        if shared_only:
+            learned = {key for key in learned if not key.startswith("blocks.")}
         rows = self.rows[role]
         mapped = {}
         for row in rows:
@@ -106,6 +109,12 @@ class PreparedModel:
             if role == "vae" and (name.startswith("encoder.") or name.startswith("conv1.")):
                 continue  # Explicitly excluded encoder, unsupported by the T2V decoder.
             target = mapped_name(role, name)
+            if prefix:
+                if not target.startswith(prefix):
+                    continue
+                target = target[len(prefix):]
+            elif shared_only and target.startswith("blocks."):
+                continue
             if target not in learned or target in mapped:
                 raise ValueError("Unexpected or duplicate learned parameter: " + target)
             mapped[target] = row
@@ -116,7 +125,9 @@ class PreparedModel:
                 checkpoint(index, len(mapped))
             path = checked_local(self.root / row["path"])
             before = identity(path)
-            if before[2] != row["size"] or digest(path) != row["sha256"] or identity(path) != before:
+            saved = self._verified.get(row["path"])
+            if (before[2] != row["size"] or (saved is not None and saved != before)
+                    or (saved is None and digest(path) != row["sha256"]) or identity(path) != before):
                 raise ValueError("Prepared tensor failed integrity verification: " + row["name"])
             data = mx.load(str(path))
             if set(data) != {row["name"]}:
@@ -139,9 +150,55 @@ class PreparedModel:
             mx.eval(value)
             if identity(path) != before:
                 raise ValueError("Tensor changed during load")
+            self._verified[row["path"]] = before
             del data, value
         if identity(self.manifest_path) != self.manifest_identity:
             raise ValueError("Prepared manifest changed while loading")
+        return module
+
+
+    def verify_loaded(self):
+        if identity(self.manifest_path) != self.manifest_identity:
+            raise ValueError("Prepared manifest changed during execution")
+        for path, saved in self._verified.items():
+            if identity(checked_local(self.root / path)) != saved:
+                raise ValueError("Prepared tensor changed after admission: " + path)
+
+    def layered(self, role, module, factory, checkpoint=None):
+        """Keep shared tensors and one exact block, using the unchanged vendor forward."""
+        import mlx.core as mx
+        import mlx.nn as nn
+        from mlx.utils import tree_flatten
+        owner = self
+        count = len(module.blocks)
+        self.load(role, module, checkpoint, shared_only=True)
+        class Block(nn.Module):
+            def __init__(self, index):
+                super().__init__()
+                self.index = index
+            def __call__(self, *args, **kwargs):
+                if checkpoint:
+                    checkpoint(self.index, count)
+                owner.verify_loaded()
+                # Initializers must not advance the inference RNG between blocks.
+                rng = list(mx.random.state)
+                mx.eval(rng)
+                block = None
+                try:
+                    block = factory()
+                    owner.load(role, block, checkpoint, prefix=f"blocks.{self.index}.")
+                    result = block(*args, **kwargs)
+                    mx.eval([value for _, value in tree_flatten(result)])
+                    owner.verify_loaded()
+                    if checkpoint:
+                        checkpoint(self.index + 1, count)
+                    return result
+                finally:
+                    mx.random.state = rng
+                    block = None
+                    mx.clear_cache()
+        module.blocks = [Block(index) for index in range(count)]
+        mx.clear_cache()
         return module
 
 

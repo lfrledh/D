@@ -4,7 +4,7 @@ import Foundation
 
 /// AUDIO1 host bridge for the separately pinned local Python SA3 provider. The child process,
 /// not this Swift adapter, imports MLX. One instance belongs to one InferenceRuntime.
-public actor MLXAudioBackend: InferenceBackend {
+public actor MLXAudioBackend: InferenceExecutionPlanning {
     public nonisolated let descriptor = BackendDescriptor(
         id: "mlx.audio.sa3", version: "1", capabilities: [.audioGeneration])
     public nonisolated let executionCapability: AudioExecutionCapability
@@ -32,8 +32,38 @@ public actor MLXAudioBackend: InferenceBackend {
         return ResourceEstimate(peakBytes: inventory.estimatedPeakBytes, confidence: .estimated)
     }
 
-    public func execute(
-        _ request: InferenceRequest,
+    private func planSeal(_ request: InferenceRequest) throws -> ModelExecutionSeal {
+        let inventory = try AudioModelInventory.inspect(request, configuration: configuration)
+        guard inventory.profile == .smMusic else {
+            throw InferenceFailure.invalidRequest("This SA3 profile has no validated layered route.")
+        }
+        return try ModelExecutionSeal.capture(request.model, backend: descriptor, names: inventory.weights.map(\.path))
+    }
+
+    public func lowMemoryPlans(for request: InferenceRequest) async throws -> [InferenceExecutionPlan] {
+        let seal = try planSeal(request)
+        return [.init(request: try request.lowMemoryRequest(method: .layered), method: .layered,
+            strategyVersion: 1, modelIdentityToken: seal.token)]
+    }
+    public func validate(_ plan: InferenceExecutionPlan, for original: InferenceRequest) async throws {
+        try plan.validateSemantics(original: original)
+        guard plan.method == .layered, plan.strategyVersion == 1,
+              try planSeal(original).token == plan.modelIdentityToken else {
+            throw InferenceFailure.inputIntegrityChanged("Approved SA3 files changed.")
+        }
+    }
+    public func execute(_ plan: InferenceExecutionPlan, for original: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await validate(plan, for: original)
+        return try await execute(plan.request, expectedPlan: plan, emit: emit)
+    }
+    public func execute(_ request: InferenceRequest,
+                        emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try await execute(request, expectedPlan: nil, emit: emit)
+    }
+
+    private func execute(
+        _ request: InferenceRequest, expectedPlan: InferenceExecutionPlan?,
         emit: @escaping @Sendable (InferenceOutput) async throws -> Void
     ) async throws -> InferenceResult {
         guard !executing, !releasing, lease == nil else {
@@ -45,7 +75,9 @@ public actor MLXAudioBackend: InferenceBackend {
 
         try configuration.confirmDeployment?()
         let inventory = try AudioModelInventory.inspect(request, configuration: configuration)
-        // Licensing is disclosed by the host; a local checkbox cannot grant rights.
+        if let expectedPlan, try planSeal(request).token != expectedPlan.modelIdentityToken {
+            throw InferenceFailure.inputIntegrityChanged("Approved SA3 files changed before execution.")
+        }
         try Task.checkCancellation()
         guard case .audio(let audio) = request.input else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
@@ -62,6 +94,10 @@ public actor MLXAudioBackend: InferenceBackend {
         let token = UUID()
         try await MLXExecutionLease.shared.acquire(token)
         lease = token
+        try inventory.confirmUnchanged()
+        if let expectedPlan, try planSeal(request).token != expectedPlan.modelIdentityToken {
+            throw InferenceFailure.inputIntegrityChanged("Approved SA3 files changed while queued.")
+        }
         let runDirectory: URL
         do {
             runDirectory = try Self.makeRunDirectory(root: inventory.configuration.artifactDirectory,
@@ -135,6 +171,10 @@ public actor MLXAudioBackend: InferenceBackend {
             }
             try access?.finish()
             try configuration.confirmDeployment?()
+            try inventory.confirmUnchanged()
+            if let expectedPlan, try planSeal(request).token != expectedPlan.modelIdentityToken {
+                throw InferenceFailure.inputIntegrityChanged("Approved SA3 files changed during execution.")
+            }
 
             // The process and both pipe readers have exited before any artifact becomes visible
             // through the runtime event stream.
@@ -173,8 +213,12 @@ public actor MLXAudioBackend: InferenceBackend {
             // Published provider files, if any, remain under this exact owned run directory.
             throw CancellationError()
         } catch let failure as InferenceFailure {
-            throw InferenceFailure.backendFailed(
-                "\(failure.localizedDescription) Audio diagnostics were retained at \(runDirectory.path).")
+            let detail = "\(failure.localizedDescription) Audio diagnostics were retained at \(runDirectory.path)."
+            switch failure {
+            case .inputIntegrityChanged: throw InferenceFailure.inputIntegrityChanged(detail)
+            case .resourceCleanupUnconfirmed: throw InferenceFailure.resourceCleanupUnconfirmed(detail)
+            default: throw InferenceFailure.backendFailed(detail)
+            }
         } catch {
             throw InferenceFailure.backendFailed(
                 "Audio execution failed; diagnostics were retained at \(runDirectory.path): \(error.localizedDescription)")
@@ -235,6 +279,7 @@ public actor MLXAudioBackend: InferenceBackend {
         let strength: Float
         let source: Source?
         let editRegion: Region?
+        let loadingStrategy: AudioDiffusionLoadingStrategy?
     }
 
     private static func encodeRequest(_ request: InferenceRequest, audio: AudioRequest) throws -> Data {
@@ -252,7 +297,7 @@ public actor MLXAudioBackend: InferenceBackend {
             runID: request.id.uuidString.lowercased(), operation: audio.operation.rawValue,
             prompt: audio.prompt, durationSeconds: audio.durationSeconds, seed: audio.seed,
             steps: diffusion.steps, guidanceScale: diffusion.guidanceScale, strength: diffusion.strength,
-            source: frozenSource, editRegion: frozenRegion)
+            source: frozenSource, editRegion: frozenRegion, loadingStrategy: diffusion.loadingStrategy)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         let data = try encoder.encode(frozen)
