@@ -1,12 +1,45 @@
 # 首发模型能力矩阵
 
+## 2026-11-25：全局低内存覆盖
+
+目录仍为20个准确配置，没有删支持项或换精度。以下按源码、阶段/独立provider及普通App分别列证；LTX2.3 BF16已取得本轮f928普通App完整请求及冷开证据，不外推其他型号。N25见CURRENT_ACTIONS。默认预算仍为物理内存减去max(4GiB,1/4)，本机12GiB；不是实时空闲内存。新建任务使用automatic，旧缺字段/fixed/明确手选保持原义；普通估算满足预算直接执行，否则才通过原ask/allow/deny及单次决定处理方案。
+
+| 当前配置 | 普通路线 → 低驻留路线；节省/仍驻留 | 预算依据、代码与实际证据边界 |
+|---|---|---|
+| Qwen3.5-9B BF16 | 完整语言层 → 原BF16逐层；embedding/head、KV及必要视觉组件保留 | 既有QwenVLM预算/原dtype路线沿用；新全局/默认接线有契约验证，准确BF16历史分层GPU沿用；本型号默认12GiB新普通请求未重跑，大常驻未验不代替低内存。 |
+| Qwen3.5-9B Q4 | 完整量化语言层 → 原packed层；量化参数、KV/视觉组件保留 | 既有精确Q4路线沿用；f928普通App新请求782E3801以automatic/默认12GiB直接resident完成，无确认，估算12,504,421,920B、MLX峰6,220,432,180B；保存冷开保持。此会话显式thinking off，不冒称默认思考问题已解。另修嵌套EOS漏读。 |
+| Qwen3.8-27B BF16 | 完整层 → 原BF16逐层；KV/共享/必要视觉组件保留 | 15GiB历史真实请求有效，不外推本轮默认12GiB；请求规模仍进入估算。 |
+| Qwen3.8-27B Q4 | 完整层 → 原packed层；共享/KV/视觉组件保留 | 既有分层与身份检查沿用；不把9B结果代为27B实测。 |
+| FLUX Klein4B Q8 | staged整塔 → 原Q8文字/DiT逐层 | 新增原U32 packed、F32 scales及混合dtype读取；真实原文件短文字/DiT逐值、dtype和RNG对照相同；f928普通App显式Layered、默认12GiB完成512²/4步/CFG1/seed42（46C24A90），PNG444,571B且解码为512²；保存正常Quit冷开准确记录保持。预算估算2,223,340,544B不是实测峰值。 |
+| FLUX Klein4B BF16 | staged整塔 → 原BF16文字/DiT逐层 | 既有估算包含共享、单层、激活及VAE；原有效证据沿用，本轮Q8适配不替换它。 |
+| FLUX Dev BF16 | staged整塔 → 原BF16分层 | 既有实现与完整普通请求沿用；本轮不重跑未变采样器。 |
+| MiniMax H3 FL2VA BF16 | 常驻 → 既有流式 | 新建fixed改automatic，冻结fixed保留；原完整普通App请求沿用，新建automatic和旧fixed兼容有全目录/请求组件验证；默认12GiB下本型号新普通GPU未重跑，不外推LTX代表。 |
+| LTX2.5 BF16 | 常驻 → 既有Gemma4/DiT流式及错峰 | 保留原Gemma4路径；新Gemma3补丁顺序检查不改Gemma4数值。 |
+| Wan2.1 T2V1.3B BF16 | 整T5/DiT → 原混合dtype逐层；共享/latent及原VAE分块保留 | 新按1261张量真实shared+maxBlock、请求tokens/workspace、VAE几何估算。320×192、17帧、50步完整provider459秒，MLX峰4,065,559,570B，RSS峰2,842,198,016B，释放active26/cache0；非普通App。大尺寸VAE仍按实际工作集拒绝，未降低原13GiB常驻估算。 |
+| MRT2 small/export-v1 | 固定图 → 编码解释器顺序释放，去预热state重叠 | 最小路线直接用于同一固定图，不伪造第二精度或逐帧权重加载。3GiB+PCM工作区估算保留；4秒/100帧同seed输出逐样本相同，RSS峰1,504,903,168→857,227,264B，MLX峰约0.49GiB。f928普通App从模型库准确选择后自动最小路线，4秒/100帧/seed45正常生成39BADF73；48kHz双声道float32 WAV1,536,044B，播放到192000帧，保存正常Quit冷开再播放；默认12GiB、估算3,225,833,472B，无额外确认。 |
+| ACE1.5 XL SFT F32/no-LM | 常驻 → 既有原F32分层 | 原ask/允许一次/保存冷开证据沿用；不增加LM或改变采样条件。 |
+| Qwen2.5-0.5B Q4 | 常驻 → 原Q4逐层 | 新按准确分片shared+maxBlock、全KV及分块prefill工作区估算；真实原文件分块prefill/两次cache decode逐值与RNG相同；非普通App。 |
+| Qwen2.5-1.5B Q4 | 常驻 → 原Q4逐层 | 同一固定Qwen2实现，逐准确manifest准入；不得以0.5B数值记录冒称本型号GPU通过。 |
+| Qwen2.5-7B Q4 | 常驻 → 原Q4逐层 | 真实7B原Q4独立head、分块prefill/完整KV两步decode逐值/RNG一致；另两分片夹具含共享/独立head和替换拒绝。非普通App，不能外推32B。 |
+| Qwen2.5-32B Q4 | 常驻 → 原Q4逐层 | 同上，最大层/共享及上下文仍可超过预算；不换小型号。 |
+| Stable Audio Small Music | 整T5/DiT → 原F16逐层；共享、latent及F32 codec保留 | 新固定NPZ形状预算shared+maxBlock/codec，保留时长工作区；6秒/8步CFG6同seed完整WAV逐字节相同，MLX峰1,746,234,946→490,235,634B。取消/同尺寸替换恢复mtime反例通过；普通App待验。 |
+| SwiftF0 0.1.2 CPU | 原有小型CPU有界路线 | 399,114B准确ONNX；真实CPU当前最长120秒合成输入产出7500帧，进程RSS峰641,695,744B。修原256MiB偏低估算为256MiB+每输入样本256B，最大759,955,456B；满足默认12GiB，不造双加载器。此为真实CPU provider，非普通App/GPU。 |
+| LTX2.3 BF16 Full | 整Gemma3+connector/DiT → 原BF16 Gemma3分片逐层、49状态物化、释放后connector、既有DiT流式 | 新阶段估算max(真实shared+maxLayer+完整states+workspace,connector+states+workspace,DiT/VAE请求工作区)。真实1024token编码MLX峰2,021,629,962B、connector8,075,320,348B，非整App峰值。f928普通App默认12GiB/global allow自动选择streaming v2，固定512×320/25帧24fps/30步CFG3seed42完成，H.264+48kHz双声道AAC全解码、保存正常Quit/冷开播放通过。App记录1470.388秒；5秒采样child RSS最大3,914,727,424B不是精确峰值，独立sample footprint峰8.6G。开发父进程ffmpeg sandbox-inherit失败保留，不是普通App失败。 |
+| LTX2.3 Q8/Gemma3 Q4 | 整Gemma3Q4+connector → 原packed逐层与错峰；DiT仍原Q8 | 同一分片读取适配实际2分片及过时index，不改原文件；小48层BF16/Q4数值/RNG/释放反例通过；真实原Q4正提示/空负提示1024-token全部49状态逐值、dtype及RNG与原常驻相同，编码MLX峰7,775,519,272→713,400,368B；同进程RSS为累计，不作两路线RSS比较。历史Q8普通GPU/保存冷开有效，新增文字路线待普通包复验。 |
+
+预算定位：Qwen3.5/3.8四配置按`QwenLayeredResourceEstimate`分别累加准确shared/maxLayer、完整KV增长与recurrent/convolution状态、512行projection、视觉输入/工作区及allocator；不以一个固定GiB替代上下文。Klein/Dev由`LocalImageModelInventory`按准确权重、分层shared/maxLayer、图像工作区及VAE估算。H3/LTX由`ExternalVideoBackend.estimate`取各阶段最大值，仍计宽×高×帧工作区；LTX2.3另读准确Gemma3分片/connector。ACE由`ACEResourceEstimate`按原F32层、条件/embedding、两份VAE、时长mask及CFG/KV分支估算。旧Qwen2、Wan、SA3新增实现分别见`LocalModelInventory`、`MLXVideoBackend`、`AudioModelInventory`；均保留输入工作量。以上是准入估算，不是实时可用内存或已测峰值。
+
+MRT2和SwiftF0明确只有经优化/核验的固定最小路线，当前仍为`InferenceBackend`而非替代plan提供者；预算足够直接执行、不额外弹确认。其余18配置的规划接口已接入，不代表18种都在本轮普通App/GPU重跑或任意请求均能满足12GiB。
+
+本轮新音频/视频方案的值型契约只改加载组织，参数/提示词/seed/准确型号及保存记录保持；运行前/取得执行权后/发布前仍验证文件身份。MRT2/SwiftF0已经是小型最小工作集时，满足预算正常执行，无需人为制造“低内存确认”；若实际请求仍超预算，必须保留具体不足，不能以此表当成任意预算保证。源码检查、组件、真实provider、普通App及用户质量判断分别报告。
+
 ## 2026-11-24：LTX2.3普通原始文件添加补证
 
 本轮接续旧完整包/断源/运行证据，另核普通用户取得路径。正常70af App通过“添加本地模型”分别选择model与text_encoder原始目录、明确复制到模型库；App自行识别准确型号、生成内部清单、完整校验并发布，未要求用户运行脚本或选旧准备包根。Q8为26原文件＋清单36,826,797,226B；BF16为28原文件＋清单72,577,188,481B。源inode/尺寸/mtime未改，目标非链接且独立inode；新增安装ED2D448A…、B0AD8B5A…。证据N24/native/raw-{q8,bf16}-*（N24见当前行动）。
 
 原始分离结构本身不能被现有执行器原位使用，界面明确只提供包含必要整理的独立副本；已准备完整包的原位能力继续保留，没有第三种隐含整套“运行缓存”。两条准确版本/精度不替换。70af原生发现准备包执行身份与下载revision混用导致noRoute，37f已修准确catalog workflowIdentity；正常Q8选用及受控失联→同安装重新校验/选用通过。949普通App从新ED2D安装完成Q8真实GPU请求：256²、9帧/24fps、2步、CFG1、seed42、明确允许一次streaming；新run 57B4AD14…完成，H264/AAC结果74,180B、SHA256 01dc30f…f4c。e937仅补低内存确认框的准确型号显示，不冒称重跑GPU。BF16新B0AD安装在949正常选用；最终冷开/播放证据见任务。旧完整包断源与GPU证据保留，不冒充本轮原始添加。
 
-BF16导入/文件准备/选择不受GPU预算阻塞；真实BF16 GPU仍需至少覆盖既有26.58GiB最低方案的较大内存Mac，本机16GiB不能代验。Q8不替代该项。
+BF16导入/文件准备/选择不受GPU预算阻塞。当时26.58GiB是旧整塔实现估算，不能作为物理下限；11月25已明确低内存实现缺口并继续补齐，当前进展见上表。常驻路线的大内存硬件未验单列，Q8不替代BF16。
 
 ## 2026-11-20：LTX2.3具名未验分支补证
 
@@ -15,7 +48,7 @@ BF16导入/文件准备/选择不受GPU预算阻塞；真实BF16 GPU仍需至少
 | 分支 | 本轮实际路径 | 仍缺 |
 |---|---|---|
 | LTX2.3 Q8＋Gemma3 Q4 | 27必需文件/36,826,797,244B完整副本，关闭管理器后后台完成；隔离本轮测试源后原有校验通过。256²、9帧/24fps、2步、CFG1、seed42、STG0，明确允许一次，真实GPU149.8秒，run B500FF8C-9078-4499-B4BE-0E4A6FBDDC71。H264/AAC完整解码、74,180B、SHA256 01dc30f145a3aac082d02809d38cef216dce4f707283a7702bd1fe5a78734f4c。保存、正常Quit、冷开同run/asset，源仍隔离。 | 低步数噪声只证明准确执行链，不是质量；不扩大到其他条件。 |
-| LTX2.3 BF16＋Gemma3 BF16 | 29文件/72,577,188,499B完整独立副本、断本轮源、校验、保存/正常Quit/冷开通过。model rev cfc837526e56abf8657823a0ae192eec3a40177d，encoder rev b8b9b412cb795bd6115fdce8c9a0ef0d1664db3a。 | GPU未开始：最低方案28,536,034,184B（26.58GiB），本机16GiB/执行预算12GiB；准入准确拒绝并保存原诊断。需更大内存Mac，Lead再沿同一副本跑，不用Q8替代或抬高预算绕过。 |
+| LTX2.3 BF16＋Gemma3 BF16 | 29文件/72,577,188,499B完整独立副本、断本轮源、校验、保存/正常Quit/冷开通过。model rev cfc837526e56abf8657823a0ae192eec3a40177d，encoder rev b8b9b412cb795bd6115fdce8c9a0ef0d1664db3a。 | GPU未开始：最低方案28,536,034,184B（26.58GiB），本机16GiB/执行预算12GiB；准入准确拒绝并保存原诊断。此为当时未补全Gemma3低内存路线的拒绝，不是物理下限；11月25继续原BF16分层与错峰实现及默认预算验证。常驻路线较大内存硬件未验单列。 |
 
 当前不是旧“SSD不足”：复制前重新核容量及峰值，原始模型不动。Q8首个AX数值未提交绑定的30步请求正常取消，保留为工具设置失败，不计2步验收。N20/review/q8-native-summary.json、bf16-native-summary.json保存准确安装/run及冷读；本轮后继仅展示/日期/随包说明变化，推理链有效证据按影响沿用。
 

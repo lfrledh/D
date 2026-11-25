@@ -1,5 +1,25 @@
 # D-UI-CONSOLIDATED-01
 
+## 2026-11-25 全局低内存与长期缺陷续办
+
+**正常App补证：** f928已完成BF16完整请求521A0054，默认12GiB、automatic、allowedByPreference、streaming v2；固定512×320、25帧/24fps、30步、CFG3、seed42不变。MP4为217,072B，H.264及48kHz双声道AAC，全解码通过；正常Quit后冷开准确项目，成果、参数和策略保留，播放器0→1.041667秒。单次allowOnce不记住后取消，等待子进程67088消失才再提交，下一次仍询问；全局allow和恢复ask均经冷开保持。正常UI带设置到工作流后，新节点43435A79保留automatic，节点运行7C4DF7D4以同模型/预算再次询问并停止。N25/ordinary-ltx-full/summary.json、native对应记录及LM-04/05-r2/06图；5秒RSS采样、provider耗时、App记录耗时分开。
+
+起点93fcca57，最终普通生产f92888533d6cf92f7acc089023617ac65dea0390已接纳桌面，5a409bdd成为回退；唯一Lead实施，非实施者只读固定快照。N25=`AgentTrials/D-UI-CONSOLIDATED-01/run-20261125-global-low-memory`。89e03bd9接全局默认/执行记录，436ebaa7补原dtype分层/阶段释放及EOS，f9288853使新建编辑请求与节点同为resident+automatic、旧显式nil保留。普通f928 Release/Archive已完成，资源36fa9cc5…a0c6。早先436前台未取得的记录保留；最终f928经真实D命中核对与一次鼠标激活恢复，无系统权限更改、无需本人动作，桌面别名已读回Nov25-Final-f9288853并正常冷开；测试窗口保存、关闭再Quit，最终无遗留D实例。仅按工具登记保留规则退役旧1c6720a3 App，所有具名反例/输入/用户资料保全。
+
+20配置当前源码和分级证据见模型矩阵；本轮已有Wan完整50步provider、SA3完整WAV相同、MRT2 PCM相同、Klein Q8与Qwen2实际文件数值相同、SwiftF0真实CPU最大支持时长；不外推成普通App/GPU全部通过。Gemma3真实BF16 1024-token全部49状态→释放编码器→connector阶段完成，固定完整BF16代表请求曾在开发父进程完成30步后因包内ffmpeg的sandbox-inherit启动上下文不符退出-5，未生成完整视频；没有改安全属性。相同请求在正常f928的正确沙盒继承上下文完成，不再重复开发父进程试跑。deny与ask停止均已实测未推理；新建选择、提示及参数由UI输入，冻结记录核实。只读复核发现的Wan整数溢出、编辑策略丢传/记录、取消最后await及错误类型降级已修并有反例；所有失败留原日志。证据索引N25/tests/verification-index.json。
+
+**内存证据口径：** BF16普通App记录1470.388秒、provider1437秒，边界不同。333次/5秒RSS采样的child最大3,914,727,424B、App最大2,880,733,184B、同刻总和最大4,111,532,032B；独立一次sample的child footprint峰8.6G。不是精确整App峰值，也不是MLX active/cache/peak。分阶段MLX记录另列。系统swap起末约2138.94→2245.06MB，期初已有交换内容，不能全部归给该任务或声称零swap；未测分页吞吐和交换归属，不能排除交换影响。准确文件与冻结请求证明未降精度或缩工作量。旧开发provider解码阶段MLX峰只覆盖其reset后的阶段，不能改称全请求峰值。
+
+**I012实质缩减：** 正常f928同一已保存QA、英文1280×800、VO关闭，准确400px down/up仍挂；依次去原生菜单锚点、完整ChatMessageTools子树、完整Chrome状态/hover/动画包装均保留故障。在去工具/锚点构造中仅LazyVStack→VStack不挂且正常Quit；回加原Lazy二进制再次挂。相同quick-chat摘要84e12…、实际命中1096/555.5已核，外围JSON在正常Quit后的保存变化单列。此时只证明惰性物化/尺寸估算参与，未证明LazyVStack自身缺陷，不能直接交付整列非惰性布局。随后F仅去行级ChatReadingMarker仍挂；工具、Chrome与marker均非本组必要条件。F还含正文原生控件、自定义行布局、滚动观察和RetainedHost，未取得首个失效属性，因此不能安全删除保护或交付全历史非惰性替代。保留F作为下一精简起点，消失时回加，不重复旧焦点/Binding试验。诊断源码逐次恢复；挂起QA的正常Quit失败与获持续授权的准确实例恢复不算正常退出通过。原始证据N25/diagnostic-*-reduction、review/i012-cumulative.json；非实施者核实际动作与反证。
+
+**I017：** 新增对齐既有b4cd24b2同段真实resize的投递/应用更新/渲染/等待：65组唯一frame键，慢更新约67–73ms，对应渲染约6–7ms；这是Instruments归属时间，非最终像素呈现、FPS或修补收益。本轮f928来源诊断71800/8160在同Resize Fields QA、英文1080×612、Quick已访问/左模型栏可见/右资产栏隐藏，实际241事件4.153秒。800条同步日志只覆盖1.365秒前缀：native导航测量66次但未观察到实际nav偏好更新或Dual body，hidden Quick宽1080保持；可见workflow宿主有嵌套layout，不能按计数或重叠耗时定因。attach45秒未启动且未发输入；改all-process后录制/输入成功，整理SIGTRAP(-5)、export MissingTemplate，因此无可用新呈现表。内盘当时余445MiB、外盘22GiB仅伴随事实，未证崩溃原因；不重试同条件或扩大清理。诊断源码恢复。正常f92872421同条件低干扰宽差P95 14pt、正常Quit，非FPS/收益A/B。仍缺可导出的同段提交/呈现和首个约束创建者，不能安全猜补；下一步Lead先在足够工作空间核录制链，沿保留边界追具体来源。原始记录N25/i017/diagnostic-source-boundaries及normal-final，旧历史对齐仍有效。隐藏Quick既有修补保留。
+
+默认思考取证：只读专属First Use已保存8次请求，4次model-default分别在256/256/1024/4096长度截止，原始字节与reasoning一致、无`</think>`/`<|im_end|>`、正文为空；另4次显式off请求分别完成，不冒称原请求成功。N25/review/thinking-saved-attempts.json仅留身份、参数、原因、长度与摘要，不复制正文。实际tokenizer/template检查与嵌套EOS组件见contracts-r1各用例；该套件的其他失败不抹掉。确实修正VLM工厂未读取Qwen3.5 `text_config.eos_token_id`的独立缺陷：保留generation_config/顶层显式优先及tokenizer EOS，显式空集合不被覆盖、畸形嵌套值拒绝。当前4条length记录没有EOS终止证据，不能将此补丁宣称为它们的原因或完成。用户若希望简短直接作答，可明确选择现有关闭思考后另发请求；D不自动切换或增加上限，既有思考内容继续保留。历史记录没有完整生成token ID序列，不能从字节没有特殊文本反推内部永未产生该token；当前结论是已记录length而非解析丢正文。
+
+**最终正常包补充代表：** f92872537从已保存专属First Use正常打开，普通Qwen3.5-9B Q4新请求782E3801直接resident完成（automatic/12GiB/估算12,504,421,920B，MLX峰6,220,432,180B，2个生成token），未询问；显式off不改。Klein Q8通过实际加载菜单选择Layered，run46C24A90固定512²/4步/CFG1/seed42，原Q8权重生成444,571B PNG。MRT2从普通库准确选用，run39BADF73固定4秒/100帧/seed45，无音符条件，顺序释放路线生成192000帧/48kHz双声道float32 WAV并实际播放到结尾。正常CmdS/Quit72537消失，冷开72966后两份完整冻结run逐字段相同、chat文件字节相同，creation外层导航字节变化不冒称整文件相同；MRT再播放到终点。未重新绑定/复制权重，没有测试启动参数。随后恢复Klein草稿automatic（历史显式run不改）、全局ask冷读1、简中及原日文输入源；关闭QA窗口再正常Quit。N25/ordinary-additional含记录/媒体验证/冷开，LM-07/08/09为同版EN1280×800真实图，非合成模型结果，听感/质量未替用户接纳。
+
+**交付门禁与复核：** f928 Release/Archive使用资源36fa9cc500e9221ec153e20c41ebb1774a72cd7eb272c26169d71ea11da3a0c6；七引擎固定来源、零权重、strict-deep签名、无测试/诊断残留通过，arm64/x86_64可执行与dSYM匹配。源码仅3个分组产品提交；独立只读角色核f928实际差分、运行回执及C-D-C/E/F反证，未发现新确定产品阻断，不冒称其亲跑Mac/GPU。普通最终桌面启动73135准确命中，无QA项目窗口恢复；正常关闭/Quit，旧5a回退保留。最终工作分支/main完整读回及个人scheme摘要在N25/integration-final.json，生产身份不改写为文档交付SHA。README认可状态保持，本轮不重拍未受影响18图。I012/I017开放、按矩阵未跑普通组合/大常驻硬件、Store/来源缺件及用户质量接纳分别保留；无新增必须本人点击。
+
 ## 2026-11-24 模型首用、默认名称及局部交互修补
 
 本轮正常候选与可执行验收已完成，停在用户试用与顾问独立审计。真实接续6dbdcf99，无远端分歧、无抢写；唯一Lead实施与操作Mac，nov24_readonly_review只读固定快照。原始证据N24=`AgentTrials/D-UI-CONSOLIDATED-01/run-20261124-model-first-use`。旧试用仅查当前自动聊天及上一交付专属QA，不能唯一对应用户未保存窗口，结论为“此次旧失败原因无法恢复”；未阻塞当前修复，不公开正文和私有路径。

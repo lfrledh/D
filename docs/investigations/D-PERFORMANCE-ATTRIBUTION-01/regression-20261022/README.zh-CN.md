@@ -548,3 +548,38 @@ I012资格为既有45行合成历史、英文1280×800pt、1×，真实CG滚动�
 I017复用同0810仅属性记录诊断，短聊天1段及3节点2边工作流2段，每段4秒241个固定60Hz计划事件，真实1280→1518/1520→1280；固定52观测宽差中位/P95分别10/14、8/10、9/12pt。记录含发送/几何查询共同uptime，**非D接收/提交/呈现链，非FPS，非优化前后**。该段没有打印根body原因；由于限量策略不能解释为零更新。相比历史可见页冻结及Binding无收益结论，没有出现可据以修补的新约束/偏好写入源，故不堆新缓存。旧隐藏Quick边界修补保持，resize未达标及用户NODE/PAN明显改善、ZOOM多数满意分别记录。
 
 精确证据：N24/diagnostic-property-reasons/{reason-summary,resize-result,resize-normal-quit}.json、四诊断目录result.json与patch/输入/回执；原始内容和sample受控本地，不上传。来源取证与普通候选验收分开；70af状态提示修补不改变布局算法，不能当性能通过。
+
+
+## 2026-11-25：故障保留缩减与同段布局来源
+
+N25=`AgentTrials/D-UI-CONSOLIDATED-01/run-20261125-global-low-memory`。生产f92888533d6cf92f7acc089023617ac65dea0390；所有本节探针/缩减仅独立诊断包，源码逐次恢复，未进入普通候选。本节不把新模型工作或构建冒称性能修复。
+
+### I012：保持故障的真实D组合
+
+同一专属Nov6 VO Anchor已保存QA、EN1280×800、VO关闭，7条消息/2次attempt，quick-chat摘要84e12d84218bc26a29f55f423bc89c0e08ae08393e9a2985343ba00a5dcccc9d。准确AX命中1096/555.5后400px down/up；E/F实际滚动条起始=1，down未移动，up触发，不能写成两个方向均有位移。
+
+| 累计构造 | 实际结果 |
+|---|---|
+| A 正常f928 | 同事务循环，正常Quit未完成 |
+| B 仅去两个原生菜单anchor，保留FocusState/菜单状态/尺寸 | 仍挂 |
+| C 在B上去完整ChatMessageTools，保留固定工具槽和正文/阅读/宿主 | 仍挂 |
+| D 在C上仅transcript LazyVStack→VStack | 同动作后CPU空闲、AX可用、正常Quit完成 |
+| 回加C原二进制 | 同QA再挂，正常Quit未完成 |
+| E 在C上去Chrome状态/hover/动画包装，保留正文及行结构 | 仍挂 |
+| F 在E上仅去行级ChatReadingMarker | 仍挂 |
+
+C-D-C证明惰性物化/尺寸估算参与，不证明LazyVStack自身缺陷。菜单anchor、完整工具、Chrome和行marker不是此组必要条件。F仍保留真实Markdown/原生段落和代码控件、自定义ChatMessageStack/Entrance、visibility/defaultanchor/滚动观察与RetainedHost，属于更小的保留故障构造，不是最小复现。未得首个失效属性/创建调用前，不能以整列eager、删除阅读/焦点保护或换渲染器作产品补丁。
+
+正常Quit失败后，仅按准确PID/执行路径/启动身份及专属已落盘QA摘要核实后定向恢复；这不算正常退出通过。D正常Quit后外围project/quick-creation字节有保存变化，chat字节不变，后续对照使用同一更新后外层，不冒称全部文件恒定。有限samples只确认事务循环，不再按累计栈占比指定根因。证据N25/diagnostic-*-reduction（plan/patch/experiment及动作）、review/i012-cumulative.json，非实施者已核C-D-C/E/F实际反证。下一Lead沿F区分剩余正文/行布局/宿主，某步消失再回加；不重复旧focus/Binding族。
+
+### I017：同段输入、布局与提交边界
+
+先重读11月20普通b4cd24b2/PID41445同段trace：trace start-date毫秒精度，同段wall/uptime偏移0.772519秒，实际post为trace内0.927551–4.925870秒。130条update去display/swap/surface/start/duration精确重复后65条，各有同键render/framewait/frame-lifetime。代表慢update73.034/68.752/67.119ms，对应render7.354/7.099/5.956ms；第一组wait5.303ms、lifetime99.569ms。阶段重叠，不机械相加、不映射成逐输入最终像素或FPS；不同run不强行对齐。N25/i017/historical-alignment.json保留源摘要。
+
+新f928来源诊断：71800/8160，Nov6 Resize Fields四节点零边、EN1080×612、Quick已访问、左模型栏显示/右资产栏隐藏。仅在实际liveResize记录Retained根更新、NSHostingView.layout、native导航测量和Dual几何/body。直接启动便于捕获stdout；LaunchServices日志重定向-10810及误建的71803副实例已记录并正常退出。准确71800独占后用正常文件面板打开QA；没有测试状态注入。
+
+第一次attach45秒没有recording-start，助手没有投递任何事件；停止准确采样工具。随后改all-process记录机制成功开始，准确AX边缘命中后241事件，实际投递4.153秒。800条限量日志仅覆盖1.365秒前缀：native导航测量66次，没有观察到Dual body或实际导航偏好更新；hidden Quick宿主width始终1080，但仍有原生layout。可见workflow-retained布局110次、累计293.38ms、单次最大12.31ms，含子层/同步日志且可能嵌套，不能与子项相加或按次数定因。根update单次几十微秒不代表后续SwiftUI计算已完成。
+
+全系统trace收满8秒后整理阶段SIGTRAP(-5)，导出报Document Missing Template Error；无可用本轮render/呈现表。内盘当时445MiB、外盘22GiB为伴随事实，未证明崩溃原因。不再次同条件重采，不修改系统权限/扩大清理。正常f92872421同QA同4秒计划低干扰重验：81个几何观测，宽差P95 14pt、终态1080×612，正常Quit完成；无优化A/B收益或最终呈现结论。
+
+现有新证据削弱该前缀由Dual body/nav偏好反复写入直接推动的假设，不能排除未覆盖时段/更外层约束，也不授权再次冻结可见内容或全局缓存。仍缺可导出的同段提交/呈现及首个约束/失效创建者，无法据计数安全修补。下一Lead先在足够工作空间核录制链，再沿保留的布局边界取得创建来源；隐藏Quick既有有效尺寸修补保留，I017仍未达标。证据N25/i017/diagnostic-source-boundaries/{experiment.json,experiment.patch,source-layout-summary.json,resize-input-all-process.log}、normal-final/summary.json；plan仅创建时记录，不能单独当现状。
