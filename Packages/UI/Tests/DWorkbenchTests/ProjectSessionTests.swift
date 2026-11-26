@@ -79,6 +79,83 @@ private final class NavigationTestDefaults: UserDefaults, @unchecked Sendable {
 
 @Suite(.serialized) @MainActor
 struct ProjectSessionTests {
+    @Test func projectDocumentContinuesIntoExactNewQuickDraftWithoutReplacingOrRunning() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let project = folder.appendingPathComponent("Continuation.dproject")
+        let backend = WorkbenchTestBackend(root: project.appendingPathComponent("Tasks"))
+        let subject = model(root: folder, backend: backend)
+        await subject.createProject(at: project)
+        await subject.registerModel(at: folder)
+        subject.prompt = "Original image settings"; subject.randomSeed = true; subject.seedText = "unfinished"
+        let document = try #require(subject.activeDocumentID), epoch = subject.navigationEpoch
+        #expect(subject.hasUnsavedDocumentEdits)
+        await subject.enableProjectQuick()
+        let quick = try #require(subject.projectQuick)
+        quick.select(operationID: "d.image.generate", modelID: "different-existing-model")
+        let prior = try #require(quick.draft)
+        let transferredID = try await subject.continueDocumentInQuick(documentID: document, navigationEpoch: epoch)
+        #expect(transferredID == quick.draft?.id && transferredID != prior.id)
+        #expect(quick.state.drafts.contains(prior))
+        #expect(quick.draft?.node.parameters["promptText"] == .text("Original image settings"))
+        #expect(quick.draft?.node.parameters["randomSeed"] == .flag(true))
+        #expect(subject.activeDocument?.draft.prompt == subject.prompt && !subject.hasUnsavedDocumentEdits)
+        #expect(await backend.requests.isEmpty)
+        let saved = quick.state
+        await #expect(throws: (any Error).self) {
+            _ = try await subject.continueDocumentInQuick(documentID: document, navigationEpoch: epoch &+ 1)
+        }
+        #expect(quick.state == saved)
+        #expect(await subject.requestClose())
+        await subject.openProject(at: project); await subject.enableProjectQuick()
+        #expect(subject.projectQuick?.draft?.id == transferredID)
+        #expect(subject.projectQuick?.state.drafts == saved.drafts)
+        #expect(subject.activeDocument?.id == document && subject.prompt == "Original image settings")
+        #expect(await backend.requests.isEmpty)
+        #expect(await subject.requestClose())
+    }
+
+    @Test func projectContinuationSaveFailureReturnsOnlyItsOwnDraftAndRetryNeverAppendsOrRuns() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let project = folder.appendingPathComponent("Continuation-failure.dproject")
+        let backend = WorkbenchTestBackend(root: project.appendingPathComponent("Tasks"))
+        let subject = model(root: folder, backend: backend)
+        await subject.createProject(at: project); await subject.registerModel(at: folder)
+        subject.prompt = "Preserved original"; subject.randomSeed = false; subject.seedText = "42"
+        await subject.enableProjectQuick()
+        let quick = try #require(subject.projectQuick)
+        quick.select(operationID: "d.image.generate", modelID: "prior-model")
+        try await quick.flush()
+        let prior = try #require(quick.draft), path = project.appendingPathComponent("quick-creation.json")
+        let backup = project.appendingPathComponent("qa-quick-before.json")
+        try FileManager.default.moveItem(at: path, to: backup)
+        try FileManager.default.createDirectory(at: path, withIntermediateDirectories: false)
+        do {
+            let id = try await subject.continueDocumentInQuick(documentID: try #require(subject.activeDocumentID),
+                navigationEpoch: subject.navigationEpoch)
+            #expect(id == quick.draft?.id && id != prior.id)
+            #expect(quick.state.drafts.contains(prior) && quick.saveIssue != nil)
+            let count = quick.state.drafts.count
+            try FileManager.default.removeItem(at: path)
+            try FileManager.default.moveItem(at: backup, to: path)
+            try await quick.flush()
+            #expect(quick.saveIssue == nil && quick.draft?.id == id && quick.state.drafts.count == count)
+            #expect(await backend.requests.isEmpty)
+            #expect(await subject.requestClose())
+            await subject.openProject(at: project); await subject.enableProjectQuick()
+            #expect(subject.projectQuick?.draft?.id == id && subject.projectQuick?.state.drafts.count == count)
+            #expect(subject.prompt == "Preserved original")
+            #expect(await subject.requestClose())
+        } catch {
+            if FileManager.default.fileExists(atPath: backup.path) {
+                try? FileManager.default.removeItem(at: path)
+                try? FileManager.default.moveItem(at: backup, to: path)
+            }
+            _ = await subject.cancelAndCloseProject()
+            throw error
+        }
+    }
     private func temporaryDirectory() throws -> URL {
         let base = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) } ?? FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
         let directory = base.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -138,7 +215,7 @@ struct ProjectSessionTests {
         }, settings: settings, audioEnabled: true)
         await subject.createProject(at: project)
         let first = try #require(subject.activeDocumentID)
-        let projectID = try #require(subject.manifest?.id)
+        let projectID = try #require(subject.manifest?.effectiveInstanceID)
         subject.prompt = "保留中文 e\u{301} 👩‍💻"
         let initialEpoch = subject.navigationEpoch
         let count = subject.documents.count
@@ -164,11 +241,11 @@ struct ProjectSessionTests {
         #expect(subject.creatorMode == .image)
         #expect(subject.recentProjects.map(\.id) == [projectID])
         #expect(!(await subject.openRecentProject(id: UUID())))
-        #expect(subject.manifest?.id == projectID)
+        #expect(subject.manifest?.effectiveInstanceID == projectID)
         #expect(await subject.requestClose())
         #expect(subject.manifest == nil)
         #expect(await subject.openRecentProject(id: projectID))
-        #expect(subject.manifest?.id == projectID)
+        #expect(subject.manifest?.effectiveInstanceID == projectID)
         #expect(subject.prompt == "存盘失败不能跳走")
         #expect(subject.recentProjects.count == 1)
         let recentBeforeMove = settings.data(forKey: "workbench.recentProjects.v1")
@@ -203,6 +280,7 @@ struct ProjectSessionTests {
         subject.seedText = "0"
         await subject.generate()
         let first = try #require(subject.manifest?.jobs.first)
+        #expect(first.request.loadingSelection == .automatic)
         try await waitUntil { await backend.requests.count == 1 }
         subject.prompt = "Second pinned task"
         await subject.generate()

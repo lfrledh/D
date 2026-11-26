@@ -124,7 +124,7 @@ public final class TextDraftSession {
                         await cancelRunIfNeeded(run, operationID: request.id)
                         continue
                     }
-                    guard case .textDelta(let delta) = output else {
+                    guard let delta = output.safeTextDelta else {
                         localError = .nonTextOutput
                         await cancelRunIfNeeded(run, operationID: request.id)
                         continue
@@ -170,6 +170,10 @@ public final class TextDraftSession {
             if let localError { throw localError }
             switch outcome {
             case .completed(let result):
+                if let response = result.textResponse {
+                    guard response.finishReason != .incomplete, response.toolCalls.isEmpty,
+                          response.finalText == replacement else { throw TextDraftError.noAcceptableCandidate }
+                }
                 guard !replacement.isEmpty else { throw TextDraftError.emptyReplacement }
                 candidate = TextRewriteCandidate(runID: run.id, selection: selection,
                                                  replacement: replacement, request: request, result: result, backendID: backendID,

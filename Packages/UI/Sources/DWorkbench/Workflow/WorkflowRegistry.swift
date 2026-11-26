@@ -37,6 +37,28 @@ public struct WorkflowRegistry: Sendable {
     /// Project the instance's typed interface; display strings never define validation.
     public func definition(for node: WorkflowNode, tools: [WorkflowToolDefinition] = []) -> WorkflowOperationDefinition? {
         guard var result = operation(node.operationID)?.definition else { return nil }
+        // These fields preserve exact settings from existing project documents.
+        // Historical nodes without them retain their original schema and meaning.
+        if WorkflowModelRoutes.isImage(node.operationID), node.parameters["randomSeed"] != nil {
+            result.fields.append(.init("randomSeed", "随机种子", .flag, .flag(false)))
+        }
+        if WorkflowModelRoutes.isImage(node.operationID),
+           node.parameters["projectImageProfile"] != nil || node.parameters["projectImageProfileRevision"] != nil {
+            result.fields.append(.init("projectImageProfile", "执行配方", .text(multiline: false), .text("")))
+            result.fields.append(.init("projectImageProfileRevision", "配方版本", .integer, .integer(1)))
+        }
+        if node.operationID == "d.video.generate" {
+            if node.parameters["frameRateDenominator"] != nil {
+                result.fields.append(.init("frameRateDenominator", "帧率分母", .integer, .integer(1)))
+            }
+            if node.parameters["memoryBudgetMiBText"] != nil {
+                // Keep a conflicting GiB value visible and reject it at admission.
+                if node.parameters["memoryBudgetGiB"] == nil {
+                    result.fields.removeAll { $0.id == "memoryBudgetGiB" }
+                }
+                result.fields.append(.init("memoryBudgetMiBText", "内存预算 MiB", .text(multiline: false), .text("")))
+            }
+        }
         if ["d.value.record", "d.value.list", "d.control.invoke"].contains(node.operationID) {
             result.inputs = (node.dataConfiguration?.fields ?? []).map {
                 .init($0.name, $0.name, kinds: $0.type.portKinds, required: $0.required)

@@ -5797,6 +5797,9 @@
     "modelManagement.local.stagingRetained": "Adding the model did not finish. D kept the staging files because they changed. The originals are unchanged.",
     "workflow.creation.publishedText": "Published Text",
     "workflow.operation.d.model.language.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)",
-    "workflow.operation.d.text.rewrite.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)"
+    "workflow.operation.d.text.rewrite.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)",
+    "workflow.operation.d.image.generate.field.randomSeed": "Random Seed",
+    "workflow.operation.d.video.generate.field.frameRateDenominator": "Frame Rate Denominator",
+    "workflow.operation.d.video.generate.field.memoryBudgetMiBText": "Memory Budget (MiB)"
   }
 }

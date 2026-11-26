@@ -181,7 +181,8 @@ struct DInferenceCLI {
                     var thresholdReached = false
                     let elapsed = ProcessInfo.processInfo.systemUptime - started
                     switch event {
-                    case .textDelta(let fragment):
+                    case .textDelta(let fragment), .textPartial(_, _, let fragment):
+                    guard !fragment.isEmpty else { continue }
                         report.chunkCount += 1
                         report.text += fragment
                         if report.firstChunkSeconds == nil { report.firstChunkSeconds = elapsed }

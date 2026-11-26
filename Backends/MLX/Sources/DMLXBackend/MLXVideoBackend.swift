@@ -7,7 +7,7 @@ import Foundation
 /// shared heavy-compute lease until the child, readers and media writer drain.
 public actor MLXVideoBackend: InferenceExecutionPlanning {
     public nonisolated let descriptor = BackendDescriptor(
-        id: "mlx.video.wan21", version: "1", capabilities: [.videoGeneration])
+        id: "mlx.video.wan21", version: "2", capabilities: [.videoGeneration])
     public nonisolated let executionCapability = VideoExecutionCapability.wan21
     private let configuration: VideoBackendConfiguration
     private var lease: UUID?
@@ -48,11 +48,11 @@ public actor MLXVideoBackend: InferenceExecutionPlanning {
     public func lowMemoryPlans(for request: InferenceRequest) async throws -> [InferenceExecutionPlan] {
         let seal = try planSeal(request)
         return [.init(request: try request.lowMemoryRequest(method: .streaming), method: .streaming,
-            strategyVersion: 1, modelIdentityToken: seal.token)]
+            strategyVersion: 2, modelIdentityToken: seal.token)]
     }
     public func validate(_ plan: InferenceExecutionPlan, for original: InferenceRequest) async throws {
         try plan.validateSemantics(original: original)
-        guard plan.method == .streaming, plan.strategyVersion == 1,
+        guard plan.method == .streaming, plan.strategyVersion == 2,
               try planSeal(original).token == plan.modelIdentityToken else {
             throw InferenceFailure.inputIntegrityChanged("Approved Wan model files changed.")
         }
@@ -64,7 +64,8 @@ public actor MLXVideoBackend: InferenceExecutionPlanning {
     }
 
     /// Exact stored shared/block bytes plus bounded activation workspaces. VAE
-    /// retains its existing chunked route; frame count still contributes to DiT.
+    /// uses native FP32 convolution and materialized temporal caches; complete
+    /// frame count still contributes to DiT, with no workload reduction.
     static func streamingPeak(_ video: VideoRequest, manifest: Data) throws -> UInt64 {
         guard let object = try JSONSerialization.jsonObject(with: manifest) as? [String: Any],
               let rows = object["tensors"] as? [[String: Any]], rows.count == 1261 else {
@@ -107,8 +108,7 @@ public actor MLXVideoBackend: InferenceExecutionPlanning {
         let work = tokens.multipliedReportingOverflow(by: 1536 * 4 * 32)
         guard !work.overflow else { throw InferenceFailure.invalidResourceEstimate }
         let diffusion = try sum(peak("diffusion"), work.partialValue, gib)
-        let decoderWork = UInt64(video.width) * UInt64(video.height) * (4 * 384 * 4 * 8)
-        return max(text, diffusion, try sum(decoderWork, gib))
+        return max(text, diffusion, try VideoExecutionCapability.wan21.estimatedDecoderPeakBytes(for: video))
     }
 
     private func inspect(_ request: InferenceRequest) throws -> (VideoRequest, Data) {

@@ -193,7 +193,7 @@ func collectMLXRun(_ run: InferenceRun, trace: MLXTestTrace) async -> CollectedM
     var streamFailed = false
     do {
         for try await output in run.events {
-            if case .textDelta(let chunk) = output { text += chunk }
+            if let chunk = output.safeTextDelta { text += chunk }
         }
     } catch { streamFailed = true }
     let outcome = await run.outcome()

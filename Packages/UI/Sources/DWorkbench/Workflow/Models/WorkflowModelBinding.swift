@@ -39,10 +39,23 @@ public struct WorkflowImageRecipe: Sendable {
             guard let loading = ImageLoadingStrategy(rawValue: rawLoading == "automatic" ? "staged" : rawLoading) else {
                 throw WorkflowIssue("所选图像实现不支持此加载方式。")
             }
+            let profile: ExecutionProfileReference
+            if let saved = p["projectImageProfile"] {
+                guard let identifier = saved.string, let revision = p["projectImageProfileRevision"]?.integer,
+                      revision > 0 else { throw WorkflowIssue("所选模型与此节点的执行配方不同；不会静默替换。") }
+                let base = ExecutionProfileReference(identifier: identifier, revision: revision)
+                guard !dev, [ImageExecutionCapability.verified512.profile, capability.profile,
+                             ImageExecutionCapability.referenceKlein4B.profile].contains(base) else {
+                    throw WorkflowIssue("所选模型与此节点的执行配方不同；不会静默替换。")
+                }
+                profile = references.isEmpty ? base : ImageExecutionCapability.referenceKlein4B.profile
+            } else {
+                profile = dev || references.isEmpty ? capability.profile : ImageExecutionCapability.referenceKlein4B.profile
+            }
             let value = ImageRequest(prompt: prompt, width: p["width"]?.integer ?? 512,
                 height: p["height"]?.integer ?? 512, steps: p["steps"]?.integer ?? (dev ? 50 : 4),
                 guidanceScale: Float(p["guidance"]?.decimal ?? (dev ? 4 : 1)), seed: seed,
-                executionProfile: dev || references.isEmpty ? capability.profile : ImageExecutionCapability.referenceKlein4B.profile,
+                executionProfile: profile,
                 referenceImages: references.isEmpty ? nil : references, loadingStrategy: loading)
             try capability.validate(value)
             return value

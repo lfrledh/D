@@ -24,7 +24,7 @@ struct TextSourcesLayoutTests {
         sources.changeQuestion("同一份问题 👩‍💻")
         let model = WorkbenchModel(projectSession: service)
         model.showingTextSources = true
-        let host = NSHostingView(rootView: WorkbenchView(model: model))
+        let host = NSHostingView(rootView: ProjectDocumentsView(model: model))
         func descendants(_ root: NSView) -> [NSView] { root.subviews.flatMap { [$0] + descendants($0) } }
         func settle(_ width: CGFloat) async throws {
             host.frame = NSRect(x: 0, y: 0, width: width, height: 680)

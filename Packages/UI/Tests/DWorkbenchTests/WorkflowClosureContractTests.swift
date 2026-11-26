@@ -4,6 +4,43 @@ import Testing
 @testable import DWorkbench
 
 @Suite struct WorkflowClosureContractTests {
+    @Test func singleRunSeedAuthorityCannotAllocateUnrelatedOrHistoricalSeeds() throws {
+        let registry = WorkflowRegistry.standard
+        var random = try #require(registry.operation("d.image.generate")).definition.makeNode()
+        random.parameters["randomSeed"] = .flag(true)
+        random.parameters["seed"] = .text("unfinished")
+        let text = try #require(registry.operation(WorkflowModelRoutes.qwen35)).definition.makeNode()
+        let plan = WorkflowPlan(graphID: UUID(), graphRevision: UUID(), steps: [
+            .init(node: random, inputs: []), .init(node: text, inputs: [])])
+        var checkpoint = WorkflowPlanCheckpoint(plan: plan)
+        let schedule = try #require(WorkflowBatchSeedSchedule.allocate(plan: plan, strategy: .fixed,
+            count: 1, registry: registry, nextSeed: { 42 }, singleRun: true)[0])
+        #expect(schedule.assignments == [.init(path: [.node(random.id)], value: "42")])
+        checkpoint.batchSeeds = schedule
+        var run = WorkflowRun(id: checkpoint.runID, graph: .init(id: plan.graphID, nodes: [random, text]), targetNodeID: random.id)
+        run.planCheckpoint = checkpoint
+        try WorkflowBatchValidation.validate([], runs: [run])
+        // An old absent marker does not grant the new ordinary-run exception.
+        run.planCheckpoint?.batchSeeds?.singleRun = nil
+        #expect(throws: WorkflowIssue.self) { try WorkflowBatchValidation.validate([], runs: [run]) }
+        run.planCheckpoint = checkpoint
+        run.planCheckpoint?.batchSeeds?.assignments.append(.init(path: [.node(text.id)], value: "7"))
+        #expect(throws: WorkflowIssue.self) { try WorkflowBatchValidation.validate([], runs: [run]) }
+        run.planCheckpoint = checkpoint
+        run.planCheckpoint?.batchSeeds?.strategy = .automatic
+        #expect(throws: WorkflowIssue.self) { try WorkflowBatchValidation.validate([], runs: [run]) }
+        run.planCheckpoint = checkpoint
+        run.scope = .init(selection: .only(random.id), recomputeSelected: true)
+        let stage = WorkflowBatchStage(name: "Controlled batch", repetitions: 1,
+            attempts: [.init(ordinal: 1, runID: run.id)])
+        #expect(throws: WorkflowIssue.self) { try WorkflowBatchValidation.validate([stage], runs: [run]) }
+        #expect(throws: WorkflowIssue.self) {
+            _ = try WorkflowBatchSeedSchedule.allocate(plan: plan, strategy: .fixed, count: 2,
+                registry: registry, nextSeed: { 42 }, singleRun: true)
+        }
+        #expect(try JSONDecoder().decode(WorkflowPlanCheckpoint.self,
+            from: JSONEncoder().encode(checkpoint)) == checkpoint)
+    }
     @Test func seedDomainsAndDynamicAddressesRetainFullUInt64() throws {
         let registry = WorkflowRegistry.standard
         for definition in registry.definitions where definition.modelKind != nil && definition.fields.contains(where: { $0.id == "seed" }) {

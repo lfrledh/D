@@ -185,15 +185,21 @@ enum WorkflowBatchValidation {
                     throw WorkflowIssue("批次派发身份、运行来源或耗时无效。")
                 }
                 let seeds = run.planCheckpoint?.batchSeeds
-                guard (seeds?.strategy ?? .fixed) == (stage.seedStrategy ?? .fixed),
+                guard seeds?.singleRun != true, (seeds?.strategy ?? .fixed) == (stage.seedStrategy ?? .fixed),
                       !stage.parentRunIDs.isEmpty || seeds?.inherited.isEmpty != false else {
                     throw WorkflowIssue("批次种子策略或继承来源与阶段不一致。")
                 }
             }
         }
         guard runs.filter({ $0.batchParent != nil }).allSatisfy({ owned.contains($0.id) }) else { throw WorkflowIssue("派生尝试缺少唯一阶段所有者。") }
-        guard runs.filter({ $0.planCheckpoint?.batchSeeds != nil }).allSatisfy({ owned.contains($0.id) }) else {
-            throw WorkflowIssue("种子调度必须属于明确授权的批次。")
+        for run in runs where run.planCheckpoint?.batchSeeds != nil && !owned.contains(run.id) {
+            guard run.batchParent == nil, let checkpoint = run.planCheckpoint,
+                  let seeds = checkpoint.batchSeeds, seeds.singleRun == true else {
+                throw WorkflowIssue("种子调度必须属于明确授权的批次。")
+            }
+            // This exception is restricted to the exact explicit Random fields
+            // of one frozen plan. It cannot authorize other seeds or a batch.
+            try seeds.validate(in: checkpoint, registry: registry)
         }
         try validateParents(runs, registry: registry)
     }

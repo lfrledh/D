@@ -817,6 +817,7 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
 
     /// Copy explicit settings and input snapshots; no runner is invoked by this command.
     public func insertQuickSettings(_ draft: QuickDraft, target: WorkflowCanvasInsertionTarget) async throws {
+        if let issue = QuickGenerationController.validationIssue(draft, forCanvas: true) { throw issue }
         guard isCurrent(target), target.rootID != nil else { throw WorkflowIssue("目标流程已改变，未添加到其他流程。") }
         try registry.validate(draft.node)
         var model = draft.node; model.id = UUID()
@@ -1792,12 +1793,18 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
             }
             var checkpoint = WorkflowPlanCheckpoint(plan: plan, arguments: arguments)
             checkpoint.modelDefaults = defaults
+            if WorkflowBatchSeedSchedule.containsProjectRandom(in: plan) {
+                checkpoint.batchSeeds = try WorkflowBatchSeedSchedule.allocate(plan: plan, strategy: .fixed,
+                    count: 1, registry: registry, nextSeed: batchSeedSource, singleRun: true)[0]
+            }
             if only {
                 guard let node = frozen.nodes.first(where: { $0.id == target }) else { throw WorkflowIssue("节点不存在。") }
                 checkpoint.externalInputs[target] = try inputs(for: node, run: .init(graph: frozen, targetNodeID: target))
-                var requested = WorkflowStepRun(node: plan.steps[0].node, signature: plan.steps[0].sourceSignature ?? "")
+                let address = WorkflowExecutionAddress(runID: checkpoint.runID, path: [.node(target)])
+                let runtimeNode = WorkflowBatchSeedLookup(checkpoint.batchSeeds).applying(to: plan.steps[0].node, at: address)
+                var requested = WorkflowStepRun(node: runtimeNode, signature: plan.steps[0].sourceSignature ?? "")
                 requested.repeatRequested = true
-                checkpoint.records = [.init(address: .init(runID: checkpoint.runID, path: [.node(target)]), step: requested)]
+                checkpoint.records = [.init(address: address, step: requested)]
             }
             var run = WorkflowRun(id: checkpoint.runID, graph: frozen, targetNodeID: target, status: .running)
             run.planCheckpoint = checkpoint
@@ -1891,6 +1898,10 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
                 tools: tools, registry: registry)
             var checkpoint = WorkflowPlanCheckpoint(plan: plan, arguments: try publicArguments(plan, graph: frozen))
             checkpoint.modelDefaults = defaults
+            if WorkflowBatchSeedSchedule.containsProjectRandom(in: plan) {
+                checkpoint.batchSeeds = try WorkflowBatchSeedSchedule.allocate(plan: plan, strategy: .fixed,
+                    count: 1, registry: registry, nextSeed: batchSeedSource, singleRun: true)[0]
+            }
             let sourceIDs = Set(pins.map { $0.sourceCall.address.runID })
             let sources = try runs.filter { sourceIDs.contains($0.id) }.map {
                 try WorkflowArchiveInspection.scopeSource($0, tools: tools, registry: registry)
@@ -1993,7 +2004,8 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
             let top = context.address?.path.count == 1
             let record = self.activeExecutor?.checkpoint?.records.first { $0.step.id == context.stepID }
             if top, self.runs[ri].scope?.recomputeSelected != true, force != context.node.id, record?.step.repeatRequested != true, record?.step.outputs.isEmpty == true, !services.hasPendingSaves,
-               let cached = self.reusable(nodeID: context.node.id, graph: self.runs[ri].graph, inputs: context.inputs), cached.id != context.stepID {
+               let cached = self.reusable(nodeID: context.node.id, graph: self.runs[ri].graph, inputs: context.inputs),
+               cached.id != context.stepID, cached.node == context.node {
                 return .outputs(cached.outputs)
             }
             return try await self.services.executeCall(context)
@@ -2485,6 +2497,7 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
             var checkpoint = WorkflowPlanCheckpoint(plan: originalCheckpoint.plan, arguments: originalCheckpoint.arguments)
             checkpoint.modelDefaults = originalCheckpoint.modelDefaults
             checkpoint.externalInputs = originalCheckpoint.externalInputs
+            checkpoint.batchSeeds = originalCheckpoint.batchSeeds
             // Persist explicit recomputation before dispatch. A prior successful
             // call with the same inputs must not replace the partial call being retried.
             let repeatedRoots = Set(originalCheckpoint.records.compactMap { record -> UUID? in
@@ -2493,9 +2506,11 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
                 return id
             })
             checkpoint.records = checkpoint.plan.steps.filter { repeatedRoots.contains($0.node.id) }.map { planned in
-                var step = WorkflowStepRun(node: planned.node, signature: planned.sourceSignature ?? "")
+                let address = WorkflowExecutionAddress(runID: checkpoint.runID, path: [.node(planned.node.id)])
+                let node = WorkflowBatchSeedLookup(checkpoint.batchSeeds).applying(to: planned.node, at: address)
+                var step = WorkflowStepRun(node: node, signature: planned.sourceSignature ?? "")
                 step.repeatRequested = true
-                return .init(address: .init(runID: checkpoint.runID, path: [.node(planned.node.id)]), step: step)
+                return .init(address: address, step: step)
             }
             var next = WorkflowRun(id: checkpoint.runID, graph: original.graph, targetNodeID: original.targetNodeID, status: .running)
             next.scope = original.scope; next.planCheckpoint = checkpoint
@@ -2530,6 +2545,20 @@ public struct WorkflowNodePresentationStatus: Equatable, Sendable {
             var retry = WorkflowRun(graph: frozen, targetNodeID: old.node.id, steps: [replacement], status: .running)
             let compiled = try WorkflowPlanCompiler(registry: registry).compile(frozen, tools: tools, target: old.node.id, only: true)
             var checkpoint = WorkflowPlanCheckpoint(runID: retry.id, plan: compiled)
+            if old.node.parameters["randomSeed"]?.flag == true {
+                // Retry only the failed candidates using this call's already
+                // captured seed. This is not authorization to draw another seed.
+                guard let seed = old.node.parameters["seed"]?.string,
+                      let source = runs[ri].planCheckpoint,
+                      let original = source.records.first(where: { $0.step.id == old.id }),
+                      WorkflowBatchSeedLookup(source.batchSeeds).applying(
+                        to: compiled.steps[0].node, at: original.address) == old.node else {
+                    throw WorkflowIssue("批次种子计划与真实生成操作不匹配。")
+                }
+                checkpoint.batchSeeds = .init(strategy: .fixed,
+                    assignments: [.init(path: [.node(old.node.id)], value: seed)], inherited: [], singleRun: true)
+                try checkpoint.batchSeeds?.validate(in: checkpoint, registry: registry)
+            }
             checkpoint.externalInputs[old.node.id] = old.inputs
             checkpoint.records = [.init(address: .init(runID: retry.id, path: [.node(old.node.id)]), step: replacement)]
             retry.planCheckpoint = checkpoint

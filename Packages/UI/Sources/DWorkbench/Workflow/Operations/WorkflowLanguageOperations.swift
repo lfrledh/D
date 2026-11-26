@@ -126,6 +126,10 @@ enum WorkflowLanguageOperations {
             .init("guidance", "引导", .decimal, .decimal(WorkflowVideoPresets.fullPreview.guidance)),
             .init("scheduleShift", "采样偏移", .decimal, .decimal(WorkflowVideoPresets.fullPreview.scheduleShift)),
             .init("seed", "种子", .text(multiline: false), .text("42")), modelField], modelKind: .video, quickCategory: .video),
+        validate: { node in
+            _ = try WorkflowVideoDraftParameters.frameRate(node.parameters)
+            _ = try WorkflowVideoDraftParameters.memoryBudgetBytes(node.parameters)
+        },
         execute: { context, services in .outputs(["output": .asset(try await services.generateVideo(context: context))]) })
 
     @MainActor static func text(_ value: WorkflowValue?, fallback: String = "", services: any WorkflowOperationServices) async throws -> String {

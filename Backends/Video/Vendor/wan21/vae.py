@@ -112,26 +112,13 @@ class CausalConv3d(nn.Module):
         return out.transpose(0, 4, 1, 2, 3)  # [B, O, T', H', W']
 
     def _conv3d(self, x: mx.array) -> mx.array:
-        """3D conv via sliding window + 2D conv per time step.
-        x: [B, T, H, W, C_in] -> [B, T_out, H_out, W_out, C_out]
-        """
-        b, t, h, w, c_in = x.shape
-        kt, kh, kw = self.kernel_size
-        st, sh, sw = self.stride
-        t_out = (t - kt) // st + 1
+        """Exact NDHWC / ODHWI convolution after __call__ has applied causal padding.
 
-        # Pre-reshape weight: [O, D, H, W, I] -> [O, H, W, D*I]
-        w_2d = self.weight.transpose(0, 2, 3, 1, 4).reshape(
-            self.weight.shape[0], kh, kw, kt * c_in
-        )
-        outputs = []
-        for t_i in range(t_out):
-            t_start = t_i * st
-            window = x[:, t_start : t_start + kt]
-            window = window.transpose(0, 2, 3, 1, 4).reshape(b, h, w, kt * c_in)
-            out_2d = mx.conv2d(window, w_2d, stride=(sh, sw)) + self.bias
-            outputs.append(out_2d)
-        return mx.stack(outputs, axis=1)
+        Native 3D convolution avoids materializing a time-window/channel copy
+        and a separate output/stack for every frame. Precision is unchanged.
+        """
+        return mx.conv3d(x, self.weight, stride=self.stride) + self.bias
+
 
 
 class RMS_norm(nn.Module):
@@ -410,7 +397,7 @@ class Decoder3d(nn.Module):
             CausalConv3d(dims[-1], 3, 3, padding=1),  # [2]
         ]
 
-    def __call__(self, x: mx.array, feat_cache=None, feat_idx=None) -> mx.array:
+    def __call__(self, x: mx.array, feat_cache=None, feat_idx=None, check_cancel=None) -> mx.array:
         """x: [B, z_dim, T, H, W] -> [B, 3, T_out, H_out, W_out]"""
         if feat_cache is not None:
             idx = feat_idx[0]
@@ -426,17 +413,27 @@ class Decoder3d(nn.Module):
             x = self.conv1(x)
 
         for layer in self.middle:
+            if check_cancel is not None:
+                check_cancel()
             if feat_cache is not None and isinstance(layer, ResidualBlock):
                 x = layer(x, feat_cache=feat_cache, feat_idx=feat_idx)
             else:
                 x = layer(x)
+            if feat_cache is not None and isinstance(layer, ResidualBlock):
+                x = self._materialize_decode_state(x, feat_cache)
 
         for layer in self.upsamples:
+            if check_cancel is not None:
+                check_cancel()
             if feat_cache is not None:
                 x = layer(x, feat_cache=feat_cache, feat_idx=feat_idx)
             else:
                 x = layer(x)
+            if feat_cache is not None:
+                x = self._materialize_decode_state(x, feat_cache)
 
+        if check_cancel is not None:
+            check_cancel()
         x = nn.silu(self.head[0](x))
         if feat_cache is not None:
             idx = feat_idx[0]
@@ -450,7 +447,22 @@ class Decoder3d(nn.Module):
             feat_idx[0] += 1
         else:
             x = self.head[2](x)
+        if feat_cache is not None:
+            x = self._materialize_decode_state(x, feat_cache)
         return x
+
+    @staticmethod
+    def _materialize_decode_state(value, cache):
+        # A two-frame slice can otherwise retain its entire four-frame parent
+        # and that parent's unevaluated graph across the next decode chunk.
+        # Copy only non-contiguous views, materialize all required state, then
+        # let Python release the old graph. Attention and every cache value
+        # remain complete; no spatial approximation or dtype conversion.
+        for index, tensor in enumerate(cache):
+            if isinstance(tensor, mx.array):
+                cache[index] = mx.contiguous(tensor)
+        mx.eval(value, [tensor for tensor in cache if isinstance(tensor, mx.array)])
+        return value
 
     def cache_slot_count(self) -> int:
         """Return the number of cache entries consumed by one cached call."""
@@ -646,7 +658,7 @@ class WanVAE(nn.Module):
         """
         return mx.concatenate(list(self.decode_chunks(z)), axis=2)
 
-    def decode_chunks(self, z: mx.array):
+    def decode_chunks(self, z: mx.array, *, check_cancel=None):
         """Decode as one first-frame chunk followed by four-frame chunks.
 
         Cache state belongs to the returned iterator and is never stored on the
@@ -663,11 +675,14 @@ class WanVAE(nn.Module):
             feat_cache = [None] * self.decoder.cache_slot_count()
             try:
                 for latent_idx in range(x.shape[2]):
+                    if check_cancel is not None:
+                        check_cancel()
                     feat_idx = [0]
                     out = self.decoder(
                         x[:, :, latent_idx : latent_idx + 1],
                         feat_cache=feat_cache,
                         feat_idx=feat_idx,
+                        check_cancel=check_cancel,
                     )
                     if feat_idx[0] != len(feat_cache):
                         raise RuntimeError(

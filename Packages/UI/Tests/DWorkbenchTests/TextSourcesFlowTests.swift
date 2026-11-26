@@ -81,6 +81,7 @@ struct TextSourcesFlowTests {
         let engines = await pool.engines
         #expect(engines.count == 2)
         #expect(await engines[0].requests.count == 1)
+        #expect(await engines[0].requests.first?.loadingSelection == .automatic)
         #expect(await engines[1].requests.count == 1)
         #expect(await project.requestClose())
     }

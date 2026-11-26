@@ -16,9 +16,23 @@ public struct WorkflowBatchSeedSchedule: Codable, Sendable, Equatable {
     public var strategy: WorkflowBatchSeedStrategy
     public var assignments: [WorkflowBatchSeedAssignment]
     public var inherited: [WorkflowBatchSeedAssignment]
+    /// Present only for an ordinary submission with explicit Random fields.
+    /// Missing in historical archives continues to require a batch-stage owner.
+    public var singleRun: Bool? = nil
 
     public static func supportedNodeCount(in plan: WorkflowPlan, registry: WorkflowRegistry = .standard) -> Int {
         targets(in: plan, registry: registry).count
+    }
+    /// New project-document Random settings use the existing persisted seed
+    /// schedule. Old plans without this explicit setting keep their old path.
+    static func containsProjectRandom(in plan: WorkflowPlan) -> Bool {
+        plan.steps.contains { step in
+            switch step.kind {
+            case .call: WorkflowModelRoutes.isImage(step.node.operationID) && step.node.parameters["randomSeed"]?.flag == true
+            case .branch(_, let yes, let no): containsProjectRandom(in: yes) || containsProjectRandom(in: no)
+            case .map(let body, _), .loop(let body, _, _, _), .invoke(_, let body): containsProjectRandom(in: body)
+            }
+        }
     }
 
     static func maximumSeed(for node: WorkflowNode, registry: WorkflowRegistry) -> UInt64? {
@@ -38,6 +52,7 @@ public struct WorkflowBatchSeedSchedule: Codable, Sendable, Equatable {
         var path: [WorkflowAddressComponent]
         var maximum: UInt64
         var unspecified: Bool
+        var explicitRandom: Bool
     }
     private static func targets(in plan: WorkflowPlan, prefix: [WorkflowAddressComponent] = [],
                                 registry: WorkflowRegistry) -> [Target] {
@@ -45,7 +60,7 @@ public struct WorkflowBatchSeedSchedule: Codable, Sendable, Equatable {
             let path = prefix + [.node(step.id)]
             switch step.kind {
             case .call:
-                return maximumSeed(for: step.node, registry: registry).map { [Target(path: path, maximum: $0, unspecified: step.node.parameters["seed"]?.string?.isEmpty != false)] } ?? []
+                return maximumSeed(for: step.node, registry: registry).map { [Target(path: path, maximum: $0, unspecified: step.node.parameters["seed"]?.string?.isEmpty != false || (WorkflowModelRoutes.isImage(step.node.operationID) && step.node.parameters["randomSeed"]?.flag == true), explicitRandom: WorkflowModelRoutes.isImage(step.node.operationID) && step.node.parameters["randomSeed"]?.flag == true)] } ?? []
             case .branch(_, let yes, let no):
                 return targets(in: yes, prefix: path + [.branch(true)], registry: registry) +
                     targets(in: no, prefix: path + [.branch(false)], registry: registry)
@@ -75,14 +90,17 @@ public struct WorkflowBatchSeedSchedule: Codable, Sendable, Equatable {
     /// at the UInt64 boundary; fixed inputs never pass through this arithmetic.
     static func allocate(plan: WorkflowPlan, parent: WorkflowPlanCheckpoint? = nil,
                          strategy: WorkflowBatchSeedStrategy, count: Int,
-                         registry: WorkflowRegistry, nextSeed: () -> UInt64) throws -> [Self?] {
+                         registry: WorkflowRegistry, nextSeed: () -> UInt64, singleRun: Bool = false) throws -> [Self?] {
         guard (1...64).contains(count) else { throw WorkflowIssue("种子分配次数超限。") }
         let targets = targets(in: plan, registry: registry)
+        guard !singleRun || (strategy == .fixed && count == 1 && parent == nil && targets.contains(where: \.explicitRandom)) else {
+            throw WorkflowIssue("批次种子计划与真实生成操作不匹配。")
+        }
         guard strategy != .automatic || !targets.isEmpty else {
             throw WorkflowIssue("当前范围没有提供种子参数的生成操作；请使用固定配方。")
         }
         let inherited = inheritedAssignments(from: parent, registry: registry)
-        let allocatedTargets = strategy == .automatic ? targets : targets.filter(\.unspecified)
+        let allocatedTargets = singleRun ? targets.filter(\.explicitRandom) : strategy == .automatic ? targets : targets.filter(\.unspecified)
         guard !allocatedTargets.isEmpty || !inherited.isEmpty else { return Array(repeating: nil, count: count) }
         let bases: [UInt64] = allocatedTargets.map { target in
             let random = nextSeed()
@@ -96,7 +114,7 @@ public struct WorkflowBatchSeedSchedule: Codable, Sendable, Equatable {
                 else { value = (base + increment) % (target.maximum + 1) }
                 return WorkflowBatchSeedAssignment(path: target.path, value: String(value))
             }
-            return Self(strategy: strategy, assignments: assignments, inherited: inherited)
+            return Self(strategy: strategy, assignments: assignments, inherited: inherited, singleRun: singleRun ? true : nil)
         }
     }
 
@@ -104,10 +122,14 @@ public struct WorkflowBatchSeedSchedule: Codable, Sendable, Equatable {
         let targets = Self.targets(in: checkpoint.plan, registry: registry)
         let maxima = Dictionary(targets.map { ($0.path, $0.maximum) }, uniquingKeysWith: { first, _ in first })
         let records = Dictionary(checkpoint.records.map { ($0.address.path, $0) }, uniquingKeysWith: { first, _ in first })
+        guard singleRun != true || (strategy == .fixed && inherited.isEmpty && !targets.filter(\.explicitRandom).isEmpty) else {
+            throw WorkflowIssue("批次种子计划与真实生成操作不匹配。")
+        }
+        let assignedTargets = singleRun == true ? targets.filter(\.explicitRandom) : targets.filter(\.unspecified)
         guard assignments.count <= 4_096, inherited.count <= 65_536,
               Set(assignments.map(\.path)).count == assignments.count,
               Set(inherited.map(\.path)).count == inherited.count,
-              (strategy == .automatic ? !targets.isEmpty && Set(assignments.map(\.path)) == Set(targets.map(\.path)) : Set(assignments.map(\.path)) == Set(targets.filter(\.unspecified).map(\.path))) else {
+              (strategy == .automatic ? !targets.isEmpty && Set(assignments.map(\.path)) == Set(targets.map(\.path)) : Set(assignments.map(\.path)) == Set(assignedTargets.map(\.path))) else {
             throw WorkflowIssue("批次种子计划与真实生成操作不匹配。")
         }
         for item in assignments {

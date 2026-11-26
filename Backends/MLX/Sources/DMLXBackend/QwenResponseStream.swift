@@ -13,6 +13,8 @@ struct QwenResponseStream {
     private var thoughtTokens = [Int]()
     private var finalTokens = [Int]()
     private var decoder = IncrementalTextDecoder()
+    private var rawDecoder = IncrementalTextDecoder()
+    private var reasoningDecoder = IncrementalTextDecoder()
     private var pending = ""
     private var blocked = false
     private var toolBlock: String?
@@ -49,6 +51,22 @@ struct QwenResponseStream {
         guard !malformedChannel else { return nil }
         guard let delta = try decoder.consume(decode(finalTokens)) else { return nil }
         return scan(delta)
+    }
+
+    mutating func acceptPartial(_ token: Int, raw: String,
+                                decode: ([Int]) -> String) throws -> InferenceOutput? {
+        let text = try accept(token, decode: decode) ?? ""
+        return try partial(raw: raw, text: text, final: false, decode: decode)
+    }
+
+    /// Flush tokenizer tails only after a genuine completed generation. A cancelled
+    /// producer cannot emit after Runtime closes admission; accepted events drain.
+    mutating func partial(raw: String, text: String, final: Bool,
+                          decode: ([Int]) -> String) throws -> InferenceOutput? {
+        let rawDelta = try rawDecoder.consume(raw, final: final) ?? ""
+        let reasoning = try reasoningDecoder.consume(decode(thoughtTokens), final: final) ?? ""
+        guard !rawDelta.isEmpty || !reasoning.isEmpty || !text.isEmpty else { return nil }
+        return .textPartial(raw: rawDelta, reasoning: reasoning, text: text)
     }
 
     mutating func finish(raw: String, stopped: String, tools: [TextToolDefinition]?, runID: UUID?,

@@ -4122,3 +4122,106 @@ extension WorkflowLifecycleTests {
         try FileManager.default.copyItem(at: store.rootURL, to: destination)
     }
 }
+
+extension WorkflowLifecycleTests {
+    @Test(arguments: [false, true])
+    func ordinaryProjectRandomCapturesOneSeedAndPreservesItThroughRetryAndColdRead(only: Bool) async throws {
+        let (_, store, engine, c) = try await fixture()
+        var node = try #require(c.registry.operation("d.image.generate")).definition.makeNode()
+        node.parameters["promptText"] = .text("CPU seed ownership fixture")
+        node.parameters["count"] = .integer(1)
+        node.parameters["randomSeed"] = .flag(true)
+        node.parameters["seed"] = .text("unfinished")
+        let graph = WorkflowGraph(nodes: [node])
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
+        await c.load()
+        var allocations = 0
+        c.batchSeedSource = { allocations += 1; return 42 }
+        await engine.configure(failure: .backendFailed("Controlled failure after capture"))
+        await c.run(target: node.id, only: only)
+        let failed = try #require(c.runs.last)
+        #expect(allocations == 1)
+        #expect(failed.planCheckpoint?.batchSeeds?.singleRun == true)
+        #expect(failed.steps.first?.node.parameters["seed"] == .text("42"))
+        let failedStep = try #require(failed.steps.first)
+        try #require(failedStep.outputs["output"]?.candidates.first?.asset == nil)
+        await engine.configure()
+        await c.retryFailedCandidates(stepID: failedStep.id)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        #expect(c.runs.last?.status == .completed && allocations == 1)
+        let requests = await engine.requests
+        #expect(requests.count == 2)
+        #expect(requests.allSatisfy { if case .image(let value) = $0.input { value.seed == 42 } else { false } })
+        #expect(c.graph?.nodes.first?.parameters["seed"] == .text("unfinished"))
+        try await c.close(); let saved = try #require(try await store.workflowState().archive); try await store.close()
+        let cold = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await cold.workflowState().archive == saved)
+        try await cold.close()
+    }
+
+    @Test func ordinaryRandomFailedCandidateRetryKeepsSuccessfulFilesAndFrozenSeed() async throws {
+        let (_, store, engine, c) = try await fixture()
+        var node = try #require(c.registry.operation("d.image.generate")).definition.makeNode()
+        node.parameters["promptText"] = .text("CPU partial candidate fixture")
+        node.parameters["count"] = .integer(2)
+        node.parameters["randomSeed"] = .flag(true)
+        node.parameters["seed"] = .text("unfinished")
+        let graph = WorkflowGraph(nodes: [node])
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
+        await c.load(); await engine.failSecond()
+        var allocations = 0
+        c.batchSeedSource = { allocations += 1; return 42 }
+        await c.run(target: node.id, only: false)
+        let source = try #require(c.runs.last), step = try #require(source.steps.last)
+        let candidates = try #require(step.outputs["output"]?.candidates)
+        try #require(candidates.count == 2 && candidates[0].asset != nil && candidates[1].asset == nil)
+        await c.retryFailedCandidates(stepID: step.id)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        let retried = try #require(c.runs.last)
+        #expect(retried.id != source.id && c.runs.first == source)
+        let result = try #require(retried.steps.last?.outputs["output"]?.candidates)
+        #expect(result.allSatisfy { $0.asset != nil } && result[0] == candidates[0])
+        #expect(allocations == 1 && retried.planCheckpoint?.batchSeeds?.singleRun == true)
+        let requests = await engine.requests
+        #expect(requests.count == 3)
+        let seeds: [UInt64] = requests.compactMap { if case .image(let value) = $0.input { value.seed } else { nil } }
+        #expect(seeds == [42, 43, 43])
+        try await c.close(); let saved = try #require(try await store.workflowState().archive); try await store.close()
+        let cold = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await cold.workflowState().archive == saved)
+        try await cold.close()
+    }
+}
+
+extension WorkflowLifecycleTests {
+    @Test(arguments: [false, true])
+    func onlyExplicitRandomPreventsReuseOfPreviousSeed(random: Bool) async throws {
+        let (_, store, engine, c) = try await fixture()
+        var node = try #require(c.registry.operation("d.image.generate")).definition.makeNode()
+        node.parameters["promptText"] = .text("CPU repeated seed fixture")
+        node.parameters["count"] = .integer(1)
+        node.parameters["randomSeed"] = .flag(random)
+        node.parameters["seed"] = .text("11")
+        let graph = WorkflowGraph(nodes: [node])
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
+        await c.load()
+        var seed: UInt64 = 0
+        c.batchSeedSource = { seed += 11; return seed }
+        await c.run(target: node.id, only: false)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        let original = try #require(c.runs.last)
+        await c.run(target: node.id, only: false)
+        try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
+        let next = try #require(c.runs.last)
+        #expect(c.runs.count == 2 && c.runs.first == original)
+        let requests = await engine.requests
+        #expect(requests.count == (random ? 2 : 1))
+        let seeds = requests.compactMap { if case .image(let image) = $0.input { image.seed } else { nil } }
+        #expect(seeds == (random ? [11, 22] : [11]))
+        #expect((original.steps.last?.outputs == next.steps.last?.outputs) == !random)
+        try await c.close(); try await store.close()
+    }
+}

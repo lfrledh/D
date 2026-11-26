@@ -32,6 +32,7 @@ public final class ProjectTextController {
     }
 
     public var isDirty: Bool { persistedRevision != editor.document.revision }
+    public var hasUnsavedEdits: Bool { isDirty || pendingRewriteRecord != nil }
     public var hasPendingCandidate: Bool { editor.candidate != nil }
     public var canAccept: Bool {
         editor.canAcceptCandidate && candidateSelectionVersion == selectionVersion && !editor.isRunning

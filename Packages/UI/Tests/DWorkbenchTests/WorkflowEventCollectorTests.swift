@@ -122,6 +122,25 @@ struct WorkflowEventCollectorTests {
         try await store.close()
     }
 
+
+    @Test func partialBudgetRejectsWholeEventWithoutMixingChannels() async throws {
+        let stream = AsyncThrowingStream<InferenceOutput, Error> { continuation in
+            continuation.yield(.textPartial(raw: "中", reasoning: "中", text: ""))
+            continuation.yield(.textPartial(raw: "b", reasoning: "", text: "b"))
+            continuation.finish()
+        }
+        let collector = WorkflowEventCollector(maximumBytes: 7)
+        let run = InferenceRun(id: UUID(), events: stream, cancel: {}, outcome: { .cancelled })
+        #expect(await collector.consume(run) != nil)
+        let snapshot = await collector.snapshot()
+        #expect(snapshot.text.isEmpty && snapshot.byteCount == 0)
+        #expect(snapshot.partialResponse?.rawText == "中")
+        #expect(snapshot.partialResponse?.reasoningText == "中")
+        #expect(snapshot.partialResponse?.finalText == nil)
+        #expect(snapshot.partialResponse?.finishReason == .incomplete)
+        #expect(snapshot.partialResponse?.toolCalls.isEmpty == true)
+    }
+
     @Test func budgetFailurePreservesAcceptedPrefix() async throws {
         let stream = AsyncThrowingStream<InferenceOutput, Error> { continuation in
             continuation.yield(.textDelta("abc")); continuation.yield(.textDelta("too much")); continuation.finish()
@@ -139,10 +158,14 @@ private actor StopPrefixBackend: InferenceBackend {
     var releaseEntered = false
     var mayRelease = false
     var sent = false
+    let thoughtOnly: Bool
+    init(thoughtOnly: Bool = false) { self.thoughtOnly = thoughtOnly }
     func permitRelease() { mayRelease = true }
     func estimate(_ request: InferenceRequest) async throws -> ResourceEstimate { .init(peakBytes: 1) }
     func execute(_ request: InferenceRequest, emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
-        for value in ["中", "e\u{301}", "👩🏽‍💻"] { try await emit(.textDelta(value)) }
+        for value in ["中", "e\u{301}", "👩🏽‍💻"] {
+            try await emit(thoughtOnly ? .textPartial(raw: value, reasoning: value, text: "") : .textDelta(value))
+        }
         sent = true
         while true { try await Task.sleep(for: .milliseconds(5)) }
     }
@@ -152,12 +175,12 @@ private actor StopPrefixBackend: InferenceBackend {
     }
 }
 @MainActor extension WorkflowEventCollectorTests {
-    @Test func realRuntimeStopDrainsAcceptedPrefixBeforeTerminalAndRelease() async throws {
+    @Test(arguments: [false, true]) func realRuntimeStopDrainsAcceptedPrefixBeforeTerminalAndRelease(thoughtOnly: Bool) async throws {
         let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
             .appendingPathComponent("StopPrefix-" + UUID().uuidString + ".dproject")
         defer { try? FileManager.default.removeItem(at: root) }
         let store = try await ProjectStore.create(at: root, name: "stop")
-        let backend = StopPrefixBackend()
+        let backend = StopPrefixBackend(thoughtOnly: thoughtOnly)
         let runtime = try InferenceRuntime(backends: [backend], configuration: .init(memoryBudgetBytes: 1024, eventBufferCapacity: 2))
         let session = WorkbenchSession(engine: runtime, backendID: "stop-prefix", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: { await runtime.shutdown() }, cleanup: {}, validateModel: { _ in })
         let service = WorkflowServices(store: store, session: session) { _, identity in
@@ -181,6 +204,10 @@ private actor StopPrefixBackend: InferenceBackend {
         do { _ = try await operation.value; Issue.record("Stopped prefix cannot complete a Call") }
         catch let failure as WorkflowOutputValidationFailure { #expect(failure.stopped) }
         #expect(terminal?.end?.cause == .stopped && terminal?.rawText == "中e\u{301}👩🏽‍💻")
+        if thoughtOnly {
+            #expect(terminal?.response?.reasoningText == "中e\u{301}👩🏽‍💻")
+            #expect(terminal?.response?.finalText == nil)
+        }
         let reference = try #require(try await store.workflowAssets(forStepID: id).first)
         #expect(try await store.workflowText(reference) == terminal?.rawText)
         #expect(await runtime.snapshot().activeRunID == nil)

@@ -222,7 +222,7 @@ def run(request_path: Path, model_path: Path, tokenizer_path: Path, output: Path
     observe("release-diffusion", request["steps"], request["steps"])
 
     vae = model.load("vae", WanVAE(), loading("vae"))
-    iterator = vae.decode_chunks(sample[None])
+    iterator = vae.decode_chunks(sample[None], check_cancel=check_cancel)
     count = 0
     hasher = hashlib.sha256()
     raw_path = output / "frames.rgb"

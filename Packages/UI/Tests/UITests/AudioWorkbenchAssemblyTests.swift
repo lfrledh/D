@@ -370,7 +370,7 @@ struct AudioWorkbenchAssemblyTests {
 
         model.clearError() // The disabled-recording error was asserted above; do not present an alert.
         var audioRectangles: [String: CGRect] = [:]
-        let workbenchHost = NSHostingController(rootView: WorkbenchView(model: model)
+        let workbenchHost = NSHostingController(rootView: ProjectDocumentsView(model: model)
             .observingLayout { audioRectangles[$0] = $1 })
         let workbenchWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1_000, height: 580),
                                       styleMask: [.titled, .resizable], backing: .buffered, defer: false)
@@ -387,7 +387,7 @@ struct AudioWorkbenchAssemblyTests {
         let imageModel = self.model(panels: AssemblyPanels(), factory: NoHardwareAudioFactory())
         await imageModel.createProject(at: root.appendingPathComponent("ImageControls.dproject"))
         var imageRectangles: [String: CGRect] = [:]
-        let imageHost = NSHostingController(rootView: WorkbenchView(model: imageModel)
+        let imageHost = NSHostingController(rootView: ProjectDocumentsView(model: imageModel, onContinueInQuick: {})
             .observingLayout { imageRectangles[$0] = $1 })
         let imageWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1_000, height: 580),
                                   styleMask: [.titled, .resizable], backing: .buffered, defer: false)
@@ -396,7 +396,7 @@ struct AudioWorkbenchAssemblyTests {
         settle(imageHost.view, width: 1_000)
         let imageIDs = Set(imageRectangles.filter { $0.value.width > 0 && $0.value.height > 0 }.keys)
         #expect(imageIDs.contains("export-artwork"))
-        #expect(imageIDs.contains("toggle-inspector"))
+        #expect(imageIDs.contains("project-document-continue-quick"))
         #expect(imageIDs.contains("copy-settings"))
         #expect(!imageIDs.contains("audio-workbench"))
     }

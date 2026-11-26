@@ -44,7 +44,8 @@ struct WorkflowWorkspacePanels: Equatable {
 /// Stable field IDs only; unknown future fields remain visible. Required ports stay outside disclosure.
 enum WorkflowParameterPresentation {
     static func isVisible(_ field: WorkflowFieldDefinition, node: WorkflowNode) -> Bool {
-        field.id != "streamWeights" || node.parameters["memoryStrategySelection"]?.string != "automatic"
+        guard !["projectImageProfile", "projectImageProfileRevision"].contains(field.id) else { return false }
+        return field.id != "streamWeights" || node.parameters["memoryStrategySelection"]?.string != "automatic"
     }
     static let advanced: Set<String> = ["temperature", "topP", "topK", "seed", "guidance", "steps",
         "memoryBudgetGiB", "loadingStrategy", "messagesJSON", "toolsJSON", "thinking", "reasoningEffort",

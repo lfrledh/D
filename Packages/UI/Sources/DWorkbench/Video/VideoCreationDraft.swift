@@ -67,3 +67,24 @@ public struct VideoCreationDraft: Codable, Sendable, Equatable {
         return zip(lhs, rhs).allSatisfy { $0.utf8.elementsEqual($1.utf8) }
     }
 }
+
+/// The old document's exact rational timeline and MiB entry share the current
+/// Wan operation. Missing fields preserve old graph interpretation, not a migration.
+enum WorkflowVideoDraftParameters {
+    static func frameRate(_ parameters: [String: WorkflowScalar]) throws -> VideoFrameRate {
+        guard let numerator = Int32(exactly: parameters["frameRate"]?.integer ?? 16),
+              let denominator = Int32(exactly: parameters["frameRateDenominator"]?.integer ?? 1),
+              numerator > 0, denominator > 0 else {
+            throw InferenceFailure.invalidRequest("请输入有效的视频参数；未完成的输入已保留。")
+        }
+        return .init(numerator: numerator, denominator: denominator)
+    }
+    static func memoryBudgetBytes(_ parameters: [String: WorkflowScalar]) throws -> UInt64? {
+        let original = try WorkflowLanguageMessageForm.memoryBudgetBytes(parameters)
+        guard let value = parameters["memoryBudgetMiBText"] else { return original }
+        guard let raw = value.string, original == nil else {
+            throw InferenceFailure.invalidRequest("内存预算请输入正整数 MiB，或清空以使用自动预算。")
+        }
+        return try VideoCreationDraft(memoryBudgetMiBText: raw).selectedMemoryBudgetBytes()
+    }
+}

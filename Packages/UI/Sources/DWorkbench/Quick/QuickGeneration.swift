@@ -177,9 +177,9 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     public var inputIssueCode: String? { inputValidationIssue?.code }
     public var audioRequiresWorkflow: Bool { draft.map(QuickAudioPresentation.requiresWorkflow) ?? false }
     private var inputValidationIssue: WorkflowIssue? { draft.flatMap { Self.validationIssue($0) ?? QuickAudioPresentation.batchIssue($0) } }
-    public static func validationIssue(_ draft: QuickDraft) -> WorkflowIssue? {
+    public static func validationIssue(_ draft: QuickDraft, forCanvas: Bool = false) -> WorkflowIssue? {
         guard let definition = WorkflowRegistry.standard.definition(for: draft.node) else { return WorkflowIssue("Unknown operation") }
-        if let issue = QuickAudioPresentation.validationIssue(draft) { return issue }
+        if !forCanvas, let issue = QuickAudioPresentation.validationIssue(draft) { return issue }
         guard (1...8).contains(draft.attempts) else { return WorkflowIssue("快速生成一次支持 1–8 次独立尝试。") }
         for field in definition.fields {
             guard let raw = draft.fieldText[field.id] else { continue }
@@ -421,15 +421,41 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         }
         state.drafts[index].fieldText = [:]; scheduleSave()
     }
+    /// Copy a project document's settings without replacing any existing Quick
+    /// draft. The caller still owns source validation; this owner controls writes.
+    /// A failed flush retains this one draft and uses the ordinary save retry.
+    @discardableResult public func appendProjectDraft(_ source: QuickDraft) throws -> String {
+        guard allowsSubmission(), isLoaded, !isRunning, !isImporting,
+              pendingSaveRunID == nil, saveIssue == nil, state.drafts.count < 512,
+              let category = QuickCategory.category(for: source.node.operationID) else {
+            throw WorkflowIssue("快速工作区已关闭或正在切换。")
+        }
+        var copy = source
+        copy.id = UUID().uuidString; copy.node.id = UUID()
+        var next = state
+        next.drafts.append(copy); next.selectedDraftID = copy.id
+        var navigation = next.navigation ?? .init(selected: category)
+        navigation.selected = category; navigation.lastDrafts[category.rawValue] = copy.id
+        next.navigation = navigation
+        try next.validate()
+        state = next; scheduleSave()
+        return copy.id
+    }
     private func scheduleSave() {
         debounce?.cancel()
         debounce = Task { [weak self] in
-            do { try await Task.sleep(for: .milliseconds(350)); try await self?.flush() }
+            do {
+                try await Task.sleep(for: .milliseconds(350))
+                guard let self else { return }
+                self.debounce = nil
+                try await self.flush()
+            }
             catch is CancellationError {} catch { self?.error = error.localizedDescription }
         }
     }
     public func flush() async throws {
         guard isLoaded else { throw WorkflowIssue(error ?? "快速记录尚未读取。") }
+        debounce?.cancel(); debounce = nil
         let preceding = writeTail
         let task = Task { @MainActor [self] in
             _ = try? await preceding?.value
@@ -446,19 +472,31 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     }
     public func start() {
         guard canStart, let source = draft, (1...8).contains(source.attempts) else { return }
+        do { launch(try Self.captureNewAttempts(source, nextSeed: { UInt64.random(in: .min ... .max) })) }
+        catch { self.error = error.localizedDescription }
+    }
+    /// Only a fresh explicit submission draws randomness. Retry and save recovery
+    /// use the captured draft already persisted by launch, never this function.
+    static func captureNewAttempts(_ source: QuickDraft, nextSeed: () -> UInt64) throws -> [QuickDraft] {
+        guard (1...8).contains(source.attempts) else { throw WorkflowIssue("快速生成一次支持 1–8 次独立尝试。") }
         var attempts: [QuickDraft] = []
+        let random = WorkflowModelRoutes.isImage(source.node.operationID) && source.node.parameters["randomSeed"]?.flag == true
+        let base = random ? nextSeed() : nil
         // Separate requests, never multiply the image operation's internal batch count.
         for offset in 0..<source.attempts {
             var captured = source
             if WorkflowModelRoutes.isImage(captured.node.operationID) { captured.node.parameters["count"] = .integer(1) }
-            if offset > 0, let raw = captured.node.parameters["seed"]?.string, let seed = UInt64(raw) {
+            if let base {
+                captured.node.parameters["seed"] = .text(String(base &+ UInt64(offset)))
+                captured.node.parameters["randomSeed"] = .flag(false)
+            } else if offset > 0, let raw = captured.node.parameters["seed"]?.string, let seed = UInt64(raw) {
                 let (next, overflow) = seed.addingReportingOverflow(UInt64(offset))
-                guard !overflow else { error = "独立尝试的种子超出范围，请减少次数或调整种子。"; return }
+                guard !overflow else { throw WorkflowIssue("独立尝试的种子超出范围，请减少次数或调整种子。") }
                 captured.node.parameters["seed"] = .text(String(next))
             }
             attempts.append(captured)
         }
-        launch(attempts)
+        return attempts
     }
     /// Explicitly rerun one failed attempt's frozen inputs, without replacing its prior evidence.
     public func retryAttempt(_ id: UUID) {
@@ -470,7 +508,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     }
     private func launch(_ attempts: [QuickDraft], retryOf: UUID? = nil) {
         guard !attempts.isEmpty else { return }
-        if let issue = attempts.compactMap(Self.validationIssue).first { error = issue.localizedDescription; return }
+        if let issue = attempts.compactMap({ Self.validationIssue($0) }).first { error = issue.localizedDescription; return }
         isRunning = true; cancelRequested = false; error = nil; streamingText = ""; progressPresentation = nil; phase = "正在保存输入…"
         let batch = UUID()
         runTask = Task { [self] in

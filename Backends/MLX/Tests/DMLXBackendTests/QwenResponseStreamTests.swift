@@ -28,6 +28,7 @@ struct QwenResponseStreamTests {
         var tokens = [Int]()
         var output = ""
         var deltas = [String]()
+        var events = [InferenceOutput]()
         var next = 1
 
         init(thinking: Bool, tools: [TextToolDefinition]? = nil) {
@@ -51,9 +52,10 @@ struct QwenResponseStreamTests {
         mutating func token(_ id: Int) throws {
             tokens.append(id)
             let table = pieces
-            if let delta = try stream.accept(id, decode: { ids in ids.map { table[$0]! }.joined() }) {
-                output += delta
-                deltas.append(delta)
+            if let event = try stream.acceptPartial(id, raw: tokens.map { table[$0]! }.joined(),
+                                                      decode: { ids in ids.map { table[$0]! }.joined() }) {
+                events.append(event)
+                if let delta = event.safeTextDelta, !delta.isEmpty { output += delta; deltas.append(delta) }
             }
         }
 
@@ -62,9 +64,10 @@ struct QwenResponseStreamTests {
             let table = pieces
             let result = try stream.finish(raw: raw, stopped: "stop", tools: tools, runID: nil,
                                            decode: { ids in ids.map { table[$0]! }.joined() })
-            if let delta = result.delta {
-                output += delta
-                deltas.append(delta)
+            if let event = try stream.partial(raw: raw, text: result.delta ?? "", final: true,
+                                               decode: { ids in ids.map { table[$0]! }.joined() }) {
+                events.append(event)
+                if let delta = event.safeTextDelta, !delta.isEmpty { output += delta; deltas.append(delta) }
             }
             return result.response
         }
@@ -232,4 +235,33 @@ struct QwenResponseStreamTests {
         #expect(Array(feed.output.utf8) == Array(text.utf8))
         #expect(response.finalText == text)
     }
+    @Test func acceptedThoughtAndRawAreAvailableBeforeCompletion() throws {
+        var feed = Feed(thinking: true)
+        try feed.text("中e\u{301}👩🏽‍💻")
+        #expect(feed.output.isEmpty)
+        #expect(feed.events == [.textPartial(raw: "中e\u{301}👩🏽‍💻", reasoning: "中e\u{301}👩🏽‍💻", text: "")])
+        try feed.token(close)
+        try feed.text("safe body ")
+        try feed.text("<tool_call><function=sum>")
+        #expect(feed.output == "safe body ")
+        let raw = feed.events.compactMap { event -> String? in
+            if case .textPartial(let value, _, _) = event { return value }; return nil
+        }.joined()
+        #expect(raw == "中e\u{301}👩🏽‍💻</think>safe body <tool_call><function=sum>")
+        // No finish is called: cancellation must retain only accepted prefixes.
+    }
+
+    @Test func partialChannelsDelayBrokenUTF8ButFlushActualReplacementAtNormalEnd() throws {
+        var stream = QwenResponseStream(openID: open, closeID: close, thinking: true)
+        let decode: ([Int]) -> String = { ids in
+            switch ids.count { case 0: ""; case 1: "\u{fffd}"; case 2: "中"; default: "中\u{fffd}" }
+        }
+        #expect(try stream.acceptPartial(1, raw: decode([1]), decode: decode) == nil)
+        #expect(try stream.acceptPartial(2, raw: decode([1, 2]), decode: decode)
+                == .textPartial(raw: "中", reasoning: "中", text: ""))
+        #expect(try stream.acceptPartial(3, raw: decode([1, 2, 3]), decode: decode) == nil)
+        #expect(try stream.partial(raw: decode([1, 2, 3]), text: "", final: true, decode: decode)
+                == .textPartial(raw: "\u{fffd}", reasoning: "\u{fffd}", text: ""))
+    }
+
 }

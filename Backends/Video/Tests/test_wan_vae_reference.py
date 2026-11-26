@@ -317,6 +317,26 @@ class WanVAEReferenceTests(unittest.TestCase):
         after_close = self.vendor_vae.decode(latent)
         _assert_close(self, after_close, np.asarray(baseline), "decode after early close")
 
+    def test_cancel_before_chunk_and_between_materialized_blocks_releases_cache(self):
+        latent = mx.array(self._latent(2, seed=71))
+        baseline = np.asarray(self.vendor_vae.decode(latent))
+        class Cancelled(Exception):
+            pass
+        for stop_at in (1, 5):
+            calls = 0
+            def check_cancel():
+                nonlocal calls
+                calls += 1
+                if calls == stop_at:
+                    raise Cancelled()
+            iterator = self.vendor_vae.decode_chunks(latent, check_cancel=check_cancel)
+            with self.assertRaises(Cancelled):
+                next(iterator)
+            self.assertEqual(calls, stop_at)
+            self.assertIsNone(iterator.gi_frame)
+            _assert_close(self, self.vendor_vae.decode(latent), baseline,
+                          f"decode after cancellation at boundary {stop_at}")
+
     def test_invalid_inputs_and_unaccepted_tiling_are_rejected(self):
         with self.assertRaisesRegex(ValueError, "rank-5"):
             self.vendor_vae.decode(mx.zeros((1, 16, 1, 1)))

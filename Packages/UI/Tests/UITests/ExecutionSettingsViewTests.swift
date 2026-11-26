@@ -31,15 +31,6 @@ struct ExecutionSettingsViewTests {
         #expect(deliveredError == error)
     }
 
-    @Test
-    func manualImageEditKeepsUnknownProfileButMayAdvanceVerified512() {
-        let scalable = ImageExecutionCapability.scalableKlein4B
-        let unknown = ExecutionProfileReference(identifier: "saved-image-profile", revision: 99)
-        #expect(GenerationInspector.profileForManualDimensionEdit(unknown, capability: scalable) == unknown)
-        #expect(GenerationInspector.profileForManualDimensionEdit(ImageExecutionCapability.verified512.profile,
-            capability: scalable) == scalable.profile)
-    }
-
     @Test(arguments: ["zh-Hans", "en"])
     func audioSummaryStatesOnlyDeclaredProfileAndOperations(locale: String) {
         let capability = AudioExecutionCapability(

@@ -37,9 +37,20 @@ public struct ArtifactReference: Sendable, Codable, Equatable {
 
 public enum InferenceOutput: Sendable, Equatable {
     case textDelta(String)
+    /// One atomic, append-only channel update. Raw includes control/tool text;
+    /// text is only the safe display prefix. This is never a completed response.
+    case textPartial(raw: String, reasoning: String, text: String)
     case progress(completed: Int, total: Int)
     case preview(ArtifactReference)
     case artifact(ArtifactReference)
+
+    /// Consumers of plain prose must never substitute raw or reasoning text.
+    public var safeTextDelta: String? {
+        switch self {
+        case .textDelta(let text), .textPartial(_, _, let text): text
+        default: nil
+        }
+    }
 }
 
 public struct InferenceResult: Sendable, Codable, Equatable {

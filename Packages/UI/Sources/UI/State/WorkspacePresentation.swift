@@ -9,14 +9,6 @@ public struct RecentProjectSummary: Identifiable, Equatable, Sendable {
     public let detail: String
     public init(id: String, name: String, detail: String) { self.id = id; self.name = name; self.detail = detail }
 }
-public enum WorkspacePane: String, CaseIterable, Identifiable {
-    case creations, assets, nodes
-    public var id: Self { self }
-    public var title: String {
-        switch self { case .creations: "创作"; case .assets: "资产"; case .nodes: "模型节点" }
-    }
-}
-
 /// The visible UI supplies the exact enabled state, including unapplied parameter edits.
 @MainActor public struct WorkbenchGenerationCommand {
     public let title: String
@@ -158,7 +150,7 @@ struct WorkbenchCommandWindow: NSViewRepresentable {
     public let files: WorkbenchGenerationCommand
     public let quickDestination: [WorkbenchChoiceCommand]
     public let importAsset: WorkbenchGenerationCommand
-    public let legacy: WorkbenchGenerationCommand
+    public let documents: WorkbenchGenerationCommand
     public let modes: [WorkbenchChoiceCommand]
     public let sidebars: [WorkbenchGenerationCommand]
     public let help: WorkbenchGenerationCommand

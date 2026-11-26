@@ -36,9 +36,36 @@ struct VideoBackendTests {
             #expect(throws: (any Error).self) { try VideoBackendConfiguration.validate(value) }
         }
         let measuredProfile = try VideoBackendConfiguration.estimate(video(width: 832, height: 480, frames: 17))
-        #expect(measuredProfile >= 19_642_860_430) // Recorded MLX peak, not system RSS.
-        #expect(measuredProfile > 14 * 1024 * 1024 * 1024)
+        #expect(measuredProfile == 13 * 1024 * 1024 * 1024) // Full-weight route retains its floor.
         #expect(try VideoBackendConfiguration.estimate(video(width: 1920, height: 1088, frames: 81)) > measuredProfile)
+    }
+
+    @Test("FP32 decoder calibration is limited to the measured resolution and bounded chunks")
+    func decoderBudgetBoundary() throws {
+        let capability = VideoExecutionCapability.wan21
+        for frames in [1, 5, 17] {
+            #expect(try capability.estimatedDecoderPeakBytes(for: video(width: 832, height: 480, frames: frames)) == 12_524_191_744)
+        }
+        for value in [video(width: 848, height: 480, frames: 17),
+                      video(width: 832, height: 496, frames: 17),
+                      video(width: 832, height: 480, frames: 21),
+                      video(width: 480, height: 832, frames: 17),
+                      video(width: 320, height: 192, frames: 17)] {
+            let previous = UInt64(value.width) * UInt64(value.height) * (4 * 384 * 4 * 8) + 1_073_741_824
+            #expect(try capability.estimatedDecoderPeakBytes(for: value) == previous)
+        }
+        #expect(throws: (any Error).self) { try capability.estimatedDecoderPeakBytes(for: video(width: Int.max)) }
+
+        var rows: [[String: Any]] = (0..<1261).map { index in
+            ["role": "text", "name": "blocks.0.w\(index)", "shape": [1], "dtype": "BF16"]
+        }
+        let representative = video(width: 832, height: 480, frames: 17)
+        #expect(try MLXVideoBackend.streamingPeak(representative,
+            manifest: JSONSerialization.data(withJSONObject: ["tensors": rows])) == 12_524_191_744)
+        // The calibrated decoder cannot suppress a larger text-stage requirement.
+        rows[0] = ["role": "text", "name": "shared", "shape": [7 * 1_073_741_824], "dtype": "BF16"]
+        #expect(try MLXVideoBackend.streamingPeak(representative,
+            manifest: JSONSerialization.data(withJSONObject: ["tensors": rows])) > 15 * 1_073_741_824)
     }
 
     @Test("Serialized request preserves Unicode, explicit seed and exact rational time")

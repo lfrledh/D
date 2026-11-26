@@ -5797,6 +5797,9 @@
     "modelManagement.local.stagingRetained": "添加未完成。暂存文件已改变，D 已保留这些文件；原文件未修改。",
     "workflow.creation.publishedText": "已发布文稿",
     "workflow.operation.d.model.language.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）",
-    "workflow.operation.d.text.rewrite.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）"
+    "workflow.operation.d.text.rewrite.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）",
+    "workflow.operation.d.image.generate.field.randomSeed": "随机种子",
+    "workflow.operation.d.video.generate.field.frameRateDenominator": "帧率分母",
+    "workflow.operation.d.video.generate.field.memoryBudgetMiBText": "内存预算 MiB"
   }
 }

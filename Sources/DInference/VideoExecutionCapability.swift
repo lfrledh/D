@@ -33,13 +33,23 @@ public struct VideoExecutionCapability: Sendable, Equatable {
         }
     }
 
-    /// Same single-point estimate used by the backend. Long sequences remain uncalibrated.
+    /// Resident T5/DiT still require their original full-weight allowance.
     public func estimatedPeakBytes(for value: VideoRequest) throws -> UInt64 {
+        max(13 * 1024 * 1024 * 1024, try estimatedDecoderPeakBytes(for: value))
+    }
+
+    /// FP32 native 3-D convolution with materialized temporal caches. The
+    /// 832x480 representative was measured through all five temporal chunks;
+    /// other resolutions and longer requests retain the conservative estimate.
+    /// This is an admission estimate, not the process RSS or an allocation cap.
+    public func estimatedDecoderPeakBytes(for value: VideoRequest) throws -> UInt64 {
         try validate(value)
         let pixels = UInt64(value.width) * UInt64(value.height)
-        let (workspace, overflow) = pixels.multipliedReportingOverflow(by: 4 * 384 * 4 * 8)
+        let calibrated = value.width == 832 && value.height == 480 && value.frameCount <= 17
+        let bytesPerPixel: UInt64 = calibrated ? 28 * 1024 : 4 * 384 * 4 * 8
+        let (workspace, overflow) = pixels.multipliedReportingOverflow(by: bytesPerPixel)
         let (decoder, extraOverflow) = workspace.addingReportingOverflow(1024 * 1024 * 1024)
         guard !overflow, !extraOverflow else { throw InferenceFailure.invalidResourceEstimate }
-        return max(13 * 1024 * 1024 * 1024, decoder)
+        return decoder
     }
 }

@@ -18,6 +18,93 @@ private actor QuickFixtureEngine: InferenceEngine {
 
 @Suite("Quick generation ownership", .serialized) @MainActor
 struct QuickGenerationTests {
+    @Test func projectDraftAppendPreservesExistingDraftAndColdReadsRawInput() async throws {
+        let (store, _, quick, _) = try await fixture()
+        quick.select(operationID: "d.video.generate", modelID: "video:fixture")
+        let prior = try #require(quick.draft)
+        let source = VideoCreationDraft(prompt: "Boat", widthText: "83x", fpsNumeratorText: "30000",
+            fpsDenominatorText: "1001", seedText: "unfinished", memoryBudgetMiBText: "1537")
+        let transferred = try QuickProjectDraftTransfer.video(source, modelID: "video:fixture", title: "Saved document")
+        let id = try quick.appendProjectDraft(transferred)
+        #expect(id != prior.id && id != transferred.id)
+        #expect(quick.draft?.node.id != transferred.node.id)
+        #expect(quick.state.drafts.first { $0.id == prior.id } == prior)
+        #expect(quick.draft?.fieldText["width"] == "83x")
+        #expect(!quick.canStart && quick.state.runs.isEmpty)
+        try await quick.flush()
+        let reopened = QuickGenerationController(store: store) { throw WorkflowIssue("No inference") }
+        await reopened.load()
+        #expect(reopened.draft == quick.draft && reopened.state.drafts.contains(prior))
+        #expect(reopened.state.runs.isEmpty)
+    }
+    @Test func transferredVideoKeepsRationalFrameRateExactMiBAndInvalidInputs() throws {
+        let source = VideoCreationDraft(prompt: "Boat", fpsNumeratorText: "30000", fpsDenominatorText: "1001", memoryBudgetMiBText: "1537")
+        var copy = try QuickProjectDraftTransfer.video(source, modelID: "video:fixture", title: "Saved document")
+        #expect(QuickGenerationController.validationIssue(copy) == nil)
+        #expect(try WorkflowVideoDraftParameters.frameRate(copy.node.parameters) == .init(numerator: 30000, denominator: 1001))
+        #expect(try WorkflowVideoDraftParameters.memoryBudgetBytes(copy.node.parameters) == 1537 * 1_048_576)
+        #expect(copy.node.parameters["memoryBudgetGiB"] == nil)
+        copy.node.parameters["memoryBudgetMiBText"] = .text("0")
+        #expect(QuickGenerationController.validationIssue(copy) != nil)
+        copy.node.parameters["memoryBudgetMiBText"] = .text("")
+        #expect(try WorkflowVideoDraftParameters.memoryBudgetBytes(copy.node.parameters) == nil)
+        copy.node.parameters["memoryBudgetGiB"] = .integer(12)
+        #expect(QuickGenerationController.validationIssue(copy) != nil)
+        copy.node.parameters["memoryBudgetMiBText"] = nil
+        copy.node.parameters["frameRateDenominator"] = nil
+        copy.fieldText = [:]
+        #expect(try WorkflowVideoDraftParameters.frameRate(copy.node.parameters) == .init(numerator: 30000))
+        #expect(try WorkflowVideoDraftParameters.memoryBudgetBytes(copy.node.parameters) == 12 * 1_073_741_824)
+    }
+    @Test func projectRandomIsCapturedOnceWithoutChangingEditableDraft() throws {
+        var source = try QuickProjectDraftTransfer.image(.init(prompt: "Boat", randomSeed: true, seedText: "unfinished"),
+            capability: .verified512, modelID: "image:fixture", title: "Saved document", reference: nil)
+        source.attempts = 3
+        var calls = 0
+        let captured = try QuickGenerationController.captureNewAttempts(source, nextSeed: { calls += 1; return UInt64.max })
+        #expect(calls == 1)
+        #expect(captured.map { $0.node.parameters["seed"]?.string } == [String(UInt64.max), "0", "1"])
+        #expect(captured.allSatisfy { $0.node.parameters["randomSeed"] == .flag(false) })
+        #expect(source.node.parameters["randomSeed"] == .flag(true) && source.node.parameters["seed"] == .text("unfinished"))
+        let roundTrip = try JSONDecoder().decode(QuickDraft.self, from: JSONEncoder().encode(captured[0]))
+        #expect(roundTrip == captured[0])
+        let next = try QuickGenerationController.captureNewAttempts(source, nextSeed: { calls += 1; return 17 })
+        #expect(calls == 2 && next[0].node.parameters["seed"] == .text("17"))
+    }
+    @Test func transferredImageUsesOriginalReferenceRecipeAndKeepsUnknownProfileBlocked() throws {
+        let saved = ProjectDraft(prompt: "Boat", randomSeed: false, seedText: "42")
+        let reference = WorkflowAssetReference(projectID: UUID(), assetID: UUID(), kind: .image,
+            sha256: String(repeating: "a", count: 64))
+        let input = ImageReference(url: URL(fileURLWithPath: "/fixture/reference.rgb"), sha256: reference.sha256,
+            byteCount: 512 * 512 * 3, width: 512, height: 512)
+        let draft = try QuickProjectDraftTransfer.image(saved, capability: .scalableKlein4B,
+            modelID: "image:fixture", title: "Original", reference: reference)
+        try WorkflowRegistry.standard.validate(draft.node)
+        #expect(draft.inputs["ref"] == .asset(reference))
+        let request = try WorkflowImageRecipe.klein(capability: .scalableKlein4B)
+            .request(node: draft.node, prompt: saved.prompt, seed: 42, reference: input)
+        #expect(request.executionProfile == ImageExecutionCapability.referenceKlein4B.profile)
+        #expect(try request.resolvedReferences() == [input])
+        let plain = try QuickProjectDraftTransfer.image(saved, capability: .scalableKlein4B,
+            modelID: "image:fixture", title: "Original", reference: nil)
+        let plainRequest = try WorkflowImageRecipe.klein(capability: .scalableKlein4B)
+            .request(node: plain.node, prompt: saved.prompt, seed: 42, reference: nil)
+        #expect(plainRequest.executionProfile == saved.imageSettings.executionProfile)
+        let added = try WorkflowImageRecipe.klein(capability: .scalableKlein4B)
+            .request(node: plain.node, prompt: saved.prompt, seed: 42, reference: input)
+        #expect(added.executionProfile == ImageExecutionCapability.referenceKlein4B.profile)
+        let removed = try WorkflowImageRecipe.klein(capability: .scalableKlein4B)
+            .request(node: draft.node, prompt: saved.prompt, seed: 42, reference: nil)
+        #expect(removed.executionProfile == saved.imageSettings.executionProfile)
+        var unknown = saved
+        unknown.imageSettings = .init(executionProfile: .init(identifier: "unknown", revision: 71))
+        #expect(throws: WorkflowIssue.self) {
+            try QuickProjectDraftTransfer.image(unknown, capability: .scalableKlein4B,
+                modelID: "image:fixture", title: "Original", reference: nil)
+        }
+        #expect(saved.imageSettings.executionProfile == ImageExecutionCapability.verified512.profile)
+    }
+
     @Test func newDraftUsesCreationLanguageButExistingDraftKeepsItsTitle() async throws {
         let (_, _, quick, _) = try await fixture()
         quick.creationText = { _, _ in "New model draft" }
@@ -151,6 +238,8 @@ struct QuickGenerationTests {
         #expect(try quick.inputAssetItems(port: port, draftID: draft.id) == [firstItems[1]])
         try await quick.flush()
         let saved = quick.state
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(quick.state == saved) // Explicit save drains the scheduled debounce.
         #expect(await engine.requests.isEmpty)
         try await canvas.close(); try await store.close()
         let reopened = try await ProjectStore.open(at: store.rootURL)

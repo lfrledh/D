@@ -49,10 +49,31 @@ struct DApp: App {
                 } else if let model = bootstrap.model, let library = bootstrap.libraryModel, let tags = bootstrap.nodeTags {
                     VStack(spacing: 0) {
                         if let issue = bootstrap.startupError { Text(issue).textSelection(.enabled).padding().modifier(DOpaqueNoticePlate()) }
-                        WorkbenchView(model: model, library: library, nodeTags: tags)
+                        if let quick = model.projectSession.projectQuick, model.manifest != nil {
+                            DualWorkbenchView(model: model, quickModel: model, quick: quick, library: library,
+                                nodeTags: tags, metadata: bootstrap.sharedLibrary, metadataIssue: bootstrap.sharedLibraryIssue,
+                                settingsRequest: $settingsRequest, windowHasSheet: applicationDelegate.hasPresentedSheet,
+                                automaticWorkspace: false)
+                                .id(model.manifest?.effectiveInstanceID)
+                        } else {
+                            HStack {
+                                Button(bootstrap.languageStore.text("command.project.open", fallback: "—")) { Task { await model.openProject() } }
+                                    .keyboardShortcut("o")
+                                Menu(bootstrap.languageStore.text("systemMenu.recent", fallback: "—")) {
+                                    ForEach(model.recentProjects) { recent in
+                                        Button(recent.name) { Task { await model.openRecentProject(id: recent.id) } }
+                                    }
+                                }
+                            }.padding(12)
+                            ProjectDocumentsView(model: model, library: library)
+                        }
+                    }.task(id: model.manifest?.effectiveInstanceID) {
+                        // Recover only the explicitly opened named project. Never
+                        // rewrite the unavailable automatic Quick store.
+                        if model.manifest != nil { await model.projectSession.enableProjectQuick() }
                     }.background(WorkbenchWindowConnection(delegate: applicationDelegate, model: model,
                         prepareLibraryForTermination: bootstrap.prepareLibraryForTermination,
-                            prepareQuickForTermination: bootstrap.prepareQuickForTermination, cancelTermination: bootstrap.cancelTermination))
+                        prepareQuickForTermination: bootstrap.prepareQuickForTermination, cancelTermination: bootstrap.cancelTermination))
                 } else if let error = bootstrap.startupError {
                     VStack(spacing: 18) {
                         Label(bootstrap.languageStore.text("workbench.startup.failed", fallback: "—"), systemImage: "externaldrive.badge.exclamationmark")
@@ -187,7 +208,7 @@ private struct WorkbenchCommands: Commands {
                 .keyboardShortcut("e", modifiers: [.command, .shift])
                 .disabled(bootstrap.isTerminating || exportCommand?.isEnabled != true)
             Divider()
-            Menu(label("layoutInteraction.advanced")) { button(current ? workspace?.legacy : nil, title: label("layoutInteraction.legacy")) }
+            button(current ? workspace?.documents : nil, title: label("workbench.creation"))
             Divider()
             Button(label("command.window.close")) { WorkbenchWindowCloseCommand.perform(on: NSApp.keyWindow) }
                 .keyboardShortcut("w").disabled(bootstrap.isTerminating || NSApp.keyWindow == nil || NSApp.keyWindow?.attachedSheet != nil)

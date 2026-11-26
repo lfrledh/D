@@ -103,6 +103,7 @@ struct VideoProjectSessionTests {
             let run = try #require(session.manifest?.jobs.last)
             #expect(run.documentID == id && run.state == .completed)
             #expect(run.request.input == .video(try draft.makeRequest()))
+            #expect(run.request.loadingSelection == .automatic)
             #expect(session.activeDocumentID == other && session.videoCreationContextID == otherContext)
             #expect(original.adoptedAssetID == nil && session.activeDocument?.adoptedAssetID == nil)
             #expect(await probe.releaseCount == 1)

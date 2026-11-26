@@ -37,7 +37,7 @@ enum WorkflowImageOperations {
                 }
             }
             let seed = try WorkflowScalarReader.text("seed", in: node)
-            guard !seed.isEmpty, seed.utf8.allSatisfy({ (48 ... 57).contains($0) }), UInt64(seed) != nil else {
+            guard node.parameters["randomSeed"]?.flag == true || (!seed.isEmpty && seed.utf8.allSatisfy({ (48 ... 57).contains($0) }) && UInt64(seed) != nil) else {
                 throw WorkflowIssue("seed 必须是 UInt64 十进制字符串。", nodeID: node.id)
             }
             let count = try WorkflowScalarReader.integer("count", in: node)

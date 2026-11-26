@@ -52,7 +52,7 @@ struct QwenVLMRealTests {
         do {
             let run = try await runtime.submit(request, backendID: backend.descriptor.id)
             var streamed = ""
-            for try await event in run.events { if case .textDelta(let value) = event { streamed += value } }
+            for try await event in run.events { if let value = event.safeTextDelta { streamed += value } }
             guard case .completed(let result) = await run.outcome() else { throw InferenceFailure.backendFailed("Multi-frame run did not complete") }
             let text = try #require(result.textResponse?.finalText)
             #expect(!text.isEmpty && text == streamed && result.textResponse?.finishReason == .stop)
@@ -123,7 +123,7 @@ struct QwenVLMRealTests {
                 var cancelled = false
                 do {
                     for try await output in run.events {
-                        if case .textDelta = output, !cancelled { cancelled = true; await run.cancel() }
+                        if let text = output.safeTextDelta, !text.isEmpty, !cancelled { cancelled = true; await run.cancel() }
                     }
                 } catch { if !cancelled { throw error } }
                 let outcome = await run.outcome(), state = await runtime.snapshot()
@@ -166,7 +166,7 @@ struct QwenVLMRealTests {
                 let start = Date(), run = try await runtime.submit(request, backendID: backend.descriptor.id)
                 print("D_QWEN_REAL started", index, root.path)
                 var text = "", deltas = 0
-                for try await output in run.events { if case .textDelta(let part) = output {
+                for try await output in run.events { if let part = output.safeTextDelta, !part.isEmpty {
                     text += part; deltas += 1
                     if deltas == 1 || deltas % 16 == 0 { print("D_QWEN_REAL progress", index, deltas) }
                 } }

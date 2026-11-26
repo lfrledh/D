@@ -120,7 +120,8 @@ public final class ProjectTextSourcesController {
                   capturedTarget.revision == document.revision else { throw TextSourcesError.stale }
             let submission = try TextSourcesContext.makeSubmission(notebook: capturedNotebook, target: capturedTarget,
                 modelID: modelID, modelRevision: verified.revision)
-            let request = InferenceRequest(id: submission.id, model: verified, input: .text(submission.request))
+            let request = InferenceRequest(id: submission.id, model: verified, input: .text(submission.request),
+                                           loadingSelection: .automatic)
             try request.validate()
             let run = try await engine.submit(request, backendID: backendID)
             activeRun = run
@@ -132,7 +133,7 @@ public final class ProjectTextSourcesController {
                 for try await event in run.events {
                     if cancelled || Task.isCancelled { cancelled = true; await sendCancellation(); continue }
                     if streamError != nil { await sendCancellation(); continue }
-                    guard case .textDelta(let delta) = event else {
+                    guard let delta = event.safeTextDelta else {
                         streamError = TextDraftError.nonTextOutput; await sendCancellation(); continue
                     }
                     guard delta.utf8.count <= TextDraftDocument.maximumUTF8Bytes - answer.utf8.count else {
@@ -152,7 +153,12 @@ public final class ProjectTextSourcesController {
             if let streamError { throw streamError }
             let metrics: [String: String]
             switch result {
-            case .completed(let output): metrics = Self.safeMetrics(output.metadata)
+            case .completed(let output):
+                if let response = output.textResponse {
+                    guard response.finishReason != .incomplete, response.toolCalls.isEmpty,
+                          response.finalText == answer else { throw TextDraftError.noAcceptableCandidate }
+                }
+                metrics = Self.safeMetrics(output.metadata)
             case .cancelled: throw CancellationError()
             case .failed(let failure): throw failure
             }

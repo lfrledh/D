@@ -88,25 +88,19 @@ struct VideoCreationViewTests {
         let id = UUID()
         let candidate = ProjectAsset(id: id, relativePath: "Video/fixture.mp4", mediaType: "video/mp4",
                                      name: "这是一个特别特别长的中文候选名称 e\u{301} 👩‍💻，不能在窄窗口丢失")
-        var draft = VideoCreationDraft(prompt: "很长的中文提示 e\u{301} 👩‍💻", widthText: "-")
+        let draft = VideoCreationDraft(prompt: "很长的中文提示 e\u{301} 👩‍💻", widthText: "-")
         var rectangles: [String: CGRect] = [:]
-        let base = VideoCreationView(draft: Binding(get: { draft }, set: { draft = $0 }), candidates: [candidate],
-                                     selectedAssetID: id, adoptedAssetID: nil, modelStatus: "模型已就绪",
-                                     canGenerate: false, isBusy: false, progress: nil, status: nil, previewURL: nil,
-                                     previewIdentity: UUID(), defaultMemoryBudgetBytes: 12 * 1_024 * 1_024 * 1_024,
-                                     actions: actions()).observingLayout { rectangles[$0] = $1 }
-        let surfaces: [(String, VideoCreationView)] = [
-            ("parameters", base.presenting(.parameters)),
-            ("content", base.presenting(.content)),
-            ("complete", base)
-        ]
+        let base = ProjectVideoCandidatesView(draft: draft, candidates: [candidate],
+            selectedAssetID: id, adoptedAssetID: nil, isBusy: false, previewURL: nil,
+            previewIdentity: UUID(), actions: actions()).observingLayout { rectangles[$0] = $1 }
+        let surfaces = [base]
         #expect(draft.prompt == "很长的中文提示 e\u{301} 👩‍💻")
         #expect(draft.widthText == "-")
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 2400), styleMask: [.borderless],
                               backing: .buffered, defer: false)
         defer { window.contentView = nil }
         for width: CGFloat in [520, 1_000] {
-            for (presentation, surface) in surfaces {
+            for surface in surfaces {
                 rectangles.removeAll()
                 let host = NSHostingView(rootView: surface)
                 window.contentView = host
@@ -117,11 +111,6 @@ struct VideoCreationViewTests {
                     host.layoutSubtreeIfNeeded()
                     await Task.yield()
                 }
-                if presentation != "content" {
-                    let control = try #require(rectangles["video-create-controls"])
-                    #expect(control.width > 0 && control.minX >= -1 && control.maxX <= width + 1)
-                }
-                if presentation != "parameters" {
                     let row = try #require(rectangles["video-create-candidate-\(id.uuidString)"])
                     #expect(row.width > 0 && row.minX >= -1 && row.maxX <= width + 1)
                     for action in ["preview", "adopt", "reject", "export"] {
@@ -129,36 +118,24 @@ struct VideoCreationViewTests {
                         #expect(button.width > 0 && button.height > 0)
                         #expect(button.minX >= -1 && button.maxX <= width + 1)
                     }
-                }
             }
         }
         #expect(draft.widthText == "-")
     }
 
     @Test
-    func parameterPresentationDisappearingDoesNotStopButContentDisappearingDoes() async throws {
-        var draft = VideoCreationDraft(prompt: "视频")
+    func candidateViewDisappearingStopsPlayback() async throws {
+        let draft = VideoCreationDraft(prompt: "视频")
         var stops = 0
         var mounted = false
         let callbacks = VideoCreationActions(generate: {}, cancel: {}, save: {}, chooseModel: {},
-                                             stop: { stops += 1 }, select: { _ in }, adopt: { _ in },
-                                             preview: { _ in }, export: { _ in }, reject: { _, _ in })
-        let base = VideoCreationView(draft: Binding(get: { draft }, set: { draft = $0 }), candidates: [],
-                                     selectedAssetID: nil, adoptedAssetID: nil, modelStatus: "模型已就绪",
-                                     canGenerate: true, isBusy: false, progress: nil, status: nil, previewURL: nil,
-                                     previewIdentity: UUID(), defaultMemoryBudgetBytes: 1, actions: callbacks)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 320), styleMask: [.borderless],
-                              backing: .buffered, defer: false)
+            stop: { stops += 1 }, select: { _ in }, adopt: { _ in }, preview: { _ in }, export: { _ in }, reject: { _, _ in })
+        let view = ProjectVideoCandidatesView(draft: draft, candidates: [], selectedAssetID: nil,
+            adoptedAssetID: nil, isBusy: false, previewURL: nil, previewIdentity: UUID(), actions: callbacks)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 320), styleMask: [.borderless], backing: .buffered, defer: false)
         defer { window.contentView = nil }
-        let host = NSHostingView(rootView: AnyView(base.presenting(.parameters).onAppear { mounted = true }))
+        let host = NSHostingView(rootView: AnyView(view.onAppear { mounted = true }))
         window.contentView = host
-        for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
-        #expect(mounted)
-        host.rootView = AnyView(EmptyView())
-        for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
-        #expect(stops == 0)
-        mounted = false
-        host.rootView = AnyView(base.presenting(.content).onAppear { mounted = true })
         for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
         #expect(mounted)
         host.rootView = AnyView(EmptyView())

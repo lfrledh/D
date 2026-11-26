@@ -265,9 +265,10 @@ public actor MLXQwenVLMBackend: InferenceExecutionPlanning {
                                 switch item {
                                 case .token(let token):
                                     tokens.append(token)
-                                    if let delta = try responseStream.accept(token,
+                                    if let partial = try responseStream.acceptPartial(token,
+                                        raw: context.tokenizer.decode(tokenIds: tokens),
                                         decode: { context.tokenizer.decode(tokenIds: $0) }) {
-                                        try await emit(.textDelta(delta))
+                                        try await emit(partial)
                                     }
                                 case .info(let info): completion = info
                                 }
@@ -278,9 +279,10 @@ public actor MLXQwenVLMBackend: InferenceExecutionPlanning {
                                 switch item {
                                 case .token(let token):
                                     tokens.append(token)
-                                    if let delta = try responseStream.accept(token,
+                                    if let partial = try responseStream.acceptPartial(token,
+                                        raw: context.tokenizer.decode(tokenIds: tokens),
                                         decode: { context.tokenizer.decode(tokenIds: $0) }) {
-                                        try await emit(.textDelta(delta))
+                                        try await emit(partial)
                                     }
                                 case .info(let info): completion = info
                                 }
@@ -298,8 +300,10 @@ public actor MLXQwenVLMBackend: InferenceExecutionPlanning {
                             let finished = try responseStream.finish(raw: raw, stopped: stop,
                                 tools: input.tools, runID: request.id,
                                 decode: { context.tokenizer.decode(tokenIds: $0) })
-                            if let delta = finished.delta {
-                                try await emit(.textDelta(delta))
+                            if let partial = try responseStream.partial(raw: raw,
+                                text: finished.delta ?? "", final: true,
+                                decode: { context.tokenizer.decode(tokenIds: $0) }) {
+                                try await emit(partial)
                             }
                             let imageFrames = prepared.image?.frames ?? []
                             let videoFrames = prepared.video?.frames ?? []

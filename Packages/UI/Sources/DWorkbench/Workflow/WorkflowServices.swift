@@ -393,7 +393,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
             "application.stream.displayPublications": String(displayPublications + 1),
             "application.stream.seconds": String(Double(duration.seconds) + Double(duration.attoseconds) / 1e18)]
         let measured = InferenceResult(artifacts: original?.artifacts ?? [],
-            metadata: (original?.metadata ?? [:]).merging(metrics) { _, measured in measured }, textResponse: original?.textResponse)
+            metadata: (original?.metadata ?? [:]).merging(metrics) { _, measured in measured }, textResponse: original?.textResponse ?? final.partialResponse)
         terminal?(measured, text, outcome, failure)
         if case .failed(let authoritativeFailure) = outcome {
             switch authoritativeFailure {
@@ -579,8 +579,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
     public func generateVideo(context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }
         let binding = try model(for: context), p = context.node.parameters
-        guard let seed = UInt64(p["seed"]?.string ?? ""),
-              let numerator = Int32(exactly: p["frameRate"]?.integer ?? 16) else { throw WorkflowIssue("T2V 配方或 seed 无效。") }
+        guard let seed = UInt64(p["seed"]?.string ?? "") else { throw WorkflowIssue("T2V 配方或 seed 无效。") }
         let prompt: String
         if let value = context.inputs["prompt"] {
             if let text = value.datum?.text { prompt = text }
@@ -601,7 +600,7 @@ struct WorkflowImageHistoryFailure: LocalizedError {
             }
             input = VideoRequest(prompt: prompt, negativePrompt: p["negativePrompt"]?.string ?? "",
             width: p["width"]?.integer ?? 256, height: p["height"]?.integer ?? 256, frameCount: p["frameCount"]?.integer ?? 17,
-            frameRate: .init(numerator: numerator), steps: p["steps"]?.integer ?? 4,
+            frameRate: try WorkflowVideoDraftParameters.frameRate(p), steps: p["steps"]?.integer ?? 4,
             guidanceScale: Float(p["guidance"]?.decimal ?? 5), scheduleShift: Float(p["scheduleShift"]?.decimal ?? 5),
             seed: seed, executionProfile: capability.profile,
             adapterOptions: p["loadingStrategy"]?.string == "ssdLayered" ? .wan(streamWeights: true) : nil)
@@ -637,10 +636,11 @@ struct WorkflowImageHistoryFailure: LocalizedError {
     }
     private func generateMedia(_ input: InferenceInput, mediaType: String, parents: [WorkflowAssetReference],
                                binding: WorkflowModelBinding, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
-        let budget = context.node.parameters["memoryBudgetGiB"]?.integer ?? 0
-        guard budget >= 0, let gib = UInt64(exactly: budget), gib <= UInt64(Int64.max) / 1_073_741_824 else { throw WorkflowIssue("内存预算无效。") }
+        let budget = try context.node.operationID == "d.video.generate"
+            ? WorkflowVideoDraftParameters.memoryBudgetBytes(context.node.parameters)
+            : WorkflowLanguageMessageForm.memoryBudgetBytes(context.node.parameters)
         let request = InferenceRequest(id: context.stepID, model: binding.reference, input: input,
-            memoryBudgetBytes: gib == 0 ? nil : gib * 1_073_741_824,
+            memoryBudgetBytes: budget,
             loadingSelection: context.node.parameters["loadingStrategy"]?.string == "automatic" || context.node.parameters["memoryStrategySelection"]?.string == "automatic" ? .automatic : nil)
         let (result, _) = try await infer(request, binding: binding)
         guard result.artifacts.count == 1, let artifact = result.artifacts.first, artifact.mediaType == mediaType else { throw WorkflowIssue("模型未交付预期的单个完整媒体。") }

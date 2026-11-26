@@ -982,6 +982,77 @@ public final class ProjectSession {
     }
 
     public var currentStore: ProjectStore? { store }
+    public var hasUnsavedDocumentEdits: Bool {
+        text?.hasUnsavedEdits == true || textSources?.isDirty == true || audio?.isDirty == true
+            || (activeDocument?.kind == .image && (activeDocument?.draft != draft || draftSaveFailed))
+            || (audioCreationDraft != nil && audioCreationDraft?.revision != audioCreationPersistedRevision)
+            || (videoCreationDraft != nil && videoCreationDraft?.revision != videoCreationPersistedRevision)
+    }
+    /// Child-editor Save uses the same writers as project navigation, but keeps
+    /// the project, runtime and admission owner open. Failures propagate to its gate.
+    public func saveDocumentEdits(documentID: UUID, navigationEpoch expectedEpoch: UInt64) async throws {
+        guard let owner = store, activeDocumentID == documentID, navigationEpoch == expectedEpoch,
+              !isChangingProject, !closePending else { throw WorkflowIssue("快速草稿所属项目已关闭或切换。") }
+        if let reason = audio?.navigationBlockMessage { throw WorkflowIssue(reason) }
+        let textOwner = text, sourceOwner = textSources
+        try await textOwner?.flush()
+        guard store === owner, activeDocumentID == documentID, navigationEpoch == expectedEpoch else { throw CancellationError() }
+        if let textOwner { sourceOwner?.synchronizeTarget(textOwner.editor.document) }
+        try await sourceOwner?.flush()
+        guard store === owner, activeDocumentID == documentID, navigationEpoch == expectedEpoch else { throw CancellationError() }
+        try await flushDraft(to: owner)
+        guard store === owner, activeDocumentID == documentID, navigationEpoch == expectedEpoch else { throw CancellationError() }
+    }
+    /// Explicit continuation from an existing document, without generation or
+    /// replacement of either that document or a previously edited Quick draft.
+    public func continueDocumentInQuick(documentID: UUID, navigationEpoch expectedEpoch: UInt64) async throws -> String {
+        guard let owner = store, let document = activeDocument, document.id == documentID,
+              navigationEpoch == expectedEpoch, !isBusy, !isChangingProject, !closePending,
+              document.kind == .image || document.kind == .video else {
+            throw WorkflowIssue("快速草稿所属项目已关闭或切换。")
+        }
+        let capturedImage = draft, capturedVideo = videoCreationDraft, editVersion = draftEditVersion
+        let kind: WorkflowModelKind = document.kind == .image ? .image : .video
+        let modelIdentity = defaultWorkflowModel(kind), capability = imageCapability
+        try await flushDraft(to: owner)
+        guard store === owner, activeDocumentID == documentID, navigationEpoch == expectedEpoch,
+              draftEditVersion == editVersion, draft == capturedImage, videoCreationDraft == capturedVideo,
+              defaultWorkflowModel(kind) == modelIdentity else {
+            throw WorkflowIssue("快速草稿所属项目已关闭或切换。")
+        }
+        try rememberCurrentWorkflowModels()
+        let copy: QuickDraft
+        if document.kind == .image {
+            let reference: WorkflowAssetReference?
+            if let id = capturedImage.referenceImageAssetID { reference = try await owner.pinWorkflowAsset(id) }
+            else { reference = nil }
+            copy = try QuickProjectDraftTransfer.image(capturedImage, capability: capability,
+                modelID: modelIdentity, title: document.name, reference: reference)
+        } else {
+            guard let capturedVideo else { throw WorkflowIssue("快速记录尚未读取。") }
+            copy = try QuickProjectDraftTransfer.video(capturedVideo, modelID: modelIdentity, title: document.name)
+        }
+        guard store === owner, activeDocumentID == documentID, navigationEpoch == expectedEpoch,
+              draftEditVersion == editVersion, draft == capturedImage, videoCreationDraft == capturedVideo,
+              defaultWorkflowModel(kind) == modelIdentity else {
+            throw WorkflowIssue("快速草稿所属项目已关闭或切换。")
+        }
+        await enableProjectQuick()
+        guard store === owner, activeDocumentID == documentID, navigationEpoch == expectedEpoch,
+              draftEditVersion == editVersion, draft == capturedImage, videoCreationDraft == capturedVideo,
+              defaultWorkflowModel(kind) == modelIdentity,
+              let quick = projectQuick, quick.store === owner else {
+            throw WorkflowIssue("快速草稿所属项目已关闭或切换。")
+        }
+        let appendedID = try quick.appendProjectDraft(copy)
+        // Only this exact append can be opened for Retry Save. Loading an older
+        // Quick draft is not evidence that this continuation was applied.
+        do { try await quick.flush() }
+        catch {
+            guard quick.draft?.id == appendedID, quick.saveIssue != nil else { throw error }
+        }
+        return appendedID
+    }
     public func makeExplicitOperationServices() throws -> WorkflowServices {
         try makeExplicitOperationServices(allowDrainingQuick: false)
     }
@@ -1989,7 +2060,8 @@ public final class ProjectSession {
                         executionProfile: ImageExecutionCapability.referenceKlein4B.profile, referenceImage: pixels,
                         loadingStrategy: input.loadingStrategy)
                 } else { frozenInput = input }
-                let request = InferenceRequest(id: id, model: reference, input: .image(frozenInput))
+                let request = InferenceRequest(id: id, model: reference, input: .image(frozenInput),
+                    loadingSelection: frozenInput.loadingStrategy == .ssdLayered ? nil : .automatic)
                 await admit(request, documentID: documentID, savedDraft: savedDraft, store: store, session: session,
                             imageReferenceAssetID: referenceID)
             } catch {
@@ -3600,7 +3672,8 @@ public final class ProjectSession {
                 try Task.checkCancellation()
                 let input = try value.makeRequest(capability: videoCapability)
                 let request = InferenceRequest(id: id, model: reference, input: .video(input),
-                                               memoryBudgetBytes: try value.selectedMemoryBudgetBytes())
+                                               memoryBudgetBytes: try value.selectedMemoryBudgetBytes(),
+                                               loadingSelection: .automatic)
                 await admit(request, documentID: documentID, savedDraft: saved, store: store,
                             session: session, backendID: backendID)
             } catch {
