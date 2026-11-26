@@ -78,6 +78,49 @@ struct VideoBackendTests {
         #expect(request.input.capability == .videoGeneration)
     }
 
+    @Test("Full layered Wan result accepts layer loading records but retains evidence bounds")
+    func layeredResultEvidence() throws {
+        // The ordinary 832x480 / 17-frame / 50-step failure produced 3216
+        // records after valid release; the previous whole-model bound was 119.
+        let input = video(width: 832, height: 480, frames: 17, steps: 50)
+        let manifest = Data("fixed model manifest".utf8)
+        var request = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(
+            VideoWireRequest(id: UUID(), video: input, memoryLimitBytes: 12 * 1024 * 1024 * 1024))) as? [String: Any])
+        request["streamWeights"] = true
+        let loading: [String: Any] = ["stage": "load-diffusion", "completed": 0, "total": 30,
+            "seconds": 1, "activeBytes": 1, "cacheBytes": 0, "peakBytes": 1, "peakRSSBytes": 1]
+        var released = loading
+        released["stage"] = "released"; released["completed"] = 17; released["total"] = 17
+        released["activeBytes"] = 0
+        var result: [String: Any] = [
+            "schema": "d.video.frames.v1", "type": "result", "runID": request["runID"]!,
+            "modelManifestSHA256": VideoProviderProtocol.sha256(manifest), "seconds": 2,
+            "conditions": [["tokenCount": 9, "effectiveText": input.prompt],
+                           ["tokenCount": 1, "effectiveText": input.negativePrompt]],
+            "precision": ["text": "BF16", "diffusion": "BF16 with original FP32 time/head/modulation/norm tensors", "vae": "F32"],
+            "frames": ["file": "frames.rgb", "width": 832, "height": 480, "frameCount": 17,
+                "fpsNumerator": 16, "fpsDenominator": 1, "layout": "RGB8-top-down",
+                "colorInterpretation": "full-range Rec.709 display RGB", "sha256": String(repeating: "a", count: 64),
+                "byteCount": 832 * 480 * 17 * 3]
+        ]
+        func validate(_ count: Int, streaming: Bool = true, terminal: [String: Any]? = nil) throws {
+            request["streamWeights"] = streaming
+            let wire = try JSONSerialization.data(withJSONObject: request, options: .sortedKeys)
+            result["request"] = request
+            result["requestSHA256"] = VideoProviderProtocol.sha256(wire)
+            result["stages"] = Array(repeating: loading, count: count - 1) + [terminal ?? released]
+            var parser = AudioJSONParser(data: try JSONSerialization.data(withJSONObject: result), maximumDepth: 24)
+            _ = try VideoProviderProtocol.validate(parser.parse(), requestData: wire,
+                manifestData: manifest, video: input, rawURL: URL(fileURLWithPath: "/not-read/frames.rgb"))
+        }
+        try validate(3216)
+        #expect(throws: (any Error).self) { try validate(3216, streaming: false) }
+        #expect(throws: (any Error).self) { try validate(10_000) }
+        #expect(throws: (any Error).self) { try validate(3216, terminal: loading) }
+        result["modelManifestSHA256"] = String(repeating: "0", count: 64)
+        #expect(throws: (any Error).self) { try validate(3216) }
+    }
+
     @Test("Progress consumer failure and timeout stop the child before returning")
     func stoppedProcesses() async throws {
         let root = try root()

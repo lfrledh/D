@@ -79,10 +79,17 @@ enum VideoProviderProtocol {
             throw InferenceFailure.backendFailed("Video result differs from the submitted immutable request/model snapshot.")
         }
         let requestObject = try expected.objectAny(context: "submitted video request")
+        // Wan's layered route reloads 24 T5 blocks for both conditions and 30
+        // DiT blocks for both CFG passes at every step. Each pass also reports
+        // its first boundary. These are genuine loading records, not extra
+        // denoising steps. Keep the original non-layered bound and wire budgets.
+        let layeredLoadingRecords = requestObject["streamWeights"] == .bool(true)
+            ? 2 * (24 + 1) + video.steps * 2 * (30 + 1) : 0
         guard object["schema"] == .string("d.video.frames.v1"), object["type"] == .string("result"),
               object["runID"] == requestObject["runID"], object["seconds"]?.nonnegativeNumber == true,
               case .array(let conditions)? = object["conditions"], conditions.count == 2,
-              case .array(let history)? = object["stages"], !history.isEmpty, history.count <= video.steps + (video.frameCount - 1) / 4 + 1 + 64 else {
+              case .array(let history)? = object["stages"], !history.isEmpty,
+              history.count <= video.steps + (video.frameCount - 1) / 4 + 1 + 64 + layeredLoadingRecords else {
             throw InferenceFailure.backendFailed("Invalid video execution evidence.")
         }
         for condition in conditions {
