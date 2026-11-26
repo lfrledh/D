@@ -9,7 +9,7 @@ import unittest
 
 ROOT = Path(os.environ["D_VIDEO_PYTHON"])
 sys.path.insert(0, str(ROOT))
-from d_video_run import validate_request, tokenize_conditions, clean_text, validate_chunk_shape, PROFILE, REVISION
+from d_video_run import validate_request, tokenize_conditions, clean_text, validate_chunk_shape, record_stage, PROFILE, REVISION
 from d_video_model import PreparedModel, mapped_name, read_json, read_snapshot
 
 
@@ -21,6 +21,42 @@ def request():
 
 
 class RunnerContract(unittest.TestCase):
+    def test_layered_evidence_is_bounded_at_maximum_steps_and_frames(self):
+        stages, wire = [], []
+        calls = 0
+        def observe(stage, completed=0, total=1):
+            nonlocal calls
+            calls += 1
+            row = dict(stage=stage, completed=completed, total=total, seconds=calls * 0.123456789,
+                       activeBytes=4_000_000_000, cacheBytes=0, peakBytes=12_000_000_000 + calls,
+                       peakRSSBytes=4_000_000_000 + calls)
+            if record_stage(stages, row):
+                wire.append(json.dumps(dict(schema="d.video.frames.v1", type="progress",
+                    runID=request()["runID"], **row)).encode() + b"\n")
+        observe("load-text")
+        for condition in range(2):
+            observe("encode-text", condition, 2)
+            for block in range(25): observe("load-text", block, 25)
+        observe("release-text", 2, 2)
+        for step in range(1000):
+            observe("denoise", step, 1000)
+            for block in range(62): observe("load-diffusion", block, 62)
+        observe("release-diffusion", 1000, 1000)
+        for tensor in range(3): observe("load-vae", tensor, 3)
+        for chunk in range(1024): observe("decode", 0 if chunk == 0 else 1 + (chunk - 1) * 4, 4093)
+        observe("released", 4093, 4093)
+        self.assertEqual(sum(x["stage"] == "denoise" for x in stages), 1000)
+        self.assertEqual(sum(x["stage"] == "decode" for x in stages), 1024)
+        self.assertEqual(stages[-1]["stage"], "released")
+        self.assertEqual(stages[-1]["peakBytes"], 12_000_000_000 + calls)
+        self.assertEqual(stages[-3]["stage"], "decode")
+        last_load = next(x for x in reversed(stages) if x["stage"] == "load-diffusion")
+        self.assertEqual(last_load["completed"], 61)
+        terminal = json.dumps(dict(stages=stages)).encode()
+        # Leave substantial space for immutable request, conditions and frames.
+        self.assertLess(len(terminal), 1024 * 1024)
+        self.assertLess(sum(map(len, wire)) + len(terminal), 8 * 1024 * 1024)
+
     def test_explicit_values_and_scaling(self):
         r = request(); r.update(width=1920, height=1088, frameCount=81, fpsNumerator=30000,
                                 fpsDenominator=1001, seed=2**32-1, memoryLimitBytes=96 * 1024**3)

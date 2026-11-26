@@ -40,6 +40,21 @@ def check_cancel():
         raise InterruptedError("Video cancellation requested; current compute boundary reached")
 
 
+def record_stage(stages, record):
+    """Keep the latest sample of a contiguous load, not every reloaded tensor.
+
+    MLX peak and ru_maxrss are cumulative for this run. Replacing a load sample
+    retains those peaks and its latest active/cache values; execution and
+    release boundaries are never coalesced. Return whether to emit progress.
+    """
+    if (stages and record["stage"] in {"load-text", "load-diffusion", "load-vae"}
+            and stages[-1]["stage"] == record["stage"]):
+        stages[-1] = record
+        return False
+    stages.append(record)
+    return True
+
+
 def validate_request(value: dict) -> dict:
     keys = {"schemaVersion", "runID", "profile", "revision", "prompt", "negativePrompt",
             "width", "height", "frameCount", "fpsNumerator", "fpsDenominator", "steps",
@@ -155,8 +170,8 @@ def run(request_path: Path, model_path: Path, tokenizer_path: Path, output: Path
                   "seconds": time.monotonic() - started, "activeBytes": mx.get_active_memory(),
                   "cacheBytes": mx.get_cache_memory(), "peakBytes": mx.get_peak_memory(),
                   "peakRSSBytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
-        stages.append(record)
-        print(json.dumps({"schema": SCHEMA, "type": "progress", "runID": request["runID"], **record}), flush=True)
+        if record_stage(stages, record):
+            print(json.dumps({"schema": SCHEMA, "type": "progress", "runID": request["runID"], **record}), flush=True)
 
     def loading(role):
         def checkpoint(index, total):

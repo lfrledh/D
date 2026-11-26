@@ -114,6 +114,8 @@ struct VideoBackendTests {
                 manifestData: manifest, video: input, rawURL: URL(fileURLWithPath: "/not-read/frames.rgb"))
         }
         try validate(3216)
+        try validate(3269)
+        #expect(throws: (any Error).self) { try validate(3270) }
         #expect(throws: (any Error).self) { try validate(3216, streaming: false) }
         #expect(throws: (any Error).self) { try validate(10_000) }
         #expect(throws: (any Error).self) { try validate(3216, terminal: loading) }
