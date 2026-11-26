@@ -499,6 +499,14 @@ struct ProjectAudioSessionTests {
         #expect(audio.clipNameInput == "bad")
         await subject.selectDocument(id: imageID)
         #expect(subject.activeDocumentID == documentID)
+        #expect(audio.navigationBlockIssue?.code == "audio.navigation.unsubmitted")
+        #expect(subject.errorCode == "audio.navigation.unsubmitted")
+        do {
+            try await subject.saveDocumentEdits(documentID: documentID, navigationEpoch: subject.navigationEpoch)
+            Issue.record("Unsubmitted audio input must retain its save gate")
+        } catch let issue as WorkflowIssue {
+            #expect(issue.code == "audio.navigation.unsubmitted")
+        }
         #expect(!(await subject.requestClose()))
 
         #expect(subject.discardAudioEditorInput(contextID: context, documentID: documentID))

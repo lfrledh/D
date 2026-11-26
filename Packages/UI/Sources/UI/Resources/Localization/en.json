@@ -5811,6 +5811,8 @@
     "workbench.native.text.saved": "Draft saved in the project",
     "workbench.native.fork.documentDefault": "Continue from Result",
     "workbench.native.fork.missing": "The image generation settings for this result are unavailable.",
-    "workbench.native.fork.mismatch": "The original model version or settings differ from the current model, or could not be confirmed. Continuing keeps the prompt, seed and dimensions. Incompatible settings need to be adjusted explicitly; the resulting image may differ."
+    "workbench.native.fork.mismatch": "The original model version or settings differ from the current model, or could not be confirmed. Continuing keeps the prompt, seed and dimensions. Incompatible settings need to be adjusted explicitly; the resulting image may differ.",
+    "audio.navigation.unsubmitted": "There are unsubmitted audio notes or clip inputs. Save them, or explicitly discard them before switching.",
+    "audio.navigation.recovery": "The recording still needs recovery. Retry recovery, or explicitly keep the pending recording before closing."
   }
 }

@@ -5811,6 +5811,8 @@
     "workbench.native.text.saved": "正文已保存在项目中",
     "workbench.native.fork.documentDefault": "从作品继续",
     "workbench.native.fork.missing": "此作品缺少可复用的图像生成条件。",
-    "workbench.native.fork.mismatch": "原作品的模型版本或参数与当前模型不同，或无法确认。继续将保留提示词、Seed和尺寸条件；不兼容项需要明确调整，不能保证得到相同图片。"
+    "workbench.native.fork.mismatch": "原作品的模型版本或参数与当前模型不同，或无法确认。继续将保留提示词、Seed和尺寸条件；不兼容项需要明确调整，不能保证得到相同图片。",
+    "audio.navigation.unsubmitted": "原声备注或片段输入尚未提交。请保存，或明确放弃这些输入后再切换。",
+    "audio.navigation.recovery": "录音文件仍处于待恢复状态。请重试恢复，或明确选择保留待恢复文件后再关闭。"
   }
 }

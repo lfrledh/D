@@ -65,15 +65,18 @@ public final class ProjectAudioController {
             || !clipNoteInput.isEmpty || clipRangeInput != nil
     }
     public var isDirty: Bool { hasUnsubmittedInput || isSaving }
-    public var navigationBlockMessage: String? {
+    public var navigationBlockIssue: WorkflowIssue? {
         if hasUnsubmittedInput {
-            return "原声备注或片段输入尚未提交。请保存，或明确放弃这些输入后再切换。"
+            return WorkflowIssue("原声备注或片段输入尚未提交。请保存，或明确放弃这些输入后再切换。",
+                code: "audio.navigation.unsubmitted")
         }
         if captureFailureBlocksNavigation {
-            return "录音文件仍处于待恢复状态。请重试恢复，或明确选择保留待恢复文件后再关闭。"
+            return WorkflowIssue("录音文件仍处于待恢复状态。请重试恢复，或明确选择保留待恢复文件后再关闭。",
+                code: "audio.navigation.recovery")
         }
         return nil
     }
+    public var navigationBlockMessage: String? { navigationBlockIssue?.reason }
 
     @ObservationIgnored private let store: ProjectStore
     @ObservationIgnored private let recordingEnabled: Bool

@@ -63,6 +63,12 @@ struct WorkflowCaptureRecoveryTests {
         // button separately; this exercises its real context-checked action.
         model.keepPendingAudioCaptureForRecovery(id: pending.id, contextID: UUID(), renderDocumentID: documentID)
         #expect(session.audio?.navigationBlockMessage != nil)
+        #expect(session.audio?.navigationBlockIssue?.code == "audio.navigation.recovery")
+        #expect(session.availableCreatorModes.contains(.audio))
+        #expect(!(await session.selectCreatorMode(.audio)))
+        #expect(session.errorCode == "audio.navigation.recovery")
+        let english = UILanguageStore(preferredLanguages: ["en"])
+        #expect(workflowText(english, try #require(session.errorCode)).hasPrefix("The recording still needs recovery."))
         model.clearError()
         model.keepPendingAudioCaptureForRecovery(id: pending.id, contextID: contextID, renderDocumentID: documentID)
         #expect(session.audio?.navigationBlockMessage == nil)

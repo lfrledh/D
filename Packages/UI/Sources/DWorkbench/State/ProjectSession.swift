@@ -467,6 +467,10 @@ public final class ProjectSession {
     }
 
     public func clearError() { errorMessage = nil }
+    public func presentDocumentError(_ error: any Error) {
+        errorMessage = error.localizedDescription
+        errorCode = (error as? WorkflowIssue)?.code
+    }
 
     private var draft: ProjectDraft { ProjectDraft(prompt: prompt, randomSeed: randomSeed, seedText: seedText,
         imageSettings: imageSettings, referenceImageAssetID: referenceImageAssetID) }
@@ -994,7 +998,7 @@ public final class ProjectSession {
     public func saveDocumentEdits(documentID: UUID, navigationEpoch expectedEpoch: UInt64) async throws {
         guard let owner = store, activeDocumentID == documentID, navigationEpoch == expectedEpoch,
               !isChangingProject, !closePending else { throw WorkflowIssue("快速草稿所属项目已关闭或切换。") }
-        if let reason = audio?.navigationBlockMessage { throw WorkflowIssue(reason) }
+        if let issue = audio?.navigationBlockIssue { throw issue }
         let textOwner = text, sourceOwner = textSources
         try await textOwner?.flush()
         guard store === owner, activeDocumentID == documentID, navigationEpoch == expectedEpoch else { throw CancellationError() }
@@ -3091,8 +3095,8 @@ public final class ProjectSession {
             errorMessage = "请先取消并等待改写结束，或接受／拒绝文字候选，再切换文档。"
             return false
         }
-        if let message = audio?.navigationBlockMessage {
-            errorMessage = message
+        if let issue = audio?.navigationBlockIssue {
+            presentDocumentError(issue)
             return false
         }
         return true

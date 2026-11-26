@@ -51,7 +51,7 @@ public struct ProjectDocumentsView: View {
                             catch {
                                 guard model.projectSession === owner, owner.navigationEpoch == epoch,
                                       owner.activeDocumentID == documentID else { return }
-                                model.errorMessage = error.localizedDescription
+                                model.projectSession.presentDocumentError(error)
                             }
                         }
                     }.keyboardShortcut("s", modifiers: .command)
@@ -122,7 +122,7 @@ public struct ProjectDocumentsView: View {
         }
         .workbenchConfirmation(consistencyText(language, "error.incomplete"), isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.clearError() } })) {
             Button(workflowText(language, "common.done")) { model.clearError() }
-        } message: { Text(model.errorMessage ?? "") }
+        } message: { WorkbenchIssueText(raw: model.errorMessage ?? "", key: model.projectSession.errorCode) }
         .workbenchSheet(isPresented: Binding(get: { library?.isPresented ?? false }, set: { library?.isPresented = $0 }),
             title: workflowText(language, "modelManagement.modelTitle")) {
             if let library { ModelLibraryView(model: library) }
@@ -144,7 +144,7 @@ public struct ProjectDocumentsView: View {
             } catch {
                 guard model.projectSession === owner, owner.currentStore === store,
                       owner.activeDocumentID == id, owner.navigationEpoch == epoch else { return }
-                model.errorMessage = error.localizedDescription
+                model.projectSession.presentDocumentError(error)
             }
         }
     }

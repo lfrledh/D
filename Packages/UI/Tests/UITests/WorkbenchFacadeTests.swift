@@ -56,6 +56,21 @@ struct WorkbenchFacadeTests {
         #expect(await service.requestClose())
     }
 
+    @Test func documentErrorKeepsSemanticReasonAndClearsItWithTheMessage() {
+        let service = session(gate: PresentationOutcomeGate())
+        let original = "原声备注或片段输入尚未提交。请保存，或明确放弃这些输入后再切换。"
+        service.presentDocumentError(WorkflowIssue(original, code: "audio.navigation.unsubmitted"))
+        #expect(service.errorMessage == original)
+        #expect(service.errorCode == "audio.navigation.unsubmitted")
+        let english = UILanguageStore(preferredLanguages: ["en"])
+        #expect(english.text("audio.navigation.unsubmitted", fallback: "missing")
+            .hasPrefix("There are unsubmitted audio notes or clip inputs."))
+        service.errorMessage = "different failure"
+        #expect(service.errorCode == nil)
+        service.clearError()
+        #expect(service.errorMessage == nil && service.errorCode == nil)
+    }
+
     @Test func recentNavigationReportsOnlyFreshFailuresEvenWhenMessageRepeats() async throws {
         let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
         let folder = URL(fileURLWithPath: base).appendingPathComponent(UUID().uuidString)
