@@ -37,13 +37,18 @@
   },
   "reference": "Wan-Video/Wan2.1",
   "referenceRevision": "9737cba9c1c3c4d04b33fcad41c111989865d315",
-  "status": "VAE 7 and numerical 13 CPU reference tests passed; production full-model execution acceptance is recorded separately in the task.",
+  "status": "Historical CPU reference tests retained. N26 FP32 fixed-latent and 832x480, 17-frame, 50-step backend acceptance are separate from ordinary App and distribution acceptance.",
   "patches": [
     {
       "file": "vae.py",
-      "sha256": "a2413614c18f922ccdfa59ba3dcbbf5f1dad76ed177558047ab9649743f398ab",
-      "reason": "Official causal cache, 4T-3 output, private chunk cache, tiny-norm fidelity; unsupported tiled decode rejects.",
-      "evidence": "D-VIDEO-V0-01/lead-vae-r1/result.json"
+      "sha256": "9f4d2fbd8e4785f2718a1e2ee1e0c5b28b81e4af023a0260c03c9164fa264eb0",
+      "reason": "Preserve FP32 causal 3D convolution, temporal cache and 4T-3 output; use native MLX conv3d with identical layout/padding and materialize bounded block/cache results before releasing intermediates. Cancellation checks surround decoder blocks and chunks; unsupported spatial tiled decode still rejects.",
+      "evidence": "D-UI-CONSOLIDATED-01/run-20261126-chat-wan-closeout/wan: fixed latent FP32 comparison, production-832-r1 and full-request-r1/summary.json; normal App acceptance recorded separately.",
+      "previousPatch": {
+        "sha256": "a2413614c18f922ccdfa59ba3dcbbf5f1dad76ed177558047ab9649743f398ab",
+        "reason": "Official causal cache, 4T-3 output, private chunk cache, tiny-norm fidelity; unsupported tiled decode rejects.",
+        "evidence": "D-VIDEO-V0-01/lead-vae-r1/result.json"
+      }
     },
     {
       "file": "config.py",
