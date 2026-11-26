@@ -180,8 +180,9 @@ struct ChatMarkdownView: View {
             if let literal = ChatMarkdownPresentation.literalText(rendered: text, raw: rawText,
                 streaming: isStreaming, showingRaw: false,
                 parsed: parsedKey?.source == text && parsedKey?.pointSize == displayPreferences.textPointSize ? parsedText : nil, document: document) {
-                Text(literal).font(.system(size: CGFloat(displayPreferences.textPointSize)))
-                    .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                ChatSelectableText(text: literal, pointSize: CGFloat(displayPreferences.textPointSize),
+                                   color: NSColor(renderPalette.foregroundColor))
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("chat-raw-\(messageID.uuidString)")
             } else if let document {
                 DocumentView(renderableDocument: document,

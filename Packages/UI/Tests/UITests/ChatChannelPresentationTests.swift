@@ -7,6 +7,33 @@ import Testing
 
 @Suite("Stored chat channel presentation")
 @MainActor struct ChatChannelPresentationTests {
+    @Test func streamingMarkdownKeepsLiteralBytesAndSelectableNativeText() async throws {
+        func descendants(_ view: NSView) -> [NSView] {
+            view.subviews.flatMap { [$0] + descendants($0) }
+        }
+        let id = UUID()
+        let prefix = "Literal **unfinished 中文 e\u{301} 👩🏽‍🎨\n"
+        let host = NSHostingView(rootView: ChatMarkdownView(messageID: id, text: prefix,
+            rawText: prefix, isStreaming: true))
+        host.frame = .init(x: 0, y: 0, width: 240, height: 500)
+        host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(50))
+        let native = try #require(descendants(host).compactMap { $0 as? NSTextView }.first { $0.string == prefix })
+        #expect(native.isSelectable && !native.isEditable)
+        let extended = prefix + "```swift\nlet value = 42\n"
+        host.rootView = ChatMarkdownView(messageID: id, text: extended, rawText: extended, isStreaming: true)
+        host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(50))
+        let updated = try #require(descendants(host).compactMap { $0 as? NSTextView }.first { $0.string == extended })
+        #expect(updated === native)
+        #expect(updated.string.utf8.elementsEqual(extended.utf8))
+        let selection = (extended as NSString).range(of: "👩🏽‍🎨")
+        updated.setSelectedRange(selection)
+        host.frame.size.width = 420
+        host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30))
+        #expect(updated.selectedRange() == selection)
+        #expect((updated.string as NSString).substring(with: updated.selectedRange()) == "👩🏽‍🎨")
+        #expect(updated.bounds.height > 0)
+    }
+
     @Test func plainUserAndImportedAnswerKeepNativeSelectionAcrossRelayout() async throws {
         func descendants(_ view: NSView) -> [NSView] {
             view.subviews.flatMap { [$0] + descendants($0) }
