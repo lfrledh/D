@@ -68,6 +68,7 @@ struct ChatMessageContent: View {
     let onPreview: (WorkflowAssetReference) -> Void
 
     @State private var reasoningExpanded = false
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.chatDisplayPreferences) private var displayPreferences
 
     @Environment(\.dLanguageStore) private var language
@@ -142,7 +143,8 @@ struct ChatMessageContent: View {
                     }
                 }
             } else {
-                Text(message.text).font(.system(size: CGFloat(displayPreferences.textPointSize))).textSelection(.enabled)
+                ChatSelectableText(text: message.text, pointSize: CGFloat(displayPreferences.textPointSize),
+                    color: NSColor(displayPreferences.resolvedAppearance.palette(for: displayPreferences.preferredColorScheme ?? colorScheme).foregroundColor))
                 ForEach(message.attachments) { attachment in
                     HStack(spacing: 6) {
                         Image(systemName: attachment.reference.kind == .image ? "photo" :
@@ -156,5 +158,59 @@ struct ChatMessageContent: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Plain message text keeps native selection without the SwiftUI selectable-Text
+/// host participating in lazy row remount layout. SwiftUI owns its measured size.
+
+struct ChatSelectableText: NSViewRepresentable {
+    let text: String
+    let pointSize: CGFloat
+    let color: NSColor
+    final class NativeText: NSTextView {
+        override var intrinsicContentSize: NSSize {
+            NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric)
+        }
+    }
+    func makeNSView(context: Context) -> NativeText {
+        let storage = NSTextStorage()
+        let manager = NSLayoutManager()
+        let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        container.widthTracksTextView = true
+        container.heightTracksTextView = false
+        container.lineFragmentPadding = 0
+        manager.addTextContainer(container)
+        storage.addLayoutManager(manager)
+        let view = NativeText(frame: .zero, textContainer: container)
+        view.isEditable = false
+        view.isSelectable = true
+        view.isRichText = false
+        view.usesFontPanel = false
+        view.drawsBackground = false
+        view.textContainerInset = .zero
+        view.isVerticallyResizable = false
+        view.isHorizontallyResizable = false
+        updateNSView(view, context: context)
+        return view
+    }
+    func updateNSView(_ view: NativeText, context: Context) {
+        if view.string != text { view.string = text }
+        let font = NSFont.systemFont(ofSize: pointSize)
+        if view.font != font { view.font = font }
+        if view.textColor != color { view.textColor = color }
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NativeText, context: Context) -> CGSize? {
+        let width = proposal.width ?? CGFloat.greatestFiniteMagnitude
+        guard width > 0, width.isFinite else { return .zero }
+        let storage = NSTextStorage(attributedString: nsView.attributedString())
+        let manager = NSLayoutManager()
+        let container = NSTextContainer(size: NSSize(width: width, height: CGFloat.greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        manager.addTextContainer(container)
+        storage.addLayoutManager(manager)
+        manager.ensureLayout(for: container)
+        let used = manager.usedRect(for: container)
+        return CGSize(width: ceil(used.width), height: ceil(used.height))
     }
 }

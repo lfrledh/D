@@ -7,6 +7,62 @@ import Testing
 
 @Suite("Stored chat channel presentation")
 @MainActor struct ChatChannelPresentationTests {
+    @Test func plainUserAndImportedAnswerKeepNativeSelectionAcrossRelayout() async throws {
+        func descendants(_ view: NSView) -> [NSView] {
+            view.subviews.flatMap { [$0] + descendants($0) }
+        }
+        let text = "Literal **text**, 中文 e\u{301} 👩🏽‍🎨\nSecond line remains plain."
+        for role in [ChatMessage.Role.user, .assistant] {
+            let message = ChatMessage(parentID: nil, role: role, text: text)
+            let host = NSHostingView(rootView: ChatMessageContent(message: message, attempt: nil, onPreview: { _ in }))
+            host.frame = .init(x: 0, y: 0, width: 320, height: 300)
+            host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(50))
+            let native = try #require(descendants(host).compactMap { $0 as? NSTextView }.first { $0.string == text })
+            #expect(native.isSelectable && !native.isEditable)
+            let selection = (text as NSString).range(of: "👩🏽‍🎨")
+            native.setSelectedRange(selection)
+            for width: CGFloat in [180, 420, 320] {
+                host.frame.size.width = width
+                host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30))
+                let current = try #require(descendants(host).compactMap { $0 as? NSTextView }.first { $0.string == text })
+                #expect(current === native)
+                #expect(current.selectedRange() == selection)
+                #expect((current.string as NSString).substring(with: current.selectedRange()) == "👩🏽‍🎨")
+            }
+            #expect(message.text == text && message.attemptID == nil)
+        }
+    }
+
+    @Test func plainTextWrapsAndStyleChangesPreserveSelectedCharacters() async throws {
+        func descendants(_ view: NSView) -> [NSView] {
+            view.subviews.flatMap { [$0] + descendants($0) }
+        }
+        let text = String(repeating: "Line 中文 👩🏽‍🎨 with wrapping words. ", count: 12) + "\n"
+        let host = NSHostingView(rootView: ChatSelectableText(text: text, pointSize: 17, color: .systemRed))
+        func settle(_ width: CGFloat) async throws -> NSTextView {
+            host.frame = .init(x: 0, y: 0, width: width, height: 1400)
+            host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(50))
+            return try #require(descendants(host).compactMap { $0 as? NSTextView }.first)
+        }
+        let narrow = try await settle(180), narrowHeight = narrow.bounds.height
+        let selection = (text as NSString).range(of: "中文")
+        narrow.setSelectedRange(selection)
+        let wide = try await settle(420)
+        #expect(wide === narrow && wide.bounds.height < narrowHeight)
+        #expect(wide.string == text && wide.selectedRange() == selection)
+        let manager = try #require(wide.layoutManager), container = try #require(wide.textContainer)
+        manager.ensureLayout(for: container)
+        #expect(manager.usedRect(for: container).maxY <= wide.bounds.height + 1)
+        if manager.extraLineFragmentTextContainer === container {
+            #expect(manager.extraLineFragmentRect.maxY <= wide.bounds.height + 1)
+        }
+        host.rootView = ChatSelectableText(text: text, pointSize: 20, color: .systemBlue)
+        let restyled = try await settle(420)
+        #expect(restyled === narrow && restyled.selectedRange() == selection)
+        #expect(restyled.font?.pointSize == 20 && restyled.textColor == .systemBlue)
+        #expect(restyled.string == text)
+    }
+
     private func attempt(status: ChatAttempt.Status, format: ChatOutputFormat? = nil) -> ChatAttempt {
         var value = ChatAttempt(sessionID: UUID(), userMessageID: UUID(), assistantMessageID: UUID(),
             node: .init(operationID: WorkflowModelRoutes.qwen35, title: "fixture"),
