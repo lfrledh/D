@@ -1,0 +1,3355 @@
+{
+  "task": "D-UI-CONSOLIDATED-01 / I019 authorized retirement",
+  "date": "2026-11-27",
+  "scope": "User approved purpose-based retirement; no product change. Precise D-only targets; no non-D inventory. GB=10^9 bytes. Container before/after is measured, file sizes are not reclaim claims.",
+  "startCommit": "5be03e740f76b64830b46c5c5c6c1ebc9b0d0b0f",
+  "production": "74599686128617952997573681098552fb0026bd",
+  "resource": "a1226881d0c6d19d8750f239cd484dd7bb8de447155409eb05acafa0f8b2b227",
+  "evidenceRun": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261127-authorized-retirement",
+  "pathBases": {
+    "DEV": "external Codex/D-Development",
+    "WORKTREES": "external Codex/D-Worktrees",
+    "CODEX": "external Codex",
+    "HOME": "current user home"
+  },
+  "containers": {
+    "external": {
+      "uuid": "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D",
+      "before": {
+        "capacity": 2000189177856,
+        "free": 15950917632,
+        "volumes": {
+          "CodexProjects": 1757122146304,
+          "aroma": 226816266240
+        }
+      },
+      "after": {
+        "capacity": 2000189177856,
+        "free": 577658408960,
+        "volumes": {
+          "CodexProjects": 1195414654976,
+          "aroma": 226816266240
+        }
+      },
+      "netFreeChangeBytes": 561707491328
+    },
+    "internal": {
+      "uuid": "005662E5-914B-4C4B-A939-865B49617505",
+      "before": {
+        "capacity": 245107195904,
+        "free": 805548032,
+        "volumes": {
+          "Macintosh HD": 12637925376,
+          "Preboot": 9023942656,
+          "Recovery": 1284087808,
+          "Update": 6569984,
+          "Data": 217990168576,
+          "VM": 3221671936
+        }
+      },
+      "after": {
+        "capacity": 245107195904,
+        "free": 35843149824,
+        "volumes": {
+          "Macintosh HD": 12637925376,
+          "Preboot": 9023942656,
+          "Recovery": 1284087808,
+          "Update": 6561792,
+          "Data": 184026386432,
+          "VM": 2147860480
+        }
+      },
+      "netFreeChangeBytes": 35037601792
+    }
+  },
+  "batches": [
+    {
+      "receipt": "batch01-internal-apps-caches-result.json",
+      "sha256": "69aa88ec2a69f87ea524eb14fa41590ffbeb241cfa7e03355a16850a6d73df99",
+      "count": 16,
+      "netFreeChangeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 35666624512,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": -1589248
+      },
+      "beforeFreeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 821702656,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 15950856192
+      },
+      "afterFreeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 36488327168,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 15949266944
+      },
+      "targets": [
+        {
+          "path": "HOME/Library/Caches/D-Development-Recoverable-20261113/NormalQA16/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Caches/D-Development-Recoverable-20261113/NormalQA16Access/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Caches/D-Development-Recoverable-20261113/NormalQA16Final825/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Caches/D-Development-Recoverable-20261113/NormalQACopy16/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Caches/D-Development-Recoverable-20261113/CEFBProbe16/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Caches/D-Development-Recoverable-20261113/CEFProbe16/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Caches/D-Development-Recoverable-20261113/NormalQA16Final781/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Caches/D-Development-Recoverable-20261113/NormalQA16Visual/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Caches/D-Development-Recoverable-20261113/NormalQA16Closeout/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Caches/D-Development-Recoverable-20261113/NormalQA/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Caches/D-Development-Recoverable-20261113/CProbe16/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Caches/D-Development-Recoverable-20261113/NormalQA16Final/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Developer/Xcode/DerivedData/D-azstzsjphxeihqekatovkjxezony/Build/Intermediates.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Developer/Xcode/DerivedData/D-azstzsjphxeihqekatovkjxezony/Index.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Developer/Xcode/DerivedData/D-dqhyvihnenzivqerybkktpajwzfx/Build/Intermediates.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "HOME/Library/Developer/Xcode/DerivedData/D-dqhyvihnenzivqerybkktpajwzfx/Index.noindex",
+          "result": "deleted"
+        }
+      ]
+    },
+    {
+      "receipt": "batch02-external-app-bodies-result.json",
+      "sha256": "747cc4bf99a310ebecdfc17ad3dd51d0fb2e930949aa36cd2259ddd3c58166db",
+      "count": 273,
+      "netFreeChangeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": -1262247936,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 413111549952
+      },
+      "beforeFreeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 36490694656,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 15967719424
+      },
+      "afterFreeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 35228446720,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 429079269376
+      },
+      "targets": [
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/native/DerivedData/Build/Products/Debug/DUITests-Runner.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/native/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-CLOSE-VIDEO-01/run-20260913T050442Z/artifacts/source-entry/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-CLOSE-VIDEO-01/run-20260913T050442Z/artifacts/D Audio Closure.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-CLOSE-VIDEO-01/run-20260913T050442Z/native/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-DEVICE-01/run-20260916T143605Z/lead/app-build/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSISTENCY-01/run-20261017-07-wheel-zoom/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-05-glass-performance/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-02-addendum/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-03-native/app/ReviewDerivedData2/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-06-canvas-redraw/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSISTENCY-01/run-20261016-01/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-SEMANTICS-01/run-20261015-01/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/D Chat Product 1ebe7042.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/D Chat Product af0103b5.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/D Chat Product 117d63b2.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/D Chat Product 543e7148.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/D Chat Product 1b00d37a.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/D Chat Product 671b2904.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T040512Z-low-memory/lead/app-build/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T040512Z-low-memory/delivery/D Release Freeze Closeout.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T160047Z-native-closeout/delivery/D Native Closeout.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T035843Z-stabilize-chat/delivery/b-chat/D Chat Candidate.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T035843Z-stabilize-chat/delivery/a1-diagnostic/D Stabilize Diagnostic.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T035843Z-stabilize-chat/delivery/a-combined/D Stabilize A.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T104034Z-desktop-resume/gui/D Reading Settle abd5f67a.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T104034Z-desktop-resume/gui/D Reading Point Candidate.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T104034Z-desktop-resume/gui/D Reading Search 854770a2.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T104034Z-desktop-resume/gui/D Reading Point 1d5db227.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom/delivery/D Chat Product 9230a6cd.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom/delivery/D Chat Bottom 37b30df2.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom/delivery/D Search Top Experiment.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T004102Z-drag-reading/gui/D F17 Top Anchor.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T004102Z-drag-reading/gui/D F17 Reader.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T004102Z-drag-reading/gui/D F17 Binding Diagnostic.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T004102Z-drag-reading/delivery/D Chat Reading Candidate 2cd9a588.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume/delivery/D Chat Product f08ca242.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume/delivery/D Chat Product e742ffd7.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/gui/D Chat Drop 52ceab56.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/gui/D Chat Drop 6fb4204d.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/gui/D Chat Drop fe0da792.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/gui/D File Route Diagnostic.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/gui/D File Route Trace.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/delivery/D Chat Product 8cf1b7dd.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T162316Z-r4/lead/app-build/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T162316Z-r4/delivery/D Release Freeze Closeout.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T162316Z-r4/delivery/D R4 Input Diagnostic.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T121357Z-human-queue/delivery/D Chat Product cc404e4e.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T024827Z-basic-usability/delivery/D Bottom Phase Candidate.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T141348Z-native-tail/delivery/D Chat Product ff20f2bc.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T141348Z-native-tail/delivery/D Chat Product b8b5ebcb.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T015601Z-human-closeout/delivery/D Native Closeout.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T015601Z-human-closeout/delivery/menu-fix/D Native Closeout.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product/delivery/s00/D Chat Product S00.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T023138Z-chat-native-audit/delivery/D Chat Product c16ab401.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue/delivery/D Chat Product e80fc15e.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue/delivery/D Chat Integrated.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue/delivery/D Chat Combined.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T121440Z-human-drop/gui/D Chat Drop d1ab5f71.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T040538Z-no-desktop/delivery/D Chat Product 4102cff1.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T002853Z-unlock-native/delivery/D Chat Position Candidate.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T002853Z-unlock-native/delivery/D Chat Bottom Diagnostic.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T070201Z/lead/app-build/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T070201Z/delivery/D Release Freeze Preview.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T062206Z-discussion/delivery/D Discussion Preview.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T130047Z-quality-transition/delivery/D Chat Input Lifecycle.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T130047Z-quality-transition/delivery/D Chat Quality.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T130047Z-quality-transition/delivery/D Chat Product 3cc71bee.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T061930Z-no-desktop-ui-prep/delivery/D Chat Candidate 9b6c982b.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/lead/app-build/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-WORKBENCH-01/run-20260916T001115Z/lead/app-build/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-CATALOG-01/run-20260923T150725Z/cache/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z/app-assembly-first/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260910T111515Z-approved-finish/recording/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260910T111515Z-approved-finish/runtime/combination/DerivedData-App/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-APP-01/run-20260911T125328Z/native/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-APP-01/run-20260911T125328Z/deployment/signed-gate/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-APP-01/run-20260911T155257Z-app-resume/native/DerivedData/Build/Products/Debug/DUITests-Runner.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-APP-01/run-20260911T155257Z-app-resume/native/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-APP-01/run-20260911T155257Z-app-resume/deployment/signed-app/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-META-PNG-01/run-v8-20260908/app-build/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-01/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-03-inputs/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261015-02/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-04-titlebar/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-LOCAL-GLASS-01/run-20261016-01/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-ALIGN-01/run-20260913T131843Z-continuation/artifacts/D ALIGN.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-ALIGN-01/run-20260913T131843Z-continuation/native-build/DerivedData/Build/Products/Debug/DUITests-Runner.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-ALIGN-01/run-20260913T131843Z-continuation/native-build/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260927T020614Z-h27/integration/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260927T020614Z-h27/delivery/D Nodes H27 Final.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260927T020614Z-h27/delivery/D Nodes H27 Pinned.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260927T020614Z-h27/delivery/D Nodes H27 Layout.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260927T020614Z-h27/delivery/D Nodes H27 Results.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260927T020614Z-h27/delivery/D Nodes H27.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z/cache/App/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z/cache/Integration/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z/cache/Delivery/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z/delivery/D Nodes.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-PERFORMANCE-ATTRIBUTION-01/run-20261018-phase02-01/diagnostic-private/DiagnosticOptimizedDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-PERFORMANCE-ATTRIBUTION-01/run-20261018-phase02-01/diagnostic-private/OptimizedDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T124235Z-ime/D Text Sources IME.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T124235Z-ime/DerivedData-App/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T101555Z-reliability/D Text Sources CLOSE2.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T101555Z-reliability/DerivedData-App/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T063313Z/D Text Sources Workbench.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T063313Z/DerivedData-App/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T085345Z-close/D Text Sources CLOSE1.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T085345Z-close/DerivedData-App/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return/combined-development-app-r1/artifacts/D Audio.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return/combined-development-app-r1/cache/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return/combined-development-app-r1/output/D Development.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-BASELINE-02/run-20260929T154311Z-current-input-drop/delivery/D Input Drop Diagnostic.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-BASELINE-02/run-20260929T154311Z-current-input-drop/delivery/D Input Drop Count.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-BASELINE-02/run-20260929T154311Z-current-input-drop/delivery/D Declared Drop.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-BASELINE-02/run-20260929T154311Z-current-input-drop/delivery/D Canvas Controls.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-BASELINE-02/run-20260928T123204Z/delivery/D UI v0.2 Preview.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-BASELINE-02/run-20260928T123204Z/delivery/D UI v0.2 Early.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-BASELINE-02/run-20260929T151114Z-card-drag/delivery/D Card Drag.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close/delivery/diagnostic/D Drop Diagnostic.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close/delivery/D UI v0.2 Repair.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-BASELINE-02/run-20260928T144932Z-native/delivery/D UI v0.2 Preview.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NON-UI-REPAIR-20261011/run-20261011T095142Z/final-app/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-06/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-01/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-02/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-05/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-04/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RENDERING-WORKSPACE-01/run-20261017-01/native/20261017-03/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NATIVE-ACCEPTANCE-20261014/run-01/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-BACKEND-01/run-20260915T163855Z-render/lead/app-build/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-CANVAS-USABILITY-01/run-20260927T140634Z/delivery/D Canvas Preview.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-MODELS-01/run-20260930T000439Z-app-canvas/lead/app-build/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-MODELS-01/run-20260930T000439Z-app-canvas/delivery/D Video Preview.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z/D Reference Workbench.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z/D Reference Audio.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z/D Reference Audio r2.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z/D Reference Workbench r2.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z/DerivedData-App/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-DOWNLOAD-FINITE-REVIEW-20261013/run-01/app/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-REFINEMENT-01/run-20261007T184130Z/gui/D UI Shell bb6f5f1c.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-REFINEMENT-01/run-20261007T184130Z/delivery/D Native UI 05aa7407.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-REFINEMENT-01/run-20261007T184130Z/delivery/D Native UI baf91280.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-REFINEMENT-01/run-20261007T184130Z/build/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-REFINEMENT-01/run-20261008T045623Z-r3-no-desktop/delivery/D Native UI 2b4b9ad2.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-REFINEMENT-01/run-20261008T010729Z-no-desktop/delivery/D Native UI 02df6f1c.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-REFINEMENT-01/run-20261008T010729Z-no-desktop/delivery/D Native UI 912cd1ed.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-REFINEMENT-01/run-20261008T010729Z-no-desktop/delivery/D Native UI 10ee7b9c.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-REFINEMENT-01/run-20261008T010729Z-no-desktop/delivery/D Native UI 4d6e8228.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-REFINEMENT-01/run-20261008T121613Z-r3-native/delivery/D Native UI 79f9eb53.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261120-language-engineering/Archive-Final-1c6720a3/D.xcarchive/Products/Applications/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261120-language-engineering/i012-geometry-r2/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261120-language-engineering/i012-geometry/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261120-language-engineering/i017-model-frame/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261120-language-engineering/i017-hosts/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261120-language-engineering/Archive-a0c9b584/D.xcarchive/Products/Applications/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261116-resume-closeout/release-5d8ced39-r2/DerivedData/Build/Products/Release/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261116-resume-closeout/release-825de3f8-r1/DerivedData/Build/Products/Release/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261116-resume-closeout/release-d4ebddb1/DerivedData/Build/Products/Release/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261116-resume-closeout/release-af7aba35-r1/DerivedData/Build/Products/Release/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261116-resume-closeout/release-5d8ced39/DerivedData/Build/Products/Release/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261116-resume-closeout/H-Archive-781c211d/D.xcarchive/Products/Applications/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261116-resume-closeout/release-cd5c7d77-r2/DerivedData/Build/Products/Release/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261116-resume-closeout/release-510215d9/DerivedData/Build/Products/Release/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261116-resume-closeout/release-781c211d-r1/DerivedData/Build/Products/Release/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-model-add-copy/release-ba95fcf8/DerivedData/Build/Products/Release/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261117-retirement-build-tips/StoreKitDerivedData/Build/Products/Release/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261117-retirement-build-tips/FinalArchive/D.xcarchive/Products/Applications/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261124-model-first-use/diagnostic-host-environment/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261124-model-first-use/Archive-Final-37f940e7/D.xcarchive/Products/Applications/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261124-model-first-use/diagnostic-unused-focus-state/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261124-model-first-use/Archive-Final-5a409bdd/D.xcarchive/Products/Applications/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261124-model-first-use/Archive-Final-949ce258/D.xcarchive/Products/Applications/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261124-model-first-use/diagnostic-focus-registration/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261124-model-first-use/Archive-Final-e9375391/D.xcarchive/Products/Applications/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261124-model-first-use/diagnostic-property-reasons/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261124-model-first-use/diagnostic-action-focus/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261124-model-first-use/Archive-Final-70af731a/D.xcarchive/Products/Applications/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-READINESS-01/run-20260924T065313Z/cache/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-DOWNLOAD-MANAGEMENT-01/run-20261013-01/app/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NATIVE-CANVAS-20261014/run-01/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-REVIEW-ISOLATION-20261013/run-01/app/ReviewDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260909T152120Z-h09-authorized/signed-build/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260909T055825Z-assembly/app-build/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908/app-build/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/signed-build/DerivedData-fresh/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/signed-build/DerivedData/Build/Products/Debug/DUITests-Runner.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/signed-build/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-v8-20260908/signed-build/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-sidebar-lens/delivery/D UI Review e11efc54.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-quiet-glass/delivery/D UI Review 052fdb4a.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-systematic-performance/delivery/D UI Review f1dec35f.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-function-organization/delivery/D UI Review e6e3f444.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-function-organization/delivery/D UI Review 5ac3353c.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-function-organization/delivery/D UI Review 27ef8afc.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-node-drag-performance/delivery/D UI Review 2d2b8380.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261012-metadata/app/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261012-metadata/delivery/D Metadata Review 22a2c1ea.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261012-metadata/delivery/D Metadata Review 054775ca.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-local-refraction/delivery/D UI Review ad50e57f.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-canvas-feedback/delivery/D UI Review 0b48129c.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261009-contours/delivery/D UI Review 78759211.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261009-contours/delivery/D Contour unclipped control.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261009-hit-motion/delivery/D UI Review 96d6dcb2.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-node-workspace/delivery/D UI Review 67b1472e.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-composer-repair/delivery/D UI Review a7a4ea3a.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-composer-repair/delivery/D UI Review aa7ab43f.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261009-explicit-canvas-fill/delivery/D UI Review 0d3079d8.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-drag-interactions/lead/prior-package-1791614774.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-drag-interactions/lead/build-product-before-reseal.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-drag-interactions/delivery/D UI Review e6413de6.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-lens-drag/delivery/D UI Review 5a171721.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261008-first-slice/delivery/D UI Review c97834cb.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261008-first-slice/delivery/D UI Review a2260084.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261008-first-slice/delivery/D UI Review 316b1a9e.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261008-first-slice/build/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261009-canvas-material/delivery/D UI Review 79cdf5a6.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/development-app-r2/artifacts/D Audio.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/development-app-r2/cache/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/development-app-r2/output/D Development.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/D Pitch Evaluation r2.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/D Pitch Evaluation.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/development-app-r1/artifacts/D Audio.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/development-app-r1/cache/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/development-app-r1/output/D Development.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-M0-01/run-20260925T112546Z-gui/apps/D-M0-testhost-18cb.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-M0-01/run-20260925T112546Z-gui/apps/D-M0-18cb.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-M0-01/run-20260925T091107Z/cache/DerivedData-Regular/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-M0-01/run-20260925T091107Z/cache/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-V0-01/run-20260913T152419Z/AppDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T065900Z/lead/D Audio Unified.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T065900Z/lead/D Audio Pitch.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T065900Z/lead/OrdinaryDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T120640Z-human/lead/D Audio Guarded.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T120640Z-human/lead/D Pitch Guarded.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T120640Z-human/lead/D Audio Fixed.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T120640Z-human/lead/OrdinaryDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T120640Z-human/lead/UITestDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T120640Z-human/lead/D Pitch Fixed.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation/native/DerivedData-App/Build/Products/Debug/DUITests-Runner.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation/native/DerivedData-App/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation/deployment-v2/signed-app/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation/deployment-v3/signed-app/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-WORKBENCH-01/run-20260916T063026Z-layout-close/lead/OrdinaryDerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-WORKBENCH-01/run-20260916T054351Z/lead/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T045011Z/cache/DerivedData-Regular/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T045011Z/cache/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T073533Z-acceptance/cache/DerivedData-Source/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-QUALITY-01/run-20260927T114101Z/delivery/D Quality IME.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-QUALITY-01/run-20260927T114101Z/delivery/D Quality Preview.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-QUALITY-01/run-20260927T114101Z/DerivedData/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/D Video Workbench.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/D Video Audio.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/DerivedData-App/Build/Products/Debug/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov24-Final-949ce258/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov16-Access-cd5c7d77/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov26-Review-4a5acad5/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov13-Closeout-8b41882a/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov20-a0c9b584/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov16-Final-781c211d/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov20-c9c16661/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov16-Resume-510215d9/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov20-4d636d5c/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov6-Models-a9dc46dd/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov24-Final-70af731a/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov24-FirstUse-e8f7abcd/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov16-Final-af7aba35/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov24-Final-e9375391/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov25-Global-436ebaa7/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov20-b4cd24b2/D.app",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/CurrentD/Nov24-Final-37f940e7/D.app",
+          "result": "deleted"
+        }
+      ]
+    },
+    {
+      "receipt": "batch03-old-cache-leaves-result.json",
+      "sha256": "fc3d6e6340018d9953e16d0430d1b5a1788bbeb9c6e1fe51a0266c730d194c5f",
+      "count": 314,
+      "netFreeChangeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": -180224,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 25075544064
+      },
+      "beforeFreeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 35996549120,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 429079392256
+      },
+      "afterFreeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 35996368896,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 454154936320
+      },
+      "targets": [
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/native/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-CLOSE-VIDEO-01/run-20260913T050442Z/native/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-DEVICE-01/run-20260916T143605Z/lead/app-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-DEVICE-01/run-20260916T143605Z/lead/source/build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-DEVICE-01/run-20260916T143605Z/lead/combined/build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NATIVE-CLOSEOUT-20261013/run-01/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-SEMANTICS-01/run-20261015-01/app/ReviewDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-SEMANTICS-01/run-20261015-01/cpu/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-SEMANTICS-01/run-20261015-01/tests/StartupBuild/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T040512Z-low-memory/lead/mlx-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T040512Z-low-memory/lead/core-build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T040512Z-low-memory/lead/app-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T040512Z-low-memory/lead/ui-scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T040512Z-low-memory/lead/platform-scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T162316Z-r4/lead/mlx-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T162316Z-r4/lead/app-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T162316Z-r4/lead/ui-scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product/tmp/runtime-build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue/lead/mcp-resolve-scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue/lead/aux-runtime-scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue/lead/template-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T070201Z/lead/mlx-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T070201Z/lead/app-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T070201Z/lead/ui-scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T070201Z/lead/root-scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T062206Z-discussion/ui-scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T062206Z-discussion/model-scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/lead/app-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/lead/ab-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/lead/root-scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-WORKBENCH-01/run-20260916T001115Z/lead/view-cpu-r2/tmp/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-WORKBENCH-01/run-20260916T001115Z/lead/mlx-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-WORKBENCH-01/run-20260916T001115Z/lead/view-cpu/tmp/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-WORKBENCH-01/run-20260916T001115Z/lead/app-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-WORKBENCH-01/run-20260916T001115Z/lead/foundation/tmp/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-WORKBENCH-01/run-20260916T001115Z/lead/store-cpu-r1/tmp/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-WORKBENCH-01/run-20260916T001115Z/lead/view-cpu-r1/tmp/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-WORKBENCH-01/run-20260916T001115Z/lead/store-cpu/tmp/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-WORKBENCH-01/run-20260916T001115Z/lead/combined-cpu/tmp/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-WORKBENCH-01/run-20260916T001115Z/lead/harness-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-WORKBENCH-01/run-20260916T001115Z/data/lead-tests/tmp/swift/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-CATALOG-01/run-20260923T150725Z/cache/workbench/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-CATALOG-01/run-20260923T150725Z/cache/view/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-CATALOG-01/run-20260923T150725Z/cache/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z/existing-model-regression/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z/app-assembly-first/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z/scale-mlx-cpu-first/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z/runtime-lead-test1b/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260910T111515Z-approved-finish/recording/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260910T111515Z-approved-finish/runtime/cpu-red/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260910T111515Z-approved-finish/runtime/combination/DerivedData-App/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260910T111515Z-approved-finish/runtime/cpu-green/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260910T111515Z-approved-finish/runtime/cpu-source/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-APP-01/run-20260911T125328Z/native/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-APP-01/run-20260911T155257Z-app-resume/native/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-META-PNG-01/run-v8-20260908/app-build/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-EXCHANGE-01/run-20260916T034259Z/lead/scratch-ui/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-EXCHANGE-01/run-20260916T034259Z/lead/scratch-source/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-ALIGN-01/run-20260913T131843Z-continuation/native-build/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-ALIGN-01/run-20260913T104905Z/mlx-build/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260927T020614Z-h27/integration/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z/cache/ui/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z/cache/App/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z/cache/Integration/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z/cache/runtime/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z/cache/Delivery/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z/cache/data/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-PERFORMANCE-ATTRIBUTION-01/run-20261018-phase02-01/diagnostic-private/DiagnosticOnoneDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-PERFORMANCE-ATTRIBUTION-01/run-20261018-phase02-01/diagnostic-private/DiagnosticOptimizedDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-PERFORMANCE-ATTRIBUTION-01/run-20261018-phase02-01/diagnostic-private/OptimizedDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-PERFORMANCE-ATTRIBUTION-01/run-20261018-phase02-01/diagnostic-private/engineering-04/test-build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-PERFORMANCE-ATTRIBUTION-01/run-20261018-phase02-01/diagnostic-private/engineering-04/ReviewDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T124235Z-ime/DerivedData-App/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T101555Z-reliability/DerivedData-App/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T063313Z/DerivedData-App/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T063313Z/DerivedData-CLI/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T085345Z-close/DerivedData-App/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T085345Z-close/DerivedData-CLI/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-LIMITED-REPAIR-20261011/run-01/build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return/combined-development-app-r1/cache/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NON-UI-REPAIR-20261011/run-20261011T095142Z/final-ui/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NON-UI-REPAIR-20261011/run-20261011T095142Z/a2-cache/overlay-workbench/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NON-UI-REPAIR-20261011/run-20261011T095142Z/final-app/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NATIVE-ACCEPTANCE-20261014/run-01/app/ReviewDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NATIVE-ACCEPTANCE-20261014/run-01/dha/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NATIVE-ACCEPTANCE-20261014/run-01/localization/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-BACKEND-01/run-20260915T163855Z-render/lead/foundation-build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-BACKEND-01/run-20260915T163855Z-render/lead/mlx-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-BACKEND-01/run-20260915T163855Z-render/lead/app-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-BACKEND-01/run-20260915T163855Z-render/lead/cli-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-BACKEND-01/run-20260915T163855Z-render/lead/workbench-build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-BACKEND-01/run-20260915T163855Z-render/lead/source-cli-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-BACKEND-01/run-20260915T163855Z-render/lead/bridge-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-SINGING-BACKEND-01/run-20260915T163855Z-render/lead/combined-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-MODELS-01/run-20260929T173017Z/combined-cpu/scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-MODELS-01/run-20260929T173017Z/lead-swift-values/scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-MODELS-01/run-20260930T000439Z-app-canvas/lead/mlx-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-MODELS-01/run-20260930T000439Z-app-canvas/lead/app-build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-MODELS-01/run-20260930T000439Z-app-canvas/lead/root-tests/scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-MODELS-01/run-20260930T000439Z-app-canvas/lead/ui-tests/scratch/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z/DerivedData-MLX/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z/DerivedData-App/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-DOWNLOAD-FINITE-REVIEW-20261013/run-01/app/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-DOWNLOAD-FINITE-REVIEW-20261013/run-01/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-REFINEMENT-01/run-20261007T184130Z/build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261030-resize-memory-b5/vendor-test-build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261120-language-engineering/i012-minimal-build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261120-language-engineering/i012-minimal-build/out/Intermediates.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261120-language-engineering/i012-minimal-build/out/ModuleCache.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261030-partial-shell-tips/release-8101d0d8/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261030-partial-shell-tips/release-ff83a094/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261030-partial-shell-tips/release-serial-3ff94ad4/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261030-partial-shell-tips/release-5f0b28b4/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261030-partial-shell-tips/release-04a6afd0/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261028-model-files-b2/build-selection/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-model-add-copy/release-fac7329a/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-model-add-copy/release-d1fea749/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261106-model-add-copy/release-aebbcffe/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261020-01/test-build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261102-closeout-copy-b6-b8/release-be151a55/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261117-retirement-build-tips/StoreKitDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261117-retirement-build-tips/StoreKitDerivedData/ModuleCache.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261117-retirement-build-tips/StoreKitDerivedData/Build/Intermediates.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261117-retirement-build-tips/component-cache/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261117-retirement-build-tips/component-cache/out/Intermediates.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261117-retirement-build-tips/component-cache/out/ModuleCache.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261026-appstore-v2/backend-tests/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261027-asset-container/build-752b8ee6/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261027-asset-container/build-825c8223/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-READINESS-01/run-20260924T065313Z/cache/source-runtime/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-READINESS-01/run-20260924T065313Z/cache/source-workbench/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-READINESS-01/run-20260924T065313Z/cache/runtime/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-READINESS-01/run-20260924T065313Z/cache/workbench/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-READINESS-01/run-20260924T065313Z/cache/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-DOWNLOAD-MANAGEMENT-01/run-20261013-01/app/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-DOWNLOAD-MANAGEMENT-01/run-20261013-01/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-INDEPENDENT-P-REVIEW-20261011/cache/overlay-workbench/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NATIVE-CANVAS-20261014/run-01/app/ReviewDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NATIVE-CANVAS-20261014/run-01/cpu/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NATIVE-CANVAS-20261014/run-01/hosting/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-REVIEW-ISOLATION-20261013/run-01/app/ReviewDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-REVIEW-ISOLATION-20261013/run-01/app/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-REVIEW-ISOLATION-20261013/run-01/tests/StartupPackage/.build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260909T152120Z-h09-authorized/signed-build/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260909T055825Z-assembly/app-build/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908/app-build/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/signed-build/DerivedData-fresh/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/signed-build/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-v8-20260908/signed-build/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261012-metadata/app/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261012-metadata/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261008-first-slice/build/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/development-app-r2/cache/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/development-app-r1/cache/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-M0-01/run-20260925T091107Z/cache/DerivedData-Regular/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-M0-01/run-20260925T091107Z/cache/runtime/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-M0-01/run-20260925T091107Z/cache/workbench/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-M0-01/run-20260925T091107Z/cache/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HANDOFF-AUDIT-20261011/run-20261011T1130Z/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-DHA-01/run-20261012-01/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-PORTABLE-KIT-01/run-20260912T030734Z/native/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-V0-01/run-20260913T152419Z/AppDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-V0-01/run-20260913T152419Z/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-INDEPENDENT-AUDIT-20261011/cache/overlay-workbench/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-INDEPENDENT-AUDIT-20261011/cache/foundation/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T065900Z/lead/scratch-ui/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T065900Z/lead/OrdinaryDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T065900Z/lead/scratch-foundation/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T065900Z/lead/reader15/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T065900Z/lead/reader13/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T065900Z/lead/reader14/build/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T120640Z-human/lead/scratch-ui/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T120640Z-human/lead/OrdinaryDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T120640Z-human/lead/UITestDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T120640Z-human/lead/SingingMLXTests/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation/native/DerivedData-MLX/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation/native/DerivedData-App/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-WORKBENCH-01/run-20260916T063026Z-layout-close/lead/OrdinaryDerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-WORKBENCH-01/run-20260916T054351Z/lead/scratch-ui/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-WORKBENCH-01/run-20260916T054351Z/lead/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T045011Z/cache/DerivedData-Regular/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T045011Z/cache/workbench/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T045011Z/cache/i18n/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T045011Z/cache/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T073533Z-acceptance/cache/DerivedData-Source/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-QUALITY-01/run-20260927T114101Z/cache/ui/out/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-NODE-QUALITY-01/run-20260927T114101Z/DerivedData/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/DerivedData-MLX/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/DerivedData-App/SDKStatCaches.noindex",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-EDIT-01/run-v7-initial/tmp/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T110719Z-human-return/checks/source-after-integration/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/checks/asset-initial/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/checks/shell-initial/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/checks/combined-initial/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/checks/asset-repair1/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/checks/combined-verified/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/checks/shared-check-2/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/checks/asset-lead-finish/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/checks/final-navigation-cpu/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/checks/native-final-cpu/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/checks/asset-repair2/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/checks/shared-check/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T040512Z-low-memory/vlm/tmp/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z/core-audio-contract/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z/combined-acceptance/core-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z/combined-acceptance/workbench-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z/text-lead-test1b/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z/scale-core-first/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z/core-runtime-audio1/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260910T111515Z-approved-finish/recording/cpu-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260910T111515Z-approved-finish/runtime/combination/core-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-BACKEND-01/run-20260910T111515Z-approved-finish/runtime/combination/workbench-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-APP-01/run-20260911T155257Z-app-resume/integration/source-cpu/scratch/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-META-PNG-01/run-20260908T125225Z-human-finish/tmp/combined-after/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-META-PNG-01/run-v8-20260908/tmp/combined-initial/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-META-PNG-01/run-v8-20260908/tmp/codec-initial/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-META-PNG-01/run-v8-20260908/tmp/relocation-isolated/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-META-PNG-01/run-v8-20260908/tmp/codec-repair2/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-META-PNG-01/run-v8-20260908/tmp/combined-corrected/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-META-PNG-01/run-v8-20260908/tmp/combined-final/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-META-PNG-01/run-v8-20260908/tmp/boundary-session/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T124235Z-ime/Build-UI/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T101555Z-reliability/Build-UI/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T063313Z/Build-Core/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T063313Z/Build-UI/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T085345Z-close/Build-UI/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-TEXT-SOURCES-01/run-20260914T085345Z-close/Build-UI-Fresh/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-META-RECIPE-01/run-v7-initial/tmp/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return/Build-Foundation/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return/combined-media-probe/Build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return/old-reader-probe/reference9/Build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return/old-reader-probe/text10/Build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return/old-reader-probe/current/Build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return/Build-UI/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return/Build-UI-Source/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return/Build-Foundation-Source/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-META-01/tmp/core-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-META-01/tmp/source-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-META-01/tmp/baseline-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z/core-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z/pixels-lead-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z/ui-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z/view-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260909T002916Z-h08-type-finish/timer-probe/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260909T002916Z-h08-type-finish/validation/lead-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260908T153243Z/prepare-cache/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260908T153243Z/audio/lead-tests-initial/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260908T153243Z/audio/lead-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260908T153243Z/store/lead-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260908T172827Z-h08/probe-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260908T172827Z-h08/validation/lead-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260909T040308Z-h08-acceptance/combination/lead-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260909T040308Z-h08-acceptance/foundation/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260909T040308Z-h08-acceptance/validation/lead-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260909T055825Z-assembly/ui/lead-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260909T055825Z-assembly/combination/lead-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-ENTRY-01/run-20260909T055825Z-assembly/service/lead-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/store-initial/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/record-initial/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/record-r2/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/record-lead-red/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/store-r1/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/record-r1/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/service-integration/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/view-lead-unit/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/store-r2/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/service-final/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/view-layout-diagnostic/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/view-r1-build/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/record-lead-full/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/checks/view-r2-unit/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908/tmp/store-initial/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908/tmp/core-final/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908/tmp/combined-initial/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908/tmp/view-repair2/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908/tmp/store-repair1/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908/tmp/combined-final/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908/tmp/store-unicode-counterexample/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908/tmp/view-repair1/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908/tmp/store-repair2/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908/tmp/combined-verified-model/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/tmp/integration-gate-before/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/tmp/final-source-acceptance/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/tmp/layout-before-root-fit/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/tmp/layout-after/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/tmp/final-merged-acceptance/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/tmp/combined-integrated/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/tmp/layout-before/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/tmp/combined-after/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/tmp/layout-before-narrow/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/tmp/combined-final-human/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/interpret-check-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/foundation-prep/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/backend-check-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/workbench-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/source-foundation-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/source-workbench-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-V0-01/run-20260913T152419Z/core-workbench-r1/workbench-cache/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-V0-01/run-20260913T152419Z/core-workbench-r1/foundation-cache/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-V0-01/run-20260913T152419Z/core/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-V0-01/run-20260913T152419Z/source-checks/workbench-cache/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-V0-01/run-20260913T152419Z/source-checks/foundation-cache/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation/source-checks/foundation/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation/source-checks/workbench/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation/foundation/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation/workbench/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/combined-ui-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/source-core-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/source-ui-build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/prep-core/cache/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/core-additional/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/lead-view-initial/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/lead-media-initial/build/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/prep-workbench/cache/arm64-apple-macosx/debug/ModuleCache",
+          "result": "deleted"
+        }
+      ]
+    },
+    {
+      "receipt": "batch04-worktrees-result.json",
+      "sha256": "45161f863dedee4acd26a818c63ac493fc0e235af43a53ba3c3698ad831c9abe",
+      "count": 167,
+      "netFreeChangeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 1191936,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 14246727680
+      },
+      "beforeFreeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 35844284416,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 563536527360
+      },
+      "afterFreeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 35845476352,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 577783255040
+      },
+      "targets": [
+        {
+          "path": "WORKTREES/D-AE-ACCESS-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-AE-BRIDGE-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-AE-DEPLOY-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-AE-PACK-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-ALIGN-AUDIO-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-ALIGN-IMAGE-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-ALIGN-REVIEW-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-ALIGN-REVIEW-02",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-ALIGN-TEXT-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-ALIGN-UI-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-AUDIO-CLOSE-VIDEO-01-P1",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-AUDIO-PUBLISH-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-AUDIO-PUBLISH-WORKER-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-AUDIO-SA3-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-AUDIO-WORKBENCH-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-AW-RECORD-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-AW-STORE-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-C01a-DIAG-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-C01a-RESULT-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-CORE",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-ARTIFACT",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-AUX",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-CHANNELS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-CONFIG-UI",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-CONTEXT-UI",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-ERROR-LANGUAGE",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-EXTERNAL-IMPORT",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-FORMAT",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-INSPECTION",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-INSPECTION-RESUME",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-INTERCHANGE",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-KNOWLEDGE",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-MCP",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-MEMORY",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-MENU",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-PACKAGE",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-PAGE-RESUME",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-PANEL",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-PREFERENCES",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-PREVIEW",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-PYTHON-CLIENT",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-QUICK-ATTACHMENTS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-QUOTE",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-READER",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-RETRIEVAL",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-SEARCH-RESUME",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-SPEECH",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-SPEECH-RESUME",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-TOOLS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-VALUES",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-VIEW",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-WASI-RESUME",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PRODUCT-WEB",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-PYTHON-DIAGNOSTIC-20261004",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-UI",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CHAT-WEB-BOUNDARY-20261004",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-CONTEXT-RESET-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-DISCUSSION-BACKUP",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-DISCUSSION-FILES-UI",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-DISCUSSION-MAIN",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-DISCUSSION-MODELS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-GUIDANCE-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-HUM-AUDIO-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-HUM-BACKEND-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-HUM-EXCHANGE-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-HUM-EXCHANGE-01-MIDI",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-HUM-EXCHANGE-01-PREVIEW",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-HUM-INTERPRET-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-HUM-PACKAGING-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-HUM-SESSION-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-HUM-STORE-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-HUM-UI-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-IR-PIXELS-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-IR-VIEW-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-KIT-CLI-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-KIT-PROBE-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-KIT-RUNNER-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-KIT-USABILITY-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-KIT-USABILITY-RUNNER-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-M0-01-CANVAS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-M0-01-IMAGE",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-M0-01-REGISTRY",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-MB-BUILD-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-META-PNG-CODEC-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-META-RECIPE-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-MRT2-BRIDGE-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-MRT2-CONDITIONS-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-MRT2-DRAFT-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-MRT2-EXPORT-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-MRT2-PROBE-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-MRT2-PROVIDER-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-MRT2-VIEW-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NATIVE-CLOSEOUT-20261013",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NATIVE-FILES-CLOSEOUT",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NAV-ASSET-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NAV-SHELL-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-BOUNDARY-01-CODEC",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-BOUNDARY-01-I18N",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-CATALOG-01-DATA",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-CATALOG-01-VIEW",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-LANGUAGE-01-AUDIO-PROGRAMS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-LANGUAGE-01-CHECKPOINT",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-LANGUAGE-01-CONTROL-FORMS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-LANGUAGE-01-DATA",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-LANGUAGE-01-EXAMPLES",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-LANGUAGE-01-FORMS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-LANGUAGE-01-MUSIC",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-LANGUAGE-01-PACK",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-LANGUAGE-01-PLAN",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-LANGUAGE-01-STRUCTURED",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-QUALITY-01-MEDIA",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NODE-QUALITY-01-SAVE",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-NON-UI-IMAGE-20261011",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-OFFLINE-PLAN-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-RELEASE-BOUNDARY-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-RELEASE-FREEZE-01-FORMS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-RELEASE-FREEZE-01-VIDEO",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-RELEASE-FREEZE-01-VLM",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-REVIEW-STARTUP-FIX-20261016",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-SINGING-BACKEND-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-SINGING-DEVICE-01-PY",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-SINGING-DEVICE-01-SW",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-SINGING-PREP-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-SINGING-RENDER-PLAN-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-SINGING-RENDER-WORKER-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-SINGING-TIMING-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-STABILIZE-BACKUP",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-STABILIZE-READINESS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-T0-EDIT-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-T0-META-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-T0-STORE-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-T0-VIEW-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-TEXT-PROFILES-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-TEXT-SOURCES-01-Plan",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-TS-CONTEXT-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-TS-SOURCES-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-TS-VIEW-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-UI-CONSISTENCY-PIXELS-20261016",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-UI-READINESS-01-CROSS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-UI-READINESS-01-RUNTIME",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-UI-READINESS-01-TAGS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-UI-REFINEMENT-APPEARANCE",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-UI-REFINEMENT-CANVAS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-V8-CHECKPOINT-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-I2V-01-R8",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-I2V-01-R8-ATTENTION",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-I2V-01-R8-STREAM",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-I2V-01-R9",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-I2V-01-R9-ATTENTION",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-I2V-01-R9-STREAM",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-I2V-01-REFERENCE121",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-I2V-01-RESOURCE-REPORT",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-MEDIA-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-MODELS-01-APPDRIVER",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-MODELS-01-AVMEDIA",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-MODELS-01-CANVAS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-MODELS-01-H3",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-MODELS-01-H3RUN",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-MODELS-01-LTX",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-MODELS-01-PROCESS",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-MODELS-01-TRANSPORT",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-MODELS-01-VALUES",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-NUMERIC-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VIDEO-VAE-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VW-DEPLOY-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VW-MEDIA-01",
+          "result": "removed"
+        },
+        {
+          "path": "WORKTREES/D-VW-VIEW-01",
+          "result": "removed"
+        }
+      ]
+    },
+    {
+      "receipt": "batch05-duplicate-engines-result.json",
+      "sha256": "377a55e4f035ca84b686685217fd55154dc743605a607a5b62c0e5451c968f4a",
+      "count": 3,
+      "netFreeChangeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": -16384,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 8781824
+      },
+      "beforeFreeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 35845390336,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 577773031424
+      },
+      "afterFreeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 35845373952,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 577781813248
+      },
+      "targets": [
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261120-language-engineering/resources-runtime-notices/Engines/ACEMusicEngine.dengine",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261120-language-engineering/resources-runtime-notices/Engines/ChatPython.dengine",
+          "result": "deleted"
+        },
+        {
+          "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261120-language-engineering/resources-runtime-notices/Engines/PitchEngine.dengine",
+          "result": "deleted"
+        }
+      ]
+    },
+    {
+      "receipt": "batch06-models-result.json",
+      "sha256": "3931046358891ad6cb12c820eb3425e6f8bef6cb4a44f16f987b02e09180737c",
+      "count": 2,
+      "netFreeChangeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 10883072,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 109404741632
+      },
+      "beforeFreeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 35833352192,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 454131855360
+      },
+      "afterFreeBytes": {
+        "005662E5-914B-4C4B-A939-865B49617505": 35844235264,
+        "0A3A8EEC-242B-42FC-93FA-BD6CBEA7141D": 563536596992
+      },
+      "targets": [
+        {
+          "removedID": "BFD7CC7B-F8B2-4D28-B854-6E3462475BE6",
+          "retainedID": "B0AD8B5A-7472-4291-B7FA-17B102293259",
+          "catalogID": "local-ltx-2.3-dev-bf16-full-v1",
+          "revision": "cfc837526e56abf8657823a0ae192eec3a40177d",
+          "absentAfter": true,
+          "appFileState": "deleted",
+          "retainedFileState": "verified",
+          "comparedFiles": 29,
+          "deletedLogicalBytes": 72577188499,
+          "markerSemanticEqual": true
+        },
+        {
+          "removedID": "C47D46E3-27E8-4C09-9A85-1027D91C7240",
+          "retainedID": "ED2D448A-A771-4375-96D1-49535AF3D6CE",
+          "catalogID": "local-ltx-2.3-dev-q8-gemma3-q4-test-v1",
+          "revision": "6671a7572a530862d1d60ce393b5d93491e3f76b",
+          "absentAfter": true,
+          "appFileState": "deleted",
+          "retainedFileState": "verified",
+          "comparedFiles": 27,
+          "deletedLogicalBytes": 36826797244,
+          "markerSemanticEqual": true
+        }
+      ]
+    }
+  ],
+  "protectedApps": [
+    {
+      "path": "DEV/CurrentD/Nov26-Final-74599686/D.app",
+      "source": "74599686128617952997573681098552fb0026bd"
+    },
+    {
+      "path": "DEV/CurrentD/Nov25-Final-f9288853/D.app",
+      "source": "f92888533d6cf92f7acc089023617ac65dea0390"
+    },
+    {
+      "path": "DEV/CurrentD/Nov16-Final-825de3f8/D.app",
+      "source": "825de3f83617e54e434d89883c7c48760bc47f2d"
+    },
+    {
+      "path": "DEV/CurrentD/Nov16-Visual-d4ebddb1/D.app",
+      "source": "d4ebddb1949dd0580ae79eaf550c910f89e95891"
+    },
+    {
+      "path": "DEV/CurrentD/Nov16-Resize-5d8ced39/D.app",
+      "source": "5d8ced39bffea72f22ec2390795e22ba3ab17e83"
+    },
+    {
+      "path": "DEV/CurrentD/Nov24-FirstUse-5607c312/D.app",
+      "source": "5607c3123336ef09790e9bdf728511d10eb81046"
+    },
+    {
+      "path": "DEV/CurrentD/Nov26-Final-5ee5450c/D.app",
+      "source": "5ee5450c8ba66cab0c96146f375715ad93701f35"
+    },
+    {
+      "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261126-chat-wan-closeout/diagnostic-U-code-copy-leaf/D.app",
+      "source": "f92888533d6cf92f7acc089023617ac65dea0390"
+    },
+    {
+      "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261126-chat-wan-closeout/diagnostic-V-text-selection/D.app",
+      "source": "f92888533d6cf92f7acc089023617ac65dea0390"
+    },
+    {
+      "path": "DEV/AgentTrials/D-UI-CONSOLIDATED-01/run-20261126-chat-wan-closeout/diagnostic-X-user-selection-restored/D.app",
+      "source": "f92888533d6cf92f7acc089023617ac65dea0390"
+    }
+  ],
+  "checks": {
+    "appExecutableHashMatchesReceipt": true,
+    "currentSignatureStrictDeep": true,
+    "archiveExecutableMatchesCurrent": true,
+    "dProcesses": 0,
+    "unrelatedModelRecordsUnchanged": true,
+    "downloadRecordsUnchanged": true
+  },
+  "worktreeRefsUnchanged": true,
+  "sourceEvidenceSHA256": "c63ddc12961faacbb3701d538f5e5bf1f2fe486622d5f455e38d41c5d89cbcdc",
+  "modelRecovery": "One historical LTX23-Copy-Run QA contains 13 JSON references to retired IDs. Preserve project, frozen inputs and outputs; explicitly select retained identical model in UI before a new run. No frozen-ID rewriting.",
+  "preservedReasons": {
+    "current_and_near_term": "current/fallback/control Apps; U/V/X diagnostics; current normal/test caches; exact seven-engine input; model originals and active prepared copies",
+    "unique_or_unresolved": "two Nov25 ktrace originals (12.115 GB); 82 worktrees with local/ignored/unmerged content; exact older runtime/source materials; effective traces/dSYM and original results",
+    "outside_D": "aroma/Time Machine, Steam/Workshop, ASMR, Unreal, system and other user data"
+  }
+}
