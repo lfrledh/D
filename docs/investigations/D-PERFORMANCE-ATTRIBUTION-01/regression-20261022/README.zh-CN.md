@@ -1,5 +1,31 @@
 # 2026-10-22 严重 UI 回归修补
 
+## 2026-11-26：聊天修复与三项缩放反证
+
+N26=`AgentTrials/D-UI-CONSOLIDATED-01/run-20261126-chat-wan-closeout`，沿dc572/f928。每项独立诊断包、准确PID/路径/窗口、Release优化，构建后源码逐字恢复，未接纳为用户候选。原具名QA、真实CG输入、VO关闭；构建/GPU/GUI串行。
+
+I012沿F的G—U累计缩减仍保留同组故障；第5步后失去AX，第6未投递，正常Quit失败，落盘QA摘要相同后仅恢复本实例。V仅关闭三处可达正文选择，六步及正常Quit通过；回加U再挂，快速冷开V再过，已排除首次V较长预热差异。W仅从U关闭用户消息选择仍挂；X仅从V恢复该处选择也挂。这分别说明其余两处至少一个或其组合仍参与、用户纯文本选择在V构造中足以触发，不能把K替代段落与原文过渡各自称为已证根因。
+
+Y在X上仅将无attempt的纯文本消息换成只读可选择NSTextView，六步与正常Quit通过；Z只回加原生产ParagraphView也通过，原ParagraphNSView的测量/缓存/失效未改。AA恢复完整产品的工具/菜单/阅读/玻璃/保留宿主，只保留这一纯文本宿主修补，再过六步及正常Quit。LazyVStack仍保留；消息文字、拖选/复制能力和保存所有者没有删除。原生用户行125×17pt，真实截图可见；该分支也覆盖无attempt的导入assistant，不能称只影响用户消息。源码db2548a已采用，9项选区/Unicode/换行组件通过；普通4a5acad5原反例六步滚动、真实选择复制、搜索、拼音组字/Undo/Redo、160条合成历史按需显示、保存/正常Quit/冷开通过。准确VoiceOver屏外目标跳转尚未证明，与卡死修补分开。最终组合复验见任务当前段。
+
+最终5ee复验出现反例：经迁入音频面板再进入原QA后AX为空，主线程同beginTransaction/flushTransactions族持续，正常Quit失败；受控QA仅revision变化，已保存内容不变。首次记录未落盘scroll工具stdout，只能记进入/调整/滚动序列中失去响应，不能断言具体第一scroll触发。新冷开5ee直接同QA及经面板返回两组六步均即时核窗口/目标/送达且未挂。只读复核指出V/Y/Z仍禁用了ChatMarkdownView解析前literal的SwiftUI选择，而AA重新带回它；74599686仅将此叶复用现有原生可选宿主，10项文字/选区组件通过。A触发时序不稳定，不能把候选B无挂直接说成严格A/B/A根因证明；I012仍开放，后续普通包结果见任务最终回执。原始ordinary-i012/{final-5ee-recurrence,cold-direct-5ee,panel-return-5ee}及恢复/补丁保留。
+
+每项patch/plan/metrics/actions/quit/recovery在N26对应diagnostic目录；T/U继承说明字段已纠正并保留原说明，执行字节未改。quick-chat字节始终保持；Y正常Quit前后逐字段核实仅project revision/updatedAt/workflowSnapshot generation/sha256及quick-creation revision改变，不能说全文件相同。G—T共14个已被接续的自有诊断App本体退役，保留源码/patch/日志/动作及U/V因果包、I017对照；同外盘实测净增4,259,336,192B，回执N26/diagnostic-retirement-result.json。没有删除模型、项目、旧正常候选或外部资料。
+
+I017完整覆盖同四节点/零边、EN1080×612、Quick已访问、左模型栏可见/右栏隐藏的241事件。相同size setter跳过的A/B/A无稳定收益，撤回。仅附加D的6秒Time Profiler已有效导出，手势post为trace0.974976—4.976898s；按主线程栈筛选3915点（不是耗时），进入保留宿主、资料库投影、节点卡及工具栏。26点含`WorkbenchInputGeometry.invalidateAfterLayout`主动整树layout，属具体调用来源，不是已定主因。time-profile.xml摘要0acbe778…b2cca；含继承环境的原trace仅本地，使用去环境TOC及有界摘要，不上传环境。
+
+单删该主动layout的C与原A2/A3：workflow layout次数423/324/428，包含时间918.198/928.927/921.799ms，P95 10.149/10.218/10.073ms。少了便宜调用，昂贵布局没有稳定改善；C撤回，IME通知/时序不改。A/C并行产品patch逐字一致，实际均执行arm64。6秒原生窗口视频保留，但固定录屏尺寸裁切扩展边缘，其帧率不当App FPS。
+
+新Animation Hitches通道覆盖6秒记录及完整241事件，保存时明确报`Could not trim file: No space left on device`（exit -6）；导出exit10说明instrument run data缺失，没有可用呈现表。其本次1,225,169,624B scratch创建时刻/名称、无打开描述符已核，跨盘复制并SHA256=ad245a64…04b5d一致后才移除内盘原临时文件；未清理其他内容。预留128MiB低估该仪器实际scratch，不能归因D卡顿。尝试仅进程TMPDIR指向本轮外盘目录，Foundation仍读回原内盘临时路径，R2在前置核对停止，未再次录制/投递。公开record帮助/recording-options没有scratch位置或buffer容量配置；不得在同一不足条件重录。需要可配置的工具暂存路线，或足够的已授权内盘空间覆盖实测scratch及保存工作集；只阻该呈现采集。所有源/输入/错误/容量/恢复记录在N26/i017-*，不改写N25旧错误原因。
+
+### 模型嵌套宿主边界 A/B/A（b8固定基线，未采用）
+
+新判别只移除可见模型栏的一层RetainedContentHost，内容、动态尺寸、其他宿主及四节点不变。A1/B/A2均为b8c20c91＋有界探针，源码构建后逐字恢复；各阶段准确实例正常退出。B仅在模型页作诊断，跨页保留行为不作为产品实现。B/A2各两段完整241事件；外层layout P95分别11.679/11.729ms与11.725/11.642ms，含时946/969ms与969/963ms（嵌套含时不相加）。宽度跟随差P95全16pt。B/A2窗口录屏在最大宽度开始后缩回1080pt再拖，实际右边界全程在画布内；固定行像素读回的边界停留P95均75ms，不是屏幕刷新率、正文呈现时间或App FPS。A1初始录屏裁切右缘，已单列限制，不拿它作完整呈现对比。
+
+移除模型子宿主并未改善外层布局或可见边界响应，恢复原构造复验无稳定差异，因此全部撤回。N26/i017-model-host-boundary/{plan,analysis,decision}.json与各阶段patch、输入、probe、mov、退出记录可复核。当前停止此因素实验的依据为完整反证，不能继续把同一宿主删改或缓存改名重试。仍缺可见SwiftUI约束/偏好最初失效者与该次提交的对应；有效Time Profiler仅给调用来源，安全局部修补尚无充分因果依据。下一最小工程动作是先取得有足够暂存空间的同段提交/失效跟踪，再对首个创建者做单因素验证；不能由这些几何数据降低验收标准。
+
+已无持续用途的六个本轮诊断App本体另退役，净释放1,026,441,216B；本组结束后退役准确diagnostic-resize-cache（无SourcePackages、原输入均在外部）和已证明无法导出的1.225GB失败scratch，净释放8,959,381,504B。缓存构建日志、补丁、身份/摘要、原始动作与有效录屏保留，U/V/X及原I017-host-measure反例不动。结果N26/diagnostic-retirement-second-result.json、i017-model-host-boundary/retirement-result.json。该scratch的去向是本轮临时产物退役，不是有效trace丢失，也不扩大到其他内盘缓存、模型或用户资料。
+
 ## 2026-11-20/21：可见宿主与提交时间线（I017仍开放）
 
 普通b4cd24b2、EN、1080×612pt、2×、4节点无连接、左模型库开/右栏闭，Quick预访问。原生边缘241事件/4秒/240×70pt往返，两次低干扰宽度差中位10/12pt、P95均14pt；投递延迟P95为3.72/3.82ms。正常App Animation Hitches同段以wall↔systemUptime锚对齐，display/swap/surface与containment去重：65次更新（中位57.70ms/P95 66.51ms），render中位5.49/P95 7.05ms，frameWait中位6.30/P95 6.87ms，frameLifetime中位82.65/P95 102.21ms。主线程3827个1ms样本中3441包含NSHostingView.layout；栈包含关系不相加，提交含布局，不能从这些数改称FPS或每事件呈现时延。11月16日1×显示条件不同，不作单因素收益比较。
