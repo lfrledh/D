@@ -292,7 +292,8 @@ public final class ProjectSession {
     @ObservationIgnored private var audioReference: ModelReference?
     @ObservationIgnored private var musicModelLease: LocationAccess.Lease?
     @ObservationIgnored private var musicReference: ModelReference?
-    public private(set) var textModelStatus = "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）"
+    public private(set) var textModelState: TextModelProfiles.Status = .choose
+    public var textModelStatus: String { textModelState.description }
     public private(set) var isTextWorking = false
     public private(set) var isRegisteringTextModel = false
     public private(set) var creatorMode: CreatorMode = .image
@@ -853,9 +854,9 @@ public final class ProjectSession {
                     textReference = try await createdSession.validateTextModel?(lease.url)
                     textModelLease = lease
                     settings.set(lease.bookmark, forKey: "workbench.textModelBookmark.v1")
-                    textModelStatus = (try? TextModelProfiles.status(for: textReference)) ?? "文字模型 · 版本未登记"
+                    textModelState = (try? TextModelProfiles.modelStatus(for: textReference)) ?? .unregistered
                 } catch { await access.release(lease); throw error }
-            } catch { textModelStatus = "文字模型暂不可用，请重新选择原模型文件夹。" }
+            } catch { textModelState = .unavailable }
         }
         if let bookmark = settings.data(forKey: "workbench.audioModelBookmark.v1"),
            let validate = createdSession.validateAudioModel {
@@ -2729,19 +2730,23 @@ public final class ProjectSession {
     }
 
     public func forkCompatibilityWarning(for assetID: UUID) -> String? {
+        forkCompatibilityIssue(for: assetID)?.reason
+    }
+
+    public func forkCompatibilityIssue(for assetID: UUID) -> WorkflowIssue? {
         guard let asset = manifest?.assets.first(where: { $0.id == assetID }),
               let job = manifest?.jobs.first(where: { $0.id == asset.jobID }),
               case .image(let image) = job.request.input else {
-            return "此作品缺少可复用的图像生成条件。"
+            return WorkflowIssue("此作品缺少可复用的图像生成条件。", code: "workbench.native.fork.missing")
         }
         guard (try? imageCapability.validate(image)) != nil,
               let revision = job.request.model.revision, revision == selectedModelRevision else {
-            return "原作品的模型版本或参数与当前模型不同，或无法确认。继续将保留提示词、Seed和尺寸条件；不兼容项需要明确调整，不能保证得到相同图片。"
+            return WorkflowIssue("原作品的模型版本或参数与当前模型不同，或无法确认。继续将保留提示词、Seed和尺寸条件；不兼容项需要明确调整，不能保证得到相同图片。", code: "workbench.native.fork.mismatch")
         }
         return nil
     }
 
-    public func forkDocument(from assetID: UUID, acknowledgeCurrentModel: Bool = false) async {
+    public func forkDocument(from assetID: UUID, acknowledgeCurrentModel: Bool = false, name: String = "从作品继续") async {
         guard navigationReady() else { return }
         guard let store, !isChangingProject, !closePending,
               let asset = manifest?.assets.first(where: { $0.id == assetID }),
@@ -2765,7 +2770,7 @@ public final class ProjectSession {
                     executionProfile: image.referenceImage == nil
                         ? (image.executionProfile ?? .init(identifier: "verified512")) : ImageExecutionCapability.scalableKlein4B.profile),
                 referenceImageAssetID: job.imageReferenceAssetID)
-            applyManifest(try await store.createDocument(name: "从作品继续", draft: value, sourceAssetID: assetID))
+            applyManifest(try await store.createDocument(name: name, draft: value, sourceAssetID: assetID))
             showingAllArtworks = false
             loadActiveDocument()
         } catch { audio?.resumeAdmissions(); report(error, context: "无法从作品新建创作；当前输入已保留") }
@@ -3046,7 +3051,7 @@ public final class ProjectSession {
             textContextID = UUID()
             text = nil
             textSources = nil
-            textModelStatus = "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）"
+            textModelState = .choose
             await access.release(modelLease)
             await access.release(workflowDestinationLease)
             workflowDestinationLease = nil
@@ -3168,7 +3173,7 @@ public final class ProjectSession {
                 textModelLease = lease
                 textReference = reference
                 settings.set(lease.bookmark, forKey: "workbench.textModelBookmark.v1")
-                textModelStatus = (try? TextModelProfiles.status(for: reference)) ?? "文字模型 · 版本未登记"
+                textModelState = (try? TextModelProfiles.modelStatus(for: reference)) ?? .unregistered
             } catch { await access.release(lease); throw error }
         } catch { report(error, context: "文字模型未能登记，未下载或更改任何权重") }
     }

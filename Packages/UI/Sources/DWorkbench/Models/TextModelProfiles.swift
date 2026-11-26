@@ -83,6 +83,26 @@ struct TextModelVerificationOptions: Sendable {
 
 /// The application admits only these bundled, pinned registrations. Verification never downloads.
 public enum TextModelProfiles {
+    public enum Status: Sendable, Equatable {
+        case choose, unavailable, unregistered, verified(TextModelProfile)
+
+        /// Compatibility description for existing non-UI callers. UI projects this value in its language.
+        public var description: String {
+            switch self {
+            case .choose: "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）"
+            case .unavailable: "文字模型暂不可用，请重新选择原模型文件夹。"
+            case .unregistered: "文字模型 · 版本未登记"
+            case .verified(let profile): profile.displayTitle + " · 文件已校验"
+                + (profile.validationStatus == .registeredAwaitingRealModelValidation ? " · 推理待本机验证" : "")
+            }
+        }
+    }
+
+    public static func modelStatus(for reference: ModelReference?) throws -> Status {
+        guard let reference else { return .choose }
+        guard let profile = try profile(forRevision: reference.revision) else { return .unregistered }
+        return .verified(profile)
+    }
     static let originalProfileID = "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
 
     private struct ExpectedSpecification: Sendable {

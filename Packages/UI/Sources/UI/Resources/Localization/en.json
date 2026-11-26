@@ -4065,7 +4065,7 @@
     "workbench.native.melodyExport.filename": "Melody Conditioning.json",
     "workbench.native.pitchExport.title": "Export Pitch and Approximate Note Analysis",
     "workbench.native.pitchExport.filename": "Pitch Analysis.json",
-    "workbench.native.textModel.title": "Choose a Registered Qwen2.5 Instruct 4-bit Model (0.5B / 1.5B / 7B / 32B)",
+    "workbench.native.textModel.title": "Choose a Qwen2.5 Instruct 4-bit model (0.5B / 1.5B / 7B / 32B)",
     "workbench.native.textSource.title": "Choose a UTF-8 TXT or Markdown Source",
     "workbench.native.fork.title": "Explore with the Current Model",
     "workbench.native.fork.continue": "Continue",
@@ -5800,6 +5800,17 @@
     "workflow.operation.d.text.rewrite.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)",
     "workflow.operation.d.image.generate.field.randomSeed": "Random Seed",
     "workflow.operation.d.video.generate.field.frameRateDenominator": "Frame Rate Denominator",
-    "workflow.operation.d.video.generate.field.memoryBudgetMiBText": "Memory Budget (MiB)"
+    "workflow.operation.d.video.generate.field.memoryBudgetMiBText": "Memory Budget (MiB)",
+    "workbench.native.textDocumentDefault": "New Draft",
+    "workbench.native.textModel.unavailable": "The text model is unavailable. Select its original folder again.",
+    "workbench.native.textModel.unregistered": "Text model · Version not recorded",
+    "workbench.native.textModel.verified": "{model} · Files verified",
+    "workbench.native.textModel.verifiedPending": "{model} · Files verified · Inference not yet verified on this Mac",
+    "workbench.native.text.saving": "Saving draft…",
+    "workbench.native.text.unsaved": "Draft not yet saved",
+    "workbench.native.text.saved": "Draft saved in the project",
+    "workbench.native.fork.documentDefault": "Continue from Result",
+    "workbench.native.fork.missing": "The image generation settings for this result are unavailable.",
+    "workbench.native.fork.mismatch": "The original model version or settings differ from the current model, or could not be confirmed. Continuing keeps the prompt, seed and dimensions. Incompatible settings need to be adjusted explicitly; the resulting image may differ."
   }
 }

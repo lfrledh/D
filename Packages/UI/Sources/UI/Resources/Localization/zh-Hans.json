@@ -4065,7 +4065,7 @@
     "workbench.native.melodyExport.filename": "旋律条件.json",
     "workbench.native.pitchExport.title": "导出音高与近似音符分析",
     "workbench.native.pitchExport.filename": "音高分析.json",
-    "workbench.native.textModel.title": "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）",
+    "workbench.native.textModel.title": "选择 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）",
     "workbench.native.textSource.title": "选择 UTF-8 TXT 或 Markdown 资料",
     "workbench.native.fork.title": "使用当前模型探索",
     "workbench.native.fork.continue": "继续",
@@ -5800,6 +5800,17 @@
     "workflow.operation.d.text.rewrite.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）",
     "workflow.operation.d.image.generate.field.randomSeed": "随机种子",
     "workflow.operation.d.video.generate.field.frameRateDenominator": "帧率分母",
-    "workflow.operation.d.video.generate.field.memoryBudgetMiBText": "内存预算 MiB"
+    "workflow.operation.d.video.generate.field.memoryBudgetMiBText": "内存预算 MiB",
+    "workbench.native.textDocumentDefault": "新文稿",
+    "workbench.native.textModel.unavailable": "文字模型暂不可用，请重新选择原模型文件夹。",
+    "workbench.native.textModel.unregistered": "文字模型 · 版本未登记",
+    "workbench.native.textModel.verified": "{model} · 文件已校验",
+    "workbench.native.textModel.verifiedPending": "{model} · 文件已校验 · 推理待本机验证",
+    "workbench.native.text.saving": "正在保存正文…",
+    "workbench.native.text.unsaved": "正文尚未保存",
+    "workbench.native.text.saved": "正文已保存在项目中",
+    "workbench.native.fork.documentDefault": "从作品继续",
+    "workbench.native.fork.missing": "此作品缺少可复用的图像生成条件。",
+    "workbench.native.fork.mismatch": "原作品的模型版本或参数与当前模型不同，或无法确认。继续将保留提示词、Seed和尺寸条件；不兼容项需要明确调整，不能保证得到相同图片。"
   }
 }

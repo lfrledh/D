@@ -297,7 +297,7 @@ public struct AudioWorkbenchView: View {
             .accessibilityIdentifier("audio-save-note")
             Divider()
             HStack {
-                TextField(consistencyText(consistencyLanguage, "remaining.5679e242347c"), text: clipNameBinding(document))
+                TextField(consistencyText(consistencyLanguage, "remaining.5679e242347c"), text: clipNameBinding(document, format: format))
                     .disabled(!canEdit)
                     .accessibilityIdentifier("audio-clip-name")
                 Button(consistencyText(consistencyLanguage, "remaining.780e77bb7d01")) { addClip(document, format: format) }
@@ -417,10 +417,12 @@ public struct AudioWorkbenchView: View {
         })
     }
 
-    private func clipNameBinding(_ document: AudioDraftDocument) -> Binding<String> {
+    private func clipNameBinding(_ document: AudioDraftDocument, format: AudioFormatInfo) -> Binding<String> {
         Binding(get: { controller?.clipNameInput ?? previewClipName }, set: { value in
             if let controller {
-                _ = controller.setClipInput(name: value, range: controller.clipRangeInput,
+                // Naming a new clip adopts the range already visible in this editor,
+                // including the initial full-audio range. Do not require a dummy range edit.
+                _ = controller.setClipInput(name: value, range: controller.clipRangeInput ?? admittedRange(format: format),
                                             note: controller.clipNoteInput,
                                             contextID: controller.contextID,
                                             documentID: document.id)

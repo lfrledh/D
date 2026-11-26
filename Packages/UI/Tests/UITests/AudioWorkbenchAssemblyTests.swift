@@ -360,6 +360,19 @@ struct AudioWorkbenchAssemblyTests {
         NotificationCenter.default.post(name: NSControl.textDidChangeNotification, object: noteField)
         settle(audioHost, width: 520)
         #expect(controller.noteInput.utf8.elementsEqual(unicode.utf8))
+        // The initial visible range is already valid. Naming a clip must not
+        // require nudging a range control before the production Add Clip action.
+        let clipField = try #require(descendants(audioHost).compactMap { $0 as? NSTextField }
+            .first { $0.placeholderString == (locale == "en" ? "Clip Name" : "片段名称") })
+        #expect(controller.clipRangeInput == nil)
+        clipField.stringValue = "Full clip"
+        NotificationCenter.default.post(name: NSControl.textDidChangeNotification, object: clipField)
+        settle(audioHost, width: 520)
+        #expect(controller.clipRangeInput == AudioFrameRange(startFrame: 0, endFrame: 32))
+        let documentID = try #require(controller.documentID)
+        #expect(await actions.addClip(controller.contextID, documentID))
+        #expect(controller.document?.clips.count == 1)
+        #expect(controller.document?.clips.first?.range == AudioFrameRange(startFrame: 0, endFrame: 32))
         settle(audioHost, width: 1_000)
         #expect(audioHost.fittingSize.width <= 1_001)
 

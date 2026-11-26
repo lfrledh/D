@@ -52,18 +52,21 @@ public final class WorkbenchModel {
         }
         return entries
     }
-    @discardableResult public func openRecentProject(id: String) async -> Bool {
-        guard !isChangingProject, !refuseEditorClose() else { return false }
+    @discardableResult public func openRecentProject(id: String, onFailure: ((WorkflowIssue) -> Void)? = nil) async -> Bool {
+        guard !isChangingProject, !isChoosingLocation, !refuseEditorClose() else { return false }
         projectSession.clearError()
         if id == "last-project" {
             guard projectSession.manifest == nil else { return false }
             viewers.suspend()
             await projectSession.restoreLastProject()
+            reportNavigationFailure(onFailure)
             return projectSession.manifest != nil && projectSession.errorMessage == nil
         }
         guard let id = UUID(uuidString: id) else { return false }
         viewers.suspend()
-        return await projectSession.openRecentProject(id: id)
+        let opened = await projectSession.openRecentProject(id: id)
+        if !opened { reportNavigationFailure(onFailure) }
+        return opened
     }
     public func switchCreatorMode(_ mode: CreatorMode) async {
         guard !isChangingProject, !refuseEditorClose() else { return }
@@ -196,7 +199,21 @@ public final class WorkbenchModel {
 
     public func createTextDocument() async {
         await endComparison()
-        await projectSession.createTextDocument()
+        await projectSession.createTextDocument(name: nativeText("textDocumentDefault"))
+    }
+    public var textModelDisplayStatus: String {
+        switch projectSession.textModelState {
+        case .choose: nativeText("textModel.title")
+        case .unavailable: nativeText("textModel.unavailable")
+        case .unregistered: nativeText("textModel.unregistered")
+        case .verified(let profile): nativeText(profile.validationStatus == .registeredAwaitingRealModelValidation
+            ? "textModel.verifiedPending" : "textModel.verified", arguments: ["model": profile.displayTitle])
+        }
+    }
+    public var textDocumentSaveStatus: String {
+        guard let text = projectSession.text else { return "" }
+        if let error = text.errorMessage { return ChatErrorText.display(error, language: language) }
+        return nativeText(text.isSaving ? "text.saving" : text.isDirty ? "text.unsaved" : "text.saved")
     }
     public func createVideoCreation() async {
         guard !isChangingProject, !refuseEditorClose() else { return }
@@ -418,10 +435,10 @@ public final class WorkbenchModel {
     public func forkFromAsset(_ id: UUID) async {
         let originalProjectID = manifest?.id
         var acknowledged = false
-        if let warning = projectSession.forkCompatibilityWarning(for: id) {
+        if let warning = projectSession.forkCompatibilityIssue(for: id) {
             let alert = NSAlert()
             alert.messageText = nativeText("fork.title")
-            alert.informativeText = warning
+            alert.informativeText = warning.code.map { workflowText(language, $0, fallback: warning.reason) } ?? warning.reason
             alert.addButton(withTitle: nativeText("fork.continue"))
             alert.addButton(withTitle: nativeText("fork.cancel"))
             guard await WorkbenchConfirmation.present(alert, owner: NSApp.keyWindow ?? NSApp.mainWindow) == .alertFirstButtonReturn else { return }
@@ -431,7 +448,7 @@ public final class WorkbenchModel {
               manifest?.assets.contains(where: { $0.id == id }) == true else { return }
         await endComparison()
         guard originalProjectID == manifest?.id else { return }
-        await projectSession.forkDocument(from: id, acknowledgeCurrentModel: acknowledged)
+        await projectSession.forkDocument(from: id, acknowledgeCurrentModel: acknowledged, name: nativeText("fork.documentDefault"))
     }
     public func toggleComparisonCandidate(_ id: UUID) {
         if comparisonProjectID != manifest?.id || comparisonProjectURL != projectURL {
@@ -788,9 +805,9 @@ public final class WorkbenchModel {
         return closed
     }
 
-    @discardableResult public func newProject() async -> Bool {
+    @discardableResult public func newProject(onFailure: ((WorkflowIssue) -> Void)? = nil) async -> Bool {
         guard !refuseEditorClose() else { return false }
-        guard !isChangingProject else { return false }
+        guard !isChangingProject, !isChoosingLocation else { return false }
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSSavePanel()
@@ -803,12 +820,13 @@ public final class WorkbenchModel {
         projectSession.clearError()
         viewers.suspend()
         await projectSession.createProject(at: url)
+        reportNavigationFailure(onFailure)
         return projectSession.errorMessage == nil && projectSession.currentStore?.rootURL.standardizedFileURL == url.standardizedFileURL
     }
 
-    @discardableResult public func openProject() async -> Bool {
+    @discardableResult public func openProject(onFailure: ((WorkflowIssue) -> Void)? = nil) async -> Bool {
         guard !refuseEditorClose() else { return false }
-        guard !isChangingProject else { return false }
+        guard !isChangingProject, !isChoosingLocation else { return false }
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSOpenPanel()
@@ -822,7 +840,15 @@ public final class WorkbenchModel {
         projectSession.clearError()
         viewers.suspend()
         await projectSession.openProject(at: url)
+        reportNavigationFailure(onFailure)
         return projectSession.errorMessage == nil && projectSession.currentStore?.rootURL.standardizedFileURL == url.standardizedFileURL
+    }
+
+    // Called only after an actual operation, after its old error was cleared.
+    // Cancelling a file panel or refusing to start never republishes an old error.
+    private func reportNavigationFailure(_ callback: ((WorkflowIssue) -> Void)?) {
+        guard let message = projectSession.errorMessage else { return }
+        callback?(WorkflowIssue(message, code: projectSession.errorCode))
     }
 
     public func registerModel() async {

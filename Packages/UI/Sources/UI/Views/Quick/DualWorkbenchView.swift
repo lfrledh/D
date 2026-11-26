@@ -461,9 +461,9 @@ public struct DualWorkbenchView: View {
         }
         return .init(workflow: entry == .workflow, chat: entry == .quick && quick.category == .text && quick.textPresentation == .chat, scope: commandScope,
             save: saveCommand,
-            newProject: action(consistencyText(language, "menu.file.new")) { Task { if await model.newProject() { navigate(to: .workflow) } } },
-            openProject: action(consistencyText(language, "menu.file.open")) { Task { if await model.openProject() { navigate(to: .workflow) } } },
-            recent: model.recentProjects.map { project in action(project.name) { Task { if await model.openRecentProject(id: project.id) { navigate(to: .workflow) } } } },
+            newProject: action(consistencyText(language, "menu.file.new")) { performProjectNavigation { await model.newProject(onFailure: $0) } },
+            openProject: action(consistencyText(language, "menu.file.open")) { performProjectNavigation { await model.openProject(onFailure: $0) } },
+            recent: model.recentProjects.map { project in action(project.name) { performProjectNavigation { await model.openRecentProject(id: project.id, onFailure: $0) } } },
             files: action(layoutText(language, automaticWorkspace && owner === automaticQuickModel ? "workspaceFiles" : "projectFiles"), enabled: !usesTemporaryChat && store != nil && instance != nil) {
                 if let store, let instance { filesRoute = .init(store: store, instanceID: instance, assetID: nil) }
             }, quickDestination: destinations,
@@ -476,6 +476,26 @@ public struct DualWorkbenchView: View {
             thirdPartyNotices: action(workflowText(language, "notices.title")) { noticesVisible = true },
             stop: entry == .quick && (quick.category != .text || quick.textPresentation == .single) ? action(systemMenuText(language, "stop"), enabled: originalQuick.isRunning) { Task { await originalQuick.cancel() } } : nil,
             retrySave: entry == .quick && (originalQuick.pendingSaveRunID != nil || originalQuick.saveIssue != nil) ? action(systemMenuText(language, "retrySave"), enabled: !originalQuick.isRunning) { Task { await originalQuick.retrySave() } } : nil)
+    }
+    @State private var projectNavigationID: UUID?
+    private func performProjectNavigation(_ operation: @escaping @MainActor (@escaping (WorkflowIssue) -> Void) async -> Bool) {
+        guard let window = commandScope.window, let sourceView = commandScope.sourceView else { return }
+        let token = UUID(), owner = model
+        let intent = navigationIntent, sourceEntry = entry
+        projectNavigationID = token
+        Task {
+            var failure: WorkflowIssue?
+            let opened = await operation { failure = $0 }
+            // A user navigation supersedes this UI response. Merely switching
+            // applications does not: retain the owned error without activating D.
+            guard projectNavigationID == token, model === owner,
+                  navigationIntent == intent, entry == sourceEntry,
+                  commandScope.window === window, commandScope.sourceView === sourceView,
+                  !sourceView.isHiddenOrHasHiddenAncestor else { return }
+            projectNavigationID = nil
+            if opened { navigate(to: .workflow) }
+            else if let failure { issueValue = failure }
+        }
     }
     @State private var navigationModeWidth: CGFloat = 232
     @State private var navigationTop: CGFloat = 48

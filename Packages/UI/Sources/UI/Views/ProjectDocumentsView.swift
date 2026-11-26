@@ -170,7 +170,7 @@ public struct ProjectDocumentsView: View {
                     Text(model.presentedDocument?.name ?? "").font(.headline).lineLimit(1)
                     Spacer(minLength: 0)
                     if onContinueInQuick != nil && (model.creatorMode == .image || model.creatorMode == .video) {
-                        Button(baselineText(language, "library.quickUse")) { continueInQuick() }
+                        Button(workflowText(language, "baseline02.library.quickUse")) { continueInQuick() }
                             .disabled(model.isBusy || transferring)
                             .accessibilityIdentifier("project-document-continue-quick")
                             .audioMeasured("project-document-continue-quick", probe: layoutProbe)
@@ -358,7 +358,7 @@ public struct ProjectDocumentsView: View {
                 }
                 if model.showingTextSources && presentation != .parameters, let sources = project.textSources {
                     HStack {
-                        Text(project.textModelStatus).font(.caption)
+                        Text(model.textModelDisplayStatus).font(.caption)
                         Spacer()
                         Button(workflowText(legacyLanguage, "consistency.legacy.WorkbenchView.30")) { Task { await model.chooseTextModel() } }.buttonStyle(WorkbenchGlassButtonStyle())
                             .disabled(project.isBusy || project.isRegisteringTextModel)
@@ -394,9 +394,9 @@ public struct ProjectDocumentsView: View {
                 }
                 TextWorkbenchView(session: text.editor, selection: text.selection,
                     instruction: Binding(get: { text.instruction }, set: { text.instruction = $0 }),
-                    modelStatus: project.textModelStatus, canGenerate: project.canRewriteText,
+                    modelStatus: model.textModelDisplayStatus, canGenerate: project.canRewriteText,
                     canAccept: text.canAccept, canUndo: text.canUndo,
-                    isSaving: text.isSaving, saveStatus: text.saveStatus,
+                    isSaving: text.isSaving, saveStatus: model.textDocumentSaveStatus,
                     onEdit: { if project.navigationEpoch == epoch { project.editText($0, documentID: id) } },
                     onSelection: { if project.navigationEpoch == epoch { project.selectText($0, documentID: id) } },
                     onGenerate: { Task { if project.navigationEpoch == epoch && project.activeDocumentID == id { await project.rewriteText() } } },

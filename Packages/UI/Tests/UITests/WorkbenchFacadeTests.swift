@@ -30,6 +30,54 @@ private actor PresentationEngine: InferenceEngine {
 
 @Suite @MainActor
 struct WorkbenchFacadeTests {
+    @Test func migratedDraftNamesAndStateFollowLanguageWithoutRenamingSavedUserContent() async throws {
+        let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+        let folder = URL(fileURLWithPath: base).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let gate = PresentationOutcomeGate(), language = UILanguageStore(preferredLanguages: ["en"])
+        let service = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: PresentationEngine(gate: gate), backendID: "fixture",
+                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text")
+        }, settings: UserDefaults(suiteName: "D.DraftLanguage.\(UUID())")!)
+        let facade = WorkbenchModel(projectSession: service, language: language)
+        await service.createProject(at: folder.appendingPathComponent("Drafts.dproject"))
+        await facade.createTextDocument()
+        let first = try #require(service.activeDocumentID)
+        #expect(service.presentedDocument?.name == "New Draft")
+        #expect(facade.textModelDisplayStatus.hasPrefix("Choose a Qwen2.5"))
+        #expect(facade.textDocumentSaveStatus == "Draft saved in the project")
+        try language.select("zh-Hans")
+        await facade.createTextDocument()
+        #expect(service.presentedDocument?.name == "新文稿")
+        #expect(service.manifest?.documents.first { $0.id == first }?.name == "New Draft")
+        #expect(facade.textDocumentSaveStatus == "正文已保存在项目中")
+        #expect(await service.requestClose())
+    }
+
+    @Test func recentNavigationReportsOnlyFreshFailuresEvenWhenMessageRepeats() async throws {
+        let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+        let folder = URL(fileURLWithPath: base).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let service = session(gate: PresentationOutcomeGate()), facade = WorkbenchModel(projectSession: service)
+        let project = folder.appendingPathComponent("Broken.dproject")
+        await service.createProject(at: project)
+        let recent = try #require(facade.recentProjects.first)
+        #expect(await service.requestClose())
+        try Data("{broken".utf8).write(to: project.appendingPathComponent(ProjectStore.manifestFilename))
+        var failures: [WorkflowIssue] = []
+        facade.errorMessage = "previous error"
+        #expect(!(await facade.openRecentProject(id: "invalid", onFailure: { failures.append($0) })))
+        #expect(failures.isEmpty)
+        #expect(!(await facade.openRecentProject(id: recent.id, onFailure: { failures.append($0) })))
+        #expect(failures.count == 1)
+        let first = failures.first?.reason
+        #expect(!(await facade.openRecentProject(id: recent.id, onFailure: { failures.append($0) })))
+        #expect(failures.count == 2 && failures.last?.reason == first)
+    }
+
     private func session(gate: PresentationOutcomeGate) -> ProjectSession {
         let engine = PresentationEngine(gate: gate)
         return ProjectSession(sessionFactory: { _ in
