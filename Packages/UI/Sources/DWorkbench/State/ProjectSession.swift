@@ -3428,7 +3428,8 @@ public final class ProjectSession {
                 }
                 try Task.checkCancellation()
                 let input = try value.makeRequest(source: source)
-                let request = InferenceRequest(id: id, model: reference, input: .audio(input), loadingSelection: .automatic)
+                let request = InferenceRequest(id: id, model: reference, input: .audio(input),
+                    loadingSelection: input.diffusion?.loadingStrategy == nil ? .automatic : nil)
                 await admit(request, documentID: documentID, savedDraft: saved, store: store,
                             session: session, backendID: backendID)
             } catch {

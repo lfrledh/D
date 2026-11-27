@@ -5,6 +5,38 @@ import Testing
 
 @Suite("Audio creation persistence and safety", .serialized)
 struct AudioCreationStoreTests {
+    @Test func loadingChoiceRoundTripsAndOldDraftKeepsAutomatic() throws {
+        let original = AudioCreationDraft(prompt: "A gentle solo piano melody by a quiet lake.", guidanceText: "6")
+        let encoder = JSONEncoder()
+        let oldBytes = try encoder.encode(original)
+        let oldObject = try #require(JSONSerialization.jsonObject(with: oldBytes) as? [String: Any])
+        #expect(oldObject["loadingStrategy"] == nil)
+        let old = try JSONDecoder().decode(AudioCreationDraft.self, from: oldBytes)
+        let oldRequest = try old.makeRequest(source: nil)
+        #expect(old.loadingStrategy == nil && oldRequest.diffusion?.loadingStrategy == nil)
+        for choice in [AudioDiffusionLoadingStrategy.resident, .ssdLayered] {
+            var edited = original
+            edited.loadingStrategy = choice
+            #expect(!original.hasSameEditableRepresentation(as: edited))
+            let restored = try JSONDecoder().decode(AudioCreationDraft.self, from: encoder.encode(edited))
+            #expect(restored == edited)
+            let request = try restored.makeRequest(source: nil)
+            #expect(request.diffusion?.loadingStrategy == choice)
+            #expect(request.prompt == original.prompt && request.durationSeconds == 6 && request.seed == 42)
+            #expect(request.diffusion?.steps == 8 && request.diffusion?.guidanceScale == 6)
+        }
+        var switched = original
+        switched.loadingStrategy = .ssdLayered
+        switched.profile = .conditionedMusic
+        switched.music = .init()
+        let restoredMusic = try JSONDecoder().decode(AudioCreationDraft.self, from: encoder.encode(switched))
+        let musicRequest = try restoredMusic.makeRequest(source: nil)
+        #expect(musicRequest.diffusion == nil && musicRequest.noteSequence != nil)
+        switched = restoredMusic
+        switched.profile = .stableAudio
+        #expect(try switched.makeRequest(source: nil).diffusion?.loadingStrategy == .ssdLayered)
+    }
+
     @Test func requestBuilderParsesOnlyOperativeFieldsWithoutClamping() throws {
         let source = AudioSourceReference(url: URL(fileURLWithPath: "/frozen/source.wav"),
             sha256: String(repeating: "a", count: 64), frameCount: 44_100,

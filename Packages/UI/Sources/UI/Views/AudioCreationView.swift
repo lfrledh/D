@@ -261,6 +261,16 @@ public struct AudioCreationView: View {
             .pickerStyle(.menu).disabled(isBusy)
             .accessibilityIdentifier("audio-create-operation")
             parameterFields
+            if executionCapability?.profile.identifier == "sm-music" {
+                WorkbenchPicker(workflowText(language, "memory.loading"), selection: $draft.loadingStrategy) {
+                    WorkbenchChoice(workflowText(language, "memory.automatic"), value: AudioDiffusionLoadingStrategy?.none)
+                    WorkbenchChoice(workflowText(language, "workflow.loading.resident"), value: AudioDiffusionLoadingStrategy?.some(.resident))
+                    WorkbenchChoice(workflowText(language, "workflow.loading.ssdLayered"), value: AudioDiffusionLoadingStrategy?.some(.ssdLayered))
+                }
+                .pickerStyle(.menu).disabled(isBusy)
+                .help(workflowText(language, draft.loadingStrategy == nil ? "memory.automaticHelp" : "memory.fixedHelp"))
+                .accessibilityIdentifier("audio-create-loading")
+            }
             if draft.operation == .inpaint { rangeEditor }
         }
     }

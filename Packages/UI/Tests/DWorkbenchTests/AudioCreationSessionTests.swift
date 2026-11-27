@@ -6,8 +6,9 @@ import Testing
 
 private actor AudioCreationCPUProbe {
     var started: Set<String> = []
+    var requests: [InferenceRequest] = []
     var releaseCount = 0
-    func begin(_ prompt: String) { started.insert(prompt) }
+    func begin(_ request: InferenceRequest, prompt: String) { started.insert(prompt); requests.append(request) }
     func didRelease() { releaseCount += 1 }
 }
 
@@ -21,7 +22,7 @@ private actor AudioCreationCPUBackend: InferenceBackend {
                  emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         try Task.checkCancellation()
         guard case .audio(let input) = request.input else { throw ProjectStoreError.invalidTransition }
-        await probe.begin(input.prompt)
+        await probe.begin(request, prompt: input.prompt)
         // Explicit synthetic modes exercise the host's cancellation/error wiring, not a model.
         if input.prompt == "CPU wait for cancellation" {
             while true { try await Task.sleep(for: .milliseconds(10)) }
@@ -72,6 +73,39 @@ struct AudioCreationSessionTests {
             try await Task.sleep(for: .milliseconds(10))
         }
     }
+    @Test func explicitAudioLoadingChoiceReachesRequestAndSavedProject() async throws {
+        let (root, settings, suite) = try fixture()
+        defer { settings.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
+        let probe = AudioCreationCPUProbe()
+        let subject = session(settings: settings, probe: probe)
+        let project = root.appendingPathComponent("Loading.dproject")
+        await subject.createProject(at: project)
+        await subject.createAudioCreation()
+        let model = root.appendingPathComponent("FixtureModel")
+        try FileManager.default.createDirectory(at: model, withIntermediateDirectories: false)
+        await subject.registerAudioModel(at: model)
+        let document = try #require(subject.activeDocumentID), context = subject.audioCreationContextID
+        let choices: [AudioDiffusionLoadingStrategy?] = [nil, .resident, .ssdLayered]
+        for choice in choices {
+            var draft = try #require(subject.audioCreationDraft)
+            draft.prompt = "CPU loading selection fixture"; draft.durationText = "0.02"
+            draft.loadingStrategy = choice
+            subject.updateAudioCreationDraft(draft, contextID: context, documentID: document)
+            await subject.generateAudioCreation(contextID: context, documentID: document)
+            try await waitForIdle(subject)
+            let request = try #require(await probe.requests.last)
+            guard case .audio(let input) = request.input else { Issue.record("Expected audio request"); return }
+            #expect(input.diffusion?.loadingStrategy == choice)
+            #expect(request.loadingSelection == (choice == nil ? .automatic : nil))
+            #expect(request.model.directory == model)
+        }
+        #expect(await probe.requests.count == 3)
+        #expect(await subject.cancelAndCloseProject())
+        let reopened = try await ProjectStore.open(at: project)
+        #expect(await reopened.snapshot().activeDocument?.audioCreation?.loadingStrategy == .ssdLayered)
+        try await reopened.close()
+    }
+
     @Test func deployedDurationRejectsBeforeCreatingAJobAndPreservesInput() async throws {
         let (root, settings, suite) = try fixture()
         defer { settings.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }

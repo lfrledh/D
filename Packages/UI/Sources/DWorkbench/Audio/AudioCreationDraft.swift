@@ -19,6 +19,7 @@ public struct AudioCreationDraft: Codable, Sendable, Equatable {
     public var stepsText: String
     public var guidanceText: String
     public var strengthText: String
+    public var loadingStrategy: AudioDiffusionLoadingStrategy?
     public var editRegion: AudioFrameRange?
     public var rejectedAssetIDs: [UUID]
 
@@ -26,11 +27,13 @@ public struct AudioCreationDraft: Codable, Sendable, Equatable {
                 durationText: String = "6", seedText: String = "42", stepsText: String = "8",
                 guidanceText: String = "1", strengthText: String = "0.5",
                 editRegion: AudioFrameRange? = nil, rejectedAssetIDs: [UUID] = [],
-                profile: AudioCreationProfile = .stableAudio, music: MusicCreationDraft? = nil) {
+                profile: AudioCreationProfile = .stableAudio, music: MusicCreationDraft? = nil,
+                loadingStrategy: AudioDiffusionLoadingStrategy? = nil) {
         self.profile = profile; self.music = music
         self.revision = revision; self.prompt = prompt; self.operation = operation
         self.durationText = durationText; self.seedText = seedText; self.stepsText = stepsText
         self.guidanceText = guidanceText; self.strengthText = strengthText
+        self.loadingStrategy = loadingStrategy
         self.editRegion = editRegion; self.rejectedAssetIDs = rejectedAssetIDs
     }
 
@@ -38,6 +41,7 @@ public struct AudioCreationDraft: Codable, Sendable, Equatable {
     /// not canonical String equality; revision and candidate decisions are host-owned.
     func hasSameEditableRepresentation(as other: Self) -> Bool {
         guard profile == other.profile, operation == other.operation, editRegion == other.editRegion,
+              loadingStrategy == other.loadingStrategy,
               prompt.utf8.elementsEqual(other.prompt.utf8),
               durationText.utf8.elementsEqual(other.durationText.utf8),
               seedText.utf8.elementsEqual(other.seedText.utf8),
@@ -60,7 +64,7 @@ public struct AudioCreationDraft: Codable, Sendable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case profile, music, revision, prompt, operation, durationText, seedText, stepsText,
-             guidanceText, strengthText, editRegion, rejectedAssetIDs
+             guidanceText, strengthText, loadingStrategy, editRegion, rejectedAssetIDs
     }
 
     public init(from decoder: Decoder) throws {
@@ -75,6 +79,7 @@ public struct AudioCreationDraft: Codable, Sendable, Equatable {
         stepsText = try values.decode(String.self, forKey: .stepsText)
         guidanceText = try values.decode(String.self, forKey: .guidanceText)
         strengthText = try values.decode(String.self, forKey: .strengthText)
+        loadingStrategy = try values.decodeIfPresent(AudioDiffusionLoadingStrategy.self, forKey: .loadingStrategy)
         editRegion = try values.decodeIfPresent(AudioFrameRange.self, forKey: .editRegion)
         rejectedAssetIDs = try values.decode([UUID].self, forKey: .rejectedAssetIDs)
     }
@@ -164,7 +169,8 @@ public struct AudioCreationDraft: Codable, Sendable, Equatable {
         }
         let request = AudioRequest(operation: operation, prompt: prompt, durationSeconds: duration,
                                    seed: seed, steps: steps, guidanceScale: guidance,
-                                   strength: strength, source: source, editRegion: region)
+                                   strength: strength, source: source, editRegion: region,
+                                   loadingStrategy: loadingStrategy)
         try request.validate()
         return request
     }
