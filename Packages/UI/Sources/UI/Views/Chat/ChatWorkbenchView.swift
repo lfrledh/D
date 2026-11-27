@@ -2190,7 +2190,7 @@ ScrollViewReader { proxy in
                 }
                 QuickParameterField(ownerID: session.id.uuidString, operationID: node.operationID,
                     modelIdentity: node.parameters["modelID"]?.string,
-                    field: field, value: node.parameters[field.id] ?? field.defaultValue,
+                    field: field, value: WorkflowParameterPresentation.value(field, node: node),
                     onChange: { value in changeParameter(field.id, value: value, node: node, sessionID: session.id) },
                     raw: chat.parameterText[session.id.uuidString + ":" + field.id],
                     onRaw: { raw in changeNumeric(field: field, raw: raw, node: node, sessionID: session.id) })

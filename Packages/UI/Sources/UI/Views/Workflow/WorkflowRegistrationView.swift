@@ -26,7 +26,7 @@ struct WorkflowRegistrationView: View {
                     if let definition = controller.registry.definition(for: node, tools: controller.tools), !definition.fields.isEmpty {
                         DisclosureGroup(workspaceText(language, "registeredParameters")) {
                             ForEach(definition.fields) { field in
-                                Text(WorkflowCanvasPresentation.fieldTitle(operationID: node.operationID, field: field, language: language) + " · " + String(describing: node.parameters[field.id] ?? field.defaultValue))
+                                Text(WorkflowCanvasPresentation.fieldTitle(operationID: node.operationID, field: field, language: language) + " · " + String(describing: WorkflowParameterPresentation.value(field, node: node)))
                                     .font(.caption).textSelection(.enabled)
                             }
                         }

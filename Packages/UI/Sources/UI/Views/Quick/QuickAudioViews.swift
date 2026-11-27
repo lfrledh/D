@@ -42,7 +42,7 @@ struct QuickAudioSettings: View {
     @ViewBuilder private func parameter(_ id: String, draft: QuickDraft, title: String? = nil, hideTitle: Bool = false) -> some View {
         if let field = quick.definition?.fields.first(where: { $0.id == id }) {
             QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, modelIdentity: draft.node.parameters["modelID"]?.string,
-                field: field, value: draft.node.parameters[id] ?? field.defaultValue,
+                field: field, value: WorkflowParameterPresentation.value(field, node: draft.node),
                 onChange: { quick.setParameter(id, value: $0, draftID: draft.id) }, raw: draft.fieldText[id],
                 onRaw: { quick.setFieldText(id, text: $0, draftID: draft.id) },
                 titleOverride: title.map { audioText(language, $0) }, hidesTitle: hideTitle)

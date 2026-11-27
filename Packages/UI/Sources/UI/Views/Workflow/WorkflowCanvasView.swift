@@ -1963,7 +1963,7 @@ private struct WorkflowNodeInspector: View {
     private func fieldEditor(_ field: WorkflowFieldDefinition, node: WorkflowNode, definition: WorkflowOperationDefinition) -> some View {
         WorkflowFieldEditor(field: field, operationID: node.operationID,
             modelIdentity: node.parameters["modelID"]?.string,
-            value: node.parameters[field.id] ?? field.defaultValue,
+            value: WorkflowParameterPresentation.value(field, node: node),
             readOnly: readOnly || !controller.canEditCanvas,
             modelChoices: controller.modelChoices.filter { $0.kind == definition.modelKind },
             modelPicker: modelPicker(for: definition.modelKind),

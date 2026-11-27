@@ -123,7 +123,7 @@ struct QuickGenerationView: View {
                        !definition.fields.filter({ ["task", "promptText"].contains($0.id) }).isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             ForEach(definition.fields.filter { ["task", "promptText"].contains($0.id) }) { field in
-                                QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, modelIdentity: draft.node.parameters["modelID"]?.string, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
+                                QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, modelIdentity: draft.node.parameters["modelID"]?.string, field: field, value: WorkflowParameterPresentation.value(field, node: draft.node),
                                     onChange: { quick.setParameter(field.id, value: $0, draftID: draft.id) }, raw: draft.fieldText[field.id], onRaw: { quick.setFieldText(field.id, text: $0, draftID: draft.id) })
                             }
                         }.frame(maxHeight: min(180, geometry.size.height * 0.28))
@@ -372,7 +372,7 @@ struct QuickGenerationView: View {
                             DisclosureGroup(baselineText(language, "label.44455611b910"), isExpanded: $advanced) {
                                 VStack(alignment: .leading, spacing: 14) {
                                     ForEach(definition.fields.filter { WorkflowParameterPresentation.isVisible($0, node: draft.node) && !["modelID", "task", "promptText", "count"].contains($0.id) }) { field in
-                                        QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, modelIdentity: draft.node.parameters["modelID"]?.string, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
+                                        QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, modelIdentity: draft.node.parameters["modelID"]?.string, field: field, value: WorkflowParameterPresentation.value(field, node: draft.node),
                                             onChange: { quick.setParameter(field.id, value: $0, draftID: draft.id) }, raw: draft.fieldText[field.id], onRaw: { quick.setFieldText(field.id, text: $0, draftID: draft.id) })
                                     }
                                     if WorkflowModelRoutes.isLanguage(draft.node.operationID),

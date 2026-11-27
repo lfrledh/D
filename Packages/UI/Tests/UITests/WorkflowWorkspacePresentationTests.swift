@@ -34,6 +34,56 @@ private struct MetadataHostProbe: NSViewRepresentable {
 }
 
 @Suite(.serialized) @MainActor struct WorkflowWorkspacePresentationTests {
+    @Test func savedVideoMissingSelectionDisplaysItsActualFixedRecipeWithoutMutation() throws {
+        for profile in ExternalVideoExecutionProfile.allCases {
+            let recipe = WorkflowVideoRecipe(profile: profile)
+            let definition = try #require(WorkflowRegistry.standard.operation(recipe.operationID)?.definition)
+            let field = try #require(definition.fields.first { $0.id == "memoryStrategySelection" })
+            var node = definition.makeNode()
+            #expect(WorkflowParameterPresentation.value(field, node: node) == .text("automatic"))
+            node.parameters["memoryStrategySelection"] = nil
+            for stream in [false, true] {
+                node.parameters["streamWeights"] = .flag(stream)
+                let before = node.parameters
+                let request = try recipe.request(node: node, prompt: "same prompt", seed: 42)
+                #expect(WorkflowParameterPresentation.value(field, node: node) == .text("fixed"))
+                if profile == .h3BF16Full {
+                    #expect(request.adapterOptions == .h3(streamWeights: stream))
+                } else {
+                    #expect(request.adapterOptions == .ltx(streamWeights: stream, spatiotemporalGuidance: 0))
+                }
+                #expect(node.parameters == before)
+            }
+            node.parameters["memoryStrategySelection"] = .text("automatic")
+            #expect(WorkflowParameterPresentation.value(field, node: node) == .text("automatic"))
+        }
+    }
+
+    @Test func savedLoadingFieldsKeepLegacyMeaningWhileNewNodesRemainAutomatic() throws {
+        let operations = ["d.video.generate", "d.model.language", "d.text.rewrite",
+            WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38, WorkflowModelRoutes.ace,
+            "d.music.generate", "d.image.generate", WorkflowModelRoutes.fluxDev]
+        for operation in operations {
+            let definition = try #require(WorkflowRegistry.standard.operation(operation)?.definition)
+            let field = try #require(definition.fields.first { $0.id == "loadingStrategy" })
+            var node = definition.makeNode()
+            #expect(WorkflowParameterPresentation.value(field, node: node) == .text("automatic"))
+            node.parameters["loadingStrategy"] = nil
+            let before = node.parameters
+            let expected = WorkflowModelRoutes.isImage(operation) ? "staged" : "resident"
+            #expect(WorkflowParameterPresentation.value(field, node: node) == .text(expected))
+            #expect(node.parameters == before)
+            node.parameters["loadingStrategy"] = .text("automatic")
+            #expect(WorkflowParameterPresentation.value(field, node: node) == .text("automatic"))
+            node.parameters["loadingStrategy"] = .text("unknown-preserved-value")
+            #expect(WorkflowParameterPresentation.value(field, node: node) == .text("unknown-preserved-value"))
+        }
+        let field = WorkflowFieldDefinition("loadingStrategy", "custom", .text(multiline: false), .text("custom-default"))
+        var custom = try #require(WorkflowRegistry.standard.operation("d.text.input")?.definition).makeNode()
+        custom.operationID = "custom.unrelated"
+        #expect(WorkflowParameterPresentation.value(field, node: custom) == .text("custom-default"))
+    }
+
     @Test func recordedDatesFollowSelectedInterfaceLanguageWithoutChangingTimestamp() throws {
         let language = UILanguageStore(preferredLanguages: ["zh-Hans"])
         let value = Date(timeIntervalSince1970: 1794972900)

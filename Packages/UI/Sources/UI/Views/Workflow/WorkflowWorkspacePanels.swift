@@ -1,4 +1,5 @@
 import DWorkbench
+import DInference
 import Foundation
 
 /// Only explicit presentation intent changes tabs. Controller selection also changes during
@@ -43,6 +44,23 @@ struct WorkflowWorkspacePanels: Equatable {
 
 /// Stable field IDs only; unknown future fields remain visible. Required ports stay outside disclosure.
 enum WorkflowParameterPresentation {
+    /// New-node defaults do not change the meaning of a missing field in a saved node.
+    /// Project the existing execution fallback without migrating or editing that node.
+    static func value(_ field: WorkflowFieldDefinition, node: WorkflowNode) -> WorkflowScalar {
+        if let value = node.parameters[field.id] { return value }
+        if field.id == "memoryStrategySelection",
+           ExternalVideoExecutionProfile.allCases.contains(where: { WorkflowVideoRecipe(profile: $0).operationID == node.operationID }) {
+            return .text("fixed")
+        }
+        if field.id == "loadingStrategy" {
+            if WorkflowModelRoutes.isImage(node.operationID) { return .text("staged") }
+            if WorkflowModelRoutes.isLanguage(node.operationID)
+                || ["d.text.rewrite", "d.video.generate", "d.music.generate", WorkflowModelRoutes.ace].contains(node.operationID) {
+                return .text("resident")
+            }
+        }
+        return field.defaultValue
+    }
     static func isVisible(_ field: WorkflowFieldDefinition, node: WorkflowNode) -> Bool {
         guard !["projectImageProfile", "projectImageProfileRevision"].contains(field.id) else { return false }
         return field.id != "streamWeights" || node.parameters["memoryStrategySelection"]?.string != "automatic"
