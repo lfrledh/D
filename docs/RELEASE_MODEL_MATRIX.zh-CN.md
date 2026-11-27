@@ -1,5 +1,13 @@
 # 首发模型能力矩阵
 
+## 2026-11-27：本轮具名补验（固定4898候选）
+
+资源沿用a1226881，不重跑未改的20配置矩阵。Qwen3.5-9B Q4官方一般思考采样字段已在普通可保存请求、冻结/重现及同一生产后端接通，默认额度未全局改变。普通3b7短档22输入/2282输出，受控后端8k档8142输入/8269输出，均在原Q4分层、默认12GiB及max32768下以有效EOS248046结束并有正文；短档正常保存/Quit/冷开已验。16k档16379输入/4735输出同样有效EOS结束且有正文，完整统计见任务与N27/qwen，不把预填充加首返回误称纯预填充。
+
+557普通App的Stable Audio Small Music已用文件选择器选择原模型，明确选择SSD分层，固定6秒/8步/CFG6/seed42完成；F16 text/DiT、F32 codec未改。输出44.1kHz双声道Float32 WAV264600帧，与N25同参数常驻/分层参考SHA256逐字节相同（c7587696…）。MLX峰490,235,634B，执行器最终active26/cache0；普通保存及正常Quit已完成；最终4898冷开后同doc/job/asset/WAV摘要保持，真实Preview播放位置0→2.9→6.0秒（末帧264599）。生成557、冷开播放4898分级记录，后端和引擎相同。WAV全部样本有限，浮点峰8.392，原常驻参考相同；不是低内存引入的数值差异，也不等于听感或作品质量已接纳。
+
+Wan512×512/17帧的FP32 VAE独立实测峰7,824,491,296B，3b7策略v3新增精确512×512且≤17帧边界，同时保留832×480且≤17帧；其他几何仍按原保守规则，832×480普通有效证据沿用。新增512完整普通请求8096C516在4898完成：512²/17帧16fps/50步/CFG6/shift8/seed42，automatic/12GiB/allowOnce→streaming-v3；provider 1149.084秒，MLX峰7,811,908,394B、provider峰RSS2,185,232,384B、5秒采样RSS最大559,415,296B（224点，压力码1）分别记录。17帧MP4 SHA c856869c…全解码、播放、正常Quit84887→冷开86445同run/asset/摘要与播放0→1.0625秒已验；N27/ordinary-wan512/summary.json。没有更换精度、放宽数值容差或增加预算，独立VAE峰不与全流程峰直接相减作收益。LTX2.3 Q8/Gemma3Q4新路线已由最终4898普通App完成固定512×320/25帧/30步/CFG3/seed42，automatic/12GiB/allowOnce，25帧带音频MP4全解码、播放、正常Quit与84887冷开同run/asset/摘要及播放通过；引擎报告967.4秒。RSS样本峰4.183GB、压力码1/2；未导出本次普通执行MLX峰，不拿旧阶段峰替代。精确身份及结果见N27/ordinary-ltx-q8，作品质量仍待用户。
+
 ## 2026-11-25：全局低内存覆盖
 
 目录仍为20个准确配置，没有删支持项或换精度。以下按源码、阶段/独立provider及普通App分别列证；LTX2.3 BF16已取得本轮f928普通App完整请求及冷开证据，不外推其他型号。N25见CURRENT_ACTIONS。默认预算仍为物理内存减去max(4GiB,1/4)，本机12GiB；不是实时空闲内存。新建任务使用automatic，旧缺字段/fixed/明确手选保持原义；普通估算满足预算直接执行，否则才通过原ask/allow/deny及单次决定处理方案。
@@ -22,7 +30,7 @@
 | Qwen2.5-1.5B Q4 | 常驻 → 原Q4逐层 | 同一固定Qwen2实现，逐准确manifest准入；不得以0.5B数值记录冒称本型号GPU通过。 |
 | Qwen2.5-7B Q4 | 常驻 → 原Q4逐层 | 真实7B原Q4独立head、分块prefill/完整KV两步decode逐值/RNG一致；另两分片夹具含共享/独立head和替换拒绝。非普通App，不能外推32B。 |
 | Qwen2.5-32B Q4 | 常驻 → 原Q4逐层 | 同上，最大层/共享及上下文仍可超过预算；不换小型号。 |
-| Stable Audio Small Music | 整T5/DiT → 原F16逐层；共享、latent及F32 codec保留 | 新固定NPZ形状预算shared+maxBlock/codec，保留时长工作区；6秒/8步CFG6同seed完整WAV逐字节相同，MLX峰1,746,234,946→490,235,634B。取消/同尺寸替换恢复mtime反例通过；普通App待验。 |
+| Stable Audio Small Music | 整T5/DiT → 原F16逐层；共享、latent及F32 codec保留 | 新固定NPZ形状预算shared+maxBlock/codec，保留时长工作区；6秒/8步CFG6同seed完整WAV逐字节相同，MLX峰1,746,234,946→490,235,634B。取消/同尺寸替换恢复mtime反例通过；N27普通557同参新请求完成，最终4898冷读/实际播放通过，见本页顶端分级记录。 |
 | SwiftF0 0.1.2 CPU | 原有小型CPU有界路线 | 399,114B准确ONNX；真实CPU当前最长120秒合成输入产出7500帧，进程RSS峰641,695,744B。修原256MiB偏低估算为256MiB+每输入样本256B，最大759,955,456B；满足默认12GiB，不造双加载器。此为真实CPU provider，非普通App/GPU。 |
 | LTX2.3 BF16 Full | 整Gemma3+connector/DiT → 原BF16 Gemma3分片逐层、49状态物化、释放后connector、既有DiT流式 | 新阶段估算max(真实shared+maxLayer+完整states+workspace,connector+states+workspace,DiT/VAE请求工作区)。真实1024token编码MLX峰2,021,629,962B、connector8,075,320,348B，非整App峰值。f928普通App默认12GiB/global allow自动选择streaming v2，固定512×320/25帧24fps/30步CFG3seed42完成，H.264+48kHz双声道AAC全解码、保存正常Quit/冷开播放通过。App记录1470.388秒；5秒采样child RSS最大3,914,727,424B不是精确峰值，独立sample footprint峰8.6G。开发父进程ffmpeg sandbox-inherit失败保留，不是普通App失败。 |
 | LTX2.3 Q8/Gemma3 Q4 | 整Gemma3Q4+connector → 原packed逐层与错峰；DiT仍原Q8 | 同一分片读取适配实际2分片及过时index，不改原文件；小48层BF16/Q4数值/RNG/释放反例通过；真实原Q4正提示/空负提示1024-token全部49状态逐值、dtype及RNG与原常驻相同，编码MLX峰7,775,519,272→713,400,368B；同进程RSS为累计，不作两路线RSS比较。历史Q8普通GPU/保存冷开有效，新增文字路线待普通包复验。 |

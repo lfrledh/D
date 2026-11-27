@@ -2,6 +2,10 @@
 
 2026-11-17 · 开发产物治理与批准打赏收口，最终正常包/Archive及桌面冷开已验证；旧候选证据按版本沿用。唯一实际版本和启动入口见[当前行动](CURRENT_ACTIONS.zh-CN.md)，不是下方历史R16包。当前仅Apple Development签名的完整沙盒Release；不是Mac App Store分发、提审或发行通过。
 
+### 2026-11-27 普通候选（固定交付）
+
+生产4898b0246901b83ff6adebb3ced7e00ea19b016d，资源a1226881d0c6d19d8750f239cd484dd7bb8de447155409eb05acafa0f8b2b227；正常Release/Archive为N27/release-final-4898b024/build-report.json与N27/Archive-4898b024/D.xcarchive。受控构建入口复用普通Release缓存，Archive 502.693秒成功；七引擎、零第三方权重、Apple Development 3V4T79WLQS签名门禁保持。产品输入摘要4af71abacc0a89cd8ac1f15ce9c1bba37048a6dbe1714b46a8c747b4ce908798，可执行7dc12de6fcebefd1e1f2a370cc3f8a2f0a4dfc99edf62b327966c27beb7fac87。源码/组件/受控GPU与普通App分级见当前行动，构建回执的runtimeVerification=not-run不改写，后续普通验收另记。Qwen短档、LTX Q8、SA3与Wan512普通生成/保存/冷开分级完成，桌面4898已接纳且正常冷开/关闭/Quit；I012/I017仍开放，不以模型通过覆盖UI缺陷。当前完整Archive保留，中间四Archive只退役重复App体、符号/元数据保留为历史资料。Store发行未验。
+
 ### 2026-11-16 历史组合包与引擎导入补验
 
 - 最终生产781c211dbb2a1089bf1c2e10e754b453fc5ffbd3；正常Release -O/WMO开发签名包已核七引擎、零第三方权重及无XCTest/诊断残留。签后摘要和资源身份见`run-20261116-resume-closeout/release-781c211d-r1/build-report.json`；资源仍5889c310…b0a514。781独立Archive实际567.884秒exit0，五项身份/七引擎/零权重（54,436文件、2,681归档成员）/无测试残留/严格签名/Privacy/arm64+x86_64 dSYM全部通过；`H-Archive-781c211d/{receipt,validation}.json`。非实施者核实际包与回执。825 Archive502.902秒及下条5d为历史，不替代最终产物。
