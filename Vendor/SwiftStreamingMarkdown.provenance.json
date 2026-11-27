@@ -127,7 +127,7 @@
     {
       "path": "Sources/MarkdownText/Models/CodeBlockConfig.swift",
       "upstreamSHA256": "88373a402ec150870f1a87ff84a12f7c38940ef455d95e0fbd55868c423b96a7",
-      "currentSHA256": "4499fee9798aae721428a6b62ed4ed8dd40f8e9253709030f08757267f6a7816"
+      "currentSHA256": "ae82e53fa8fe0a24c6a75c30ac996d2cefcd7354a814d75255b0d839be9dec63"
     },
     {
       "path": "Sources/MarkdownText/Models/ImageConfig+SourceResolution.swift",
@@ -167,7 +167,7 @@
     {
       "path": "Sources/MarkdownText/Models/MarkdownRenderConfig.swift",
       "upstreamSHA256": "e48063556e118cda45ec3699c0bb2df5347c5adfc53a11bde6ac36029dd52636",
-      "currentSHA256": "6f2b2d6745f5286ac5d299f80465ca4b9fb091309b241da8cbfbe84dc2c79ac8"
+      "currentSHA256": "e48063556e118cda45ec3699c0bb2df5347c5adfc53a11bde6ac36029dd52636"
     },
     {
       "path": "Sources/MarkdownText/Models/MarkdownRenderable.swift",
@@ -582,7 +582,7 @@
     {
       "path": "Sources/MarkdownText/UI/CodeBlockView.swift",
       "upstreamSHA256": "db30fa36da0d657af8434c8e28ca948120f908be7236ff6a0f866c971fe9feba",
-      "currentSHA256": "6e75a41ba08750c1f0cdc100f28f867be1e3e24eb36447c40ead43c0800e5382"
+      "currentSHA256": "9e08acfbfac7a5c55cda967342dfb15f93f2dab42f8d3c303ddbb02276ff6460"
     },
     {
       "path": "Sources/MarkdownText/UI/DocumentView.swift",
@@ -597,7 +597,7 @@
     {
       "path": "Sources/MarkdownText/UI/HighlightTaskManager.swift",
       "upstreamSHA256": "09022669529d6f9151dcd03d1eaead986154d069126f1bac53a096059aa0d4e5",
-      "currentSHA256": "1703dd78ded355ade1e22feec8f4b289360408a4e93cb985b995265329ff2961"
+      "currentSHA256": "09022669529d6f9151dcd03d1eaead986154d069126f1bac53a096059aa0d4e5"
     },
     {
       "path": "Sources/MarkdownText/UI/Images/BlockImageFailureView.swift",
@@ -672,7 +672,7 @@
     {
       "path": "Sources/MarkdownText/UI/TableView.swift",
       "upstreamSHA256": "02078a3f60d432ad3b9c9f54a54eb3b12cb2bdca994eec04ada0f743f4652b0e",
-      "currentSHA256": "b8db8590922320bd42472289248a714690fa5d04d29d4133ef56234740ba5c24"
+      "currentSHA256": "02078a3f60d432ad3b9c9f54a54eb3b12cb2bdca994eec04ada0f743f4652b0e"
     },
     {
       "path": "Sources/MarkdownText/UI/TextSelection/SelectableTextView.swift",

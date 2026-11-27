@@ -80,5 +80,3 @@ Existing Package.resolved files lock transitive dependencies, including the upst
 `SwiftStreamingMarkdown/`保留固定官方提交`5f7c04e0558df6146f90d482edb62cb456986bda`的全部生产Sources及Package/LICENSE/README/SECURITY（MIT）。它是生产子集，不含上游示例、工具和30MB快照测试；Package移除了相应测试依赖/target。依赖版本不变，Equatable宏继续按既有信任校验。`SwiftStreamingMarkdown.provenance.json`记录原始/当前摘要，`patches/markdown-code-wrap.patch`可重放。
 
 局部补丁仅给现有CodeBlockConfig/CodeBlockView增加默认关闭的换行展示开关；保留高亮、原始代码复制及解析器。选择依据：固定库只提供横向ScrollView且无公开代码块替换入口；用小补丁复用成熟渲染而不再解析Markdown。升级时检查上游是否已支持、核局部补丁并运行字体/原文/代码宽度回归；不得修改SwiftPM缓存。实际运行证据见CHAT-PRODUCT任务记录。
-
-2026-11-27 I012局部对照：macOS代码文本叶使用原生AttributedString宿主，保持高亮颜色、等宽字体/间距、wrap与横向滚动及复制；不更换解析器、Lazy列表或阅读所有者。正常App因果与回归尚在验证，不将组件通过写成挂起已修复。同步重放材料时发现既有Copy双语、表格复制及高亮任务合并的current摘要/patch滞后；已用同一固定官方提交逐文件核SHA并补齐实际局部差分，不升级依赖或覆盖历史实现。

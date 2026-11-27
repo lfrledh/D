@@ -6,9 +6,6 @@
 import Foundation
 import HighlightSwift
 import SwiftUI
-#if canImport(AppKit)
-import AppKit
-#endif
 
 struct CodeBlockView: View {
 
@@ -58,11 +55,6 @@ struct CodeBlockView: View {
 
   @ViewBuilder
   private var codeText: some View {
-    #if canImport(AppKit)
-    CodeBlockNativeText(content: attributedString ?? AttributedString(code),
-                        fonts: config.codeBlockConfig.codeTextFonts,
-                        foreground: NSColor(foregroundColor))
-    #else
     if #available(iOS 16.1, *) {
       Text(attributedString ?? AttributedString(code))
         .font(config.codeBlockConfig.codeTextFonts)
@@ -72,7 +64,6 @@ struct CodeBlockView: View {
         .font(config.codeBlockConfig.codeTextFonts)
         .foregroundStyle(Color.Theme.Component.CodeBlock.Foreground.FunctionParameter)
     }
-    #endif
   }
 
   @ViewBuilder
@@ -151,81 +142,6 @@ struct CodeBlockView: View {
     .onDisappear { activeHighlight = nil }
   }
 }
-
-#if canImport(AppKit)
-/// Native attributed code text for selection and accessibility in the lazy
-/// transcript. Measurement uses
-/// a separate layout stack and never changes the displayed view's intrinsic size.
-struct CodeBlockNativeText: NSViewRepresentable {
-  let content: AttributedString
-  let fonts: TextFonts
-  let foreground: NSColor
-
-  final class NativeText: NSTextView {
-    override var intrinsicContentSize: NSSize {
-      NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric)
-    }
-  }
-
-  func makeNSView(context: Context) -> NativeText {
-    let storage = NSTextStorage()
-    let manager = NSLayoutManager()
-    let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
-    container.widthTracksTextView = true
-    container.heightTracksTextView = false
-    container.lineFragmentPadding = 0
-    manager.addTextContainer(container)
-    storage.addLayoutManager(manager)
-    let view = NativeText(frame: .zero, textContainer: container)
-    view.isEditable = false
-    view.isSelectable = true
-    view.isRichText = true
-    view.usesFontPanel = false
-    view.drawsBackground = false
-    view.textContainerInset = .zero
-    view.isVerticallyResizable = false
-    view.isHorizontallyResizable = false
-    updateNSView(view, context: context)
-    return view
-  }
-
-  func updateNSView(_ view: NativeText, context: Context) {
-    let value = NSMutableAttributedString(attributedString: NSAttributedString(content))
-    let range = NSRange(location: 0, length: value.length)
-    value.addAttribute(.font, value: fonts.normal, range: range)
-    if let spacing = fonts.preferredLetterSpacing {
-      value.addAttribute(.kern, value: spacing, range: range)
-    }
-    if let lineHeight = fonts.preferredLineHeight, lineHeight > fonts.normal.lineHeight {
-      let paragraph = NSMutableParagraphStyle()
-      paragraph.lineSpacing = lineHeight - fonts.normal.lineHeight
-      value.addAttribute(.paragraphStyle, value: paragraph, range: range)
-    }
-    value.enumerateAttribute(.foregroundColor, in: range) { color, run, _ in
-      if color == nil { value.addAttribute(.foregroundColor, value: foreground, range: run) }
-    }
-    guard view.attributedString() != value else { return }
-    let sameText = view.string == value.string
-    let selection = view.selectedRanges
-    view.textStorage?.setAttributedString(value)
-    if sameText { view.selectedRanges = selection }
-  }
-
-  func sizeThatFits(_ proposal: ProposedViewSize, nsView: NativeText, context: Context) -> CGSize? {
-    let width = proposal.width ?? CGFloat.greatestFiniteMagnitude
-    guard width > 0, width.isFinite else { return .zero }
-    let storage = NSTextStorage(attributedString: nsView.attributedString())
-    let manager = NSLayoutManager()
-    let container = NSTextContainer(size: NSSize(width: width, height: CGFloat.greatestFiniteMagnitude))
-    container.lineFragmentPadding = 0
-    manager.addTextContainer(container)
-    storage.addLayoutManager(manager)
-    manager.ensureLayout(for: container)
-    let used = manager.usedRect(for: container)
-    return CGSize(width: ceil(used.width), height: ceil(used.height))
-  }
-}
-#endif
 
 #if DEBUG
 
