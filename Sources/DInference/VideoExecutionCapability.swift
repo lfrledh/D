@@ -39,13 +39,14 @@ public struct VideoExecutionCapability: Sendable, Equatable {
     }
 
     /// FP32 native 3-D convolution with materialized temporal caches. The
-    /// 832x480 representative was measured through all five temporal chunks;
-    /// other resolutions and longer requests retain the conservative estimate.
+    /// 832x480 and 512x512 representatives were measured through all five
+    /// temporal chunks; other resolutions and longer requests stay conservative.
     /// This is an admission estimate, not the process RSS or an allocation cap.
     public func estimatedDecoderPeakBytes(for value: VideoRequest) throws -> UInt64 {
         try validate(value)
         let pixels = UInt64(value.width) * UInt64(value.height)
-        let calibrated = value.width == 832 && value.height == 480 && value.frameCount <= 17
+        let calibrated = ((value.width == 832 && value.height == 480) ||
+                          (value.width == 512 && value.height == 512)) && value.frameCount <= 17
         let bytesPerPixel: UInt64 = calibrated ? 28 * 1024 : 4 * 384 * 4 * 8
         let (workspace, overflow) = pixels.multipliedReportingOverflow(by: bytesPerPixel)
         let (decoder, extraOverflow) = workspace.addingReportingOverflow(1024 * 1024 * 1024)

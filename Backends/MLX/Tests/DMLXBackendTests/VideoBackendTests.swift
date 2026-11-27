@@ -45,8 +45,11 @@ struct VideoBackendTests {
         let capability = VideoExecutionCapability.wan21
         for frames in [1, 5, 17] {
             #expect(try capability.estimatedDecoderPeakBytes(for: video(width: 832, height: 480, frames: frames)) == 12_524_191_744)
+            #expect(try capability.estimatedDecoderPeakBytes(for: video(width: 512, height: 512, frames: frames)) == 8_589_934_592)
         }
-        for value in [video(width: 848, height: 480, frames: 17),
+        for value in [video(width: 512, height: 512, frames: 21),
+                      video(width: 528, height: 512, frames: 17),
+                      video(width: 848, height: 480, frames: 17),
                       video(width: 832, height: 496, frames: 17),
                       video(width: 832, height: 480, frames: 21),
                       video(width: 480, height: 832, frames: 17),

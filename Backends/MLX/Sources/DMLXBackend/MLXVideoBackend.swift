@@ -48,11 +48,11 @@ public actor MLXVideoBackend: InferenceExecutionPlanning {
     public func lowMemoryPlans(for request: InferenceRequest) async throws -> [InferenceExecutionPlan] {
         let seal = try planSeal(request)
         return [.init(request: try request.lowMemoryRequest(method: .streaming), method: .streaming,
-            strategyVersion: 2, modelIdentityToken: seal.token)]
+            strategyVersion: 3, modelIdentityToken: seal.token)]
     }
     public func validate(_ plan: InferenceExecutionPlan, for original: InferenceRequest) async throws {
         try plan.validateSemantics(original: original)
-        guard plan.method == .streaming, plan.strategyVersion == 2,
+        guard plan.method == .streaming, plan.strategyVersion == 3,
               try planSeal(original).token == plan.modelIdentityToken else {
             throw InferenceFailure.inputIntegrityChanged("Approved Wan model files changed.")
         }
