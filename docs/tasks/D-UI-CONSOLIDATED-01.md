@@ -1,5 +1,31 @@
 # D-UI-CONSOLIDATED-01
 
+<a id="ui-copy-01-20-20261127"></a>
+## 2026-11-27 已批准UI文本第1–20组
+
+接在b712完整交付之后实施，保留前轮Qwen、I012、I017和低内存证据，不重开其无效实验；21–40未批准。真实开工main/施工分支b712，索引/施工树干净，个人scheme在另一主树保持原摘要与未暂存状态。产品 **e1de72e705c1ebd46f0b5ede36a4fdda592a10be**；本批证据简称C27=`D-Development/AgentTrials/D-UI-CONSOLIDATED-01/run-20261127-ui-copy-01-20`。
+
+| 批次 | 实际修改 |
+|---|---|
+| 1–7 | 聊天预设及真实设置导入预览、回答规则范围、附件类型、原回答错误及选择说明；正式双语和可见fallback同步。既有普通预设flush重试与编辑保护不变。 |
+| 8–9 | 文字附件错误及按原请求重现错误摘要同步；历史原始中英错误保留精确匹配，显示使用当前语言。 |
+| 10–13 | 数据输入说明及真实定义fallback、缺分词器说明、准备中状态、复制未完成标题；不改变准备/复制/原件行为。 |
+| 14–18 | 项目元数据/共用标签/备份范围说明、目标变化、来源缺失；移除文件详情重复Text与无用key，不留空串。 |
+| 19–20 | 45个指定帮助条目和7个缩放/素材条目的conditions_key及双语正文删除；缩放对象为画布、6类对象为当前工作区的素材。127条帮助仍保留65条真实条件及实时不可用原因。 |
+
+**第9条具体分流：** `ChatController.reproduce`原组合guard拆为现有稳定原因：归档/删除→reasonArchived，找不到回答→missingAttempt，运行或待保存→chatBusy，缺原用户消息→missingMessage，必要seed缺失/不能解析→replayMissingParameters。继续先执行原加载/保存保护；实际提交沿用冻结node/messages/inputs/systemPrompt/outputFormat与种子，不使用当前默认。比较面板保留WorkflowIssue.code交给现有错误显示。无效/负seed在既有Store校验先被拒绝，缺消息的不一致存储也不绕过校验来制造普通App反例。
+
+**源码与组件：** 精确31项值、52条帮助配置变更和无引用键清理见C27/approved-copy-and-help-changes.json；中英各5766键，重复键/键集/占位符/正式help引用通过，见resource-check.json。19项UI/错误/帮助方法和4项Workbench方法通过（缺seed/非数字/负值3情况）；原冻结format/memory重现回归沿用本轮实跑。首轮两个测试构造问题（等待异步提交位置、非法seed先被Store拒绝）已修正并复跑，记录保留，不当作产品失败或抹掉。非实施者只读固定16文件快照和最终两测试差分，无阻塞发现，见readonly-result.json。
+
+**普通App与交付：** 同一e1de普通Release在1280×800检查中英预设新建/编辑、实际JSON导入预览、回答比较（附件类型/保留输入说明）、模型管理、素材详情/标签和帮助；英文标签说明另检查1080×612。真实键鼠创建FA8D预设，明确导入产生57AB新身份；取消中文导入预览不产生条目。选择已有回答后真实输入草稿仍在，随后清除本次QA输入。两预设保存、正常退出530、桌面冷开1239并重新打开专属QA后ID/内容相同；最终关闭QA并正常Quit，恢复简中，未改变输入源/VO/全局ask。未运行新推理。模型历史成果只作界面材料，不算本批生成。
+
+帮助普通App抽查FLOW-SELECT/WORKSPACE-ZOOM-SPEED/WORKSPACE-RESOURCE-IMAGE双语，额外英文MENU-FILE-NEW/DECISION-ACCEPT，无已删条件标题；MODEL-CHANGE真实条件仍显示。中英AXHelp继续读出用途，原生hover事件及layer103独立提示窗留证；提示窗不在父窗口截图中，不伪称截图证明悬停动作。文件详情实际展开/滚动后只保留位置及原导出说明。缺附件、原回答错误、重现失败、缺分词器/准备进度/复制失败、目标/来源失效未在普通App强造，分别沿错误组件或源码/资源核对；不称这些异常全部亲测。首次启动就绪等待、AXSet未进入编辑绑定、被遮挡/屏外目标和未匹配名称均由输入守卫停止，改以就绪状态、当前AX命中和真实键入完成；无权限绕过或产品“修复”冒名。
+
+**固定候选：** `/Volumes/CodexProjects/Codex/D-Development/CurrentD/Nov27-Copy-e1de72e7/D.app`，生产 **e1de72e705c1ebd46f0b5ede36a4fdda592a10be**；资源 **a1226881d0c6d19d8750f239cd484dd7bb8de447155409eb05acafa0f8b2b227**。C27/release-final/build-report.json、Archive-e1de72e7/D.xcarchive、final-package-e1de72e7.json：Release、strict-deep开发签名/沙盒、七引擎、零第三方权重、无XCTest/诊断注入，Archive可执行与两架构dSYM匹配。正式zh/en/help字节与源码一致，见packaged-text-resources.json。桌面入口已核，4898最近回退、745额外反例及已有具名保护保持，candidate-acceptance.json删除集合为空。
+
+**实图/动作索引：** C27/native-acceptance.json、native/actions.jsonl、native/presets-cold.json、native/quit-first.json及quit-final.json。代表原始截图captures/03-import-preview-zh.png、05-preset-editor-en.png、09-comparison-inputs-en.png、21-metadata-scope-zh.png、22-tags-scope-zh.png、27-help-zoom-zh.png、33-presets-cold-zh.png；稀有错误及VoiceOver导航不由这些截图代替。31项值均为本批实际更新，既有正确用语/保存保护沿用，没有以新框架重复建设。完整文档SHA与远端读回以CurrentD/receipt.json及C27/final-delivery.json为准。I012/I017前轮开放事实不因本批通过而关闭；21–40仍未批准。本批不重跑GPU或StoreKit，不新增永久总表。
+
+
 ## 2026-11-27 官方思考参数、历史组合与低内存补验（固定交付）
 
 起点 `1ed6a251d32717629317e269f1c44bee6c01341c`，唯一Lead串行写入/构建/GPU/原生操作，一位只读固定快照复核。N27=`AgentTrials/D-UI-CONSOLIDATED-01/run-20261127-qwen-chat-low-memory`。以下是本轮新证据；上节之前的清理、745及旧失败不倒写。
