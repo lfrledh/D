@@ -734,11 +734,12 @@ public struct SharedLibraryBrowser: View {
         }
         .onChange(of: collectionFeedback?.status(in: insertionController)) { _, _ in refreshCollectionFeedback() }
         .onChange(of: store.metadata) { _, _ in state.reconcile(using: store) }
-        // This observer only dismisses a removed detail. Comparing every entry's
-        // content also traverses metadata on unrelated layout updates.
-        .onChange(of: !headerOnly && compactDetailKey != nil &&
-            SharedLibraryBrowserLogic.detailEntry(key: compactDetailKey, entries: entries) == nil) { _, missing in
-            if missing { compactDetailKey = nil }
+        .onChange(of: headerOnly ? [] : entries) { _, current in
+            guard !headerOnly else { return }
+            if compactDetailKey != nil,
+               SharedLibraryBrowserLogic.detailEntry(key: compactDetailKey, entries: current) == nil {
+                self.compactDetailKey = nil
+            }
         }
         .onChange(of: selectedKeys) { _, value in
             guard !headerOnly else { return }
