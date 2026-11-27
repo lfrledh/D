@@ -1,9 +1,51 @@
 import Foundation
+import AppKit
+import SwiftUI
 import Testing
 @testable import SwiftStreamingMarkdown
 
 @Suite("Chat code appearance updates", .timeLimit(.minutes(1)))
 @MainActor struct ChatCodeHighlightTests {
+    @Test func nativeCodeKeepsSelectionAndHighlightAcrossWidthChanges() throws {
+        let code = "// 🛶\n\n" + (1...45).map { "let sample\($0) = \($0)" }.joined(separator: "\n") + "\n"
+        let font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        let fonts = TextFonts(normal: font, italic: nil, bold: nil, boldItalic: nil,
+                              preferredLetterSpacing: nil, preferredLineHeight: nil)
+        var highlighted = AttributedString(code)
+        highlighted.foregroundColor = .systemGreen
+        let host = NSHostingView(rootView: CodeBlockNativeText(content: highlighted, fonts: fonts, foreground: .labelColor).frame(width: 500))
+        host.frame = NSRect(x: 0, y: 0, width: 500, height: 1000)
+        host.layoutSubtreeIfNeeded()
+        func find(_ view: NSView) -> NSTextView? {
+            if let text = view as? NSTextView { return text }
+            return view.subviews.compactMap { find($0) }.first
+        }
+        let text = try #require(find(host))
+        let range = (code as NSString).range(of: "sample30")
+        text.setSelectedRange(range)
+        let wideHeight = host.fittingSize.height
+        #expect(text.isSelectable && !text.isEditable)
+        #expect(text.string == code)
+        #expect(wideHeight > 45 * 12)
+        highlighted.foregroundColor = .systemOrange
+        host.rootView = CodeBlockNativeText(content: highlighted, fonts: fonts, foreground: .white).frame(width: 100)
+        host.frame.size.width = 100
+        host.layoutSubtreeIfNeeded()
+        #expect(find(host) === text)
+        #expect(text.string == code && text.selectedRange() == range)
+        #expect(host.fittingSize.height > wideHeight)
+        #expect(text.textStorage?.attribute(.foregroundColor, at: range.location, effectiveRange: nil) as? NSColor == .systemOrange)
+        #expect(text.intrinsicContentSize.height == NSView.noIntrinsicMetric)
+        let unwrapped = NSHostingView(rootView: CodeBlockNativeText(content: highlighted, fonts: fonts, foreground: .white)
+            .fixedSize(horizontal: true, vertical: true))
+        unwrapped.frame = NSRect(x: 0, y: 0, width: 100, height: 1000)
+        unwrapped.layoutSubtreeIfNeeded()
+        #expect(unwrapped.fittingSize.width > 100)
+        #expect(unwrapped.fittingSize.height == wideHeight)
+        #expect(find(unwrapped)?.string == code)
+
+    }
+
     @Test func pendingAppearanceKeepsItsOwnCompletionAndCoalesces() async {
         let renderer = ControlledHighlighter()
         let manager = HighlightTaskManager { code, _ in await renderer.render(code) }
