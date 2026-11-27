@@ -138,6 +138,12 @@ public actor MLXTextBackend: InferenceExecutionPlanning {
                     }
                     let parameters = GenerateParameters(maxTokens: input.maxTokens,
                                                         temperature: input.temperature, topP: input.topP,
+                                                        topK: input.topK ?? 0, minP: input.minP ?? 0,
+                                                        repetitionPenalty: input.repetitionPenalty,
+                                                        presencePenalty: input.presencePenalty,
+                                                        presenceContextSize: input.maxTokens,
+                                                        presenceIncludesPrompt: false,
+                                                        normalizedTopKFirst: (input.topK ?? 0) > 0,
                                                         seed: randomSeed)
                     await observer(MLXLifecycleEvent(runID: request.id, phase: .generating))
                     try Task.checkCancellation()

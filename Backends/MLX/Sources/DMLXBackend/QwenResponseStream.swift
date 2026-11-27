@@ -19,6 +19,9 @@ struct QwenResponseStream {
     private var blocked = false
     private var toolBlock: String?
     private var delivered = ""
+    var reasoningTokenCount: Int { thoughtTokens.count }
+    /// Includes tool markup; channel markers and EOS are counted separately.
+    var bodyChannelTokenCount: Int { finalTokens.count }
 
     init(openID: Int, closeID: Int, thinking: Bool, tools: [TextToolDefinition]? = nil) {
         self.openID = openID

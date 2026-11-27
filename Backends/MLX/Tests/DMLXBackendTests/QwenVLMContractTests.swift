@@ -3,13 +3,67 @@ import CoreMedia
 import CryptoKit
 import DInference
 import Foundation
-import MLXLMCommon
+import MLX
+@testable import MLXLMCommon
 import MLXVLM
 import Testing
 @testable import DMLXBackend
 
 @Suite("Qwen3.5 VLM metadata contract")
 struct QwenVLMContractTests {
+    @Test func generatedPresenceExcludesPromptRetainsDistantTokensAndCountsOnce() {
+        var processor = PresencePenaltyContext(presencePenalty: 1.5,
+            presenceContextSize: 64, includesPrompt: false)
+        processor.prompt(MLXArray([1, 1]))
+        let logits = MLXArray.zeros([1, 4], type: Float.self)
+        #expect(processor.process(logits: logits)[0].asArray(Float.self) == [0, 0, 0, 0])
+        processor.didSample(token: MLXArray(2))
+        for _ in 0..<30 { processor.didSample(token: MLXArray(3)) }
+        #expect(processor.process(logits: logits)[0].asArray(Float.self) == [0, 0, -1.5, -1.5])
+        var fresh = PresencePenaltyContext(presencePenalty: 1.5,
+            presenceContextSize: 64, includesPrompt: false)
+        fresh.prompt(MLXArray([2, 3]))
+        #expect(fresh.process(logits: logits)[0].asArray(Float.self) == [0, 0, 0, 0])
+        var legacy = PresencePenaltyContext(presencePenalty: 1.5, presenceContextSize: 20)
+        legacy.prompt(MLXArray([1]))
+        #expect(legacy.process(logits: logits)[0].asArray(Float.self) == [0, -1.5, 0, 0])
+        #expect(GenerateParameters(repetitionPenalty: 1, presencePenalty: 0).processor() == nil)
+    }
+
+    @Test func explicitTopKNormalizesBeforeNucleusFiltering() {
+        let logits = log(MLXArray([0.5 as Float, 0.3, 0.2])[.newAxis, .ellipsis])
+        let canonical = TopPSampler(temperature: 1, topP: 0.6, topK: 2, seed: 42, normalizedTopKFirst: true)
+        let legacy = TopPSampler(temperature: 1, topP: 0.6, topK: 2, seed: 42)
+        var oldTokens = Set<Int>()
+        for _ in 0..<64 {
+            #expect(canonical.sample(logits: logits).item(Int.self) == 0)
+            oldTokens.insert(legacy.sample(logits: logits).item(Int.self))
+        }
+        #expect(oldTokens == [0, 1])
+    }
+
+    @Test func producerTimingCountsIntervalsAndExcludesTerminationToken() {
+        var timing = GenerateTokenTiming()
+        for i in 0..<512 { timing.recordToken(at: 100 + Double(i) * 0.05) }
+        #expect(abs((timing.tokensPerSecond(in: 0..<512) ?? 0) - 20) < 1e-10)
+        #expect(timing.tokensPerSecond(in: 0..<1) == nil)
+        #expect(timing.tokensPerSecond(in: 0..<513) == nil)
+        timing.recordTermination(99, kind: "eos")
+        #expect(timing.tokenUptimes.count == 512 && timing.terminationToken == 99)
+    }
+
+    @Test func explicitTopKRetainsThresholdTies() {
+        let sampler = TopPSampler(temperature: 1, topP: 0.95, topK: 1,
+                                  seed: 42, normalizedTopKFirst: true)
+        let logits = MLXArray([1 as Float, 1, 0])[.newAxis, .ellipsis]
+        var tokens = Set<Int>()
+        for _ in 0..<64 { tokens.insert(sampler.sample(logits: logits).item(Int.self)) }
+        #expect(tokens == [0, 1])
+        let tinyP = TopPSampler(temperature: 1, topP: 1e-10, topK: 2,
+                                seed: 42, normalizedTopKFirst: true)
+        #expect(tinyP.sample(logits: MLXArray([0 as Float, 2, 1])[.newAxis, .ellipsis]).item(Int.self) == 1)
+    }
+
     @Test func executionSealRejectsSymbolicAncestorsAndSameSizeReplacement() throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root.appendingPathComponent("weights"), withIntermediateDirectories: true)

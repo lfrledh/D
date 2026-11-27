@@ -6,6 +6,7 @@ import Foundation
 public actor InferenceRuntime: InferenceEngine {
     private struct Entry {
         let token: UUID
+        let submittedUptime: TimeInterval
         let request: InferenceRequest
         let backend: any InferenceBackend
         let events: BoundedInferenceEvents
@@ -57,7 +58,8 @@ public actor InferenceRuntime: InferenceEngine {
         let completion = RunCompletion()
         let id = request.id
         let token = UUID()
-        entries[id] = Entry(token: token, request: request, backend: backend,
+        entries[id] = Entry(token: token, submittedUptime: ProcessInfo.processInfo.systemUptime,
+                            request: request, backend: backend,
                             events: events, completion: completion)
         if request.priority != .background,
            let background = queue.firstIndex(where: { entries[$0]?.request.priority == .background }) {
@@ -228,6 +230,7 @@ public actor InferenceRuntime: InferenceEngine {
                 try await self.emit(output, for: id, token: entry.token)
             }
             let result: InferenceResult
+            let admittedUptime = ProcessInfo.processInfo.systemUptime
             record?.executionStarted = true
             if let chosenPlan, let planner = entry.backend as? any InferenceExecutionPlanning {
                 result = try await planner.execute(chosenPlan, for: entry.request, emit: emit)
@@ -237,7 +240,9 @@ public actor InferenceRuntime: InferenceEngine {
             if !measured.isEmpty { record?.measurements = measured }
             let events = await entry.events.snapshot()
             try checkCancellation(id)
-            let diagnostics = ["runtime.events.accepted": String(events.accepted),
+            let diagnostics = ["runtime.submittedUptime": String(entry.submittedUptime),
+                "runtime.admittedUptime": String(admittedUptime),
+                "runtime.events.accepted": String(events.accepted),
                 "runtime.events.peakBuffered": String(events.peakBuffered),
                 "runtime.events.capacity": String(configuration.eventBufferCapacity),
                 "runtime.events.waits": String(events.capacityWaits),

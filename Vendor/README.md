@@ -67,6 +67,8 @@ python3 scripts/verify-mlx-vendor.py
 
 本地细小BF16模型的13项对照/边界测试通过，涵盖非平凡图片/视频位置、逐段预填充与decode/cache精确对照、文件变动和取消；这不是完整9B/27B权重或GUI验收。真实模型与App证据以当前任务记录为准。更新依赖时重新判断局部补丁适用性，不在SwiftPM缓存内悄悄打补丁；回退保留Git历史及原始权重。
 
+2026-11-27：新采样字段沿既有请求保存与传递；presence 可明确排除 prompt 并覆盖本次生成的完整有界历史。显式 Top K 请求采用先温度/Min P、Top K、再对剩余分布归一化后的 Top P；旧缺字段请求及上游默认保持原顺序。生产 token 完成点只保存有界内存时间戳，最终持久化分窗汇总和实际终止 token，不逐 token 写日志或追加设备同步。完整补丁从固定上游重放，当前验证见任务 N27；跨框架随机数序列不承诺一致。
+
 ## MCP Swift SDK 0.12.1
 
 `mcp-swift-sdk/` preserves all 100 files from official commit `a0ae212ebf6eab5f754c3129608bc5557637e605`, including Apache-2.0 licensing and upstream tests. `mcp-swift-sdk.provenance.json` records original hashes. The only code patch, `patches/mcp-session-injection.patch`, exposes the existing URLSession initializer so D can reject redirects before forwarding tool parameters. Protocol, JSON-RPC and SSE remain implemented by the official SDK. Never patch SwiftPM caches.

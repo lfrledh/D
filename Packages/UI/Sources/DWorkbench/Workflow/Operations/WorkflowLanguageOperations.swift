@@ -13,6 +13,10 @@ enum WorkflowLanguageOperations {
             .init("images", "有序参考图像", kinds: [.image, .list], required: false, assetListKind: .image),
             .init("video", "视频（2 FPS抽帧，无音频理解）", kinds: [.video, .list], required: false, assetListKind: .video)] : []
         let visualFields: [WorkflowFieldDefinition] = visual ? [
+            .init("topK", "Top K", .integer, .integer(0)),
+            .init("minP", "Min P", .decimal, .decimal(0)),
+            .init("presencePenalty", "Presence penalty", .decimal, .decimal(0)),
+            .init("repetitionPenalty", "Repetition penalty", .decimal, .decimal(1)),
             .init("minimumPixels", "每图最小像素（0使用模型配置）", .integer, .integer(0)),
             .init("maximumPixels", "每图最大像素（0使用模型配置）", .integer, .integer(0)),
             .init("maximumVideoFrames", "抽帧安全预算", .integer, .integer(64)),
@@ -36,6 +40,12 @@ enum WorkflowLanguageOperations {
             }
             let p = try WorkflowScalarReader.decimal("topP", in: node)
             guard p > 0 && p <= 1 else { throw WorkflowIssue("Top P 必须大于0且不超过1。") }
+            let sampling = TextRequest(prompt: "",
+                topK: node.parameters["topK"] == nil ? nil : try WorkflowScalarReader.integer("topK", in: node),
+                minP: node.parameters["minP"] == nil ? nil : Float(try WorkflowScalarReader.decimal("minP", in: node)),
+                presencePenalty: node.parameters["presencePenalty"] == nil ? nil : Float(try WorkflowScalarReader.decimal("presencePenalty", in: node)),
+                repetitionPenalty: node.parameters["repetitionPenalty"] == nil ? nil : Float(try WorkflowScalarReader.decimal("repetitionPenalty", in: node)))
+            try sampling.validateSampling()
             _ = try WorkflowLanguageMessageForm.loadingStrategy(node.parameters)
             _ = try WorkflowLanguageMessageForm.memoryBudgetBytes(node.parameters)
             if visual {

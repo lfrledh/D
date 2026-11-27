@@ -756,8 +756,8 @@
     {
       "path": "Libraries/MLXLMCommon/Evaluate.swift",
       "upstreamSHA256": "fb4a7f08d4db732956b7c20a8573278789acc7f7ae9f81910e58c2609f4a39b4",
-      "sha256": "70c5a2a7b4f9ea6b3b5630d343d488cc8f8af8b74b48847662f2be0f7dae55e2",
-      "size": 93261
+      "sha256": "70f8e09e920aedf25836dc875411253eee6efa46fdbd3dd02fb6df7ede29d4ce",
+      "size": 97563
     },
     {
       "path": "Libraries/MLXLMCommon/Extensions/Encodable+toolResult.swift",

@@ -26,6 +26,26 @@ struct WorkflowLanguageCloseoutTests {
         #expect(try WorkflowLanguageMessageForm.loadingStrategy(node.parameters) == .ssdLayered)
     }
 
+    @Test func samplingConfigurationColdReadRetainsExplicitAndLegacyValues() throws {
+        let registry = WorkflowRegistry.standard
+        var node = try #require(registry.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
+        node.parameters["topK"] = .integer(20)
+        node.parameters["minP"] = .decimal(0)
+        node.parameters["presencePenalty"] = .decimal(1.5)
+        node.parameters["repetitionPenalty"] = .decimal(1)
+        node.parameters["maximumOutputTokens"] = .integer(32768)
+        node.parameters["seed"] = .text("42")
+        let read = try JSONDecoder().decode(WorkflowNode.self, from: JSONEncoder().encode(node))
+        try registry.validate(read)
+        #expect(read == node)
+        for key in ["topK", "minP", "presencePenalty", "repetitionPenalty"] { node.parameters.removeValue(forKey: key) }
+        let old = node
+        try registry.validate(node)
+        #expect(node == old)
+        node.parameters["presencePenalty"] = .decimal(3)
+        #expect(throws: (any Error).self) { try registry.validate(node) }
+    }
+
     @Test func orderedMediaAndRoleFormPreservesMeaningAndRejectsUnusedInputs() throws {
         let image = TextImageReference(url: URL(fileURLWithPath: "/fixture/a.png"), width: 1, height: 1,
                                       byteCount: 3, contentSHA256: String(repeating: "a", count: 64))
@@ -264,6 +284,10 @@ private actor CloseoutResponseEngine: InferenceEngine {
         let registry = WorkflowRegistry.standard
         var node = try #require(registry.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
         node.parameters["modelID"] = .text("text:fixture")
+        node.parameters["topK"] = .integer(20)
+        node.parameters["minP"] = .decimal(0)
+        node.parameters["presencePenalty"] = .decimal(1.5)
+        node.parameters["repetitionPenalty"] = .decimal(1)
         for (budget, strategy): (Int?, String?) in [(nil, nil), (0, "resident"), (15, "ssdLayered")] {
             node.parameters["memoryBudgetGiB"] = budget.map(WorkflowScalar.integer)
             node.parameters["loadingStrategy"] = strategy.map(WorkflowScalar.text)
@@ -277,6 +301,7 @@ private actor CloseoutResponseEngine: InferenceEngine {
             #expect(request.memoryBudgetBytes == expectedBytes)
             guard case .text(let text) = request.input else { Issue.record("Expected text"); return }
             #expect(text.loadingStrategy == strategy.flatMap(TextLoadingStrategy.init(rawValue:)))
+            #expect(text.topK == 20 && text.minP == 0 && text.presencePenalty == 1.5 && text.repetitionPenalty == 1)
             #expect(request.model.directory == root)
         }
         for invalid: WorkflowScalar in [.integer(-1), .integer(Int.max), .text("15"), .decimal(15)] {

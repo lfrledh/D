@@ -107,6 +107,12 @@ public struct GenerateParameters: Sendable {
 
     /// number of tokens to consider for presence penalty
     public var presenceContextSize: Int
+    /// False selects generated tokens only. Pair with maxTokens as the context
+    /// size to cover the entire bounded request without prompt-token penalties.
+    public var presenceIncludesPrompt: Bool
+    /// Explicit top-k requests can normalize the retained distribution before top-p.
+    /// False preserves the pinned mlx-lm filter order for existing callers.
+    public var normalizedTopKFirst: Bool
 
     /// additive penalty that scales with token frequency in recent context
     public var frequencyPenalty: Float?
@@ -129,6 +135,8 @@ public struct GenerateParameters: Sendable {
         repetitionContextSize: Int = 20,
         presencePenalty: Float? = nil,
         presenceContextSize: Int = 20,
+        presenceIncludesPrompt: Bool = true,
+        normalizedTopKFirst: Bool = false,
         frequencyPenalty: Float? = nil,
         frequencyContextSize: Int = 20,
         prefillStepSize: Int = 512,
@@ -148,6 +156,8 @@ public struct GenerateParameters: Sendable {
         self.repetitionContextSize = repetitionContextSize
         self.presencePenalty = presencePenalty
         self.presenceContextSize = presenceContextSize
+        self.presenceIncludesPrompt = presenceIncludesPrompt
+        self.normalizedTopKFirst = normalizedTopKFirst
         self.frequencyPenalty = frequencyPenalty
         self.frequencyContextSize = frequencyContextSize
         self.prefillStepSize = prefillStepSize
@@ -163,7 +173,8 @@ public struct GenerateParameters: Sendable {
             return ArgMaxSampler()
         } else if usesTopP || usesTopK || usesMinP {
             return TopPSampler(
-                temperature: temperature, topP: topP, topK: topK, minP: minP, seed: seed)
+                temperature: temperature, topP: topP, topK: topK, minP: minP, seed: seed,
+                normalizedTopKFirst: normalizedTopKFirst)
         } else {
             return CategoricalSampler(temperature: temperature, seed: seed)
         }
@@ -171,7 +182,7 @@ public struct GenerateParameters: Sendable {
 
     public func processor() -> LogitProcessor? {
         let repetitionContext: RepetitionContext?
-        if let repetitionPenalty, repetitionPenalty != 0, repetitionContextSize > 0 {
+        if let repetitionPenalty, repetitionPenalty != 0, repetitionPenalty != 1, repetitionContextSize > 0 {
             repetitionContext = RepetitionContext(
                 repetitionPenalty: repetitionPenalty,
                 repetitionContextSize: repetitionContextSize
@@ -184,7 +195,7 @@ public struct GenerateParameters: Sendable {
         if let presencePenalty, presencePenalty != 0, presenceContextSize > 0 {
             presenceContext = PresencePenaltyContext(
                 presencePenalty: presencePenalty,
-                presenceContextSize: presenceContextSize
+                presenceContextSize: presenceContextSize, includesPrompt: presenceIncludesPrompt
             )
         } else {
             presenceContext = nil
@@ -236,11 +247,14 @@ public struct TopPSampler: LogitSampler {
     let negInf: MLXArray
     let randomState: MLXRandom.RandomState
 
+    private let normalizedTopKFirst: Bool
+
     public init(
         temperature: Float, topP: Float = 1.0, topK: Int = 0, minP: Float = 0.0,
-        seed: UInt64? = nil
+        seed: UInt64? = nil, normalizedTopKFirst: Bool = false
     ) {
         self.temp = MLXArray(temperature)
+        self.normalizedTopKFirst = normalizedTopKFirst
         if topP > 0 && topP < 1 {
             self.topP = MLXArray(topP)
         } else {
@@ -261,6 +275,14 @@ public struct TopPSampler: LogitSampler {
         }
 
         return withRandomState(randomState) {
+            if normalizedTopKFirst {
+                var filtered = logits / temp
+                if let minP { filtered = applyMinP(filtered, minP: minP) }
+                if let topK { filtered = applyTopKThreshold(filtered, topK: topK) }
+                var normalized = logSoftmax(filtered)
+                if let topP { normalized = applyTopP(normalized, topP: topP, keepHighest: true) }
+                return categorical(normalized)
+            }
             var logprobs = logSoftmax(logits)
 
             // Apply filters in Python mlx-lm order: top_p → min_p → top_k.
@@ -280,14 +302,19 @@ public struct TopPSampler: LogitSampler {
 
     /// Keep tokens whose cumulative probability exceeds `1 - topP` (nucleus sampling).
     /// Matches `apply_top_p` from `mlx_lm/sample_utils.py`.
-    private func applyTopP(_ logprobs: MLXArray, topP: MLXArray) -> MLXArray {
+    private func applyTopP(_ logprobs: MLXArray, topP: MLXArray, keepHighest: Bool = false) -> MLXArray {
         let sortedIndices = argSort(logprobs, axis: -1)
         let sortedLogprobs = takeAlong(logprobs, sortedIndices, axis: -1)
         let sortedProbs = exp(sortedLogprobs)
         let cumulativeProbs = cumsum(sortedProbs, axis: -1)
 
         // Mask low-probability tail in sorted order, scatter back to original vocab order.
-        let filtered = MLX.where(cumulativeProbs .> (1 - topP), sortedLogprobs, negInf)
+        var keep = cumulativeProbs .> (1 - topP)
+        if keepHighest {
+            let last = MLXArray(0..<logprobs.dim(-1)) .== (logprobs.dim(-1) - 1)
+            keep = MLX.where(last, MLXArray(true), keep)
+        }
+        let filtered = MLX.where(keep, sortedLogprobs, negInf)
         return putAlong(logprobs, sortedIndices, values: filtered, axis: -1)
     }
 
@@ -309,6 +336,15 @@ public struct TopPSampler: LogitSampler {
         // Indices at [topK, V) are the tokens to mask out.
         let maskIndices = argPartition(-logprobs, kth: topK - 1, axis: -1)[0..., topK...]
         return putAlong(logprobs, maskIndices, values: negInf, axis: -1)
+    }
+
+    /// The vLLM route retains all ties at the kth-largest value.
+    /// Keep the legacy exact-k route above unchanged for frozen requests.
+    private func applyTopKThreshold(_ logits: MLXArray, topK: Int) -> MLXArray {
+        guard topK < logits.dim(-1) else { return logits }
+        let kth = argPartition(-logits, kth: topK - 1, axis: -1)[0..., (topK - 1)..<topK]
+        let threshold = takeAlong(logits, kth, axis: -1)
+        return MLX.where(logits .>= threshold, logits, negInf)
     }
 }
 
@@ -423,14 +459,16 @@ public struct RepetitionContext: LogitProcessor {
 public struct PresencePenaltyContext: LogitProcessor {
     private var ring: TokenRing
     let presencePenalty: Float
+    private let includesPrompt: Bool
 
-    public init(presencePenalty: Float, presenceContextSize: Int) {
+    public init(presencePenalty: Float, presenceContextSize: Int, includesPrompt: Bool = true) {
+        self.includesPrompt = includesPrompt
         self.presencePenalty = presencePenalty
         self.ring = TokenRing(capacity: presenceContextSize)
     }
 
     mutating public func prompt(_ prompt: MLXArray) {
-        ring.loadPrompt(prompt)
+        if includesPrompt { ring.loadPrompt(prompt) }
     }
 
     public func process(logits: MLXArray) -> MLXArray {
@@ -1888,9 +1926,10 @@ public func generateThrowingTokenTask(
     let task = Task {
         var iterator = boxed.consume()
         var handler = RawTokenLoopHandler()
-        var start = Date.timeIntervalSinceReferenceDate
+        var start = ProcessInfo.processInfo.systemUptime
         var promptTime: TimeInterval = 0
         var tokenCount = 0
+        var timing = GenerateTokenTiming()
         var stopReason: GenerateStopReason?
         let stops = buildStopTokenIds(modelConfiguration: modelConfiguration, tokenizer: tokenizer)
         // The throwing stream has its own YieldResult type. RawTokenLoopHandler
@@ -1906,13 +1945,15 @@ public func generateThrowingTokenTask(
         }
         do {
             tokenLoop: while let token = try iterator.nextThrowing() {
+                let producedAt = ProcessInfo.processInfo.systemUptime
                 try Task.checkCancellation()
                 if promptTime == 0 {
-                    let now = Date.timeIntervalSinceReferenceDate
+                    let now = ProcessInfo.processInfo.systemUptime
                     promptTime = now - start
                     start = now
                 }
                 if token == tokenizer.unknownTokenId || stops.contains(token) {
+                    timing.recordTermination(token, kind: stops.contains(token) ? "eos" : "unknown")
                     if includeStopToken {
                         tokenCount += 1
                         switch handler.onStopToken(token, emit: emit) {
@@ -1926,6 +1967,7 @@ public func generateThrowingTokenTask(
                     stopReason = .stop
                     break
                 }
+                timing.recordToken(at: producedAt)
                 tokenCount += 1
                 switch handler.onToken(token, emit: emit) {
                 case .more: break
@@ -1938,13 +1980,14 @@ public func generateThrowingTokenTask(
                     ?? .cancelled
             }
             handler.onGenerationEnd(emit: emit)
+            Stream().synchronize()
+            timing.finish()
             let info = GenerateCompletionInfo(
                 promptTokenCount: promptTokenCount, generationTokenCount: tokenCount,
                 promptTime: promptTime + iterator.promptPrefillTime,
-                generationTime: Date.timeIntervalSinceReferenceDate - start,
-                stopReason: stopReason ?? .cancelled)
+                generationTime: ProcessInfo.processInfo.systemUptime - start,
+                stopReason: stopReason ?? .cancelled, tokenTiming: timing)
             _ = continuation.yield(handler.infoEvent(info))
-            Stream().synchronize()
             continuation.finish()
         } catch {
             Stream().synchronize()
@@ -1978,9 +2021,10 @@ private func generateLoopTask<Handler: TokenLoopHandler>(
             var iterator = iterator.consume()
             var handler = handler.consume()
 
-            var start = Date.timeIntervalSinceReferenceDate
+            var start = ProcessInfo.processInfo.systemUptime
             var promptTime: TimeInterval = 0
             var tokenCount = 0
+            var timing = GenerateTokenTiming()
             var stopReason: GenerateStopReason?
 
             let stopTokenIds = buildStopTokenIds(
@@ -1989,6 +2033,7 @@ private func generateLoopTask<Handler: TokenLoopHandler>(
             )
 
             tokenLoop: while let token = iterator.next() {
+                let producedAt = ProcessInfo.processInfo.systemUptime
                 // Check for cancellation on every loop iteration.
                 if Task.isCancelled {
                     stopReason = .cancelled
@@ -1996,13 +2041,14 @@ private func generateLoopTask<Handler: TokenLoopHandler>(
                 }
 
                 if promptTime == 0 {
-                    let now = Date.timeIntervalSinceReferenceDate
+                    let now = ProcessInfo.processInfo.systemUptime
                     promptTime = now - start
                     start = now
                 }
 
                 // Check for end-of-sequence tokens
                 if token == tokenizer.unknownTokenId || stopTokenIds.contains(token) {
+                    timing.recordTermination(token, kind: stopTokenIds.contains(token) ? "eos" : "unknown")
                     if includeStopToken {
                         tokenCount += 1
                         switch handler.onStopToken(token, emit: continuation.yield) {
@@ -2022,6 +2068,7 @@ private func generateLoopTask<Handler: TokenLoopHandler>(
                     break
                 }
 
+                timing.recordToken(at: producedAt)
                 tokenCount += 1
                 switch handler.onToken(token, emit: continuation.yield) {
                 case .more:
@@ -2046,8 +2093,11 @@ private func generateLoopTask<Handler: TokenLoopHandler>(
             }
 
             handler.onGenerationEnd(emit: continuation.yield)
+            // Reuse the existing final drain before publishing completion time.
+            Stream().synchronize()
+            timing.finish()
 
-            let now = Date.timeIntervalSinceReferenceDate
+            let now = ProcessInfo.processInfo.systemUptime
             let generateTime = now - start
 
             let mtpStats = iterator as? MTPStatsCollecting
@@ -2060,12 +2110,10 @@ private func generateLoopTask<Handler: TokenLoopHandler>(
                 proposedDraftTokens: mtpStats?.proposedDraftTokens,
                 acceptedDraftTokens: mtpStats?.acceptedDraftTokens,
                 passthroughReason: mtpStats?.passthroughReason,
-                speculativeDecodingTelemetry: iterator.speculativeDecodingTelemetry
+                speculativeDecodingTelemetry: iterator.speculativeDecodingTelemetry,
+                tokenTiming: timing
             )
             _ = continuation.yield(handler.infoEvent(info))
-
-            // Synchronize with the stream to ensure tasks are completed
-            Stream().synchronize()
 
             // Finalize the stream
             continuation.finish()
@@ -2114,7 +2162,36 @@ public enum GenerateStopReason: Sendable {
 /// Represents metadata and statistics related to token generation.
 ///
 /// Provides information about the number of tokens processed during both the prompt and generation phases, as well as the time taken for each phase.
+/// CPU timestamps at completed token production, before stream delivery. Values
+/// are ephemeral and bounded; consumers persist only aggregate measurements.
+public struct GenerateTokenTiming: Sendable {
+    public private(set) var tokenUptimes: [TimeInterval] = []
+    public private(set) var truncated = false
+    public private(set) var terminationToken: Int?
+    public private(set) var terminationKind: String?
+    public private(set) var finishedUptime: TimeInterval = 0
+
+    mutating func recordToken(at time: TimeInterval) {
+        if tokenUptimes.count < 262_144 { tokenUptimes.append(time) }
+        else { truncated = true }
+    }
+    mutating func recordTermination(_ token: Int, kind: String) {
+        terminationToken = token
+        terminationKind = kind
+    }
+    mutating func finish() { finishedUptime = ProcessInfo.processInfo.systemUptime }
+
+    /// Stop tokens are excluded. N produced tokens span N-1 decode intervals.
+    public func tokensPerSecond(in range: Range<Int>) -> Double? {
+        guard !truncated, range.count >= 2, range.lowerBound >= 0,
+              range.upperBound <= tokenUptimes.count else { return nil }
+        let elapsed = tokenUptimes[range.upperBound - 1] - tokenUptimes[range.lowerBound]
+        return elapsed > 0 ? Double(range.count - 1) / elapsed : nil
+    }
+}
+
 public struct GenerateCompletionInfo: Sendable {
+    public let tokenTiming: GenerateTokenTiming?
     /// The number of tokens included in the input prompt.
     public let promptTokenCount: Int
 
@@ -2169,7 +2246,8 @@ public struct GenerateCompletionInfo: Sendable {
         proposedDraftTokens: Int? = nil,
         acceptedDraftTokens: Int? = nil,
         passthroughReason: String? = nil,
-        speculativeDecodingTelemetry: SpeculativeDecodingTelemetry? = nil
+        speculativeDecodingTelemetry: SpeculativeDecodingTelemetry? = nil,
+        tokenTiming: GenerateTokenTiming? = nil
     ) {
         self.promptTokenCount = promptTokenCount
         self.generationTokenCount = generationTokenCount
@@ -2180,6 +2258,7 @@ public struct GenerateCompletionInfo: Sendable {
         self.acceptedDraftTokens = acceptedDraftTokens
         self.passthroughReason = passthroughReason
         self.speculativeDecodingTelemetry = speculativeDecodingTelemetry
+        self.tokenTiming = tokenTiming
     }
 
     public func summary() -> String {

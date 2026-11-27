@@ -71,6 +71,7 @@ public struct TextExecutionCapability: Codable, Equatable, Sendable {
             for video in request.allVideos { try video.validate() }
             try request.visualProcessing?.validate()
         }
+        try request.validateSampling()
         guard request.maxTokens > 0, request.maxTokens <= maximumOutputTokens,
               request.temperature.isFinite, request.temperature >= 0,
               request.topP.isFinite, request.topP > 0, request.topP <= 1 else {

@@ -7,6 +7,23 @@ struct TextExecutionCapabilityTests {
     private let capability = TextExecutionCapability(maximumPromptTokens: 2048,
                                                      maximumOutputTokens: 256)
 
+    @Test func samplingRoundTripAndMissingFieldsPreserveLegacyMeaning() throws {
+        let old = Data(#"{"prompt":"legacy","maxTokens":256,"temperature":0.7,"topP":0.95}"#.utf8)
+        let legacy = try JSONDecoder().decode(TextRequest.self, from: old)
+        #expect(legacy.topK == nil && legacy.minP == nil && legacy.presencePenalty == nil && legacy.repetitionPenalty == nil)
+        let configured = TextRequest(prompt: "same model", maxTokens: 32768, temperature: 1,
+            topP: 0.95, seed: 42, topK: 20, minP: 0, presencePenalty: 1.5, repetitionPenalty: 1)
+        #expect(try JSONDecoder().decode(TextRequest.self, from: JSONEncoder().encode(configured)) == configured)
+        try configured.validateSampling()
+        for invalid in [TextRequest(prompt: "", topK: -1), TextRequest(prompt: "", minP: 1.1),
+                        TextRequest(prompt: "", presencePenalty: 2.1), TextRequest(prompt: "", repetitionPenalty: 0)] {
+            #expect(throws: (any Error).self) { try invalid.validateSampling() }
+            #expect(throws: (any Error).self) {
+                try InferenceRequest(model: .init(directory: URL(fileURLWithPath: "/fixture/model")), input: .text(invalid)).validate()
+            }
+        }
+    }
+
     @Test func identityContractAndLegacyResolutionAreStable() throws {
         #expect(TextExecutionCapability.qwen2Profile
             == ExecutionProfileReference(identifier: "qwen2-text", revision: 1))

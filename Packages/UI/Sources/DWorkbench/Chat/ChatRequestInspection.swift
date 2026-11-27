@@ -312,6 +312,7 @@ public struct ChatRequestInspection: Sendable {
                                     fields: [WorkflowFieldDefinition]) -> String? {
         // Export only declared, bounded request settings. Free text and identifiers stay local.
         let safeKeys: Set<String> = ["maximumPromptTokens", "maximumOutputTokens", "temperature", "topP",
+                                     "topK", "minP", "presencePenalty", "repetitionPenalty",
                                      "outputMode", "memoryBudgetGiB", "loadingStrategy", "thinking",
                                      "reasoningEffort", "preserveThinking", "minimumPixels", "maximumPixels",
                                      "maximumVideoFrames"]

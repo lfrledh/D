@@ -505,7 +505,10 @@ struct WorkflowImageHistoryFailure: LocalizedError {
             messages: messages, tools: try WorkflowLanguageMessageForm.tools(p["toolsJSON"]?.string ?? ""),
             thinking: try WorkflowLanguageMessageForm.thinking(p), seed: try WorkflowLanguageMessageForm.seed(p),
             loadingStrategy: try WorkflowLanguageMessageForm.loadingStrategy(p),
-            chatTemplateOverride: (p["chatTemplateOverride"]?.string ?? "").isEmpty ? nil : p["chatTemplateOverride"]?.string)
+            chatTemplateOverride: (p["chatTemplateOverride"]?.string ?? "").isEmpty ? nil : p["chatTemplateOverride"]?.string,
+            topK: p["topK"]?.integer, minP: p["minP"]?.decimal.map(Float.init),
+            presencePenalty: p["presencePenalty"]?.decimal.map(Float.init),
+            repetitionPenalty: p["repetitionPenalty"]?.decimal.map(Float.init))
         try capability?.validate(input)
         return InferenceRequest(id: context.stepID, model: binding.reference, input: .text(input),
             memoryBudgetBytes: try WorkflowLanguageMessageForm.memoryBudgetBytes(p),

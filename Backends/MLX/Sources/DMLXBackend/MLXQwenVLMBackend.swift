@@ -128,6 +128,7 @@ public actor MLXQwenVLMBackend: InferenceExecutionPlanning {
     }
     private func execute(_ request: InferenceRequest, expectedPlan: InferenceExecutionPlan?,
                         emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        let backendStarted = ProcessInfo.processInfo.systemUptime
         guard !executing, lease == nil else {
             throw InferenceFailure.backendFailed("VLM execution requires release of the previous run.")
         }
@@ -181,12 +182,14 @@ public actor MLXQwenVLMBackend: InferenceExecutionPlanning {
                                           layeredQwen35: input.loadingStrategy == .ssdLayered,
                                           fileSelection: inventory.fileSet?.selection,
                                           expectedModelIdentities: seal?.files)
+            let loadStarted = ProcessInfo.processInfo.systemUptime
             let loaded = try await withRandomState(randomState) {
                 try await factory.loadContainer(from: inventory.directory,
                                                 using: LocalTokenizerLoader(fileSet: inventory.fileSet,
                                                     chatTemplateOverride: input.chatTemplateOverride,
                                                     hasTools: !(input.tools ?? []).isEmpty))
             }
+            let loadSeconds = ProcessInfo.processInfo.systemUptime - loadStarted
             container = loaded
             await observer(MLXLifecycleEvent(runID: request.id, phase: .loaded))
             try Task.checkCancellation()
@@ -213,7 +216,9 @@ public actor MLXQwenVLMBackend: InferenceExecutionPlanning {
                                               additionalContext: templateContext)
                     userInput.processing = .init(minPixels: processing?.minimumPixels,
                                                  maxPixels: processing?.maximumPixels)
+                    let prepareStarted = ProcessInfo.processInfo.systemUptime
                     let prepared = try await context.processor.prepare(input: userInput)
+                    let prepareSeconds = ProcessInfo.processInfo.systemUptime - prepareStarted
                     try Task.checkCancellation()
                     let promptTokens = prepared.text.tokens.size
                     guard promptTokens <= promptLimit,
@@ -223,6 +228,12 @@ public actor MLXQwenVLMBackend: InferenceExecutionPlanning {
                     }
                     let parameters = GenerateParameters(maxTokens: input.maxTokens,
                                                         temperature: input.temperature, topP: input.topP,
+                                                        topK: input.topK ?? 0, minP: input.minP ?? 0,
+                                                        repetitionPenalty: input.repetitionPenalty,
+                                                        presencePenalty: input.presencePenalty,
+                                                        presenceContextSize: input.maxTokens,
+                                                        presenceIncludesPrompt: false,
+                                                        normalizedTopKFirst: (input.topK ?? 0) > 0,
                                                         seed: randomSeed)
                     await observer(MLXLifecycleEvent(runID: request.id, phase: .generating))
                     try Task.checkCancellation()
@@ -251,6 +262,10 @@ public actor MLXQwenVLMBackend: InferenceExecutionPlanning {
                         do {
                             var completion: GenerateCompletionInfo?
                             var tokens = [Int]()
+                            var parsingSeconds: TimeInterval = 0
+                            var deliverySeconds: TimeInterval = 0
+                            var firstBodyIndex: Int?
+                            var firstBodyConsumedUptime: TimeInterval?
                             guard let openID = context.tokenizer.convertTokenToId("<think>"),
                                   let closeID = context.tokenizer.convertTokenToId("</think>") else {
                                 throw InferenceFailure.invalidRequest("Qwen tokenizer is missing required response-channel tokens.")
@@ -265,10 +280,20 @@ public actor MLXQwenVLMBackend: InferenceExecutionPlanning {
                                 switch item {
                                 case .token(let token):
                                     tokens.append(token)
-                                    if let partial = try responseStream.acceptPartial(token,
+                                    let parseStarted = ProcessInfo.processInfo.systemUptime
+                                    let partial = try responseStream.acceptPartial(token,
                                         raw: context.tokenizer.decode(tokenIds: tokens),
-                                        decode: { context.tokenizer.decode(tokenIds: $0) }) {
+                                        decode: { context.tokenizer.decode(tokenIds: $0) })
+                                    parsingSeconds += ProcessInfo.processInfo.systemUptime - parseStarted
+                                    if let partial {
+                                        if case .textPartial(_, _, let body) = partial, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                           firstBodyIndex == nil {
+                                            firstBodyIndex = tokens.count - 1
+                                            firstBodyConsumedUptime = ProcessInfo.processInfo.systemUptime
+                                        }
+                                        let deliveryStarted = ProcessInfo.processInfo.systemUptime
                                         try await emit(partial)
+                                        deliverySeconds += ProcessInfo.processInfo.systemUptime - deliveryStarted
                                     }
                                 case .info(let info): completion = info
                                 }
@@ -279,10 +304,20 @@ public actor MLXQwenVLMBackend: InferenceExecutionPlanning {
                                 switch item {
                                 case .token(let token):
                                     tokens.append(token)
-                                    if let partial = try responseStream.acceptPartial(token,
+                                    let parseStarted = ProcessInfo.processInfo.systemUptime
+                                    let partial = try responseStream.acceptPartial(token,
                                         raw: context.tokenizer.decode(tokenIds: tokens),
-                                        decode: { context.tokenizer.decode(tokenIds: $0) }) {
+                                        decode: { context.tokenizer.decode(tokenIds: $0) })
+                                    parsingSeconds += ProcessInfo.processInfo.systemUptime - parseStarted
+                                    if let partial {
+                                        if case .textPartial(_, _, let body) = partial, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                           firstBodyIndex == nil {
+                                            firstBodyIndex = tokens.count - 1
+                                            firstBodyConsumedUptime = ProcessInfo.processInfo.systemUptime
+                                        }
+                                        let deliveryStarted = ProcessInfo.processInfo.systemUptime
                                         try await emit(partial)
+                                        deliverySeconds += ProcessInfo.processInfo.systemUptime - deliveryStarted
                                     }
                                 case .info(let info): completion = info
                                 }
@@ -296,21 +331,40 @@ public actor MLXQwenVLMBackend: InferenceExecutionPlanning {
                             let stop = try GenerationTermination.resolve(
                                 completion, requestedTokens: input.maxTokens,
                                 taskWasCancelled: Task.isCancelled || generationTask.isCancelled)
+                            let finalParseStarted = ProcessInfo.processInfo.systemUptime
                             let raw = context.tokenizer.decode(tokenIds: tokens)
                             let finished = try responseStream.finish(raw: raw, stopped: stop,
                                 tools: input.tools, runID: request.id,
                                 decode: { context.tokenizer.decode(tokenIds: $0) })
-                            if let partial = try responseStream.partial(raw: raw,
+                            if firstBodyIndex == nil, let delta = finished.delta, !delta.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !tokens.isEmpty {
+                                firstBodyIndex = tokens.count - 1
+                                firstBodyConsumedUptime = ProcessInfo.processInfo.systemUptime
+                            }
+                            let finalPartial = try responseStream.partial(raw: raw,
                                 text: finished.delta ?? "", final: true,
-                                decode: { context.tokenizer.decode(tokenIds: $0) }) {
-                                try await emit(partial)
+                                decode: { context.tokenizer.decode(tokenIds: $0) })
+                            parsingSeconds += ProcessInfo.processInfo.systemUptime - finalParseStarted
+                            if let finalPartial {
+                                let deliveryStarted = ProcessInfo.processInfo.systemUptime
+                                try await emit(finalPartial)
+                                deliverySeconds += ProcessInfo.processInfo.systemUptime - deliveryStarted
                             }
                             let imageFrames = prepared.image?.frames ?? []
                             let videoFrames = prepared.video?.frames ?? []
                             let visualTokens = imageFrames.reduce(0) { $0 + $1.product / 4 } +
                                 videoFrames.reduce(0) { $0 + $1.product / 4 }
                             let thw = (imageFrames + videoFrames).map { "\($0.t)x\($0.h)x\($0.w)" }.joined(separator: ",")
-                            return InferenceResult(metadata: [
+                            let measurements = QwenGenerationMeasurements.metadata(
+                                completion: completion, input: input, backendStarted: backendStarted,
+                                loadSeconds: loadSeconds, prepareSeconds: prepareSeconds,
+                                firstBodyIndex: firstBodyIndex, firstBodyConsumedUptime: firstBodyConsumedUptime,
+                                consumedUptime: ProcessInfo.processInfo.systemUptime, parsingSeconds: parsingSeconds,
+                                deliverySeconds: deliverySeconds,
+                                reasoningTokens: responseStream.reasoningTokenCount,
+                                bodyChannelTokens: responseStream.bodyChannelTokenCount,
+                                peakBytes: Memory.peakMemory, activeBytes: Memory.activeMemory,
+                                cacheBytes: Memory.cacheMemory)
+                            var metadata: [String: String] = [
                                 "promptTokens": String(completion.promptTokenCount),
                                 "generationTokens": String(completion.generationTokenCount),
                                 "stopReason": stop,
@@ -336,7 +390,17 @@ public actor MLXQwenVLMBackend: InferenceExecutionPlanning {
                                 "videoSamplingFPS": "2", "videoAudio": videos.isEmpty ? "none" : "ignored",
                                 "videoSemantics": videos.isEmpty ? "none" : "sampled-clip-understanding",
                                 "videoTemporalPadding": videos.isEmpty ? "none" : "upstream-odd-frame-padding",
-                            ], textResponse: finished.response)
+                            ]
+                            metadata.merge(measurements, uniquingKeysWith: { _, measured in measured })
+                            metadata["configuredEOSIDs"] = context.configuration.eosTokenIds.sorted().map { String($0) }.joined(separator: ",")
+                            metadata["tokenizerEOSID"] = context.tokenizer.eosTokenId.map { String($0) } ?? "none"
+                            metadata["extraEOSIDs"] = context.configuration.extraEOSTokens.compactMap {
+                                context.tokenizer.convertTokenToId($0)
+                            }.sorted().map { String($0) }.joined(separator: ",")
+                            metadata["thinkingOpenTokenID"] = String(openID)
+                            metadata["thinkingCloseTokenID"] = String(closeID)
+                            metadata["effectiveThinking"] = String(input.thinking?.enableThinking ?? true)
+                            return InferenceResult(metadata: metadata, textResponse: finished.response)
                         } catch {
                             generationTask.cancel()
                             await generationTask.value

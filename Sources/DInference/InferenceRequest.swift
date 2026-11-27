@@ -100,6 +100,7 @@ public struct InferenceRequest: Sendable, Codable, Equatable, Identifiable {
         case .video(let video):
             try video.validate()
         case .text(let text):
+            try text.validateSampling()
             guard text.maxTokens > 0, text.temperature.isFinite,
                   text.temperature >= 0, text.topP.isFinite, text.topP > 0, text.topP <= 1 else {
                 throw InferenceFailure.invalidRequest("Invalid text generation parameters.")
