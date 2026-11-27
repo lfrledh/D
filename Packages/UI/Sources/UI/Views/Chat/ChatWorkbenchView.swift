@@ -863,9 +863,9 @@ struct ChatWorkbenchView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             case .presetImport(let presets, let data):
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(newLabel("importPresetsTitle", english: "Import preset copies", chinese: "导入预设副本")).font(.headline)
-                    Text(newLabel("importPresetsNote", english: "This creates new presets. It does not change any conversation or run a model.",
-                        chinese: "将创建新预设，不改变现有会话，也不会运行模型。"))
+                    Text(newLabel("importPresetsTitle", english: "Import chat presets", chinese: "导入聊天预设")).font(.headline)
+                    Text(newLabel("importPresetsNote", english: "These will be added to the current project as new chat presets.",
+                        chinese: "将作为新的聊天预设添加到当前项目。"))
                     WorkbenchScrollView {
                         ForEach(presets) { item in
                             VStack(alignment: .leading) {
@@ -960,8 +960,8 @@ ScrollViewReader { proxy in
                                 VStack(alignment: .leading, spacing: 8) {
                                     ForEach(chat.state.presets) { preset in
                                         Button(preset.name + " · " + (preset.configuration == nil
-                                            ? newLabel("rulesOnly", english: "Rules only", chinese: "仅规则")
-                                            : newLabel("rulesAndModel", english: "Rules + model settings", chinese: "规则＋模型设置"))) {
+                                            ? newLabel("rulesOnly", english: "Answer rules only", chinese: "仅回答规则")
+                                            : newLabel("rulesAndModel", english: "Answer rules and model settings", chinese: "回答规则与模型设置"))) {
                                             perform(sessionID: session.id) { try chat.applyPreset(preset.id, sessionID: session.id) }
                                         }.disabled(!chat.isLoaded || session.archived || session.contextChoices?.deletedAt != nil || chat.saveIssue != nil)
                                     }

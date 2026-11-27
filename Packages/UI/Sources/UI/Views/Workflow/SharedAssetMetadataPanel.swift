@@ -140,7 +140,6 @@ struct SharedAssetMetadataPanel: View {
             }
             DisclosureGroup(t("files")) {
                 row(t("relativePath"), snapshot.asset.relativePath)
-                Text(t("fileLimit")).font(.caption)
                 Text(t("exportLimit")).font(.caption)
             }
         }.font(.caption).textSelection(.enabled)

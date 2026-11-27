@@ -89,6 +89,65 @@ private actor ChatGatedToolTransport: ChatWebTransport {
 
 @Suite("Chat sidecar and service", .serialized) @MainActor
 struct ChatTests {
+    @Test func replayMissingAttemptDoesNotClaimMissingParametersOrSubmit() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        try chat.updateDraft("Preserve this draft", sessionID: id)
+        let before = chat.state
+        await #expect(throws: WorkflowIssue("尝试记录已丢失。", code: "chat.error.missingAttempt")) {
+            try await chat.reproduce(UUID(), sessionID: id)
+        }
+        #expect(chat.state == before)
+        #expect(await engine.requests.isEmpty)
+        try await store.close()
+    }
+
+    @Test(arguments: [Optional<String>.none, "invalid", "-1"])
+    func replayMissingOrInvalidSeedKeepsFrozenRecordAndDoesNotUseCurrentSeed(seed: String?) async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        try await chat.sendAfterDraft("Original question", sessionID: id)
+        let original = try #require(chat.selectedSession?.attempts.first)
+        try chat.updateDraft("Keep unsent input", sessionID: id)
+        try await chat.flush()
+        var state = chat.state, node = original.node
+        node.parameters["seed"] = seed.map(WorkflowScalar.text)
+        var historical = ChatAttempt(id: original.id, sessionID: id, userMessageID: original.userMessageID,
+            assistantMessageID: original.assistantMessageID, node: node, messagesJSON: original.messagesJSON,
+            inputs: original.inputs, systemPrompt: original.systemPrompt, createdAt: original.createdAt,
+            status: original.status)
+        historical.rawText = original.rawText; historical.response = original.response
+        historical.output = original.output; historical.languageEnd = original.languageEnd
+        state.sessions[0].attempts[0] = historical
+        // Invalid seeds are rejected before a record can be persisted. A missing
+        // legacy seed is readable, but must not be filled from current settings.
+        if seed != nil {
+            let before = try await store.chatState()
+            await #expect(throws: WorkflowIssue("seed 需要完整 UInt64 十进制整数。")) {
+                try await store.saveChatState(state, expectedRevision: state.revision)
+            }
+            #expect(try await store.chatState() == before)
+            #expect(await engine.requests.count == 1)
+            try await store.close()
+            return
+        }
+        try await store.saveChatState(state, expectedRevision: state.revision)
+        var serviceCalls = 0
+        let reader = ChatController(store: store) {
+            serviceCalls += 1; throw WorkflowIssue("Unexpected inference service request")
+        }
+        await reader.load()
+        #expect(reader.isLoaded)
+        let before = reader.state
+        await #expect(throws: WorkflowIssue("旧尝试缺少可重现的冻结参数或种子，不能按当前设置冒充重现。", code: "chat.error.replayMissingParameters")) {
+            try await reader.reproduce(original.id, sessionID: id)
+        }
+        #expect(reader.state == before && reader.selectedSession?.draft == "Keep unsent input")
+        #expect(serviceCalls == 0)
+        #expect(await engine.requests.count == 1)
+        try await store.close()
+    }
+
     @Test func outputFormatIsFrozenForReplayButAutomaticRestoresEmptySystem() async throws {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)

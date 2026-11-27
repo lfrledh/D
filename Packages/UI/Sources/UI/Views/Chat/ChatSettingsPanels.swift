@@ -45,8 +45,8 @@ struct ChatDefaultsSettingsPanel: View {
             }
             if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red) }
             Divider()
-            Text(t("presets.title", "Common presets · this workspace", "常用预设 · 当前工作区")).font(.headline)
-            Text(t("presets.scope", "Presets belong to this project's store. Managing them does not change a conversation; Apply is explicit.", "预设保存在当前项目中。管理预设不会改变会话；只有点击应用才会生效。"))
+            Text(t("presets.title", "Chat presets · current workspace", "聊天预设 · 当前工作区")).font(.headline)
+            Text(t("presets.scope", "Presets are saved in the current project. Managing them does not change conversations; they take effect only when you click Apply.", "预设保存在当前项目中。管理预设不会改变对话；只有点击应用才会生效。"))
                 .font(.caption).foregroundStyle(.secondary)
             ChatPresetsManagementPanel(chat: chat, isAvailable: isAvailable, sessionID: chat.state.selectedSessionID)
         }.onAppear { if !loaded { draft = chat.defaultSystemPrompt; loaded = true } }
@@ -73,7 +73,9 @@ struct ChatPresetsManagementPanel: View {
                 onImport: { Task { await importFile() } },
                 onExport: { values in Task { await export(values) } }, showsHeading: false, isAvailable: isAvailable).disabled(busy)
             if let pending {
-                Text(t("presets.importPreview", "Import copies: ", "将作为副本导入：") + pending.names.joined(separator: "、"))
+                Text(workflowText(language, "chat.importPresetsTitle")).font(.headline)
+                Text(workflowText(language, "chat.importPresetsNote")).font(.caption)
+                Text(pending.names.joined(separator: "、"))
                 HStack {
                     Button(pending.applied ? workflowText(language, "chat.retrySave") : t("presets.importConfirm", "Import these chat presets", "导入这些聊天预设")) {
                         Task { await commitImport(pending) }

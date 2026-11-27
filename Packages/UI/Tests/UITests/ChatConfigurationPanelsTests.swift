@@ -323,6 +323,9 @@ private actor ConfigurationPanelEngine: InferenceEngine {
         await chat.waitForCompletion()
         let source = try #require(chat.selectedSession?.attempts.first)
         try chat.setArchived(true, sessionID: id)
+        await #expect(throws: WorkflowIssue("请先恢复已归档或已删除的会话。", code: "chat.clarity.reasonArchived")) {
+            try await chat.reproduce(source.id, sessionID: id)
+        }
         #expect(!ChatConfigurationActions.canCompare(try #require(chat.selectedSession), source: source, chat: chat))
         #expect(!ChatConfigurationActions.canChoose(try #require(chat.selectedSession), attempt: source, chat: chat))
         await #expect(throws: (any Error).self) {
@@ -330,6 +333,9 @@ private actor ConfigurationPanelEngine: InferenceEngine {
         }
         try chat.setArchived(false, sessionID: id)
         try chat.setDeleted(true, sessionID: id)
+        await #expect(throws: WorkflowIssue("请先恢复已归档或已删除的会话。", code: "chat.clarity.reasonArchived")) {
+            try await chat.reproduce(source.id, sessionID: id)
+        }
         #expect(!ChatConfigurationActions.canCompare(try #require(chat.selectedSession), source: source, chat: chat))
         #expect(!ChatConfigurationActions.canChoose(try #require(chat.selectedSession), attempt: source, chat: chat))
         try chat.setDeleted(false, sessionID: id)
@@ -337,10 +343,14 @@ private actor ConfigurationPanelEngine: InferenceEngine {
         await engine.setHeld(true)
         try await chat.regenerate(source.userMessageID, sessionID: id)
         #expect(chat.isRunning)
+        await #expect(throws: WorkflowIssue("已有聊天推理或待保存结果。", code: "chat.error.chatBusy")) {
+            try await chat.reproduce(source.id, sessionID: id)
+        }
         #expect(!ChatConfigurationActions.canCompare(try #require(chat.selectedSession), source: source, chat: chat))
         #expect(!ChatConfigurationActions.canChoose(try #require(chat.selectedSession), attempt: source, chat: chat))
         await engine.setHeld(false)
         await chat.waitForCompletion()
+        #expect(await engine.requests.count == 2)
         #expect(ChatConfigurationActions.canCompare(try #require(chat.selectedSession), source: source, chat: chat))
         try await close(store, root: root)
     }

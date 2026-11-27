@@ -37,6 +37,26 @@ import Testing
         #expect(raw == "模型文件已改变或位置不符，请重新校验。")
     }
 
+    @Test func revisedAttachmentAndReplayCopyStillRecognizesHistoricalDiagnostics() throws {
+        let (store, suite) = try language("en")
+        defer { suite.cleanup() }
+        let cases = [
+            ("文字附件缺少冻结快照。", "The text attachment has no frozen snapshot.", "chat.error.missingTextSnapshot"),
+            ("旧尝试缺少可重现的冻结参数或种子，不能按当前设置冒充重现。",
+             "The old attempt has no reproducible frozen settings or seed. Current settings cannot be presented as a replay.",
+             "chat.error.replayMissingParameters")
+        ]
+        for locale in ["en", "zh-Hans"] {
+            try store.select(locale)
+            for (original, historicalEnglish, key) in cases {
+                let expected = store.text(key, fallback: "missing")
+                #expect(ChatErrorText.display(original, language: store) == expected)
+                #expect(ChatErrorText.display(historicalEnglish, language: store) == expected)
+                #expect(ChatErrorText.display(historicalEnglish + " user detail", language: store).hasSuffix(historicalEnglish + " user detail"))
+            }
+        }
+    }
+
     @Test func externalPackOverridesTheSameStableKey() throws {
         let (store, suite) = try language("en")
         defer { suite.cleanup() }

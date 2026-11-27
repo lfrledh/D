@@ -1549,11 +1549,21 @@ public enum ChatGenerationPhase: String, Sendable {
     public func reproduce(_ attemptID: UUID, sessionID: UUID) async throws {
         try requireLoaded()
         let session = state.sessions[try index(sessionID)]
-        guard !session.archived, session.contextChoices?.deletedAt == nil, let attempt = session.attempts.first(where: { $0.id == attemptID }),
-              attempt.status != .running, attempt.status != .saving,
-              let user = session.messages.first(where: { $0.id == attempt.userMessageID }),
-              let seed = attempt.node.parameters["seed"]?.string, UInt64(seed) != nil else {
-            throw WorkflowIssue("旧尝试缺少可重现的冻结参数或种子，不能按当前设置冒充重现。")
+        guard !session.archived, session.contextChoices?.deletedAt == nil else {
+            throw WorkflowIssue("请先恢复已归档或已删除的会话。", code: "chat.clarity.reasonArchived")
+        }
+        guard let attempt = session.attempts.first(where: { $0.id == attemptID }) else {
+            throw WorkflowIssue("尝试记录已丢失。", code: "chat.error.missingAttempt")
+        }
+        guard !isRunning, pendingSaveAttemptID == nil,
+              attempt.status != .running, attempt.status != .saving else {
+            throw WorkflowIssue("已有聊天推理或待保存结果。", code: "chat.error.chatBusy")
+        }
+        guard let user = session.messages.first(where: { $0.id == attempt.userMessageID }) else {
+            throw WorkflowIssue("消息不存在。", code: "chat.error.missingMessage")
+        }
+        guard let seed = attempt.node.parameters["seed"]?.string, UInt64(seed) != nil else {
+            throw WorkflowIssue("旧尝试缺少可重现的冻结参数或种子，不能按当前设置冒充重现。", code: "chat.error.replayMissingParameters")
         }
         try await launch(sessionID: sessionID, user: user,
             prepared: (attempt.node, attempt.messagesJSON, attempt.inputs, attempt.memoryUses ?? [], []),

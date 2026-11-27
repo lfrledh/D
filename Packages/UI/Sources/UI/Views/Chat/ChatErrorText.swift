@@ -7,6 +7,7 @@ enum ChatErrorText {
         let original: String
         let key: String
         let english: String
+        var historicalEnglish: String? = nil
     }
 
     // Exact product-owned literals. Do not infer a cause from a substring of a
@@ -17,7 +18,7 @@ enum ChatErrorText {
         .init(original: "所选路径含未完成或待处理工具调用。", key: "chat.error.unfinishedPath", english: "The selected path contains an unfinished answer or pending tool call. Finish it or choose another path."),
         .init(original: "部分回答须显式采用后才能进入上下文。", key: "chat.error.adoptPartial", english: "Use the partial answer explicitly before continuing with it in the context."),
         .init(original: "完整聊天消息超过1MiB；请显式开启新会话或分叉较短路径。", key: "chat.error.contextTooLarge", english: "The complete chat messages exceed 1 MiB. Start a new conversation or fork a shorter path explicitly."),
-        .init(original: "文字附件缺少冻结快照。", key: "chat.error.missingTextSnapshot", english: "The text attachment has no frozen snapshot."),
+        .init(original: "文字附件缺少冻结快照。", key: "chat.error.missingTextSnapshot", english: "This text attachment could not be read. Please add it again.", historicalEnglish: "The text attachment has no frozen snapshot."),
         .init(original: "附件类型不能用于文字聊天。", key: "chat.error.unsupportedContextAttachment", english: "This attachment type cannot be used in text chat."),
         .init(original: "模型文件已改变或位置不符，请重新校验。", key: "modelManagement.local.filesChanged", english: "The model files or their record changed. Select and check the files again."),
         .init(original: "模型安装已不可用，请在模型库检查。", key: "modelManagement.prepareEngineUnavailable", english: "This operation is currently unavailable. Check the model library and try again."),
@@ -149,7 +150,7 @@ enum ChatErrorText {
         .init(original: "需要已有用户消息和模型。", key: "chat.error.needUserMessageModel", english: "An existing user message and model are required."),
         .init(original: "比较需要已有固定问题与明确的文字模型配置。", key: "chat.error.compareNeedsFixedQuestion", english: "Comparison requires an existing fixed question and explicit text model settings."),
         .init(original: "固定比较输入超过所选上下文预算；没有删减原始问题。", key: "chat.error.compareContextBudget", english: "The fixed comparison input exceeds the selected context budget. The original question was not shortened."),
-        .init(original: "旧尝试缺少可重现的冻结参数或种子，不能按当前设置冒充重现。", key: "chat.error.replayMissingParameters", english: "The old attempt has no reproducible frozen settings or seed. Current settings cannot be presented as a replay."),
+        .init(original: "旧尝试缺少可重现的冻结参数或种子，不能按当前设置冒充重现。", key: "chat.error.replayMissingParameters", english: "This answer is missing its original generation parameters and cannot be regenerated from the original request.", historicalEnglish: "The old attempt has no reproducible frozen settings or seed. Current settings cannot be presented as a replay."),
         .init(original: "摘要在准备期间已改变，请重新发送。", key: "chat.error.summaryChanged", english: "The summary changed during preparation. Send again."),
         .init(original: "当前不能开始本地转写。", key: "chat.error.transcriptionUnavailable", english: "Local transcription cannot start now."),
         .init(original: "会话已关闭；转写没有写入其他会话。", key: "chat.error.transcriptionSessionClosed", english: "The conversation closed. The transcription was not written to another conversation."),
@@ -198,7 +199,7 @@ enum ChatErrorText {
     static func display(_ original: String, language: UILanguageStore?) -> String {
         if let budget = displayContextBudget(original, language: language) { return budget }
         if let csv = displayCSVLimit(original, language: language) { return csv }
-        guard let entry = entries.first(where: { $0.original == original || $0.english == original }) else {
+        guard let entry = entries.first(where: { $0.original == original || $0.english == original || $0.historicalEnglish == original }) else {
             // Keep all diagnostic bytes visible. The label describes the text; it
             // does not claim that an unknown backend cause was translated.
             return (language?.text("chat.error.originalDiagnostic", fallback: "Original diagnostic: ")

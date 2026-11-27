@@ -207,7 +207,7 @@ public final class ModelLibraryModel {
             case .choosingCredential: "正在连接下载令牌…"
             case .registering: "正在校验本地模型…"
             case .copying: "正在校验并复制必要模型文件…"
-            case .preparing: "正在准备并校验独立执行包…"
+            case .preparing: "正在准备模型…"
             }
         }
     }
@@ -617,7 +617,7 @@ public final class ModelLibraryModel {
                 _ = try await library.registerLocalFiles(selection, storage: .managed, validatePrepared: preparedValidator)
             }
             catch is CancellationError { }
-            catch { report(error, context: managementText("copyFailed", "复制未完成；原位置登记仍保留")) }
+            catch { report(error, context: managementText("copyFailed", "模型复制未完成")) }
         }
         importTask = task
         await task.value

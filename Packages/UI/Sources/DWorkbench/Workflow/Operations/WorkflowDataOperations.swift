@@ -8,7 +8,7 @@ enum WorkflowDataOperations {
 
     private static let input = WorkflowOperation(
         definition: .init(
-            id: "d.value.input", title: "Data Input", detail: "Provides a frozen typed value.", inputs: [],
+            id: "d.value.input", title: "Data Input", detail: "Provides text, numbers, or other data entered in advance to downstream nodes.", inputs: [],
             outputs: [.init("output", "Value", kinds: WorkflowDataKind.allCases)],
             fields: [.init("publicName", "Public Name", .text(multiline: false), .text(""))]
         ),

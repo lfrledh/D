@@ -73,7 +73,6 @@
     "name_key": "consistency.help.FLOW-SELECT.name",
     "help_key": "consistency.help.FLOW-SELECT.purpose",
     "object_key": "consistency.help.FLOW-SELECT.object",
-    "conditions_key": "consistency.help.FLOW-SELECT.conditions",
     "category": "build",
     "aliases": [
       "流程",
@@ -86,7 +85,6 @@
     "name_key": "consistency.help.FLOW-NEW.name",
     "help_key": "consistency.help.FLOW-NEW.purpose",
     "object_key": "consistency.help.FLOW-NEW.object",
-    "conditions_key": "consistency.help.FLOW-NEW.conditions",
     "category": "build",
     "aliases": [
       "新建流程",
@@ -99,7 +97,6 @@
     "name_key": "consistency.help.FLOW-SAVE.name",
     "help_key": "consistency.help.FLOW-SAVE.purpose",
     "object_key": "consistency.help.FLOW-SAVE.object",
-    "conditions_key": "consistency.help.FLOW-SAVE.conditions",
     "category": "project",
     "aliases": [
       "保存流程更改",
@@ -112,7 +109,6 @@
     "name_key": "consistency.help.FLOW-MORE.name",
     "help_key": "consistency.help.FLOW-MORE.purpose",
     "object_key": "consistency.help.FLOW-MORE.object",
-    "conditions_key": "consistency.help.FLOW-MORE.conditions",
     "category": "build",
     "aliases": [
       "流程设置",
@@ -467,7 +463,6 @@
     "name_key": "consistency.help.DECISION-REJECT.name",
     "help_key": "consistency.help.DECISION-REJECT.purpose",
     "object_key": "consistency.help.DECISION-REJECT.object",
-    "conditions_key": "consistency.help.DECISION-REJECT.conditions",
     "category": "inspect",
     "aliases": [
       "拒绝",
@@ -480,7 +475,6 @@
     "name_key": "consistency.help.DECISION-ACCEPT.name",
     "help_key": "consistency.help.DECISION-ACCEPT.purpose",
     "object_key": "consistency.help.DECISION-ACCEPT.object",
-    "conditions_key": "consistency.help.DECISION-ACCEPT.conditions",
     "category": "inspect",
     "aliases": [
       "采用此结果",
@@ -493,7 +487,6 @@
     "name_key": "consistency.help.DECISION-CONTINUE.name",
     "help_key": "consistency.help.DECISION-CONTINUE.purpose",
     "object_key": "consistency.help.DECISION-CONTINUE.object",
-    "conditions_key": "consistency.help.DECISION-CONTINUE.conditions",
     "category": "build",
     "aliases": [
       "继续运行",
@@ -506,7 +499,6 @@
     "name_key": "consistency.help.CANVAS-POINTER.name",
     "help_key": "consistency.help.CANVAS-POINTER.purpose",
     "object_key": "consistency.help.CANVAS-POINTER.object",
-    "conditions_key": "consistency.help.CANVAS-POINTER.conditions",
     "category": "view",
     "aliases": [
       "选择",
@@ -531,7 +523,6 @@
     "name_key": "consistency.help.CANVAS-UNDO.name",
     "help_key": "consistency.help.CANVAS-UNDO.purpose",
     "object_key": "consistency.help.CANVAS-UNDO.object",
-    "conditions_key": "consistency.help.CANVAS-UNDO.conditions",
     "category": "build",
     "aliases": [
       "撤销",
@@ -544,7 +535,6 @@
     "name_key": "consistency.help.CANVAS-REDO.name",
     "help_key": "consistency.help.CANVAS-REDO.purpose",
     "object_key": "consistency.help.CANVAS-REDO.object",
-    "conditions_key": "consistency.help.CANVAS-REDO.conditions",
     "category": "build",
     "aliases": [
       "重做",
@@ -569,7 +559,6 @@
     "name_key": "consistency.help.RUN-RANGE.name",
     "help_key": "consistency.help.RUN-RANGE.purpose",
     "object_key": "consistency.help.RUN-RANGE.object",
-    "conditions_key": "consistency.help.RUN-RANGE.conditions",
     "category": "build",
     "aliases": [
       "运行范围",
@@ -582,7 +571,6 @@
     "name_key": "consistency.help.RUN-TARGET.name",
     "help_key": "consistency.help.RUN-TARGET.purpose",
     "object_key": "consistency.help.RUN-TARGET.object",
-    "conditions_key": "consistency.help.RUN-TARGET.conditions",
     "category": "build",
     "aliases": [
       "作用节点",
@@ -595,7 +583,6 @@
     "name_key": "consistency.help.RUN-REVIEW.name",
     "help_key": "consistency.help.RUN-REVIEW.purpose",
     "object_key": "consistency.help.RUN-REVIEW.object",
-    "conditions_key": "consistency.help.RUN-REVIEW.conditions",
     "category": "build",
     "aliases": [
       "检查并运行…",
@@ -608,7 +595,6 @@
     "name_key": "consistency.help.RUN-HISTORY.name",
     "help_key": "consistency.help.RUN-HISTORY.purpose",
     "object_key": "consistency.help.RUN-HISTORY.object",
-    "conditions_key": "consistency.help.RUN-HISTORY.conditions",
     "category": "inspect",
     "aliases": [
       "运行记录",
@@ -621,7 +607,6 @@
     "name_key": "consistency.help.RUN-PAUSE.name",
     "help_key": "consistency.help.RUN-PAUSE.purpose",
     "object_key": "consistency.help.RUN-PAUSE.object",
-    "conditions_key": "consistency.help.RUN-PAUSE.conditions",
     "category": "build",
     "aliases": [
       "暂停",
@@ -634,7 +619,6 @@
     "name_key": "consistency.help.RUN-STOP.name",
     "help_key": "consistency.help.RUN-STOP.purpose",
     "object_key": "consistency.help.RUN-STOP.object",
-    "conditions_key": "consistency.help.RUN-STOP.conditions",
     "category": "build",
     "aliases": [
       "停止",
@@ -1109,7 +1093,6 @@
     "name_key": "consistency.help.MENU-FILE-NEW.name",
     "help_key": "consistency.help.MENU-FILE-NEW.purpose",
     "object_key": "consistency.help.MENU-FILE-NEW.object",
-    "conditions_key": "consistency.help.MENU-FILE-NEW.conditions",
     "category": "project",
     "aliases": [
       "新建项目…",
@@ -1122,7 +1105,6 @@
     "name_key": "consistency.help.MENU-FILE-OPEN.name",
     "help_key": "consistency.help.MENU-FILE-OPEN.purpose",
     "object_key": "consistency.help.MENU-FILE-OPEN.object",
-    "conditions_key": "consistency.help.MENU-FILE-OPEN.conditions",
     "category": "project",
     "aliases": [
       "打开项目…",
@@ -1135,7 +1117,6 @@
     "name_key": "consistency.help.MENU-FILE-SAVE.name",
     "help_key": "consistency.help.MENU-FILE-SAVE.purpose",
     "object_key": "consistency.help.MENU-FILE-SAVE.object",
-    "conditions_key": "consistency.help.MENU-FILE-SAVE.conditions",
     "category": "project",
     "aliases": [
       "保存更改",
@@ -1148,7 +1129,6 @@
     "name_key": "consistency.help.MENU-FILE-IMPORT.name",
     "help_key": "consistency.help.MENU-FILE-IMPORT.purpose",
     "object_key": "consistency.help.MENU-FILE-IMPORT.object",
-    "conditions_key": "consistency.help.MENU-FILE-IMPORT.conditions",
     "category": "project",
     "aliases": [
       "导入素材…",
@@ -1163,7 +1143,6 @@
     "name_key": "consistency.help.MENU-FILE-EXPORT.name",
     "help_key": "consistency.help.MENU-FILE-EXPORT.purpose",
     "object_key": "consistency.help.MENU-FILE-EXPORT.object",
-    "conditions_key": "consistency.help.MENU-FILE-EXPORT.conditions",
     "category": "project",
     "aliases": [
       "导出…",
@@ -1178,7 +1157,6 @@
     "name_key": "consistency.help.MENU-FILE-BACKUPS.name",
     "help_key": "consistency.help.MENU-FILE-BACKUPS.purpose",
     "object_key": "consistency.help.MENU-FILE-BACKUPS.object",
-    "conditions_key": "consistency.help.MENU-FILE-BACKUPS.conditions",
     "category": "project",
     "aliases": [
       "项目文件与备份…",
@@ -1191,7 +1169,6 @@
     "name_key": "consistency.help.MENU-RESOURCES-LIBRARY.name",
     "help_key": "consistency.help.MENU-RESOURCES-LIBRARY.purpose",
     "object_key": "consistency.help.MENU-RESOURCES-LIBRARY.object",
-    "conditions_key": "consistency.help.MENU-RESOURCES-LIBRARY.conditions",
     "category": "models",
     "aliases": [
       "资料库…",
@@ -1206,7 +1183,6 @@
     "name_key": "consistency.help.MENU-RESOURCES-MODELS.name",
     "help_key": "consistency.help.MENU-RESOURCES-MODELS.purpose",
     "object_key": "consistency.help.MENU-RESOURCES-MODELS.object",
-    "conditions_key": "consistency.help.MENU-RESOURCES-MODELS.conditions",
     "category": "models",
     "aliases": [
       "模型与下载…",
@@ -1219,7 +1195,6 @@
     "name_key": "consistency.help.MENU-FLOW-BLANK.name",
     "help_key": "consistency.help.MENU-FLOW-BLANK.purpose",
     "object_key": "consistency.help.MENU-FLOW-BLANK.object",
-    "conditions_key": "consistency.help.MENU-FLOW-BLANK.conditions",
     "category": "build",
     "aliases": [
       "空白流程",
@@ -1232,7 +1207,6 @@
     "name_key": "consistency.help.MENU-FLOW-TEMPLATES.name",
     "help_key": "consistency.help.MENU-FLOW-TEMPLATES.purpose",
     "object_key": "consistency.help.MENU-FLOW-TEMPLATES.object",
-    "conditions_key": "consistency.help.MENU-FLOW-TEMPLATES.conditions",
     "category": "build",
     "aliases": [
       "从模板新建",
@@ -1245,7 +1219,6 @@
     "name_key": "consistency.help.MENU-FLOW-TEMPLATE-TEXT.name",
     "help_key": "consistency.help.MENU-FLOW-TEMPLATE-TEXT.purpose",
     "object_key": "consistency.help.MENU-FLOW-TEMPLATE-TEXT.object",
-    "conditions_key": "consistency.help.MENU-FLOW-TEMPLATE-TEXT.conditions",
     "category": "build",
     "aliases": [
       "文字模板",
@@ -1258,7 +1231,6 @@
     "name_key": "consistency.help.MENU-FLOW-TEMPLATE-IMAGES.name",
     "help_key": "consistency.help.MENU-FLOW-TEMPLATE-IMAGES.purpose",
     "object_key": "consistency.help.MENU-FLOW-TEMPLATE-IMAGES.object",
-    "conditions_key": "consistency.help.MENU-FLOW-TEMPLATE-IMAGES.conditions",
     "category": "build",
     "aliases": [
       "图像批处理",
@@ -1271,7 +1243,6 @@
     "name_key": "consistency.help.MENU-FLOW-TEMPLATE-EXISTING.name",
     "help_key": "consistency.help.MENU-FLOW-TEMPLATE-EXISTING.purpose",
     "object_key": "consistency.help.MENU-FLOW-TEMPLATE-EXISTING.object",
-    "conditions_key": "consistency.help.MENU-FLOW-TEMPLATE-EXISTING.conditions",
     "category": "build",
     "aliases": [
       "更多现有模板…",
@@ -1284,7 +1255,6 @@
     "name_key": "consistency.help.MENU-FLOW-INTERFACE.name",
     "help_key": "consistency.help.MENU-FLOW-INTERFACE.purpose",
     "object_key": "consistency.help.MENU-FLOW-INTERFACE.object",
-    "conditions_key": "consistency.help.MENU-FLOW-INTERFACE.conditions",
     "category": "build",
     "aliases": [
       "流程输入与输出…",
@@ -1297,7 +1267,6 @@
     "name_key": "consistency.help.MENU-FLOW-CUSTOM.name",
     "help_key": "consistency.help.MENU-FLOW-CUSTOM.purpose",
     "object_key": "consistency.help.MENU-FLOW-CUSTOM.object",
-    "conditions_key": "consistency.help.MENU-FLOW-CUSTOM.conditions",
     "category": "build",
     "aliases": [
       "管理自定义节点…",
@@ -1310,7 +1279,6 @@
     "name_key": "consistency.help.MENU-NODE-PROPERTIES.name",
     "help_key": "consistency.help.MENU-NODE-PROPERTIES.purpose",
     "object_key": "consistency.help.MENU-NODE-PROPERTIES.object",
-    "conditions_key": "consistency.help.MENU-NODE-PROPERTIES.conditions",
     "category": "build",
     "aliases": [
       "显示属性",
@@ -1323,7 +1291,6 @@
     "name_key": "consistency.help.MENU-NODE-RESULTS.name",
     "help_key": "consistency.help.MENU-NODE-RESULTS.purpose",
     "object_key": "consistency.help.MENU-NODE-RESULTS.object",
-    "conditions_key": "consistency.help.MENU-NODE-RESULTS.conditions",
     "category": "build",
     "aliases": [
       "查看结果",
@@ -1336,7 +1303,6 @@
     "name_key": "consistency.help.MENU-NODE-SCOPE.name",
     "help_key": "consistency.help.MENU-NODE-SCOPE.purpose",
     "object_key": "consistency.help.MENU-NODE-SCOPE.object",
-    "conditions_key": "consistency.help.MENU-NODE-SCOPE.conditions",
     "category": "build",
     "aliases": [
       "运行范围",
@@ -1349,7 +1315,6 @@
     "name_key": "consistency.help.MENU-NODE-THROUGH.name",
     "help_key": "consistency.help.MENU-NODE-THROUGH.purpose",
     "object_key": "consistency.help.MENU-NODE-THROUGH.object",
-    "conditions_key": "consistency.help.MENU-NODE-THROUGH.conditions",
     "category": "build",
     "aliases": [
       "运行到此节点",
@@ -1362,7 +1327,6 @@
     "name_key": "consistency.help.MENU-NODE-ONLY.name",
     "help_key": "consistency.help.MENU-NODE-ONLY.purpose",
     "object_key": "consistency.help.MENU-NODE-ONLY.object",
-    "conditions_key": "consistency.help.MENU-NODE-ONLY.conditions",
     "category": "build",
     "aliases": [
       "仅运行此节点",
@@ -1375,7 +1339,6 @@
     "name_key": "consistency.help.MENU-NODE-FROM.name",
     "help_key": "consistency.help.MENU-NODE-FROM.purpose",
     "object_key": "consistency.help.MENU-NODE-FROM.object",
-    "conditions_key": "consistency.help.MENU-NODE-FROM.conditions",
     "category": "build",
     "aliases": [
       "从此节点重新运行",
@@ -1388,7 +1351,6 @@
     "name_key": "consistency.help.MENU-NODE-AFTER.name",
     "help_key": "consistency.help.MENU-NODE-AFTER.purpose",
     "object_key": "consistency.help.MENU-NODE-AFTER.object",
-    "conditions_key": "consistency.help.MENU-NODE-AFTER.conditions",
     "category": "build",
     "aliases": [
       "用已有结果继续",
@@ -1401,7 +1363,6 @@
     "name_key": "consistency.help.MENU-NODE-DELETE.name",
     "help_key": "consistency.help.MENU-NODE-DELETE.purpose",
     "object_key": "consistency.help.MENU-NODE-DELETE.object",
-    "conditions_key": "consistency.help.MENU-NODE-DELETE.conditions",
     "category": "build",
     "aliases": [
       "删除节点",
@@ -1414,7 +1375,6 @@
     "name_key": "consistency.help.MENU-MODEL-LOCATE.name",
     "help_key": "consistency.help.MENU-MODEL-LOCATE.purpose",
     "object_key": "consistency.help.MENU-MODEL-LOCATE.object",
-    "conditions_key": "consistency.help.MENU-MODEL-LOCATE.conditions",
     "category": "models",
     "aliases": [
       "在 Finder 中显示",
@@ -1427,7 +1387,6 @@
     "name_key": "consistency.help.MENU-LIBRARY-SAVED.name",
     "help_key": "consistency.help.MENU-LIBRARY-SAVED.purpose",
     "object_key": "consistency.help.MENU-LIBRARY-SAVED.object",
-    "conditions_key": "consistency.help.MENU-LIBRARY-SAVED.conditions",
     "category": "organize",
     "aliases": [
       "已保存搜索",
@@ -1440,7 +1399,6 @@
     "name_key": "consistency.help.MENU-LIBRARY-SAVED-DYNAMIC.name",
     "help_key": "consistency.help.MENU-LIBRARY-SAVED-DYNAMIC.purpose",
     "object_key": "consistency.help.MENU-LIBRARY-SAVED-DYNAMIC.object",
-    "conditions_key": "consistency.help.MENU-LIBRARY-SAVED-DYNAMIC.conditions",
     "category": "organize",
     "aliases": [
       "<用户名称>",
@@ -1453,7 +1411,6 @@
     "name_key": "consistency.help.MENU-LIBRARY-MANAGE.name",
     "help_key": "consistency.help.MENU-LIBRARY-MANAGE.purpose",
     "object_key": "consistency.help.MENU-LIBRARY-MANAGE.object",
-    "conditions_key": "consistency.help.MENU-LIBRARY-MANAGE.conditions",
     "category": "organize",
     "aliases": [
       "管理标签与分类…",
@@ -1466,7 +1423,6 @@
     "name_key": "consistency.help.MENU-LIBRARY-UNDO.name",
     "help_key": "consistency.help.MENU-LIBRARY-UNDO.purpose",
     "object_key": "consistency.help.MENU-LIBRARY-UNDO.object",
-    "conditions_key": "consistency.help.MENU-LIBRARY-UNDO.conditions",
     "category": "organize",
     "aliases": [
       "撤销整理操作",
@@ -1479,7 +1435,6 @@
     "name_key": "consistency.help.MENU-LIBRARY-REDO.name",
     "help_key": "consistency.help.MENU-LIBRARY-REDO.purpose",
     "object_key": "consistency.help.MENU-LIBRARY-REDO.object",
-    "conditions_key": "consistency.help.MENU-LIBRARY-REDO.conditions",
     "category": "organize",
     "aliases": [
       "重做整理操作",
@@ -1568,7 +1523,6 @@
     "name_key": "consistency.help.WORKSPACE-ZOOM-SPEED.name",
     "help_key": "consistency.help.WORKSPACE-ZOOM-SPEED.purpose",
     "object_key": "consistency.help.WORKSPACE-ZOOM-SPEED.object",
-    "conditions_key": "consistency.help.WORKSPACE-ZOOM-SPEED.conditions",
     "category": "view",
     "aliases": [
       "滚轮缩放速度",
@@ -1581,7 +1535,6 @@
     "name_key": "consistency.help.WORKSPACE-RESOURCE-ALL.name",
     "help_key": "consistency.help.WORKSPACE-RESOURCE-ALL.purpose",
     "object_key": "consistency.help.WORKSPACE-RESOURCE-ALL.object",
-    "conditions_key": "consistency.help.WORKSPACE-RESOURCE-ALL.conditions",
     "category": "organize",
     "aliases": [
       "全部素材",
@@ -1594,7 +1547,6 @@
     "name_key": "consistency.help.WORKSPACE-RESOURCE-TEXT.name",
     "help_key": "consistency.help.WORKSPACE-RESOURCE-TEXT.purpose",
     "object_key": "consistency.help.WORKSPACE-RESOURCE-TEXT.object",
-    "conditions_key": "consistency.help.WORKSPACE-RESOURCE-TEXT.conditions",
     "category": "organize",
     "aliases": [
       "文字素材",
@@ -1607,7 +1559,6 @@
     "name_key": "consistency.help.WORKSPACE-RESOURCE-IMAGE.name",
     "help_key": "consistency.help.WORKSPACE-RESOURCE-IMAGE.purpose",
     "object_key": "consistency.help.WORKSPACE-RESOURCE-IMAGE.object",
-    "conditions_key": "consistency.help.WORKSPACE-RESOURCE-IMAGE.conditions",
     "category": "organize",
     "aliases": [
       "图像素材",
@@ -1620,7 +1571,6 @@
     "name_key": "consistency.help.WORKSPACE-RESOURCE-VIDEO.name",
     "help_key": "consistency.help.WORKSPACE-RESOURCE-VIDEO.purpose",
     "object_key": "consistency.help.WORKSPACE-RESOURCE-VIDEO.object",
-    "conditions_key": "consistency.help.WORKSPACE-RESOURCE-VIDEO.conditions",
     "category": "organize",
     "aliases": [
       "视频素材",
@@ -1633,7 +1583,6 @@
     "name_key": "consistency.help.WORKSPACE-RESOURCE-AUDIO.name",
     "help_key": "consistency.help.WORKSPACE-RESOURCE-AUDIO.purpose",
     "object_key": "consistency.help.WORKSPACE-RESOURCE-AUDIO.object",
-    "conditions_key": "consistency.help.WORKSPACE-RESOURCE-AUDIO.conditions",
     "category": "organize",
     "aliases": [
       "音频素材",
@@ -1646,7 +1595,6 @@
     "name_key": "consistency.help.WORKSPACE-RESOURCE-DATA.name",
     "help_key": "consistency.help.WORKSPACE-RESOURCE-DATA.purpose",
     "object_key": "consistency.help.WORKSPACE-RESOURCE-DATA.object",
-    "conditions_key": "consistency.help.WORKSPACE-RESOURCE-DATA.conditions",
     "category": "organize",
     "aliases": [
       "数据素材",

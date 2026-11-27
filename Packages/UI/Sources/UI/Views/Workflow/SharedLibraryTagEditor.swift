@@ -245,7 +245,7 @@ struct WorkflowAssetMetadataHost: View {
             guard controller.canReadLibraryMetadata, controller.projectID == project,
                   controller.projectInstanceID == instance,
                   assetID.map({ id in controller.availableAssets.contains { $0.id == id } }) ?? true else {
-                throw WorkflowIssue("Metadata target is no longer open / 元数据所属项目实例或对象已改变。草稿未提交。", code: "metadata.error.targetUnavailable")
+                throw WorkflowIssue("The current project or selected content has changed. These changes have not been saved. / 当前项目或所选内容已发生变化，本次修改尚未保存。", code: "metadata.error.targetUnavailable")
             }
             guard controller.canEditLibraryMetadata else {
                 throw WorkflowIssue("Metadata editing is temporarily busy.", code: "container.issue.busy")

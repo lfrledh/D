@@ -155,7 +155,7 @@ struct ChatPresetsPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if showsHeading { Text(text("presets", "Presets", "预设")).font(.headline) }
+            if showsHeading { Text(text("presets", "Chat presets", "聊天预设")).font(.headline) }
             Text(text("future", "Applying a preset changes future answers only.", "应用预设只影响之后的回答。"))
                 .font(.caption).foregroundStyle(.secondary)
             if chat.state.presets.isEmpty {
@@ -167,8 +167,8 @@ struct ChatPresetsPanel: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(preset.name).lineLimit(1)
                         Text(preset.configuration == nil
-                            ? text("promptOnly", "Prompt only", "仅提示词")
-                            : text("withSettings", "Prompt and model settings", "提示词和模型设置"))
+                            ? text("promptOnly", "Answer rules only", "仅回答规则")
+                            : text("withSettings", "Answer rules and model settings", "回答规则与模型设置"))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 8)
@@ -193,7 +193,7 @@ struct ChatPresetsPanel: View {
                 }
             }.disabled(closeSaveApplied)
             HStack {
-                Button(text("new", "New preset…", "新建预设…")) { load(nil) }
+                Button(text("new", "New chat preset…", "新建聊天预设…")) { load(nil) }
                 Spacer()
                 Button(text("import", "Import…", "导入…"), action: onImport)
                 Button(text("export", "Export all chat presets…", "导出全部聊天预设…")) { onExport(chat.state.presets) }
@@ -251,7 +251,7 @@ struct ChatPresetsPanel: View {
                     Spacer()
                     Button(text("cancel", "Cancel", "取消")) { editorOpen = false; draftLoaded = false; issue = nil }
                         .disabled(closeSaveApplied)
-                    Button(closeSaveApplied ? workflowText(language, "chat.retrySave") : text("save", "Save preset", "保存预设")) {
+                    Button(closeSaveApplied ? workflowText(language, "chat.retrySave") : text("save", "Save chat preset", "保存聊天预设")) {
                         Task {
                             guard !saving else { return }
                             do { try await saveAndFlush() } catch { issue = error.localizedDescription }
@@ -264,8 +264,8 @@ struct ChatPresetsPanel: View {
                 }
             }.padding(.top, 8)
         } label: {
-            Text(original == nil ? text("create", "Create preset", "新建预设") :
-                text("editTitle", "Edit preset", "编辑预设"))
+            Text(original == nil ? text("create", "New chat preset", "新建聊天预设") :
+                text("editTitle", "Edit chat preset", "编辑聊天预设"))
         }
         .accessibilityIdentifier("chat-preset-editor")
     }
@@ -280,6 +280,7 @@ struct ChatComparisonPanel: View {
     let sourceAttemptID: UUID
     let onClose: () -> Void
     @State private var issue: String?
+    @State private var issueCode: String?
 
     init(chat: ChatController, sessionID: UUID, sourceAttemptID: UUID,
          onClose: @escaping () -> Void) {
@@ -296,10 +297,14 @@ struct ChatComparisonPanel: View {
             fallback: language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english)
     }
     private func perform(_ action: () throws -> Void) {
-        do { try action(); issue = nil } catch { issue = error.localizedDescription }
+        do { try action(); issue = nil; issueCode = nil }
+        catch { issue = error.localizedDescription; issueCode = (error as? WorkflowIssue)?.code }
     }
     private func launch(_ action: @escaping @MainActor () async throws -> Void) {
-        Task { do { try await action(); issue = nil } catch { issue = error.localizedDescription } }
+        Task {
+            do { try await action(); issue = nil; issueCode = nil }
+            catch { issue = error.localizedDescription; issueCode = (error as? WorkflowIssue)?.code }
+        }
     }
     private func status(_ attempt: ChatAttempt) -> String {
         let english: String = switch attempt.status {
@@ -342,7 +347,7 @@ struct ChatComparisonPanel: View {
                     }
                     Text(text("system", "System prompt", "系统提示") + ": " + source.systemPrompt)
                         .textSelection(.enabled)
-                    Text(text("mediaPorts", "Media ports", "媒体端口") + ": " +
+                    Text(text("mediaPorts", "Attachment types", "附件类型") + ": " +
                          (source.inputs.isEmpty ? "—" : source.inputs.keys.sorted().map { key in
                              WorkflowCanvasPresentation.portTitle(operationID: source.node.operationID, portID: key,
                                  fallback: key, input: true, language: language)
@@ -373,18 +378,18 @@ struct ChatComparisonPanel: View {
                     .accessibilityIdentifier("chat-comparison-reproduce")
                     .help(workflowText(language, "chat.clarity.reproduceHelp"))
                 }
-                Text(text("draft", "Your unsent draft is preserved. Choosing an answer selects its branch without generating.",
-                    "未发送草稿会保留。选择回答只切换分支，不会生成。"))
+                Text(text("draft", "Once selected, this answer will be used to continue the conversation. Your draft will be kept.",
+                    "选择后，将以这条回答继续对话。输入框中的内容会保留。"))
                     .font(.caption).foregroundStyle(.secondary)
                 if let originalError = source.issue {
-                    Text(text("sourceIssue", "Source issue", "原回答问题") + ": " + ChatErrorText.display(originalError, language: language))
+                    Text(text("sourceIssue", "Error from the original answer", "原回答的错误信息") + ": " + ChatErrorText.display(originalError, language: language))
                         .font(.caption).foregroundStyle(.red).textSelection(.enabled)
                 }
             } else {
                 Text(text("missing", "The source answer is no longer in this conversation.", "原回答已不在此对话中。"))
                     .foregroundStyle(.secondary)
             }
-            if let issue { WorkbenchIssueText(raw: issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+            if let issue { WorkbenchIssueText(raw: issue, key: issueCode).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
